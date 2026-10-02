@@ -1,0 +1,7 @@
+:root { font-family: Inter, Aptos, "Segoe UI", sans-serif; color:#152235; background:#f2f5f8; font-synthesis:none; text-rendering:optimizeLegibility; --navy:#102a43; --blue:#0969da; --cyan:#13a3a3; --line:#dbe3eb; --muted:#65758b; --surface:#fff; }
+* { box-sizing:border-box; }
+body { margin:0; min-width:320px; min-height:100vh; }
+button,input,select,textarea { font:inherit; }
+button { cursor:pointer; }
+h1,h2,h3,p { margin-top:0; }
+#root { min-height:100vh; }
