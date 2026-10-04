@@ -48,6 +48,8 @@ Every push or pull request to `main` runs static analysis, compiles the producti
 
 Pushing a version tag such as `v0.1.0` runs the same verified pipeline and deploys the installer, blockmap and checksum to a GitHub Release. The workflow uses the repository-scoped `GITHUB_TOKEN`; no personal access token or application secret is required.
 
+Every push to `main` also builds and deploys the browser version to GitHub Pages at `https://ponkritz.github.io/DemandPlanning/`. This hosted MVP uses the local development adapter; central multi-user SharePoint persistence is enabled only after the approved Entra/SharePoint adapter is configured.
+
 ## Data and security boundary
 
 No production data, tenant identifiers, access tokens, client secrets or employee information belong in Git. The local adapter persists synthetic development records in browser storage.
