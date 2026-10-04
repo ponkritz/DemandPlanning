@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "description": "Demand planning, capacity and release tracking desktop application",
+  "author": "Demand Planning Team",
   "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
