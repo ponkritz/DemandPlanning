@@ -1,6 +1,7 @@
 {
   "name": "demandplanning",
   "private": true,
+  "packageManager": "pnpm@11.19.0",
   "version": "0.1.0",
   "description": "Demand planning, capacity and release tracking desktop application",
   "author": "Demand Planning Team",

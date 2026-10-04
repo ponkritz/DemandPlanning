@@ -12,6 +12,8 @@ export function MonthlyPage({ store, month }: PageProps) {
   function setHours(activityId: string, field: 'plannedHours' | 'actualHours', value: string) {
     if ((field === 'plannedHours' && !planningOpen) || (field === 'actualHours' && !actualsOpen)) return
     const parsed = value === '' ? null : Math.max(0, Number(value))
+    // This runs only from the input event, not during component rendering.
+    // oxlint-disable-next-line react/purity
     const now = new Date().toISOString()
     store.update((draft) => {
       let effort = draft.efforts.find((item) => item.activityId === activityId && item.month === month)
