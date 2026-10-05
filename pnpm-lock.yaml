@@ -8,12 +8,18 @@ importers:
 
   .:
     dependencies:
+      '@azure/msal-browser':
+        specifier: ^5.24.0
+        version: 5.24.0
       react:
         specifier: ^19.2.8
         version: 19.3.0
       react-dom:
         specifier: ^19.2.8
         version: 19.3.0(react@19.3.0)
+      read-excel-file:
+        specifier: ^9.3.10
+        version: 9.3.10
     devDependencies:
       '@types/node':
         specifier: ^24.13.3
@@ -53,6 +59,14 @@ importers:
         version: 9.5.1(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
 
 packages:
+
+  '@azure/msal-browser@5.24.0':
+    resolution: {integrity: sha512-jS1stt81tslcVZi7fqVD+g6vr8w/IWqFl/vAB2dx/6EOroQDuCR4+z0o3C+d6a/GpLATvdoO+kwnDcYzsBXKQA==}
+    engines: {node: '>=0.8.0'}
+
+  '@azure/msal-common@16.14.2':
+    resolution: {integrity: sha512-HOBR0Gfo39TMrkxNG8k6cfjRkrRjXZc3JQs3ebMWQc9S4cihuknMYra3sgmzbZB752oQBqBN9+WF7c826p2vIQ==}
+    engines: {node: '>=0.8.0'}
 
   '@electron-internal/extract-zip@1.0.5':
     resolution: {integrity: sha512-+bqFCP98pLI0Tt0XQo1TmlXtwjWchISndDOxCkEcIuUgXWpBnLyRI+2DU+mesvnMMX6L1XDqYNA0lXNDHd/yiA==}
@@ -792,6 +806,9 @@ packages:
       picomatch:
         optional: true
 
+  fflate@0.8.3:
+    resolution: {integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==}
+
   filelist@1.0.6:
     resolution: {integrity: sha512-5giy2PkLYY1cP39p17Ech+2xlpTRL9HLspOfEgm0L6CwBXBTgsK5ou0JtzYuepxkaQ/tvhCFIJ5uXo0OrM2DxA==}
 
@@ -1293,6 +1310,10 @@ packages:
     resolution: {integrity: sha512-BNg9EN3DD3GsDXX7Aa8O4p92sryjkmzYYgmgTAc6CA4uGLEDzFfxOxugu21akOxpcXHiEgsYkC6nPsQvLLLmEg==}
     hasBin: true
 
+  read-excel-file@9.3.10:
+    resolution: {integrity: sha512-zFcBdzunLCGBmLRT4Q3mLPJnhKPAXXfGAZ83feODlEqX2aRUbgF1h/n2oY0UF7I8tVwnJNRas6fTRD5veDUs+g==}
+    engines: {node: '>=18'}
+
   readable-stream@2.3.8:
     resolution: {integrity: sha512-8p0AUk4XODgIewSi0l8Epjs+EVnWiK7NoDIEGU0HhE7+ZyY8D1IMY7odu5lRrFXGg71L15KG8QrPmum45RTtdA==}
 
@@ -1344,6 +1365,10 @@ packages:
   sax@1.6.1:
     resolution: {integrity: sha512-42tBVwLWnaQvW5zc4HbZrTuWccECCZfBi92FDuwtqxasH+JbPB3/FOKb1m222K42R4WxuxzzMsTswfzgtSu64Q==}
     engines: {node: '>=11.0.0'}
+
+  saxen@11.2.0:
+    resolution: {integrity: sha512-2bG564AAJcm/3vyZC0Uhs/mACrH+4AHMaKHKAB2M5xMqomUZa27FQ7MYaQGFKVcJk/MVzSEQ34A8QZWW+eiWEw==}
+    engines: {node: '>= 20.12'}
 
   scheduler@0.28.0:
     resolution: {integrity: sha512-juorfCmIkIw8tT+p5BXSm6PJjQF/ycEYmKyzURCIt/RaZIhL+PulbQ9Yu2z1HdOJDdqDTlxA1+xKBmHXJsczAw==}
@@ -1504,6 +1529,10 @@ packages:
     resolution: {integrity: sha512-gptHNQghINnc/vTGIk0SOFGFNXw7JVrlRUtConJRlvaw6DuX0wO5Jeko9sWrMBhh+PsYAZ7oXAiOnf/UKogyiw==}
     engines: {node: '>= 10.0.0'}
 
+  unzipper-esm@0.13.3:
+    resolution: {integrity: sha512-LUO6VZ6fCzkDbdMev0/fOhoIeVGKaOkTIOoYxVLE0SQjfvmAHK+oywl7lfhloSZIsdGJ25mJ18Mtd9CyTASjrA==}
+    engines: {node: '>=8.0.0'}
+
   unzipper@0.12.5:
     resolution: {integrity: sha512-tXYOi9R57Uj/2Z25SOs5RRSzq886MBQj2gY8dPL+xl/kv6s6SvByoKfAtvfVeEuhntWDgjd2o9p2lb4TVPAz0A==}
 
@@ -1579,6 +1608,10 @@ packages:
     engines: {node: ^20.17.0 || >=22.9.0}
     hasBin: true
 
+  worker-f@0.1.20:
+    resolution: {integrity: sha512-7z5K5z4x++FykhpDTfriT/dOu7CmSap9BBv38DVFU3CD38obopq+DoFH75yBV3butpGm+OeqR9BKdSvYJSnUfQ==}
+    engines: {node: '>=12'}
+
   wrap-ansi@7.0.0:
     resolution: {integrity: sha512-YVGIj2kamLSTxw6NsZjoBxfSwsn0ycdesmc4p+Q21c5zPuZ1pl+NfxVdxPtdHvmNVOQ6XSYG4AUtyt/Fi7D16Q==}
     engines: {node: '>=10'}
@@ -1626,6 +1659,12 @@ packages:
     engines: {node: '>=10'}
 
 snapshots:
+
+  '@azure/msal-browser@5.24.0':
+    dependencies:
+      '@azure/msal-common': 16.14.2
+
+  '@azure/msal-common@16.14.2': {}
 
   '@electron-internal/extract-zip@1.0.5': {}
 
@@ -2367,6 +2406,8 @@ snapshots:
     optionalDependencies:
       picomatch: 4.0.7
 
+  fflate@0.8.3: {}
+
   filelist@1.0.6:
     dependencies:
       minimatch: 5.1.9
@@ -2468,7 +2509,7 @@ snapshots:
       es6-error: 4.1.1
       matcher: 3.0.0
       roarr: 2.15.4
-      semver: 7.7.4
+      semver: 7.8.5
       serialize-error: 7.0.1
     optional: true
 
@@ -2723,11 +2764,11 @@ snapshots:
 
   node-abi@4.35.0:
     dependencies:
-      semver: 7.7.4
+      semver: 7.8.5
 
   node-api-version@0.2.1:
     dependencies:
-      semver: 7.7.4
+      semver: 7.8.5
 
   node-gyp@12.4.0:
     dependencies:
@@ -2736,7 +2777,7 @@ snapshots:
       graceful-fs: 4.2.11
       nopt: 9.0.0
       proc-log: 6.1.0
-      semver: 7.7.4
+      semver: 7.8.5
       tar: 7.5.22
       tinyglobby: 0.2.17
       undici: 6.29.0
@@ -2866,6 +2907,13 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  read-excel-file@9.3.10:
+    dependencies:
+      fflate: 0.8.3
+      saxen: 11.2.0
+      unzipper-esm: 0.13.3
+      worker-f: 0.1.20
+
   readable-stream@2.3.8:
     dependencies:
       core-util-is: 1.0.3
@@ -2938,6 +2986,8 @@ snapshots:
       truncate-utf8-bytes: 1.0.2
 
   sax@1.6.1: {}
+
+  saxen@11.2.0: {}
 
   scheduler@0.28.0: {}
 
@@ -3078,6 +3128,11 @@ snapshots:
 
   universalify@2.0.1: {}
 
+  unzipper-esm@0.13.3:
+    dependencies:
+      graceful-fs: 4.2.11
+      node-int64: 0.4.0
+
   unzipper@0.12.5:
     dependencies:
       bluebird: 3.7.2
@@ -3131,6 +3186,8 @@ snapshots:
   which@6.0.1:
     dependencies:
       isexe: 4.0.0
+
+  worker-f@0.1.20: {}
 
   wrap-ansi@7.0.0:
     dependencies:

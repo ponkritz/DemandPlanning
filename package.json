@@ -17,8 +17,10 @@
     "start:desktop": "electron ."
   },
   "dependencies": {
+    "@azure/msal-browser": "^5.24.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "read-excel-file": "^9.3.10"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
@@ -37,9 +39,22 @@
   "build": {
     "appId": "com.demandplanning.desktop",
     "productName": "Demand Planning Hub",
-    "directories": { "output": "release" },
-    "files": ["dist/**/*", "electron/**/*", "package.json"],
-    "win": { "target": ["nsis"] },
-    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true }
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }
