@@ -41,7 +41,7 @@ export default function App() {
       <div className="sidebar-footer"><span className="environment-dot" /> Desktop MVP<small>Local adapter · v0.1.0</small></div>
     </aside>
     <main>
-      <header className="topbar"><div><p className="eyebrow">{monthName(month).toUpperCase()}</p><h1>{nav.find((item) => item.id === page)?.label}</h1></div><div className="topbar-actions"><label className="month-picker">Month<input type="month" value={month} onChange={(event) => setMonth(event.target.value)} /></label><Pill tone={planningOpen ? 'open' : 'locked'}>Planning {planningOpen ? 'open' : 'locked'}</Pill><Pill tone={actualsOpen ? 'open' : 'locked'}>Actuals {actualsOpen ? 'open' : 'locked'}</Pill></div></header>
+      <header className="topbar"><div><p className="eyebrow">{monthName(month).toUpperCase()}</p><h1>{nav.find((item) => item.id === page)?.label}</h1></div><div className="topbar-actions"><Pill tone={store.connection.mode === 'sharepoint' ? 'open' : store.connection.status === 'error' || store.connection.status === 'conflict' ? 'danger' : 'neutral'}>{store.connection.mode === 'sharepoint' ? '● Live SharePoint' : '○ Local data'}</Pill><label className="month-picker">Month<input type="month" value={month} onChange={(event) => setMonth(event.target.value)} /></label><Pill tone={planningOpen ? 'open' : 'locked'}>Planning {planningOpen ? 'open' : 'locked'}</Pill><Pill tone={actualsOpen ? 'open' : 'locked'}>Actuals {actualsOpen ? 'open' : 'locked'}</Pill></div></header>
       {page === 'overview' && <DashboardPage {...pageProps} navigate={setPage} />}
       {page === 'activities' && <ActivitiesPage {...pageProps} />}
       {page === 'monthly' && <MonthlyPage {...pageProps} />}

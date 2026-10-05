@@ -11,6 +11,8 @@ export interface PersonRef {
   email: string
   role: UserRole
   active: boolean
+  region?: string
+  discipline?: string
 }
 
 export interface Activity {
@@ -26,6 +28,13 @@ export interface Activity {
   complexity: Complexity
   featureCount?: number
   bugCount?: number
+  stream?: string
+  sourceCategory?: string
+  releaseType?: string
+  currentMilestone?: string
+  sourceNote?: string
+  region?: string
+  discipline?: string
   source: 'Manual' | 'Migration' | 'TFS' | 'Windchill'
   createdAt: string
   createdBy: string
@@ -39,6 +48,10 @@ export interface MonthlyEffort {
   plannedHours: number | null
   actualHours: number | null
   baselineHours: number | null
+  totalWorkingHours?: number | null
+  standardHours?: number | null
+  netWorkingHours?: number | null
+  regionalHolidayHours?: number | null
   notes: string
   learnings: string
   struggles: string
