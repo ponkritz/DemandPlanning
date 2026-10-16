@@ -435,14 +435,20 @@ test('partial hierarchy retains known IDs and completion creates only missing ch
 test('bulk monthly creation creates one task per Time Writing story and skips existing month tasks', async () => {
   const server = fakeHierarchyServer()
   const result = await createAzureReleaseHierarchy(config, pat, { ...feature, iterationPath: 'Quality Project\\PI A', storyIterationPath: 'Quality Project\\PI A\\Sprint 1', assignedTo: 'creator@example.test' }, 'PU', [], 'October 2026', server.transport)
-  const stories = result.items.filter(item => item.workItemType === 'User Story')
-  const first = await bulkCreateMonthlyTimeWritingTasks(config, pat, stories, 'November 2026', 'creator@example.test', server.transport)
+  const source = result.items.map(item => item.id === result.feature.id ? { ...item, state: 'Active' } : item)
+  const first = await bulkCreateMonthlyTimeWritingTasks(config, pat, source, 'November 2026', 'creator@example.test', server.transport)
   assert.equal(first.length, 1)
   assert.equal(first[0].title, 'November 2026 | Example | Service | v1.0')
   assert.equal(server.records.get(first[0].id).fields['System.AssignedTo'].id, 'creator@example.test')
   const writes = server.writes.length
-  await bulkCreateMonthlyTimeWritingTasks(config, pat, stories, 'November 2026', 'creator@example.test', server.transport)
+  await bulkCreateMonthlyTimeWritingTasks(config, pat, source, 'November 2026', 'creator@example.test', server.transport)
   assert.equal(server.writes.length, writes)
+})
+
+test('bulk monthly creation excludes Time Writing stories under non-Active Features', async () => {
+  const server = fakeHierarchyServer()
+  const result = await createAzureReleaseHierarchy(config, pat, { ...feature, iterationPath: 'Quality Project\\PI A', storyIterationPath: 'Quality Project\\PI A\\Sprint 1', assignedTo: 'creator@example.test' }, 'PU', [], 'October 2026', server.transport)
+  await assert.rejects(bulkCreateMonthlyTimeWritingTasks(config, pat, result.items, 'November 2026', 'creator@example.test', server.transport), /Active Features/)
 })
 
 test('desktop child requests permit only User Story/Task and retain hierarchy relation', () => {
