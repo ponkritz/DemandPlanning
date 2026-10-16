@@ -39,23 +39,40 @@ test('Time Writing stories are filtered by selected-month child task and roll up
   assert.equal(data.epicBreakdown.length, 1); assert.equal(data.epicBreakdown[0].epic.id, 10)
   assert.equal(data.epicBreakdown[0].tasks, 1)
 })
-test('NPRA tagged Feature estimates reduce selected-month capacity using the agreed formula', () => {
+test('NPRA remains separately reported and does not reduce utilization capacity', () => {
   const epic = item(10, { workItemType: 'Epic', title: 'Epic A' })
   const feature = item(11, { workItemType: 'Feature', title: 'NPRA Feature', parentId: 10, assignedTo: 'QE', tags: 'Release; NPRA Hours', originalEstimate: 16 })
   const story = item(12, { parentId: 11, originalEstimate: 10, completedWork: 5 })
   const task = item(13, { workItemType: 'Task', parentId: 12, title: 'October 2026 | Release' })
   const data = azureInsights([epic, feature, story, task], '2026-10', '2026-10-17')
   assert.equal(data.workingDays, 22); assert.equal(data.dayCapacity, 176); assert.equal(data.capacity, 176)
-  assert.equal(data.npra.value, 16); assert.equal(data.available, 160); assert.equal(data.utilization, 110)
-  assert.equal(data.epicBreakdown[0].npra.value, 16); assert.equal(data.resources[0].utilization, 110)
+  assert.equal(data.npra.value, 16); assert.equal(data.available, 5); assert.equal(data.utilization, 3520)
+  assert.equal(data.epicBreakdown[0].npra.value, 16); assert.equal(data.resources[0].utilization, 3520)
 })
-test('NPRA respects exact tag matching and reports unavailable utilization when capacity is exhausted', () => {
+test('NPRA remains exact-tagged and does not change the new utilization calculation', () => {
   const feature = item(1, { workItemType: 'Feature', tags: 'Not NPRA Hours', originalEstimate: 999 })
   const story = item(2, { parentId: 1, originalEstimate: 1, completedWork: 1 })
   const task = item(3, { workItemType: 'Task', parentId: 2, title: 'October 2026 | Release' })
   assert.equal(azureInsights([feature, story, task], '2026-10', '2026-10-17').npra.value, null)
+  const before = azureInsights([feature, story, task], '2026-10', '2026-10-17').utilization
   feature.tags = 'NPRA Hours'; feature.originalEstimate = 176
-  assert.equal(azureInsights([feature, story, task], '2026-10', '2026-10-17').utilization, null)
+  assert.equal(azureInsights([feature, story, task], '2026-10', '2026-10-17').utilization, before)
+})
+test('utilization uses funded month hours over all Actuals less Absence Actuals under Epic 37778', () => {
+  const absenceEpic = item(37778, { workItemType: 'Epic', title: 'Absence' })
+  const absenceFeature = item(2, { workItemType: 'Feature', parentId: 37778 })
+  const absenceStory = item(3, { parentId: 2, completedWork: 16 })
+  const absenceTask = item(4, { workItemType: 'Task', parentId: 3, title: 'October 2026 | Absence' })
+  const fundedEpic = item(10, { workItemType: 'Epic', title: 'Funded' })
+  const fundedFeature = item(11, { workItemType: 'Feature', parentId: 10 })
+  const fundedStory = item(12, { parentId: 11, completedWork: 80 })
+  const fundedTask = item(13, { workItemType: 'Task', parentId: 12, title: 'October 2026 | Funded' })
+  const data = azureInsights([absenceEpic, absenceFeature, absenceStory, absenceTask, fundedEpic, fundedFeature, fundedStory, fundedTask], '2026-10', '2026-10-17')
+  assert.equal(data.dayCapacity, 176)
+  assert.equal(data.actual.value, 96)
+  assert.equal(data.absence.value, 16)
+  assert.equal(data.available, 80)
+  assert.equal(data.utilization, 220)
 })
 test('closures use India month and completed state; overdue excludes completed items and today', () => {
   const data = azureInsights([item(1, { workItemType: 'Feature', state: 'Closed', closedDate: '2026-09-30T20:00:00Z', targetDate: '2026-10-01' }), item(2, { workItemType: 'Feature', state: 'Active', closedDate: '2026-10-01', targetDate: '2026-10-16' }), item(3, { targetDate: '2026-10-17' })], '2026-10', '2026-10-17')

@@ -50,7 +50,7 @@ pnpm build
 
 ### Versions, build identity and Force Update
 
-The current release is **v0.7.0**. The authoritative number is `package.json` (`0.7.0` without the display prefix); the UI and release tags use **vX.Y.Z**. Increase **X** for a major/incompatible change (reset Y and Z), **Y** for a new backward-compatible feature (reset Z), and **Z** for bug fixes only. Rebuilding an unchanged release keeps its version and gets a distinct build ID. Do not automatically treat every commit as a release or infer version changes from build counts. Future releases must bump the appropriate component before deployment.
+The current release is **v0.8.0**. The authoritative number is `package.json` (`0.8.0` without the display prefix); the UI and release tags use **vX.Y.Z**. Increase **X** for a major/incompatible change (reset Y and Z), **Y** for a new backward-compatible feature (reset Z), and **Z** for bug fixes only. Rebuilding an unchanged release keeps its version and gets a distinct build ID. Do not automatically treat every commit as a release or infer version changes from build counts. Future releases must bump the appropriate component before deployment.
 
 The sidebar shows version, build ID and build date/time in **IST**; the Force Update dialog also shows the source commit. GitHub Actions stamps `GITHUB_RUN_ID.GITHUB_RUN_ATTEMPT`; local builds use a commit/timestamp ID. Metadata is embedded in the app, emitted to `build-info.json`, and stamped into HTML. Both CI jobs verify the version and reject a release tag that does not exactly match `v` plus the package version.
 
@@ -66,7 +66,7 @@ Every push to `main` also builds and deploys the browser version to GitHub Pages
 
 ## Data and security boundary
 
-### Azure dashboard mapping (v0.7.0)
+### Azure dashboard mapping (v0.8.0)
 
 Overview and its deterministic insights consume the exact same scoped `azure.items` workspace as Backlogs: a fresh selected-team preview takes precedence over the verified saved cache. Removed records are excluded. Visual state filters on Backlogs do not change dashboard totals. Refresh is explicit; failed refreshes retain the previous dataset and display the error. There is no local planning/demo fallback.
 
@@ -74,7 +74,7 @@ Plan = `Microsoft.VSTS.Scheduling.OriginalEstimate`; Actual = `Microsoft.VSTS.Sc
 
 The six-month table uses Original Estimate and Completed Work only on direct child Tasks under those Time Writing stories, assigned to months by the agreed `October 2026 | Feature title` naming convention. The dashboard and Monthly Time Writing view group these selected stories by traversing Story → Feature → Epic parent links. Items without a resolved Epic appear as `No Epic path`. Undated/unmatched tasks are counted as unmapped, not attributed by Created/Changed Date. Work-field units must be confirmed in the Azure project; Story Points are never treated as hours. Snapshot/revision history is not available, so estimates are not claimed to be frozen monthly plans or time entries.
 
-NPRA capacity uses Features tagged exactly `NPRA Hours` that are the direct parent Feature of a selected-month Time Writing story. NPRA Hours = that Feature's Original Estimate. Weekdays only are counted as working days (Monday–Friday); public holidays, leave and partial availability are not yet included. Per person and overall capacity is `working days × 8`; the app applies the requested utilization formula `base capacity ÷ (base capacity − NPRA Hours) × 100`. A missing NPRA estimate remains unavailable rather than zero. NPRA Features without an assignee are included in the overall result but explicitly flagged as not allocatable to an individual. A zero or negative adjusted capacity displays unavailable rather than an infinite or misleading percentage.
+NPRA Hours remain a separately tracked Feature category (exact tag `NPRA Hours`) and do not adjust utilization. Weekdays only are counted as working days (Monday–Friday). Funded hours are `working days × 8`. For the selected month, Absence Hours are the Completed Work on Time Writing stories mapped to Epic `#37778`; the dashboard calculates utilization as `funded hours ÷ (all Time Writing Actuals − Absence Hours) × 100`. An empty or zero denominator displays unavailable rather than an infinite or misleading percentage. Public holidays, leave outside Epic #37778, partial availability and multiple-person aggregation are not inferred.
 
 Feature closure counts require a completed state (Closed, Done or Completed) and Closed Date, bucketed in India time. Target Date determines overdue non-completed items. Feature completion is not proof of release/milestone sign-off. YoY counts describe only currently fetched backlog membership; historical coverage is not guaranteed and a zero denominator never produces a fabricated percentage. Resource totals use Assigned To on Time Writing stories, not local synthetic people. Capacity/utilization, ad-hoc classification, approved baselines, bands and lessons remain unavailable pending explicit source mappings. No 160-hour capacity is assumed. The UI provides source-item links and a field-mapping table. No external AI integration is enabled.
 
