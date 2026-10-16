@@ -30,8 +30,8 @@ export function azureInsights(source: AzureWorkItem[], month: string, today: str
   const timeWritingTasks = tasks.filter(item => item.parentId != null && storyIds.has(item.parentId))
   const monthlyTasks = timeWritingTasks.filter(item => timeWritingMonth(item.title) === month)
   const storiesForMonth = timeWritingStories.filter(item => monthlyTasks.some(task => task.parentId === item.id))
-  const plan = total(storiesForMonth, 'originalEstimate'), actual = total(storiesForMonth, 'completedWork')
-  const paired = storiesForMonth.filter(item => item.originalEstimate != null && item.completedWork != null)
+  const plan = total(monthlyTasks, 'originalEstimate'), actual = total(monthlyTasks, 'completedWork')
+  const paired = monthlyTasks.filter(item => item.originalEstimate != null && item.completedWork != null)
   const variance = paired.length ? paired.reduce((sum, item) => sum + item.completedWork! - item.originalEstimate!, 0) : null
   const closed = (item: AzureWorkItem) => ['closed', 'done', 'completed'].includes(item.state.trim().toLowerCase())
   const overdue = items.filter(item => !closed(item) && item.targetDate && item.targetDate.slice(0, 10) < today)
@@ -49,12 +49,12 @@ export function azureInsights(source: AzureWorkItem[], month: string, today: str
   const npraFeatures = monthlyFeatures.filter(item => hasTag(item, 'NPRA Hours'))
   const npra = total(npraFeatures, 'originalEstimate')
   const dayCount = workingDays(month), dayCapacity = dayCount * 8
-  const absenceStories = storiesForMonth.filter(item => epicOf(item)?.id === 37778)
-  const absence = total(absenceStories, 'completedWork')
+  const absenceTasks = monthlyTasks.filter(item => epicOf(item)?.id === 37778)
+  const absence = total(absenceTasks, 'completedWork')
   const actualLessAbsence = actual.value == null ? null : actual.value - (absence.value ?? 0)
-  const resourceNames = [...new Set(storiesForMonth.map(item => item.assignedTo).filter(Boolean))].sort()
+  const resourceNames = [...new Set(monthlyTasks.map(item => item.assignedTo).filter(Boolean))].sort()
   const resources = resourceNames.map(name => {
-    const owned = storiesForMonth.filter(item => item.assignedTo === name), absenceOwned = absenceStories.filter(item => item.assignedTo === name)
+    const owned = monthlyTasks.filter(item => item.assignedTo === name), absenceOwned = absenceTasks.filter(item => item.assignedTo === name)
     const actualOwned = total(owned, 'completedWork'), absenceHours = total(absenceOwned, 'completedWork')
     const denominator = actualOwned.value == null ? null : actualOwned.value - (absenceHours.value ?? 0)
     return { name, plan: total(owned, 'originalEstimate'), actual: actualOwned, count: owned.length, npra: total([], 'originalEstimate'), absence: absenceHours, capacity: dayCapacity, available: denominator, utilization: utilization(dayCapacity, denominator) }
@@ -66,7 +66,7 @@ export function azureInsights(source: AzureWorkItem[], month: string, today: str
   })
   const epicGroups = new Map<string, { epic?: AzureWorkItem; stories: AzureWorkItem[] }>()
   for (const story of storiesForMonth) { const epic = epicOf(story); const key = epic?.key ?? 'unmapped'; const group = epicGroups.get(key) ?? { epic, stories: [] }; group.stories.push(story); epicGroups.set(key, group) }
-  const epicBreakdown = [...epicGroups.values()].map(group => { const groupFeatures = [...new Map(group.stories.map(featureOf).filter((item): item is AzureWorkItem => Boolean(item)).map(item => [item.key, item])).values()]; return { ...group, plan: total(group.stories, 'originalEstimate'), actual: total(group.stories, 'completedWork'), npra: total(groupFeatures.filter(item => hasTag(item, 'NPRA Hours')), 'originalEstimate'), tasks: monthlyTasks.filter(task => group.stories.some(story => story.id === task.parentId)).length } }).sort((a,b) => (b.actual.value ?? -1) - (a.actual.value ?? -1))
+  const epicBreakdown = [...epicGroups.values()].map(group => { const groupFeatures = [...new Map(group.stories.map(featureOf).filter((item): item is AzureWorkItem => Boolean(item)).map(item => [item.key, item])).values()]; const groupTasks = monthlyTasks.filter(task => group.stories.some(story => story.id === task.parentId)); return { ...group, plan: total(groupTasks, 'originalEstimate'), actual: total(groupTasks, 'completedWork'), npra: total(groupFeatures.filter(item => hasTag(item, 'NPRA Hours')), 'originalEstimate'), tasks: groupTasks.length } }).sort((a,b) => (b.actual.value ?? -1) - (a.actual.value ?? -1))
   const capacity = dayCapacity
-  return { items, features, tasks, timeWritingStories, storiesForMonth, timeWritingTasks, monthlyTasks, plan, actual, variance, paired, overdue, flags, closures, priorClosures, resources, trend, epicBreakdown, npraFeatures, npra, absenceStories, absence, workingDays: dayCount, dayCapacity, capacity, available: actualLessAbsence, utilization: utilization(dayCapacity, actualLessAbsence), unassignedNpRA: npraFeatures.filter(item => !item.assignedTo), unmappedTasks: timeWritingTasks.filter(item => !timeWritingMonth(item.title)).length }
+  return { items, features, tasks, timeWritingStories, storiesForMonth, timeWritingTasks, monthlyTasks, plan, actual, variance, paired, overdue, flags, closures, priorClosures, resources, trend, epicBreakdown, npraFeatures, npra, absenceTasks, absence, workingDays: dayCount, dayCapacity, capacity, available: actualLessAbsence, utilization: utilization(dayCapacity, actualLessAbsence), unassignedNpRA: npraFeatures.filter(item => !item.assignedTo), unmappedTasks: timeWritingTasks.filter(item => !timeWritingMonth(item.title)).length }
 }

@@ -61,11 +61,12 @@ function azureFeatureRequest(input) {
 function azureTimeWritingEffortRequest(input) {
   if (!input || input.operation !== 'update-time-writing-effort') throw new Error('Invalid monthly effort request.')
   const connection = azureReadRequest({ ...input, operation: 'areas' })
-  if (!Number.isSafeInteger(input.workItemId) || input.workItemId < 1 || !Number.isFinite(input.planHours) || !Number.isFinite(input.actualHours) || input.planHours < 0 || input.actualHours < 0 || input.planHours > 1000000 || input.actualHours > 1000000) throw new Error('Invalid Plan or Actual hours.')
+  if (!Number.isSafeInteger(input.workItemId) || input.workItemId < 1 || (input.planHours == null && input.actualHours == null) || (input.planHours != null && (!Number.isFinite(input.planHours) || input.planHours < 0 || input.planHours > 1000000)) || (input.actualHours != null && (!Number.isFinite(input.actualHours) || input.actualHours < 0 || input.actualHours > 1000000)) || (input.tags != null && (typeof input.tags !== 'string' || input.tags.length > 100000))) throw new Error('Invalid Original Estimate or Completed Work.')
   const base = `https://dev.azure.com/${encodeURIComponent(input.organization)}/${encodeURIComponent(input.project)}`
   const patch = [
-    { op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.OriginalEstimate', value: input.planHours },
-    { op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.CompletedWork', value: input.actualHours },
+    ...(input.planHours == null ? [] : [{ op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.OriginalEstimate', value: input.planHours }]),
+    ...(input.actualHours == null ? [] : [{ op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.CompletedWork', value: input.actualHours }]),
+    ...(input.tags ? [{ op: 'add', path: '/fields/System.Tags', value: input.tags }] : []),
   ]
   return { url: `${base}/_apis/wit/workitems/${input.workItemId}?api-version=7.1`, options: {
     method: 'PATCH', redirect: 'error', headers: { ...connection.options.headers, 'Content-Type': 'application/json-patch+json' }, body: JSON.stringify(patch),

@@ -17,7 +17,7 @@ export function AdminPage({ store, month }: PageProps) {
     store.update((draft) => {
       let current = draft.periods.find((item) => item.month === month)
       if (!current) {
-        current = { month, planningDeadline: `${month}-01T00:00:00.000Z`, actualsDeadline: `${month}-28T23:59:59.000Z`, planningLocked: false, actualsLocked: false, updatedAt: now, updatedBy: 'u-owner' }
+        current = { month, planningDeadline: `${month}-05T23:59:59.000Z`, actualsDeadline: `${month}-05T23:59:59.000Z`, planningLocked: false, actualsLocked: false, updatedAt: now, updatedBy: 'u-owner' }
         draft.periods.push(current)
       }
       if (kind === 'planning') current.planningLocked = !current.planningLocked
@@ -83,8 +83,8 @@ export function AdminPage({ store, month }: PageProps) {
     </Panel>
     <div className="admin-grid">
       <Panel><div className="panel-heading"><div><p className="eyebrow">PERIOD CONTROL</p><h2>{month}</h2></div></div><label>Reason for change<textarea value={reason} onChange={(event) => setReason(event.target.value)} /></label>
-        <div className="control-card"><div><strong>Planning</strong><p>Deadline: {period?.planningDeadline?.slice(0, 10) ?? 'Not configured'}</p></div><Pill tone={period?.planningLocked ? 'locked' : 'open'}>{period?.planningLocked ? 'Locked' : 'Open'}</Pill><button className="primary" onClick={() => toggle('planning')}>{period?.planningLocked ? 'Unlock' : 'Lock'}</button><label>Extend until<input type="date" onChange={(event) => extend('planning', event.target.value)} /></label></div>
-        <div className="control-card"><div><strong>Actuals</strong><p>Deadline: {period?.actualsDeadline?.slice(0, 10) ?? 'Not configured'}</p></div><Pill tone={period?.actualsLocked ? 'locked' : 'open'}>{period?.actualsLocked ? 'Locked' : 'Open'}</Pill><button className="primary" onClick={() => toggle('actuals')}>{period?.actualsLocked ? 'Unlock' : 'Lock'}</button><label>Extend until<input type="date" onChange={(event) => extend('actuals', event.target.value)} /></label></div>
+        <div className="control-card"><div><strong>Planning</strong><p>Deadline: {period?.planningDeadline?.slice(0, 10) ?? `${month}-05 (default)`}</p></div><Pill tone={period?.planningLocked ? 'locked' : 'open'}>{period?.planningLocked ? 'Locked' : 'Open'}</Pill><button className="primary" onClick={() => toggle('planning')}>{period?.planningLocked ? 'Unlock' : 'Lock'}</button><label>Extend until<input type="date" onChange={(event) => extend('planning', event.target.value)} /></label></div>
+        <div className="control-card"><div><strong>Actuals</strong><p>Deadline: {period?.actualsDeadline?.slice(0, 10) ?? `${month}-05 (default)`}</p></div><Pill tone={period?.actualsLocked ? 'locked' : 'open'}>{period?.actualsLocked ? 'Locked' : 'Open'}</Pill><button className="primary" onClick={() => toggle('actuals')}>{period?.actualsLocked ? 'Unlock' : 'Lock'}</button><label>Extend until<input type="date" onChange={(event) => extend('actuals', event.target.value)} /></label></div>
       </Panel>
       <Panel><div className="panel-heading"><div><p className="eyebrow">RBAC</p><h2>People and roles</h2></div></div>
         <form className="resource-form" onSubmit={addResource}><div className="form-row"><label>Name<input name="name" required placeholder="Resource name" /></label><label>Work email<input name="email" type="email" required placeholder="name@philips.com" /></label></div><div className="form-row"><label>App role<select name="role" defaultValue="Contributor"><option>Contributor</option><option>ProcessOwner</option><option>Viewer</option><option>Admin</option><option>Owner</option></select></label><button className="primary resource-add-button">＋ Add resource</button></div></form>

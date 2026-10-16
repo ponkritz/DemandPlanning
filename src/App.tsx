@@ -59,7 +59,7 @@ export default function App() {
       {store.connection.mode !== 'sharepoint' && store.connection.status === 'error' && <div className="notice error" role="alert">{store.connection.message}</div>}
       {page === 'overview' && <DashboardPage month={month} azure={azure} navigate={setPage} />}
       {page === 'activities' && <ActivitiesPage azure={azure} />}
-      {page === 'monthly' && <MonthlyPage azure={azure} month={month} />}
+      {page === 'monthly' && <MonthlyPage azure={azure} month={month} store={store} />}
       {page === 'baselines' && <BaselinesPage azure={azure} month={month} />}
       {page === 'releases' && <ReleasesPage azure={azure} month={month} />}
       {page === 'board' && <BoardPage azure={azure} onOpenConnection={() => setPage('azure')} />}

@@ -56,11 +56,12 @@ test('ADS configurations retain URL, reason and PAT as one selectable browser-lo
   assert.deepEqual(listAzureConnectionProfiles(storage), [{ id: second.id, url: second.url, reason: second.reason }])
 })
 
-test('monthly effort writes only both scheduling fields on a verified Time Writing User Story', async () => {
-  const record = { id: 41, fields: { 'System.Title': 'Program | Service | v1.0 - Time Writing', 'System.WorkItemType': 'User Story', 'System.State': 'Active', 'System.TeamProject': config.project, 'System.AreaPath': 'Quality', 'System.IterationPath': config.project, 'Microsoft.VSTS.Scheduling.OriginalEstimate': 4, 'Microsoft.VSTS.Scheduling.CompletedWork': 2 } }
+test('monthly effort writes only both scheduling fields on a verified month Task', async () => {
+  const parent = { id: 40, fields: { 'System.Title': 'Program | Service | v1.0 - Time Writing', 'System.WorkItemType': 'User Story', 'System.TeamProject': config.project } }
+  const record = { id: 41, fields: { 'System.Title': 'October 2026 | Program | Service | v1.0', 'System.WorkItemType': 'Task', 'System.Parent': 40, 'System.State': 'Active', 'System.TeamProject': config.project, 'System.AreaPath': 'Quality', 'System.IterationPath': config.project, 'Microsoft.VSTS.Scheduling.OriginalEstimate': 4, 'Microsoft.VSTS.Scheduling.CompletedWork': 2 } }
   let write
-  const updated = await updateAzureTimeWritingEffort(config, pat, 41, 8, 6, async (request) => {
-    if (request.operation === 'items') return { value: [record] }
+  const updated = await updateAzureTimeWritingEffort(config, pat, 41, 8, 6, false, async (request) => {
+    if (request.operation === 'items') return { value: request.ids[0] === 40 ? [parent] : [record] }
     assert.equal(request.operation, 'update-time-writing-effort')
     write = request
     return { ...record, fields: { ...record.fields, 'Microsoft.VSTS.Scheduling.OriginalEstimate': 8, 'Microsoft.VSTS.Scheduling.CompletedWork': 6 } }
@@ -69,8 +70,8 @@ test('monthly effort writes only both scheduling fields on a verified Time Writi
   assert.equal(write.actualHours, 6)
   assert.equal(updated.originalEstimate, 8)
   assert.equal(updated.completedWork, 6)
-  await assert.rejects(updateAzureTimeWritingEffort(config, pat, 41, -1, 2, async () => ({})), /Plan and Actual/)
-  await assert.rejects(updateAzureTimeWritingEffort(config, pat, 41, 1, 2, async (request) => request.operation === 'items' ? { value: [{ ...record, fields: { ...record.fields, 'System.Title': 'Regular Story' } }] } : ({})), /Only a Time Writing/)
+  await assert.rejects(updateAzureTimeWritingEffort(config, pat, 41, -1, 2, false, async () => ({})), /Original Estimate/)
+  await assert.rejects(updateAzureTimeWritingEffort(config, pat, 41, 1, 2, false, async (request) => request.operation === 'items' ? { value: [{ ...record, fields: { ...record.fields, 'System.Title': 'Regular Task' } }] } : ({})), /Only a month-named/)
 })
 
 test('PU and Release descriptions follow the agreed DoD templates', () => {

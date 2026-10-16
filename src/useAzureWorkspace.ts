@@ -108,16 +108,16 @@ export function useAzureWorkspace(store: PageProps['store']) {
     })
   }
 
-  async function saveTimeWritingEffort(workItemId: number, planHours: number, actualHours: number) {
+  async function saveTimeWritingEffort(workItemId: number, planHours: number | undefined, actualHours: number | undefined, markAdhoc = false) {
     if (!config) throw new Error('Configure a valid Azure DevOps project first.')
-    const updated = await updateAzureTimeWritingEffort(config, pat, workItemId, planHours, actualHours)
+    const updated = await updateAzureTimeWritingEffort(config, pat, workItemId, planHours, actualHours, markAdhoc)
     setPreview((current) => current ? { ...current, items: mergeAzureWorkItems(current.items, [updated]), scope: { ...current.scope, itemKeys: [...new Set([...current.scope.itemKeys, updated.key])] } } : current)
     store.update((draft) => {
       draft.azureWorkItems = mergeAzureWorkItems(draft.azureWorkItems ?? [], [updated])
-      draft.audits.unshift({ id: crypto.randomUUID(), timestamp: new Date().toISOString(), actor: 'u-owner', action: 'Update Azure effort', entity: 'AzureDevOps Time Writing', entityId: String(updated.id), detail: `Updated Plan to ${planHours}h and Actual to ${actualHours}h on Azure DevOps work item #${updated.id}.` })
+      draft.audits.unshift({ id: crypto.randomUUID(), timestamp: new Date().toISOString(), actor: 'u-owner', action: 'Update Azure effort', entity: 'AzureDevOps Time Writing Task', entityId: String(updated.id), detail: `Updated Original Estimate to ${planHours ?? 'unchanged'}h and Completed Work to ${actualHours ?? 'unchanged'}h on Azure DevOps Task #${updated.id}${markAdhoc ? '; tagged ad-hoc' : ''}.` })
       return draft
     })
-    setMessage(`Plan and Actual saved to Azure DevOps work item #${updated.id}.`); setError('')
+    setMessage(`Azure DevOps Task #${updated.id} saved and verified.`); setError('')
     return updated
   }
 

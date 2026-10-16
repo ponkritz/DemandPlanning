@@ -5,20 +5,20 @@ import { azureInsights, timeWritingMonth, indiaMonth } from '../src/azureInsight
 import { mapAzureWorkItem } from '../src/azureDevOps.ts'
 
 const item = (id, extra = {}) => ({ key: `org/project/${id}`, id, title: 'Release - Time Writing', workItemType: 'User Story', state: 'Active', assignedTo: 'QE', ...extra })
-test('Time Writing story Original Estimate maps to Plan and Completed Work to Actual without child double-counting', () => {
-  const story = item(1, { originalEstimate: 20, completedWork: 30 })
-  const task = item(2, { workItemType: 'Task', parentId: 1, title: 'October 2026 | Release', originalEstimate: 8, completedWork: 9 })
+test('month Task Original Estimate maps to Plan and Completed Work to Actual without child double-counting', () => {
+  const story = item(1)
+  const task = item(2, { workItemType: 'Task', parentId: 1, title: 'October 2026 | Release', originalEstimate: 8, completedWork: 11 })
   const data = azureInsights([story, story, task, item(3, { title: 'Other story', originalEstimate: 1000, completedWork: 999 })], '2026-10', '2026-10-17')
-  assert.equal(data.plan.value, 20); assert.equal(data.actual.value, 30); assert.equal(data.variance, 10)
+  assert.equal(data.plan.value, 8); assert.equal(data.actual.value, 11); assert.equal(data.variance, 3)
   assert.equal(data.flags.length, 1)
-  assert.equal(data.trend.at(-1).plan.value, 8); assert.equal(data.trend.at(-1).actual.value, 9)
-  assert.equal(data.resources[0].actual.value, 30)
+  assert.equal(data.trend.at(-1).plan.value, 8); assert.equal(data.trend.at(-1).actual.value, 11)
+  assert.equal(data.resources[0].actual.value, 11)
 })
-test('missing story fields remain unavailable rather than using Task fields or synthetic data', () => {
+test('Task fields remain the sole monthly source when User Story fields are blank', () => {
   const data = azureInsights([item(1), item(2, { title: 'October 2026 | Release', workItemType: 'Task', parentId: 1, originalEstimate: 20, completedWork: 0 })], '2026-10', '2026-10-17')
-  assert.equal(data.plan.value, null); assert.equal(data.actual.value, null); assert.equal(data.variance, null)
+  assert.equal(data.plan.value, 20); assert.equal(data.actual.value, 0); assert.equal(data.variance, -20)
   assert.equal(data.trend.at(-1).actual.value, 0)
-  assert.equal(data.plan.count, 0); assert.equal(data.plan.total, 1)
+  assert.equal(data.plan.count, 1); assert.equal(data.plan.total, 1)
 })
 test('only Time Writing child Tasks contribute monthly trend; excludes Removed and unrelated tasks', () => {
   const data = azureInsights([item(1), item(2, { state: 'Removed', originalEstimate: 1000 }), item(3, { title: 'October 2026 | Other', workItemType: 'Task', parentId: 77, completedWork: 99 }), item(4, { title: 'No month', workItemType: 'Task', parentId: 1, completedWork: 30 })], '2026-10', '2026-10-17')
@@ -29,9 +29,9 @@ test('only Time Writing child Tasks contribute monthly trend; excludes Removed a
 test('Time Writing stories are filtered by selected-month child task and roll up to their Epic', () => {
   const epic = item(10, { workItemType: 'Epic', title: 'Epic A' })
   const feature = item(11, { workItemType: 'Feature', title: 'Feature A', parentId: 10 })
-  const october = item(12, { parentId: 11, originalEstimate: 10, completedWork: 7 })
+  const october = item(12, { parentId: 11 })
   const november = item(13, { parentId: 11, title: 'November 2026 | Release', originalEstimate: 20, completedWork: 10 })
-  const octoberTask = item(14, { workItemType: 'Task', parentId: 12, title: 'October 2026 | Release' })
+  const octoberTask = item(14, { workItemType: 'Task', parentId: 12, title: 'October 2026 | Release', originalEstimate: 10, completedWork: 7 })
   const novemberTask = item(15, { workItemType: 'Task', parentId: 13, title: 'November 2026 | Release' })
   const data = azureInsights([epic, feature, october, november, octoberTask, novemberTask], '2026-10', '2026-10-17')
   assert.deepEqual(data.storiesForMonth.map(row => row.id), [12])
@@ -42,8 +42,8 @@ test('Time Writing stories are filtered by selected-month child task and roll up
 test('NPRA remains separately reported and does not reduce utilization capacity', () => {
   const epic = item(10, { workItemType: 'Epic', title: 'Epic A' })
   const feature = item(11, { workItemType: 'Feature', title: 'NPRA Feature', parentId: 10, assignedTo: 'QE', tags: 'Release; NPRA Hours', originalEstimate: 16 })
-  const story = item(12, { parentId: 11, originalEstimate: 10, completedWork: 5 })
-  const task = item(13, { workItemType: 'Task', parentId: 12, title: 'October 2026 | Release' })
+  const story = item(12, { parentId: 11 })
+  const task = item(13, { workItemType: 'Task', parentId: 12, title: 'October 2026 | Release', originalEstimate: 10, completedWork: 5 })
   const data = azureInsights([epic, feature, story, task], '2026-10', '2026-10-17')
   assert.equal(data.workingDays, 22); assert.equal(data.dayCapacity, 176); assert.equal(data.capacity, 176)
   assert.equal(data.npra.value, 16); assert.equal(data.available, 5); assert.equal(data.utilization, 3520)
@@ -51,8 +51,8 @@ test('NPRA remains separately reported and does not reduce utilization capacity'
 })
 test('NPRA remains exact-tagged and does not change the new utilization calculation', () => {
   const feature = item(1, { workItemType: 'Feature', tags: 'Not NPRA Hours', originalEstimate: 999 })
-  const story = item(2, { parentId: 1, originalEstimate: 1, completedWork: 1 })
-  const task = item(3, { workItemType: 'Task', parentId: 2, title: 'October 2026 | Release' })
+  const story = item(2, { parentId: 1 })
+  const task = item(3, { workItemType: 'Task', parentId: 2, title: 'October 2026 | Release', originalEstimate: 1, completedWork: 1 })
   assert.equal(azureInsights([feature, story, task], '2026-10', '2026-10-17').npra.value, null)
   const before = azureInsights([feature, story, task], '2026-10', '2026-10-17').utilization
   feature.tags = 'NPRA Hours'; feature.originalEstimate = 176
@@ -61,12 +61,12 @@ test('NPRA remains exact-tagged and does not change the new utilization calculat
 test('utilization uses funded month hours over all Actuals less Absence Actuals under Epic 37778', () => {
   const absenceEpic = item(37778, { workItemType: 'Epic', title: 'Absence' })
   const absenceFeature = item(2, { workItemType: 'Feature', parentId: 37778 })
-  const absenceStory = item(3, { parentId: 2, completedWork: 16 })
-  const absenceTask = item(4, { workItemType: 'Task', parentId: 3, title: 'October 2026 | Absence' })
+  const absenceStory = item(3, { parentId: 2 })
+  const absenceTask = item(4, { workItemType: 'Task', parentId: 3, title: 'October 2026 | Absence', completedWork: 16 })
   const fundedEpic = item(10, { workItemType: 'Epic', title: 'Funded' })
   const fundedFeature = item(11, { workItemType: 'Feature', parentId: 10 })
-  const fundedStory = item(12, { parentId: 11, completedWork: 80 })
-  const fundedTask = item(13, { workItemType: 'Task', parentId: 12, title: 'October 2026 | Funded' })
+  const fundedStory = item(12, { parentId: 11 })
+  const fundedTask = item(13, { workItemType: 'Task', parentId: 12, title: 'October 2026 | Funded', completedWork: 80 })
   const data = azureInsights([absenceEpic, absenceFeature, absenceStory, absenceTask, fundedEpic, fundedFeature, fundedStory, fundedTask], '2026-10', '2026-10-17')
   assert.equal(data.dayCapacity, 176)
   assert.equal(data.actual.value, 96)

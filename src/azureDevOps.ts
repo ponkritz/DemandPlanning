@@ -12,6 +12,7 @@ export interface AzureRequest extends AzureConfig {
   workItemId?: number
   planHours?: number
   actualHours?: number
+  tags?: string
 }
 export interface FeatureInput { parentId: number; title: string; description: string; acceptanceCriteria: string; areaPath?: string; iterationPath?: string; assignedTo?: string; targetDate?: string; assignToCreator?: boolean; storyIterationPath?: string }
 export function featureDescription(kind: 'PU' | 'Release') {
@@ -235,18 +236,26 @@ export async function createAzureFeature(config: AzureConfig, pat: string, featu
 }
 
 const validHours = (value: number) => Number.isFinite(value) && value >= 0 && value <= 1_000_000
+const monthNamedTask = (title: string) => /^(January|February|March|April|May|June|July|August|September|October|November|December) \d{4}\s*\|/i.test(title.trim())
 
-/** Updates only the two Azure scheduling fields used as Plan and Actual in this app. */
-export async function updateAzureTimeWritingEffort(config: AzureConfig, pat: string, workItemId: number, planHours: number, actualHours: number, transport: AzureTransport = requestAzure): Promise<AzureWorkItem> {
+/** Updates only the two Azure scheduling fields on a selected-month Task. */
+export async function updateAzureTimeWritingEffort(config: AzureConfig, pat: string, workItemId: number, planHours: number | undefined, actualHours: number | undefined, markAdhoc = false, transport: AzureTransport = requestAzure): Promise<AzureWorkItem> {
   if (!pat.trim()) throw new Error('Select a PAT profile with Work Items (Read & Write) before saving Plan or Actual.')
-  if (!Number.isSafeInteger(workItemId) || workItemId < 1 || !validHours(planHours) || !validHours(actualHours)) throw new Error('Plan and Actual must be numbers from 0 to 1,000,000 hours.')
+  if (!Number.isSafeInteger(workItemId) || workItemId < 1 || (planHours == null && actualHours == null) || (planHours != null && !validHours(planHours)) || (actualHours != null && !validHours(actualHours))) throw new Error('Original Estimate and Completed Work must be numbers from 0 to 1,000,000 hours.')
   const source = await transport({ ...config, pat, operation: 'items', ids: [workItemId] }) as { value?: RawItem[] }
   const raw = source.value?.find((item) => item.id === workItemId)
-  if (!raw || raw.fields['System.WorkItemType'] !== 'User Story' || !/-\s*Time Writ(?:ing|ting)\s*$/i.test(String(raw.fields['System.Title'] ?? ''))) throw new Error('Only a Time Writing User Story can be updated from Monthly effort.')
-  const response = await transport({ ...config, pat, operation: 'update-time-writing-effort', workItemId, planHours, actualHours }) as RawItem
+  const parentId = raw && (typeof raw.fields['System.Parent'] === 'number' ? raw.fields['System.Parent'] : parentFromRelation(raw))
+  if (!raw || raw.fields['System.WorkItemType'] !== 'Task' || !monthNamedTask(String(raw.fields['System.Title'] ?? ''))) throw new Error('Only a month-named Time Writing Task can be updated from Monthly effort.')
+  if (!parentId) throw new Error('The monthly Task has no parent Time Writing User Story.')
+  const parentSource = await transport({ ...config, pat, operation: 'items', ids: [parentId] }) as { value?: RawItem[] }
+  const parent = parentSource.value?.find((item) => item.id === parentId)
+  if (!parent || parent.fields['System.WorkItemType'] !== 'User Story' || !/-\s*Time Writ(?:ing|ting)\s*$/i.test(String(parent.fields['System.Title'] ?? ''))) throw new Error('The Task parent is not a Time Writing User Story.')
+  const existingTags = typeof raw.fields['System.Tags'] === 'string' ? raw.fields['System.Tags'] : ''
+  const tags = markAdhoc && !existingTags.split(';').some(tag => tag.trim().toLowerCase() === 'ad-hoc') ? [...existingTags.split(';').map(tag => tag.trim()).filter(Boolean), 'ad-hoc'].join('; ') : undefined
+  const response = await transport({ ...config, pat, operation: 'update-time-writing-effort', workItemId, planHours, actualHours, tags }) as RawItem
   if (response.id !== workItemId) throw new Error('Azure DevOps returned an unexpected work item after saving effort.')
   const updated = mapAzureWorkItem(response, config)
-  if (updated.originalEstimate !== planHours || updated.completedWork !== actualHours) throw new Error('Azure DevOps did not confirm both Plan and Actual values. Refresh before retrying.')
+  if ((planHours != null && updated.originalEstimate !== planHours) || (actualHours != null && updated.completedWork !== actualHours) || (tags && !updated.tags.split(';').some(tag => tag.trim().toLowerCase() === 'ad-hoc'))) throw new Error('Azure DevOps did not confirm the saved fields. Refresh before retrying.')
   return updated
 }
 
@@ -373,7 +382,7 @@ async function requestAzure(request: AzureRequest): Promise<unknown> {
   const readingMetadata = request.operation === 'backlog-epics' || request.operation === 'identity' || request.operation === 'areas' || request.operation === 'iterations' || request.operation === 'iteration-tree'
   const create = request.operation === 'create-feature' || request.operation === 'create-child'
   const endpoint = request.operation === 'update-time-writing-effort' ? `_apis/wit/workitems/${request.workItemId}` : create ? `_apis/wit/workitems/$${request.operation === 'create-feature' ? 'Feature' : encodeURIComponent(request.workItemType!)}` : request.operation === 'backlog-epics' ? `${encodeURIComponent(request.team)}/_apis/work/backlogs/Microsoft.EpicCategory/workItems` : request.operation === 'iteration-tree' ? '_apis/wit/classificationnodes/iterations' : readingMetadata ? `${encodeURIComponent(request.team)}/_apis/work/teamsettings/${request.operation === 'areas' ? 'teamfieldvalues' : 'iterations'}` : request.operation === 'query' ? '_apis/wit/wiql' : '_apis/wit/workitemsbatch'
-  const body = request.operation === 'update-time-writing-effort' ? [{ op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.OriginalEstimate', value: request.planHours }, { op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.CompletedWork', value: request.actualHours }] : create ? featurePatch(request, request.feature!) : request.operation === 'query' ? { query: request.query } : { ids: request.ids, errorPolicy: 'Fail', $expand: 'Relations' }
+  const body = request.operation === 'update-time-writing-effort' ? [{ ...(request.planHours == null ? {} : { op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.OriginalEstimate', value: request.planHours }) }, { ...(request.actualHours == null ? {} : { op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.CompletedWork', value: request.actualHours }) }, ...(request.tags ? [{ op: 'add', path: '/fields/System.Tags', value: request.tags }] : [])].filter(patch => 'op' in patch) : create ? featurePatch(request, request.feature!) : request.operation === 'query' ? { query: request.query } : { ids: request.ids, errorPolicy: 'Fail', $expand: 'Relations' }
   let response: Response
   try {
     const url = request.operation === 'identity' ? `https://dev.azure.com/${encodeURIComponent(request.organization)}/_apis/connectionData?api-version=7.1-preview.1` : `${base}/${endpoint}?api-version=7.1${request.operation === 'query' ? '&$top=1000' : ''}${request.operation === 'iteration-tree' ? '&$depth=10' : ''}${create ? `&validateOnly=${request.validateOnly === true}` : ''}`
