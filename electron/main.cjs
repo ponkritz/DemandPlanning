@@ -1,15 +1,15 @@
 const { app, BrowserWindow, shell, ipcMain } = require('electron')
 const path = require('path')
 const { pathToFileURL } = require('url')
-const { readAzureDevOps } = require('./azure-devops.cjs')
+const { requestAzureDevOps } = require('./azure-devops.cjs')
 const bundledUrl = pathToFileURL(path.join(__dirname, '..', 'dist', 'index.html')).href
 
-ipcMain.handle('azure-devops:read', async (event, request) => {
+ipcMain.handle('azure-devops:request', async (event, request) => {
   const source = event.senderFrame?.url
   const devUrl = process.env.VITE_DEV_SERVER_URL
   const trusted = source === bundledUrl || (devUrl && source && new URL(source).origin === new URL(devUrl).origin)
   if (!trusted || event.senderFrame !== event.sender.mainFrame) throw new Error('Untrusted request source.')
-  return readAzureDevOps(request)
+  return requestAzureDevOps(request)
 })
 
 function createWindow() {

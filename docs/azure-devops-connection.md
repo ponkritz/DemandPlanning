@@ -1,19 +1,42 @@
 # Azure DevOps work-item trial
 
-Open **Azure DevOps** in the app. The supplied organization/project/team are prefilled from the backlog URL. Source access is read-only; saving a preview only updates Demand Planning data.
+Open **Azure DevOps** in the app. The supplied organization/project/team are prefilled from the backlog URL. Fetch and preview only read Azure DevOps. Feature creation is an explicit, separate action.
 
 ## Connect
 
 1. In Azure DevOps User settings → Personal access tokens, create a token for the required organization. Select custom scopes → **Work Items → Read** and a short expiry (seven days for the trial), subject to organization policy.
-2. Paste the token into the app's password field. Never paste it in chat, a repository, a URL, or a GitHub Actions variable.
+2. Paste the token into the app's password field and choose **Save PAT on this browser**, or fetch once to save it. Never paste it in chat, a repository, a URL, or a GitHub Actions variable.
 3. Select **Fetch preview**. The app reads the team's configured area paths, queries all work-item types in that scope, and reads their details in batches of at most 200. It preserves parent IDs for later hierarchy mapping.
 4. Review the titles, types, states, assignees and available dates. Select **Save work items** to retain the source records. Re-fetching upserts by organization/project/ID without creating duplicate source records. Previously saved items missing from a later fetch are retained for review.
 
-The PAT is cleared from the form when a fetch starts, retained only in request memory during the operation, and never saved to localStorage, JSON backups or audit records. Re-enter it to refresh. GitHub Secrets are not needed. Browser password managers are outside the app's storage controls.
+The PAT is saved in a separate localStorage entry scoped to the organization/project, as requested for this trial. Fetch and create reuse it across sessions on the same browser profile. It is never included in AppState, JSON backups, SharePoint state sync or audit records. **Forget PAT** removes that local copy; revocation must be done in Azure DevOps. Anyone with access to the browser profile can use the saved token. It is not a managed credential vault. GitHub Secrets are not needed.
 
-## Web and desktop
+## Hierarchy and Feature creation
 
-The web app sends HTTPS requests directly to `dev.azure.com`; organization/network/browser restrictions can block cross-origin requests. The desktop package uses a narrow preload/IPC bridge to make the same read requests from its main process. Neither mode sends tokens through GitHub. Requests do not follow redirects with credentials; errors are shown without logging tokens.
+The main view shows the fetched Epics, Features, User Stories, Tasks and other work-item types using real parent IDs (with reverse hierarchy relations as a fallback). Expand individual branches or use Expand all. Active / New / Closed filters match the source state exactly. Matching children keep their ancestors as context; custom states remain visible under All. Parents outside the fetched team scope are labelled, rather than guessed.
+
+Select **+ Feature** on an Epic or **New Feature** to choose from all fetched Epics in the project. Enter a title, optional assignee/date/acceptance criteria and a PAT with **Work Items → Read & Write**. The PU description preset is `Feature DoD: DT finished. This is a PU release.` The Release preset is `Feature DoD: IQOQ finished and Checklist uploaded into the Feature.` Preset text is editable before creation.
+
+Review Area Path (defaults to the Epic's area but can be overridden) and Iteration Path. A short iteration name is resolved against team iterations; missing/ambiguous names stop creation and require the full path. The connector reads the parent to confirm it is an Epic, validates the payload with `validateOnly=true`, creates one Feature with a reverse hierarchy link, then reads it back to verify the type, parent, area and iteration. It does not bypass project rules or set an invented initial state. Custom required fields may block validation and will be reported.
+
+The saved PAT is reused for creation. There is no automatic retry of a create request. If a response is lost, check the Azure DevOps backlog before retrying. Successful operations display source links and save verified records in the app.
+
+### Automatic children
+
+Feature titles use `Program | Service | vRelease`. The review identifier is `Service Release` (without the version prefix `v`).
+
+- PU: optional SFV, DT and IQOQ review User Stories.
+- Full Release: optional PRD, SFV, DT and IQOQ review User Stories.
+- Each selected review is named `<Milestone> : Review of Deliverables (<Service> <Release>)`.
+- Both types always include `<Feature title> - Time Writing` as a User Story, even if all milestones are skipped.
+- That story always gets a Task named `<Month Year> | <Feature title>`, for the current calendar month in Asia/Kolkata.
+- User Stories inherit the Feature's area and resolved iteration. The Time Writing Task inherits its area but uses the **project-root iteration** (`Patient Safety and Quality` for the configured project).
+
+Every child is validated, saved, linked and read back. Multi-item creation is not atomic: Azure DevOps cannot create this entire hierarchy in one transaction. If a later child fails, known successful IDs are retained and reported. **Complete children** on the existing Feature checks direct children by type/title/parent and creates only missing selected stories and the current month Task. Duplicates or conflicting area/iteration values stop completion for review. Using it in a later month creates only that missing Task. No rollback or deletion is performed automatically.
+
+## Web and desktop transport
+
+The web app sends HTTPS requests directly to `dev.azure.com`; organization/network/browser restrictions can block cross-origin requests. The desktop package uses a narrow preload/IPC bridge for source reads and explicitly requested Feature creation. Neither mode sends tokens through GitHub. Requests do not follow redirects with credentials; errors are shown without logging tokens.
 
 Saved source records use the existing app store: local browser/device storage by default, or the central SharePoint file when already connected. Azure DevOps connectivity does not by itself centralize planning data or enforce app roles.
 
@@ -23,7 +46,7 @@ This initial connector reads Azure Boards work items, not Azure Pipelines deploy
 
 Custom release types, milestone fields, cross-team descendants and historical state revisions require project-specific mapping. Per-release feature/bug totals and historical YoY trends are not claimed by this initial source preview. The existing manual release dashboard stays separate until that mapping is confirmed.
 
-No production PAT was available during implementation. Contract tests cover area scoping, paging, batching, missing fields, repeat refreshes, incomplete responses and request restrictions; a real PAT fetch is still required for tenant validation.
+Live reading was confirmed by the user. No production PAT was available to the coding agent for creating a Feature. Contract tests cover area scoping, paging, batching, missing fields, refreshes, incomplete responses, parent/type verification, hierarchy/state filters, iteration resolution, PU/Release descriptions and web/desktop payload parity. A real write still requires the user's PAT in the app.
 
 ## References
 

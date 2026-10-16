@@ -1,0 +1,11 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Synthetic Azure tree verification</title><div id="root"></div><script type="module">
+import React from 'react'
+import { createRoot } from 'react-dom/client'
+import { AzureWorkItemTree } from '/src/components/AzureWorkItemTree.tsx'
+import '/src/index.css'
+import '/src/App.css'
+const config = { organization: 'example-org', project: 'Quality Project', team: 'Example Team' }
+const fixture = (id, workItemType, state, parentId) => ({ key: `example-org/quality project/${id}`, id, organization:config.organization, project:config.project, title:`Synthetic ${workItemType} ${id}`,workItemType,state,parentId,assignedTo:'Example QE',areaPath:'Quality Project\\Example Team',iterationPath:'Quality Project\\PI',tags:'',url:'https://example.invalid',syncedAt:'2026-10-16T00:00:00Z' })
+const items=[fixture(1,'Epic','Closed'),fixture(2,'Feature','New',1),fixture(3,'User Story','Active',2),fixture(4,'Task','Active',3),fixture(5,'Epic','New')]
+createRoot(document.getElementById('root')).render(React.createElement('section',{className:'content'},React.createElement('div',{className:'notice'},'Synthetic data for UI verification; no Azure DevOps writes.'),React.createElement('article',{className:'panel'},React.createElement(AzureWorkItemTree,{items,config,onCreated:()=>{}}))))
+</script></html>
