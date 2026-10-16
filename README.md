@@ -48,6 +48,16 @@ pnpm build
 
 ## GitHub Actions deployment
 
+### Versions, build identity and Force Update
+
+The current release is **v0.2.0**. The authoritative number is `package.json` (`0.2.0` without the display prefix); the UI and release tags use **vX.Y.Z**. Increase **X** for a major/incompatible change (reset Y and Z), **Y** for a new backward-compatible feature (reset Z), and **Z** for bug fixes only. Rebuilding an unchanged release keeps its version and gets a distinct build ID. Do not automatically treat every commit as a release or infer version changes from build counts. Future releases must bump the appropriate component before deployment.
+
+The sidebar shows version, build ID and build date/time in **IST**; the Force Update dialog also shows the source commit. GitHub Actions stamps `GITHUB_RUN_ID.GITHUB_RUN_ATTEMPT`; local builds use a commit/timestamp ID. Metadata is embedded in the app, emitted to `build-info.json`, and stamped into HTML. Both CI jobs verify the version and reject a release tag that does not exactly match `v` plus the package version.
+
+**Force Update** checks a cache-busted, `no-store` build manifest, retrieves fresh same-origin HTML, verifies that its build ID matches the manifest, then navigates using unique update query parameters. Hashed assets include the build metadata and therefore change with each build. An offline/error response or an older HTML response blocks navigation and allows retry. This is a supported best-effort web equivalent of Ctrl+Shift+R; web JavaScript cannot invoke the browser's privileged hard-reload command. The button never clears localStorage, IndexedDB, cookies, PATs or column preferences. Browser/proxy caching policies still apply.
+
+Updates always require acknowledgment of unfinished forms. Pending saves and active Azure fetches block reload. A failed save, SharePoint conflict or unsaved fetched preview requires exporting JSON first; the update backup includes the current preview and its scope. Export does not capture text in unsubmitted forms, so save or cancel those first. Desktop **Force Update** uses a trusted, narrow Electron cache-ignoring reload and reloads the installed package only—it does not download/install a new executable. The web button is also available on the startup/recovery screen, where it never exports an unread dataset as if it had been loaded.
+
 Every push or pull request to `main` runs static analysis, compiles the production web bundle, packages the Windows NSIS installer, calculates its SHA-256 checksum and publishes the result as a 30-day workflow artifact.
 
 Pushing a version tag such as `v0.1.0` runs the same verified pipeline and deploys the installer, blockmap and checksum to a GitHub Release. The workflow uses the repository-scoped `GITHUB_TOKEN`; no personal access token or application secret is required.

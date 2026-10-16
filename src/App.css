@@ -46,4 +46,15 @@
 .backlog-column-choice .ghost{padding:4px 9px}
 .backlog-column-choice button:disabled{opacity:.35;cursor:default}
 .backlog-preference-status{font-size:11px;margin:8px 0 0}
+.build-status{margin-top:8px;font-size:12px}
+.sidebar{overflow-y:auto}.sidebar nav,.sidebar-footer{flex-shrink:0}
+.build-status>small{display:block;font-size:10px;margin:4px 0 0;line-height:1.5;overflow-wrap:anywhere}
+.sidebar-footer .build-status>small{color:#b9cbda}
+.force-update-button{border:1px solid #6da8ce;border-radius:6px;padding:7px 10px;margin-top:9px;background:#fff;color:#17496c;font-size:12px;font-weight:600}
+.build-status .modal{color:#203349;font-size:13px;font-weight:400}
+.build-update-body{display:grid;gap:12px;line-height:1.6}
+.build-update-body p{margin:0}
+.build-update-body dl{display:grid;grid-template-columns:110px 1fr;gap:7px 12px;margin:0;background:#f3f7fb;padding:12px;border-radius:7px}
+.build-update-body dt{color:#61768a}.build-update-body dd{margin:0;overflow-wrap:anywhere}
+.build-update-body .notice{margin:0}
 @media(max-width:700px){.backlog-toolbar{align-items:flex-start}.backlog-toolbar-actions{flex-wrap:wrap;justify-content:flex-end}.backlog-level{font-size:0}.backlog-level select{font-size:12px}.backlog-page{padding:20px 14px}.backlog-footer{flex-wrap:wrap}}

@@ -4,6 +4,12 @@ const { pathToFileURL } = require('url')
 const { requestAzureDevOps } = require('./azure-devops.cjs')
 const bundledUrl = pathToFileURL(path.join(__dirname, '..', 'dist', 'index.html')).href
 
+ipcMain.handle('app-update:reload', (event) => {
+  const source = event.senderFrame?.url, devUrl = process.env.VITE_DEV_SERVER_URL
+  if (event.senderFrame !== event.sender.mainFrame || !(source === bundledUrl || (devUrl && source && new URL(source).origin === new URL(devUrl).origin))) throw new Error('Untrusted update request.')
+  setImmediate(() => { if (!event.sender.isDestroyed()) event.sender.reloadIgnoringCache() })
+})
+
 ipcMain.handle('azure-devops:request', async (event, request) => {
   const source = event.senderFrame?.url
   const devUrl = process.env.VITE_DEV_SERVER_URL

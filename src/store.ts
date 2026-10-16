@@ -23,6 +23,7 @@ export function useAppStore() {
   const [cache, setCache] = useState<{ status: 'loading' | 'saving' | 'saved' | 'error'; message: string }>({ status: 'loading', message: 'Opening browser database…' })
   const writer = useRef(createStateWriter(indexedStateRepository()))
   const pendingSave = useRef(false)
+  const pendingRemoteSave = useRef(false)
   const [connection, setConnection] = useState<ConnectionState>({ mode: 'local', status: 'idle', message: 'Data is stored only in this browser.' })
   const client = useRef<SharePointStateClient | null>(null)
   const etag = useRef<string | null>(null)
@@ -62,18 +63,20 @@ export function useAppStore() {
   useEffect(() => {
     if (!ready) return
     if (connection.mode !== 'sharepoint' || !client.current) return
-    if (skipNextSave.current) { skipNextSave.current = false; return }
+    if (skipNextSave.current) { skipNextSave.current = false; pendingRemoteSave.current = false; return }
+    let active = true
+    pendingRemoteSave.current = true
     const timer = window.setTimeout(async () => {
       setConnection((current) => ({ ...current, status: 'saving', message: 'Saving changes to SharePoint…' }))
       try {
         etag.current = await client.current!.save(state, etag.current)
-        setConnection((current) => ({ ...current, status: 'synced', message: `Saved to SharePoint at ${new Date().toLocaleTimeString()}.` }))
+        if (active) { pendingRemoteSave.current = false; setConnection((current) => ({ ...current, status: 'synced', message: `Saved to SharePoint at ${new Date().toLocaleTimeString()}.` })) }
       } catch (error) {
         const conflict = error instanceof Error && error.message === 'SYNC_CONFLICT'
-        setConnection((current) => ({ ...current, status: conflict ? 'conflict' : 'error', message: conflict ? 'Another user updated the central data. Pull the latest version before editing again.' : friendlyError(error) }))
+        if (active) setConnection((current) => ({ ...current, status: conflict ? 'conflict' : 'error', message: conflict ? 'Another user updated the central data. Pull the latest version before editing again.' : friendlyError(error) }))
       }
     }, 900)
-    return () => window.clearTimeout(timer)
+    return () => { active = false; window.clearTimeout(timer) }
   }, [state, ready, connection.mode])
 
   function update(mutator: (draft: AppState) => AppState) {
@@ -144,7 +147,7 @@ export function useAppStore() {
     setState(structuredClone(validateBackup(value)))
   }
 
-  return { state, setState, update, addAudit, reset, connection, connectSharePoint, initializeSharePoint, pullSharePoint, disconnectSharePoint, getSavedSharePointConfig, ready, loadError, cache, retryLoad: () => { setLoadError(''); setLoadAttempt((value) => value + 1) }, retrySave: () => setSaveAttempt((value) => value + 1), restoreBackup }
+  return { state, setState, update, addAudit, reset, connection, connectSharePoint, initializeSharePoint, pullSharePoint, disconnectSharePoint, getSavedSharePointConfig, ready, loadError, cache, retryLoad: () => { setLoadError(''); setLoadAttempt((value) => value + 1) }, retrySave: () => setSaveAttempt((value) => value + 1), restoreBackup, hasPendingSave: () => pendingSave.current || (connection.mode === 'sharepoint' && pendingRemoteSave.current) }
 }
 
 function friendlyError(error: unknown) {

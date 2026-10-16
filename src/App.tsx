@@ -15,6 +15,8 @@ import { AzureDevOpsPage } from './pages/AzureDevOpsPage'
 import { BoardPage } from './pages/BoardPage'
 import { useAzureWorkspace } from './useAzureWorkspace'
 import { exportStateJson } from './download'
+import { BuildStatus } from './components/BuildStatus'
+import { mergeAzureWorkItems } from './azureDevOps'
 
 export type Page = 'overview' | 'activities' | 'monthly' | 'baselines' | 'releases' | 'board' | 'azure' | 'migration' | 'snapshots' | 'admin'
 
@@ -40,14 +42,15 @@ export default function App() {
   const planningOpen = period ? effectivePlanningOpen(period) : true
   const actualsOpen = period ? effectiveActualsOpen(period) : true
   const pageProps = { store, month, setMonth }
+  const buildStatus = <BuildStatus pending={store.hasPendingSave} failed={store.ready && (store.cache.status === 'error' || (store.connection.mode === 'sharepoint' && ['error', 'conflict'].includes(store.connection.status)))} busy={azure.busy} preview={Boolean(azure.preview)} onBackup={store.ready ? () => exportStateJson({ ...store.state, azureWorkItems: mergeAzureWorkItems(store.state.azureWorkItems ?? [], azure.preview?.items ?? []), ...(azure.preview ? { azureBacklogScope: azure.preview.scope } : {}) }) : undefined} />
 
-  if (!store.ready) return <main className="content"><h1>Demand Planning</h1>{store.loadError ? <div className="notice error" role="alert"><p>{store.loadError}</p><p>Do not clear browser data. If you still have an older tab open with unsaved changes, export its JSON backup first.</p><button className="primary" onClick={store.retryLoad}>Retry loading saved data</button></div> : <p role="status">Loading saved browser data…</p>}</main>
+  if (!store.ready) return <main className="content"><h1>Demand Planning</h1>{store.loadError ? <div className="notice error" role="alert"><p>{store.loadError}</p><p>Do not clear browser data. If you still have an older tab open with unsaved changes, export its JSON backup first.</p><button className="primary" onClick={store.retryLoad}>Retry loading saved data</button></div> : <p role="status">Loading saved browser data…</p>}{buildStatus}</main>
 
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand"><div className="brand-mark">DP</div><div><strong>Demand Planning</strong><span>Quality Engineering</span></div></div>
       <nav aria-label="Primary navigation">{nav.map((item) => <button key={item.id} className={page === item.id ? 'nav-active' : ''} onClick={() => setPage(item.id)}><span className="nav-icon">{item.icon}</span>{item.label}</button>)}</nav>
-      <div className="sidebar-footer"><span className="environment-dot" /> Desktop MVP<small>Local adapter · v0.1.0</small></div>
+      <div className="sidebar-footer"><span className="environment-dot" /> Demand Planning MVP{buildStatus}</div>
     </aside>
     <main>
       <header className="topbar"><div><p className="eyebrow">{monthName(month).toUpperCase()}</p><h1>{nav.find((item) => item.id === page)?.label}</h1></div><div className="topbar-actions"><Pill tone={store.connection.mode === 'sharepoint' ? 'open' : store.cache.status === 'error' || store.connection.status === 'error' || store.connection.status === 'conflict' ? 'danger' : 'neutral'}>{store.connection.mode === 'sharepoint' ? '● Live SharePoint' : store.cache.status === 'error' ? '⚠ Not saved locally' : store.cache.status === 'saving' ? '◌ Saving locally' : '○ Local IndexedDB'}</Pill><label className="month-picker">Month<input type="month" value={month} onChange={(event) => setMonth(event.target.value)} /></label><Pill tone={planningOpen ? 'open' : 'locked'}>Planning {planningOpen ? 'open' : 'locked'}</Pill><Pill tone={actualsOpen ? 'open' : 'locked'}>Actuals {actualsOpen ? 'open' : 'locked'}</Pill></div></header>

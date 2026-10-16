@@ -43,6 +43,9 @@ jobs:
       - name: Static analysis
         run: pnpm lint
 
+      - name: Verify release version
+        run: node scripts/verify-version.mjs
+
       - name: Verify Azure DevOps integration
         run: pnpm test:azure
 
@@ -114,6 +117,11 @@ jobs:
 
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Verify version and update safety
+        run: |
+          node scripts/verify-version.mjs
+          pnpm test:azure
 
       - name: Build browser application
         run: pnpm build:web
