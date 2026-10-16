@@ -14,7 +14,7 @@ export interface AzureRequest extends AzureConfig {
   actualHours?: number
   tags?: string
 }
-export interface FeatureInput { parentId: number; title: string; description: string; acceptanceCriteria: string; areaPath?: string; iterationPath?: string; assignedTo?: string; targetDate?: string; assignToCreator?: boolean; storyIterationPath?: string }
+export interface FeatureInput { parentId: number; title: string; description: string; acceptanceCriteria: string; areaPath?: string; iterationPath?: string; assignedTo?: string; targetDate?: string; assignToCreator?: boolean; storyIterationPath?: string; taskOriginalEstimate?: number; taskCompletedWork?: number }
 export function featureDescription(kind: 'PU' | 'Release') {
   return kind === 'PU' ? 'Feature DoD: DT finished. This is a PU release.' : 'Feature DoD: IQOQ finished and Checklist uploaded into the Feature.'
 }
@@ -61,8 +61,12 @@ export function currentIterationPairs(iterations: AzureIteration[], date = new D
   })
   const under = (child: string, parent: string) => child.toLowerCase().startsWith(`${parent.toLowerCase()}\\`)
   const pairs = active.filter((item) => !active.some((child) => under(child.path, item.path))).flatMap((sprint) => {
-    const ancestors = active.filter((pi) => under(sprint.path, pi.path) && pi.path.includes('\\')).sort((a, b) => b.path.length - a.path.length)
-    return ancestors[0] ? [{ pi: ancestors[0], sprint }] : []
+    const ancestors = iterations.filter((pi) => under(sprint.path, pi.path) && pi.path.includes('\\')).sort((a, b) => b.path.length - a.path.length)
+    // Teams commonly date only the Sprint. Prefer an active PI, but safely use
+    // the closest PI-named parent when the PI itself has no dates.
+    const pi = ancestors.find((item) => active.some((current) => current.path.toLowerCase() === item.path.toLowerCase()))
+      ?? ancestors.find((item) => /\b(?:pi|program\s*increment)\b/i.test(item.name))
+    return pi ? [{ pi, sprint }] : []
   })
   const teamPairs = pairs.filter((pair) => pair.sprint.teamConfigured)
   return teamPairs.length ? teamPairs : pairs
@@ -315,7 +319,7 @@ async function directChildren(config: AzureConfig, pat: string, parentId: number
   return items
 }
 
-async function ensureChild(config: AzureConfig, pat: string, parent: AzureWorkItem, type: 'User Story' | 'Task', title: string, existing: AzureWorkItem[], transport: AzureTransport, iterationPath = parent.iterationPath) {
+async function ensureChild(config: AzureConfig, pat: string, parent: AzureWorkItem, type: 'User Story' | 'Task', title: string, existing: AzureWorkItem[], transport: AzureTransport, iterationPath = parent.iterationPath, taskOriginalEstimate?: number, taskCompletedWork?: number) {
   const matches = existing.filter((item) => item.parentId === parent.id && item.workItemType === type && item.title.trim() === title)
   if (matches.length > 1) throw new Error(`Multiple matching ${type} items already exist under #${parent.id}. Review duplicates before continuing.`)
   if (matches.length === 1) {
@@ -324,7 +328,7 @@ async function ensureChild(config: AzureConfig, pat: string, parent: AzureWorkIt
   }
   if (title.length > 255) throw new Error('An automatic child title exceeds 255 characters. Shorten the Feature title.')
   const request: AzureRequest = { ...config, pat, operation: 'create-child', workItemType: type,
-    feature: { parentId: parent.id, title, description: '', acceptanceCriteria: '', areaPath: parent.areaPath, iterationPath } }
+    feature: { parentId: parent.id, title, description: '', acceptanceCriteria: '', areaPath: parent.areaPath, iterationPath, ...(type === 'Task' && taskOriginalEstimate != null ? { taskOriginalEstimate } : {}), ...(type === 'Task' && taskCompletedWork != null ? { taskCompletedWork } : {}) } }
   await transport({ ...request, validateOnly: true })
   const response = await transport({ ...request, validateOnly: false }) as RawItem
   if (!Number.isSafeInteger(response.id) || response.id < 1) throw new Error(`${type} creation could not be confirmed. Check children under #${parent.id} before retrying.`)
@@ -333,7 +337,7 @@ async function ensureChild(config: AzureConfig, pat: string, parent: AzureWorkIt
     const raw = read.value?.find((item) => item.id === response.id)
     if (!raw) throw new Error('Missing work item.')
     const item = mapAzureWorkItem(raw, config)
-    if (item.parentId !== parent.id || item.workItemType !== type || item.areaPath !== parent.areaPath || item.iterationPath !== iterationPath) throw new Error('Child verification failed.')
+    if (item.parentId !== parent.id || item.workItemType !== type || item.areaPath !== parent.areaPath || item.iterationPath !== iterationPath || (taskOriginalEstimate != null && item.originalEstimate !== taskOriginalEstimate) || (taskCompletedWork != null && item.completedWork !== taskCompletedWork)) throw new Error('Child verification failed.')
     return item
   } catch { throw new Error(`${type} #${response.id} was created but could not be verified. Check the source before using Complete children.`) }
 }
@@ -367,7 +371,17 @@ export async function createAzureReleaseHierarchy(config: AzureConfig, pat: stri
   if ([...titles.reviews.map((review) => review.title), titles.timeWriting, titles.task].some((title) => title.length > 255)) throw new Error('An automatic child title exceeds 255 characters. Shorten the Feature title.')
   if (milestones?.some((milestone) => !titles.reviews.some((review) => review.milestone === milestone))) throw new Error('Unsupported milestone selection for this release classification.')
   const feature = await createAzureFeature(config, pat, input, transport)
-  try { return await completeReleaseHierarchy(config, pat, feature.id, kind, milestones, monthLabel, transport, input.storyIterationPath) }
+  try {
+    const bundle = await completeReleaseHierarchy(config, pat, feature.id, kind, milestones, monthLabel, transport, input.storyIterationPath)
+    // Initial effort is deliberately saved on the month-named Task, not the User Story.
+    if (input.taskOriginalEstimate != null || input.taskCompletedWork != null) {
+      const task = bundle.items.find((item) => item.workItemType === 'Task')
+      if (!task) throw new Error('Time Writing Task was not created.')
+      const updated = await updateAzureTimeWritingEffort(config, pat, task.id, input.taskOriginalEstimate, input.taskCompletedWork, false, transport)
+      return { feature: bundle.feature, items: mergeAzureWorkItems(bundle.items, [updated]) }
+    }
+    return bundle
+  }
   catch (failure) {
     const partial = failure instanceof HierarchyCreationError ? failure.createdItems : []
     const items = mergeAzureWorkItems([feature], partial)

@@ -450,6 +450,14 @@ test('current dates resolve PI and nested Sprint with inclusive India-day bounda
   assert.equal(currentIterationPairs([{ name: 'No dates', path: 'Quality Project\\Unknown' }]).length, 0)
 })
 
+test('a dated Sprint resolves its PI parent even when Azure has no PI date range', () => {
+  const iterations = projectIterationPaths({ name: 'Quality Project', children: [{ name: 'PI 2026.4', children: [{ name: 'Sprint 7', attributes: { startDate: '2026-10-17T00:00:00Z', finishDate: '2026-10-30T00:00:00Z' } }] }] })
+  const pair = currentIterationPairs(iterations, new Date('2026-10-17T12:00:00Z'))
+  assert.equal(pair.length, 1)
+  assert.equal(pair[0].pi.name, 'PI 2026.4')
+  assert.equal(pair[0].sprint.name, 'Sprint 7')
+})
+
 test('overlapping branches stay ambiguous unless configured team Sprint narrows them', () => {
   const attributes = { startDate: '2026-10-01T00:00:00Z', finishDate: '2026-10-31T00:00:00Z' }
   const values = ['A', 'B'].flatMap((branch) => [{ name: branch, path: `Project\\${branch}`, attributes }, { name: 'Sprint', path: `Project\\${branch}\\Sprint`, attributes }])

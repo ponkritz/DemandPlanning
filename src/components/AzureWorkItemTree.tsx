@@ -18,6 +18,8 @@ export function AzureWorkItemTree({ items, config, onCreated, savedPat = '', onS
   const [resultText, setResultText] = useState('')
   const [partialError, setPartialError] = useState('')
   const [description, setDescription] = useState(featureDescription('PU'))
+  const [taskOriginalEstimate, setTaskOriginalEstimate] = useState('')
+  const [taskCompletedWork, setTaskCompletedWork] = useState('')
   const [iterationPath, setIterationPath] = useState('')
   const [sprintPath, setSprintPath] = useState('')
   const [creatorName, setCreatorName] = useState('Identified from your PAT when creating')
@@ -40,7 +42,7 @@ export function AzureWorkItemTree({ items, config, onCreated, savedPat = '', onS
   let plan
   try { plan = releaseHierarchyTitles(title.trim(), releaseKind, monthLabel) } catch { plan = null }
 
-  function openEditor(epic: AzureWorkItem) { setParent(epic); setResumeFeature(null); setTitle(''); setIterationPath(''); setSprintPath(''); setIterationChoices([]); setReleaseKind('PU'); setMilestones(['SFV', 'DT', 'IQOQ']); setDescription(featureDescription('PU')); setPat(savedPat); setError(''); setPartialError(''); setResult(null); if (savedPat) void loadIterations(savedPat) }
+  function openEditor(epic: AzureWorkItem) { setParent(epic); setResumeFeature(null); setTitle(''); setTaskOriginalEstimate(''); setTaskCompletedWork(''); setIterationPath(''); setSprintPath(''); setIterationChoices([]); setReleaseKind('PU'); setMilestones(['SFV', 'DT', 'IQOQ']); setDescription(featureDescription('PU')); setPat(savedPat); setError(''); setPartialError(''); setResult(null); if (savedPat) void loadIterations(savedPat) }
   function openResume(item: AzureWorkItem) { setParent(null); setResumeFeature(item); setTitle(item.title); setIterationPath(''); setSprintPath(''); setIterationChoices([]); setReleaseKind('PU'); setMilestones(['SFV', 'DT', 'IQOQ']); setPat(savedPat); setError(''); setPartialError(''); setResult(null); if (savedPat) void loadIterations(savedPat) }
   function closeEditor() { if (submitting.current) return; setParent(null); setResumeFeature(null); setPat(''); setError('') }
   function setKind(kind: 'PU' | 'Release') { setReleaseKind(kind); setMilestones(kind === 'PU' ? ['SFV', 'DT', 'IQOQ'] : ['PRD', 'SFV', 'DT', 'IQOQ']); setDescription(featureDescription(kind)) }
@@ -72,7 +74,10 @@ export function AzureWorkItemTree({ items, config, onCreated, savedPat = '', onS
     if ((!parent && !resumeFeature) || submitting.current) return
     const data = new FormData(event.currentTarget)
     const token = pat; setError(''); submitting.current = true; setCreating(true)
-    const feature: FeatureInput = { parentId: parent?.id ?? 0, title: title.trim(), description: String(data.get('description') ?? ''), acceptanceCriteria: String(data.get('acceptance') ?? ''), areaPath: String(data.get('areaPath') ?? ''), iterationPath, assignToCreator: true, storyIterationPath: sprintPath, targetDate: String(data.get('targetDate') ?? '') }
+    const parseHours = (value: string, label: string) => { if (!value.trim()) return undefined; const hours = Number(value); if (!Number.isFinite(hours) || hours < 0 || hours > 1000000) throw new Error(`${label} must be a number from 0 to 1,000,000.`); return hours }
+    let feature: FeatureInput
+    try { feature = { parentId: parent?.id ?? 0, title: title.trim(), description: String(data.get('description') ?? ''), acceptanceCriteria: String(data.get('acceptance') ?? ''), areaPath: String(data.get('areaPath') ?? ''), iterationPath, assignToCreator: true, storyIterationPath: sprintPath, targetDate: String(data.get('targetDate') ?? ''), taskOriginalEstimate: parseHours(taskOriginalEstimate, 'Original Estimate'), taskCompletedWork: parseHours(taskCompletedWork, 'Completed Work') } }
+    catch (failure) { setError(failure instanceof Error ? failure.message : 'Invalid Task effort.'); submitting.current = false; setCreating(false); return }
     try {
       onSavePat?.(token)
       const fresh = currentIterationPairs(await readAzureIterations(config, token))
@@ -108,6 +113,7 @@ export function AzureWorkItemTree({ items, config, onCreated, savedPat = '', onS
       <label>Release classification<select value={releaseKind} disabled={creating} onChange={(event) => setKind(event.target.value as 'PU' | 'Release')}><option value="PU">PU</option><option value="Release">Full Release</option></select></label>
       {parent && <><label>Description<textarea name="description" maxLength={100000} value={description} onChange={(event) => setDescription(event.target.value)} disabled={creating} /></label><label>Acceptance criteria<textarea name="acceptance" maxLength={100000} disabled={creating} /></label>
       <div className="form-row"><label>Feature assigned to<input readOnly value={creatorName} /></label><label>Target date (optional)<input name="targetDate" type="date" disabled={creating} /></label></div></>}
+      {parent && <div className="form-row"><label>Time Writing Task — Original Estimate (hours)<input type="number" min="0" max="1000000" step="0.25" value={taskOriginalEstimate} onChange={(event) => setTaskOriginalEstimate(event.target.value)} disabled={creating} placeholder="Optional" /></label><label>Time Writing Task — Completed Work (hours)<input type="number" min="0" max="1000000" step="0.25" value={taskCompletedWork} onChange={(event) => setTaskCompletedWork(event.target.value)} disabled={creating} placeholder="Optional" /></label></div>}
       <fieldset className="milestone-choices" disabled={creating}><legend>Optional milestone User Stories</legend><div className="button-row"><button type="button" className="text-button" onClick={() => setMilestones(availableMilestones)}>Select all</button><button type="button" className="text-button" onClick={() => setMilestones([])}>Skip all milestones</button></div>{availableMilestones.map((milestone) => <label className="checkbox-label" key={milestone}><input type="checkbox" checked={milestones.includes(milestone)} onChange={(event) => setMilestones((current) => event.target.checked ? [...current, milestone] : current.filter((value) => value !== milestone))} />{milestone} review of deliverables</label>)}</fieldset>
       <div className="hierarchy-plan"><strong>Always included</strong><p>Time Writing User Story in the current Sprint and one task for {monthLabel}. Task iteration: {config.project}. The Feature is assigned to the PAT owner; children are not automatically assigned.</p>{plan ? <ul>{plan.reviews.filter((review) => milestones.includes(review.milestone)).map((review) => <li key={review.milestone}>{review.title}</li>)}<li>{plan.timeWriting}<ul><li>{plan.task}</li></ul></li></ul> : <p>Enter Program | Service | vRelease to preview the exact titles.</p>}</div>
       <label>PAT — Work Items: Read &amp; Write<input type="password" required autoComplete="off" value={pat} onChange={(event) => { setPat(event.target.value); setCreatorName('Identified from your PAT when creating'); setIterationChoices([]); setIterationPath(''); setSprintPath('') }} disabled={creating} /></label>

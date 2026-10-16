@@ -39,6 +39,7 @@ function azureFeatureRequest(input) {
   if (feature.assignedTo != null && (typeof feature.assignedTo !== 'string' || feature.assignedTo.length > 320)) throw new Error('Invalid assignee.')
   if (feature.targetDate && !/^\d{4}-\d{2}-\d{2}$/.test(feature.targetDate)) throw new Error('Invalid target date.')
   if (feature.iterationPath != null && (typeof feature.iterationPath !== 'string' || feature.iterationPath.length > 4096)) throw new Error('Invalid iteration path.')
+  for (const field of ['taskOriginalEstimate', 'taskCompletedWork']) if (feature[field] != null && (!Number.isFinite(feature[field]) || feature[field] < 0 || feature[field] > 1000000)) throw new Error('Invalid Task effort.')
   const htmlText = (value) => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('\n', '<br>')
   const base = `https://dev.azure.com/${encodeURIComponent(input.organization)}/${encodeURIComponent(input.project)}`
   const patch = [
