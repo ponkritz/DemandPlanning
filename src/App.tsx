@@ -58,10 +58,10 @@ export default function App() {
       {store.cache.status === 'error' && <div className="notice error" role="alert"><p>{store.cache.message}</p><div className="button-row"><button className="ghost" onClick={() => exportStateJson(store.state)}>Export JSON backup now</button><button className="primary" onClick={store.retrySave}>Retry browser save</button></div></div>}
       {store.connection.mode !== 'sharepoint' && store.connection.status === 'error' && <div className="notice error" role="alert">{store.connection.message}</div>}
       {page === 'overview' && <DashboardPage month={month} azure={azure} navigate={setPage} />}
-      {page === 'activities' && <ActivitiesPage {...pageProps} />}
-      {page === 'monthly' && <MonthlyPage {...pageProps} />}
-      {page === 'baselines' && <BaselinesPage {...pageProps} />}
-      {page === 'releases' && <ReleasesPage {...pageProps} />}
+      {page === 'activities' && <ActivitiesPage azure={azure} />}
+      {page === 'monthly' && <MonthlyPage azure={azure} month={month} />}
+      {page === 'baselines' && <BaselinesPage azure={azure} month={month} />}
+      {page === 'releases' && <ReleasesPage azure={azure} month={month} />}
       {page === 'board' && <BoardPage azure={azure} onOpenConnection={() => setPage('azure')} />}
       {page === 'azure' && <AzureDevOpsPage azure={azure} onOpenBoard={() => setPage('board')} />}
       {page === 'migration' && <MigrationPage {...pageProps} />}
