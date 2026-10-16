@@ -1,9 +1,11 @@
+import { useState } from 'react'
 import { Heading, Panel, Pill } from '../components/ui'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import { azureInsights, indiaMonth } from '../azureInsights'
 
 export function ReleasesPage({ azure, month }: { azure: AzureWorkspace; month: string }) {
-  const data = azureInsights(azure.items, month, new Date().toISOString().slice(0, 10))
+  const [today] = useState(() => new Date().toISOString().slice(0, 10))
+  const data = azureInsights(azure.items, month, today)
   const features = data.features.filter(item => indiaMonth(item.closedDate) === month || item.targetDate?.startsWith(month))
   return <section className="content"><Heading eyebrow="AZURE DEVOPS" title="Feature milestones" detail="Feature dates and states from the same Azure backlog source." />
     <div className="metric-grid compact"><article><span>Features</span><strong>{features.length}</strong><small>Targeted or closed in {month}</small></article><article><span>Closed</span><strong>{data.closures.length}</strong><small>Closed/Done/Completed</small></article><article><span>Overdue</span><strong>{data.overdue.filter(item => item.workItemType === 'Feature').length}</strong><small>Open with elapsed target</small></article></div>
