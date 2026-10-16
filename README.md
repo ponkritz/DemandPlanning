@@ -8,6 +8,8 @@ The repository contains a working React/TypeScript application with an Electron 
 
 Implemented in the MVP UI:
 
+- Read-only Azure DevOps work-item preview and refresh using a session-only PAT ([setup](docs/azure-devops-connection.md)); custom release mapping awaits live validation.
+
 - Unified dashboard for plan, actuals, variance, ad-hoc work, utilization and milestones
 - Activity register with process owners, resources, bands and measurable complexity
 - Monthly planning and actuals; automatic month-level ad-hoc classification after planning freeze

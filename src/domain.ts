@@ -137,4 +137,25 @@ export interface AppState {
   audits: AuditEvent[]
   snapshots: Snapshot[]
   masters: MasterValue[]
+  azureWorkItems?: AzureWorkItem[]
+}
+
+export interface AzureWorkItem {
+  key: string
+  id: number
+  organization: string
+  project: string
+  title: string
+  workItemType: string
+  state: string
+  assignedTo: string
+  areaPath: string
+  iterationPath: string
+  parentId?: number
+  targetDate?: string
+  closedDate?: string
+  changedDate?: string
+  tags: string
+  url: string
+  syncedAt: string
 }

@@ -43,6 +43,9 @@ jobs:
       - name: Static analysis
         run: pnpm lint
 
+      - name: Verify Azure DevOps integration
+        run: pnpm test:azure
+
       - name: Build web application
         run: pnpm build:web
 

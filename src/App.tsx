@@ -11,8 +11,9 @@ import { ReleasesPage } from './pages/ReleasesPage'
 import { MigrationPage } from './pages/MigrationPage'
 import { SnapshotsPage } from './pages/SnapshotsPage'
 import { AdminPage } from './pages/AdminPage'
+import { AzureDevOpsPage } from './pages/AzureDevOpsPage'
 
-export type Page = 'overview' | 'activities' | 'monthly' | 'baselines' | 'releases' | 'migration' | 'snapshots' | 'admin'
+export type Page = 'overview' | 'activities' | 'monthly' | 'baselines' | 'releases' | 'azure' | 'migration' | 'snapshots' | 'admin'
 
 const nav: Array<{ id: Page; label: string; icon: string }> = [
   { id: 'overview', label: 'Overview', icon: '▦' },
@@ -20,6 +21,7 @@ const nav: Array<{ id: Page; label: string; icon: string }> = [
   { id: 'monthly', label: 'Monthly effort', icon: '◫' },
   { id: 'baselines', label: 'Baselines', icon: '⌁' },
   { id: 'releases', label: 'Releases', icon: '◆' },
+  { id: 'azure', label: 'Azure DevOps', icon: '⇄' },
   { id: 'migration', label: 'Migration', icon: '⇧' },
   { id: 'snapshots', label: 'Snapshots', icon: '▣' },
   { id: 'admin', label: 'Administration', icon: '⚙' },
@@ -47,6 +49,7 @@ export default function App() {
       {page === 'monthly' && <MonthlyPage {...pageProps} />}
       {page === 'baselines' && <BaselinesPage {...pageProps} />}
       {page === 'releases' && <ReleasesPage {...pageProps} />}
+      {page === 'azure' && <AzureDevOpsPage {...pageProps} />}
       {page === 'migration' && <MigrationPage {...pageProps} />}
       {page === 'snapshots' && <SnapshotsPage {...pageProps} />}
       {page === 'admin' && <AdminPage {...pageProps} />}
