@@ -149,6 +149,10 @@ export interface AzureWorkItem {
   title: string
   description?: string
   storyPoints?: number
+  originalEstimate?: number
+  completedWork?: number
+  remainingWork?: number
+  createdDate?: string
   workItemType: string
   state: string
   assignedTo: string

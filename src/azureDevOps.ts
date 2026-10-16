@@ -167,11 +167,16 @@ export function mapAzureWorkItem(item: RawItem, config: AzureConfig): AzureWorkI
   const assignee = fields['System.AssignedTo']
   const assignedTo = typeof assignee === 'string' ? assignee : assignee && typeof assignee === 'object' && 'displayName' in assignee ? String(assignee.displayName) : ''
   const date = (name: string) => { const value = text(name); return /^\d{4}-\d{2}-\d{2}(T|$)/.test(value) ? value : undefined }
+  const number = (name: string) => typeof fields[name] === 'number' && Number.isFinite(fields[name]) && (fields[name] as number) >= 0 ? fields[name] as number : undefined
   return {
     key: `${config.organization.toLowerCase()}/${config.project.toLowerCase()}/${item.id}`, id: item.id,
     organization: config.organization, project: config.project,
     title: text('System.Title'), workItemType: text('System.WorkItemType'), state: text('System.State'), assignedTo,
     description: text('System.Description'),
+    originalEstimate: number('Microsoft.VSTS.Scheduling.OriginalEstimate'),
+    completedWork: number('Microsoft.VSTS.Scheduling.CompletedWork'),
+    remainingWork: number('Microsoft.VSTS.Scheduling.RemainingWork'),
+    createdDate: date('System.CreatedDate'),
     storyPoints: typeof fields['Microsoft.VSTS.Scheduling.StoryPoints'] === 'number' && Number.isFinite(fields['Microsoft.VSTS.Scheduling.StoryPoints']) ? fields['Microsoft.VSTS.Scheduling.StoryPoints'] as number : undefined,
     areaPath: text('System.AreaPath'), iterationPath: text('System.IterationPath'),
     parentId: typeof fields['System.Parent'] === 'number' ? fields['System.Parent'] : parentFromRelation(item),

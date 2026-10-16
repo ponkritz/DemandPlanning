@@ -17,6 +17,7 @@ import { useAzureWorkspace } from './useAzureWorkspace'
 import { exportStateJson } from './download'
 import { BuildStatus } from './components/BuildStatus'
 import { mergeAzureWorkItems } from './azureDevOps'
+import { indiaMonth } from './azureInsights'
 
 export type Page = 'overview' | 'activities' | 'monthly' | 'baselines' | 'releases' | 'board' | 'azure' | 'migration' | 'snapshots' | 'admin'
 
@@ -37,7 +38,7 @@ export default function App() {
   const store = useAppStore()
   const azure = useAzureWorkspace(store)
   const [page, setPage] = useState<Page>('overview')
-  const [month, setMonth] = useState('2026-10')
+  const [month, setMonth] = useState(() => indiaMonth(new Date().toISOString())!)
   const period = useMemo(() => store.state.periods.find((item) => item.month === month) ?? store.state.periods[0], [month, store.state.periods])
   const planningOpen = period ? effectivePlanningOpen(period) : true
   const actualsOpen = period ? effectiveActualsOpen(period) : true
@@ -53,10 +54,10 @@ export default function App() {
       <div className="sidebar-footer">{buildStatus}</div>
     </aside>
     <main>
-      <header className="topbar"><div><p className="eyebrow">{monthName(month).toUpperCase()}</p><h1>{nav.find((item) => item.id === page)?.label}</h1></div><div className="topbar-actions"><Pill tone={store.connection.mode === 'sharepoint' ? 'open' : store.cache.status === 'error' || store.connection.status === 'error' || store.connection.status === 'conflict' ? 'danger' : 'neutral'}>{store.connection.mode === 'sharepoint' ? '● Live SharePoint' : store.cache.status === 'error' ? '⚠ Not saved locally' : store.cache.status === 'saving' ? '◌ Saving locally' : '○ Local IndexedDB'}</Pill><label className="month-picker">Month<input type="month" value={month} onChange={(event) => setMonth(event.target.value)} /></label><Pill tone={planningOpen ? 'open' : 'locked'}>Planning {planningOpen ? 'open' : 'locked'}</Pill><Pill tone={actualsOpen ? 'open' : 'locked'}>Actuals {actualsOpen ? 'open' : 'locked'}</Pill></div></header>
+      <header className="topbar"><div><p className="eyebrow">{monthName(month).toUpperCase()}</p><h1>{nav.find((item) => item.id === page)?.label}</h1></div><div className="topbar-actions"><Pill tone={store.connection.mode === 'sharepoint' ? 'open' : store.cache.status === 'error' || store.connection.status === 'error' || store.connection.status === 'conflict' ? 'danger' : 'neutral'}>{store.connection.mode === 'sharepoint' ? '● Live SharePoint' : store.cache.status === 'error' ? '⚠ Not saved locally' : store.cache.status === 'saving' ? '◌ Saving locally' : '○ Local IndexedDB'}</Pill><label className="month-picker">Month<input type="month" value={month} onChange={(event) => /^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value) && setMonth(event.target.value)} /></label>{page !== 'overview' && <><Pill tone={planningOpen ? 'open' : 'locked'}>Planning {planningOpen ? 'open' : 'locked'}</Pill><Pill tone={actualsOpen ? 'open' : 'locked'}>Actuals {actualsOpen ? 'open' : 'locked'}</Pill></>}</div></header>
       {store.cache.status === 'error' && <div className="notice error" role="alert"><p>{store.cache.message}</p><div className="button-row"><button className="ghost" onClick={() => exportStateJson(store.state)}>Export JSON backup now</button><button className="primary" onClick={store.retrySave}>Retry browser save</button></div></div>}
       {store.connection.mode !== 'sharepoint' && store.connection.status === 'error' && <div className="notice error" role="alert">{store.connection.message}</div>}
-      {page === 'overview' && <DashboardPage {...pageProps} navigate={setPage} />}
+      {page === 'overview' && <DashboardPage month={month} azure={azure} navigate={setPage} />}
       {page === 'activities' && <ActivitiesPage {...pageProps} />}
       {page === 'monthly' && <MonthlyPage {...pageProps} />}
       {page === 'baselines' && <BaselinesPage {...pageProps} />}

@@ -1,0 +1,45 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { azureInsights, timeWritingMonth, indiaMonth } from '../src/azureInsights.ts'
+import { mapAzureWorkItem } from '../src/azureDevOps.ts'
+
+const item = (id, extra = {}) => ({ key: `org/project/${id}`, id, title: 'Release - Time Writing', workItemType: 'User Story', state: 'Active', assignedTo: 'QE', ...extra })
+test('Time Writing story Original Estimate maps to Plan and Completed Work to Actual without child double-counting', () => {
+  const story = item(1, { originalEstimate: 20, completedWork: 30 })
+  const task = item(2, { workItemType: 'Task', parentId: 1, title: 'October 2026 | Release', originalEstimate: 8, completedWork: 9 })
+  const data = azureInsights([story, story, task, item(3, { title: 'Other story', originalEstimate: 1000, completedWork: 999 })], '2026-10', '2026-10-17')
+  assert.equal(data.plan.value, 20); assert.equal(data.actual.value, 30); assert.equal(data.variance, 10)
+  assert.equal(data.flags.length, 1)
+  assert.equal(data.trend.at(-1).plan.value, 8); assert.equal(data.trend.at(-1).actual.value, 9)
+  assert.equal(data.resources[0].actual.value, 30)
+})
+test('missing story fields remain unavailable rather than using Task fields or synthetic data', () => {
+  const data = azureInsights([item(1), item(2, { title: 'October 2026 | Release', workItemType: 'Task', parentId: 1, originalEstimate: 20, completedWork: 0 })], '2026-10', '2026-10-17')
+  assert.equal(data.plan.value, null); assert.equal(data.actual.value, null); assert.equal(data.variance, null)
+  assert.equal(data.trend.at(-1).actual.value, 0)
+  assert.equal(data.plan.count, 0); assert.equal(data.plan.total, 1)
+})
+test('only Time Writing child Tasks contribute monthly trend; excludes Removed and unrelated tasks', () => {
+  const data = azureInsights([item(1), item(2, { state: 'Removed', originalEstimate: 1000 }), item(3, { title: 'October 2026 | Other', workItemType: 'Task', parentId: 77, completedWork: 99 }), item(4, { title: 'No month', workItemType: 'Task', parentId: 1, completedWork: 30 })], '2026-10', '2026-10-17')
+  assert.equal(data.timeWritingStories.length, 1); assert.equal(data.trend.at(-1).actual.value, null); assert.equal(data.unmappedTasks, 1)
+  assert.equal(timeWritingMonth('october 2026 | Release'), '2026-10')
+  assert.equal(timeWritingMonth('Release October 2026'), undefined)
+})
+test('closures use India month and completed state; overdue excludes completed items and today', () => {
+  const data = azureInsights([item(1, { workItemType: 'Feature', state: 'Closed', closedDate: '2026-09-30T20:00:00Z', targetDate: '2026-10-01' }), item(2, { workItemType: 'Feature', state: 'Active', closedDate: '2026-10-01', targetDate: '2026-10-16' }), item(3, { targetDate: '2026-10-17' })], '2026-10', '2026-10-17')
+  assert.equal(data.closures.length, 1); assert.equal(data.overdue.length, 1)
+  assert.equal(indiaMonth('2026-12-31T20:00:00Z'), '2027-01')
+  assert.throws(() => azureInsights([], '', '2026-10-17'))
+})
+test('source maps numeric scheduling fields preserving zero and rejecting string/negative/nonfinite estimates', () => {
+  const config = { organization: 'org', project: 'project', team: 'team' }
+  const row = mapAzureWorkItem({ id: 1, fields: { 'Microsoft.VSTS.Scheduling.OriginalEstimate': 0, 'Microsoft.VSTS.Scheduling.CompletedWork': 12, 'Microsoft.VSTS.Scheduling.RemainingWork': 3, 'System.CreatedDate': '2026-10-01' } }, config)
+  assert.equal(row.originalEstimate, 0); assert.equal(row.completedWork, 12); assert.equal(row.remainingWork, 3); assert.equal(row.createdDate, '2026-10-01')
+  for (const bad of ['20', -1, Infinity]) assert.equal(mapAzureWorkItem({ id: 1, fields: { 'Microsoft.VSTS.Scheduling.OriginalEstimate': bad } }, config).originalEstimate, undefined)
+})
+test('dashboard consumes shared Azure workspace only and removes sample/local metrics and assumed capacity', () => {
+  const source = readFileSync(new URL('../src/pages/DashboardPage.tsx', import.meta.url), 'utf8')
+  assert.match(source, /azureInsights\(azure.items/)
+  assert.doesNotMatch(source, /store\.state|capacityUtilization|\['May',64/)
+})
