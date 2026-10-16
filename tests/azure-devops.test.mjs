@@ -77,6 +77,21 @@ test('incomplete batch aborts rather than publishing a misleading partial import
   }), /Some work items could not be read/)
 })
 
+test('all-project Epic option includes out-of-team Epics without duplicating team records', async () => {
+  let teamPage = 0
+  let epicPage = 0
+  const result = await fetchAzureWorkItems({ ...config, includeProjectEpics: true }, pat, async (request) => {
+    if (request.operation === 'areas') return { field: { referenceName: 'System.AreaPath' }, values: [{ value: 'Quality\\Team A', includeChildren: true }] }
+    if (request.operation === 'query') {
+      if (request.query.includes("[System.WorkItemType] = 'Epic'")) return { workItems: ++epicPage === 1 ? [{ id: 1 }, { id: 2 }] : [] }
+      return { workItems: ++teamPage === 1 ? [{ id: 1 }] : [] }
+    }
+    return { value: request.ids.map((id) => ({ id, fields: { 'System.WorkItemType': 'Epic', 'System.Title': `Example Epic ${id}` } })) }
+  })
+  assert.equal(result.items.length, 2)
+  assert.equal(new Set(result.items.map((item) => item.id)).size, 2)
+})
+
 test('desktop bridge constrains credentials to Azure DevOps and rejects writes and oversized batches', () => {
   const read = azureReadRequest({ ...config, pat, operation: 'areas' })
   assert.equal(new URL(read.url).hostname, 'dev.azure.com')

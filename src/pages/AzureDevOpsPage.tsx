@@ -11,6 +11,7 @@ const defaultUrl = 'https://dev.azure.com/ALMP-ORG-MSTP01/Patient%20Safety%20and
 export function AzureDevOpsPage({ store }: PageProps) {
   const [projectUrl, setProjectUrl] = useState(defaultUrl)
   const [team, setTeam] = useState('InD Quality')
+  const [includeProjectEpics, setIncludeProjectEpics] = useState(true)
   const [pat, setPat] = useState(() => loadAzurePat(parseAzureProjectUrl(defaultUrl)))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -20,7 +21,7 @@ export function AzureDevOpsPage({ store }: PageProps) {
   const [filter, setFilter] = useState('')
   const items = preview?.items ?? saved
   let config: AzureConfig | null
-  try { config = { ...parseAzureProjectUrl(projectUrl), team } } catch { config = null }
+  try { config = { ...parseAzureProjectUrl(projectUrl), team, includeProjectEpics } } catch { config = null }
   const shown = items.filter((item) => `${item.id} ${item.title} ${item.workItemType} ${item.state}`.toLowerCase().includes(filter.toLowerCase()))
   const counts = new Map<string, number>()
   for (const item of items) counts.set(item.workItemType || 'Unknown', (counts.get(item.workItemType || 'Unknown') ?? 0) + 1)
@@ -31,7 +32,7 @@ export function AzureDevOpsPage({ store }: PageProps) {
     try {
       const config = parseAzureProjectUrl(projectUrl)
       saveAzurePat(config, token)
-      const result = await fetchAzureWorkItems({ ...config, team: team.trim() || config.team }, token)
+      const result = await fetchAzureWorkItems({ ...config, team: team.trim() || config.team, includeProjectEpics }, token)
       setPreview(result)
       setMessage(`${result.items.length} work items fetched. Review the preview, then save it to the app.`)
     } catch (failure) { setError(failure instanceof Error ? failure.message : 'Unable to fetch Azure DevOps data.') }
@@ -75,6 +76,7 @@ export function AzureDevOpsPage({ store }: PageProps) {
         <label>Azure DevOps project or backlog URL<input type="url" required disabled={busy} value={projectUrl} onChange={(event) => { const next = event.target.value; setProjectUrl(next); setPreview(null); try { setPat(loadAzurePat(parseAzureProjectUrl(next))) } catch { setPat('') } }} /></label>
         <div className="form-row"><label>Team<input required disabled={busy} value={team} onChange={(event) => { setTeam(event.target.value); setPreview(null) }} /></label><label>Personal access token<input type="password" required autoComplete="off" disabled={busy} value={pat} onChange={(event) => setPat(event.target.value)} placeholder="Configure once on this browser" /></label></div>
         <div className="button-row"><button type="button" className="ghost" disabled={busy || !pat.trim()} onClick={() => { try { rememberPat() } catch (failure) { setError(failure instanceof Error ? failure.message : 'Unable to save the PAT.') } }}>Save PAT on this browser</button><button type="button" className="ghost" disabled={busy} onClick={forgetPat}>Forget PAT</button></div>
+        <label className="checkbox-label"><input type="checkbox" disabled={busy} checked={includeProjectEpics} onChange={(event) => { setIncludeProjectEpics(event.target.checked); setPreview(null) }} />Include all accessible project Epics (children are fetched from the selected team scope)</label>
         <div className="button-row"><button className="primary" disabled={busy}>{busy ? 'Fetching team work items…' : 'Fetch preview'}</button>{preview && <><button type="button" className="primary" disabled={!preview.items.length} onClick={savePreview}>Save {preview.items.length} work items</button><button type="button" className="ghost" onClick={() => { setPreview(null); setMessage('Preview discarded. Previously saved work items are unchanged.') }}>Discard preview</button></>}</div>
       </form>
       <p className="muted">Use Work Items → Read &amp; Write for creation. The PAT is saved separately in this browser profile for reuse, excluded from app backups, SharePoint sync and GitHub. Anyone with access to this profile can use it. Forget PAT removes the saved copy.</p>

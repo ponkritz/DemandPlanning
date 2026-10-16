@@ -1,6 +1,6 @@
 import type { AzureWorkItem } from './domain'
 
-export interface AzureConfig { organization: string; project: string; team: string }
+export interface AzureConfig { organization: string; project: string; team: string; includeProjectEpics?: boolean }
 export interface AzureRequest extends AzureConfig {
   operation: 'areas' | 'iterations' | 'query' | 'items' | 'create-feature' | 'create-child'
   pat: string
@@ -64,6 +64,28 @@ export async function fetchAzureWorkItems(config: AzureConfig, pat: string, tran
     }
     afterId = Math.max(...ids)
     if (items.length > 50000) throw new Error('This team exceeds the trial limit of 50,000 work items. Use a narrower team scope.')
+  }
+  if (config.includeProjectEpics) {
+    const known = new Set(items.map((item) => item.id))
+    let epicAfter = 0
+    while (true) {
+      const query = `SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = ${literal(config.project)} AND [System.WorkItemType] = 'Epic' AND [System.Id] > ${epicAfter} ORDER BY [System.Id] ASC`
+      const page = await request('query', { query }) as { workItems?: { id: number }[] }
+      if (!Array.isArray(page.workItems)) throw new Error('Could not list project Epics. No preview was saved.')
+      if (!page.workItems.length) break
+      const pageIds = page.workItems.map((item) => item.id)
+      if (pageIds.some((id) => !Number.isSafeInteger(id) || id <= epicAfter)) throw new Error('Unexpected Epic paging response.')
+      const ids = pageIds.filter((id) => !known.has(id))
+      for (let index = 0; index < ids.length; index += 200) {
+        const batchIds = ids.slice(index, index + 200)
+        const batch = await request('items', { ids: batchIds }) as { value?: RawItem[] }
+        if (batch.value?.length !== batchIds.length) throw new Error('Some project Epics could not be read. No preview was saved.')
+        items.push(...batch.value.map((item) => mapAzureWorkItem(item, config)))
+        batchIds.forEach((id) => known.add(id))
+      }
+      epicAfter = Math.max(...pageIds)
+      if (items.length > 50000) throw new Error('Team data and project Epics exceed the trial limit of 50,000 items.')
+    }
   }
   return { items, areaPaths: areas.values.map((area) => area.value), asOf }
 }
