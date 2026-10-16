@@ -89,12 +89,6 @@ export function futureIterationPairs(iterations: AzureIteration[], date = new Da
   return scheduledIterationPairs(iterations, date, 'future')
 }
 
-export async function readAzureCreator(config: AzureConfig, pat: string, transport: AzureTransport = requestAzure) {
-  const response = await transport({ ...config, pat, operation: 'identity' }) as { authenticatedUser?: { id?: string; providerDisplayName?: string; properties?: Record<string, { $value?: string }> } }
-  const user = response.authenticatedUser
-  if (!user?.id || !/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(user.id)) throw new Error('Unable to identify the PAT owner. No Feature was created. Check the connection identity.')
-  return { id: user.id, name: user.providerDisplayName || user.properties?.Account?.$value || user.id }
-}
 export interface AzureBacklogScope extends AzureConfig { itemKeys: string[]; areaPaths: string[]; fetchedAt: string }
 export interface AzureFetchResult { items: AzureWorkItem[]; areaPaths: string[]; asOf: string; scope: AzureBacklogScope }
 interface RawItem { id: number; fields: Record<string, unknown>; relations?: { rel: string; url: string }[] }
@@ -221,8 +215,8 @@ function parentFromRelation(item: RawItem) {
 export async function createAzureFeature(config: AzureConfig, pat: string, feature: FeatureInput, transport: AzureTransport = requestAzure): Promise<AzureWorkItem> {
   if (!pat.trim()) throw new Error('Enter a Work Items (Read & Write) PAT.')
   if (!Number.isSafeInteger(feature.parentId) || feature.parentId < 1 || !feature.title.trim() || feature.title.trim().length > 255) throw new Error('Choose a parent Epic and enter a title of 1–255 characters.')
-  const creator = feature.assignToCreator ? await readAzureCreator(config, pat, transport) : null
-  if (creator) feature = { ...feature, assignedTo: creator.id }
+  if (feature.assignToCreator) throw new Error('Configure a Feature creator email in the ADS configuration. Azure DevOps does not accept the PAT identity GUID as Assigned To.')
+  if (!feature.assignedTo?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(feature.assignedTo.trim())) throw new Error('A valid Feature creator email is required for Assigned To.')
   const parentResponse = await transport({ ...config, pat, operation: 'items', ids: [feature.parentId] }) as { value: RawItem[] }
   const parent = parentResponse.value?.find((item) => item.id === feature.parentId)
   if (!parent || parent.fields['System.WorkItemType'] !== 'Epic') throw new Error('The selected parent is not an accessible Epic. Refresh and select an Epic.')
@@ -246,7 +240,9 @@ export async function createAzureFeature(config: AzureConfig, pat: string, featu
     const checked = await transport({ ...config, pat, operation: 'items', ids: [created.id] }) as { value: RawItem[] }
     const item = checked.value?.find((entry) => entry.id === created.id)
     if (!item) throw new Error('Verification response did not include the created Feature.')
-    if (creator && (item.fields['System.AssignedTo'] as { id?: string } | undefined)?.id?.toLowerCase() !== creator.id.toLowerCase()) throw new Error('Creator assignment verification failed.')
+    const assigned = item.fields['System.AssignedTo']
+    const assignedName = typeof assigned === 'string' ? assigned : assigned && typeof assigned === 'object' && 'uniqueName' in assigned ? String(assigned.uniqueName) : assigned && typeof assigned === 'object' && 'mailAddress' in assigned ? String(assigned.mailAddress) : assigned && typeof assigned === 'object' && 'id' in assigned ? String(assigned.id) : ''
+    if (assignedName && assignedName.toLowerCase() !== feature.assignedTo.trim().toLowerCase()) throw new Error('Configured creator email assignment verification failed.')
     const mapped = mapAzureWorkItem(item, config)
     if (mapped.parentId !== feature.parentId || mapped.workItemType !== 'Feature') throw new Error('Parent/type verification failed.')
     if (mapped.areaPath.toLowerCase() !== areaPath.toLowerCase() || (iterationPath && mapped.iterationPath.toLowerCase() !== iterationPath.toLowerCase())) throw new Error('Area/iteration verification failed.')

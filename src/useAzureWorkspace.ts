@@ -14,6 +14,7 @@ export function useAzureWorkspace(store: PageProps['store']) {
   const [connectionProfiles, setConnectionProfiles] = useState<AzureConnectionProfileSummary[]>(() => listAzureConnectionProfiles())
   const [activeConnectionProfileId, setActiveConnectionProfileId] = useState(() => listAzureConnectionProfiles()[0]?.id ?? '')
   const [pat, setPat] = useState(() => { const first = listAzureConnectionProfiles()[0]?.id; return first ? loadAzureConnectionProfile(first)?.token ?? '' : loadAzurePat(defaultConfig) })
+  const [creatorEmail, setCreatorEmail] = useState(() => { const first = listAzureConnectionProfiles()[0]?.id; return first ? loadAzureConnectionProfile(first)?.creatorEmail ?? '' : '' })
   const [busy, setBusy] = useState(false)
   const fetching = useRef(false)
   const [lastRefreshed, setLastRefreshed] = useState('')
@@ -44,7 +45,7 @@ export function useAzureWorkspace(store: PageProps['store']) {
       let tokenWarning = ''
       try {
         const reason = connectionProfiles.find((profile) => profile.id === activeConnectionProfileId)?.reason
-        if (activeConnectionProfileId && reason) saveAzureConnectionProfile({ id: activeConnectionProfileId, url: projectUrl, reason, token: pat })
+        if (activeConnectionProfileId && reason) saveAzureConnectionProfile({ id: activeConnectionProfileId, url: projectUrl, reason, creatorEmail, token: pat })
         else saveAzurePat(parsed, pat)
       } catch { tokenWarning = ' PAT could not be saved in this browser; the current-session token was used for fetching.' }
       const result = await fetchAzureWorkItems({ ...parsed, team: parsed.team || team.trim() }, pat)
@@ -60,7 +61,7 @@ export function useAzureWorkspace(store: PageProps['store']) {
     setPat(value.trim()); setError('')
     try {
       const reason = connectionProfiles.find((profile) => profile.id === activeConnectionProfileId)?.reason
-      if (activeConnectionProfileId && reason) saveAzureConnectionProfile({ id: activeConnectionProfileId, url: projectUrl, reason, token: value })
+      if (activeConnectionProfileId && reason) saveAzureConnectionProfile({ id: activeConnectionProfileId, url: projectUrl, reason, creatorEmail, token: value })
       else saveAzurePat(config, value)
       setMessage(activeConnectionProfileId ? `Azure DevOps configuration “${reason}” updated on this browser.` : 'PAT saved on this browser for this organization and project.')
     }
@@ -75,22 +76,24 @@ export function useAzureWorkspace(store: PageProps['store']) {
   function selectConnectionProfile(id: string) {
     const profile = id ? loadAzureConnectionProfile(id) : null
     if (!profile) { setActiveConnectionProfileId(''); setError(''); return }
-    setProjectUrl(profile.url); setPreview(null); setActiveConnectionProfileId(id); setPat(profile.token); setError('')
+    setProjectUrl(profile.url); setPreview(null); setActiveConnectionProfileId(id); setPat(profile.token); setCreatorEmail(profile.creatorEmail?.trim() ?? ''); setError('')
     try { const parsed = parseAzureProjectUrl(profile.url); if (parsed.team) setTeam(parsed.team) } catch { /* saved profile validation already prevents this */ }
   }
 
-  function saveConnectionProfile(reason: string, value = pat) {
+  function saveConnectionProfile(reason: string, email = creatorEmail, value = pat) {
     parseAzureProjectUrl(projectUrl)
     const cleanReason = reason.trim()
     if (!cleanReason) throw new Error('Enter a reason for this Azure DevOps configuration.')
+    const cleanEmail = email.trim().toLowerCase()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) throw new Error('Enter the Azure DevOps email that should be assigned to newly created Features.')
     const id = activeConnectionProfileId || crypto.randomUUID().replaceAll('-', '')
-    saveAzureConnectionProfile({ id, url: projectUrl, reason: cleanReason, token: value })
-    setConnectionProfiles(listAzureConnectionProfiles()); setActiveConnectionProfileId(id); setPat(value.trim()); setMessage(`Azure DevOps configuration “${cleanReason}” saved on this browser.`); setError('')
+    saveAzureConnectionProfile({ id, url: projectUrl, reason: cleanReason, creatorEmail: cleanEmail, token: value })
+    setConnectionProfiles(listAzureConnectionProfiles()); setActiveConnectionProfileId(id); setPat(value.trim()); setCreatorEmail(cleanEmail); setMessage(`Azure DevOps configuration “${cleanReason}” saved on this browser.`); setError('')
   }
 
   function forgetConnectionProfile() {
     if (!activeConnectionProfileId) return
-    forgetAzureConnectionProfile(activeConnectionProfileId); const profiles = listAzureConnectionProfiles(); const next = profiles[0]?.id ?? ''; setConnectionProfiles(profiles); setActiveConnectionProfileId(''); if (next) selectConnectionProfile(next); else setPat(''); setMessage('Azure DevOps configuration removed from this browser. The token itself was not revoked.'); setError('')
+    forgetAzureConnectionProfile(activeConnectionProfileId); const profiles = listAzureConnectionProfiles(); const next = profiles[0]?.id ?? ''; setConnectionProfiles(profiles); setActiveConnectionProfileId(''); if (next) selectConnectionProfile(next); else { setPat(''); setCreatorEmail('') }; setMessage('Azure DevOps configuration removed from this browser. The token itself was not revoked.'); setError('')
   }
 
   function featureCreated(incoming: AzureWorkItem[]) {
@@ -134,7 +137,7 @@ export function useAzureWorkspace(store: PageProps['store']) {
     setPreview(null); setMessage(`${incoming.length} team-backlog records loaded into the app cache. Check browser save status for persistence. Old out-of-scope cached records were replaced; Azure DevOps and demand-planning data were not modified.`)
   }
 
-  return { projectUrl, changeProjectUrl, team, setTeam, pat, setPat, connectionProfiles, activeConnectionProfileId, selectConnectionProfile, saveConnectionProfile, forgetConnectionProfile, busy, error, setError, message, setMessage, preview, setPreview, saved, items, config, needsScopedRefresh, fetchPreview, refresh, lastRefreshed, rememberPat, forgetPat, featureCreated, savePreview, saveTimeWritingEffort }
+  return { projectUrl, changeProjectUrl, team, setTeam, pat, setPat, creatorEmail, setCreatorEmail, connectionProfiles, activeConnectionProfileId, selectConnectionProfile, saveConnectionProfile, forgetConnectionProfile, busy, error, setError, message, setMessage, preview, setPreview, saved, items, config, needsScopedRefresh, fetchPreview, refresh, lastRefreshed, rememberPat, forgetPat, featureCreated, savePreview, saveTimeWritingEffort }
 }
 
 export type AzureWorkspace = ReturnType<typeof useAzureWorkspace>

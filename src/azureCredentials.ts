@@ -5,21 +5,27 @@ const legacyKey = (config: AzureConfig) => `demand-planning-azure-pat:${encodeUR
 const profileKey = (config: AzureConfig) => `${legacyKey(config)}:profiles-v1`
 export interface AzurePatProfile { id: string; purpose: string; token: string }
 export interface AzurePatProfileSummary { id: string; purpose: string }
-export interface AzureConnectionProfile { id: string; url: string; reason: string; token: string }
-export interface AzureConnectionProfileSummary { id: string; url: string; reason: string }
+export interface AzureConnectionProfile { id: string; url: string; reason: string; creatorEmail?: string; token: string }
+export interface AzureConnectionProfileSummary { id: string; url: string; reason: string; creatorEmail?: string }
 const connectionProfilesKey = 'demand-planning-azure-connection-profiles-v1'
 const valid = (profile: unknown): profile is AzurePatProfile => Boolean(profile && typeof profile === 'object' && typeof (profile as AzurePatProfile).id === 'string' && /^[a-zA-Z0-9_-]{1,80}$/.test((profile as AzurePatProfile).id) && typeof (profile as AzurePatProfile).purpose === 'string' && (profile as AzurePatProfile).purpose.trim().length > 0 && typeof (profile as AzurePatProfile).token === 'string' && (profile as AzurePatProfile).token.trim().length > 0)
-const validConnection = (profile: unknown): profile is AzureConnectionProfile => Boolean(profile && typeof profile === 'object' && typeof (profile as AzureConnectionProfile).id === 'string' && /^[a-zA-Z0-9_-]{1,80}$/.test((profile as AzureConnectionProfile).id) && typeof (profile as AzureConnectionProfile).url === 'string' && (() => { try { const url = new URL((profile as AzureConnectionProfile).url); return url.protocol === 'https:' && url.hostname === 'dev.azure.com' } catch { return false } })() && typeof (profile as AzureConnectionProfile).reason === 'string' && (profile as AzureConnectionProfile).reason.trim().length > 0 && typeof (profile as AzureConnectionProfile).token === 'string' && (profile as AzureConnectionProfile).token.trim().length > 0)
+const validConnection = (profile: unknown): profile is AzureConnectionProfile => {
+  if (!profile || typeof profile !== 'object') return false
+  const value = profile as AzureConnectionProfile
+  if (typeof value.id !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(value.id) || typeof value.url !== 'string' || typeof value.reason !== 'string' || !value.reason.trim() || typeof value.token !== 'string' || !value.token.trim()) return false
+  try { const url = new URL(value.url); if (url.protocol !== 'https:' || url.hostname !== 'dev.azure.com') return false } catch { return false }
+  return value.creatorEmail == null || (typeof value.creatorEmail === 'string' && (!value.creatorEmail.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.creatorEmail.trim())))
+}
 
 export function listAzureConnectionProfiles(storage: Pick<Storage, 'getItem'> = localStorage): AzureConnectionProfileSummary[] {
-  try { const raw = JSON.parse(storage.getItem(connectionProfilesKey) ?? '[]'); return Array.isArray(raw) ? raw.filter(validConnection).map(({ id, url, reason }) => ({ id, url, reason })) : [] } catch { return [] }
+  try { const raw = JSON.parse(storage.getItem(connectionProfilesKey) ?? '[]'); return Array.isArray(raw) ? raw.filter(validConnection).map(({ id, url, reason, creatorEmail }) => ({ id, url, reason, ...(creatorEmail?.trim() ? { creatorEmail: creatorEmail.trim() } : {}) })) : [] } catch { return [] }
 }
 export function loadAzureConnectionProfile(id: string, storage: Pick<Storage, 'getItem'> = localStorage) {
   try { const raw = JSON.parse(storage.getItem(connectionProfilesKey) ?? '[]'); return Array.isArray(raw) ? raw.filter(validConnection).find(profile => profile.id === id) ?? null : null } catch { return null }
 }
 export function saveAzureConnectionProfile(profile: AzureConnectionProfile, storage: Pick<Storage, 'getItem'|'setItem'> = localStorage) {
-  if (!validConnection(profile)) throw new Error('Provide a valid Azure DevOps URL, reason and PAT.')
-  try { const raw = JSON.parse(storage.getItem(connectionProfilesKey) ?? '[]'); const profiles = Array.isArray(raw) ? raw.filter(validConnection).filter(item => item.id !== profile.id) : []; profiles.push({ ...profile, url: profile.url.trim(), reason: profile.reason.trim(), token: profile.token.trim() }); storage.setItem(connectionProfilesKey, JSON.stringify(profiles)) }
+  if (!validConnection(profile)) throw new Error('Provide a valid Azure DevOps URL, reason, creator email and PAT.')
+  try { const raw = JSON.parse(storage.getItem(connectionProfilesKey) ?? '[]'); const profiles = Array.isArray(raw) ? raw.filter(validConnection).filter(item => item.id !== profile.id) : []; profiles.push({ ...profile, url: profile.url.trim(), reason: profile.reason.trim(), ...(profile.creatorEmail?.trim() ? { creatorEmail: profile.creatorEmail.trim() } : {}), token: profile.token.trim() }); storage.setItem(connectionProfilesKey, JSON.stringify(profiles)) }
   catch { throw new Error('This browser could not save the Azure DevOps configuration. Check local storage availability.') }
 }
 export function forgetAzureConnectionProfile(id: string, storage: Pick<Storage, 'getItem'|'setItem'> = localStorage) {

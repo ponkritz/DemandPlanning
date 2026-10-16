@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
-import { parseAzureProjectUrl, fetchAzureWorkItems, mergeAzureWorkItems, buildWorkItemQuery, createAzureFeature, featurePatch, featureDescription, releaseHierarchyTitles, currentIndiaMonth, createAzureReleaseHierarchy, completeReleaseHierarchy, HierarchyCreationError, readAzureIterations, projectIterationPaths, currentIterationPairs, futureIterationPairs, readAzureCreator, mapAzureWorkItem, savedBacklogItems, sameAzureScope, updateAzureTimeWritingEffort } from '../src/azureDevOps.ts'
+import { parseAzureProjectUrl, fetchAzureWorkItems, mergeAzureWorkItems, buildWorkItemQuery, createAzureFeature, featurePatch, featureDescription, releaseHierarchyTitles, currentIndiaMonth, createAzureReleaseHierarchy, completeReleaseHierarchy, HierarchyCreationError, readAzureIterations, projectIterationPaths, currentIterationPairs, futureIterationPairs, mapAzureWorkItem, savedBacklogItems, sameAzureScope, updateAzureTimeWritingEffort } from '../src/azureDevOps.ts'
 import { buildWorkItemTree } from '../src/azureHierarchy.ts'
 import { loadAzurePat, saveAzurePat, forgetAzurePat, listAzurePatProfiles, loadAzurePatProfile, saveAzurePatProfile, forgetAzurePatProfile, listAzureConnectionProfiles, loadAzureConnectionProfile, saveAzureConnectionProfile, forgetAzureConnectionProfile } from '../src/azureCredentials.ts'
 import { normalizeBacklogColumns, defaultBacklogColumns, plainAzureText, visibleBacklogRows } from '../src/backlogView.ts'
@@ -54,6 +54,16 @@ test('ADS configurations retain URL, reason and PAT as one selectable browser-lo
   assert.deepEqual(loadAzureConnectionProfile(second.id, storage), second)
   forgetAzureConnectionProfile(first.id, storage)
   assert.deepEqual(listAzureConnectionProfiles(storage), [{ id: second.id, url: second.url, reason: second.reason }])
+})
+
+test('ADS configuration retains the creator email separately from its PAT', () => {
+  const values = new Map()
+  const storage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) }
+  const profile = { id: 'write', url: 'https://dev.azure.com/example-org/Quality%20Project/_backlogs/backlog/Team%20A/Epics', reason: 'Feature write', creatorEmail: 'creator@example.test', token: 'write-token' }
+  saveAzureConnectionProfile(profile, storage)
+  assert.deepEqual(listAzureConnectionProfiles(storage), [{ id: profile.id, url: profile.url, reason: profile.reason, creatorEmail: profile.creatorEmail }])
+  assert.equal(loadAzureConnectionProfile(profile.id, storage)?.creatorEmail, profile.creatorEmail)
+  assert.equal(JSON.stringify(listAzureConnectionProfiles(storage)).includes('token'), false)
 })
 
 test('monthly effort writes only both scheduling fields on a verified month Task', async () => {
@@ -475,11 +485,11 @@ test('overlapping branches stay ambiguous unless configured team Sprint narrows 
   assert.equal(currentIterationPairs(values, date).length, 1)
 })
 
-test('new Feature is assigned to PAT owner, all stories to Sprint, and task remains project-root', async () => {
+test('new Feature is assigned to the configured creator email, all stories to Sprint, and task remains project-root', async () => {
   const server = fakeHierarchyServer()
-  const result = await createAzureReleaseHierarchy(config, pat, { ...feature, iterationPath: 'Quality Project\\PI A', storyIterationPath: 'Quality Project\\PI A\\Sprint 1', assignToCreator: true, assignedTo: 'not-the-creator@example.test' }, 'PU', undefined, 'October 2026', server.transport)
+  const result = await createAzureReleaseHierarchy(config, pat, { ...feature, iterationPath: 'Quality Project\\PI A', storyIterationPath: 'Quality Project\\PI A\\Sprint 1', assignedTo: 'creator@example.test' }, 'PU', undefined, 'October 2026', server.transport)
   assert.equal(result.feature.iterationPath, 'Quality Project\\PI A')
-  assert.equal(server.records.get(result.feature.id).fields['System.AssignedTo'].id, 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee')
+  assert.equal(server.records.get(result.feature.id).fields['System.AssignedTo'].id, 'creator@example.test')
   assert.ok(result.items.filter((item) => item.workItemType === 'User Story').every((item) => item.iterationPath === 'Quality Project\\PI A\\Sprint 1'))
   assert.equal(result.items.find((item) => item.workItemType === 'Task').iterationPath, config.project)
   const writes = server.writes.length
@@ -487,14 +497,11 @@ test('new Feature is assigned to PAT owner, all stories to Sprint, and task rema
   assert.equal(server.writes.length, writes)
 })
 
-test('identity failures stop before writes; desktop identity URL stays fixed to organization', async () => {
-  await assert.rejects(readAzureCreator(config, pat, async () => ({ authenticatedUser: {} })), /identify the PAT owner/)
+test('a missing configured creator email stops Feature creation before writes', async () => {
   const server = fakeHierarchyServer()
-  await assert.rejects(createAzureFeature(config, pat, { ...feature, assignToCreator: true }, async (request) => request.operation === 'identity' ? {} : server.transport(request)), /PAT owner/)
+  await assert.rejects(createAzureFeature(config, pat, { ...feature, assignedTo: '' }, server.transport), /creator email/)
+  await assert.rejects(createAzureFeature(config, pat, { ...feature, assignToCreator: true }, server.transport), /creator email/)
   assert.equal(server.writes.length, 0)
-  const request = azureReadRequest({ ...config, pat, operation: 'identity' })
-  assert.equal(request.url, 'https://dev.azure.com/example-org/_apis/connectionData?api-version=7.1-preview.1')
-  assert.equal(request.options.method, 'GET')
 })
 
 test('Removed records never appear, even as parent context or under All', () => {
