@@ -53,23 +53,40 @@ export async function readAzureIterations(config: AzureConfig, pat: string, tran
   if (!options.size) throw new Error('Could not load iteration paths. Check Azure DevOps access or enter the full path from Project settings → Project configuration → Iterations.')
   return [...options.values()].sort((a, b) => a.path.localeCompare(b.path))
 }
-export function currentIterationPairs(iterations: AzureIteration[], date = new Date()) {
-  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date)
-  const active = iterations.filter((item) => {
+function indiaDate(date: Date) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date)
+}
+
+function scheduledIterationPairs(iterations: AzureIteration[], date: Date, schedule: 'current' | 'future') {
+  const today = indiaDate(date)
+  const dated = iterations.filter((item) => {
     const start = item.attributes?.startDate?.slice(0, 10), finish = item.attributes?.finishDate?.slice(0, 10)
-    return start && finish && /^\d{4}-\d{2}-\d{2}$/.test(start) && /^\d{4}-\d{2}-\d{2}$/.test(finish) && start <= today && today <= finish
+    return Boolean(start && finish && /^\d{4}-\d{2}-\d{2}$/.test(start) && /^\d{4}-\d{2}-\d{2}$/.test(finish))
+  })
+  const eligible = dated.filter((item) => {
+    const start = item.attributes!.startDate!.slice(0, 10), finish = item.attributes!.finishDate!.slice(0, 10)
+    return schedule === 'current' ? start <= today && today <= finish : start > today
   })
   const under = (child: string, parent: string) => child.toLowerCase().startsWith(`${parent.toLowerCase()}\\`)
-  const pairs = active.filter((item) => !active.some((child) => under(child.path, item.path))).flatMap((sprint) => {
+  const pairs = eligible.filter((item) => !dated.some((child) => under(child.path, item.path))).flatMap((sprint) => {
     const ancestors = iterations.filter((pi) => under(sprint.path, pi.path) && pi.path.includes('\\')).sort((a, b) => b.path.length - a.path.length)
     // Teams commonly date only the Sprint. Prefer an active PI, but safely use
     // the closest PI-named parent when the PI itself has no dates.
-    const pi = ancestors.find((item) => active.some((current) => current.path.toLowerCase() === item.path.toLowerCase()))
+    const pi = ancestors.find((item) => eligible.some((current) => current.path.toLowerCase() === item.path.toLowerCase()))
       ?? ancestors.find((item) => /\b(?:pi|program\s*increment)\b/i.test(item.name))
     return pi ? [{ pi, sprint }] : []
   })
   const teamPairs = pairs.filter((pair) => pair.sprint.teamConfigured)
-  return teamPairs.length ? teamPairs : pairs
+  const selected = teamPairs.length ? teamPairs : pairs
+  return selected.sort((a, b) => a.sprint.attributes!.startDate!.localeCompare(b.sprint.attributes!.startDate!) || a.sprint.path.localeCompare(b.sprint.path))
+}
+
+export function currentIterationPairs(iterations: AzureIteration[], date = new Date()) {
+  return scheduledIterationPairs(iterations, date, 'current')
+}
+
+export function futureIterationPairs(iterations: AzureIteration[], date = new Date()) {
+  return scheduledIterationPairs(iterations, date, 'future')
 }
 
 export async function readAzureCreator(config: AzureConfig, pat: string, transport: AzureTransport = requestAzure) {

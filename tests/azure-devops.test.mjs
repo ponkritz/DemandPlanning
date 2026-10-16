@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
-import { parseAzureProjectUrl, fetchAzureWorkItems, mergeAzureWorkItems, buildWorkItemQuery, createAzureFeature, featurePatch, featureDescription, releaseHierarchyTitles, currentIndiaMonth, createAzureReleaseHierarchy, completeReleaseHierarchy, HierarchyCreationError, readAzureIterations, projectIterationPaths, currentIterationPairs, readAzureCreator, mapAzureWorkItem, savedBacklogItems, sameAzureScope, updateAzureTimeWritingEffort } from '../src/azureDevOps.ts'
+import { parseAzureProjectUrl, fetchAzureWorkItems, mergeAzureWorkItems, buildWorkItemQuery, createAzureFeature, featurePatch, featureDescription, releaseHierarchyTitles, currentIndiaMonth, createAzureReleaseHierarchy, completeReleaseHierarchy, HierarchyCreationError, readAzureIterations, projectIterationPaths, currentIterationPairs, futureIterationPairs, readAzureCreator, mapAzureWorkItem, savedBacklogItems, sameAzureScope, updateAzureTimeWritingEffort } from '../src/azureDevOps.ts'
 import { buildWorkItemTree } from '../src/azureHierarchy.ts'
 import { loadAzurePat, saveAzurePat, forgetAzurePat, listAzurePatProfiles, loadAzurePatProfile, saveAzurePatProfile, forgetAzurePatProfile, listAzureConnectionProfiles, loadAzureConnectionProfile, saveAzureConnectionProfile, forgetAzureConnectionProfile } from '../src/azureCredentials.ts'
 import { normalizeBacklogColumns, defaultBacklogColumns, plainAzureText, visibleBacklogRows } from '../src/backlogView.ts'
@@ -456,6 +456,13 @@ test('a dated Sprint resolves its PI parent even when Azure has no PI date range
   assert.equal(pair.length, 1)
   assert.equal(pair[0].pi.name, 'PI 2026.4')
   assert.equal(pair[0].sprint.name, 'Sprint 7')
+})
+
+test('future PI and Sprint pairs are available alongside the current schedule', () => {
+  const iterations = projectIterationPaths({ name: 'Quality Project', children: [{ name: 'PI 2026.4', children: [{ name: 'Sprint 7', attributes: { startDate: '2026-10-17T00:00:00Z', finishDate: '2026-10-30T00:00:00Z' } }, { name: 'Sprint 8', attributes: { startDate: '2026-10-31T00:00:00Z', finishDate: '2026-11-13T00:00:00Z' } }] }, { name: 'PI 2027.1', children: [{ name: 'Sprint 1', attributes: { startDate: '2027-01-01T00:00:00Z', finishDate: '2027-01-14T00:00:00Z' } }] }] })
+  const date = new Date('2026-10-17T12:00:00Z')
+  assert.equal(currentIterationPairs(iterations, date)[0].sprint.name, 'Sprint 7')
+  assert.deepEqual(futureIterationPairs(iterations, date).map((pair) => `${pair.pi.name}/${pair.sprint.name}`), ['PI 2026.4/Sprint 8', 'PI 2027.1/Sprint 1'])
 })
 
 test('overlapping branches stay ambiguous unless configured team Sprint narrows them', () => {

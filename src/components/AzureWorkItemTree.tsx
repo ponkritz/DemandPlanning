@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import type { AzureWorkItem } from '../domain'
 import { buildWorkItemTree, type WorkItemNode } from '../azureHierarchy'
-import { createAzureReleaseHierarchy, completeReleaseHierarchy, currentIndiaMonth, releaseHierarchyTitles, HierarchyCreationError, featureDescription, readAzureIterations, currentIterationPairs, readAzureCreator, type AzureIteration, type AzureConfig, type FeatureInput } from '../azureDevOps'
+import { createAzureReleaseHierarchy, completeReleaseHierarchy, currentIndiaMonth, releaseHierarchyTitles, HierarchyCreationError, featureDescription, readAzureIterations, currentIterationPairs, futureIterationPairs, readAzureCreator, type AzureIteration, type AzureConfig, type FeatureInput } from '../azureDevOps'
 import { Modal } from './ui'
 import { BacklogTable } from './BacklogTable'
 
@@ -37,6 +37,8 @@ export function AzureWorkItemTree({ items, config, onCreated, savedPat = '', onS
   const filtering = Boolean(search.trim())
   const states = [...new Set(['New', 'Active', 'Closed', ...scoped.map((item) => item.state)])].filter(Boolean)
   const pairs = currentIterationPairs(iterationChoices)
+  const futurePairs = futureIterationPairs(iterationChoices)
+  const selectablePairs = [...pairs, ...futurePairs]
   const availableMilestones = releaseKind === 'PU' ? ['SFV', 'DT', 'IQOQ'] : ['PRD', 'SFV', 'DT', 'IQOQ']
   const monthLabel = currentIndiaMonth()
   let plan
@@ -59,9 +61,10 @@ export function AzureWorkItemTree({ items, config, onCreated, savedPat = '', onS
     try {
       const options = await readAzureIterations(config, token)
       setIterationChoices(options)
-      const current = currentIterationPairs(options)
+      const current = currentIterationPairs(options), future = futureIterationPairs(options)
       if (current.length === 1) { setIterationPath(current[0].pi.path); setSprintPath(current[0].sprint.path) }
-      else { setIterationPath(''); setSprintPath(''); setError(current.length ? 'Several current PI/Sprint branches overlap. Select the correct team schedule below.' : 'No current dated PI → Sprint pair found. Check start/finish dates and nesting in Azure Project settings, then reload.') }
+      else if (!current.length && future.length === 1) { setIterationPath(future[0].pi.path); setSprintPath(future[0].sprint.path) }
+      else { setIterationPath(''); setSprintPath(''); setError(current.length ? 'Several current PI/Sprint branches overlap. Select the correct team schedule below.' : future.length ? 'No current dated Sprint was found. Select one future PI/Sprint below.' : 'No current or future dated PI → Sprint pair found. Check start/finish dates and nesting in Azure Project settings, then reload.') }
       const creator = await readAzureCreator(config, token)
       setCreatorName(creator.name)
     }
@@ -80,7 +83,8 @@ export function AzureWorkItemTree({ items, config, onCreated, savedPat = '', onS
     catch (failure) { setError(failure instanceof Error ? failure.message : 'Invalid Task effort.'); submitting.current = false; setCreating(false); return }
     try {
       onSavePat?.(token)
-      const fresh = currentIterationPairs(await readAzureIterations(config, token))
+      const choices = await readAzureIterations(config, token)
+      const fresh = [...currentIterationPairs(choices), ...futureIterationPairs(choices)]
       if (!fresh.some((pair) => pair.pi.path === iterationPath && pair.sprint.path === sprintPath)) throw new Error('The selected PI/Sprint is no longer current. Reload the schedule and review it before creating. No write was attempted.')
       const bundle = resumeFeature ? await completeReleaseHierarchy(config, token, resumeFeature.id, releaseKind, milestones, monthLabel, undefined, sprintPath) : await createAzureReleaseHierarchy(config, token, feature, releaseKind, milestones, monthLabel)
       onCreated(parent ? [parent, ...bundle.items] : bundle.items)
@@ -108,8 +112,8 @@ export function AzureWorkItemTree({ items, config, onCreated, savedPat = '', onS
       <label>Feature title<input name="title" required maxLength={255} value={title} onChange={(event) => setTitle(event.target.value)} disabled={creating || Boolean(resumeFeature)} placeholder="Program | Service | vRelease" autoFocus /></label>
       {parent && <><label>Area Path<input name="areaPath" key={parent.key} defaultValue={parent.areaPath} required disabled={creating} /></label>
       </>}
-      <div className="iteration-picker"><button type="button" className="ghost" onClick={() => void loadIterations()} disabled={creating || iterationLoading}>{iterationLoading ? 'Detecting current schedule…' : 'Detect current PI / Sprint & creator'}</button><label>Current team schedule<select required value={sprintPath} onChange={(event) => { const pair = pairs.find((value) => value.sprint.path === event.target.value); setSprintPath(pair?.sprint.path ?? ''); setIterationPath(pair?.pi.path ?? '') }} disabled={creating || iterationLoading}><option value="">Select a current dated PI → Sprint</option>{pairs.map((pair) => <option key={pair.sprint.path} value={pair.sprint.path}>{pair.pi.path} → {pair.sprint.name} ({pair.sprint.attributes?.startDate?.slice(0, 10)} — {pair.sprint.attributes?.finishDate?.slice(0, 10)})</option>)}</select></label></div>
-      <p className="muted">Current date uses India time; date boundaries are inclusive. Feature → {resumeFeature ? resumeFeature.iterationPath : iterationPath || 'current PI'}. User Stories → {sprintPath || 'current Sprint'}. Time Writing task → {config.project}. Existing Features are not moved during child completion.</p>
+      <div className="iteration-picker"><button type="button" className="ghost" onClick={() => void loadIterations()} disabled={creating || iterationLoading}>{iterationLoading ? 'Loading PI / Sprint schedule…' : 'Load current & future PI / Sprint schedule'}</button><label>PI / Sprint schedule<select required value={sprintPath} onChange={(event) => { const pair = selectablePairs.find((value) => value.sprint.path === event.target.value); setSprintPath(pair?.sprint.path ?? ''); setIterationPath(pair?.pi.path ?? '') }} disabled={creating || iterationLoading}><option value="">Select a dated PI → Sprint</option>{pairs.length > 0 && <optgroup label="Current PI / Sprint">{pairs.map((pair) => <option key={pair.sprint.path} value={pair.sprint.path}>{pair.pi.path} → {pair.sprint.name} ({pair.sprint.attributes?.startDate?.slice(0, 10)} — {pair.sprint.attributes?.finishDate?.slice(0, 10)})</option>)}</optgroup>}{futurePairs.length > 0 && <optgroup label="Future PI / Sprint">{futurePairs.map((pair) => <option key={pair.sprint.path} value={pair.sprint.path}>{pair.pi.path} → {pair.sprint.name} ({pair.sprint.attributes?.startDate?.slice(0, 10)} — {pair.sprint.attributes?.finishDate?.slice(0, 10)})</option>)}</optgroup>}</select></label></div>
+      <p className="muted">Current date uses India time; date boundaries are inclusive. Current and all future dated schedules are available. Feature → {resumeFeature ? resumeFeature.iterationPath : iterationPath || 'selected PI'}. User Stories → {sprintPath || 'selected Sprint'}. Time Writing task → {config.project}. Existing Features are not moved during child completion.</p>
       <label>Release classification<select value={releaseKind} disabled={creating} onChange={(event) => setKind(event.target.value as 'PU' | 'Release')}><option value="PU">PU</option><option value="Release">Full Release</option></select></label>
       {parent && <><label>Description<textarea name="description" maxLength={100000} value={description} onChange={(event) => setDescription(event.target.value)} disabled={creating} /></label><label>Acceptance criteria<textarea name="acceptance" maxLength={100000} disabled={creating} /></label>
       <div className="form-row"><label>Feature assigned to<input readOnly value={creatorName} /></label><label>Target date (optional)<input name="targetDate" type="date" disabled={creating} /></label></div></>}
