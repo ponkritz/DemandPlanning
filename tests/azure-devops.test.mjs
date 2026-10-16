@@ -490,6 +490,7 @@ test('new Feature is assigned to the configured creator email, all stories to Sp
   const result = await createAzureReleaseHierarchy(config, pat, { ...feature, iterationPath: 'Quality Project\\PI A', storyIterationPath: 'Quality Project\\PI A\\Sprint 1', assignedTo: 'creator@example.test' }, 'PU', undefined, 'October 2026', server.transport)
   assert.equal(result.feature.iterationPath, 'Quality Project\\PI A')
   assert.equal(server.records.get(result.feature.id).fields['System.AssignedTo'].id, 'creator@example.test')
+  assert.ok(result.items.filter((item) => item.workItemType === 'User Story' || item.workItemType === 'Task').every((item) => server.records.get(item.id).fields['System.AssignedTo'].id === 'creator@example.test'))
   assert.ok(result.items.filter((item) => item.workItemType === 'User Story').every((item) => item.iterationPath === 'Quality Project\\PI A\\Sprint 1'))
   assert.equal(result.items.find((item) => item.workItemType === 'Task').iterationPath, config.project)
   const writes = server.writes.length
