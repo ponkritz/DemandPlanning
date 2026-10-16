@@ -50,7 +50,7 @@ pnpm build
 
 ### Versions, build identity and Force Update
 
-The current release is **v0.8.0**. The authoritative number is `package.json` (`0.8.0` without the display prefix); the UI and release tags use **vX.Y.Z**. Increase **X** for a major/incompatible change (reset Y and Z), **Y** for a new backward-compatible feature (reset Z), and **Z** for bug fixes only. Rebuilding an unchanged release keeps its version and gets a distinct build ID. Do not automatically treat every commit as a release or infer version changes from build counts. Future releases must bump the appropriate component before deployment.
+The current release is **v0.9.0**. The authoritative number is `package.json` (`0.9.0` without the display prefix); the UI and release tags use **vX.Y.Z**. Increase **X** for a major/incompatible change (reset Y and Z), **Y** for a new backward-compatible feature (reset Z), and **Z** for bug fixes only. Rebuilding an unchanged release keeps its version and gets a distinct build ID. Do not automatically treat every commit as a release or infer version changes from build counts. Future releases must bump the appropriate component before deployment.
 
 The sidebar shows version, build ID and build date/time in **IST**; the Force Update dialog also shows the source commit. GitHub Actions stamps `GITHUB_RUN_ID.GITHUB_RUN_ATTEMPT`; local builds use a commit/timestamp ID. Metadata is embedded in the app, emitted to `build-info.json`, and stamped into HTML. Both CI jobs verify the version and reject a release tag that does not exactly match `v` plus the package version.
 
@@ -66,7 +66,7 @@ Every push to `main` also builds and deploys the browser version to GitHub Pages
 
 ## Data and security boundary
 
-### Azure dashboard mapping (v0.8.0)
+### Azure dashboard mapping (v0.9.0)
 
 Overview and its deterministic insights consume the exact same scoped `azure.items` workspace as Backlogs: a fresh selected-team preview takes precedence over the verified saved cache. Removed records are excluded. Visual state filters on Backlogs do not change dashboard totals. Refresh is explicit; failed refreshes retain the previous dataset and display the error. There is no local planning/demo fallback.
 
@@ -98,7 +98,7 @@ Fetched membership is stored with organization/project/team and exact item keys.
 
 ### Azure PAT profiles
 
-Connection settings can store several named PAT profiles per Azure DevOps organization/project—for example **Backlog Read**, **Work Item Write**, and **Release Import**. Select exactly one active profile; the active token is used for refresh and Azure write actions. Profiles are browser-local only and excluded from IndexedDB app data, JSON backups, SharePoint snapshots, browser exports and GitHub. Use separate least-privilege tokens where possible: a read-only profile for refresh and a Work Items (Read & Write) profile only while creating or updating work items. Removing a profile only removes its local copy; revoke the PAT in Azure DevOps if it should no longer work. Browser-local storage is not an enterprise secret vault, so do not share a browser profile with someone who must not use the token.
+Connection settings can store several named ADS configurations. Each configuration is one complete set: **Azure DevOps URL, PAT and reason**—for example **Quality Backlog Read** or **Release Work Item Write**. Select exactly one active configuration; Fetch preview and Refresh use that configuration’s URL and PAT together, while the reason is the visible audit label. Saving a preview replaces the cached Azure dataset with that selected source scope, so dashboards never silently mix different source scopes. Configurations are browser-local only and excluded from IndexedDB app data, JSON backups, SharePoint snapshots, browser exports and GitHub. Use separate least-privilege tokens where possible: a read-only configuration for refresh and a Work Items (Read & Write) configuration only while creating or updating work items. Removing a configuration only removes its local copy; revoke the PAT in Azure DevOps if it should no longer work. Browser-local storage is not an enterprise secret vault, so do not share a browser profile with someone who must not use the token.
 
 **Backlogs** (formerly Board) is a compact, expandable table following Epic → Feature → User Story → Task parent links. It defaults to the multi-select **New + Active** state filter. Select additional source states or **All**. Removed items are always excluded, including parent context, level selectors and the source-details table; active descendants remain visible with a missing-parent indicator. Other ancestors outside the state filter are shown as parent context. **Refresh from Azure** reads a fresh snapshot without changing Azure DevOps; **Save fetched work items** persists that snapshot in app storage. Failed refreshes retain the previous data. This is an on-demand refresh, not a background/live subscription.
 

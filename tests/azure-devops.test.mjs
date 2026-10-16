@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { parseAzureProjectUrl, fetchAzureWorkItems, mergeAzureWorkItems, buildWorkItemQuery, createAzureFeature, featurePatch, featureDescription, releaseHierarchyTitles, currentIndiaMonth, createAzureReleaseHierarchy, completeReleaseHierarchy, HierarchyCreationError, readAzureIterations, projectIterationPaths, currentIterationPairs, readAzureCreator, mapAzureWorkItem, savedBacklogItems, sameAzureScope, updateAzureTimeWritingEffort } from '../src/azureDevOps.ts'
 import { buildWorkItemTree } from '../src/azureHierarchy.ts'
-import { loadAzurePat, saveAzurePat, forgetAzurePat, listAzurePatProfiles, loadAzurePatProfile, saveAzurePatProfile, forgetAzurePatProfile } from '../src/azureCredentials.ts'
+import { loadAzurePat, saveAzurePat, forgetAzurePat, listAzurePatProfiles, loadAzurePatProfile, saveAzurePatProfile, forgetAzurePatProfile, listAzureConnectionProfiles, loadAzureConnectionProfile, saveAzureConnectionProfile, forgetAzureConnectionProfile } from '../src/azureCredentials.ts'
 import { normalizeBacklogColumns, defaultBacklogColumns, plainAzureText, visibleBacklogRows } from '../src/backlogView.ts'
 
 const require = createRequire(import.meta.url)
@@ -41,6 +41,19 @@ test('named PAT profiles stay scoped, reveal only purpose summaries and do not o
   assert.equal(listAzurePatProfiles({ ...config, project: 'Other' }, storage).length, 0)
   forgetAzurePatProfile(config, 'backlog-read', storage)
   assert.deepEqual(listAzurePatProfiles(config, storage), [{ id: 'write', purpose: 'Work Item Write' }])
+})
+
+test('ADS configurations retain URL, reason and PAT as one selectable browser-local set', () => {
+  const values = new Map()
+  const storage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: (key) => values.delete(key) }
+  const first = { id: 'quality-read', url: 'https://dev.azure.com/example-org/Quality%20Project/_backlogs/backlog/Team%20A/Epics', reason: 'Quality backlog read', token: 'quality-read-token' }
+  const second = { id: 'release-write', url: 'https://dev.azure.com/another-org/Release%20Project/_backlogs/backlog/Release%20Team/Epics', reason: 'Release work-item write', token: 'release-write-token' }
+  saveAzureConnectionProfile(first, storage); saveAzureConnectionProfile(second, storage)
+  assert.deepEqual(listAzureConnectionProfiles(storage), [{ id: first.id, url: first.url, reason: first.reason }, { id: second.id, url: second.url, reason: second.reason }])
+  assert.equal(JSON.stringify(listAzureConnectionProfiles(storage)).includes('token'), false)
+  assert.deepEqual(loadAzureConnectionProfile(second.id, storage), second)
+  forgetAzureConnectionProfile(first.id, storage)
+  assert.deepEqual(listAzureConnectionProfiles(storage), [{ id: second.id, url: second.url, reason: second.reason }])
 })
 
 test('monthly effort writes only both scheduling fields on a verified Time Writing User Story', async () => {

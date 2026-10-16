@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { fetchAzureWorkItems, mergeAzureWorkItems, parseAzureProjectUrl, savedBacklogItems, sameAzureScope, updateAzureTimeWritingEffort, type AzureFetchResult, type AzureConfig } from './azureDevOps'
 import type { PageProps } from './pages/types'
 import type { AzureWorkItem } from './domain'
-import { loadAzurePat, saveAzurePat, forgetAzurePat, listAzurePatProfiles, loadAzurePatProfile, saveAzurePatProfile, forgetAzurePatProfile, type AzurePatProfileSummary } from './azureCredentials'
+import { loadAzurePat, saveAzurePat, forgetAzurePat, listAzureConnectionProfiles, loadAzureConnectionProfile, saveAzureConnectionProfile, forgetAzureConnectionProfile, type AzureConnectionProfileSummary } from './azureCredentials'
 
 const defaultUrl = 'https://dev.azure.com/ALMP-ORG-MSTP01/Patient%20Safety%20and%20Quality/_backlogs/backlog/InD%20Quality/Epics'
 const defaultConfig = parseAzureProjectUrl(defaultUrl)
@@ -11,9 +11,9 @@ const defaultConfig = parseAzureProjectUrl(defaultUrl)
 export function useAzureWorkspace(store: PageProps['store']) {
   const [projectUrl, setProjectUrl] = useState(defaultUrl)
   const [team, setTeam] = useState('InD Quality')
-  const [patProfiles, setPatProfiles] = useState<AzurePatProfileSummary[]>(() => listAzurePatProfiles(defaultConfig))
-  const [activePatProfileId, setActivePatProfileId] = useState(() => listAzurePatProfiles(defaultConfig)[0]?.id ?? '')
-  const [pat, setPat] = useState(() => { const first = listAzurePatProfiles(defaultConfig)[0]?.id; return first ? loadAzurePatProfile(defaultConfig, first) : loadAzurePat(defaultConfig) })
+  const [connectionProfiles, setConnectionProfiles] = useState<AzureConnectionProfileSummary[]>(() => listAzureConnectionProfiles())
+  const [activeConnectionProfileId, setActiveConnectionProfileId] = useState(() => listAzureConnectionProfiles()[0]?.id ?? '')
+  const [pat, setPat] = useState(() => { const first = listAzureConnectionProfiles()[0]?.id; return first ? loadAzureConnectionProfile(first)?.token ?? '' : loadAzurePat(defaultConfig) })
   const [busy, setBusy] = useState(false)
   const fetching = useRef(false)
   const [lastRefreshed, setLastRefreshed] = useState('')
@@ -28,7 +28,7 @@ export function useAzureWorkspace(store: PageProps['store']) {
 
   function changeProjectUrl(next: string) {
     setProjectUrl(next); setPreview(null)
-    try { const parsed = parseAzureProjectUrl(next); if (parsed.team) setTeam(parsed.team); const profiles = listAzurePatProfiles(parsed); setPatProfiles(profiles); const selected = profiles[0]?.id ?? ''; setActivePatProfileId(selected); setPat(selected ? loadAzurePatProfile(parsed, selected) : loadAzurePat(parsed)) } catch { setPat(''); setPatProfiles([]); setActivePatProfileId('') }
+    try { const parsed = parseAzureProjectUrl(next); if (parsed.team) setTeam(parsed.team); setActiveConnectionProfileId(''); setPat(loadAzurePat(parsed)) } catch { setPat(''); setActiveConnectionProfileId('') }
   }
 
   async function fetchPreview(event: React.FormEvent<HTMLFormElement>) {
@@ -43,8 +43,8 @@ export function useAzureWorkspace(store: PageProps['store']) {
       const parsed = parseAzureProjectUrl(projectUrl)
       let tokenWarning = ''
       try {
-        const purpose = patProfiles.find((profile) => profile.id === activePatProfileId)?.purpose
-        if (activePatProfileId && purpose) saveAzurePatProfile(parsed, { id: activePatProfileId, purpose, token: pat })
+        const reason = connectionProfiles.find((profile) => profile.id === activeConnectionProfileId)?.reason
+        if (activeConnectionProfileId && reason) saveAzureConnectionProfile({ id: activeConnectionProfileId, url: projectUrl, reason, token: pat })
         else saveAzurePat(parsed, pat)
       } catch { tokenWarning = ' PAT could not be saved in this browser; the current-session token was used for fetching.' }
       const result = await fetchAzureWorkItems({ ...parsed, team: parsed.team || team.trim() }, pat)
@@ -59,10 +59,10 @@ export function useAzureWorkspace(store: PageProps['store']) {
     if (!config) { setError('Enter a valid Azure DevOps project URL first.'); return }
     setPat(value.trim()); setError('')
     try {
-      const purpose = patProfiles.find((profile) => profile.id === activePatProfileId)?.purpose
-      if (activePatProfileId && purpose) saveAzurePatProfile(config, { id: activePatProfileId, purpose, token: value })
+      const reason = connectionProfiles.find((profile) => profile.id === activeConnectionProfileId)?.reason
+      if (activeConnectionProfileId && reason) saveAzureConnectionProfile({ id: activeConnectionProfileId, url: projectUrl, reason, token: value })
       else saveAzurePat(config, value)
-      setMessage(activePatProfileId ? `PAT profile “${purpose}” updated on this browser.` : 'PAT saved on this browser for this organization and project.')
+      setMessage(activeConnectionProfileId ? `Azure DevOps configuration “${reason}” updated on this browser.` : 'PAT saved on this browser for this organization and project.')
     }
     catch { setMessage('PAT is available for this session but could not be saved in browser settings. Fetching is still available; do not clear browser data.') }
   }
@@ -72,23 +72,25 @@ export function useAzureWorkspace(store: PageProps['store']) {
     setPat(''); setMessage('Saved PAT removed from this browser. The token itself has not been revoked in Azure DevOps.'); setError('')
   }
 
-  function selectPatProfile(id: string) {
-    if (!config) return
-    setActivePatProfileId(id); setPat(id ? loadAzurePatProfile(config, id) : loadAzurePat(config)); setError('')
+  function selectConnectionProfile(id: string) {
+    const profile = id ? loadAzureConnectionProfile(id) : null
+    if (!profile) { setActiveConnectionProfileId(''); setError(''); return }
+    setProjectUrl(profile.url); setPreview(null); setActiveConnectionProfileId(id); setPat(profile.token); setError('')
+    try { const parsed = parseAzureProjectUrl(profile.url); if (parsed.team) setTeam(parsed.team) } catch { /* saved profile validation already prevents this */ }
   }
 
-  function savePatProfile(purpose: string, value = pat) {
-    if (!config) throw new Error('Enter a valid Azure DevOps project URL first.')
-    const cleanPurpose = purpose.trim()
-    if (!cleanPurpose) throw new Error('Enter a purpose for this PAT profile.')
-    const id = activePatProfileId || crypto.randomUUID().replaceAll('-', '')
-    saveAzurePatProfile(config, { id, purpose: cleanPurpose, token: value })
-    const profiles = listAzurePatProfiles(config); setPatProfiles(profiles); setActivePatProfileId(id); setPat(value.trim()); setMessage(`PAT profile “${cleanPurpose}” saved on this browser.`); setError('')
+  function saveConnectionProfile(reason: string, value = pat) {
+    parseAzureProjectUrl(projectUrl)
+    const cleanReason = reason.trim()
+    if (!cleanReason) throw new Error('Enter a reason for this Azure DevOps configuration.')
+    const id = activeConnectionProfileId || crypto.randomUUID().replaceAll('-', '')
+    saveAzureConnectionProfile({ id, url: projectUrl, reason: cleanReason, token: value })
+    setConnectionProfiles(listAzureConnectionProfiles()); setActiveConnectionProfileId(id); setPat(value.trim()); setMessage(`Azure DevOps configuration “${cleanReason}” saved on this browser.`); setError('')
   }
 
-  function forgetPatProfile() {
-    if (!config || !activePatProfileId) return
-    forgetAzurePatProfile(config, activePatProfileId); const profiles = listAzurePatProfiles(config); const next = profiles[0]?.id ?? ''; setPatProfiles(profiles); setActivePatProfileId(next); setPat(next ? loadAzurePatProfile(config, next) : ''); setMessage('PAT profile removed from this browser. The Azure DevOps token itself was not revoked.'); setError('')
+  function forgetConnectionProfile() {
+    if (!activeConnectionProfileId) return
+    forgetAzureConnectionProfile(activeConnectionProfileId); const profiles = listAzureConnectionProfiles(); const next = profiles[0]?.id ?? ''; setConnectionProfiles(profiles); setActiveConnectionProfileId(''); if (next) selectConnectionProfile(next); else setPat(''); setMessage('Azure DevOps configuration removed from this browser. The token itself was not revoked.'); setError('')
   }
 
   function featureCreated(incoming: AzureWorkItem[]) {
@@ -132,7 +134,7 @@ export function useAzureWorkspace(store: PageProps['store']) {
     setPreview(null); setMessage(`${incoming.length} team-backlog records loaded into the app cache. Check browser save status for persistence. Old out-of-scope cached records were replaced; Azure DevOps and demand-planning data were not modified.`)
   }
 
-  return { projectUrl, changeProjectUrl, team, setTeam, pat, setPat, patProfiles, activePatProfileId, selectPatProfile, savePatProfile, forgetPatProfile, busy, error, setError, message, setMessage, preview, setPreview, saved, items, config, needsScopedRefresh, fetchPreview, refresh, lastRefreshed, rememberPat, forgetPat, featureCreated, savePreview, saveTimeWritingEffort }
+  return { projectUrl, changeProjectUrl, team, setTeam, pat, setPat, connectionProfiles, activeConnectionProfileId, selectConnectionProfile, saveConnectionProfile, forgetConnectionProfile, busy, error, setError, message, setMessage, preview, setPreview, saved, items, config, needsScopedRefresh, fetchPreview, refresh, lastRefreshed, rememberPat, forgetPat, featureCreated, savePreview, saveTimeWritingEffort }
 }
 
 export type AzureWorkspace = ReturnType<typeof useAzureWorkspace>
