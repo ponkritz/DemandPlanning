@@ -1,5 +1,7 @@
 import { InteractionRequiredAuthError, PublicClientApplication, type AccountInfo } from '@azure/msal-browser'
 import type { AppState } from './domain'
+import { freezeSnapshot, listSnapshots, snapshotFolder, uploadSnapshot } from './cloudSnapshots'
+import type { Snapshot } from './domain'
 
 export interface SharePointConfig {
   tenantId: string
@@ -73,15 +75,35 @@ export class SharePointStateClient {
     return item.eTag ?? item.etag ?? ''
   }
 
-  private async ensureParentFolders() {
-    const folders = this.config.stateFilePath.split('/').slice(0, -1).filter(Boolean)
+  getSnapshotFolder() { return snapshotFolder(this.config.stateFilePath) }
+
+  async saveSnapshot(state: AppState, type: Snapshot['type'], month: string, build: unknown) {
+    if (!this.account || !this.siteId) throw new Error('Connect to SharePoint in Administration first.')
+    const snapshot = freezeSnapshot(state, type, month, this.account.username, build)
+    const folder = this.getSnapshotFolder()
+    await this.ensureParentFolders(`${folder}/snapshot.json`)
+    return uploadSnapshot(this.snapshotRequest, folder, snapshot)
+  }
+
+  listSnapshots() { return listSnapshots(this.snapshotRequest, this.getSnapshotFolder()) }
+
+  private snapshotRequest = (path: string, options: RequestInit = {}) => {
+    const root = `${graphRoot}/sites/${this.siteId}/drive`
+    const url = path.startsWith('https:') ? path : `${root}${path}`
+    if (new URL(url).origin !== new URL(graphRoot).origin || !new URL(url).pathname.startsWith('/v1.0/')) throw new Error('Invalid SharePoint pagination URL.')
+    return this.authorizedFetch(url, options)
+  }
+
+  private async ensureParentFolders(filePath = this.config.stateFilePath) {
+    const folders = filePath.split('/').slice(0, -1).filter(Boolean)
     let currentPath = ''
     for (const folder of folders) {
       const candidate = [currentPath, folder].filter(Boolean).join('/')
       const exists = await this.graph(`/sites/${this.siteId}/drive/root:/${encodeGraphPath(candidate)}`, {}, true)
       if (!exists) {
         const parent = currentPath ? `/sites/${this.siteId}/drive/root:/${encodeGraphPath(currentPath)}:/children` : `/sites/${this.siteId}/drive/root/children`
-        await this.graph(parent, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: folder, folder: {}, '@microsoft.graph.conflictBehavior': 'fail' }) })
+        const response = await this.authorizedFetch(`${graphRoot}${parent}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: folder, folder: {}, '@microsoft.graph.conflictBehavior': 'fail' }) })
+        if (!response.ok && response.status !== 409) throw new Error(`Unable to create SharePoint folder (${response.status}).`)
       }
       currentPath = candidate
     }

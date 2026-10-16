@@ -3,6 +3,8 @@ import type { AppState, AuditEvent } from './domain'
 import { seedState } from './seed'
 import { SharePointStateClient, defaultSharePointConfig, type SharePointConfig } from './sharepoint'
 import { loadBrowserState, indexedStateRepository, createStateWriter, validateBackup } from './browserState'
+import type { Snapshot } from './domain'
+import { appBuild } from './buildInfo'
 
 const CONFIG_KEY = 'demand-planning-sharepoint-config-v1'
 
@@ -24,6 +26,7 @@ export function useAppStore() {
   const writer = useRef(createStateWriter(indexedStateRepository()))
   const pendingSave = useRef(false)
   const pendingRemoteSave = useRef(false)
+  const pendingSnapshot = useRef(false)
   const [connection, setConnection] = useState<ConnectionState>({ mode: 'local', status: 'idle', message: 'Data is stored only in this browser.' })
   const client = useRef<SharePointStateClient | null>(null)
   const etag = useRef<string | null>(null)
@@ -55,7 +58,7 @@ export function useAppStore() {
   }, [state, ready, saveAttempt])
 
   useEffect(() => {
-    const warn = (event: BeforeUnloadEvent) => { if (pendingSave.current) { event.preventDefault(); event.returnValue = '' } }
+    const warn = (event: BeforeUnloadEvent) => { if (pendingSave.current || pendingSnapshot.current || pendingRemoteSave.current) { event.preventDefault(); event.returnValue = '' } }
     window.addEventListener('beforeunload', warn)
     return () => window.removeEventListener('beforeunload', warn)
   }, [])
@@ -147,7 +150,22 @@ export function useAppStore() {
     setState(structuredClone(validateBackup(value)))
   }
 
-  return { state, setState, update, addAudit, reset, connection, connectSharePoint, initializeSharePoint, pullSharePoint, disconnectSharePoint, getSavedSharePointConfig, ready, loadError, cache, retryLoad: () => { setLoadError(''); setLoadAttempt((value) => value + 1) }, retrySave: () => setSaveAttempt((value) => value + 1), restoreBackup, hasPendingSave: () => pendingSave.current || (connection.mode === 'sharepoint' && pendingRemoteSave.current) }
+  function snapshotClient() {
+    if (!client.current || !['sharepoint', 'empty'].includes(connection.mode)) throw new Error('Connect to SharePoint in Administration first. Snapshots are not saved in the browser.')
+    return client.current
+  }
+
+  async function saveSnapshot(type: Snapshot['type'], month: string) {
+    if (pendingSnapshot.current) throw new Error('A snapshot upload is already in progress.')
+    const target = snapshotClient()
+    pendingSnapshot.current = true
+    try { return await target.saveSnapshot(state, type, month, appBuild) }
+    finally { pendingSnapshot.current = false }
+  }
+
+  const listSnapshots = () => snapshotClient().listSnapshots()
+
+  return { state, setState, update, addAudit, reset, connection, connectSharePoint, initializeSharePoint, pullSharePoint, disconnectSharePoint, getSavedSharePointConfig, ready, loadError, cache, retryLoad: () => { setLoadError(''); setLoadAttempt((value) => value + 1) }, retrySave: () => setSaveAttempt((value) => value + 1), restoreBackup, saveSnapshot, listSnapshots, hasPendingSave: () => pendingSnapshot.current || pendingSave.current || (connection.mode === 'sharepoint' && pendingRemoteSave.current) }
 }
 
 function friendlyError(error: unknown) {

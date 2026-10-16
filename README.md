@@ -50,7 +50,7 @@ pnpm build
 
 ### Versions, build identity and Force Update
 
-The current release is **v0.2.1**. The authoritative number is `package.json` (`0.2.1` without the display prefix); the UI and release tags use **vX.Y.Z**. Increase **X** for a major/incompatible change (reset Y and Z), **Y** for a new backward-compatible feature (reset Z), and **Z** for bug fixes only. Rebuilding an unchanged release keeps its version and gets a distinct build ID. Do not automatically treat every commit as a release or infer version changes from build counts. Future releases must bump the appropriate component before deployment.
+The current release is **v0.3.0**. The authoritative number is `package.json` (`0.3.0` without the display prefix); the UI and release tags use **vX.Y.Z**. Increase **X** for a major/incompatible change (reset Y and Z), **Y** for a new backward-compatible feature (reset Z), and **Z** for bug fixes only. Rebuilding an unchanged release keeps its version and gets a distinct build ID. Do not automatically treat every commit as a release or infer version changes from build counts. Future releases must bump the appropriate component before deployment.
 
 The sidebar shows version, build ID and build date/time in **IST**; the Force Update dialog also shows the source commit. GitHub Actions stamps `GITHUB_RUN_ID.GITHUB_RUN_ATTEMPT`; local builds use a commit/timestamp ID. Metadata is embedded in the app, emitted to `build-info.json`, and stamped into HTML. Both CI jobs verify the version and reject a release tag that does not exactly match `v` plus the package version.
 
@@ -65,6 +65,16 @@ Pushing a version tag such as `v0.1.0` runs the same verified pipeline and deplo
 Every push to `main` also builds and deploys the browser version to GitHub Pages at `https://ponkritz.github.io/DemandPlanning/`. It uses local browser storage until an Admin configures the approved Entra SPA registration under **Administration → SharePoint connection**.
 
 ## Data and security boundary
+
+### SharePoint snapshots (v0.3.0)
+
+New LTE/PI Review snapshots are separate JSON files saved directly to the connected site's default document library, in a `Snapshots` folder beside the configured central state file. With the existing default path this is `Demand Planning MVP/Snapshots`. Snapshots do not update the central state file or append a full payload to IndexedDB. The shared history is loaded from SharePoint (with pagination), with links to the files. Legacy app snapshot records remain untouched and are labelled unverified; they are not automatically uploaded.
+
+Configure **Administration → SharePoint connection** and complete Microsoft sign-in first. An approved Entra SPA Client ID, permitted Graph delegated access and site/library write access are required; an Azure DevOps PAT cannot authorize this. Connection can save snapshots even before the central app-state file has been initialized. The browser dataset/cache remains separate and continues to use IndexedDB.
+
+Each snapshot freezes the currently loaded app dataset, selected month/type, signed-in author, UTC creation time and build identity. It includes saved Azure work items, not an unsaved Azure fetch preview; refresh/save source data first. Earlier snapshot payloads and authentication settings are excluded. A unique file name avoids normal multi-user collisions, and upload requests specify conflict failure. Success is reported only after uploading and comparing a read-back with the frozen JSON. Failed/disconnected writes never silently save a browser snapshot. If upload verification is uncertain, refresh history before retrying to avoid duplicate captures. Files are capped at 200 MB. Existing SharePoint access, versioning and retention settings apply; no immutable-record or validated-compliance claim is made.
+
+Before acceptance, test an actual authenticated upload in the Philips tenant, cross-user history visibility, denied write access and network failure. Automated transport tests do not substitute for these checks. Snapshot JSON is not a rendered PPT/PDF report or a normal restore-backup file.
 
 ### Backlogs, columns, refresh and current iterations
 
