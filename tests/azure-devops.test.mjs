@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
-import { parseAzureProjectUrl, fetchAzureWorkItems, mergeAzureWorkItems, buildWorkItemQuery, createAzureFeature, featurePatch, featureDescription, releaseHierarchyTitles, currentIndiaMonth, createAzureReleaseHierarchy, completeReleaseHierarchy, HierarchyCreationError, readAzureIterations, projectIterationPaths, currentIterationPairs, futureIterationPairs, mapAzureWorkItem, savedBacklogItems, sameAzureScope, updateAzureTimeWritingEffort } from '../src/azureDevOps.ts'
+import { parseAzureProjectUrl, fetchAzureWorkItems, mergeAzureWorkItems, buildWorkItemQuery, createAzureFeature, featurePatch, featureDescription, releaseHierarchyTitles, currentIndiaMonth, createAzureReleaseHierarchy, completeReleaseHierarchy, bulkCreateMonthlyTimeWritingTasks, HierarchyCreationError, readAzureIterations, projectIterationPaths, currentIterationPairs, futureIterationPairs, mapAzureWorkItem, savedBacklogItems, sameAzureScope, updateAzureTimeWritingEffort } from '../src/azureDevOps.ts'
 import { buildWorkItemTree } from '../src/azureHierarchy.ts'
 import { loadAzurePat, saveAzurePat, forgetAzurePat, listAzurePatProfiles, loadAzurePatProfile, saveAzurePatProfile, forgetAzurePatProfile, listAzureConnectionProfiles, loadAzureConnectionProfile, saveAzureConnectionProfile, forgetAzureConnectionProfile } from '../src/azureCredentials.ts'
 import { normalizeBacklogColumns, defaultBacklogColumns, plainAzureText, visibleBacklogRows } from '../src/backlogView.ts'
@@ -430,6 +430,19 @@ test('partial hierarchy retains known IDs and completion creates only missing ch
   assert.equal(result.items.length, 6)
   assert.equal(server.writes.filter((item) => item.fields['System.WorkItemType'] === 'Feature').length, 1)
   assert.equal(server.writes.length, 6)
+})
+
+test('bulk monthly creation creates one task per Time Writing story and skips existing month tasks', async () => {
+  const server = fakeHierarchyServer()
+  const result = await createAzureReleaseHierarchy(config, pat, { ...feature, iterationPath: 'Quality Project\\PI A', storyIterationPath: 'Quality Project\\PI A\\Sprint 1', assignedTo: 'creator@example.test' }, 'PU', [], 'October 2026', server.transport)
+  const stories = result.items.filter(item => item.workItemType === 'User Story')
+  const first = await bulkCreateMonthlyTimeWritingTasks(config, pat, stories, 'November 2026', 'creator@example.test', server.transport)
+  assert.equal(first.length, 1)
+  assert.equal(first[0].title, 'November 2026 | Example | Service | v1.0')
+  assert.equal(server.records.get(first[0].id).fields['System.AssignedTo'].id, 'creator@example.test')
+  const writes = server.writes.length
+  await bulkCreateMonthlyTimeWritingTasks(config, pat, stories, 'November 2026', 'creator@example.test', server.transport)
+  assert.equal(server.writes.length, writes)
 })
 
 test('desktop child requests permit only User Story/Task and retain hierarchy relation', () => {

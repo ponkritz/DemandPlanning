@@ -313,6 +313,11 @@ export function currentIndiaMonth(date = new Date()) {
   return new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' }).format(date)
 }
 
+export function monthLabelFromKey(month: string) {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error('Choose a valid month for bulk Time Writing Tasks.')
+  return new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' }).format(new Date(`${month}-01T12:00:00Z`))
+}
+
 export class HierarchyCreationError extends Error {
   createdItems: AzureWorkItem[]
   constructor(message: string, createdItems: AzureWorkItem[]) { super(message); this.name = 'HierarchyCreationError'; this.createdItems = createdItems }
@@ -376,6 +381,27 @@ export async function completeReleaseHierarchy(config: AzureConfig, pat: string,
     return { feature, items }
   } catch (failure) {
     throw new HierarchyCreationError(failure instanceof Error ? failure.message : 'Unable to complete the release hierarchy.', items)
+  }
+}
+
+/** Ensures one selected-month Task beneath every supplied Time Writing User Story. */
+export async function bulkCreateMonthlyTimeWritingTasks(config: AzureConfig, pat: string, stories: AzureWorkItem[], monthLabel = currentIndiaMonth(), assignedTo?: string, transport: AzureTransport = requestAzure) {
+  if (!pat.trim()) throw new Error('Enter a Work Items (Read & Write) PAT.')
+  if (!/^(January|February|March|April|May|June|July|August|September|October|November|December) \d{4}$/.test(monthLabel)) throw new Error('Choose a valid month for bulk Time Writing Tasks.')
+  if (!assignedTo?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(assignedTo.trim())) throw new Error('Configure a valid Feature creator email before bulk task creation.')
+  const targets = [...new Map(stories.filter((story) => story.workItemType === 'User Story' && /\s*-\s*time\s*writ(?:ing|ting)\s*$/i.test(story.title)).map(story => [story.id, story])).values()]
+  if (!targets.length) throw new Error('No Time Writing User Stories are loaded. Refresh and save the backlog first.')
+  const items: AzureWorkItem[] = []
+  try {
+    for (const story of targets) {
+      const featureTitle = story.title.replace(/\s*-\s*time\s*writ(?:ing|ting)\s*$/i, '').trim()
+      if (!featureTitle) throw new Error(`Time Writing User Story #${story.id} has no Feature title prefix.`)
+      const tasks = await directChildren(config, pat, story.id, transport)
+      items.push(await ensureChild(config, pat, story, 'Task', `${monthLabel} | ${featureTitle}`, tasks, transport, config.project, undefined, undefined, assignedTo.trim()))
+    }
+    return items
+  } catch (failure) {
+    throw new HierarchyCreationError(failure instanceof Error ? failure.message : 'Unable to bulk-create monthly Time Writing Tasks.', items)
   }
 }
 
