@@ -50,7 +50,7 @@ export default function App() {
     <aside className="sidebar">
       <div className="brand"><div className="brand-mark">DP</div><div><strong>Demand Planning</strong><span>Quality Engineering</span></div></div>
       <nav aria-label="Primary navigation">{nav.map((item) => <button key={item.id} className={page === item.id ? 'nav-active' : ''} onClick={() => setPage(item.id)}><span className="nav-icon">{item.icon}</span>{item.label}</button>)}</nav>
-      <div className="sidebar-footer"><span className="environment-dot" /> Demand Planning MVP{buildStatus}</div>
+      <div className="sidebar-footer">{buildStatus}</div>
     </aside>
     <main>
       <header className="topbar"><div><p className="eyebrow">{monthName(month).toUpperCase()}</p><h1>{nav.find((item) => item.id === page)?.label}</h1></div><div className="topbar-actions"><Pill tone={store.connection.mode === 'sharepoint' ? 'open' : store.cache.status === 'error' || store.connection.status === 'error' || store.connection.status === 'conflict' ? 'danger' : 'neutral'}>{store.connection.mode === 'sharepoint' ? '● Live SharePoint' : store.cache.status === 'error' ? '⚠ Not saved locally' : store.cache.status === 'saving' ? '◌ Saving locally' : '○ Local IndexedDB'}</Pill><label className="month-picker">Month<input type="month" value={month} onChange={(event) => setMonth(event.target.value)} /></label><Pill tone={planningOpen ? 'open' : 'locked'}>Planning {planningOpen ? 'open' : 'locked'}</Pill><Pill tone={actualsOpen ? 'open' : 'locked'}>Actuals {actualsOpen ? 'open' : 'locked'}</Pill></div></header>

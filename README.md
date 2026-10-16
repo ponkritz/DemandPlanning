@@ -50,7 +50,7 @@ pnpm build
 
 ### Versions, build identity and Force Update
 
-The current release is **v0.2.0**. The authoritative number is `package.json` (`0.2.0` without the display prefix); the UI and release tags use **vX.Y.Z**. Increase **X** for a major/incompatible change (reset Y and Z), **Y** for a new backward-compatible feature (reset Z), and **Z** for bug fixes only. Rebuilding an unchanged release keeps its version and gets a distinct build ID. Do not automatically treat every commit as a release or infer version changes from build counts. Future releases must bump the appropriate component before deployment.
+The current release is **v0.2.1**. The authoritative number is `package.json` (`0.2.1` without the display prefix); the UI and release tags use **vX.Y.Z**. Increase **X** for a major/incompatible change (reset Y and Z), **Y** for a new backward-compatible feature (reset Z), and **Z** for bug fixes only. Rebuilding an unchanged release keeps its version and gets a distinct build ID. Do not automatically treat every commit as a release or infer version changes from build counts. Future releases must bump the appropriate component before deployment.
 
 The sidebar shows version, build ID and build date/time in **IST**; the Force Update dialog also shows the source commit. GitHub Actions stamps `GITHUB_RUN_ID.GITHUB_RUN_ATTEMPT`; local builds use a commit/timestamp ID. Metadata is embedded in the app, emitted to `build-info.json`, and stamped into HTML. Both CI jobs verify the version and reject a release tag that does not exactly match `v` plus the package version.
 
