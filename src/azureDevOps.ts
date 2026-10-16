@@ -2,7 +2,7 @@ import type { AzureWorkItem } from './domain'
 
 export interface AzureConfig { organization: string; project: string; team: string; includeProjectEpics?: boolean }
 export interface AzureRequest extends AzureConfig {
-  operation: 'areas' | 'iterations' | 'iteration-tree' | 'query' | 'items' | 'create-feature' | 'create-child'
+  operation: 'identity' | 'areas' | 'iterations' | 'iteration-tree' | 'query' | 'items' | 'create-feature' | 'create-child'
   pat: string
   query?: string
   ids?: number[]
@@ -10,13 +10,13 @@ export interface AzureRequest extends AzureConfig {
   validateOnly?: boolean
   workItemType?: 'User Story' | 'Task'
 }
-export interface FeatureInput { parentId: number; title: string; description: string; acceptanceCriteria: string; areaPath?: string; iterationPath?: string; assignedTo?: string; targetDate?: string }
+export interface FeatureInput { parentId: number; title: string; description: string; acceptanceCriteria: string; areaPath?: string; iterationPath?: string; assignedTo?: string; targetDate?: string; assignToCreator?: boolean; storyIterationPath?: string }
 export function featureDescription(kind: 'PU' | 'Release') {
   return kind === 'PU' ? 'Feature DoD: DT finished. This is a PU release.' : 'Feature DoD: IQOQ finished and Checklist uploaded into the Feature.'
 }
 
-export interface AzureIteration { name: string; path: string }
-interface IterationNode { name: string; path?: string; children?: IterationNode[] }
+export interface AzureIteration { name: string; path: string; attributes?: { startDate?: string; finishDate?: string }; teamConfigured?: boolean }
+interface IterationNode { name: string; path?: string; attributes?: AzureIteration['attributes']; children?: IterationNode[] }
 
 export function projectIterationPaths(root: IterationNode): AzureIteration[] {
   const paths: AzureIteration[] = []
@@ -24,7 +24,7 @@ export function projectIterationPaths(root: IterationNode): AzureIteration[] {
     const parts = node.path?.split('\\').filter(Boolean)
     // Classification-node paths contain an internal "Iteration" segment that work-item fields do not use.
     const path = parts?.length && parts[1]?.toLowerCase() === 'iteration' ? [parts[0], ...parts.slice(2)].join('\\') : parentPath ? `${parentPath}\\${node.name}` : node.name
-    paths.push({ name: node.name, path })
+    paths.push({ name: node.name, path, ...(node.attributes ? { attributes: node.attributes } : {}) })
     node.children?.forEach((child) => visit(child, path))
   }
   visit(root)
@@ -40,14 +40,35 @@ export async function readAzureIterations(config: AzureConfig, pat: string, tran
   const options = new Map<string, AzureIteration>()
   if (results[0].status === 'fulfilled') {
     const team = results[0].value as { value?: AzureIteration[] }
-    for (const item of team.value ?? []) if (item.name && item.path) options.set(item.path.toLowerCase(), item)
+    for (const item of team.value ?? []) if (item.name && item.path) options.set(item.path.toLowerCase(), { ...item, teamConfigured: true })
   }
   if (results[1].status === 'fulfilled') {
     const root = results[1].value as IterationNode
-    if (root.name) for (const item of projectIterationPaths(root)) options.set(item.path.toLowerCase(), item)
+    if (root.name) for (const item of projectIterationPaths(root)) options.set(item.path.toLowerCase(), { ...options.get(item.path.toLowerCase()), ...item })
   }
   if (!options.size) throw new Error('Could not load iteration paths. Check Azure DevOps access or enter the full path from Project settings → Project configuration → Iterations.')
   return [...options.values()].sort((a, b) => a.path.localeCompare(b.path))
+}
+export function currentIterationPairs(iterations: AzureIteration[], date = new Date()) {
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date)
+  const active = iterations.filter((item) => {
+    const start = item.attributes?.startDate?.slice(0, 10), finish = item.attributes?.finishDate?.slice(0, 10)
+    return start && finish && /^\d{4}-\d{2}-\d{2}$/.test(start) && /^\d{4}-\d{2}-\d{2}$/.test(finish) && start <= today && today <= finish
+  })
+  const under = (child: string, parent: string) => child.toLowerCase().startsWith(`${parent.toLowerCase()}\\`)
+  const pairs = active.filter((item) => !active.some((child) => under(child.path, item.path))).flatMap((sprint) => {
+    const ancestors = active.filter((pi) => under(sprint.path, pi.path) && pi.path.includes('\\')).sort((a, b) => b.path.length - a.path.length)
+    return ancestors[0] ? [{ pi: ancestors[0], sprint }] : []
+  })
+  const teamPairs = pairs.filter((pair) => pair.sprint.teamConfigured)
+  return teamPairs.length ? teamPairs : pairs
+}
+
+export async function readAzureCreator(config: AzureConfig, pat: string, transport: AzureTransport = requestAzure) {
+  const response = await transport({ ...config, pat, operation: 'identity' }) as { authenticatedUser?: { id?: string; providerDisplayName?: string; properties?: Record<string, { $value?: string }> } }
+  const user = response.authenticatedUser
+  if (!user?.id || !/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(user.id)) throw new Error('Unable to identify the PAT owner. No Feature was created. Check the connection identity.')
+  return { id: user.id, name: user.providerDisplayName || user.properties?.Account?.$value || user.id }
 }
 export interface AzureFetchResult { items: AzureWorkItem[]; areaPaths: string[]; asOf: string }
 interface RawItem { id: number; fields: Record<string, unknown>; relations?: { rel: string; url: string }[] }
@@ -153,6 +174,8 @@ function parentFromRelation(item: RawItem) {
 export async function createAzureFeature(config: AzureConfig, pat: string, feature: FeatureInput, transport: AzureTransport = requestAzure): Promise<AzureWorkItem> {
   if (!pat.trim()) throw new Error('Enter a Work Items (Read & Write) PAT.')
   if (!Number.isSafeInteger(feature.parentId) || feature.parentId < 1 || !feature.title.trim() || feature.title.trim().length > 255) throw new Error('Choose a parent Epic and enter a title of 1–255 characters.')
+  const creator = feature.assignToCreator ? await readAzureCreator(config, pat, transport) : null
+  if (creator) feature = { ...feature, assignedTo: creator.id }
   const parentResponse = await transport({ ...config, pat, operation: 'items', ids: [feature.parentId] }) as { value: RawItem[] }
   const parent = parentResponse.value?.find((item) => item.id === feature.parentId)
   if (!parent || parent.fields['System.WorkItemType'] !== 'Epic') throw new Error('The selected parent is not an accessible Epic. Refresh and select an Epic.')
@@ -176,12 +199,13 @@ export async function createAzureFeature(config: AzureConfig, pat: string, featu
     const checked = await transport({ ...config, pat, operation: 'items', ids: [created.id] }) as { value: RawItem[] }
     const item = checked.value?.find((entry) => entry.id === created.id)
     if (!item) throw new Error('Verification response did not include the created Feature.')
+    if (creator && (item.fields['System.AssignedTo'] as { id?: string } | undefined)?.id?.toLowerCase() !== creator.id.toLowerCase()) throw new Error('Creator assignment verification failed.')
     const mapped = mapAzureWorkItem(item, config)
     if (mapped.parentId !== feature.parentId || mapped.workItemType !== 'Feature') throw new Error('Parent/type verification failed.')
     if (mapped.areaPath.toLowerCase() !== areaPath.toLowerCase() || (iterationPath && mapped.iterationPath.toLowerCase() !== iterationPath.toLowerCase())) throw new Error('Area/iteration verification failed.')
     return mapped
   } catch {
-    throw new Error(`Feature #${created.id} was created, but its parent, area or iteration could not be verified. Check it in Azure DevOps before creating another.`)
+    throw new Error(`Feature #${created.id} was created, but its parent, area, iteration or assignee could not be verified. Check it in Azure DevOps before creating another.`)
   }
 }
 
@@ -264,7 +288,7 @@ async function ensureChild(config: AzureConfig, pat: string, parent: AzureWorkIt
   } catch { throw new Error(`${type} #${response.id} was created but could not be verified. Check the source before using Complete children.`) }
 }
 
-export async function completeReleaseHierarchy(config: AzureConfig, pat: string, featureId: number, kind: 'PU' | 'Release', milestones?: string[], monthLabel = currentIndiaMonth(), transport: AzureTransport = requestAzure) {
+export async function completeReleaseHierarchy(config: AzureConfig, pat: string, featureId: number, kind: 'PU' | 'Release', milestones?: string[], monthLabel = currentIndiaMonth(), transport: AzureTransport = requestAzure, storyIterationPath?: string) {
   const items: AzureWorkItem[] = []
   try {
     if (!pat.trim()) throw new Error('Enter a Work Items (Read & Write) PAT.')
@@ -277,8 +301,8 @@ export async function completeReleaseHierarchy(config: AzureConfig, pat: string,
     const selected = milestones ?? titles.reviews.map((review) => review.milestone)
     if (selected.some((milestone) => !titles.reviews.some((review) => review.milestone === milestone))) throw new Error('Unsupported milestone selection for this release classification.')
     const children = await directChildren(config, pat, feature.id, transport)
-    for (const review of titles.reviews.filter((review) => selected.includes(review.milestone))) items.push(await ensureChild(config, pat, feature, 'User Story', review.title, children, transport))
-    const timeWriting = await ensureChild(config, pat, feature, 'User Story', titles.timeWriting, children, transport)
+    for (const review of titles.reviews.filter((review) => selected.includes(review.milestone))) items.push(await ensureChild(config, pat, feature, 'User Story', review.title, children, transport, storyIterationPath || feature.iterationPath))
+    const timeWriting = await ensureChild(config, pat, feature, 'User Story', titles.timeWriting, children, transport, storyIterationPath || feature.iterationPath)
     items.push(timeWriting)
     const tasks = await directChildren(config, pat, timeWriting.id, transport)
     items.push(await ensureChild(config, pat, timeWriting, 'Task', titles.task, tasks, transport, config.project))
@@ -293,7 +317,7 @@ export async function createAzureReleaseHierarchy(config: AzureConfig, pat: stri
   if ([...titles.reviews.map((review) => review.title), titles.timeWriting, titles.task].some((title) => title.length > 255)) throw new Error('An automatic child title exceeds 255 characters. Shorten the Feature title.')
   if (milestones?.some((milestone) => !titles.reviews.some((review) => review.milestone === milestone))) throw new Error('Unsupported milestone selection for this release classification.')
   const feature = await createAzureFeature(config, pat, input, transport)
-  try { return await completeReleaseHierarchy(config, pat, feature.id, kind, milestones, monthLabel, transport) }
+  try { return await completeReleaseHierarchy(config, pat, feature.id, kind, milestones, monthLabel, transport, input.storyIterationPath) }
   catch (failure) {
     const partial = failure instanceof HierarchyCreationError ? failure.createdItems : []
     const items = mergeAzureWorkItems([feature], partial)
@@ -305,12 +329,13 @@ async function requestAzure(request: AzureRequest): Promise<unknown> {
   if (window.azureDevOps) return window.azureDevOps.request(request)
   const base = `https://dev.azure.com/${encodeURIComponent(request.organization)}/${encodeURIComponent(request.project)}`
   const writing = request.operation === 'create-feature' || request.operation === 'create-child'
-  const readingMetadata = request.operation === 'areas' || request.operation === 'iterations' || request.operation === 'iteration-tree'
+  const readingMetadata = request.operation === 'identity' || request.operation === 'areas' || request.operation === 'iterations' || request.operation === 'iteration-tree'
   const endpoint = writing ? `_apis/wit/workitems/$${request.operation === 'create-feature' ? 'Feature' : encodeURIComponent(request.workItemType!)}` : request.operation === 'iteration-tree' ? '_apis/wit/classificationnodes/iterations' : readingMetadata ? `${encodeURIComponent(request.team)}/_apis/work/teamsettings/${request.operation === 'areas' ? 'teamfieldvalues' : 'iterations'}` : request.operation === 'query' ? '_apis/wit/wiql' : '_apis/wit/workitemsbatch'
   const body = writing ? featurePatch(request, request.feature!) : request.operation === 'query' ? { query: request.query } : { ids: request.ids, errorPolicy: 'Fail', $expand: 'Relations' }
   let response: Response
   try {
-    response = await fetch(`${base}/${endpoint}?api-version=7.1${request.operation === 'query' ? '&$top=1000' : ''}${request.operation === 'iteration-tree' ? '&$depth=10' : ''}${writing ? `&validateOnly=${request.validateOnly === true}` : ''}`, {
+    const url = request.operation === 'identity' ? `https://dev.azure.com/${encodeURIComponent(request.organization)}/_apis/connectionData?api-version=7.1-preview.1` : `${base}/${endpoint}?api-version=7.1${request.operation === 'query' ? '&$top=1000' : ''}${request.operation === 'iteration-tree' ? '&$depth=10' : ''}${writing ? `&validateOnly=${request.validateOnly === true}` : ''}`
+    response = await fetch(url, {
       method: readingMetadata ? 'GET' : 'POST', redirect: 'error', credentials: 'omit',
       headers: { Authorization: `Basic ${btoa(`:${request.pat}`)}`, 'Content-Type': writing ? 'application/json-patch+json' : 'application/json', Accept: 'application/json' },
       body: readingMetadata ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(45000),

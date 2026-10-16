@@ -4,13 +4,15 @@ import { AzureWorkItemTree } from '../components/AzureWorkItemTree'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 
 export function BoardPage({ azure, onOpenConnection }: { azure: AzureWorkspace; onOpenConnection: () => void }) {
-  const { items, config, preview, busy, pat, featureCreated, rememberPat, savePreview } = azure
+  const { items, config, preview, busy, pat, featureCreated, rememberPat, savePreview, refresh, lastRefreshed, error } = azure
   const [filter, setFilter] = useState('')
   const shown = items.filter((item) => `${item.id} ${item.title} ${item.workItemType} ${item.state}`.toLowerCase().includes(filter.toLowerCase()))
   const counts = new Map<string, number>()
   for (const item of items) counts.set(item.workItemType || 'Unknown', (counts.get(item.workItemType || 'Unknown') ?? 0) + 1)
 
-  return <section className="content"><Heading eyebrow="WORK ITEM MANAGEMENT" title="Board" detail="Browse Epic → Feature → User Story → Task relationships and create release work." action={<button className="ghost" onClick={onOpenConnection}>Connection settings</button>} />
+  return <section className="content"><Heading eyebrow="WORK ITEM MANAGEMENT" title="Board" detail="Browse Epic → Feature → User Story → Task relationships and create release work." action={<div className="button-row"><button className="primary" disabled={busy || !config || !pat} onClick={() => void refresh()}>{busy ? 'Refreshing…' : 'Refresh from Azure'}</button><button className="ghost" onClick={onOpenConnection}>Connection settings</button></div>} />
+    <p className="muted">{lastRefreshed ? `Last successful refresh: ${new Date(lastRefreshed).toLocaleString()}.` : 'Saved data is a snapshot, not a live subscription.'} Refresh reads current source data; Save fetched work items retains it in the app.</p>
+    {error && <div className="notice error" role="alert">{error} Previously loaded data has been retained.</div>}
     {busy && <div className="notice" role="status">Fetching work items… The Board will update when the preview is ready.</div>}
     {preview && <div className="notice board-preview"><span>Showing {preview.items.length} fetched work items. Save the preview to retain it after closing the app.</span><button className="primary" disabled={!preview.items.length} onClick={savePreview}>Save fetched work items</button></div>}
     {config ? <Panel className="connection-panel"><AzureWorkItemTree items={items} config={config} onCreated={featureCreated} savedPat={pat} onSavePat={rememberPat} /></Panel> : <Panel><p>Configure a valid Azure DevOps project to use the Board.</p><button className="primary" onClick={onOpenConnection}>Open connection settings</button></Panel>}

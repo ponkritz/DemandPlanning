@@ -1,11 +1,11 @@
 import { useMemo, useRef, useState } from 'react'
 import type { AzureWorkItem } from '../domain'
-import { buildWorkItemTree, type StateFilter, type WorkItemNode } from '../azureHierarchy'
-import { createAzureReleaseHierarchy, completeReleaseHierarchy, currentIndiaMonth, releaseHierarchyTitles, HierarchyCreationError, featureDescription, readAzureIterations, type AzureIteration, type AzureConfig, type FeatureInput } from '../azureDevOps'
+import { buildWorkItemTree, type WorkItemNode } from '../azureHierarchy'
+import { createAzureReleaseHierarchy, completeReleaseHierarchy, currentIndiaMonth, releaseHierarchyTitles, HierarchyCreationError, featureDescription, readAzureIterations, currentIterationPairs, readAzureCreator, type AzureIteration, type AzureConfig, type FeatureInput } from '../azureDevOps'
 import { Modal, Pill } from './ui'
 
 export function AzureWorkItemTree({ items, config, onCreated, savedPat = '', onSavePat }: { items: AzureWorkItem[]; config: AzureConfig; onCreated: (items: AzureWorkItem[]) => void; savedPat?: string; onSavePat?: (pat: string) => void }) {
-  const [state, setState] = useState<StateFilter>('All')
+  const [state, setState] = useState<string[]>(['New', 'Active'])
   const [search, setSearch] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [expandAll, setExpandAll] = useState(false)
@@ -17,7 +17,9 @@ export function AzureWorkItemTree({ items, config, onCreated, savedPat = '', onS
   const [resultText, setResultText] = useState('')
   const [partialError, setPartialError] = useState('')
   const [description, setDescription] = useState(featureDescription('PU'))
-  const [iterationPath, setIterationPath] = useState('Current PI')
+  const [iterationPath, setIterationPath] = useState('')
+  const [sprintPath, setSprintPath] = useState('')
+  const [creatorName, setCreatorName] = useState('Identified from your PAT when creating')
   const [iterationChoices, setIterationChoices] = useState<AzureIteration[]>([])
   const [iterationLoading, setIterationLoading] = useState(false)
   const [pat, setPat] = useState('')
@@ -28,21 +30,31 @@ export function AzureWorkItemTree({ items, config, onCreated, savedPat = '', onS
   const scoped = useMemo(() => items.filter((item) => item.organization.toLowerCase() === config.organization.toLowerCase() && item.project.toLowerCase() === config.project.toLowerCase()), [items, config.organization, config.project])
   const epics = scoped.filter((item) => item.workItemType === 'Epic').sort((a, b) => a.id - b.id)
   const tree = useMemo(() => buildWorkItemTree(scoped, state, search), [scoped, state, search])
-  const filtering = state !== 'All' || Boolean(search.trim())
+  const filtering = !state.includes('All') || Boolean(search.trim())
+  const states = [...new Set(['New', 'Active', 'Closed', ...scoped.map((item) => item.state)])].filter(Boolean)
+  const pairs = currentIterationPairs(iterationChoices)
   const availableMilestones = releaseKind === 'PU' ? ['SFV', 'DT', 'IQOQ'] : ['PRD', 'SFV', 'DT', 'IQOQ']
   const monthLabel = currentIndiaMonth()
   let plan
   try { plan = releaseHierarchyTitles(title.trim(), releaseKind, monthLabel) } catch { plan = null }
 
-  function openEditor(epic: AzureWorkItem) { setParent(epic); setResumeFeature(null); setTitle(''); setIterationPath('Current PI'); setIterationChoices([]); setReleaseKind('PU'); setMilestones(['SFV', 'DT', 'IQOQ']); setDescription(featureDescription('PU')); setPat(savedPat); setError(''); setPartialError(''); setResult(null) }
-  function openResume(item: AzureWorkItem) { setParent(null); setResumeFeature(item); setTitle(item.title); setReleaseKind('PU'); setMilestones(['SFV', 'DT', 'IQOQ']); setPat(savedPat); setError(''); setPartialError(''); setResult(null) }
+  function openEditor(epic: AzureWorkItem) { setParent(epic); setResumeFeature(null); setTitle(''); setIterationPath(''); setSprintPath(''); setIterationChoices([]); setReleaseKind('PU'); setMilestones(['SFV', 'DT', 'IQOQ']); setDescription(featureDescription('PU')); setPat(savedPat); setError(''); setPartialError(''); setResult(null); if (savedPat) void loadIterations(savedPat) }
+  function openResume(item: AzureWorkItem) { setParent(null); setResumeFeature(item); setTitle(item.title); setIterationPath(''); setSprintPath(''); setIterationChoices([]); setReleaseKind('PU'); setMilestones(['SFV', 'DT', 'IQOQ']); setPat(savedPat); setError(''); setPartialError(''); setResult(null); if (savedPat) void loadIterations(savedPat) }
   function closeEditor() { if (submitting.current) return; setParent(null); setResumeFeature(null); setPat(''); setError('') }
   function setKind(kind: 'PU' | 'Release') { setReleaseKind(kind); setMilestones(kind === 'PU' ? ['SFV', 'DT', 'IQOQ'] : ['PRD', 'SFV', 'DT', 'IQOQ']); setDescription(featureDescription(kind)) }
   function toggle(key: string) { setExpanded((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next }) }
 
-  async function loadIterations() {
+  async function loadIterations(token = pat || savedPat) {
     setError(''); setIterationLoading(true)
-    try { setIterationChoices(await readAzureIterations(config, pat || savedPat)) }
+    try {
+      const options = await readAzureIterations(config, token)
+      setIterationChoices(options)
+      const current = currentIterationPairs(options)
+      if (current.length === 1) { setIterationPath(current[0].pi.path); setSprintPath(current[0].sprint.path) }
+      else { setIterationPath(''); setSprintPath(''); setError(current.length ? 'Several current PI/Sprint branches overlap. Select the correct team schedule below.' : 'No current dated PI → Sprint pair found. Check start/finish dates and nesting in Azure Project settings, then reload.') }
+      const creator = await readAzureCreator(config, token)
+      setCreatorName(creator.name)
+    }
     catch (failure) { setError(failure instanceof Error ? failure.message : 'Unable to load iteration paths.') }
     finally { setIterationLoading(false) }
   }
@@ -51,11 +63,13 @@ export function AzureWorkItemTree({ items, config, onCreated, savedPat = '', onS
     event.preventDefault()
     if ((!parent && !resumeFeature) || submitting.current) return
     const data = new FormData(event.currentTarget)
-    const token = pat; setPat(''); setError(''); submitting.current = true; setCreating(true)
-    const feature: FeatureInput = { parentId: parent?.id ?? 0, title: title.trim(), description: String(data.get('description') ?? ''), acceptanceCriteria: String(data.get('acceptance') ?? ''), areaPath: String(data.get('areaPath') ?? ''), iterationPath: String(data.get('iterationPath') ?? ''), assignedTo: String(data.get('assignedTo') ?? ''), targetDate: String(data.get('targetDate') ?? '') }
+    const token = pat; setError(''); submitting.current = true; setCreating(true)
+    const feature: FeatureInput = { parentId: parent?.id ?? 0, title: title.trim(), description: String(data.get('description') ?? ''), acceptanceCriteria: String(data.get('acceptance') ?? ''), areaPath: String(data.get('areaPath') ?? ''), iterationPath, assignToCreator: true, storyIterationPath: sprintPath, targetDate: String(data.get('targetDate') ?? '') }
     try {
       onSavePat?.(token)
-      const bundle = resumeFeature ? await completeReleaseHierarchy(config, token, resumeFeature.id, releaseKind, milestones, monthLabel) : await createAzureReleaseHierarchy(config, token, feature, releaseKind, milestones, monthLabel)
+      const fresh = currentIterationPairs(await readAzureIterations(config, token))
+      if (!fresh.some((pair) => pair.pi.path === iterationPath && pair.sprint.path === sprintPath)) throw new Error('The selected PI/Sprint is no longer current. Reload the schedule and review it before creating. No write was attempted.')
+      const bundle = resumeFeature ? await completeReleaseHierarchy(config, token, resumeFeature.id, releaseKind, milestones, monthLabel, undefined, sprintPath) : await createAzureReleaseHierarchy(config, token, feature, releaseKind, milestones, monthLabel)
       onCreated(parent ? [parent, ...bundle.items] : bundle.items)
       setResult(bundle.feature); setResultText(`Hierarchy complete: ${milestones.length} milestone stories, Time Writing story and ${monthLabel} task verified.`); setParent(null); setResumeFeature(null); setExpanded((current) => new Set([...current, bundle.feature.key, ...bundle.items.filter((item) => item.workItemType === 'User Story').map((item) => item.key), ...(parent ? [parent.key] : [])]))
     } catch (failure) {
@@ -83,8 +97,8 @@ export function AzureWorkItemTree({ items, config, onCreated, savedPat = '', onS
 
   return <>
     <div className="panel-heading"><div><h2>Epic and work-item tree</h2><p className="muted">{epics.length} Epics · {scoped.length} work items. Links follow Azure DevOps parent IDs.</p></div><button className="primary" disabled={!epics.length} onClick={() => openEditor(epics[0])}>＋ New Feature</button></div>
-    <div className="tree-controls"><div className="button-row" role="group" aria-label="Work item state">{(['Active', 'New', 'Closed', 'All'] as StateFilter[]).map((value) => <button key={value} className={state === value ? 'primary' : 'ghost'} aria-pressed={state === value} onClick={() => setState(value)}>{value}</button>)}</div><input aria-label="Search work-item tree" placeholder="Search ID, title, type or assignee" value={search} onChange={(event) => setSearch(event.target.value)} /><button className="ghost" onClick={() => { setExpandAll(!expandAll); setExpanded(new Set()) }}>{expandAll ? 'Collapse all' : 'Expand all'}</button></div>
-    <p className="muted tree-help">Filters use the exact Azure DevOps state. Matching children retain their ancestors as context. Other process states are visible under All. All Epics remain available in the New Feature selector.</p>
+    <div className="tree-controls"><div className="button-row" role="group" aria-label="Work item states (multi-select)">{[...states, 'All'].map((value) => <button key={value} className={state.includes(value) ? 'primary' : 'ghost'} aria-pressed={state.includes(value)} onClick={() => setState((current) => value === 'All' ? ['All'] : current.includes(value) ? current.filter((item) => item !== value && item !== 'All') : [...current.filter((item) => item !== 'All'), value])}>{value}</button>)}</div><input aria-label="Search work-item tree" placeholder="Search ID, title, type or assignee" value={search} onChange={(event) => setSearch(event.target.value)} /><button className="ghost" onClick={() => { setExpandAll(!expandAll); setExpanded(new Set()) }}>{expandAll ? 'Collapse all' : 'Expand all'}</button></div>
+    <p className="muted tree-help">Select multiple states. Default: New + Active. Matching children retain their ancestors as context, even when the parent has another state. All Epics remain available in the New Feature selector.</p>
     {result && <div className="notice success" role="status"><a href={result.url} target="_blank" rel="noreferrer">Feature #{result.id}: {result.title}</a> — {resultText}</div>}
     {partialError && <div className="notice error" role="alert">{partialError}</div>}
     <div className="work-tree">{tree.length ? tree.map((node) => render(node, 0)) : <p className="empty-state">{scoped.length ? 'No work items match this filter.' : 'Fetch your team work items to load the hierarchy.'}</p>}</div>
@@ -93,18 +107,18 @@ export function AzureWorkItemTree({ items, config, onCreated, savedPat = '', onS
       {parent && <label>Parent Epic<select disabled={creating} value={parent.key} onChange={(event) => setParent(epics.find((item) => item.key === event.target.value) ?? null)}>{epics.map((epic) => <option value={epic.key} key={epic.key}>#{epic.id} · {epic.title} ({epic.state})</option>)}</select></label>}
       <label>Feature title<input name="title" required maxLength={255} value={title} onChange={(event) => setTitle(event.target.value)} disabled={creating || Boolean(resumeFeature)} placeholder="Program | Service | vRelease" autoFocus /></label>
       {parent && <><label>Area Path<input name="areaPath" key={parent.key} defaultValue={parent.areaPath} required disabled={creating} /></label>
-      <label>Iteration Path or iteration name<input name="iterationPath" value={iterationPath} onChange={(event) => setIterationPath(event.target.value)} placeholder="Select or enter the actual full path" disabled={creating} /></label>
-      <div className="iteration-picker"><button type="button" className="ghost" onClick={loadIterations} disabled={creating || iterationLoading}>{iterationLoading ? 'Loading iteration paths…' : 'Load iteration paths'}</button>{iterationChoices.length > 0 && <label>Actual Azure DevOps iteration<select value={iterationChoices.some((choice) => choice.path === iterationPath) ? iterationPath : ''} onChange={(event) => { if (event.target.value) setIterationPath(event.target.value) }} disabled={creating}><option value="">Select the PI's full path</option>{iterationChoices.map((choice) => <option key={choice.path} value={choice.path}>{choice.path}</option>)}</select></label>}</div>
-      <p className="muted">Current PI must match a real iteration name. Load paths to find project iterations outside the team's list. The Time Writing task still uses the project-root iteration.</p></>}
+      </>}
+      <div className="iteration-picker"><button type="button" className="ghost" onClick={() => void loadIterations()} disabled={creating || iterationLoading}>{iterationLoading ? 'Detecting current schedule…' : 'Detect current PI / Sprint & creator'}</button><label>Current team schedule<select required value={sprintPath} onChange={(event) => { const pair = pairs.find((value) => value.sprint.path === event.target.value); setSprintPath(pair?.sprint.path ?? ''); setIterationPath(pair?.pi.path ?? '') }} disabled={creating || iterationLoading}><option value="">Select a current dated PI → Sprint</option>{pairs.map((pair) => <option key={pair.sprint.path} value={pair.sprint.path}>{pair.pi.path} → {pair.sprint.name} ({pair.sprint.attributes?.startDate?.slice(0, 10)} — {pair.sprint.attributes?.finishDate?.slice(0, 10)})</option>)}</select></label></div>
+      <p className="muted">Current date uses India time; date boundaries are inclusive. Feature → {resumeFeature ? resumeFeature.iterationPath : iterationPath || 'current PI'}. User Stories → {sprintPath || 'current Sprint'}. Time Writing task → {config.project}. Existing Features are not moved during child completion.</p>
       <label>Release classification<select value={releaseKind} disabled={creating} onChange={(event) => setKind(event.target.value as 'PU' | 'Release')}><option value="PU">PU</option><option value="Release">Full Release</option></select></label>
       {parent && <><label>Description<textarea name="description" maxLength={100000} value={description} onChange={(event) => setDescription(event.target.value)} disabled={creating} /></label><label>Acceptance criteria<textarea name="acceptance" maxLength={100000} disabled={creating} /></label>
-      <div className="form-row"><label>Assignee email (optional)<input name="assignedTo" type="email" disabled={creating} /></label><label>Target date (optional)<input name="targetDate" type="date" disabled={creating} /></label></div></>}
+      <div className="form-row"><label>Feature assigned to<input readOnly value={creatorName} /></label><label>Target date (optional)<input name="targetDate" type="date" disabled={creating} /></label></div></>}
       <fieldset className="milestone-choices" disabled={creating}><legend>Optional milestone User Stories</legend><div className="button-row"><button type="button" className="text-button" onClick={() => setMilestones(availableMilestones)}>Select all</button><button type="button" className="text-button" onClick={() => setMilestones([])}>Skip all milestones</button></div>{availableMilestones.map((milestone) => <label className="checkbox-label" key={milestone}><input type="checkbox" checked={milestones.includes(milestone)} onChange={(event) => setMilestones((current) => event.target.checked ? [...current, milestone] : current.filter((value) => value !== milestone))} />{milestone} review of deliverables</label>)}</fieldset>
-      <div className="hierarchy-plan"><strong>Always included</strong><p>Time Writing User Story and one task for {monthLabel}. Task iteration: {config.project}. User Stories inherit the Feature iteration.</p>{plan ? <ul>{plan.reviews.filter((review) => milestones.includes(review.milestone)).map((review) => <li key={review.milestone}>{review.title}</li>)}<li>{plan.timeWriting}<ul><li>{plan.task}</li></ul></li></ul> : <p>Enter Program | Service | vRelease to preview the exact titles.</p>}</div>
-      <label>PAT — Work Items: Read &amp; Write<input type="password" required autoComplete="off" value={pat} onChange={(event) => setPat(event.target.value)} disabled={creating} /></label>
+      <div className="hierarchy-plan"><strong>Always included</strong><p>Time Writing User Story in the current Sprint and one task for {monthLabel}. Task iteration: {config.project}. The Feature is assigned to the PAT owner; children are not automatically assigned.</p>{plan ? <ul>{plan.reviews.filter((review) => milestones.includes(review.milestone)).map((review) => <li key={review.milestone}>{review.title}</li>)}<li>{plan.timeWriting}<ul><li>{plan.task}</li></ul></li></ul> : <p>Enter Program | Service | vRelease to preview the exact titles.</p>}</div>
+      <label>PAT — Work Items: Read &amp; Write<input type="password" required autoComplete="off" value={pat} onChange={(event) => { setPat(event.target.value); setCreatorName('Identified from your PAT when creating'); setIterationChoices([]); setIterationPath(''); setSprintPath('') }} disabled={creating} /></label>
       <p className="muted">The configured PAT is reused and saved separately in this browser. No state, priority, notification setting or project rule is overridden.</p>
       {error && <div className="notice error" role="alert">{error}</div>}
-      <div className="modal-actions"><button type="button" className="ghost" onClick={closeEditor} disabled={creating}>Cancel</button><button className="primary" disabled={creating || iterationLoading || !plan}>{creating ? 'Creating and verifying hierarchy…' : resumeFeature ? 'Complete missing children' : 'Create Feature and children'}</button></div>
+      <div className="modal-actions"><button type="button" className="ghost" onClick={closeEditor} disabled={creating}>Cancel</button><button className="primary" disabled={creating || iterationLoading || !plan || !sprintPath}>{creating ? 'Creating and verifying hierarchy…' : resumeFeature ? 'Complete missing children' : 'Create Feature and children'}</button></div>
     </form></Modal>}
   </>
 }

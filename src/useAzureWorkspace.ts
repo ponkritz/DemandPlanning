@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { fetchAzureWorkItems, mergeAzureWorkItems, parseAzureProjectUrl, type AzureFetchResult, type AzureConfig } from './azureDevOps'
 import type { PageProps } from './pages/types'
 import type { AzureWorkItem } from './domain'
@@ -13,6 +13,8 @@ export function useAzureWorkspace(store: PageProps['store']) {
   const [includeProjectEpics, setIncludeProjectEpics] = useState(true)
   const [pat, setPat] = useState(() => loadAzurePat(parseAzureProjectUrl(defaultUrl)))
   const [busy, setBusy] = useState(false)
+  const fetching = useRef(false)
+  const [lastRefreshed, setLastRefreshed] = useState('')
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [preview, setPreview] = useState<AzureFetchResult | null>(null)
@@ -27,15 +29,22 @@ export function useAzureWorkspace(store: PageProps['store']) {
   }
 
   async function fetchPreview(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setError(''); setMessage(''); setPreview(null); setBusy(true)
+    event.preventDefault()
+    await refresh()
+  }
+
+  async function refresh() {
+    if (fetching.current) return
+    fetching.current = true; setError(''); setMessage(''); setBusy(true)
     try {
       const parsed = parseAzureProjectUrl(projectUrl)
       saveAzurePat(parsed, pat)
       const result = await fetchAzureWorkItems({ ...parsed, team: team.trim() || parsed.team, includeProjectEpics }, pat)
       setPreview(result)
+      setLastRefreshed(new Date().toISOString())
       setMessage(`${result.items.length} work items fetched. Open Board to review the hierarchy and save the preview.`)
     } catch (failure) { setError(failure instanceof Error ? failure.message : 'Unable to fetch Azure DevOps data.') }
-    finally { setBusy(false) }
+    finally { fetching.current = false; setBusy(false) }
   }
 
   function rememberPat(value = pat) {
@@ -69,7 +78,7 @@ export function useAzureWorkspace(store: PageProps['store']) {
     setPreview(null); setMessage(`${incoming.length} work items saved. Refreshing the same IDs updates existing records. Azure DevOps was not modified.`)
   }
 
-  return { projectUrl, changeProjectUrl, team, setTeam, includeProjectEpics, setIncludeProjectEpics, pat, setPat, busy, error, setError, message, setMessage, preview, setPreview, saved, items, config, fetchPreview, rememberPat, forgetPat, featureCreated, savePreview }
+  return { projectUrl, changeProjectUrl, team, setTeam, includeProjectEpics, setIncludeProjectEpics, pat, setPat, busy, error, setError, message, setMessage, preview, setPreview, saved, items, config, fetchPreview, refresh, lastRefreshed, rememberPat, forgetPat, featureCreated, savePreview }
 }
 
 export type AzureWorkspace = ReturnType<typeof useAzureWorkspace>

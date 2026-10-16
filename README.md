@@ -56,6 +56,14 @@ Every push to `main` also builds and deploys the browser version to GitHub Pages
 
 ## Data and security boundary
 
+### Board refresh, identity and current iterations
+
+The Board defaults to the multi-select **New + Active** state filter. Select additional source states or **All**. Ancestors in other states are shown only as parent context. **Refresh from Azure** reads a fresh snapshot without changing Azure DevOps; **Save fetched work items** persists that snapshot in app storage. Failed refreshes retain the previous data. This is an on-demand refresh, not a background/live subscription.
+
+New Features are assigned to the authenticated PAT owner (not the app's local demo user). Every person must use their own PAT for self-assignment. Tokens remain outside exported app state. Identity is read from the fixed organization connectionData endpoint and verified after Feature creation; no project-user-directory permission is added.
+
+Opening the creation form reads team iterations and the project iteration tree. Dated leaf iterations containing today's India calendar date are treated as Sprint candidates; their nearest dated ancestor is the PI. Team-configured Sprint candidates take precedence. Start and finish days are inclusive. A unique pair is preselected; overlapping branches require explicit selection and missing dates/nesting block creation until corrected in Azure settings. The mapping is shown for review: **Feature → PI; all new User Stories → Sprint; Time Writing Task → project root**. Dates are rechecked before a write. Existing Feature/child iterations are not silently changed during completion; conflicting existing children require manual review in Azure.
+
 No production data, tenant identifiers, access tokens, client secrets or employee information belong in Git. The local adapter persists synthetic development records in browser storage.
 
 The central-data MVP uses Microsoft identity delegated authentication and one versioned JSON file in the site's default SharePoint document library. The browser never stores a client secret. An ETag prevents one user from silently overwriting a newer central version.

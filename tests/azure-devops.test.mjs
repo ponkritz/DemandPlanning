@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
-import { parseAzureProjectUrl, fetchAzureWorkItems, mergeAzureWorkItems, buildWorkItemQuery, createAzureFeature, featurePatch, featureDescription, releaseHierarchyTitles, currentIndiaMonth, createAzureReleaseHierarchy, completeReleaseHierarchy, HierarchyCreationError, readAzureIterations, projectIterationPaths } from '../src/azureDevOps.ts'
+import { parseAzureProjectUrl, fetchAzureWorkItems, mergeAzureWorkItems, buildWorkItemQuery, createAzureFeature, featurePatch, featureDescription, releaseHierarchyTitles, currentIndiaMonth, createAzureReleaseHierarchy, completeReleaseHierarchy, HierarchyCreationError, readAzureIterations, projectIterationPaths, currentIterationPairs, readAzureCreator } from '../src/azureDevOps.ts'
 import { buildWorkItemTree } from '../src/azureHierarchy.ts'
 import { loadAzurePat, saveAzurePat, forgetAzurePat } from '../src/azureCredentials.ts'
 
@@ -248,6 +248,7 @@ function fakeHierarchyServer() {
   let failureTitle = ''
   const writes = []
   const transport = async (request) => {
+    if (request.operation === 'identity') return { authenticatedUser: { id: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', providerDisplayName: 'Synthetic Creator' } }
     if (request.operation === 'items') return { value: request.ids.map((id) => records.get(id)).filter(Boolean) }
     if (request.operation === 'iterations') return { value: [{ name: 'Current PI', path: 'Quality Project\\Current PI' }] }
     if (request.operation === 'query') {
@@ -259,7 +260,7 @@ function fakeHierarchyServer() {
       if (request.feature.title === failureTitle) throw new Error('Synthetic project validation failure')
       if (request.validateOnly) return { id: 0, fields: {} }
       const source = request.feature
-      const item = { id: nextId++, fields: { 'System.Title': source.title, 'System.WorkItemType': request.operation === 'create-feature' ? 'Feature' : request.workItemType, 'System.State': 'New', 'System.Parent': source.parentId, 'System.AreaPath': source.areaPath, 'System.IterationPath': source.iterationPath || config.project, 'System.TeamProject': config.project } }
+      const item = { id: nextId++, fields: { 'System.Title': source.title, 'System.WorkItemType': request.operation === 'create-feature' ? 'Feature' : request.workItemType, 'System.State': 'New', 'System.Parent': source.parentId, 'System.AreaPath': source.areaPath, 'System.IterationPath': source.iterationPath || config.project, 'System.TeamProject': config.project, ...(source.assignedTo ? { 'System.AssignedTo': { id: source.assignedTo, displayName: 'Synthetic Creator' } } : {}) } }
       records.set(item.id, item); writes.push(item)
       return item
     }
@@ -329,4 +330,55 @@ test('desktop child requests permit only User Story/Task and retain hierarchy re
     assert.ok(JSON.parse(request.options.body).some((operation) => operation.path === '/relations/-' && operation.value.rel === 'System.LinkTypes.Hierarchy-Reverse'))
   }
   assert.throws(() => azureFeatureRequest({ ...config, pat, operation: 'create-child', workItemType: 'Epic', validateOnly: false, feature: { ...feature, areaPath: 'Quality' } }))
+})
+
+test('multi-select state filters include both New and Active, with ancestor context and explicit none', () => {
+  const data = [treeItem(1, 'Epic', 'Closed'), treeItem(2, 'Feature', 'New', 1), treeItem(3, 'User Story', 'Active', 2), treeItem(4, 'Task', 'Closed', 3)]
+  const roots = buildWorkItemTree(data, ['New', 'Active'], '')
+  assert.equal(roots[0].context, true)
+  assert.equal(roots[0].children[0].context, false)
+  assert.equal(roots[0].children[0].children[0].item.id, 3)
+  assert.equal(roots[0].children[0].children[0].children.length, 0)
+  assert.deepEqual(buildWorkItemTree(data, [], ''), [])
+  assert.equal(buildWorkItemTree(data, ['All'], '')[0].children[0].children[0].children.length, 1)
+})
+
+test('current dates resolve PI and nested Sprint with inclusive India-day boundaries', () => {
+  const iterations = projectIterationPaths({ name: 'Quality Project', children: [{ name: 'PI A', attributes: { startDate: '2026-10-01T00:00:00Z', finishDate: '2026-12-31T00:00:00Z' }, children: [{ name: 'Sprint 1', attributes: { startDate: '2026-10-01T00:00:00Z', finishDate: '2026-10-16T00:00:00Z' } }, { name: 'Sprint 2', attributes: { startDate: '2026-10-17T00:00:00Z', finishDate: '2026-10-30T00:00:00Z' } }] }] })
+  assert.equal(currentIterationPairs(iterations, new Date('2026-10-16T18:29:59Z'))[0].sprint.name, 'Sprint 1')
+  assert.equal(currentIterationPairs(iterations, new Date('2026-10-16T18:30:00Z'))[0].sprint.name, 'Sprint 2')
+  assert.equal(currentIterationPairs(iterations, new Date('2027-01-01T00:00:00Z')).length, 0)
+  assert.equal(currentIterationPairs([{ name: 'No dates', path: 'Quality Project\\Unknown' }]).length, 0)
+})
+
+test('overlapping branches stay ambiguous unless configured team Sprint narrows them', () => {
+  const attributes = { startDate: '2026-10-01T00:00:00Z', finishDate: '2026-10-31T00:00:00Z' }
+  const values = ['A', 'B'].flatMap((branch) => [{ name: branch, path: `Project\\${branch}`, attributes }, { name: 'Sprint', path: `Project\\${branch}\\Sprint`, attributes }])
+  const date = new Date('2026-10-16T12:00:00Z')
+  assert.equal(currentIterationPairs(values, date).length, 2)
+  values[3].teamConfigured = true
+  assert.equal(currentIterationPairs(values, date)[0].pi.name, 'B')
+  assert.equal(currentIterationPairs(values, date).length, 1)
+})
+
+test('new Feature is assigned to PAT owner, all stories to Sprint, and task remains project-root', async () => {
+  const server = fakeHierarchyServer()
+  const result = await createAzureReleaseHierarchy(config, pat, { ...feature, iterationPath: 'Quality Project\\PI A', storyIterationPath: 'Quality Project\\PI A\\Sprint 1', assignToCreator: true, assignedTo: 'not-the-creator@example.test' }, 'PU', undefined, 'October 2026', server.transport)
+  assert.equal(result.feature.iterationPath, 'Quality Project\\PI A')
+  assert.equal(server.records.get(result.feature.id).fields['System.AssignedTo'].id, 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee')
+  assert.ok(result.items.filter((item) => item.workItemType === 'User Story').every((item) => item.iterationPath === 'Quality Project\\PI A\\Sprint 1'))
+  assert.equal(result.items.find((item) => item.workItemType === 'Task').iterationPath, config.project)
+  const writes = server.writes.length
+  await completeReleaseHierarchy(config, pat, result.feature.id, 'PU', undefined, 'October 2026', server.transport, 'Quality Project\\PI A\\Sprint 1')
+  assert.equal(server.writes.length, writes)
+})
+
+test('identity failures stop before writes; desktop identity URL stays fixed to organization', async () => {
+  await assert.rejects(readAzureCreator(config, pat, async () => ({ authenticatedUser: {} })), /identify the PAT owner/)
+  const server = fakeHierarchyServer()
+  await assert.rejects(createAzureFeature(config, pat, { ...feature, assignToCreator: true }, async (request) => request.operation === 'identity' ? {} : server.transport(request)), /PAT owner/)
+  assert.equal(server.writes.length, 0)
+  const request = azureReadRequest({ ...config, pat, operation: 'identity' })
+  assert.equal(request.url, 'https://dev.azure.com/example-org/_apis/connectionData?api-version=7.1-preview.1')
+  assert.equal(request.options.method, 'GET')
 })
