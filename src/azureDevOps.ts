@@ -1,8 +1,8 @@
 import type { AzureWorkItem } from './domain'
 
-export interface AzureConfig { organization: string; project: string; team: string; includeProjectEpics?: boolean }
+export interface AzureConfig { organization: string; project: string; team: string }
 export interface AzureRequest extends AzureConfig {
-  operation: 'identity' | 'areas' | 'iterations' | 'iteration-tree' | 'query' | 'items' | 'create-feature' | 'create-child'
+  operation: 'backlog-epics' | 'identity' | 'areas' | 'iterations' | 'iteration-tree' | 'query' | 'items' | 'create-feature' | 'create-child'
   pat: string
   query?: string
   ids?: number[]
@@ -70,7 +70,8 @@ export async function readAzureCreator(config: AzureConfig, pat: string, transpo
   if (!user?.id || !/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(user.id)) throw new Error('Unable to identify the PAT owner. No Feature was created. Check the connection identity.')
   return { id: user.id, name: user.providerDisplayName || user.properties?.Account?.$value || user.id }
 }
-export interface AzureFetchResult { items: AzureWorkItem[]; areaPaths: string[]; asOf: string }
+export interface AzureBacklogScope extends AzureConfig { itemKeys: string[]; areaPaths: string[]; fetchedAt: string }
+export interface AzureFetchResult { items: AzureWorkItem[]; areaPaths: string[]; asOf: string; scope: AzureBacklogScope }
 interface RawItem { id: number; fields: Record<string, unknown>; relations?: { rel: string; url: string }[] }
 interface TeamAreas { field: { referenceName: string }; values: { value: string; includeChildren: boolean }[] }
 type AzureTransport = (request: AzureRequest) => Promise<unknown>
@@ -91,10 +92,11 @@ export function parseAzureProjectUrl(input: string): AzureConfig {
 
 const literal = (value: string) => `'${value.replaceAll("'", "''")}'`
 
-export function buildWorkItemQuery(project: string, areas: TeamAreas['values'], afterId: number) {
+export function buildWorkItemQuery(project: string, areas: TeamAreas['values'], afterId: number, parentIds?: number[]) {
   if (!areas.length) throw new Error('This team has no configured area paths. Check team settings in Azure DevOps.')
   const areaClause = areas.map((area) => `[System.AreaPath] ${area.includeChildren ? 'UNDER' : '='} ${literal(area.value)}`).join(' OR ')
-  return `SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = ${literal(project)} AND (${areaClause}) AND [System.Id] > ${afterId} ORDER BY [System.Id] ASC`
+  if (parentIds && (!parentIds.length || parentIds.length > 200 || parentIds.some((id) => !Number.isSafeInteger(id) || id < 1))) throw new Error('Invalid backlog parent IDs.')
+  return `SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = ${literal(project)} AND (${areaClause})${parentIds ? ` AND [System.Parent] IN (${parentIds.join(',')}) AND [System.State] <> 'Removed'` : ''} AND [System.Id] > ${afterId} ORDER BY [System.Id] ASC`
 }
 
 export async function fetchAzureWorkItems(config: AzureConfig, pat: string, transport: AzureTransport = requestAzure): Promise<AzureFetchResult> {
@@ -103,47 +105,60 @@ export async function fetchAzureWorkItems(config: AzureConfig, pat: string, tran
   const request = (operation: AzureRequest['operation'], extra: Partial<AzureRequest> = {}) => transport({ ...config, pat: pat.trim(), operation, ...extra })
   const areas = await request('areas') as TeamAreas
   if (areas.field?.referenceName !== 'System.AreaPath' || !Array.isArray(areas.values)) throw new Error('Unexpected team area-path response.')
-  const items: AzureWorkItem[] = []
-  let afterId = 0
-  let asOf = ''
-  while (true) {
-    const page = await request('query', { query: buildWorkItemQuery(config.project, areas.values, afterId) }) as { workItems?: { id: number }[]; asOf?: string }
-    if (!Array.isArray(page.workItems)) throw new Error('Azure DevOps did not return a work-item list.')
-    if (!page.workItems.length) break
-    const ids = page.workItems.map((item) => item.id)
-    if (ids.some((id) => !Number.isSafeInteger(id) || id <= afterId)) throw new Error('Unexpected work-item paging response. No data was imported.')
-    asOf = page.asOf ?? asOf
+  const backlog = await request('backlog-epics') as { workItems?: { target?: { id: number } }[] }
+  if (!Array.isArray(backlog.workItems)) throw new Error('The team Epic backlog could not be read. No project-wide fallback was attempted.')
+  const rootIds = [...new Set(backlog.workItems.map((link) => link.target?.id))]
+  if (rootIds.some((id) => !Number.isSafeInteger(id) || !id || id < 1)) throw new Error('Unexpected team backlog IDs. No data was imported.')
+  if (rootIds.length > 50000) throw new Error('The team Epic backlog exceeds the trial safety limit. No data was imported.')
+  const readItems = async (ids: number[]) => {
+    const result: AzureWorkItem[] = []
     for (let index = 0; index < ids.length; index += 200) {
-      const batch = await request('items', { ids: ids.slice(index, index + 200) }) as { value?: RawItem[] }
-      if (!Array.isArray(batch.value) || batch.value.length !== Math.min(200, ids.length - index)) throw new Error('Some work items could not be read. Check access and fetch again; no partial import was saved.')
-      items.push(...batch.value.map((item) => mapAzureWorkItem(item, config)))
+      const batchIds = ids.slice(index, index + 200)
+      const batch = await request('items', { ids: batchIds }) as { value?: RawItem[] }
+      if (!Array.isArray(batch.value) || batch.value.length !== batchIds.length || new Set(batch.value.map((item) => item.id)).size !== batchIds.length || batch.value.some((item) => !batchIds.includes(item.id) || (typeof item.fields['System.TeamProject'] === 'string' && item.fields['System.TeamProject'].toLowerCase() !== config.project.toLowerCase()))) throw new Error('Some work items could not be read. Check access and fetch again; no partial import was saved.')
+      result.push(...batch.value.map((item) => mapAzureWorkItem(item, config)).filter((item) => item.state.trim().toLowerCase() !== 'removed'))
     }
-    afterId = Math.max(...ids)
-    if (items.length > 50000) throw new Error('This team exceeds the trial limit of 50,000 work items. Use a narrower team scope.')
+    return result
   }
-  if (config.includeProjectEpics) {
-    const known = new Set(items.map((item) => item.id))
-    let epicAfter = 0
-    while (true) {
-      const query = `SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = ${literal(config.project)} AND [System.WorkItemType] = 'Epic' AND [System.Id] > ${epicAfter} ORDER BY [System.Id] ASC`
-      const page = await request('query', { query }) as { workItems?: { id: number }[] }
-      if (!Array.isArray(page.workItems)) throw new Error('Could not list project Epics. No preview was saved.')
-      if (!page.workItems.length) break
-      const pageIds = page.workItems.map((item) => item.id)
-      if (pageIds.some((id) => !Number.isSafeInteger(id) || id <= epicAfter)) throw new Error('Unexpected Epic paging response.')
-      const ids = pageIds.filter((id) => !known.has(id))
-      for (let index = 0; index < ids.length; index += 200) {
-        const batchIds = ids.slice(index, index + 200)
-        const batch = await request('items', { ids: batchIds }) as { value?: RawItem[] }
-        if (batch.value?.length !== batchIds.length) throw new Error('Some project Epics could not be read. No preview was saved.')
-        items.push(...batch.value.map((item) => mapAzureWorkItem(item, config)))
-        batchIds.forEach((id) => known.add(id))
+  const items = await readItems(rootIds as number[])
+  if (items.some((item) => item.workItemType !== 'Epic')) throw new Error('The selected Epic backlog returned an unexpected work-item type. No data was imported.')
+  const known = new Set(items.map((item) => item.id))
+  let frontier = [...known]
+  let depth = 0
+  while (frontier.length) {
+    if (++depth > 64) throw new Error('Unexpected backlog hierarchy depth. No partial data was imported.')
+    const next: number[] = []
+    for (let start = 0; start < frontier.length; start += 200) {
+      const parents = frontier.slice(start, start + 200)
+      let afterId = 0
+      while (true) {
+        const page = await request('query', { query: buildWorkItemQuery(config.project, areas.values, afterId, parents) }) as { workItems?: { id: number }[] }
+        if (!Array.isArray(page.workItems)) throw new Error('Unable to read backlog children. No partial data was imported.')
+        if (!page.workItems.length) break
+        const ids = page.workItems.map((item) => item.id)
+        if (ids.some((id) => !Number.isSafeInteger(id) || id <= afterId)) throw new Error('Unexpected child paging response. No partial data was imported.')
+        for (const item of await readItems(ids.filter((id) => !known.has(id)))) {
+          if (!item.parentId || !parents.includes(item.parentId)) throw new Error('A child did not belong to the requested backlog parents. No partial data was imported.')
+          known.add(item.id); items.push(item); next.push(item.id)
+        }
+        afterId = Math.max(...ids)
+        if (items.length > 50000) throw new Error('This backlog exceeds the 50,000-item trial safety limit. No partial data was imported.')
       }
-      epicAfter = Math.max(...pageIds)
-      if (items.length > 50000) throw new Error('Team data and project Epics exceed the trial limit of 50,000 items.')
     }
+    frontier = next
   }
-  return { items, areaPaths: areas.values.map((area) => area.value), asOf }
+  const asOf = new Date().toISOString(), areaPaths = areas.values.map((area) => area.value)
+  return { items, areaPaths, asOf, scope: { organization: config.organization, project: config.project, team: config.team, itemKeys: items.map((item) => item.key), areaPaths, fetchedAt: asOf } }
+}
+
+export function sameAzureScope(left: AzureConfig | undefined | null, right: AzureConfig | undefined | null) {
+  return Boolean(left && right && ['organization', 'project', 'team'].every((key) => typeof left[key as keyof AzureConfig] === 'string' && typeof right[key as keyof AzureConfig] === 'string' && left[key as keyof AzureConfig].toLowerCase() === right[key as keyof AzureConfig].toLowerCase()))
+}
+
+export function savedBacklogItems(items: AzureWorkItem[], scope: AzureBacklogScope | undefined, config: AzureConfig | null) {
+  if (!sameAzureScope(scope, config) || !Array.isArray(scope?.itemKeys)) return []
+  const keys = new Set(scope.itemKeys)
+  return items.filter((item) => keys.has(item.key) && item.organization.toLowerCase() === config!.organization.toLowerCase() && item.project.toLowerCase() === config!.project.toLowerCase() && item.state.trim().toLowerCase() !== 'removed')
 }
 
 export function mapAzureWorkItem(item: RawItem, config: AzureConfig): AzureWorkItem {
@@ -331,8 +346,8 @@ async function requestAzure(request: AzureRequest): Promise<unknown> {
   if (window.azureDevOps) return window.azureDevOps.request(request)
   const base = `https://dev.azure.com/${encodeURIComponent(request.organization)}/${encodeURIComponent(request.project)}`
   const writing = request.operation === 'create-feature' || request.operation === 'create-child'
-  const readingMetadata = request.operation === 'identity' || request.operation === 'areas' || request.operation === 'iterations' || request.operation === 'iteration-tree'
-  const endpoint = writing ? `_apis/wit/workitems/$${request.operation === 'create-feature' ? 'Feature' : encodeURIComponent(request.workItemType!)}` : request.operation === 'iteration-tree' ? '_apis/wit/classificationnodes/iterations' : readingMetadata ? `${encodeURIComponent(request.team)}/_apis/work/teamsettings/${request.operation === 'areas' ? 'teamfieldvalues' : 'iterations'}` : request.operation === 'query' ? '_apis/wit/wiql' : '_apis/wit/workitemsbatch'
+  const readingMetadata = request.operation === 'backlog-epics' || request.operation === 'identity' || request.operation === 'areas' || request.operation === 'iterations' || request.operation === 'iteration-tree'
+  const endpoint = writing ? `_apis/wit/workitems/$${request.operation === 'create-feature' ? 'Feature' : encodeURIComponent(request.workItemType!)}` : request.operation === 'backlog-epics' ? `${encodeURIComponent(request.team)}/_apis/work/backlogs/Microsoft.EpicCategory/workItems` : request.operation === 'iteration-tree' ? '_apis/wit/classificationnodes/iterations' : readingMetadata ? `${encodeURIComponent(request.team)}/_apis/work/teamsettings/${request.operation === 'areas' ? 'teamfieldvalues' : 'iterations'}` : request.operation === 'query' ? '_apis/wit/wiql' : '_apis/wit/workitemsbatch'
   const body = writing ? featurePatch(request, request.feature!) : request.operation === 'query' ? { query: request.query } : { ids: request.ids, errorPolicy: 'Fail', $expand: 'Relations' }
   let response: Response
   try {

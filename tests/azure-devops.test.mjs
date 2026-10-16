@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
-import { parseAzureProjectUrl, fetchAzureWorkItems, mergeAzureWorkItems, buildWorkItemQuery, createAzureFeature, featurePatch, featureDescription, releaseHierarchyTitles, currentIndiaMonth, createAzureReleaseHierarchy, completeReleaseHierarchy, HierarchyCreationError, readAzureIterations, projectIterationPaths, currentIterationPairs, readAzureCreator, mapAzureWorkItem } from '../src/azureDevOps.ts'
+import { parseAzureProjectUrl, fetchAzureWorkItems, mergeAzureWorkItems, buildWorkItemQuery, createAzureFeature, featurePatch, featureDescription, releaseHierarchyTitles, currentIndiaMonth, createAzureReleaseHierarchy, completeReleaseHierarchy, HierarchyCreationError, readAzureIterations, projectIterationPaths, currentIterationPairs, readAzureCreator, mapAzureWorkItem, savedBacklogItems, sameAzureScope } from '../src/azureDevOps.ts'
 import { buildWorkItemTree } from '../src/azureHierarchy.ts'
 import { loadAzurePat, saveAzurePat, forgetAzurePat } from '../src/azureCredentials.ts'
 import { normalizeBacklogColumns, defaultBacklogColumns, plainAzureText, visibleBacklogRows } from '../src/backlogView.ts'
@@ -51,46 +51,96 @@ test('fetch batches at 200, follows all ID pages and stores no token or invented
   let page = 0
   const result = await fetchAzureWorkItems(config, pat, async (request) => {
     if (request.operation === 'areas') return { field: { referenceName: 'System.AreaPath' }, values: [{ value: 'Quality\\Team A', includeChildren: true }] }
+    if (request.operation === 'backlog-epics') return { workItems: [{ target: { id: 1 } }] }
     if (request.operation === 'query') {
+      assert.ok(request.query.includes('[System.Parent] IN ('), 'Every traversal query must be constrained to known parents')
+      assert.ok(request.query.includes("[System.State] <> 'Removed'"))
+      if (!request.query.includes('[System.Parent] IN (1)')) return { workItems: [] }
       page++
-      return { workItems: page === 1 ? Array.from({ length: 201 }, (_, i) => ({ id: i + 1 })) : page === 2 ? [{ id: 202 }] : [], asOf: '2026-10-16T00:00:00Z' }
+      return { workItems: page === 1 ? Array.from({ length: 201 }, (_, i) => ({ id: i + 2 })) : page === 2 ? [{ id: 203 }] : [] }
     }
     batches.push(request.ids.length)
     return { value: request.ids.map((id) => ({ id, fields: { 'System.Title': `Sample ${id}`, 'System.WorkItemType': id === 1 ? 'Epic' : 'Feature', 'System.State': 'Active', 'System.AssignedTo': { displayName: 'Example QE' }, 'System.Parent': id === 1 ? undefined : 1 } })) }
   })
-  assert.deepEqual(batches, [200, 1, 1])
-  assert.equal(result.items.length, 202)
+  assert.deepEqual(batches, [1, 200, 1, 1])
+  assert.equal(result.items.length, 203)
   assert.equal(result.items[1].parentId, 1)
   assert.equal(result.items[0].closedDate, undefined)
   assert.equal(result.items[0].targetDate, undefined)
   assert.equal(JSON.stringify(result).includes(pat), false)
   const refreshed = { ...result.items[0], state: 'Closed' }
   const merged = mergeAzureWorkItems(result.items, [refreshed])
-  assert.equal(merged.length, 202)
+  assert.equal(merged.length, 203)
   assert.equal(merged[0].state, 'Closed')
 })
 
 test('incomplete batch aborts rather than publishing a misleading partial import', async () => {
   await assert.rejects(fetchAzureWorkItems(config, pat, async (request) => {
     if (request.operation === 'areas') return { field: { referenceName: 'System.AreaPath' }, values: [{ value: 'Quality', includeChildren: true }] }
+    if (request.operation === 'backlog-epics') return { workItems: [{ target: { id: 1 } }, { target: { id: 2 } }] }
     if (request.operation === 'query') return { workItems: [{ id: 1 }, { id: 2 }] }
     return { value: [{ id: 1, fields: {} }] }
   }), /Some work items could not be read/)
 })
 
-test('all-project Epic option includes out-of-team Epics without duplicating team records', async () => {
-  let teamPage = 0
-  let epicPage = 0
+test('legacy all-project flag cannot widen the actual team Epic backlog fetch', async () => {
   const result = await fetchAzureWorkItems({ ...config, includeProjectEpics: true }, pat, async (request) => {
     if (request.operation === 'areas') return { field: { referenceName: 'System.AreaPath' }, values: [{ value: 'Quality\\Team A', includeChildren: true }] }
+    if (request.operation === 'backlog-epics') return { workItems: [{ target: { id: 1 } }, { target: { id: 1 } }] }
     if (request.operation === 'query') {
-      if (request.query.includes("[System.WorkItemType] = 'Epic'")) return { workItems: ++epicPage === 1 ? [{ id: 1 }, { id: 2 }] : [] }
-      return { workItems: ++teamPage === 1 ? [{ id: 1 }] : [] }
+      assert.ok(request.query.includes('[System.Parent] IN (1)'))
+      assert.equal(request.query.includes("[System.WorkItemType] = 'Epic'"), false)
+      return { workItems: [] }
     }
     return { value: request.ids.map((id) => ({ id, fields: { 'System.WorkItemType': 'Epic', 'System.Title': `Example Epic ${id}` } })) }
   })
-  assert.equal(result.items.length, 2)
-  assert.equal(new Set(result.items.map((item) => item.id)).size, 2)
+  assert.equal(result.items.length, 1)
+  assert.deepEqual(result.scope.itemKeys, result.items.map((item) => item.key))
+  assert.equal(result.scope.team, config.team)
+})
+
+test('empty or inaccessible team backlog never falls back to a project query', async () => {
+  const transport = async (request) => {
+    if (request.operation === 'areas') return { field: { referenceName: 'System.AreaPath' }, values: [{ value: 'Quality', includeChildren: true }] }
+    if (request.operation === 'backlog-epics') return { workItems: [] }
+    throw new Error('No other operation should run for an empty backlog')
+  }
+  assert.deepEqual((await fetchAzureWorkItems(config, pat, transport)).items, [])
+  await assert.rejects(fetchAzureWorkItems(config, pat, async (request) => request.operation === 'backlog-epics' ? {} : transport(request)), /No project-wide fallback/)
+})
+
+test('saved cache displays only exact verified team membership and hides legacy unscoped data', () => {
+  const items = [1, 2, 3].map((id) => mapAzureWorkItem({ id, fields: { 'System.State': 'Active' } }, config))
+  const scope = { ...config, itemKeys: [items[0].key, items[1].key], areaPaths: ['Quality'], fetchedAt: '2026-10-16T00:00:00Z' }
+  assert.deepEqual(savedBacklogItems(items, undefined, config), [])
+  assert.deepEqual(savedBacklogItems(items, scope, { ...config, team: 'Other team' }), [])
+  assert.deepEqual(savedBacklogItems(items, scope, config).map((item) => item.id), [1, 2])
+  assert.equal(sameAzureScope(scope, { ...config, team: config.team.toUpperCase() }), true)
+})
+
+test('desktop backlog endpoint is fixed to selected team and uses GET', () => {
+  const request = azureReadRequest({ ...config, pat, operation: 'backlog-epics' })
+  assert.equal(request.url, 'https://dev.azure.com/example-org/Quality%20Project/Team%20A/_apis/work/backlogs/Microsoft.EpicCategory/workItems?api-version=7.1')
+  assert.equal(request.options.method, 'GET')
+  assert.equal(request.options.body, undefined)
+})
+
+test('fetch follows only actual backlog Epic descendants, excluding unrelated same-area items and Removed records', async () => {
+  const records = [
+    [10, 'Epic', 'Active', undefined], [20, 'Feature', 'New', 10], [21, 'Feature', 'Removed', 10],
+    [30, 'User Story', 'Active', 20], [40, 'Task', 'Closed', 30],
+    [99, 'Epic', 'Active', undefined], [100, 'Feature', 'Active', 99],
+  ].map(([id, type, state, parent]) => ({ id, fields: { 'System.Title': `Example ${id}`, 'System.WorkItemType': type, 'System.State': state, 'System.Parent': parent, 'System.TeamProject': config.project, 'System.AreaPath': 'Quality\\Team A' } }))
+  const result = await fetchAzureWorkItems(config, pat, async (request) => {
+    if (request.operation === 'areas') return { field: { referenceName: 'System.AreaPath' }, values: [{ value: 'Quality\\Team A', includeChildren: true }] }
+    if (request.operation === 'backlog-epics') return { workItems: [{ target: { id: 10 } }] }
+    if (request.operation === 'items') return { value: records.filter((item) => request.ids.includes(item.id)) }
+    const parents = request.query.match(/\[System.Parent\] IN \(([\d,]+)\)/)[1].split(',').map(Number)
+    const after = Number(request.query.match(/\[System.Id\] > (\d+)/)[1])
+    return { workItems: records.filter((item) => parents.includes(item.fields['System.Parent']) && item.id > after && item.fields['System.State'] !== 'Removed').map((item) => ({ id: item.id })) }
+  })
+  assert.deepEqual(result.items.map((item) => item.id), [10, 20, 30, 40])
+  assert.ok(result.scope.itemKeys.every((key) => !key.endsWith('/99') && !key.endsWith('/100')))
 })
 
 test('desktop bridge constrains credentials to Azure DevOps and rejects writes and oversized batches', () => {

@@ -10,6 +10,7 @@ function azureReadRequest(input) {
     return { url: `https://dev.azure.com/${encodeURIComponent(input.organization)}/_apis/connectionData?api-version=7.1-preview.1`, options: { method: 'GET', redirect: 'error', headers: { Authorization: `Basic ${Buffer.from(`:${input.pat.trim()}`).toString('base64')}`, Accept: 'application/json' } } }
   }
   if (input.operation === 'areas') endpoint = `${encodeURIComponent(input.team)}/_apis/work/teamsettings/teamfieldvalues`
+  else if (input.operation === 'backlog-epics') endpoint = `${encodeURIComponent(input.team)}/_apis/work/backlogs/Microsoft.EpicCategory/workItems`
   else if (input.operation === 'iterations') endpoint = `${encodeURIComponent(input.team)}/_apis/work/teamsettings/iterations`
   else if (input.operation === 'iteration-tree') endpoint = '_apis/wit/classificationnodes/iterations'
   else if (input.operation === 'query') {

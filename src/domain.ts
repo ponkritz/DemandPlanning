@@ -138,6 +138,7 @@ export interface AppState {
   snapshots: Snapshot[]
   masters: MasterValue[]
   azureWorkItems?: AzureWorkItem[]
+  azureBacklogScope?: { organization: string; project: string; team: string; itemKeys: string[]; areaPaths: string[]; fetchedAt: string }
 }
 
 export interface AzureWorkItem {
