@@ -30,7 +30,8 @@ export function AzureWorkItemTree({ items, config, onCreated, savedPat = '', onS
   const scoped = useMemo(() => items.filter((item) => item.organization.toLowerCase() === config.organization.toLowerCase() && item.project.toLowerCase() === config.project.toLowerCase()), [items, config.organization, config.project])
   const epics = scoped.filter((item) => item.workItemType === 'Epic').sort((a, b) => a.id - b.id)
   const tree = useMemo(() => buildWorkItemTree(scoped, state, search), [scoped, state, search])
-  const filtering = !state.includes('All') || Boolean(search.trim())
+  // Search reveals matches; state filtering alone must not expand thousands of fetched records.
+  const filtering = Boolean(search.trim())
   const states = [...new Set(['New', 'Active', 'Closed', ...scoped.map((item) => item.state)])].filter(Boolean)
   const pairs = currentIterationPairs(iterationChoices)
   const availableMilestones = releaseKind === 'PU' ? ['SFV', 'DT', 'IQOQ'] : ['PRD', 'SFV', 'DT', 'IQOQ']
