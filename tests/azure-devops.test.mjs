@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
-import { parseAzureProjectUrl, fetchAzureWorkItems, mergeAzureWorkItems, buildWorkItemQuery, createAzureFeature, featurePatch, featureDescription, releaseHierarchyTitles, currentIndiaMonth, createAzureReleaseHierarchy, completeReleaseHierarchy, HierarchyCreationError } from '../src/azureDevOps.ts'
+import { parseAzureProjectUrl, fetchAzureWorkItems, mergeAzureWorkItems, buildWorkItemQuery, createAzureFeature, featurePatch, featureDescription, releaseHierarchyTitles, currentIndiaMonth, createAzureReleaseHierarchy, completeReleaseHierarchy, HierarchyCreationError, readAzureIterations, projectIterationPaths } from '../src/azureDevOps.ts'
 import { buildWorkItemTree } from '../src/azureHierarchy.ts'
 import { loadAzurePat, saveAzurePat, forgetAzurePat } from '../src/azureCredentials.ts'
 
@@ -147,9 +147,49 @@ test('explicit area override and named iteration resolve before creation and ver
   await assert.rejects(createAzureFeature(config, pat, chosen, async (request) => {
     if (request.operation === 'items') return { value: [{ id: 10, fields: { 'System.WorkItemType': 'Epic', 'System.AreaPath': 'Quality' } }] }
     if (request.operation === 'iterations') return { value: [] }
+    if (request.operation === 'iteration-tree') return { name: config.project, children: [] }
     wrote = true
-  }), /not found in team iterations/)
+  }), /not found in team or project iterations/)
   assert.equal(wrote, false)
+})
+
+test('project iteration tree removes the internal Iteration segment and keeps nested paths', () => {
+  assert.deepEqual(projectIterationPaths({ name: 'Quality Project', path: '\\Quality Project\\Iteration', children: [
+    { name: 'Current PI', path: '\\Quality Project\\Iteration\\Current PI', children: [{ name: 'Sprint 1', path: '\\Quality Project\\Iteration\\Current PI\\Sprint 1' }] },
+  ] }), [
+    { name: 'Quality Project', path: 'Quality Project' },
+    { name: 'Current PI', path: 'Quality Project\\Current PI' },
+    { name: 'Sprint 1', path: 'Quality Project\\Current PI\\Sprint 1' },
+  ])
+})
+
+test('Current PI can resolve from project configuration when absent from team iterations', async () => {
+  let payload
+  const result = await createAzureFeature(config, pat, { ...feature, iterationPath: 'Current PI' }, async (request) => {
+    if (request.operation === 'items' && request.ids[0] === 10) return { value: [{ id: 10, fields: { 'System.WorkItemType': 'Epic', 'System.AreaPath': 'Quality' } }] }
+    if (request.operation === 'iterations') return { value: [] }
+    if (request.operation === 'iteration-tree') return { name: config.project, path: '\\Quality Project\\Iteration', children: [{ name: 'Current PI', path: '\\Quality Project\\Iteration\\Current PI' }] }
+    if (request.operation === 'create-feature') { payload = request.feature; return { id: 11 } }
+    return { value: [{ id: 11, fields: { 'System.WorkItemType': 'Feature', 'System.Parent': 10, 'System.AreaPath': 'Quality', 'System.IterationPath': 'Quality Project\\Current PI' } }] }
+  })
+  assert.equal(payload.iterationPath, 'Quality Project\\Current PI')
+  assert.equal(result.iterationPath, 'Quality Project\\Current PI')
+})
+
+test('team and project iteration choices deduplicate paths; ambiguous names stop before writes', async () => {
+  const transport = async (request) => {
+    if (request.operation === 'iterations') return { value: [{ name: 'PI', path: 'Quality Project\\A\\PI' }] }
+    if (request.operation === 'iteration-tree') return { name: config.project, children: [{ name: 'A', children: [{ name: 'PI' }] }, { name: 'B', children: [{ name: 'PI' }] }] }
+    if (request.operation === 'items') return { value: [{ id: 10, fields: { 'System.WorkItemType': 'Epic', 'System.AreaPath': 'Quality' } }] }
+    throw new Error('No creation should happen')
+  }
+  const choices = await readAzureIterations(config, pat, transport)
+  assert.equal(choices.filter((item) => item.path === 'Quality Project\\A\\PI').length, 1)
+  await assert.rejects(createAzureFeature(config, pat, { ...feature, iterationPath: 'PI' }, transport), /is ambiguous/)
+  const request = azureReadRequest({ ...config, pat, operation: 'iteration-tree' })
+  assert.ok(request.url.includes('/_apis/wit/classificationnodes/iterations?'))
+  assert.ok(request.url.includes('$depth=10'))
+  assert.equal(request.options.method, 'GET')
 })
 
 test('uncertain verification reports the created ID without retrying a write', async () => {

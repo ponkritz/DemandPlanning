@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import type { AzureWorkItem } from '../domain'
 import { buildWorkItemTree, type StateFilter, type WorkItemNode } from '../azureHierarchy'
-import { createAzureReleaseHierarchy, completeReleaseHierarchy, currentIndiaMonth, releaseHierarchyTitles, HierarchyCreationError, featureDescription, type AzureConfig, type FeatureInput } from '../azureDevOps'
+import { createAzureReleaseHierarchy, completeReleaseHierarchy, currentIndiaMonth, releaseHierarchyTitles, HierarchyCreationError, featureDescription, readAzureIterations, type AzureIteration, type AzureConfig, type FeatureInput } from '../azureDevOps'
 import { Modal, Pill } from './ui'
 
 export function AzureWorkItemTree({ items, config, onCreated, savedPat = '', onSavePat }: { items: AzureWorkItem[]; config: AzureConfig; onCreated: (items: AzureWorkItem[]) => void; savedPat?: string; onSavePat?: (pat: string) => void }) {
@@ -17,6 +17,9 @@ export function AzureWorkItemTree({ items, config, onCreated, savedPat = '', onS
   const [resultText, setResultText] = useState('')
   const [partialError, setPartialError] = useState('')
   const [description, setDescription] = useState(featureDescription('PU'))
+  const [iterationPath, setIterationPath] = useState('Current PI')
+  const [iterationChoices, setIterationChoices] = useState<AzureIteration[]>([])
+  const [iterationLoading, setIterationLoading] = useState(false)
   const [pat, setPat] = useState('')
   const [creating, setCreating] = useState(false)
   const submitting = useRef(false)
@@ -31,11 +34,18 @@ export function AzureWorkItemTree({ items, config, onCreated, savedPat = '', onS
   let plan
   try { plan = releaseHierarchyTitles(title.trim(), releaseKind, monthLabel) } catch { plan = null }
 
-  function openEditor(epic: AzureWorkItem) { setParent(epic); setResumeFeature(null); setTitle(''); setReleaseKind('PU'); setMilestones(['SFV', 'DT', 'IQOQ']); setDescription(featureDescription('PU')); setPat(savedPat); setError(''); setPartialError(''); setResult(null) }
+  function openEditor(epic: AzureWorkItem) { setParent(epic); setResumeFeature(null); setTitle(''); setIterationPath('Current PI'); setIterationChoices([]); setReleaseKind('PU'); setMilestones(['SFV', 'DT', 'IQOQ']); setDescription(featureDescription('PU')); setPat(savedPat); setError(''); setPartialError(''); setResult(null) }
   function openResume(item: AzureWorkItem) { setParent(null); setResumeFeature(item); setTitle(item.title); setReleaseKind('PU'); setMilestones(['SFV', 'DT', 'IQOQ']); setPat(savedPat); setError(''); setPartialError(''); setResult(null) }
   function closeEditor() { if (submitting.current) return; setParent(null); setResumeFeature(null); setPat(''); setError('') }
   function setKind(kind: 'PU' | 'Release') { setReleaseKind(kind); setMilestones(kind === 'PU' ? ['SFV', 'DT', 'IQOQ'] : ['PRD', 'SFV', 'DT', 'IQOQ']); setDescription(featureDescription(kind)) }
   function toggle(key: string) { setExpanded((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next }) }
+
+  async function loadIterations() {
+    setError(''); setIterationLoading(true)
+    try { setIterationChoices(await readAzureIterations(config, pat || savedPat)) }
+    catch (failure) { setError(failure instanceof Error ? failure.message : 'Unable to load iteration paths.') }
+    finally { setIterationLoading(false) }
+  }
 
   async function create(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -83,7 +93,9 @@ export function AzureWorkItemTree({ items, config, onCreated, savedPat = '', onS
       {parent && <label>Parent Epic<select disabled={creating} value={parent.key} onChange={(event) => setParent(epics.find((item) => item.key === event.target.value) ?? null)}>{epics.map((epic) => <option value={epic.key} key={epic.key}>#{epic.id} · {epic.title} ({epic.state})</option>)}</select></label>}
       <label>Feature title<input name="title" required maxLength={255} value={title} onChange={(event) => setTitle(event.target.value)} disabled={creating || Boolean(resumeFeature)} placeholder="Program | Service | vRelease" autoFocus /></label>
       {parent && <><label>Area Path<input name="areaPath" key={parent.key} defaultValue={parent.areaPath} required disabled={creating} /></label>
-      <label>Iteration Path or team iteration name<input name="iterationPath" defaultValue="Current PI" placeholder="Current PI or full iteration path" disabled={creating} /></label></>}
+      <label>Iteration Path or iteration name<input name="iterationPath" value={iterationPath} onChange={(event) => setIterationPath(event.target.value)} placeholder="Select or enter the actual full path" disabled={creating} /></label>
+      <div className="iteration-picker"><button type="button" className="ghost" onClick={loadIterations} disabled={creating || iterationLoading}>{iterationLoading ? 'Loading iteration paths…' : 'Load iteration paths'}</button>{iterationChoices.length > 0 && <label>Actual Azure DevOps iteration<select value={iterationChoices.some((choice) => choice.path === iterationPath) ? iterationPath : ''} onChange={(event) => { if (event.target.value) setIterationPath(event.target.value) }} disabled={creating}><option value="">Select the PI's full path</option>{iterationChoices.map((choice) => <option key={choice.path} value={choice.path}>{choice.path}</option>)}</select></label>}</div>
+      <p className="muted">Current PI must match a real iteration name. Load paths to find project iterations outside the team's list. The Time Writing task still uses the project-root iteration.</p></>}
       <label>Release classification<select value={releaseKind} disabled={creating} onChange={(event) => setKind(event.target.value as 'PU' | 'Release')}><option value="PU">PU</option><option value="Release">Full Release</option></select></label>
       {parent && <><label>Description<textarea name="description" maxLength={100000} value={description} onChange={(event) => setDescription(event.target.value)} disabled={creating} /></label><label>Acceptance criteria<textarea name="acceptance" maxLength={100000} disabled={creating} /></label>
       <div className="form-row"><label>Assignee email (optional)<input name="assignedTo" type="email" disabled={creating} /></label><label>Target date (optional)<input name="targetDate" type="date" disabled={creating} /></label></div></>}
@@ -92,7 +104,7 @@ export function AzureWorkItemTree({ items, config, onCreated, savedPat = '', onS
       <label>PAT — Work Items: Read &amp; Write<input type="password" required autoComplete="off" value={pat} onChange={(event) => setPat(event.target.value)} disabled={creating} /></label>
       <p className="muted">The configured PAT is reused and saved separately in this browser. No state, priority, notification setting or project rule is overridden.</p>
       {error && <div className="notice error" role="alert">{error}</div>}
-      <div className="modal-actions"><button type="button" className="ghost" onClick={closeEditor} disabled={creating}>Cancel</button><button className="primary" disabled={creating || !plan}>{creating ? 'Creating and verifying hierarchy…' : resumeFeature ? 'Complete missing children' : 'Create Feature and children'}</button></div>
+      <div className="modal-actions"><button type="button" className="ghost" onClick={closeEditor} disabled={creating}>Cancel</button><button className="primary" disabled={creating || iterationLoading || !plan}>{creating ? 'Creating and verifying hierarchy…' : resumeFeature ? 'Complete missing children' : 'Create Feature and children'}</button></div>
     </form></Modal>}
   </>
 }

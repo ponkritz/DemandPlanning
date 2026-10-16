@@ -2,7 +2,7 @@ import type { AzureWorkItem } from './domain'
 
 export interface AzureConfig { organization: string; project: string; team: string; includeProjectEpics?: boolean }
 export interface AzureRequest extends AzureConfig {
-  operation: 'areas' | 'iterations' | 'query' | 'items' | 'create-feature' | 'create-child'
+  operation: 'areas' | 'iterations' | 'iteration-tree' | 'query' | 'items' | 'create-feature' | 'create-child'
   pat: string
   query?: string
   ids?: number[]
@@ -13,6 +13,41 @@ export interface AzureRequest extends AzureConfig {
 export interface FeatureInput { parentId: number; title: string; description: string; acceptanceCriteria: string; areaPath?: string; iterationPath?: string; assignedTo?: string; targetDate?: string }
 export function featureDescription(kind: 'PU' | 'Release') {
   return kind === 'PU' ? 'Feature DoD: DT finished. This is a PU release.' : 'Feature DoD: IQOQ finished and Checklist uploaded into the Feature.'
+}
+
+export interface AzureIteration { name: string; path: string }
+interface IterationNode { name: string; path?: string; children?: IterationNode[] }
+
+export function projectIterationPaths(root: IterationNode): AzureIteration[] {
+  const paths: AzureIteration[] = []
+  function visit(node: IterationNode, parentPath = '') {
+    const parts = node.path?.split('\\').filter(Boolean)
+    // Classification-node paths contain an internal "Iteration" segment that work-item fields do not use.
+    const path = parts?.length && parts[1]?.toLowerCase() === 'iteration' ? [parts[0], ...parts.slice(2)].join('\\') : parentPath ? `${parentPath}\\${node.name}` : node.name
+    paths.push({ name: node.name, path })
+    node.children?.forEach((child) => visit(child, path))
+  }
+  visit(root)
+  return paths
+}
+
+export async function readAzureIterations(config: AzureConfig, pat: string, transport: AzureTransport = requestAzure): Promise<AzureIteration[]> {
+  if (!pat.trim()) throw new Error('Configure your PAT first to load iteration paths.')
+  const results = await Promise.allSettled([
+    transport({ ...config, pat, operation: 'iterations' }),
+    transport({ ...config, pat, operation: 'iteration-tree' }),
+  ])
+  const options = new Map<string, AzureIteration>()
+  if (results[0].status === 'fulfilled') {
+    const team = results[0].value as { value?: AzureIteration[] }
+    for (const item of team.value ?? []) if (item.name && item.path) options.set(item.path.toLowerCase(), item)
+  }
+  if (results[1].status === 'fulfilled') {
+    const root = results[1].value as IterationNode
+    if (root.name) for (const item of projectIterationPaths(root)) options.set(item.path.toLowerCase(), item)
+  }
+  if (!options.size) throw new Error('Could not load iteration paths. Check Azure DevOps access or enter the full path from Project settings → Project configuration → Iterations.')
+  return [...options.values()].sort((a, b) => a.path.localeCompare(b.path))
 }
 export interface AzureFetchResult { items: AzureWorkItem[]; areaPaths: string[]; asOf: string }
 interface RawItem { id: number; fields: Record<string, unknown>; relations?: { rel: string; url: string }[] }
@@ -127,9 +162,9 @@ export async function createAzureFeature(config: AzureConfig, pat: string, featu
   if (typeof areaPath !== 'string' || !areaPath) throw new Error('The parent Epic has no area path. Check it in Azure DevOps.')
   let iterationPath = feature.iterationPath?.trim()
   if (iterationPath && !iterationPath.includes('\\')) {
-    const iterations = await transport({ ...config, pat, operation: 'iterations' }) as { value?: { name: string; path: string }[] }
-    const matches = iterations.value?.filter((iteration) => iteration.name.toLowerCase() === iterationPath!.toLowerCase()) ?? []
-    if (matches.length !== 1) throw new Error(`Iteration "${iterationPath}" ${matches.length ? 'is ambiguous' : 'was not found in team iterations'}. Enter its full iteration path from Azure DevOps.`)
+    const iterations = await readAzureIterations(config, pat, transport)
+    const matches = iterations.filter((iteration) => iteration.name.toLowerCase() === iterationPath!.toLowerCase())
+    if (matches.length !== 1) throw new Error(`Iteration "${iterationPath}" ${matches.length ? 'is ambiguous' : 'was not found in team or project iterations'}. Use Load iteration paths and select its actual full path. Available paths: ${iterations.slice(0, 8).map((iteration) => iteration.path).join('; ')}`)
     iterationPath = matches[0].path
   }
   const request: AzureRequest = { ...config, pat, operation: 'create-feature', feature: { ...feature, title: feature.title.trim(), areaPath, iterationPath } }
@@ -270,12 +305,12 @@ async function requestAzure(request: AzureRequest): Promise<unknown> {
   if (window.azureDevOps) return window.azureDevOps.request(request)
   const base = `https://dev.azure.com/${encodeURIComponent(request.organization)}/${encodeURIComponent(request.project)}`
   const writing = request.operation === 'create-feature' || request.operation === 'create-child'
-  const readingMetadata = request.operation === 'areas' || request.operation === 'iterations'
-  const endpoint = writing ? `_apis/wit/workitems/$${request.operation === 'create-feature' ? 'Feature' : encodeURIComponent(request.workItemType!)}` : readingMetadata ? `${encodeURIComponent(request.team)}/_apis/work/teamsettings/${request.operation === 'areas' ? 'teamfieldvalues' : 'iterations'}` : request.operation === 'query' ? '_apis/wit/wiql' : '_apis/wit/workitemsbatch'
+  const readingMetadata = request.operation === 'areas' || request.operation === 'iterations' || request.operation === 'iteration-tree'
+  const endpoint = writing ? `_apis/wit/workitems/$${request.operation === 'create-feature' ? 'Feature' : encodeURIComponent(request.workItemType!)}` : request.operation === 'iteration-tree' ? '_apis/wit/classificationnodes/iterations' : readingMetadata ? `${encodeURIComponent(request.team)}/_apis/work/teamsettings/${request.operation === 'areas' ? 'teamfieldvalues' : 'iterations'}` : request.operation === 'query' ? '_apis/wit/wiql' : '_apis/wit/workitemsbatch'
   const body = writing ? featurePatch(request, request.feature!) : request.operation === 'query' ? { query: request.query } : { ids: request.ids, errorPolicy: 'Fail', $expand: 'Relations' }
   let response: Response
   try {
-    response = await fetch(`${base}/${endpoint}?api-version=7.1${request.operation === 'query' ? '&$top=1000' : ''}${writing ? `&validateOnly=${request.validateOnly === true}` : ''}`, {
+    response = await fetch(`${base}/${endpoint}?api-version=7.1${request.operation === 'query' ? '&$top=1000' : ''}${request.operation === 'iteration-tree' ? '&$depth=10' : ''}${writing ? `&validateOnly=${request.validateOnly === true}` : ''}`, {
       method: readingMetadata ? 'GET' : 'POST', redirect: 'error', credentials: 'omit',
       headers: { Authorization: `Basic ${btoa(`:${request.pat}`)}`, 'Content-Type': writing ? 'application/json-patch+json' : 'application/json', Accept: 'application/json' },
       body: readingMetadata ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(45000),

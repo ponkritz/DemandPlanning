@@ -8,6 +8,7 @@ function azureReadRequest(input) {
   let endpoint, body
   if (input.operation === 'areas') endpoint = `${encodeURIComponent(input.team)}/_apis/work/teamsettings/teamfieldvalues`
   else if (input.operation === 'iterations') endpoint = `${encodeURIComponent(input.team)}/_apis/work/teamsettings/iterations`
+  else if (input.operation === 'iteration-tree') endpoint = '_apis/wit/classificationnodes/iterations'
   else if (input.operation === 'query') {
     if (typeof input.query !== 'string' || !/^SELECT \[System.Id\] FROM WorkItems WHERE /i.test(input.query) || input.query.length > 100000) throw new Error('Invalid read query.')
     endpoint = '_apis/wit/wiql'; body = { query: input.query }
@@ -15,7 +16,7 @@ function azureReadRequest(input) {
     if (!Array.isArray(input.ids) || !input.ids.length || input.ids.length > 200 || input.ids.some((id) => !Number.isSafeInteger(id) || id < 1)) throw new Error('Invalid work-item batch.')
     endpoint = '_apis/wit/workitemsbatch'; body = { ids: input.ids, errorPolicy: 'Fail', $expand: 'Relations' }
   } else throw new Error('Only read operations are supported.')
-  return { url: `${base}/${endpoint}?api-version=7.1${input.operation === 'query' ? '&$top=1000' : ''}`, options: {
+  return { url: `${base}/${endpoint}?api-version=7.1${input.operation === 'query' ? '&$top=1000' : ''}${input.operation === 'iteration-tree' ? '&$depth=10' : ''}`, options: {
     method: body ? 'POST' : 'GET', redirect: 'error',
     headers: { Authorization: `Basic ${Buffer.from(`:${input.pat.trim()}`).toString('base64')}`, Accept: 'application/json', 'Content-Type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,

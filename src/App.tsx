@@ -12,8 +12,10 @@ import { MigrationPage } from './pages/MigrationPage'
 import { SnapshotsPage } from './pages/SnapshotsPage'
 import { AdminPage } from './pages/AdminPage'
 import { AzureDevOpsPage } from './pages/AzureDevOpsPage'
+import { BoardPage } from './pages/BoardPage'
+import { useAzureWorkspace } from './useAzureWorkspace'
 
-export type Page = 'overview' | 'activities' | 'monthly' | 'baselines' | 'releases' | 'azure' | 'migration' | 'snapshots' | 'admin'
+export type Page = 'overview' | 'activities' | 'monthly' | 'baselines' | 'releases' | 'board' | 'azure' | 'migration' | 'snapshots' | 'admin'
 
 const nav: Array<{ id: Page; label: string; icon: string }> = [
   { id: 'overview', label: 'Overview', icon: '▦' },
@@ -21,6 +23,7 @@ const nav: Array<{ id: Page; label: string; icon: string }> = [
   { id: 'monthly', label: 'Monthly effort', icon: '◫' },
   { id: 'baselines', label: 'Baselines', icon: '⌁' },
   { id: 'releases', label: 'Releases', icon: '◆' },
+  { id: 'board', label: 'Board', icon: '▤' },
   { id: 'azure', label: 'Azure DevOps', icon: '⇄' },
   { id: 'migration', label: 'Migration', icon: '⇧' },
   { id: 'snapshots', label: 'Snapshots', icon: '▣' },
@@ -29,6 +32,7 @@ const nav: Array<{ id: Page; label: string; icon: string }> = [
 
 export default function App() {
   const store = useAppStore()
+  const azure = useAzureWorkspace(store)
   const [page, setPage] = useState<Page>('overview')
   const [month, setMonth] = useState('2026-10')
   const period = useMemo(() => store.state.periods.find((item) => item.month === month) ?? store.state.periods[0], [month, store.state.periods])
@@ -49,7 +53,8 @@ export default function App() {
       {page === 'monthly' && <MonthlyPage {...pageProps} />}
       {page === 'baselines' && <BaselinesPage {...pageProps} />}
       {page === 'releases' && <ReleasesPage {...pageProps} />}
-      {page === 'azure' && <AzureDevOpsPage {...pageProps} />}
+      {page === 'board' && <BoardPage azure={azure} onOpenConnection={() => setPage('azure')} />}
+      {page === 'azure' && <AzureDevOpsPage azure={azure} onOpenBoard={() => setPage('board')} />}
       {page === 'migration' && <MigrationPage {...pageProps} />}
       {page === 'snapshots' && <SnapshotsPage {...pageProps} />}
       {page === 'admin' && <AdminPage {...pageProps} />}

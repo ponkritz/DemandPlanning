@@ -8,7 +8,7 @@ The repository contains a working React/TypeScript application with an Electron 
 
 Implemented in the MVP UI:
 
-- Azure DevOps parent/child tree, state filters, release Feature/Story/Task creation, optional milestones and browser-saved PAT configuration ([setup](docs/azure-devops-connection.md)); custom release mapping awaits live validation.
+- Separate Board view for the parent/child tree, state filters and release Feature/Story/Task creation; Azure DevOps handles connection settings, saved PAT and data fetch ([setup](docs/azure-devops-connection.md)).
 
 - Unified dashboard for plan, actuals, variance, ad-hoc work, utilization and milestones
 - Activity register with process owners, resources, bands and measurable complexity
