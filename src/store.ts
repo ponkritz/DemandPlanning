@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import type { AppState, AuditEvent } from './domain'
 import { seedState } from './seed'
 import { SharePointStateClient, defaultSharePointConfig, type SharePointConfig } from './sharepoint'
+import { loadBrowserState, indexedStateRepository, createStateWriter, validateBackup } from './browserState'
 
-const STORAGE_KEY = 'demand-planning-mvp-v1'
 const CONFIG_KEY = 'demand-planning-sharepoint-config-v1'
 
 export interface ConnectionState {
@@ -14,30 +14,53 @@ export interface ConnectionState {
   message?: string
 }
 
-function loadState(): AppState {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored) return JSON.parse(stored) as AppState
-  } catch {
-    // A damaged development cache falls back to safe synthetic seed data.
-  }
-  return structuredClone(seedState)
-}
-
 export function useAppStore() {
-  const [state, setState] = useState<AppState>(loadState)
+  const [state, setState] = useState<AppState>(() => structuredClone(seedState))
+  const [ready, setReady] = useState(false)
+  const [loadError, setLoadError] = useState('')
+  const [loadAttempt, setLoadAttempt] = useState(0)
+  const [saveAttempt, setSaveAttempt] = useState(0)
+  const [cache, setCache] = useState<{ status: 'loading' | 'saving' | 'saved' | 'error'; message: string }>({ status: 'loading', message: 'Opening browser database…' })
+  const writer = useRef(createStateWriter(indexedStateRepository()))
+  const pendingSave = useRef(false)
   const [connection, setConnection] = useState<ConnectionState>({ mode: 'local', status: 'idle', message: 'Data is stored only in this browser.' })
   const client = useRef<SharePointStateClient | null>(null)
   const etag = useRef<string | null>(null)
   const skipNextSave = useRef(false)
 
   useEffect(() => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)) }
-    catch {
-      // A large backlog or disabled storage must not crash the app or silently imply persistence.
-      // oxlint-disable-next-line react/set-state-in-effect -- Report an external storage failure; status changes do not re-run this effect.
-      if (connection.mode !== 'sharepoint') setConnection((current) => ({ ...current, status: 'error', message: 'Browser storage is full or unavailable. Current changes are in memory only; previously saved data is unchanged. Export a backup before closing or reloading.' }))
-    }
+    let active = true
+    void loadBrowserState(indexedStateRepository(), { getItem: (key) => localStorage.getItem(key) }, seedState).then((loaded) => {
+      if (!active) return
+      setState(loaded.state); setReady(true); setLoadError('')
+      setCache({ status: 'saved', message: loaded.source === 'migrated' ? 'Existing saved data migrated to IndexedDB. The old localStorage copy was retained.' : 'Browser database loaded.' })
+    }).catch((error: unknown) => { if (active) setLoadError(`Saved data could not be loaded. Nothing was overwritten. ${friendlyError(error)}`) })
+    return () => { active = false }
+  }, [loadAttempt])
+
+  useEffect(() => {
+    if (!ready) return
+    let active = true
+    pendingSave.current = true
+    const timer = window.setTimeout(() => {
+      setCache({ status: 'saving', message: 'Saving to browser database…' })
+      void writer.current(state).then(() => {
+        if (active) { pendingSave.current = false; setCache({ status: 'saved', message: `Saved in this browser at ${new Date().toLocaleTimeString()}.` }) }
+      }).catch(() => {
+        if (active) setCache({ status: 'error', message: 'Browser database save failed. Current changes are in memory only; the last committed data is unchanged. Export a JSON backup before closing, then retry saving. Check available disk space or browser storage policies.' })
+      })
+    }, 200)
+    return () => { active = false; window.clearTimeout(timer) }
+  }, [state, ready, saveAttempt])
+
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => { if (pendingSave.current) { event.preventDefault(); event.returnValue = '' } }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [])
+
+  useEffect(() => {
+    if (!ready) return
     if (connection.mode !== 'sharepoint' || !client.current) return
     if (skipNextSave.current) { skipNextSave.current = false; return }
     const timer = window.setTimeout(async () => {
@@ -51,7 +74,7 @@ export function useAppStore() {
       }
     }, 900)
     return () => window.clearTimeout(timer)
-  }, [state, connection.mode])
+  }, [state, ready, connection.mode])
 
   function update(mutator: (draft: AppState) => AppState) {
     setState((current) => mutator(structuredClone(current)))
@@ -116,7 +139,12 @@ export function useAppStore() {
     catch { return defaultSharePointConfig }
   }
 
-  return { state, setState, update, addAudit, reset, connection, connectSharePoint, initializeSharePoint, pullSharePoint, disconnectSharePoint, getSavedSharePointConfig }
+  function restoreBackup(value: unknown) {
+    if (connection.mode !== 'local') throw new Error('Disconnect SharePoint before restoring a local backup. No central data was changed.')
+    setState(structuredClone(validateBackup(value)))
+  }
+
+  return { state, setState, update, addAudit, reset, connection, connectSharePoint, initializeSharePoint, pullSharePoint, disconnectSharePoint, getSavedSharePointConfig, ready, loadError, cache, retryLoad: () => { setLoadError(''); setLoadAttempt((value) => value + 1) }, retrySave: () => setSaveAttempt((value) => value + 1), restoreBackup }
 }
 
 function friendlyError(error: unknown) {

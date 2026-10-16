@@ -1,0 +1,19 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Synthetic browser storage verification</title><style>body{font:16px system-ui;padding:32px;line-height:1.6}button{padding:12px;margin-right:10px}#status{white-space:pre-wrap}</style><h1>Synthetic IndexedDB verification</h1><p>Uses a separate test-only database. No app data, credentials or Azure records are read or modified.</p><button id="write">Write 14,000 synthetic records</button><button id="read">Read saved test records</button><p id="status" role="status">Ready</p><script type="module">
+import { indexedStateRepository, validateBackup } from '/src/browserState.ts'
+const factory = { open: (_name, version) => indexedDB.open('demand-planning-synthetic-storage-check-v1', version) }
+const repository = indexedStateRepository(factory)
+const output = document.querySelector('#status')
+document.querySelector('#write').onclick = async () => {
+  output.textContent = 'Saving synthetic test data…'
+  try {
+    const state = { schemaVersion: 1, people: [], activities: [], efforts: [], baselines: [], periods: [], releases: [], audits: [], snapshots: [], masters: [], azureWorkItems: Array.from({length:14000}, (_,i) => ({ key:`example/project/${i+1}`,id:i+1,organization:'example',project:'project',title:`Synthetic item ${i+1}`,description:'Synthetic planning description. '.repeat(30),state:'New',workItemType:'Feature',assignedTo:'',areaPath:'project',iterationPath:'project',tags:'',url:'https://example.invalid',syncedAt:'2026-10-16T00:00:00Z' })) }
+    const bytes = new Blob([JSON.stringify(state)]).size
+    await repository.write(state)
+    output.textContent = `COMMITTED: ${state.azureWorkItems.length} synthetic records; ${(bytes/1024/1024).toFixed(1)} MiB. Reload this test page and select Read to verify persistence.`
+  } catch (error) { output.textContent = `FAILED: ${error.message}` }
+}
+document.querySelector('#read').onclick = async () => {
+  try { const state = validateBackup(await repository.read()); output.textContent = `VERIFIED after database reopen: ${state.azureWorkItems.length} synthetic records. Last title: ${state.azureWorkItems.at(-1).title}.` }
+  catch(error) { output.textContent = `FAILED: ${error.message}` }
+}
+</script></html>

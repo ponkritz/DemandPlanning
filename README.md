@@ -62,7 +62,17 @@ Every push to `main` also builds and deploys the browser version to GitHub Pages
 
 **Column Options** supports visibility, ordering, reset, cancel and apply. Title is required to retain hierarchy controls. Preferences are saved separately in the browser per organization/project/team and do not modify Azure DevOps or central app state. Default columns: Order, ID, Work Item Type, Title, Description, State, Story Points and Actions. Additional columns: Assigned To, Iteration Path, Area Path, Target Date, Closed Date and Tags. Description is displayed as plain text, never injected HTML. Refresh old snapshots once to populate the newly mapped Description and Story Points fields. Empty numeric values are not replaced with invented estimates. The table has a sticky header, horizontal scrolling and 200-row pagination of expanded rows to bound large-list rendering. Backlog levels promote Features, User Stories or Tasks to the top level without changing their source relationships.
 
-Order is a displayed root-row number, not a write to Azure backlog priority. Large fetched descriptions may exceed browser-storage capacity; a failed local save shows a warning instead of crashing the app. Current unsaved data remains in memory and should be exported before closing. This does not increase the browser's quota or introduce central persistence.
+Order is a displayed root-row number, not a write to Azure backlog priority.
+
+### Large browser datasets and storage recovery
+
+Full app data now uses **IndexedDB**, not the small synchronous localStorage snapshot. PATs, connection configuration and column preferences remain separate small browser settings. On first use of this version, an empty IndexedDB imports the previously saved `demand-planning-mvp-v1` snapshot; the old copy is retained, not deleted. Once IndexedDB contains data it takes precedence, so an older legacy snapshot cannot overwrite a newer database. A database read failure or malformed backup blocks startup rather than replacing saved data with demo records. No initial seed is saved before hydration completes.
+
+Autosaves are debounced and serialized; a save is confirmed only on IndexedDB transaction completion. Failed/aborted saves retain the previous committed data, show a persistent warning, offer direct JSON backup and retry controls, and warn on closing with pending saves. Browser privacy policy, disk limits, eviction and clearing site data can still affect persistence. This is browser-local storage, **not** a multi-user central database or a guarantee of unlimited space.
+
+If the old version displays a storage-full warning, keep that tab open and first use **Snapshots → Portable data → JSON**. Open the updated version separately, then use **Snapshots → Browser storage & backup recovery** to select the JSON file, review counts and confirm replacement. Restore does not write to Azure DevOps and is disabled while SharePoint is connected. Wait for a confirmed browser save before closing the old tab. Backups contain app records but not the PAT; protect them as internal data. In-memory-only changes in an old tab cannot be recovered automatically after that tab is reloaded or closed.
+
+`pnpm test:azure` runs both Azure integration checks and storage tests, including a 14,000-item synthetic backlog, legacy migration, failed reads, serialization, aborts and backup validation. `tests/browser-storage-preview.html` is a local-only UI fixture using a separate synthetic test database; it never opens the real app database.
 
 New Features are assigned to the authenticated PAT owner (not the app's local demo user). Every person must use their own PAT for self-assignment. Tokens remain outside exported app state. Identity is read from the fixed organization connectionData endpoint and verified after Feature creation; no project-user-directory permission is added.
 
@@ -85,7 +95,7 @@ The migration page accepts the exact 17-column shape of `Demand Planning _ Proje
 
 ## Planned adapters
 
-- `LocalStorageAdapter` — offline/local cache and synthetic development adapter
+- `IndexedDBStateRepository` — offline/local app cache with legacy localStorage migration and JSON recovery
 - `SharePointStateClient` — central JSON state with Microsoft sign-in and optimistic concurrency
 - `ReleaseImportAdapter` — mapped CSV/Excel exports from TFS and Windchill
 - `ReportingAdapter` — PDF, PNG and 2-slide PowerPoint generation
