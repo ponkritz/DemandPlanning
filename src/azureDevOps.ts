@@ -385,12 +385,16 @@ export async function completeReleaseHierarchy(config: AzureConfig, pat: string,
 }
 
 /** Ensures one selected-month Task beneath every supplied Time Writing User Story. */
-export async function bulkCreateMonthlyTimeWritingTasks(config: AzureConfig, pat: string, stories: AzureWorkItem[], monthLabel = currentIndiaMonth(), assignedTo?: string, transport: AzureTransport = requestAzure) {
+export async function bulkCreateMonthlyTimeWritingTasks(config: AzureConfig, pat: string, source: AzureWorkItem[], monthLabel = currentIndiaMonth(), assignedTo?: string, transport: AzureTransport = requestAzure) {
   if (!pat.trim()) throw new Error('Enter a Work Items (Read & Write) PAT.')
   if (!/^(January|February|March|April|May|June|July|August|September|October|November|December) \d{4}$/.test(monthLabel)) throw new Error('Choose a valid month for bulk Time Writing Tasks.')
   if (!assignedTo?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(assignedTo.trim())) throw new Error('Configure a valid Feature creator email before bulk task creation.')
-  const targets = [...new Map(stories.filter((story) => story.workItemType === 'User Story' && /\s*-\s*time\s*writ(?:ing|ting)\s*$/i.test(story.title)).map(story => [story.id, story])).values()]
-  if (!targets.length) throw new Error('No Time Writing User Stories are loaded. Refresh and save the backlog first.')
+  const byId = new Map(source.map(item => [item.id, item]))
+  const targets = [...new Map(source.filter((story) => {
+    const feature = story.parentId == null ? undefined : byId.get(story.parentId)
+    return story.workItemType === 'User Story' && /\s*-\s*time\s*writ(?:ing|ting)\s*$/i.test(story.title) && feature?.workItemType === 'Feature' && feature.state.trim().toLowerCase() === 'active'
+  }).map(story => [story.id, story])).values()]
+  if (!targets.length) throw new Error('No Time Writing User Stories under Active Features are loaded. Refresh and save the backlog first.')
   const items: AzureWorkItem[] = []
   try {
     for (const story of targets) {
