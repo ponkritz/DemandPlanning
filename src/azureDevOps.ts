@@ -2,13 +2,16 @@ import type { AzureWorkItem } from './domain'
 
 export interface AzureConfig { organization: string; project: string; team: string }
 export interface AzureRequest extends AzureConfig {
-  operation: 'backlog-epics' | 'identity' | 'areas' | 'iterations' | 'iteration-tree' | 'query' | 'items' | 'create-feature' | 'create-child'
+  operation: 'backlog-epics' | 'identity' | 'areas' | 'iterations' | 'iteration-tree' | 'query' | 'items' | 'create-feature' | 'create-child' | 'update-time-writing-effort'
   pat: string
   query?: string
   ids?: number[]
   feature?: FeatureInput & { areaPath: string }
   validateOnly?: boolean
   workItemType?: 'User Story' | 'Task'
+  workItemId?: number
+  planHours?: number
+  actualHours?: number
 }
 export interface FeatureInput { parentId: number; title: string; description: string; acceptanceCriteria: string; areaPath?: string; iterationPath?: string; assignedTo?: string; targetDate?: string; assignToCreator?: boolean; storyIterationPath?: string }
 export function featureDescription(kind: 'PU' | 'Release') {
@@ -231,6 +234,22 @@ export async function createAzureFeature(config: AzureConfig, pat: string, featu
   }
 }
 
+const validHours = (value: number) => Number.isFinite(value) && value >= 0 && value <= 1_000_000
+
+/** Updates only the two Azure scheduling fields used as Plan and Actual in this app. */
+export async function updateAzureTimeWritingEffort(config: AzureConfig, pat: string, workItemId: number, planHours: number, actualHours: number, transport: AzureTransport = requestAzure): Promise<AzureWorkItem> {
+  if (!pat.trim()) throw new Error('Select a PAT profile with Work Items (Read & Write) before saving Plan or Actual.')
+  if (!Number.isSafeInteger(workItemId) || workItemId < 1 || !validHours(planHours) || !validHours(actualHours)) throw new Error('Plan and Actual must be numbers from 0 to 1,000,000 hours.')
+  const source = await transport({ ...config, pat, operation: 'items', ids: [workItemId] }) as { value?: RawItem[] }
+  const raw = source.value?.find((item) => item.id === workItemId)
+  if (!raw || raw.fields['System.WorkItemType'] !== 'User Story' || !/-\s*Time Writ(?:ing|ting)\s*$/i.test(String(raw.fields['System.Title'] ?? ''))) throw new Error('Only a Time Writing User Story can be updated from Monthly effort.')
+  const response = await transport({ ...config, pat, operation: 'update-time-writing-effort', workItemId, planHours, actualHours }) as RawItem
+  if (response.id !== workItemId) throw new Error('Azure DevOps returned an unexpected work item after saving effort.')
+  const updated = mapAzureWorkItem(response, config)
+  if (updated.originalEstimate !== planHours || updated.completedWork !== actualHours) throw new Error('Azure DevOps did not confirm both Plan and Actual values. Refresh before retrying.')
+  return updated
+}
+
 const htmlText = (value: string) => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('\n', '<br>')
 
 export function featurePatch(config: AzureConfig, feature: FeatureInput & { areaPath: string }) {
@@ -350,15 +369,16 @@ export async function createAzureReleaseHierarchy(config: AzureConfig, pat: stri
 async function requestAzure(request: AzureRequest): Promise<unknown> {
   if (window.azureDevOps) return window.azureDevOps.request(request)
   const base = `https://dev.azure.com/${encodeURIComponent(request.organization)}/${encodeURIComponent(request.project)}`
-  const writing = request.operation === 'create-feature' || request.operation === 'create-child'
+  const writing = request.operation === 'create-feature' || request.operation === 'create-child' || request.operation === 'update-time-writing-effort'
   const readingMetadata = request.operation === 'backlog-epics' || request.operation === 'identity' || request.operation === 'areas' || request.operation === 'iterations' || request.operation === 'iteration-tree'
-  const endpoint = writing ? `_apis/wit/workitems/$${request.operation === 'create-feature' ? 'Feature' : encodeURIComponent(request.workItemType!)}` : request.operation === 'backlog-epics' ? `${encodeURIComponent(request.team)}/_apis/work/backlogs/Microsoft.EpicCategory/workItems` : request.operation === 'iteration-tree' ? '_apis/wit/classificationnodes/iterations' : readingMetadata ? `${encodeURIComponent(request.team)}/_apis/work/teamsettings/${request.operation === 'areas' ? 'teamfieldvalues' : 'iterations'}` : request.operation === 'query' ? '_apis/wit/wiql' : '_apis/wit/workitemsbatch'
-  const body = writing ? featurePatch(request, request.feature!) : request.operation === 'query' ? { query: request.query } : { ids: request.ids, errorPolicy: 'Fail', $expand: 'Relations' }
+  const create = request.operation === 'create-feature' || request.operation === 'create-child'
+  const endpoint = request.operation === 'update-time-writing-effort' ? `_apis/wit/workitems/${request.workItemId}` : create ? `_apis/wit/workitems/$${request.operation === 'create-feature' ? 'Feature' : encodeURIComponent(request.workItemType!)}` : request.operation === 'backlog-epics' ? `${encodeURIComponent(request.team)}/_apis/work/backlogs/Microsoft.EpicCategory/workItems` : request.operation === 'iteration-tree' ? '_apis/wit/classificationnodes/iterations' : readingMetadata ? `${encodeURIComponent(request.team)}/_apis/work/teamsettings/${request.operation === 'areas' ? 'teamfieldvalues' : 'iterations'}` : request.operation === 'query' ? '_apis/wit/wiql' : '_apis/wit/workitemsbatch'
+  const body = request.operation === 'update-time-writing-effort' ? [{ op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.OriginalEstimate', value: request.planHours }, { op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.CompletedWork', value: request.actualHours }] : create ? featurePatch(request, request.feature!) : request.operation === 'query' ? { query: request.query } : { ids: request.ids, errorPolicy: 'Fail', $expand: 'Relations' }
   let response: Response
   try {
-    const url = request.operation === 'identity' ? `https://dev.azure.com/${encodeURIComponent(request.organization)}/_apis/connectionData?api-version=7.1-preview.1` : `${base}/${endpoint}?api-version=7.1${request.operation === 'query' ? '&$top=1000' : ''}${request.operation === 'iteration-tree' ? '&$depth=10' : ''}${writing ? `&validateOnly=${request.validateOnly === true}` : ''}`
+    const url = request.operation === 'identity' ? `https://dev.azure.com/${encodeURIComponent(request.organization)}/_apis/connectionData?api-version=7.1-preview.1` : `${base}/${endpoint}?api-version=7.1${request.operation === 'query' ? '&$top=1000' : ''}${request.operation === 'iteration-tree' ? '&$depth=10' : ''}${create ? `&validateOnly=${request.validateOnly === true}` : ''}`
     response = await fetch(url, {
-      method: readingMetadata ? 'GET' : 'POST', redirect: 'error', credentials: 'omit',
+      method: readingMetadata ? 'GET' : request.operation === 'update-time-writing-effort' ? 'PATCH' : 'POST', redirect: 'error', credentials: 'omit',
       headers: { Authorization: `Basic ${btoa(`:${request.pat}`)}`, 'Content-Type': writing ? 'application/json-patch+json' : 'application/json', Accept: 'application/json' },
       body: readingMetadata ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(45000),
     })

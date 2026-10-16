@@ -56,22 +56,39 @@ function azureFeatureRequest(input) {
   } }
 }
 
+// Deliberately constrained write: Monthly effort can update only the two scheduling
+// fields on a known Time Writing User Story; it cannot send an arbitrary JSON patch.
+function azureTimeWritingEffortRequest(input) {
+  if (!input || input.operation !== 'update-time-writing-effort') throw new Error('Invalid monthly effort request.')
+  const connection = azureReadRequest({ ...input, operation: 'areas' })
+  if (!Number.isSafeInteger(input.workItemId) || input.workItemId < 1 || !Number.isFinite(input.planHours) || !Number.isFinite(input.actualHours) || input.planHours < 0 || input.actualHours < 0 || input.planHours > 1000000 || input.actualHours > 1000000) throw new Error('Invalid Plan or Actual hours.')
+  const base = `https://dev.azure.com/${encodeURIComponent(input.organization)}/${encodeURIComponent(input.project)}`
+  const patch = [
+    { op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.OriginalEstimate', value: input.planHours },
+    { op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.CompletedWork', value: input.actualHours },
+  ]
+  return { url: `${base}/_apis/wit/workitems/${input.workItemId}?api-version=7.1`, options: {
+    method: 'PATCH', redirect: 'error', headers: { ...connection.options.headers, 'Content-Type': 'application/json-patch+json' }, body: JSON.stringify(patch),
+  } }
+}
+
 async function requestAzureDevOps(input) {
-  const writing = input?.operation === 'create-feature' || input?.operation === 'create-child'
-  const request = writing ? azureFeatureRequest(input) : azureReadRequest(input)
+  const creating = input?.operation === 'create-feature' || input?.operation === 'create-child'
+  const writing = creating || input?.operation === 'update-time-writing-effort'
+  const request = creating ? azureFeatureRequest(input) : input?.operation === 'update-time-writing-effort' ? azureTimeWritingEffortRequest(input) : azureReadRequest(input)
   let response
   try { response = await fetch(request.url, { ...request.options, signal: AbortSignal.timeout(45000) }) }
-  catch { throw new Error(writing && !input.validateOnly ? 'Creation could not be confirmed. Check the backlog before retrying; a Feature may have been created.' : 'Azure DevOps could not be reached. Check network/VPN access and the organization URL.') }
+  catch { throw new Error(writing && !input.validateOnly ? `${creating ? 'Creation' : 'Effort update'} could not be confirmed. Check the Azure DevOps work item before retrying.` : 'Azure DevOps could not be reached. Check network/VPN access and the organization URL.') }
   if (response.status === 401) throw new Error('PAT rejected or expired. Check Work Items (Read) access.')
   if (response.status === 403) throw new Error(`Access denied by Azure DevOps. Check Work Items (${writing ? 'Read & Write' : 'Read'}) scope and project permissions.`)
   if (writing && (response.status === 400 || response.status === 422)) {
     const detail = await response.json().catch(() => ({}))
-    throw new Error(`Azure DevOps rejected the Feature: ${String(detail.message ?? 'Check required fields and project rules.').replaceAll(input.pat, '[redacted]').slice(0, 1200)}`)
+    throw new Error(`Azure DevOps rejected the ${creating ? 'Feature' : 'effort update'}: ${String(detail.message ?? 'Check required fields and project rules.').replaceAll(input.pat, '[redacted]').slice(0, 1200)}`)
   }
   if (response.status === 404) throw new Error('Project or team not found. Check connection details.')
-  if (!response.ok) throw new Error(writing && !input.validateOnly ? `Create returned ${response.status}. Check the backlog before retrying to avoid duplicates.` : `Azure DevOps returned ${response.status}. No data was imported.`)
+  if (!response.ok) throw new Error(writing && !input.validateOnly ? `${creating ? 'Create' : 'Effort update'} returned ${response.status}. Check Azure DevOps before retrying.` : `Azure DevOps returned ${response.status}. No data was imported.`)
   if (!(response.headers.get('content-type') ?? '').includes('application/json')) throw new Error('Azure DevOps returned a sign-in page. Check the PAT.')
   return response.json()
 }
 
-module.exports = { azureReadRequest, azureFeatureRequest, requestAzureDevOps }
+module.exports = { azureReadRequest, azureFeatureRequest, azureTimeWritingEffortRequest, requestAzureDevOps }

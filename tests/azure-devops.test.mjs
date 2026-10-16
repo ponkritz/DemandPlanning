@@ -1,9 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
-import { parseAzureProjectUrl, fetchAzureWorkItems, mergeAzureWorkItems, buildWorkItemQuery, createAzureFeature, featurePatch, featureDescription, releaseHierarchyTitles, currentIndiaMonth, createAzureReleaseHierarchy, completeReleaseHierarchy, HierarchyCreationError, readAzureIterations, projectIterationPaths, currentIterationPairs, readAzureCreator, mapAzureWorkItem, savedBacklogItems, sameAzureScope } from '../src/azureDevOps.ts'
+import { parseAzureProjectUrl, fetchAzureWorkItems, mergeAzureWorkItems, buildWorkItemQuery, createAzureFeature, featurePatch, featureDescription, releaseHierarchyTitles, currentIndiaMonth, createAzureReleaseHierarchy, completeReleaseHierarchy, HierarchyCreationError, readAzureIterations, projectIterationPaths, currentIterationPairs, readAzureCreator, mapAzureWorkItem, savedBacklogItems, sameAzureScope, updateAzureTimeWritingEffort } from '../src/azureDevOps.ts'
 import { buildWorkItemTree } from '../src/azureHierarchy.ts'
-import { loadAzurePat, saveAzurePat, forgetAzurePat } from '../src/azureCredentials.ts'
+import { loadAzurePat, saveAzurePat, forgetAzurePat, listAzurePatProfiles, loadAzurePatProfile, saveAzurePatProfile, forgetAzurePatProfile } from '../src/azureCredentials.ts'
 import { normalizeBacklogColumns, defaultBacklogColumns, plainAzureText, visibleBacklogRows } from '../src/backlogView.ts'
 
 const require = createRequire(import.meta.url)
@@ -24,6 +24,40 @@ test('browser PAT persistence is scoped to organization/project and can be forgo
   forgetAzurePat(config, storage)
   assert.equal(loadAzurePat(config, storage), '')
   assert.throws(() => saveAzurePat(config, ' ', storage), /Enter a PAT/)
+})
+
+test('named PAT profiles stay scoped, reveal only purpose summaries and do not overwrite each other', () => {
+  const values = new Map()
+  const storage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: (key) => values.delete(key) }
+  saveAzurePatProfile(config, { id: 'backlog-read', purpose: 'Backlog Read', token: 'read-token' }, storage)
+  saveAzurePatProfile(config, { id: 'write', purpose: 'Work Item Write', token: 'write-token' }, storage)
+  assert.deepEqual(listAzurePatProfiles(config, storage), [{ id: 'backlog-read', purpose: 'Backlog Read' }, { id: 'write', purpose: 'Work Item Write' }])
+  assert.equal(JSON.stringify(listAzurePatProfiles(config, storage)).includes('token'), false)
+  assert.equal(loadAzurePatProfile(config, 'backlog-read', storage), 'read-token')
+  assert.equal(loadAzurePatProfile(config, 'write', storage), 'write-token')
+  saveAzurePatProfile(config, { id: 'write', purpose: 'Work Item Write', token: 'replaced-write-token' }, storage)
+  assert.equal(listAzurePatProfiles(config, storage).length, 2)
+  assert.equal(loadAzurePatProfile(config, 'write', storage), 'replaced-write-token')
+  assert.equal(listAzurePatProfiles({ ...config, project: 'Other' }, storage).length, 0)
+  forgetAzurePatProfile(config, 'backlog-read', storage)
+  assert.deepEqual(listAzurePatProfiles(config, storage), [{ id: 'write', purpose: 'Work Item Write' }])
+})
+
+test('monthly effort writes only both scheduling fields on a verified Time Writing User Story', async () => {
+  const record = { id: 41, fields: { 'System.Title': 'Program | Service | v1.0 - Time Writing', 'System.WorkItemType': 'User Story', 'System.State': 'Active', 'System.TeamProject': config.project, 'System.AreaPath': 'Quality', 'System.IterationPath': config.project, 'Microsoft.VSTS.Scheduling.OriginalEstimate': 4, 'Microsoft.VSTS.Scheduling.CompletedWork': 2 } }
+  let write
+  const updated = await updateAzureTimeWritingEffort(config, pat, 41, 8, 6, async (request) => {
+    if (request.operation === 'items') return { value: [record] }
+    assert.equal(request.operation, 'update-time-writing-effort')
+    write = request
+    return { ...record, fields: { ...record.fields, 'Microsoft.VSTS.Scheduling.OriginalEstimate': 8, 'Microsoft.VSTS.Scheduling.CompletedWork': 6 } }
+  })
+  assert.equal(write.planHours, 8)
+  assert.equal(write.actualHours, 6)
+  assert.equal(updated.originalEstimate, 8)
+  assert.equal(updated.completedWork, 6)
+  await assert.rejects(updateAzureTimeWritingEffort(config, pat, 41, -1, 2, async () => ({})), /Plan and Actual/)
+  await assert.rejects(updateAzureTimeWritingEffort(config, pat, 41, 1, 2, async (request) => request.operation === 'items' ? { value: [{ ...record, fields: { ...record.fields, 'System.Title': 'Regular Story' } }] } : ({})), /Only a Time Writing/)
 })
 
 test('PU and Release descriptions follow the agreed DoD templates', () => {
