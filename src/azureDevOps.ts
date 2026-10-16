@@ -156,6 +156,8 @@ export function mapAzureWorkItem(item: RawItem, config: AzureConfig): AzureWorkI
     key: `${config.organization.toLowerCase()}/${config.project.toLowerCase()}/${item.id}`, id: item.id,
     organization: config.organization, project: config.project,
     title: text('System.Title'), workItemType: text('System.WorkItemType'), state: text('System.State'), assignedTo,
+    description: text('System.Description'),
+    storyPoints: typeof fields['Microsoft.VSTS.Scheduling.StoryPoints'] === 'number' && Number.isFinite(fields['Microsoft.VSTS.Scheduling.StoryPoints']) ? fields['Microsoft.VSTS.Scheduling.StoryPoints'] as number : undefined,
     areaPath: text('System.AreaPath'), iterationPath: text('System.IterationPath'),
     parentId: typeof fields['System.Parent'] === 'number' ? fields['System.Parent'] : parentFromRelation(item),
     targetDate: date('Microsoft.VSTS.Scheduling.TargetDate'), closedDate: date('Microsoft.VSTS.Common.ClosedDate'),

@@ -146,6 +146,8 @@ export interface AzureWorkItem {
   organization: string
   project: string
   title: string
+  description?: string
+  storyPoints?: number
   workItemType: string
   state: string
   assignedTo: string

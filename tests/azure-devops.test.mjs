@@ -1,9 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
-import { parseAzureProjectUrl, fetchAzureWorkItems, mergeAzureWorkItems, buildWorkItemQuery, createAzureFeature, featurePatch, featureDescription, releaseHierarchyTitles, currentIndiaMonth, createAzureReleaseHierarchy, completeReleaseHierarchy, HierarchyCreationError, readAzureIterations, projectIterationPaths, currentIterationPairs, readAzureCreator } from '../src/azureDevOps.ts'
+import { parseAzureProjectUrl, fetchAzureWorkItems, mergeAzureWorkItems, buildWorkItemQuery, createAzureFeature, featurePatch, featureDescription, releaseHierarchyTitles, currentIndiaMonth, createAzureReleaseHierarchy, completeReleaseHierarchy, HierarchyCreationError, readAzureIterations, projectIterationPaths, currentIterationPairs, readAzureCreator, mapAzureWorkItem } from '../src/azureDevOps.ts'
 import { buildWorkItemTree } from '../src/azureHierarchy.ts'
 import { loadAzurePat, saveAzurePat, forgetAzurePat } from '../src/azureCredentials.ts'
+import { normalizeBacklogColumns, defaultBacklogColumns, plainAzureText, visibleBacklogRows } from '../src/backlogView.ts'
 
 const require = createRequire(import.meta.url)
 const { azureReadRequest, azureFeatureRequest } = require('../electron/azure-devops.cjs')
@@ -381,4 +382,39 @@ test('identity failures stop before writes; desktop identity URL stays fixed to 
   const request = azureReadRequest({ ...config, pat, operation: 'identity' })
   assert.equal(request.url, 'https://dev.azure.com/example-org/_apis/connectionData?api-version=7.1-preview.1')
   assert.equal(request.options.method, 'GET')
+})
+
+test('Removed records never appear, even as parent context or under All', () => {
+  const items = [treeItem(1, 'Epic', ' removed '), treeItem(2, 'Feature', 'New', 1), treeItem(3, 'User Story', 'Removed', 2), treeItem(4, 'Task', 'Active', 3)]
+  const rows = visibleBacklogRows(buildWorkItemTree(items, ['All'], ''), new Set(), true, false)
+  assert.deepEqual(rows.map((row) => row.node.item.id), [2, 4])
+  assert.ok(rows.every((row) => row.node.parentMissing))
+  assert.deepEqual(visibleBacklogRows(buildWorkItemTree(items, ['Removed'], ''), new Set(), true, false), [])
+})
+
+test('backlog column preferences preserve order, reject unknowns, and always keep Title', () => {
+  assert.deepEqual(normalizeBacklogColumns(null), defaultBacklogColumns)
+  assert.deepEqual(normalizeBacklogColumns(['state', 'title', 'id', 'id', 'invalid']), ['state', 'title', 'id'])
+  assert.deepEqual(normalizeBacklogColumns(['assignedTo']), ['title', 'assignedTo'])
+  assert.deepEqual(normalizeBacklogColumns([]), ['title'])
+})
+
+test('backlog rows expand real hierarchy and level selection promotes Features without duplicates', () => {
+  const tree = buildWorkItemTree([treeItem(1, 'Epic', 'Active'), treeItem(2, 'Feature', 'Active', 1), treeItem(3, 'User Story', 'Active', 2), treeItem(4, 'Task', 'Active', 3)], ['All'], '')
+  assert.deepEqual(visibleBacklogRows(tree, new Set(), false, false).map((row) => row.node.item.id), [1])
+  const rows = visibleBacklogRows(tree, new Set([tree[0].item.key]), false, false)
+  assert.deepEqual(rows.map((row) => [row.node.item.id, row.depth, row.order]), [[1, 0, 1], [2, 1, 0]])
+  assert.deepEqual(visibleBacklogRows(tree, new Set(), false, false, 'Feature').map((row) => [row.node.item.id, row.depth]), [[2, 0]])
+  assert.deepEqual(visibleBacklogRows(tree, new Set(), true, false).map((row) => row.depth), [0, 1, 2, 3])
+  assert.deepEqual(visibleBacklogRows(tree, new Set(), false, true).map((row) => row.depth), [0, 1, 2, 3])
+})
+
+test('backlog source maps real descriptions and numeric story points without inventing missing values', () => {
+  const mapped = mapAzureWorkItem({ id: 1, fields: { 'System.Description': '<p>Planning &amp; delivery</p>', 'Microsoft.VSTS.Scheduling.StoryPoints': 0 } }, config)
+  assert.equal(mapped.description, '<p>Planning &amp; delivery</p>')
+  assert.equal(mapped.storyPoints, 0)
+  assert.equal(mapAzureWorkItem({ id: 2, fields: {} }, config).storyPoints, undefined)
+  assert.equal(mapAzureWorkItem({ id: 2, fields: { 'Microsoft.VSTS.Scheduling.StoryPoints': '5' } }, config).storyPoints, undefined)
+  assert.equal(plainAzureText('<script>alert(1)</script><p>A &amp; B&nbsp; &#x41; &#66;</p>'), 'A & B A B')
+  assert.equal(plainAzureText('<img src=x onerror=alert(1)>safe'), 'safe')
 })

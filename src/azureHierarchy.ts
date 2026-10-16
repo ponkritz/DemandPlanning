@@ -4,6 +4,7 @@ export type StateFilter = 'All' | 'New' | 'Active' | 'Closed'
 export interface WorkItemNode { item: AzureWorkItem; children: WorkItemNode[]; context: boolean; parentMissing: boolean }
 
 export function buildWorkItemTree(items: AzureWorkItem[], state: StateFilter | readonly string[], search: string): WorkItemNode[] {
+  items = items.filter((item) => item.state.trim().toLowerCase() !== 'removed')
   const states = typeof state === 'string' ? [state] : state
   const byKey = new Map(items.map((item) => [item.key, item]))
   const parentKey = (item: AzureWorkItem) => `${item.organization.toLowerCase()}/${item.project.toLowerCase()}/${item.parentId}`

@@ -42,7 +42,7 @@ export function useAzureWorkspace(store: PageProps['store']) {
       const result = await fetchAzureWorkItems({ ...parsed, team: team.trim() || parsed.team, includeProjectEpics }, pat)
       setPreview(result)
       setLastRefreshed(new Date().toISOString())
-      setMessage(`${result.items.length} work items fetched. Open Board to review the hierarchy and save the preview.`)
+      setMessage(`${result.items.length} work items fetched. Open Backlogs to review the hierarchy and save the preview.`)
     } catch (failure) { setError(failure instanceof Error ? failure.message : 'Unable to fetch Azure DevOps data.') }
     finally { fetching.current = false; setBusy(false) }
   }

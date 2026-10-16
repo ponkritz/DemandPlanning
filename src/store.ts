@@ -32,7 +32,12 @@ export function useAppStore() {
   const skipNextSave = useRef(false)
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)) }
+    catch {
+      // A large backlog or disabled storage must not crash the app or silently imply persistence.
+      // oxlint-disable-next-line react/set-state-in-effect -- Report an external storage failure; status changes do not re-run this effect.
+      if (connection.mode !== 'sharepoint') setConnection((current) => ({ ...current, status: 'error', message: 'Browser storage is full or unavailable. Current changes are in memory only; previously saved data is unchanged. Export a backup before closing or reloading.' }))
+    }
     if (connection.mode !== 'sharepoint' || !client.current) return
     if (skipNextSave.current) { skipNextSave.current = false; return }
     const timer = window.setTimeout(async () => {

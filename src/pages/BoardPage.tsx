@@ -6,16 +6,17 @@ import type { AzureWorkspace } from '../useAzureWorkspace'
 export function BoardPage({ azure, onOpenConnection }: { azure: AzureWorkspace; onOpenConnection: () => void }) {
   const { items, config, preview, busy, pat, featureCreated, rememberPat, savePreview, refresh, lastRefreshed, error } = azure
   const [filter, setFilter] = useState('')
-  const shown = items.filter((item) => `${item.id} ${item.title} ${item.workItemType} ${item.state}`.toLowerCase().includes(filter.toLowerCase()))
+  const activeItems = items.filter((item) => item.state.trim().toLowerCase() !== 'removed')
+  const shown = activeItems.filter((item) => `${item.id} ${item.title} ${item.workItemType} ${item.state}`.toLowerCase().includes(filter.toLowerCase()))
   const counts = new Map<string, number>()
-  for (const item of items) counts.set(item.workItemType || 'Unknown', (counts.get(item.workItemType || 'Unknown') ?? 0) + 1)
+  for (const item of activeItems) counts.set(item.workItemType || 'Unknown', (counts.get(item.workItemType || 'Unknown') ?? 0) + 1)
 
-  return <section className="content"><Heading eyebrow="WORK ITEM MANAGEMENT" title="Board" detail="Browse Epic → Feature → User Story → Task relationships and create release work." action={<div className="button-row"><button className="primary" disabled={busy || !config || !pat} onClick={() => void refresh()}>{busy ? 'Refreshing…' : 'Refresh from Azure'}</button><button className="ghost" onClick={onOpenConnection}>Connection settings</button></div>} />
+  return <section className="content backlog-page"><Heading eyebrow="WORK ITEM MANAGEMENT" title="Backlogs" detail="Plan and track your team’s work in an expandable backlog." action={<div className="button-row"><button className="primary" disabled={busy || !config || !pat} onClick={() => void refresh()}>{busy ? 'Refreshing…' : 'Refresh from Azure'}</button><button className="ghost" onClick={onOpenConnection}>Connection settings</button></div>} />
     <p className="muted">{lastRefreshed ? `Last successful refresh: ${new Date(lastRefreshed).toLocaleString()}.` : 'Saved data is a snapshot, not a live subscription.'} Refresh reads current source data; Save fetched work items retains it in the app.</p>
     {error && <div className="notice error" role="alert">{error} Previously loaded data has been retained.</div>}
-    {busy && <div className="notice" role="status">Fetching work items… The Board will update when the preview is ready.</div>}
+    {busy && <div className="notice" role="status">Fetching work items… Backlogs will update when the preview is ready.</div>}
     {preview && <div className="notice board-preview"><span>Showing {preview.items.length} fetched work items. Save the preview to retain it after closing the app.</span><button className="primary" disabled={!preview.items.length} onClick={savePreview}>Save fetched work items</button></div>}
-    {config ? <Panel className="connection-panel"><AzureWorkItemTree items={items} config={config} onCreated={featureCreated} savedPat={pat} onSavePat={rememberPat} /></Panel> : <Panel><p>Configure a valid Azure DevOps project to use the Board.</p><button className="primary" onClick={onOpenConnection}>Open connection settings</button></Panel>}
+    {config ? <Panel className="connection-panel backlog-panel"><AzureWorkItemTree items={items} config={config} onCreated={featureCreated} savedPat={pat} onSavePat={rememberPat} /></Panel> : <Panel><p>Configure a valid Azure DevOps project to use Backlogs.</p><button className="primary" onClick={onOpenConnection}>Open connection settings</button></Panel>}
     {!items.length && !busy && <div className="notice">No source data loaded yet. <button className="text-button" onClick={onOpenConnection}>Fetch work items from Azure DevOps →</button></div>}
     <details className="source-details"><summary>Source details and dates ({items.length} items)</summary>
       <Panel className="connection-panel"><div className="panel-heading"><div><h2>{preview ? 'Work-item preview' : 'Saved work items'}</h2><p className="muted">{items.length} items · {preview ? `Scope: ${preview.areaPaths.join(', ')}` : 'Refresh source data from connection settings.'}</p></div><input aria-label="Search work-item details" className="search" placeholder="Search ID, title, type or state" value={filter} onChange={(event) => setFilter(event.target.value)} /></div>

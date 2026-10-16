@@ -2,7 +2,8 @@ import { useMemo, useRef, useState } from 'react'
 import type { AzureWorkItem } from '../domain'
 import { buildWorkItemTree, type WorkItemNode } from '../azureHierarchy'
 import { createAzureReleaseHierarchy, completeReleaseHierarchy, currentIndiaMonth, releaseHierarchyTitles, HierarchyCreationError, featureDescription, readAzureIterations, currentIterationPairs, readAzureCreator, type AzureIteration, type AzureConfig, type FeatureInput } from '../azureDevOps'
-import { Modal, Pill } from './ui'
+import { Modal } from './ui'
+import { BacklogTable } from './BacklogTable'
 
 export function AzureWorkItemTree({ items, config, onCreated, savedPat = '', onSavePat }: { items: AzureWorkItem[]; config: AzureConfig; onCreated: (items: AzureWorkItem[]) => void; savedPat?: string; onSavePat?: (pat: string) => void }) {
   const [state, setState] = useState<string[]>(['New', 'Active'])
@@ -27,7 +28,7 @@ export function AzureWorkItemTree({ items, config, onCreated, savedPat = '', onS
   const submitting = useRef(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState<AzureWorkItem | null>(null)
-  const scoped = useMemo(() => items.filter((item) => item.organization.toLowerCase() === config.organization.toLowerCase() && item.project.toLowerCase() === config.project.toLowerCase()), [items, config.organization, config.project])
+  const scoped = useMemo(() => items.filter((item) => item.state.trim().toLowerCase() !== 'removed' && item.organization.toLowerCase() === config.organization.toLowerCase() && item.project.toLowerCase() === config.project.toLowerCase()), [items, config.organization, config.project])
   const epics = scoped.filter((item) => item.workItemType === 'Epic').sort((a, b) => a.id - b.id)
   const tree = useMemo(() => buildWorkItemTree(scoped, state, search), [scoped, state, search])
   // Search reveals matches; state filtering alone must not expand thousands of fetched records.
@@ -43,7 +44,13 @@ export function AzureWorkItemTree({ items, config, onCreated, savedPat = '', onS
   function openResume(item: AzureWorkItem) { setParent(null); setResumeFeature(item); setTitle(item.title); setIterationPath(''); setSprintPath(''); setIterationChoices([]); setReleaseKind('PU'); setMilestones(['SFV', 'DT', 'IQOQ']); setPat(savedPat); setError(''); setPartialError(''); setResult(null); if (savedPat) void loadIterations(savedPat) }
   function closeEditor() { if (submitting.current) return; setParent(null); setResumeFeature(null); setPat(''); setError('') }
   function setKind(kind: 'PU' | 'Release') { setReleaseKind(kind); setMilestones(kind === 'PU' ? ['SFV', 'DT', 'IQOQ'] : ['PRD', 'SFV', 'DT', 'IQOQ']); setDescription(featureDescription(kind)) }
-  function toggle(key: string) { setExpanded((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next }) }
+  function toggle(key: string) {
+    if (expandAll) {
+      const next = new Set<string>()
+      const visit = (nodes: WorkItemNode[]) => { for (const node of nodes) { if (node.item.key !== key) next.add(node.item.key); visit(node.children) } }
+      visit(tree); setExpanded(next); setExpandAll(false)
+    } else setExpanded((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next })
+  }
 
   async function loadIterations(token = pat || savedPat) {
     setError(''); setIterationLoading(true)
@@ -83,26 +90,13 @@ export function AzureWorkItemTree({ items, config, onCreated, savedPat = '', onS
     finally { submitting.current = false; setCreating(false) }
   }
 
-  function render(node: WorkItemNode, depth: number) {
-    const item = node.item
-    const open = filtering || expandAll || expanded.has(item.key)
-    return <div className="work-tree-node" key={item.key}><div className={`work-tree-row ${node.context ? 'work-tree-context' : ''}`} style={{ paddingLeft: `${12 + Math.min(depth, 20) * 22}px` }}>
-      {node.children.length ? <button type="button" className="tree-toggle" aria-label={`${open ? 'Collapse' : 'Expand'} ${item.workItemType} ${item.id}`} aria-expanded={open} onClick={() => toggle(item.key)} disabled={filtering || expandAll}>{open ? '▾' : '▸'}</button> : <span className="tree-toggle" />}
-      <Pill tone={item.workItemType === 'Epic' ? 'info' : item.workItemType === 'Feature' ? 'open' : 'neutral'}>{item.workItemType}</Pill>
-      <div className="work-tree-title"><a href={item.url} target="_blank" rel="noreferrer">#{item.id} · {item.title}</a><small>{node.context ? 'Parent context · ' : ''}{item.assignedTo || 'Unassigned'}{node.parentMissing ? ` · Parent #${item.parentId} is outside the fetched data` : ''}</small></div>
-      <Pill tone={item.state.toLowerCase() === 'closed' ? 'open' : 'neutral'}>{item.state}</Pill><span className="muted">{node.children.length ? `${node.children.length} children` : ''}</span>
-      {item.workItemType === 'Epic' && <button className="ghost" type="button" onClick={() => openEditor(item)}>＋ Feature</button>}
-      {item.workItemType === 'Feature' && <button className="ghost" type="button" onClick={() => openResume(item)}>Complete children</button>}
-    </div>{open && node.children.map((child) => render(child, depth + 1))}</div>
-  }
-
   return <>
-    <div className="panel-heading"><div><h2>Epic and work-item tree</h2><p className="muted">{epics.length} Epics · {scoped.length} work items. Links follow Azure DevOps parent IDs.</p></div><button className="primary" disabled={!epics.length} onClick={() => openEditor(epics[0])}>＋ New Feature</button></div>
+    <div className="panel-heading backlog-heading"><div><h2>{config.team || config.project}</h2><p className="muted">{epics.length} Epics · {scoped.length} work items · Epic → Feature → User Story → Task</p></div><button className="primary" disabled={!epics.length} onClick={() => openEditor(epics[0])}>＋ New Feature</button></div>
     <div className="tree-controls"><div className="button-row" role="group" aria-label="Work item states (multi-select)">{[...states, 'All'].map((value) => <button key={value} className={state.includes(value) ? 'primary' : 'ghost'} aria-pressed={state.includes(value)} onClick={() => setState((current) => value === 'All' ? ['All'] : current.includes(value) ? current.filter((item) => item !== value && item !== 'All') : [...current.filter((item) => item !== 'All'), value])}>{value}</button>)}</div><input aria-label="Search work-item tree" placeholder="Search ID, title, type or assignee" value={search} onChange={(event) => setSearch(event.target.value)} /><button className="ghost" onClick={() => { setExpandAll(!expandAll); setExpanded(new Set()) }}>{expandAll ? 'Collapse all' : 'Expand all'}</button></div>
     <p className="muted tree-help">Select multiple states. Default: New + Active. Matching children retain their ancestors as context, even when the parent has another state. All Epics remain available in the New Feature selector.</p>
     {result && <div className="notice success" role="status"><a href={result.url} target="_blank" rel="noreferrer">Feature #{result.id}: {result.title}</a> — {resultText}</div>}
     {partialError && <div className="notice error" role="alert">{partialError}</div>}
-    <div className="work-tree">{tree.length ? tree.map((node) => render(node, 0)) : <p className="empty-state">{scoped.length ? 'No work items match this filter.' : 'Fetch your team work items to load the hierarchy.'}</p>}</div>
+    <BacklogTable key={`${config.organization}/${config.project}/${config.team}`} scope={`${config.organization}/${config.project}/${config.team}`} tree={tree} expanded={expanded} expandAll={expandAll} searching={filtering} onToggle={toggle} onExpand={(value) => { setExpandAll(value); setExpanded(new Set()) }} onNewFeature={openEditor} onComplete={openResume} />
     {(parent || resumeFeature) && <Modal title={resumeFeature ? 'Complete Feature children' : 'Add Feature under an Epic'} eyebrow="AZURE DEVOPS WRITE" onClose={closeEditor}><form onSubmit={create}>
       <p className="muted">{resumeFeature ? 'Completes missing children without recreating the Feature.' : `Creates one real Feature and its selected children in ${config.organization} / ${config.project}.`} Review the hierarchy below. Project validation runs before each save.</p>
       {parent && <label>Parent Epic<select disabled={creating} value={parent.key} onChange={(event) => setParent(epics.find((item) => item.key === event.target.value) ?? null)}>{epics.map((epic) => <option value={epic.key} key={epic.key}>#{epic.id} · {epic.title} ({epic.state})</option>)}</select></label>}

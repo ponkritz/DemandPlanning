@@ -56,9 +56,13 @@ Every push to `main` also builds and deploys the browser version to GitHub Pages
 
 ## Data and security boundary
 
-### Board refresh, identity and current iterations
+### Backlogs, columns, refresh and current iterations
 
-The Board defaults to the multi-select **New + Active** state filter. Select additional source states or **All**. Ancestors in other states are shown only as parent context. **Refresh from Azure** reads a fresh snapshot without changing Azure DevOps; **Save fetched work items** persists that snapshot in app storage. Failed refreshes retain the previous data. This is an on-demand refresh, not a background/live subscription.
+**Backlogs** (formerly Board) is a compact, expandable table following Epic → Feature → User Story → Task parent links. It defaults to the multi-select **New + Active** state filter. Select additional source states or **All**. Removed items are always excluded, including parent context, level selectors and the source-details table; active descendants remain visible with a missing-parent indicator. Other ancestors outside the state filter are shown as parent context. **Refresh from Azure** reads a fresh snapshot without changing Azure DevOps; **Save fetched work items** persists that snapshot in app storage. Failed refreshes retain the previous data. This is an on-demand refresh, not a background/live subscription.
+
+**Column Options** supports visibility, ordering, reset, cancel and apply. Title is required to retain hierarchy controls. Preferences are saved separately in the browser per organization/project/team and do not modify Azure DevOps or central app state. Default columns: Order, ID, Work Item Type, Title, Description, State, Story Points and Actions. Additional columns: Assigned To, Iteration Path, Area Path, Target Date, Closed Date and Tags. Description is displayed as plain text, never injected HTML. Refresh old snapshots once to populate the newly mapped Description and Story Points fields. Empty numeric values are not replaced with invented estimates. The table has a sticky header, horizontal scrolling and 200-row pagination of expanded rows to bound large-list rendering. Backlog levels promote Features, User Stories or Tasks to the top level without changing their source relationships.
+
+Order is a displayed root-row number, not a write to Azure backlog priority. Large fetched descriptions may exceed browser-storage capacity; a failed local save shows a warning instead of crashing the app. Current unsaved data remains in memory and should be exported before closing. This does not increase the browser's quota or introduce central persistence.
 
 New Features are assigned to the authenticated PAT owner (not the app's local demo user). Every person must use their own PAT for self-assignment. Tokens remain outside exported app state. Identity is read from the fixed organization connectionData endpoint and verified after Feature creation; no project-user-directory permission is added.
 

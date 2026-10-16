@@ -23,7 +23,7 @@ const nav: Array<{ id: Page; label: string; icon: string }> = [
   { id: 'monthly', label: 'Monthly effort', icon: '◫' },
   { id: 'baselines', label: 'Baselines', icon: '⌁' },
   { id: 'releases', label: 'Releases', icon: '◆' },
-  { id: 'board', label: 'Board', icon: '▤' },
+  { id: 'board', label: 'Backlogs', icon: '▤' },
   { id: 'azure', label: 'Azure DevOps', icon: '⇄' },
   { id: 'migration', label: 'Migration', icon: '⇧' },
   { id: 'snapshots', label: 'Snapshots', icon: '▣' },
@@ -48,6 +48,7 @@ export default function App() {
     </aside>
     <main>
       <header className="topbar"><div><p className="eyebrow">{monthName(month).toUpperCase()}</p><h1>{nav.find((item) => item.id === page)?.label}</h1></div><div className="topbar-actions"><Pill tone={store.connection.mode === 'sharepoint' ? 'open' : store.connection.status === 'error' || store.connection.status === 'conflict' ? 'danger' : 'neutral'}>{store.connection.mode === 'sharepoint' ? '● Live SharePoint' : '○ Local data'}</Pill><label className="month-picker">Month<input type="month" value={month} onChange={(event) => setMonth(event.target.value)} /></label><Pill tone={planningOpen ? 'open' : 'locked'}>Planning {planningOpen ? 'open' : 'locked'}</Pill><Pill tone={actualsOpen ? 'open' : 'locked'}>Actuals {actualsOpen ? 'open' : 'locked'}</Pill></div></header>
+      {store.connection.mode !== 'sharepoint' && store.connection.status === 'error' && <div className="notice error" role="alert">{store.connection.message}</div>}
       {page === 'overview' && <DashboardPage {...pageProps} navigate={setPage} />}
       {page === 'activities' && <ActivitiesPage {...pageProps} />}
       {page === 'monthly' && <MonthlyPage {...pageProps} />}
