@@ -6,7 +6,7 @@ const { Readable } = require('stream')
 // Desktop self-update from the rolling "desktop-latest" GitHub release. CI publishes latest.json next to the
 // installers; the app compares build numbers, downloads only the installer for this platform from the fixed
 // release address, verifies its SHA-256 against latest.json, then starts it (Windows) or opens it (macOS).
-const releaseBase = 'https://github.com/neurolooom-eng/Test2/releases/download/desktop-latest/'
+const releaseBase = 'https://github.com/ponkritz/DemandPlanning/releases/download/desktop-latest/'
 const installerNames = { win32: 'Demand-Planning-Hub-Setup.exe', darwin: 'Demand-Planning-Hub-mac.dmg' }
 
 function validateManifest(value) {
