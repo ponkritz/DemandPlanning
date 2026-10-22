@@ -18,3 +18,10 @@ test('Overview releases: per stream, releases with documents approved in the mon
   const india = releaseStreams(state, profiles, '2026-10', 'Asia/Kolkata')
   assert.deepEqual(india.find((stream) => stream.name === 'CP').releases.map((entry) => entry.release), ['3.1'], 'late 30 Sep UTC is October in India')
 })
+
+test('Pulse Check releases: only the given (Release Details) views, each shown even when not fetched or without releases', () => {
+  const state = { azureSources: [source('dp', [doc(1, 'DHFI\\Dose Planning\\Release 4.2', '2026-10-05T10:00:00Z')]), source('ped', [doc(2, 'DHFI\\Pedestal\\Release 1.0', '2026-10-05T10:00:00Z')]), source('ref', [doc(3, 'DHFI\\Team', '2026-10-01T00:00:00Z')])] }
+  const profiles = [{ id: 'dp', reason: 'DP', role: 'release-source' }, { id: 'ped', reason: 'Releases (Pedestal)', role: 'release-source' }, { id: 'ref', reason: 'Ref', role: 'reference' }, { id: 'iocc', reason: 'IOCC', role: 'reference' }]
+  const shown = releaseStreams(state, profiles, '2026-10', 'UTC', ['dp', 'ref', 'iocc'])
+  assert.deepEqual(shown.map((stream) => [stream.name, stream.releases.length, stream.fetchedAt]), [['DP', 1, '2026-10-20T00:00:00Z'], ['IOCC', 0, ''], ['Ref', 0, '2026-10-20T00:00:00Z']], 'Pedestal (not under Release Details) is left out')
+})

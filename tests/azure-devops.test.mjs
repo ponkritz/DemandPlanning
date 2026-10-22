@@ -578,3 +578,16 @@ test('a Feature from its Epic setup: chosen stories, Time Writing story, Task de
   assert.equal(server.writes.length, before, 'nothing is created twice')
   await assert.rejects(completeFeatureFromSetup(config, pat, result.feature.id, { ...setup, stories: [{ title: '{program} only', description: '' }] }, 'October 2026', async (request) => request.operation === 'items' ? { value: [{ id: result.feature.id, fields: { 'System.Title': 'No parts', 'System.WorkItemType': 'Feature', 'System.TeamProject': config.project, 'System.AssignedTo': { uniqueName: 'a@b.co' } } }] } : server.transport(request)), /does not provide/)
 })
+
+test('Feature setup: the Time Writing User Story is configurable per Epic (title, Description, Assigned to, Area and Iteration Path)', async () => {
+  const old = parseFeatureSetup(JSON.stringify({ schema: 1, kind: 'feature-setup', epics: [{ epicId: 1, stories: [] }] }))
+  assert.deepEqual(setupFor(old, 1).timeWritingStory, { title: '{feature} - Time Writing', description: '', assignedTo: '', areaPath: '', iterationPath: '' }, 'files without it keep the built-in story')
+  const server = fakeHierarchyServer()
+  const timeWritingStory = { title: 'Time Writing | {service}', description: 'Hours', assignedTo: 'lead@example.test', areaPath: 'Quality Project\\Time', iterationPath: 'Quality Project\\Current PI\\Sprint 9' }
+  const result = await createFeatureFromSetup(config, pat, { ...feature, iterationPath: 'Current PI' }, { stories: [], timeWritingStory, task: { title: '{month} | {feature}', description: '', assignedTo: '', areaPath: '', iterationPath: '' } }, 'October 2026', server.transport)
+  const story = result.items.find((item) => item.workItemType === 'User Story')
+  assert.deepEqual([story.title, story.areaPath, story.iterationPath, story.assignedToEmail], ['Time Writing | Service', 'Quality Project\\Time', 'Quality Project\\Current PI\\Sprint 9', 'lead@example.test'])
+  const task = result.items.find((item) => item.workItemType === 'Task')
+  assert.equal(task.parentId, story.id, 'the month Task goes under the configured story')
+  assert.equal(task.assignedToEmail, feature.assignedTo, 'the Task still defaults to the Feature assignee')
+})

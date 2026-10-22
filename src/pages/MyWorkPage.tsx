@@ -3,7 +3,7 @@ import { PersonPicker } from '../components/PersonPicker'
 import { EmptyState, Metric, Metrics, Notice, Page, Pill, TablePanel, type Tone } from '../components/ui'
 import { currentIndiaMonth, updateAzureWorkItem } from '../azureDevOps'
 import { capacityContext } from '../capacity'
-import { monthTaskCandidates, nextStateFor, workTypes } from '../myWork'
+import { matchesWork, monthTaskCandidates, nextStateFor, workTypes } from '../myWork'
 import type { AzureWorkItem } from '../domain'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { MyWork } from '../useMyWork'
@@ -18,12 +18,16 @@ export function MyWorkPage({ azure, store, my, onOpenBulk }: { azure: AzureWorks
   const [log, setLog] = useState<Log[]>([])
   // Opens on Features; the list is always in ascending ID order.
   const [typeFilter, setTypeFilter] = useState('Feature')
+  // The search looks through all types at once; the type chips apply again when it is cleared.
+  const [search, setSearch] = useState('')
+  const searching = Boolean(search.trim())
   const { config, pat } = azure
   const month = currentIndiaMonth()
   const absenceEpicId = capacityContext(store.state).absenceEpicId
   const blocked = azure.isSample ? 'Synthetic sample data is loaded: changes to Azure DevOps are disabled.' : !config || !pat.trim() ? 'Connect the Time Writing connection (with its PAT) to change items in Azure DevOps.' : ''
   const pending = my.pending
-  const shown = (typeFilter === 'All' ? pending : pending.filter(({ item }) => (typeFilter === 'Other' ? !(workTypes as readonly string[]).includes(item.workItemType) : item.workItemType === typeFilter))).toSorted((a, b) => a.item.id - b.item.id)
+  const found = searching ? pending.filter((row) => matchesWork(row, search)) : pending
+  const shown = (searching || typeFilter === 'All' ? found : found.filter(({ item }) => (typeFilter === 'Other' ? !(workTypes as readonly string[]).includes(item.workItemType) : item.workItemType === typeFilter))).toSorted((a, b) => a.item.id - b.item.id)
   const counts = Object.fromEntries(workTypes.map((type) => [type, pending.filter(({ item }) => item.workItemType === type).length])) as Record<string, number>
   const candidates = my.known ? monthTaskCandidates(azure.items, my.me, month, absenceEpicId) : []
   const missing = candidates.filter((row) => row.status === 'needs-task' || row.status === 'needs-story')
@@ -54,9 +58,15 @@ export function MyWorkPage({ azure, store, my, onOpenBulk }: { azure: AzureWorks
         </Metrics>
         {blocked && <Notice tone="warning">{blocked}</Notice>}
         {log.map((entry, index) => <Notice key={index} tone={entry.tone}>{entry.text}</Notice>)}
-        <TablePanel title="Pending work" detail="New and active items assigned to you, in ascending ID order. Close an item to set its State to Closed. A Feature is set to Active from New, and only an Active Feature can be closed. Azure DevOps refuses a change its process does not allow." count={`${shown.length} of ${pending.length}`}
-          action={<div className="chip-row">{['All', ...workTypes, 'Other'].map((type) => <button type="button" key={type} className={`chip ${typeFilter === type ? 'chip-on' : ''}`} onClick={() => setTypeFilter(type)}>{type}{type !== 'All' && type !== 'Other' ? ` ${counts[type] ?? 0}` : ''}</button>)}</div>}
-          empty={shown.length ? undefined : pending.length ? 'Nothing of this type.' : 'No pending work assigned to you.'}>
+        <TablePanel title="Pending work" info={<ul>
+          <li>New and active items assigned to the person shown (matched by email, else by name), always in ascending ID order. Epics and work under the absence Epic are left out.</li>
+          <li>Search looks through every type at once: ID (with or without #), title, type, state, Feature, Epic, Area Path, Iteration Path and tags. Every word must match, in any order and case. Esc or a type chip clears it.</li>
+          <li>Close &lt;type&gt; sets the State to Closed. A Feature in New offers Set Feature to Active; only an Active Feature can be closed. Only the State is written, after confirmation, then the data is refreshed.</li>
+          <li>Azure DevOps refuses a change its process does not allow; the error is shown.</li>
+        </ul>} count={`${shown.length} of ${pending.length}`}
+          action={<div className="chip-row">{['All', ...workTypes, 'Other'].map((type) => <button type="button" key={type} className={`chip ${!searching && typeFilter === type ? 'chip-on' : ''}`} onClick={() => { setTypeFilter(type); setSearch('') }}>{type}{type !== 'All' && type !== 'Other' ? ` ${counts[type] ?? 0}` : ''}</button>)}</div>}
+          empty={shown.length ? undefined : searching ? `Nothing matches “${search.trim()}” in any type.` : pending.length ? 'Nothing of this type.' : 'No pending work assigned to you.'}>
+          <div className="query-toolbar my-work-search"><input type="search" className="search" aria-label="Search all assigned work" placeholder="Search all types (ID, title, state, Feature, path…)" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setSearch('') }} />{searching && <span className="muted">{shown.length} of {pending.length} match, all types</span>}</div>
           {shown.length > 0 && <table className="work-table"><thead><tr><th>Item</th><th>State</th><th>Feature</th><th>Iteration</th><th>Action</th></tr></thead><tbody>{shown.map(({ item, feature }) => {
             return <tr key={item.key}>
               <td><span className={`type-dot type-${item.workItemType.replace(/\s/g, '').toLowerCase()}`} aria-hidden="true" /><a href={item.url} target="_blank" rel="noreferrer">#{item.id}</a> <strong className="inline">{item.title}</strong><small>{item.workItemType}</small></td>

@@ -52,7 +52,7 @@ export function AzureViewsGitPanel({ git, azure }: { git: GitStorage; azure: Azu
     finally { setBusy('') }
   }
 
-  return <Panel className="connection-panel admin-section" eyebrow="AZURE DEVOPS" title="Views in Git" detail="On-prem views: each fetch in the desktop app is saved to the Git data repository, and the web app shows it — the web cannot reach on-prem servers. Also keep the Azure DevOps connections — view names, queries, project URLs, on-prem servers and roles — in the Git data repository, next to the planning data, and restore them on another computer. PATs are never written to Git: a restored connection keeps the PAT it has here, or uses the PAT entered below, or one saved here for the same organisation or server.">
+  return <Panel className="connection-panel admin-section" eyebrow="AZURE DEVOPS" title="Views in Git" info="On-prem views: each fetch in the desktop app is saved to the Git data repository, and the web app shows it — the web cannot reach on-prem servers. Also keep the Azure DevOps connections — view names, queries, project URLs, on-prem servers and roles — in the Git data repository, next to the planning data, and restore them on another computer. PATs are never written to Git: a restored connection keeps the PAT it has here, or uses the PAT entered below, or one saved here for the same organisation or server.">
     {!git.connected ? <Notice tone="warning">Connect Git storage above to save the views.</Notice> : <>
       <div className="connection-form">
         <label className="wide-field">Change description<input value={commit} onChange={(event) => setCommit(event.target.value)} placeholder="e.g. Add DP, CP and IOCC queries" /></label>

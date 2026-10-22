@@ -43,7 +43,7 @@ export function AccessPanel({ access, git, people }: { access: Access; git: GitS
 
   const you = access.email ? <>You are <strong>{access.email}</strong> (the email on your Time Writing connection){access.policy ? <> · {access.rights.roles.length ? access.rights.roles.map((role) => <Pill key={role} tone="info">{role}</Pill>) : <Pill tone="danger">no role</Pill>}{access.policy.members[access.email] ? '' : ' (default role)'}</> : ''}.</>
     : <>Your roles follow the email on your Time Writing connection (Settings → Azure DevOps → the connection's email field). None is set{access.policy ? ', so the default role applies' : ''}.</>
-  return <Panel className="admin-section" eyebrow="ACCESS" title="Roles and access" detail={<>Which menu areas each role sees and what it may do, and who has which role (by the email on their Time Writing connection). Stored in Git as {access.path || 'access.json'}, so only people who can write to the data repository can change it.{access.history && <> <a href={access.history} target="_blank" rel="noreferrer">History</a></>}</>}
+  return <Panel className="admin-section" eyebrow="ACCESS" title="Roles and access" info={<>Which menu areas each role sees and what it may do, and who has which role (by the email on their Time Writing connection). Stored in Git as {access.path || 'access.json'}, so only people who can write to the data repository can change it. Roles decide what this app shows and does; what each person can read or change in Azure DevOps and GitHub is still decided by their own tokens and project permissions.{access.history && <> <a href={access.history} target="_blank" rel="noreferrer">History</a></>}</>}
     action={access.policy && editable ? <button type="button" className="ghost" onClick={() => { setDraft(null); setResult(null); void access.reload() }}>Reload from Git</button> : undefined}>
     <Notice tone={access.email ? 'info' : 'warning'}>{you}</Notice>
     {!git.connected && <Notice tone="info">Connect Git storage (Storage tab) to use access roles. {access.policy ? 'The roles last loaded in this browser still apply.' : 'Without them, everyone sees every page.'}</Notice>}
@@ -85,6 +85,6 @@ export function AccessPanel({ access, git, people }: { access: Access; git: GitS
       </form>}
     </>}
     {result && <Notice tone={result.tone}>{result.text}{result.url && <> <a href={result.url} target="_blank" rel="noreferrer">View commit</a></>}</Notice>}
-    <p className="muted"><small>Roles decide what this app shows and does. What each person can read or change in Azure DevOps and GitHub is still decided by their own tokens and project permissions.</small></p>
+
   </Panel>
 }

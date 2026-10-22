@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { isMine, isPending, myPendingWork, monthTaskCandidates, moveCandidates, assignablePeople } from '../src/myWork.ts'
+import { isMine, isPending, matchesWork, myPendingWork, monthTaskCandidates, moveCandidates, assignablePeople } from '../src/myWork.ts'
 import { ensureMonthTask, updateAzureWorkItem, workItemUpdatePatch, addChildWorkItem, requestAzure } from '../src/azureDevOps.ts'
 import { createRequire } from 'node:module'
 
@@ -166,4 +166,16 @@ test('state checks: closed stories close the Feature, closed tasks close the sto
   assert.deepEqual(checks[0].children.map((child) => child.id), [11, 12], 'Removed stories are ignored')
   assert.deepEqual([nextStateFor({ workItemType: 'Feature', state: 'New' }), nextStateFor({ workItemType: 'Feature', state: 'Active' }), nextStateFor({ workItemType: 'Feature', state: 'Resolved' }), nextStateFor({ workItemType: 'Task', state: 'New' })],
     [{ state: 'Active', label: 'Set Feature to Active' }, { state: 'Closed', label: 'Close Feature' }, null, { state: 'Closed', label: 'Close Task' }])
+})
+
+test('Assigned to Me search: every word must match, across ID, title, type, state, Feature, Epic, paths and tags', () => {
+  const rows = myPendingWork(items, me)
+  const find = (query) => rows.filter((row) => matchesWork(row, query)).map(({ item }) => item.id)
+  assert.deepEqual(find(''), rows.map(({ item }) => item.id), 'blank search shows everything')
+  assert.deepEqual(find('#7'), [7], 'an ID with or without #')
+  assert.deepEqual(find('dose planning'), [7], 'a Feature title finds my work under it')
+  assert.deepEqual(find('sfv NEW'), [5], 'words in any order and case; state matches')
+  assert.deepEqual(find('user story'), [3, 5], 'type matches')
+  assert.deepEqual(find('sprint 1 cp'), [2, 3, 5, 7], 'Iteration Path and Epic title combine (the absence Feature has no Epic CP)')
+  assert.deepEqual(find('nothing-like-this'), [])
 })

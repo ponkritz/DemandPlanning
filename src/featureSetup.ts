@@ -1,17 +1,20 @@
-// Per-Epic setup for new Features: which optional User Stories are offered (all ticked by default) and the defaults of
-// the month Time Writing Task. Kept in the Git data repository as feature-setup.json, shared by everyone. Titles are
+// Per-Epic setup for new Features: which optional User Stories are offered (all ticked by default), the Time Writing
+// User Story (title, Description, Assigned to, Area and Iteration Path) and the defaults of the month Time Writing Task. Kept in the Git data repository as feature-setup.json, shared by everyone. Titles are
 // plain text, optionally with placeholders filled in at creation: {feature} (the whole Feature title), {program},
 // {service}, {version} (its parts, for titles like "Program | Service | v1.2"), {month} (e.g. "October 2026").
 // An Epic without a setup keeps the built-in PU / Full Release milestones.
 export interface StoryTemplate { title: string; description: string }
 export interface TaskTemplate { title: string; description: string; originalEstimate?: number; assignedTo: string; areaPath: string; iterationPath: string }
-export interface EpicSetup { epicId: number; epicTitle: string; stories: StoryTemplate[]; task: TaskTemplate }
+// The "Time Writing" User Story that holds the month Task: always created; its title and fields are configurable.
+export interface TimeWritingStoryTemplate { title: string; description: string; assignedTo: string; areaPath: string; iterationPath: string }
+export interface EpicSetup { epicId: number; epicTitle: string; stories: StoryTemplate[]; timeWritingStory: TimeWritingStoryTemplate; task: TaskTemplate }
 export interface FeatureSetupFile { schema: 1; kind: 'feature-setup'; epics: EpicSetup[] }
 
 export const featureSetupFile = 'feature-setup.json'
 export const placeholders = ['feature', 'program', 'service', 'version', 'month'] as const
 export const defaultTask: TaskTemplate = { title: '{month} | {feature}', description: '', assignedTo: '', areaPath: '', iterationPath: '' }
-export const emptySetup = (epicId: number, epicTitle = ''): EpicSetup => ({ epicId, epicTitle, stories: [], task: { ...defaultTask } })
+export const defaultTimeWritingStory: TimeWritingStoryTemplate = { title: '{feature} - Time Writing', description: '', assignedTo: '', areaPath: '', iterationPath: '' }
+export const emptySetup = (epicId: number, epicTitle = ''): EpicSetup => ({ epicId, epicTitle, stories: [], timeWritingStory: { ...defaultTimeWritingStory }, task: { ...defaultTask } })
 
 // The values of the placeholders for a Feature title and month.
 export function titleValues(featureTitle: string, month: string): Record<(typeof placeholders)[number], string> {
@@ -35,11 +38,15 @@ function cleanTask(input: Partial<Record<keyof TaskTemplate, unknown>> | undefin
   const assignedTo = text(input?.assignedTo, 320).toLowerCase()
   return { title: text(input?.title, 255) || defaultTask.title, description: text(input?.description, 100000), ...(estimate != null ? { originalEstimate: estimate } : {}), assignedTo: isEmail(assignedTo) ? assignedTo : '', areaPath: text(input?.areaPath, 4096), iterationPath: text(input?.iterationPath, 4096) }
 }
+function cleanTimeWritingStory(input: Partial<Record<keyof TimeWritingStoryTemplate, unknown>> | undefined): TimeWritingStoryTemplate {
+  const assignedTo = text(input?.assignedTo, 320).toLowerCase()
+  return { title: text(input?.title, 255) || defaultTimeWritingStory.title, description: text(input?.description, 100000), assignedTo: isEmail(assignedTo) ? assignedTo : '', areaPath: text(input?.areaPath, 4096), iterationPath: text(input?.iterationPath, 4096) }
+}
 export function cleanSetup(input: Partial<Record<keyof EpicSetup, unknown>>): EpicSetup | null {
   const epicId = Number(input.epicId)
   if (!Number.isSafeInteger(epicId) || epicId < 1) return null
   const stories = Array.isArray(input.stories) ? input.stories.map((story: Partial<Record<keyof StoryTemplate, unknown>>) => ({ title: text(story?.title, 255), description: text(story?.description, 100000) })).filter((story) => story.title) : []
-  return { epicId, epicTitle: text(input.epicTitle, 255), stories, task: cleanTask(input.task as Partial<Record<keyof TaskTemplate, unknown>> | undefined) }
+  return { epicId, epicTitle: text(input.epicTitle, 255), stories, timeWritingStory: cleanTimeWritingStory(input.timeWritingStory as Partial<Record<keyof TimeWritingStoryTemplate, unknown>> | undefined), task: cleanTask(input.task as Partial<Record<keyof TaskTemplate, unknown>> | undefined) }
 }
 
 export function parseFeatureSetup(raw: string): FeatureSetupFile {

@@ -34,6 +34,16 @@ export function myPendingWork(items: AzureWorkItem[], me: Me, absenceEpicId?: nu
   return pending.sort((a, b) => rank(a.item.workItemType) - rank(b.item.workItemType) || a.item.id - b.item.id)
 }
 
+// Search on Assigned to Me: every word must appear (any case) in the ID, title, type, state, Feature, Epic, Area Path,
+// Iteration Path or tags. A blank search matches everything.
+export function matchesWork(row: { item: AzureWorkItem; feature?: AzureWorkItem; epic?: AzureWorkItem }, query: string) {
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean).map((word) => word.replace(/^#(?=\d)/, ''))
+  if (!words.length) return true
+  const { item, feature, epic } = row
+  const text = [item.id, item.title, item.workItemType, item.state, feature?.title, epic?.title, item.areaPath, item.iterationPath, item.tags].filter((value) => value != null && value !== '').join(' ').toLowerCase()
+  return words.every((word) => text.includes(word))
+}
+
 // Features that need my month Time Writing task: pending, outside the absence Epic, and either assigned to me or
 // holding a pending item of mine. Status comes from the cached backlog; creation re-checks Azure before writing.
 export interface MonthTaskCandidate { feature: AzureWorkItem; storyTitle: string; taskTitle: string; status: 'exists' | 'needs-task' | 'needs-story' | 'conflict' }

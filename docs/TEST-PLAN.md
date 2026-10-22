@@ -287,6 +287,10 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-ACC-02 New work is always assigned; creating for others** — Req CON-50, CON-51 — L1 `my-work.test.mjs` (the month story and task carry the assignee; ＋ User Story / ＋ Task go under the right parent type with the chosen email and iteration; no assignee → refused in the browser transport before sending and in the Windows app request builder; people to choose: everyone with an email, a shared name shows the email), `azure-devops.test.mjs` (every item of a new Feature hierarchy is assigned), `access.test.mjs` (Scrum Master has the right, Team Member not); browser check with Azure DevOps mocked: ＋ User Story on a Feature → the picker starts on the Feature's assignee, choosing Ben creates the story assigned to ben@x.com. **UAT**
 
+**TC-NAV-20 Pulse Check: Release Details and Last month** — Req NAV-20 — L1 `release-overview.test.mjs` (only the given Release Details views, each shown even when not fetched; a release source outside Release Details left out), `pulse-check.test.mjs` (previous month across the year; releases compared per stream; Features and User Stories opened and closed per Epic, absence and Removed left out, narrowed to a person); browser check on sample data: the tabs Releases and Last month; Last month shows the utilization metrics, Releases vs the selected month, Work closed and opened, the Overview month panels and the gaps for the previous month. **UAT**
+
+**TC-CON-25 Configurable Time Writing story** — Req CON-57 — L1 `azure-devops.test.mjs` (a setup file without it keeps “{feature} - Time Writing”; a configured title, Area Path, Iteration Path and assignee are used and the month Task goes under that story). **UAT**
+
 **TC-NAV-17 Menu groups and collapsing** — Req NAV-17, NAV-18, OV-10 — L1 `format.test.mjs` (Data Insights holds Overview, Pulse Check, PI Review; My Work order Assigned to Me, Monthly Time Writing, Bulk actions); browser check on sample data: the menu shows the five headings; Pulse Check shows the month's releases (Overview keeps This month and Trends); collapsing My Work and Windchill exports hides them and stays so after a reload; at 900 px width every page is still reachable. **UAT**
 
 **TC-CON-23 Feature setup per Epic** — Req CON-52, CON-53 — L1 `azure-devops.test.mjs` (placeholders, plain text, unknown braces kept, missing values; the file is parsed and written clean; a Feature from its Epic setup gets the chosen stories, the Time Writing story and the Task with title, Original Estimate, Area Path, Iteration Path and assignee; completing again creates nothing; a placeholder the title cannot fill stops it); browser check with GitHub and Azure DevOps mocked: Settings → Feature setup, add “US 1 ({service})” and “US 4”, Original Estimate 6 → preview shows “US 1 (Service)”; Save to Git writes feature-setup.json; ＋ Feature under that Epic with “CP | Care Pathways | v3.1” lists “US 1 (Care Pathways)” and “US 4” ticked, the Task “October 2026 | CP | Care Pathways | v3.1” with 6 h, and no PU / Full Release choice. **UAT**
@@ -490,6 +494,10 @@ Cases marked **UAT** are also run in acceptance testing.
   - The list opens on the Feature chip and is always in ascending ID order, on every chip.
   - The type chips filter the list and show counts.
   - The bulk panels are not on this page. "Bulk actions →" on the month-tasks metric opens the Bulk actions page, whose lists are also in ascending ID order.
+
+**TC-ATM-07 Search all assigned work and Info** — Req ATM-15, ATM-16
+- L1: `my-work.test.mjs` (blank search shows everything; ID with or without #; Feature title, Epic, Iteration Path, type and state match; every word must match).
+- Browser check on sample data: on the Feature chip, typing "task" lists the Tasks (all types searched, no chip highlighted, "N of M match, all types"); Esc clears it and the Feature chip applies again; a search with no match says “Nothing matches … in any type”. Hovering "ⓘ Info" shows the list rules; moving away hides them.
 
 **TC-ATM-03 Close an item** — Req ATM-06 — **UAT**
 - Steps:
@@ -982,6 +990,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | ATM-07…09 | TC-ATM-04 |
 | ATM-10…12 | TC-ATM-05 |
 | ATM-13, ATM-14 | TC-ATM-06 |
+| ATM-15, ATM-16 | TC-ATM-07 |
 | BKL-01…03, BKL-12 | TC-BKL-01 |
 | BKL-04…09, BKL-11 | TC-BKL-02 |
 | BKL-10 | TC-BKL-03 |

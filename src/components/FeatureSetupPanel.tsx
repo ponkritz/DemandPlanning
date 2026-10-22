@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import type { AzureWorkItem } from '../domain'
-import { emptySetup, fillTitle, missingValues, placeholders, setupFor, titleValues, type EpicSetup, type FeatureSetupFile } from '../featureSetup'
+import { defaultTimeWritingStory, emptySetup, fillTitle, missingValues, placeholders, setupFor, titleValues, type EpicSetup, type FeatureSetupFile } from '../featureSetup'
 import { currentIndiaMonth } from '../azureDevOps'
 import { assignablePeople } from '../myWork'
 import type { FeatureSetup } from '../useFeatureSetup'
 import type { GitStorage } from '../useGitStorage'
 import { PersonPicker } from './PersonPicker'
-import { EmptyState, Notice, Panel } from './ui'
+import { EmptyState, Notice, Panel, Info } from './ui'
 
 // Settings → Feature setup: per Epic, the optional User Stories offered when a Feature is created under it (all ticked
 // by default) and the defaults of the month Time Writing Task. Saved to Git (feature-setup.json) for everyone.
@@ -33,7 +33,9 @@ export function FeatureSetupPanel({ setup, git, items }: { setup: FeatureSetup; 
     setDraft(next); setResult(null)
   }
   const preview = (template: string) => { const missing = missingValues(template, values); return missing.length ? `needs {${missing.join('}, {')}} — the sample title has no such part` : fillTitle(template, values) || '—' }
-  const taskAssigneeName = current?.task.assignedTo ? people.find((person) => person.email === current.task.assignedTo)?.name ?? current.task.assignedTo : ''
+  const nameOf = (email: string | undefined) => email ? people.find((person) => person.email === email)?.name ?? email : ''
+  const taskAssigneeName = nameOf(current?.task.assignedTo)
+  const story = current?.timeWritingStory ?? defaultTimeWritingStory
 
   async function save(event: React.FormEvent) {
     event.preventDefault()
@@ -44,7 +46,7 @@ export function FeatureSetupPanel({ setup, git, items }: { setup: FeatureSetup; 
     finally { setBusy(false) }
   }
 
-  return <Panel className="admin-section" eyebrow="NEW FEATURES" title="Feature setup per Epic" detail={<>When a Feature is created under an Epic, its optional User Stories (all ticked, untick what is not needed) and the month Time Writing Task defaults come from here. An Epic without a setup keeps the PU / Full Release milestones. Shared with everyone through Git (feature-setup.json).{setup.history && <> <a href={setup.history} target="_blank" rel="noreferrer">History</a></>}</>}
+  return <Panel className="admin-section" eyebrow="NEW FEATURES" title="Feature setup per Epic" info={<>When a Feature is created under an Epic, its optional User Stories (all ticked, untick what is not needed), the Time Writing User Story and the month Time Writing Task defaults come from here. An Epic without a setup keeps the PU / Full Release milestones. Shared with everyone through Git (feature-setup.json).{setup.history && <> <a href={setup.history} target="_blank" rel="noreferrer">History</a></>}</>}
     action={editable && setup.file ? <button type="button" className="ghost" onClick={() => { setDraft(null); setResult(null); void setup.reload() }}>Reload from Git</button> : undefined}>
     {!git.connected && <Notice tone="info">Connect Git storage (Storage tab) to share the Feature setup.{setup.file ? ' The setup last loaded in this browser is used meanwhile.' : ''}</Notice>}
     {git.connected && git.readOnly && <Notice tone="info">View only: your Git token can read but not save.</Notice>}
@@ -54,7 +56,7 @@ export function FeatureSetupPanel({ setup, git, items }: { setup: FeatureSetup; 
         <label>Epic<select value={chosen} onChange={(event) => setEpicId(Number(event.target.value))}>{epics.map((item) => <option key={item.id} value={item.id}>{setupFor(file, item.id) ? '● ' : ''}#{item.id} {item.title}</option>)}</select></label>
         <label>Preview with Feature title<input value={sample} onChange={(event) => setSample(event.target.value)} /></label>
       </div>
-      <p className="muted"><small>Placeholders: {placeholders.map((key) => `{${key}}`).join(' ')} — {'{feature}'} is the whole title; {'{program}'}, {'{service}'}, {'{version}'} are its parts for titles like “Program | Service | v1.2”; {'{month}'} is e.g. “{currentIndiaMonth()}”. Text without placeholders is used as typed. ● marks Epics with a setup.</small></p>
+      <p className="info-line"><Info label="Placeholders">Placeholders: {placeholders.map((key) => `{${key}}`).join(' ')} — {'{feature}'} is the whole title; {'{program}'}, {'{service}'}, {'{version}'} are its parts for titles like “Program | Service | v1.2”; {'{month}'} is e.g. “{currentIndiaMonth()}”. Text without placeholders is used as typed. ● marks Epics with a setup.</Info></p>
       <fieldset className="plain-fieldset feature-setup" disabled={!editable || busy}>
         <h3>Optional User Stories</h3>
         {!current?.stories.length && <p className="muted">{current ? 'No optional User Stories: only the Time Writing story and Task are created.' : 'No setup for this Epic yet: Features under it use the PU / Full Release milestones. Add a User Story or set the Task defaults to start one.'}</p>}
@@ -64,8 +66,17 @@ export function FeatureSetupPanel({ setup, git, items }: { setup: FeatureSetup; 
           <div className="button-row"><button type="button" className="ghost" aria-label="Move up" disabled={index === 0} onClick={() => change((entry) => { [entry.stories[index - 1], entry.stories[index]] = [entry.stories[index], entry.stories[index - 1]] })}>↑</button><button type="button" className="ghost" aria-label="Move down" disabled={index === current.stories.length - 1} onClick={() => change((entry) => { [entry.stories[index + 1], entry.stories[index]] = [entry.stories[index], entry.stories[index + 1]] })}>↓</button><button type="button" className="text-button" onClick={() => change((entry) => { entry.stories.splice(index, 1) })}>Remove</button></div>
         </div>)}
         <button type="button" className="ghost" onClick={() => change((entry) => { entry.stories.push({ title: '', description: '' }) })}>＋ Add optional User Story</button>
-        <h3>Time Writing Task defaults</h3>
-        <p className="muted"><small>Always created under the “{'{feature}'} - Time Writing” User Story.</small></p>
+        <h3>Time Writing User Story <Info>Always created under the Feature; it holds the month Task. Keep “Time Writing” in the title so Monthly Time Writing and Bulk actions recognise it before its first Task exists.</Info></h3>
+        <div className="form-row">
+          <label>Title<input value={story.title} maxLength={255} onChange={(event) => change((entry) => { entry.timeWritingStory ??= { ...defaultTimeWritingStory }; entry.timeWritingStory.title = event.target.value })} /><small className="muted">→ {preview(story.title)}</small></label>
+          <label>Assigned to<PersonPicker label="Time Writing story assigned to" value={nameOf(story.assignedTo)} people={people.map((person) => person.name)} onChange={(name) => change((entry) => { entry.timeWritingStory ??= { ...defaultTimeWritingStory }; entry.timeWritingStory.assignedTo = people.find((person) => person.name === name)?.email ?? '' })} meLabel="The person the Feature is assigned to" /></label>
+        </div>
+        <label>Description<textarea rows={2} value={story.description} onChange={(event) => change((entry) => { entry.timeWritingStory ??= { ...defaultTimeWritingStory }; entry.timeWritingStory.description = event.target.value })} /></label>
+        <div className="form-row">
+          <label>Area Path<input value={story.areaPath} placeholder="The Feature's Area Path" onChange={(event) => change((entry) => { entry.timeWritingStory ??= { ...defaultTimeWritingStory }; entry.timeWritingStory.areaPath = event.target.value })} /></label>
+          <label>Iteration Path<input value={story.iterationPath} placeholder="The Sprint chosen when creating" onChange={(event) => change((entry) => { entry.timeWritingStory ??= { ...defaultTimeWritingStory }; entry.timeWritingStory.iterationPath = event.target.value })} /></label>
+        </div>
+        <h3>Time Writing Task defaults <Info>Always created under the Time Writing User Story above.</Info></h3>
         <div className="form-row">
           <label>Title<input value={current?.task.title ?? '{month} | {feature}'} maxLength={255} onChange={(event) => change((entry) => { entry.task.title = event.target.value })} /><small className="muted">→ {preview(current?.task.title ?? '{month} | {feature}')}</small></label>
           <label>Original Estimate (hours)<input type="number" min="0" max="1000000" step="0.25" value={current?.task.originalEstimate ?? ''} placeholder="None" onChange={(event) => change((entry) => { const value = event.target.value.trim(); if (value === '') delete entry.task.originalEstimate; else if (Number.isFinite(Number(value)) && Number(value) >= 0) entry.task.originalEstimate = Number(value) })} /></label>

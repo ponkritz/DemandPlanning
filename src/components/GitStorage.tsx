@@ -12,7 +12,7 @@ export function GitStoragePanel({ git }: { git: GitStorage }) {
   const [token, setToken] = useState('')
   const [remember, setRemember] = useState(true)
   const field = (key: keyof typeof form) => ({ value: form[key], onChange: (event: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [key]: event.target.value }) })
-  return <Panel className="connection-panel admin-section" eyebrow="PLANNING DATA" title="Git storage" detail="Baseline rules, release scopes and the region / role mapping are saved as one JSON file in a private GitHub repository; every save is a commit. Use a separate private repository (not the app's), with a fine-grained token limited to it with Contents: Read and write. The token stays in this browser." action={<Pill tone={tone[git.status]}>{label[git.status]}</Pill>}>
+  return <Panel className="connection-panel admin-section" eyebrow="PLANNING DATA" title="Git storage" info="Baseline rules, release scopes and the region / role mapping are saved as one JSON file in a private GitHub repository; every save is a commit. Use a separate private repository (not the app's), with a fine-grained token limited to it with Contents: Read and write. The token stays in this browser." action={<Pill tone={tone[git.status]}>{label[git.status]}</Pill>}>
     <form className="connection-form" onSubmit={(event) => { event.preventDefault(); void git.connect(form, token, remember).then(() => setToken('')) }}>
       <label>Owner (user or organisation)<input required {...field('owner')} placeholder="e.g. my-org" /></label>
       <label>Repository<input required {...field('repo')} placeholder="e.g. demand-planning-data" /></label>
