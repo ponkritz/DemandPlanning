@@ -103,6 +103,19 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     return { changed: true, ...(await writeTextFile(viewsConfig, token, text, current.sha, commitMessage)) }
   }
 
+  // Access roles (access.json): read by everyone with Git storage; saved only with a token that can write. The version
+  // read is required to save, so a concurrent change is refused rather than overwritten.
+  const accessConfig = config ? siblingConfig(config, 'access.json') : null
+  const readAccess = useCallback(async () => {
+    if (!config || !token) throw new Error('Connect Git storage first.')
+    return readTextFile(siblingConfig(config, 'access.json'), token)
+  }, [config, token])
+  async function writeAccess(text: string, sha: string | null, commitMessage: string) {
+    if (!accessConfig || !token) throw new Error('Connect Git storage first.')
+    if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
+    return writeTextFile(accessConfig, token, text, sha, commitMessage)
+  }
+
   // On-prem view snapshots (azure-data/<connection>.json): the desktop app commits each fetch whose data changed;
   // the web app loads them. Per view, the last result is kept so the next fetch can say what happened.
   const [snapshotNotes, setSnapshotNotes] = useState<Record<string, { tone: 'success' | 'error' | 'info'; text: string }>>({})
@@ -203,6 +216,6 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     setConfig(null); setToken(''); setSynced(null); setStatus('off'); setMessage('Git storage disconnected in this browser. The data stays in the app and in the repository.'); sha.current = null
   }
 
-  return { config, connected, readOnly, status, message, dirty, commitUrl, history: config ? historyUrl(config) : '', isSample, load: () => load(), connect, save, disconnect, viewsPath: viewsConfig?.path ?? '', viewsHistory: viewsConfig ? historyUrl(viewsConfig) : '', readViews, writeViews, syncViews, viewsSync, snapshotNotes, pushSnapshot, pullSnapshot, pullSnapshots, pushWindchill, pullWindchill, pullWindchillOne, snapshotsHistory: config ? historyUrl(siblingConfig(config, snapshotFolder)) : '' }
+  return { config, connected, readOnly, status, message, dirty, commitUrl, history: config ? historyUrl(config) : '', isSample, load: () => load(), connect, save, disconnect, viewsPath: viewsConfig?.path ?? '', viewsHistory: viewsConfig ? historyUrl(viewsConfig) : '', readViews, writeViews, syncViews, accessScope: accessConfig && token ? `${accessConfig.owner}/${accessConfig.repo}@${accessConfig.branch}:${accessConfig.path}` : '', accessPath: accessConfig?.path ?? '', accessHistory: accessConfig ? historyUrl(accessConfig) : '', readAccess, writeAccess, viewsSync, snapshotNotes, pushSnapshot, pullSnapshot, pullSnapshots, pushWindchill, pullWindchill, pullWindchillOne, snapshotsHistory: config ? historyUrl(siblingConfig(config, snapshotFolder)) : '' }
 }
 export type GitStorage = ReturnType<typeof useGitStorage>

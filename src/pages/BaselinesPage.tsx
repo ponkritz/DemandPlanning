@@ -11,7 +11,9 @@ import type { PageProps } from './types'
 
 const scopeText = (rule: BaselineRule, entry: Pick<ScopeEntry, 'drivers'>) => rule.unitsPerDriver ? `${entry.drivers[rule.driver] ?? '?'} ${rule.driver}` : 'Fixed units only'
 
-export function BaselinesPage({ azure, month, store, git, onOpenSettings }: { azure: AzureWorkspace; month: string; store: PageProps['store']; git: GitStorage; onOpenSettings: () => void }) {
+// canEdit: the viewer's access roles include editing baselines (a read-only Git token makes the page view-only too).
+export function BaselinesPage({ azure, month, store, git, onOpenSettings, canEdit = true }: { azure: AzureWorkspace; month: string; store: PageProps['store']; git: GitStorage; onOpenSettings: () => void; canEdit?: boolean }) {
+  const readOnly = git.readOnly || !canEdit
   const [today] = useState(todayIso)
   const [editing, setEditing] = useState<string | null>(null)
   const [open, setOpen] = useState<string | null>(null)
@@ -50,7 +52,7 @@ export function BaselinesPage({ azure, month, store, git, onOpenSettings }: { az
   }
 
   return <Page>
-    <GitSyncBar git={git} onOpenSettings={onOpenSettings} />
+    {canEdit ? <GitSyncBar git={git} onOpenSettings={onOpenSettings} /> : <Notice tone="info" className="git-bar">View only: your role does not include editing baselines. An Admin can change this in Settings → Access.</Notice>}
     <Metrics>
       <Metric label="Releases with a baseline" value={`${scoped.length} / ${releases.length}`} hint={`Features under ${rules.length} stream${rules.length === 1 ? '' : 's'} with estimation rules`} />
       <Metric label="Baseline" value={`${formatHours(totals.baseline)}h`} hint="Current scope × estimation rules" />
@@ -69,7 +71,7 @@ export function BaselinesPage({ azure, month, store, git, onOpenSettings }: { az
             <td>{formatHours(row.actual)}</td>
             <td className={row.variance != null && row.variance > 0 ? 'negative' : ''}>{row.variance == null ? '—' : `${row.variance > 0 ? '+' : ''}${formatHours(row.variance)}`}</td>
             <td className={row.growth ? 'negative' : ''}>{row.growth == null ? '—' : `${row.growth > 0 ? '+' : ''}${formatHours(row.growth)}`}</td>
-            <td>{!git.readOnly && <button type="button" className="ghost" onClick={() => setEditing(editing === key ? null : key)}>{row.scope ? 'Re-baseline' : 'Set scope'}</button>}</td>
+            <td>{!readOnly && <button type="button" className="ghost" onClick={() => setEditing(editing === key ? null : key)}>{row.scope ? 'Re-baseline' : 'Set scope'}</button>}</td>
           </tr>,
           open === key && row.scope ? <tr key={`${key}-history`} className="baseline-history"><td /><td colSpan={7}><ol>{row.scope.history.map((entry, index) => <li key={entry.at}><strong>v{index + 1}</strong> {formatDate(entry.at)} · {scopeText(row.rule, entry)} → {formatHours(baselineHours(row.rule, entry).total)}h{entry.reason && <em> — {entry.reason}</em>}</li>)}</ol></td></tr> : null,
           editing === key && !git.readOnly ? <tr key={`${key}-edit`} className="baseline-edit"><td /><td colSpan={7}><ScopeForm row={row} onCancel={() => setEditing(null)} onSave={(entry) => saveScope(row, entry)} /></td></tr> : null,
@@ -77,7 +79,7 @@ export function BaselinesPage({ azure, month, store, git, onOpenSettings }: { az
       })}</tbody></table>
         : <EmptyState title={rules.length ? 'No releases found for the streams with rules.' : 'No estimation rules yet.'} detail={rules.length ? `Releases are the Features under the Epics ${rules.map((rule) => rule.stream).join(', ')}. Refresh from Azure DevOps or check the stream names in the rules below.` : 'Add a rule for a stream below.'} />}
     </TablePanel>
-    <BaselineRulesEditor key={JSON.stringify(rules)} rules={rules} streams={streams} onSave={saveRules} readOnly={git.readOnly} />
+    <BaselineRulesEditor key={JSON.stringify(rules)} rules={rules} streams={streams} onSave={saveRules} readOnly={readOnly} />
     <h2 className="baseline-subhead">Task plan check · this month</h2>
     <Metrics>
         <Metric label="Month tasks" value={data.monthlyTasks.length} hint={`${data.paired.length} with both fields populated`} />

@@ -165,6 +165,7 @@ export interface AzureWorkItem {
   completedWork?: number
   remainingWork?: number
   createdDate?: string
+  createdBy?: string
   workItemType: string
   state: string
   assignedTo: string

@@ -25,7 +25,7 @@ export const projectApiBase = (config: Pick<AzureConfig, 'organization' | 'proje
 // Azure DevOps Services accepts 7.1; older Azure DevOps Server versions need a lower version (e.g. 6.0 or 5.0).
 export const apiVersionOf = (config: Pick<AzureConfig, 'apiVersion'>) => config.apiVersion && /^\d{1,2}\.\d(-preview(\.\d)?)?$/.test(config.apiVersion) ? config.apiVersion : '7.1'
 export interface AzureRequest extends AzureConfig {
-  operation: 'backlog-epics' | 'areas' | 'iterations' | 'iteration-tree' | 'fields' | 'query' | 'items' | 'create-feature' | 'create-child' | 'update-time-writing-effort' | 'update-work-item'
+  operation: 'identity' | 'backlog-epics' | 'areas' | 'iterations' | 'iteration-tree' | 'fields' | 'query' | 'items' | 'create-feature' | 'create-child' | 'update-time-writing-effort' | 'update-work-item'
   pat: string
   query?: string
   ids?: number[]
@@ -58,6 +58,18 @@ export function projectIterationPaths(root: IterationNode): AzureIteration[] {
   }
   visit(root)
   return paths
+}
+
+// Who the PAT belongs to: the email (account) Azure DevOps reports for it. The app's access roles are matched on it.
+export interface AzureIdentity { email: string; name: string }
+export async function readAzureIdentity(config: AzureConfig, pat: string, transport: AzureTransport = requestAzure): Promise<AzureIdentity> {
+  if (!pat.trim()) throw new Error('Enter the PAT of the Time Writing connection to identify you.')
+  const response = await transport({ ...config, pat: pat.trim(), operation: 'identity' }) as { authenticatedUser?: { providerDisplayName?: unknown; customDisplayName?: unknown; properties?: Record<string, { $value?: unknown } | undefined> } } | null
+  const user = response?.authenticatedUser
+  const account = user?.properties?.Account?.$value
+  if (typeof account !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(account.trim())) throw new Error('Azure DevOps did not return an email for this PAT, so your access roles cannot be matched.')
+  const name = [user?.customDisplayName, user?.providerDisplayName].find((value): value is string => typeof value === 'string' && Boolean(value.trim()))
+  return { email: account.trim().toLowerCase(), name: name?.trim() ?? account.trim() }
 }
 
 export async function readAzureIterations(config: AzureConfig, pat: string, transport: AzureTransport = requestAzure): Promise<AzureIteration[]> {
@@ -220,6 +232,9 @@ export function savedBacklogItems(items: AzureWorkItem[], scope: AzureBacklogSco
   return items.filter((item) => keys.has(item.key) && item.organization.toLowerCase() === config!.organization.toLowerCase() && item.project.toLowerCase() === config!.project.toLowerCase() && item.state.trim().toLowerCase() !== 'removed')
 }
 
+// Display name of an identity field (an object with displayName, or plain text).
+const identityName = (value: unknown) => typeof value === 'string' ? value : value && typeof value === 'object' && 'displayName' in value ? String((value as { displayName: unknown }).displayName) : ''
+
 export function mapAzureWorkItem(item: RawItem, config: AzureConfig): AzureWorkItem {
   const fields = item.fields
   const text = (name: string) => typeof fields[name] === 'string' ? fields[name] as string : ''
@@ -238,6 +253,7 @@ export function mapAzureWorkItem(item: RawItem, config: AzureConfig): AzureWorkI
     completedWork: number('Microsoft.VSTS.Scheduling.CompletedWork'),
     remainingWork: number('Microsoft.VSTS.Scheduling.RemainingWork'),
     createdDate: date('System.CreatedDate'),
+    ...(identityName(fields['System.CreatedBy']) ? { createdBy: identityName(fields['System.CreatedBy']) } : {}),
     storyPoints: typeof fields['Microsoft.VSTS.Scheduling.StoryPoints'] === 'number' && Number.isFinite(fields['Microsoft.VSTS.Scheduling.StoryPoints']) ? fields['Microsoft.VSTS.Scheduling.StoryPoints'] as number : undefined,
     areaPath: text('System.AreaPath'), iterationPath: text('System.IterationPath'),
     parentId: typeof fields['System.Parent'] === 'number' ? fields['System.Parent'] : parentFromRelation(item),
@@ -516,20 +532,28 @@ export function versionsToTry(config: Pick<AzureConfig, 'apiVersion' | 'organiza
 }
 export const isApiVersionError = (text: string) => /api[- ]?version|version of the api|VssVersionOutOfRange|out of range/i.test(text) && /version/i.test(text)
 
+// Set by the app from the viewer's access roles; while it returns false, nothing is changed in Azure DevOps.
+let writesAllowed: () => boolean = () => true
+export function guardAzureWrites(check: () => boolean) { writesAllowed = check }
+export const changesAzure = (operation: AzureRequest['operation']) => operation === 'create-feature' || operation === 'create-child' || operation === 'update-time-writing-effort' || operation === 'update-work-item'
+
 export async function requestAzure(request: AzureRequest): Promise<unknown> {
+  if (changesAzure(request.operation) && !writesAllowed()) throw new Error('Your role does not allow changes in Azure DevOps. An Admin can change this in Settings → Access.')
   if (window.azureDevOps) return window.azureDevOps.request(request)
-  const base = projectApiBase(request)
+  // identity: who the PAT belongs to (connectionData, organization or collection level, a preview API).
+  const identity = request.operation === 'identity'
+  const base = identity ? collectionUrl(request) : projectApiBase(request)
   const updating = request.operation === 'update-time-writing-effort' || request.operation === 'update-work-item'
   const writing = request.operation === 'create-feature' || request.operation === 'create-child' || updating
-  const readingMetadata = request.operation === 'backlog-epics' || request.operation === 'areas' || request.operation === 'iterations' || request.operation === 'iteration-tree' || request.operation === 'fields'
+  const readingMetadata = identity || request.operation === 'backlog-epics' || request.operation === 'areas' || request.operation === 'iterations' || request.operation === 'iteration-tree' || request.operation === 'fields'
   const create = request.operation === 'create-feature' || request.operation === 'create-child'
-  const endpoint = updating ? `_apis/wit/workitems/${request.workItemId}` : create ? `_apis/wit/workitems/$${request.operation === 'create-feature' ? 'Feature' : encodeURIComponent(request.workItemType!)}` : request.operation === 'backlog-epics' ? `${encodeURIComponent(request.team)}/_apis/work/backlogs/Microsoft.EpicCategory/workItems` : request.operation === 'iteration-tree' ? '_apis/wit/classificationnodes/iterations' : request.operation === 'fields' ? '_apis/wit/fields' : readingMetadata ? `${encodeURIComponent(request.team)}/_apis/work/teamsettings/${request.operation === 'areas' ? 'teamfieldvalues' : 'iterations'}` : request.operation === 'query' ? '_apis/wit/wiql' : '_apis/wit/workitemsbatch'
+  const endpoint = identity ? '_apis/connectionData' : updating ? `_apis/wit/workitems/${request.workItemId}` : create ? `_apis/wit/workitems/$${request.operation === 'create-feature' ? 'Feature' : encodeURIComponent(request.workItemType!)}` : request.operation === 'backlog-epics' ? `${encodeURIComponent(request.team)}/_apis/work/backlogs/Microsoft.EpicCategory/workItems` : request.operation === 'iteration-tree' ? '_apis/wit/classificationnodes/iterations' : request.operation === 'fields' ? '_apis/wit/fields' : readingMetadata ? `${encodeURIComponent(request.team)}/_apis/work/teamsettings/${request.operation === 'areas' ? 'teamfieldvalues' : 'iterations'}` : request.operation === 'query' ? '_apis/wit/wiql' : '_apis/wit/workitemsbatch'
   const body = request.operation === 'update-work-item' ? workItemUpdatePatch(request) : request.operation === 'update-time-writing-effort' ? [{ ...(request.planHours == null ? {} : { op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.OriginalEstimate', value: request.planHours }) }, { ...(request.actualHours == null ? {} : { op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.CompletedWork', value: request.actualHours }) }, ...(request.tags ? [{ op: 'add', path: '/fields/System.Tags', value: request.tags }] : [])].filter(patch => 'op' in patch) : create ? featurePatch(request, request.feature!) : request.operation === 'query' ? { query: request.query } : { ids: request.ids, errorPolicy: 'Fail', $expand: 'Relations' }
   const versions = versionsToTry(request)
   let response: Response | undefined
   for (const [attempt, version] of versions.entries()) {
     try {
-      const url = `${base}/${endpoint}?api-version=${version}${request.operation === 'query' ? '&$top=1000' : ''}${request.operation === 'iteration-tree' ? '&$depth=10' : ''}${create ? `&validateOnly=${request.validateOnly === true}` : ''}`
+      const url = `${base}/${endpoint}?api-version=${identity ? `${version.replace(/-preview.*$/, '')}-preview` : version}${request.operation === 'query' ? '&$top=1000' : ''}${request.operation === 'iteration-tree' ? '&$depth=10' : ''}${create ? `&validateOnly=${request.validateOnly === true}` : ''}`
       response = await fetch(url, {
         method: readingMetadata ? 'GET' : updating ? 'PATCH' : 'POST', redirect: 'error', credentials: 'omit',
         headers: { Authorization: `Basic ${btoa(`:${request.pat}`)}`, 'Content-Type': writing ? 'application/json-patch+json' : 'application/json', Accept: 'application/json' },
