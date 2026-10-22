@@ -7,6 +7,7 @@ import { approvalDateFrom, defaultReleaseQuery, fetchReleaseSource, normalizeRel
 import { sampleDataset, sampleProfiles, sampleReleaseScopes } from './sampleData'
 import { indiaMonth } from './azureInsights'
 import { columnName, pickFields, queryLayout } from './queryView'
+import { promoteToTimeWriting } from './viewDefinitions'
 
 const defaultUrl = 'https://dev.azure.com/ALMP-ORG-MSTP01/Patient%20Safety%20and%20Quality/_backlogs/backlog/InD%20Quality/Epics'
 const defaultConfig = parseAzureProjectUrl(defaultUrl)
@@ -340,10 +341,13 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
     }
   }
 
+  // The Time Writing connection in use: the active one while it exists, else the first.
+  const activeTimeWriting = () => connectionProfiles.find((entry) => entry.id === activeConnectionProfileId && entry.role === 'time-tracking')?.id ?? connectionProfiles.find((entry) => entry.role === 'time-tracking')?.id
+
   // Fetches the active Time Writing connection and every read-only connection, one after another.
   async function fetchAll() {
     setError(''); setMessage('')
-    const targets = connectionProfiles.filter((profile) => profile.role !== 'time-tracking' || profile.id === (activeConnectionProfileId || connectionProfiles.find((entry) => entry.role === 'time-tracking')?.id))
+    const targets = connectionProfiles.filter((profile) => profile.role !== 'time-tracking' || profile.id === activeTimeWriting())
     let ok = 0
     for (const profile of targets) if (await fetchConnection(profile.id)) ok += 1
     setMessage(`${ok} of ${targets.length} connection${targets.length === 1 ? '' : 's'} fetched and saved.`)
@@ -352,7 +356,7 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
   // At start: the cloud (Azure DevOps Services) connections of fetchAll that have a PAT here are fetched again, so the
   // app opens on current data. On-prem connections are left to their own Fetch (VPN) or the data in Git.
   async function fetchCloud() {
-    const timeWriting = activeConnectionProfileId || connectionProfiles.find((entry) => entry.role === 'time-tracking')?.id
+    const timeWriting = activeTimeWriting()
     const cloud = (baseUrl?: string) => { try { return !baseUrl || isCloudBase(baseUrl) } catch { return false } }
     const targets = connectionProfiles.filter((profile) => (profile.role !== 'time-tracking' || profile.id === timeWriting) && cloud(profile.baseUrl) && loadAzureConnectionProfile(profile.id)?.token?.trim())
     for (const profile of targets) await fetchConnection(profile.id)
@@ -388,7 +392,24 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
     setMessage(`${preview.items.length} team-backlog records saved. Old out-of-scope cached records were replaced; Azure DevOps and demand-planning data were not modified.`)
   }
 
-  return { reloadConnectionProfiles: () => setConnectionProfiles(listAzureConnectionProfiles()), projectUrl, changeProjectUrl, team, setTeam, pat, setPat, creatorEmail, setCreatorEmail, role, setRole, connectionStatus, saveConnection, removeConnection, fetchConnection, loadFromGit: (id: string) => loadFromGit(id), canLoadFromGit, fetchAll, fetchCloud, testConnection, applyWorkItems, isSample, loadSampleData, connectionProfiles, activeConnectionProfileId, selectConnectionProfile, saveConnectionProfile, forgetConnectionProfile, busy, error, setError, message, setMessage, preview, setPreview, saved, items, config, needsScopedRefresh, fetchPreview, refresh, lastRefreshed, rememberPat, forgetPat, featureCreated, savePreview, saveTimeWritingEffort }
+  // After the connections changed outside this hook (Git sync): the active Time Writing connection is kept if it still
+  // exists, else the first Time Writing connection becomes active.
+  function reloadConnectionProfiles() {
+    const profiles = listAzureConnectionProfiles()
+    setConnectionProfiles(profiles)
+    if (!profiles.some((profile) => profile.id === activeConnectionProfileId && profile.role === 'time-tracking')) { const next = profiles.find((profile) => profile.role === 'time-tracking'); if (next) selectConnectionProfile(next.id) }
+  }
+
+  // Makes a connection (e.g. a backlog view of the same project that loads) the only Time Writing connection; the
+  // replaced ones are removed here. Its separate view data is dropped: it is fetched as Time Writing from now on.
+  function makeTimeWriting(id: string) {
+    const replaced = promoteToTimeWriting(id)
+    store.update((draft) => { draft.azureSources = (draft.azureSources ?? []).filter((source) => source.connectionId !== id && !replaced.some((entry) => entry.id === source.connectionId)); return draft })
+    setConnectionProfiles(listAzureConnectionProfiles()); selectConnectionProfile(id)
+    return replaced
+  }
+
+  return { reloadConnectionProfiles, makeTimeWriting, projectUrl, changeProjectUrl, team, setTeam, pat, setPat, creatorEmail, setCreatorEmail, role, setRole, connectionStatus, saveConnection, removeConnection, fetchConnection, loadFromGit: (id: string) => loadFromGit(id), canLoadFromGit, fetchAll, fetchCloud, testConnection, applyWorkItems, isSample, loadSampleData, connectionProfiles, activeConnectionProfileId, selectConnectionProfile, saveConnectionProfile, forgetConnectionProfile, busy, error, setError, message, setMessage, preview, setPreview, saved, items, config, needsScopedRefresh, fetchPreview, refresh, lastRefreshed, rememberPat, forgetPat, featureCreated, savePreview, saveTimeWritingEffort }
 }
 
 export type AzureWorkspace = ReturnType<typeof useAzureWorkspace>

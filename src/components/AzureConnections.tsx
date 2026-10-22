@@ -73,6 +73,34 @@ export function AzureConnections({ azure, store, git, onOpenBoard }: { azure: Az
   const timeWriting = connectionProfiles.filter((profile) => profile.role === 'time-tracking')
   const keep = timeWriting.find((profile) => profile.id === activeConnectionProfileId) ?? timeWriting[0]
   const extras = timeWriting.filter((profile) => profile.id !== keep?.id)
+  // A backlog view of the same project and team as Time Writing reads the same work items: it can take over as the
+  // Time Writing connection (e.g. when it loads and Time Writing does not). The replaced connection is removed here,
+  // from the shared setup in Git and with its data in Git, so it does not come back for anyone.
+  const sameBacklog = (profile: AzureConnectionProfileSummary) => {
+    if (!keep || profile.role !== 'backlog-view' || profile.query) return false
+    const a = splitAzureUrl(profile.url, profile.baseUrl), b = splitAzureUrl(keep.url, keep.baseUrl)
+    return [a.baseUrl, a.project, a.team].join('|').toLowerCase() === [b.baseUrl, b.project, b.team].join('|').toLowerCase()
+  }
+  const twins = connectionProfiles.filter(sameBacklog)
+  async function switchTimeWriting(profile: AzureConnectionProfileSummary) {
+    const toGit = Boolean(git?.connected && !git.readOnly && !azure.isSample)
+    const replacing = timeWriting.filter((entry) => entry.id !== profile.id).map((entry) => `“${entry.reason}”`).join(', ')
+    if (!window.confirm(`Use “${profile.reason}” as the Time Writing connection${replacing ? ` and remove ${replacing}` : ''}?${toGit ? ' The connection setup in Git is updated and data saved to Git for the removed connection is deleted, so it does not come back for anyone.' : ''} Its PAT is not revoked in Azure DevOps.`)) return
+    const replaced = azure.makeTimeWriting(profile.id)
+    const names = replaced.map((entry) => entry.reason).join(', ')
+    let text = `“${profile.reason}” is now the Time Writing connection${names ? `; removed ${names}` : ''}.`, tone: 'success' | 'warning' = 'success'
+    if (toGit && git) {
+      try {
+        const list = listAzureConnectionProfiles()
+        await git.writeViews(serializeViews(viewsFile(list)), `Use ${profile.reason} as the Time Writing connection${names ? `; remove ${names}` : ''}`)
+        markViewsSynced(list)
+        const deleted = await git.removeSnapshots([profile.id, ...replaced.map((entry) => entry.id)], `Remove data of replaced connection${names ? ` ${names}` : ''}`)
+        text += ` The connection setup in Git is updated${deleted ? ` and ${deleted} data file${deleted === 1 ? '' : 's'} removed` : ''}.`
+      } catch (failure) { tone = 'warning'; text += ` Git was not updated (${failure instanceof Error ? failure.message : String(failure)}); the old connection may come back at the next start.` }
+    } else if (git?.connected) { tone = 'warning'; text += ' Your Git token cannot save, so the connection setup in Git still has the old connection; someone with write access needs to do this too.' }
+    setCleanup({ tone, text })
+    void azure.fetchConnection(profile.id)
+  }
   async function removeDuplicates() {
     if (!keep || !extras.length) return
     const names = extras.map((profile) => profile.reason).join(', '), toGit = Boolean(git?.connected && !git.readOnly && !azure.isSample)
@@ -96,6 +124,7 @@ export function AzureConnections({ azure, store, git, onOpenBoard }: { azure: Az
         <div className="button-row nowrap"><button type="button" className="primary" onClick={() => { setFormError(''); setForm({ ...preset, pat: '' }) }}>Set up</button><button type="button" className="text-button" onClick={() => { const next = [...dismissed, preset.key]; setDismissed(next); saveDismissedPresets(next) }}>Dismiss</button></div>
       </div>)}</div>}
       {extras.length > 0 && keep && <Notice tone="warning">{timeWriting.length} Time Writing (QMS-0025) connections: only “{keep.reason}” is used; {extras.map((profile) => `“${profile.reason}”`).join(', ')} {extras.length === 1 ? 'is a duplicate' : 'are duplicates'}. <button type="button" className="text-button" onClick={() => void removeDuplicates()}>Keep “{keep.reason}”, remove the other{extras.length === 1 ? '' : 's'}</button></Notice>}
+      {keep && twins.map((profile) => <Notice key={profile.id} tone="warning">“{profile.reason}” reads the same backlog as the Time Writing connection “{keep.reason}”. If “{profile.reason}” loads and “{keep.reason}” does not, <button type="button" className="text-button" onClick={() => void switchTimeWriting(profile)}>use “{profile.reason}” as Time Writing and remove “{keep.reason}”</button>.</Notice>)}
       {cleanup && <Notice tone={cleanup.tone}>{cleanup.text}</Notice>}
       {connectionProfiles.length ? <div className="azure-table"><table className="connection-table"><thead><tr><th>Connection</th><th>Used for</th><th>Organization / project</th><th>Query</th><th>Status</th><th /></tr></thead><tbody>{connectionProfiles.map((profile) => {
         const parts = splitAzureUrl(profile.url, profile.baseUrl), [tone, label] = statusTone(profile), status = connectionStatus[profile.id]
@@ -106,7 +135,7 @@ export function AzureConnections({ azure, store, git, onOpenBoard }: { azure: Az
           <td>{parts.baseUrl.replace('https://', '')}{profile.baseUrl && <Pill tone="info">On-prem</Pill>}<small>{parts.project}{parts.team ? ` · team ${parts.team}` : ''}{profile.apiVersion ? ` · API ${profile.apiVersion}` : ''}</small></td>
           <td>{profile.query ? <span className="query-chip" title={profile.query}>Custom query</span> : <small>{profile.role === 'time-tracking' || profile.role === 'backlog-view' ? 'Team Epic backlog' : 'Default'}</small>}</td>
           <td><Pill tone={tone}>{label}</Pill><small>{status?.message ?? lastFetch(profile)}</small></td>
-          <td><div className="button-row nowrap"><button type="button" className="ghost" disabled={status?.state === 'busy' || fetchingAll} onClick={() => void azure.fetchConnection(profile.id)}>Fetch</button><button type="button" className="ghost" disabled={status?.state === 'busy' || fetchingAll} onClick={() => void azure.testConnection(profile.id)}>Test</button><button type="button" className="ghost" onClick={() => edit(profile)}>Edit</button><button type="button" className="ghost" title="New connection with the same settings and PAT" onClick={() => clone(profile)}>Clone</button><button type="button" className="text-button" onClick={() => { if (window.confirm(`Remove “${profile.reason}” from this browser? Its PAT is not revoked in Azure DevOps.`)) azure.removeConnection(profile.id) }}>Remove</button></div></td>
+          <td><div className="button-row nowrap"><button type="button" className="ghost" disabled={status?.state === 'busy' || fetchingAll} onClick={() => void azure.fetchConnection(profile.id)}>Fetch</button><button type="button" className="ghost" disabled={status?.state === 'busy' || fetchingAll} onClick={() => void azure.testConnection(profile.id)}>Test</button>{profile.role === 'backlog-view' && <button type="button" className="ghost" disabled={status?.state === 'busy' || fetchingAll || busy} onClick={() => void switchTimeWriting(profile)}>Use as Time Writing</button>}<button type="button" className="ghost" onClick={() => edit(profile)}>Edit</button><button type="button" className="ghost" title="New connection with the same settings and PAT" onClick={() => clone(profile)}>Clone</button><button type="button" className="text-button" onClick={() => { if (window.confirm(`Remove “${profile.reason}” from this browser? Its PAT is not revoked in Azure DevOps.`)) azure.removeConnection(profile.id) }}>Remove</button></div></td>
         </tr>
       })}</tbody></table></div>
         : presets.length ? null : <EmptyState title="No connections yet." detail="Add your Time Writing project first, then the DHFI release source and any other read-only sources." />}

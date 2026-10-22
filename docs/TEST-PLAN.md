@@ -273,6 +273,8 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-CON-19 Duplicate Time Writing connections** — Req CON-39 — browser check with a mocked GitHub: two QMS-0025 connections show the warning; Keep … remove the other leaves QMS-0025 and DP and writes azure-views.json without the duplicate. **UAT**
 
+**TC-CON-22 Backlog view as Time Writing; removals from Git** — Req CON-46, CON-47 — L1 `view-definitions.test.mjs` (promote: role, PAT kept, creator email and view name taken over, old one removed; sync: a connection removed in Git and unchanged here is removed once, changed here is kept, an empty file removes nothing), `git-storage.test.mjs` (delete reads the current version, one commit, missing file is not an error); browser check with GitHub and Azure DevOps mocked: a Time Writing connection with a failing PAT and a backlog view of the same project and team → the notice names both; Use as Time Writing → confirmation, azure-views.json written with only the backlog connection as Time Writing, azure-data/tw.json deleted, the fetch uses the backlog connection's PAT, one QMS-0025 entry in the menu. **UAT**
+
 **TC-CON-20 Bulk move states and person search** — Req CON-37 — L1 `my-work.test.mjs` (New only, Active only, both; other pending states left alone); browser check on sample data: the person box lists everyone on click, "ch" narrows to Chen Wei and Enter picks him; ✕ returns to me.
 
 **TC-CON-21 Overview by region and roles** — Req CON-38 — L1 `capacity.test.mjs` (no filter = everyone; each region gives exactly its people; several roles; region and roles together; same holidays as the team view); browser check on sample data: India gives 2 people, India · QE + Lead gives 1 and the headline follows. **UAT**
