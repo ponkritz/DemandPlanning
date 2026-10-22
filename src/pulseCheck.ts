@@ -56,3 +56,27 @@ export function workFlow(source: AzureWorkItem[], month: string, absenceEpicId?:
     items: items.sort((a, b) => a.change.localeCompare(b.change) || a.item.id - b.item.id),
   }
 }
+
+// Ongoing activities: Features and User Stories in progress now (Active, In Progress, Committed, Doing), per stream,
+// with the hours booked on them in the month (Completed Work of that month's Time Writing Tasks below them) and
+// whether their Target Date has passed. Work under the absence Epic is left out.
+const inProgress = /^(active|in progress|committed|doing)$/i
+export interface OngoingItem { item: AzureWorkItem; stream: string; feature?: AzureWorkItem; booked: number; overdue: boolean }
+export function ongoingWork(source: AzureWorkItem[], month: string, today: string, monthOf: (title: string) => string | undefined, absenceEpicId?: number) {
+  const byId = new Map(source.map((item) => [item.id, item]))
+  const chain = (item: AzureWorkItem) => { const list: AzureWorkItem[] = []; const seen = new Set([item.id]); let current = item.parentId == null ? undefined : byId.get(item.parentId); while (current && !seen.has(current.id)) { list.push(current); seen.add(current.id); current = current.parentId == null ? undefined : byId.get(current.parentId) } return list }
+  const booked = new Map<number, number>()
+  for (const task of source) {
+    if (task.workItemType !== 'Task' || monthOf(task.title) !== month || !task.completedWork) continue
+    for (const parent of chain(task)) booked.set(parent.id, (booked.get(parent.id) ?? 0) + task.completedWork)
+  }
+  const items: OngoingItem[] = []
+  for (const item of source) {
+    if (!(flowTypes as readonly string[]).includes(item.workItemType) || !inProgress.test(item.state.trim())) continue
+    const parents = chain(item), epic = parents.find((entry) => entry.workItemType === 'Epic')
+    if (absenceEpicId != null && epic?.id === absenceEpicId) continue
+    items.push({ item, stream: epic?.title ?? 'No Epic', feature: parents.find((entry) => entry.workItemType === 'Feature'), booked: Math.round((booked.get(item.id) ?? 0) * 100) / 100, overdue: Boolean(item.targetDate && item.targetDate.slice(0, 10) < today) })
+  }
+  items.sort((a, b) => a.stream.localeCompare(b.stream) || (a.item.workItemType === b.item.workItemType ? 0 : a.item.workItemType === 'Feature' ? -1 : 1) || a.item.id - b.item.id)
+  return { items, features: items.filter((entry) => entry.item.workItemType === 'Feature').length, stories: items.filter((entry) => entry.item.workItemType === 'User Story').length, people: new Set(items.map((entry) => entry.item.assignedTo).filter(Boolean)).size, overdue: items.filter((entry) => entry.overdue).length, streams: [...new Set(items.map((entry) => entry.stream))] }
+}

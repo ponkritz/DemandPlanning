@@ -152,12 +152,19 @@ test('Windows app proxy: version fallback, redirects refused, certificate errors
 })
 
 import { connectionPresets, pendingPresets, presetProjectUrl } from '../src/connectionPresets.ts'
-test('pre-filled connections: DHP on-prem and the cloud Time Writing project, until saved or dismissed', () => {
-  const dhp = connectionPresets.find((preset) => preset.key === 'dhp-on-prem')
-  assert.equal(presetProjectUrl(dhp), 'https://tfsapac04.ta.philips.com/tfs/DHPCollection/DHP')
-  assert.deepEqual(pendingPresets([], []).map((preset) => preset.key), ['time-writing-cloud', 'dhp-on-prem'])
-  assert.deepEqual(pendingPresets([{ url: 'https://tfsapac04.ta.philips.com/tfs/DHPCollection/DHP' }], []).map((preset) => preset.key), ['time-writing-cloud'], 'saved → no longer offered')
-  assert.deepEqual(pendingPresets([{ url: 'https://dev.azure.com/ALMP-ORG-MSTP01/Patient%20Safety%20and%20Quality/_backlogs/backlog/InD%20Quality/Epics' }], ['dhp-on-prem']), [], 'saved with a team URL, or dismissed')
+test('pre-filled connections from the shared setup: Time Writing, the four stream views and DHP, until saved or dismissed', () => {
+  assert.deepEqual(connectionPresets.map((preset) => [preset.key, preset.viewName, preset.role]), [
+    ['time-writing-cloud', 'QMS-0025', 'time-tracking'], ['dp-completed', 'DP [Completed Releases]', 'release-source'], ['cp-completed', 'CP [Completed Releases]', 'release-source'],
+    ['iocc-completed', 'IOCC [Completed Releases]', 'release-source'], ['content-completed', 'Content [Completed Releases]', 'release-source'], ['dhp-on-prem', 'Releases (Pedastal)', 'reference'],
+  ])
+  assert.ok(connectionPresets.every((preset) => !('pat' in preset) && preset.creatorEmail === ''), 'no PAT and no personal email')
+  const dp = connectionPresets.find((preset) => preset.key === 'dp-completed')
+  assert.equal(presetProjectUrl(dp), 'https://tfsapac04.ta.philips.com/tfs/DHPCollection/DHP.Vault')
+  assert.match(dp.query, /\[Area Path\] NOT UNDER 'DHP\.Vault\\xDev\\IOCC'/)
+  assert.equal(presetProjectUrl(connectionPresets.find((preset) => preset.key === 'dhp-on-prem')), 'https://tfsapac04.ta.philips.com/tfs/DHPCollection/DHP')
+  const vault = 'https://tfsapac04.ta.philips.com/tfs/DHPCollection/DHP.Vault'
+  assert.deepEqual(pendingPresets([{ url: vault, reason: 'DP_Completed', viewName: 'DP [Completed Releases]', query: dp.query }], []).map((preset) => preset.key), ['time-writing-cloud', 'cp-completed', 'iocc-completed', 'content-completed', 'dhp-on-prem'], 'one saved stream view does not hide the others in the same project')
+  assert.deepEqual(pendingPresets([{ url: 'https://dev.azure.com/ALMP-ORG-MSTP01/Patient%20Safety%20and%20Quality/_backlogs/backlog/InD%20Quality/Epics', reason: 'x' }, { url: 'https://tfsapac04.ta.philips.com/tfs/DHPCollection/DHP', reason: 'DHP' }], ['dp-completed', 'cp-completed', 'iocc-completed', 'content-completed']), [], 'saved (team URL, same name) or dismissed')
 })
 
 import { detectOs, desktopDownloads } from '../src/desktopDownloads.ts'

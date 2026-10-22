@@ -30,3 +30,34 @@ export function releaseOf(item: Pick<AzureWorkItem, 'areaPath' | 'iterationPath'
   const name = releaseFromPath(item.areaPath)?.name ?? (area.length > 1 ? area.at(-1) : undefined) ?? (at > 0 ? iteration[at - 1] : area[0])
   return name ? { name, release } : undefined
 }
+
+// Per-stream rules (see streams.ts). The result may carry a group shown before the name.
+export interface StreamRelease extends PathRelease { group?: string }
+const versionPart = /(?:^|[^\d.])(?:v\.?\s*|rel(?:ease)?\s*[-_:.]?\s*)?(\d+(?:\.\d+)+)(?![\d.]*\d)/i
+// DP: the release name is the Area Path's last segment (below the project); the number comes from the Iteration
+// Path — a "Release x.y.z" segment, else the last segment holding a version such as "2.1.0" or "v2.1".
+export function dpRelease(item: Pick<AzureWorkItem, 'areaPath' | 'iterationPath'>): StreamRelease | undefined {
+  const area = segments(item.areaPath), iteration = segments(item.iterationPath)
+  const name = area.length > 1 ? area.at(-1) : undefined
+  let release: string | undefined
+  for (const part of iteration) { const exact = releaseSegment.exec(part); if (exact) release = exact[1] }
+  if (!release) for (const part of iteration.slice(1)) { const found = versionPart.exec(part); if (found) release = found[1] }
+  return name && release ? { name, release } : releaseOf(item)
+}
+// IOCC: grouped by the Area Path segment right after "IOCC"; the release name is the document Title, with a version in
+// it (e.g. "… 2.3.1") taken as the release number.
+export function ioccRelease(item: Pick<AzureWorkItem, 'areaPath' | 'title'>): StreamRelease | undefined {
+  const area = segments(item.areaPath), at = area.findIndex((part) => part.toLowerCase() === 'iocc')
+  const group = at >= 0 ? area[at + 1] : undefined
+  const title = (item.title ?? '').trim()
+  if (!group || !title) return undefined
+  const found = versionPart.exec(title)
+  if (!found) return { group, name: title, release: '' }
+  const index = title.indexOf(found[1], found.index)
+  const before = title.slice(0, index).replace(/(?:\bv\.?|\brel(?:ease)?)\s*[-_:.]?\s*$/i, ''), after = title.slice(index + found[1].length)
+  const name = `${before} ${after}`.replace(/\s*[|:_–-]\s*$/, '').replace(/^\s*[|:_–-]\s*/, '').replace(/\s+/g, ' ').trim() || title
+  return { group, name, release: found[1] }
+}
+export function releaseFor(item: Pick<AzureWorkItem, 'areaPath' | 'iterationPath' | 'title'>, rule: 'path' | 'dp' | 'iocc' = 'path'): StreamRelease | undefined {
+  return rule === 'dp' ? dpRelease(item) : rule === 'iocc' ? ioccRelease(item) : releaseOf(item)
+}

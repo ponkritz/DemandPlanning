@@ -1,15 +1,17 @@
 import type { AzureWorkItem } from './domain'
 import { mapAzureWorkItem, requestAzure, type AzureConfig, type AzureRequest } from './azureDevOps.ts'
 import { pickFields, queryLayout } from './queryView.ts'
-import { releaseOf } from './releasePath.ts'
+import { releaseFor } from './releasePath.ts'
+import type { ReleaseRule } from './streams.ts'
 import { isMonthTask, timeWritingStoryIds } from './azureInsights.ts'
 
 // Read-only release source: a second Azure project (e.g. DHFI) queried with a saved WIQL query.
 // Approved documents carry their release in the Area or Iteration Path ("…\Name\Release x.y.z", see releasePath).
-export interface ReleaseSourceSettings { approvalDateField?: string }
+// matchThreshold: the % a fuzzy Feature match (DP, IOCC) needs to count as the release's Feature (default 80).
+export interface ReleaseSourceSettings { approvalDateField?: string; matchThreshold?: number }
 export const defaultReleaseSourceSettings: ReleaseSourceSettings = {}
 export interface ReleaseSourceSnapshot { organization: string; project: string; query: string; fetchedAt: string; items: AzureWorkItem[]; columns?: { ref: string; name: string }[]; orderBy?: { ref: string; desc: boolean }[] }
-export interface ReleaseEntry { key: string; name: string; release: string; documents: number; items: AzureWorkItem[]; tracked: boolean; trackedBy: AzureWorkItem[]; features: AzureWorkItem[]; planned: number; booked: number; hourTasks: number; approvalDate?: string; approvalMonth?: string }
+export interface ReleaseEntry { key: string; group?: string; match?: { feature: AzureWorkItem; score: number }; name: string; release: string; documents: number; items: AzureWorkItem[]; tracked: boolean; trackedBy: AzureWorkItem[]; features: AzureWorkItem[]; planned: number; booked: number; hourTasks: number; approvalDate?: string; approvalMonth?: string }
 
 type Transport = (request: AzureRequest) => Promise<unknown>
 
@@ -17,7 +19,8 @@ type Transport = (request: AzureRequest) => Promise<unknown>
 export function normalizeReleaseSourceSettings(value: unknown): ReleaseSourceSettings {
   const input = (value && typeof value === 'object' ? value : {}) as Partial<Record<keyof ReleaseSourceSettings, unknown>>
   const approvalDateField = typeof input.approvalDateField === 'string' && /^[\w.]{1,120}$/.test(input.approvalDateField.trim()) ? input.approvalDateField.trim() : undefined
-  return approvalDateField ? { approvalDateField } : {}
+  const threshold = Number(input.matchThreshold)
+  return { ...(approvalDateField ? { approvalDateField } : {}), ...(Number.isInteger(threshold) && threshold >= 1 && threshold <= 100 ? { matchThreshold: threshold } : {}) }
 }
 
 // Accept a flat work-item query as pasted from Azure DevOps. Only its WHERE clause is kept so paging
@@ -151,15 +154,44 @@ export function tracksRelease(title: string, name: string, release: string) {
   return [...title.matchAll(versionToken)].some((match) => normalizeVersion(match[2]) === wanted)
 }
 // The Feature title the app creates for a release, in the exact form tracksRelease maps back.
-export const releaseFeatureTitle = (stream: string, name: string, release: string) => `${stream.trim()} | ${name.trim()} | v${release.trim()}`
+export const releaseFeatureTitle = (stream: string, name: string, release: string) => release.trim() ? `${stream.trim()} | ${name.trim()} | v${release.trim()}` : `${stream.trim()} | ${name.trim()}`
 
-export function releaseRegister(source: AzureWorkItem[] | undefined, backlog: AzureWorkItem[]): ReleaseEntry[] {
+// Fuzzy match of a QMS-0025 Feature title to a release, 0–100: how well the name (and group) is found in the title —
+// the best of bigram similarity to the title or one of its "|" parts and the share of the name's words in the title —
+// weighed 60/40 with the version: the exact version 1, the same major.minor 0.6, the same major 0.3. Without a release
+// number only the name counts.
+const bigrams = (text: string) => { const clean = text.toLowerCase().replace(/[^a-z0-9]+/g, ''); const list: string[] = []; for (let index = 0; index < clean.length - 1; index += 1) list.push(clean.slice(index, index + 2)); return list }
+export function similarity(a: string, b: string) {
+  const x = bigrams(a), y = bigrams(b)
+  if (!x.length || !y.length) return a.trim().toLowerCase() === b.trim().toLowerCase() && a.trim() ? 1 : 0
+  const counts = new Map<string, number>(); for (const pair of y) counts.set(pair, (counts.get(pair) ?? 0) + 1)
+  let both = 0; for (const pair of x) { const left = counts.get(pair) ?? 0; if (left) { both += 1; counts.set(pair, left - 1) } }
+  return 2 * both / (x.length + y.length)
+}
+export function matchScore(title: string, name: string, release: string, group?: string) {
+  const label = [group, name].filter(Boolean).join(' ')
+  const titleWords = new Set(words(title).trim().split(' ').filter(Boolean)), nameWords = words(label).trim().split(' ').filter(Boolean)
+  const parts = [title, ...title.split('|')].map((part) => part.replace(/\bv?\d+(\.\d+)+\b/gi, ' ').trim()).filter(Boolean)
+  const nameScore = Math.max(...parts.map((part) => similarity(label, part)), nameWords.length ? nameWords.filter((word) => titleWords.has(word)).length / nameWords.length : 0)
+  if (!release.trim()) return Math.round(nameScore * 100)
+  const wanted = normalizeVersion(release).split('.')
+  const versionScore = Math.max(0, ...[...title.matchAll(versionToken)].map((match) => {
+    const found = normalizeVersion(match[2]).split('.')
+    return found.join('.') === wanted.join('.') ? 1 : found[0] === wanted[0] && (found[1] ?? '0') === (wanted[1] ?? '0') ? 0.6 : found[0] === wanted[0] ? 0.3 : 0
+  }))
+  return Math.round((nameScore * 0.6 + versionScore * 0.4) * 100)
+}
+
+// rule: how the stream reads its releases (streams.ts); fuzzy: match Features by matchScore, the best one tracking the
+// release when it reaches the threshold (%), instead of the exact rule.
+export interface RegisterOptions { rule?: ReleaseRule; fuzzy?: boolean; threshold?: number }
+export function releaseRegister(source: AzureWorkItem[] | undefined, backlog: AzureWorkItem[], options: RegisterOptions = {}): ReleaseEntry[] {
   const entries = new Map<string, ReleaseEntry>()
   for (const item of source ?? []) {
-    const found = releaseOf(item)
+    const found = releaseFor(item, options.rule)
     if (!found) continue
-    const key = `${found.name}\u0000${normalizeVersion(found.release)}`.toLowerCase()
-    const entry = entries.get(key) ?? { key: `${found.name} ${found.release}`, name: found.name, release: found.release, documents: 0, items: [], tracked: false, trackedBy: [], features: [], planned: 0, booked: 0, hourTasks: 0 }
+    const key = `${found.group ?? ''}\u0000${found.name}\u0000${normalizeVersion(found.release)}`.toLowerCase()
+    const entry = entries.get(key) ?? { key: [found.group, found.name, found.release].filter(Boolean).join(' '), ...(found.group ? { group: found.group } : {}), name: found.name, release: found.release, documents: 0, items: [], tracked: false, trackedBy: [], features: [], planned: 0, booked: 0, hourTasks: 0 }
     entry.documents += 1; entry.items.push(item)
     if (item.approvalDate && (!entry.approvalDate || item.approvalDate > entry.approvalDate)) { entry.approvalDate = item.approvalDate; entry.approvalMonth = approvalMonthOf(item.approvalDate) }
     entries.set(key, entry)
@@ -178,13 +210,15 @@ export function releaseRegister(source: AzureWorkItem[] | undefined, backlog: Az
   const features = live.filter((item) => item.workItemType === 'Feature')
   const bestNameLength = new Map<number, number>()
   for (const feature of features) for (const entry of entries.values()) if (names(feature.title, entry)) bestNameLength.set(feature.id, Math.max(bestNameLength.get(feature.id) ?? 0, entry.name.trim().length))
+  const threshold = options.threshold ?? 80
   return [...entries.values()].map((entry) => {
-    const tracking = features.filter((feature) => names(feature.title, entry) && bestNameLength.get(feature.id) === entry.name.trim().length).sort((a, b) => a.id - b.id)
+    const best = options.fuzzy ? features.map((feature) => ({ feature, score: matchScore(feature.title, entry.name, entry.release, entry.group) })).sort((a, b) => b.score - a.score || a.feature.id - b.feature.id)[0] : undefined
+    const tracking = options.fuzzy ? best && best.score >= threshold ? [best.feature] : [] : features.filter((feature) => names(feature.title, entry) && bestNameLength.get(feature.id) === entry.name.trim().length).sort((a, b) => a.id - b.id)
     const trackedBy = tracking
     const featureIds = new Set(tracking.map((feature) => feature.id))
     const tasks = new Map(timeWritingTasks.filter((task) => featureIds.has(featureOf(task)?.id ?? -1)).map((task) => [task.id, task]))
     const planned = [...tasks.values()].reduce((sum, task) => sum + hours(task.originalEstimate), 0)
     const booked = [...tasks.values()].reduce((sum, task) => sum + hours(task.completedWork), 0)
-    return { ...entry, tracked: trackedBy.length > 0, trackedBy, features: tracking, planned, booked, hourTasks: tasks.size }
+    return { ...entry, ...(best ? { match: best } : {}), tracked: trackedBy.length > 0, trackedBy, features: tracking, planned, booked, hourTasks: tasks.size }
   }).sort((a, b) => a.name.localeCompare(b.name) || b.release.localeCompare(a.release, undefined, { numeric: true }))
 }
