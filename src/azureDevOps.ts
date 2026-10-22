@@ -254,6 +254,7 @@ export function mapAzureWorkItem(item: RawItem, config: AzureConfig): AzureWorkI
     remainingWork: number('Microsoft.VSTS.Scheduling.RemainingWork'),
     createdDate: date('System.CreatedDate'),
     ...(identityName(fields['System.CreatedBy']) ? { createdBy: identityName(fields['System.CreatedBy']) } : {}),
+    ...(identityName(fields['System.ChangedBy']) ? { changedBy: identityName(fields['System.ChangedBy']) } : {}),
     storyPoints: typeof fields['Microsoft.VSTS.Scheduling.StoryPoints'] === 'number' && Number.isFinite(fields['Microsoft.VSTS.Scheduling.StoryPoints']) ? fields['Microsoft.VSTS.Scheduling.StoryPoints'] as number : undefined,
     areaPath: text('System.AreaPath'), iterationPath: text('System.IterationPath'),
     parentId: typeof fields['System.Parent'] === 'number' ? fields['System.Parent'] : parentFromRelation(item),
