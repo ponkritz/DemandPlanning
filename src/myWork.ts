@@ -12,9 +12,6 @@ export function isMine(item: Pick<AzureWorkItem, 'assignedTo' | 'assignedToEmail
 }
 
 export const workTypes = ['Feature', 'User Story', 'Bug', 'Task'] as const
-// The states offered for finishing an item. Azure DevOps rejects a state the item's process does not allow
-// (for example Resolved on an Agile Task); the error is shown as returned.
-export const finishStates: Record<string, string[]> = { Feature: ['Resolved', 'Closed'], 'User Story': ['Resolved', 'Closed'], Bug: ['Resolved', 'Closed'], Task: ['Closed'] }
 
 function ancestry(items: AzureWorkItem[]) {
   const byId = new Map(items.map((item) => [item.id, item]))
@@ -77,4 +74,50 @@ export type MoveStates = 'new' | 'active' | 'both'
 export const matchesMoveStates = (state: string, states: MoveStates) => { const value = state.trim().toLowerCase(); return states === 'both' ? value === 'new' || value === 'active' : value === states }
 export function moveCandidates(items: AzureWorkItem[], me: Me, target: string, iterations: DatedIteration[], absenceEpicId?: number, date = new Date(), states: MoveStates = 'both') {
   return myPendingWork(items, me, absenceEpicId).filter(({ item }) => item.workItemType === 'User Story' && matchesMoveStates(item.state, states) && item.iterationPath.trim().toLowerCase() !== target.trim().toLowerCase() && isPastSprint(item.iterationPath, iterations, date))
+}
+
+// Everyone in the backlog with an Azure email (for choosing who a new work item is assigned to), sorted by name. A name
+// used with more than one email shows the email too, so the choice is never ambiguous.
+export function assignablePeople(items: AzureWorkItem[]) {
+  const byEmail = new Map<string, string>()
+  for (const item of items) if (item.assignedToEmail && item.assignedTo.trim() && !byEmail.has(item.assignedToEmail)) byEmail.set(item.assignedToEmail, item.assignedTo.trim())
+  const counts = new Map<string, number>()
+  for (const name of byEmail.values()) counts.set(name, (counts.get(name) ?? 0) + 1)
+  return [...byEmail.entries()].map(([email, name]) => ({ email, name: (counts.get(name) ?? 0) > 1 ? `${name} (${email})` : name })).sort((a, b) => a.name.localeCompare(b.name))
+}
+
+// State checks over the person's Features and User Stories (work under the absence Epic left out):
+//  - a Feature whose User Stories are all Closed should be Closed too;
+//  - a User Story whose Tasks are all Closed should be Closed too;
+//  - an Active Feature should have at least one Active User Story.
+// Only items with children of that kind are judged; Removed children are ignored.
+export type StateCheckKind = 'close-feature' | 'close-story' | 'feature-needs-active-story'
+export interface StateCheck { kind: StateCheckKind; item: AzureWorkItem; children: AzureWorkItem[] }
+const stateIs = (item: Pick<AzureWorkItem, 'state'>, state: string) => item.state.trim().toLowerCase() === state
+export function stateChecks(items: AzureWorkItem[], me: Me, absenceEpicId?: number): StateCheck[] {
+  const byId = new Map(items.map((item) => [item.id, item]))
+  const underAbsence = (item: AzureWorkItem) => { const seen = new Set<number>(); for (let current: AzureWorkItem | undefined = item; current && !seen.has(current.id); current = current.parentId == null ? undefined : byId.get(current.parentId)) { if (current.id === absenceEpicId) return true; seen.add(current.id) } return false }
+  const children = new Map<number, AzureWorkItem[]>()
+  for (const item of items) if (item.parentId != null && !stateIs(item, 'removed')) children.set(item.parentId, [...(children.get(item.parentId) ?? []), item])
+  const checks: StateCheck[] = []
+  for (const item of items.filter((entry) => isMine(entry, me) && !stateIs(entry, 'closed') && !stateIs(entry, 'removed') && !underAbsence(entry)).sort((a, b) => a.id - b.id)) {
+    if (item.workItemType === 'Feature') {
+      const stories = (children.get(item.id) ?? []).filter((child) => child.workItemType === 'User Story')
+      if (stories.length && stories.every((story) => stateIs(story, 'closed'))) checks.push({ kind: 'close-feature', item, children: stories })
+      else if (stateIs(item, 'active') && !stories.some((story) => stateIs(story, 'active'))) checks.push({ kind: 'feature-needs-active-story', item, children: stories })
+    } else if (item.workItemType === 'User Story') {
+      const tasks = (children.get(item.id) ?? []).filter((child) => child.workItemType === 'Task')
+      if (tasks.length && tasks.every((task) => stateIs(task, 'closed'))) checks.push({ kind: 'close-story', item, children: tasks })
+    }
+  }
+  return checks
+}
+
+// What may be done to a Feature from Assigned to Me: a New Feature is set to Active; only an Active Feature is Closed.
+// Other work items are closed directly.
+export function nextStateFor(item: Pick<AzureWorkItem, 'workItemType' | 'state'>): { state: 'Active' | 'Closed'; label: string } | null {
+  if (item.workItemType !== 'Feature') return { state: 'Closed', label: `Close ${item.workItemType}` }
+  if (stateIs(item, 'new')) return { state: 'Active', label: 'Set Feature to Active' }
+  if (stateIs(item, 'active')) return { state: 'Closed', label: 'Close Feature' }
+  return null
 }

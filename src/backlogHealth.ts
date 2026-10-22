@@ -67,9 +67,68 @@ export function hierarchyOf(item: AzureWorkItem, byId: Map<number, AzureWorkItem
   return levels
 }
 
-// Older Sprints and Unassigned as CSV: the item, where it sits, its state, who created and who last updated it, and when.
-export const itemHeader = ['ID', 'Work Item Type', 'Title', 'Area Path', 'Iteration Path', 'State', 'Created By', 'Updated By', 'Created On', 'Updated On', 'URL']
-export function itemCsv(rows: AzureWorkItem[]) {
+// Columns a Backlog Health tab can show, in the order chosen per tab (saved in this browser). ID is always shown; the
+// CSV of a tab has the shown columns plus the URL. Values are full (paths, dates as YYYY-MM-DD).
+export const healthColumns = [
+  { id: 'id', label: 'ID' },
+  { id: 'type', label: 'Work Item Type' },
+  { id: 'title', label: 'Title' },
+  { id: 'areaPath', label: 'Area Path' },
+  { id: 'iterationPath', label: 'Iteration Path' },
+  { id: 'state', label: 'State' },
+  { id: 'assignedTo', label: 'Assigned To' },
+  { id: 'createdBy', label: 'Created By' },
+  { id: 'changedBy', label: 'Updated By' },
+  { id: 'createdDate', label: 'Created On' },
+  { id: 'changedDate', label: 'Updated On' },
+  { id: 'sprintEnd', label: 'Sprint end' },
+  { id: 'parent', label: 'Parent' },
+  { id: 'epic', label: 'Epic' },
+  { id: 'feature', label: 'Feature' },
+  { id: 'story', label: 'User Story' },
+  { id: 'tags', label: 'Tags' },
+  { id: 'description', label: 'Description' },
+] as const
+export type HealthColumn = typeof healthColumns[number]['id']
+export type HealthList = 'sprints' | 'dod' | 'unassigned'
+const itemColumns: HealthColumn[] = ['id', 'type', 'title', 'areaPath', 'iterationPath', 'state', 'assignedTo', 'createdBy', 'changedBy', 'createdDate', 'changedDate']
+export const defaultHealthColumns: Record<HealthList, HealthColumn[]> = { sprints: itemColumns, unassigned: itemColumns, dod: ['id', 'title', 'type', 'state', 'assignedTo', 'iterationPath', 'parent', 'description'] }
+export const healthColumnLabel = (id: HealthColumn) => healthColumns.find((column) => column.id === id)!.label
+
+// Known columns only, no repeats, ID always (first unless placed elsewhere); anything else falls back to the default.
+export function normalizeHealthColumns(value: unknown, list: HealthList): HealthColumn[] {
+  if (!Array.isArray(value)) return [...defaultHealthColumns[list]]
+  const known = new Set<string>(healthColumns.map((column) => column.id))
+  const picked = [...new Set(value.filter((id): id is HealthColumn => typeof id === 'string' && known.has(id)))]
+  return picked.includes('id') ? picked : ['id', ...picked]
+}
+
+export function healthValue(column: HealthColumn, item: AzureWorkItem, byId: Map<number, AzureWorkItem>, iterations: DatedIteration[]): string {
+  const label = (entry?: AzureWorkItem) => entry ? `#${entry.id} ${entry.title}` : ''
+  switch (column) {
+    case 'id': return String(item.id)
+    case 'type': return item.workItemType
+    case 'title': return item.title
+    case 'areaPath': return item.areaPath
+    case 'iterationPath': return item.iterationPath
+    case 'state': return item.state
+    case 'assignedTo': return item.assignedTo
+    case 'createdBy': return item.createdBy ?? ''
+    case 'changedBy': return item.changedBy ?? ''
+    case 'createdDate': return item.createdDate?.slice(0, 10) ?? ''
+    case 'changedDate': return item.changedDate?.slice(0, 10) ?? ''
+    case 'sprintEnd': return sprintEnd(item, iterations)
+    case 'parent': return item.parentId != null ? label(byId.get(item.parentId)) || `#${item.parentId}` : ''
+    case 'epic': return label(hierarchyOf(item, byId).Epic)
+    case 'feature': return label(hierarchyOf(item, byId).Feature)
+    case 'story': return label(hierarchyOf(item, byId)['User Story'])
+    case 'tags': return item.tags
+    case 'description': return descriptionText(item)
+  }
+}
+
+export function columnsCsv(rows: AzureWorkItem[], columns: HealthColumn[], all: AzureWorkItem[], iterations: DatedIteration[]) {
+  const byId = new Map(all.map((item) => [item.id, item]))
   const quote = (value: unknown) => { const text = String(value ?? ''); return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text }
-  return [itemHeader, ...rows.map((item) => [item.id, item.workItemType, item.title, item.areaPath, item.iterationPath, item.state, item.createdBy ?? '', item.changedBy ?? '', item.createdDate?.slice(0, 10) ?? '', item.changedDate?.slice(0, 10) ?? '', item.url])].map((row) => row.map(quote).join(',')).join('\r\n')
+  return [[...columns.map(healthColumnLabel), 'URL'], ...rows.map((item) => [...columns.map((column) => healthValue(column, item, byId, iterations)), item.url])].map((row) => row.map(quote).join(',')).join('\r\n')
 }

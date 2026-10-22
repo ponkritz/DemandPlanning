@@ -229,7 +229,17 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
 
   // Fetches one connection read-only. Time Writing goes to the preview (review, then save); the release source,
   // document and reference connections are stored with the app data straight away. Nothing is written to Azure.
-  async function fetchConnection(id: string): Promise<boolean> {
+  // Only one Time Writing fetch runs at a time: a second request (↻, Fetch, Fetch all, the fetch at start, Use as Time
+  // Writing) joins the one already running and gets its result, instead of failing.
+  const timeWritingRun = useRef<Promise<boolean> | null>(null)
+  function fetchConnection(id: string): Promise<boolean> {
+    if ((loadAzureConnectionProfile(id)?.role ?? 'time-tracking') !== 'time-tracking') return fetchConnectionNow(id)
+    if (timeWritingRun.current) return timeWritingRun.current
+    const run = fetchConnectionNow(id).finally(() => { if (timeWritingRun.current === run) timeWritingRun.current = null })
+    timeWritingRun.current = run
+    return run
+  }
+  async function fetchConnectionNow(id: string): Promise<boolean> {
     const profile = loadAzureConnectionProfile(id)
     const summary = connectionProfiles.find((entry) => entry.id === id)
     if (!profile) { setConnectionStatus((current) => ({ ...current, [id]: { state: 'error', message: 'Saved connection not found in this browser.' } })); return false }
@@ -245,7 +255,6 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
       let done = ''
       const notify = (source: Parameters<FetchListener>[1]) => { const listed = listAzureConnectionProfiles().find((entry) => entry.id === id); if (listed) onFetched?.current?.(listed, source) }
       if (role === 'time-tracking') {
-        if (fetching.current) throw new Error('A Time Writing fetch is already running.')
         fetching.current = true; setBusy(true)
         try {
           selectConnectionProfile(id)

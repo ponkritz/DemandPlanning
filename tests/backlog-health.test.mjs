@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { olderSprintItems, featuresWithoutDoD, unassignedItems, hasDoD, healthCsv, sprintEnd, hierarchyOf, itemCsv, descriptionText, peopleOf } from '../src/backlogHealth.ts'
+import { olderSprintItems, featuresWithoutDoD, unassignedItems, hasDoD, healthCsv, sprintEnd, hierarchyOf, columnsCsv, defaultHealthColumns, normalizeHealthColumns, descriptionText, peopleOf } from '../src/backlogHealth.ts'
 import { mapAzureWorkItem } from '../src/azureDevOps.ts'
 
 const base = { organization: 'org', project: 'Q', state: 'Active', assignedTo: 'Ana', areaPath: 'Q', iterationPath: 'Q\\PI 1\\Sprint 1', tags: '', url: 'u', syncedAt: '' }
@@ -41,9 +41,9 @@ test('Unassigned list: ID, type, title, paths, state, created and updated by and
   assert.deepEqual([level.Epic?.id, level.Feature?.id, level['User Story']?.id, level.Task?.id], [1, 2, 4, 6])
   assert.deepEqual(Object.keys(hierarchyOf(tree[1], byId)).sort(), ['Epic', 'Feature'], 'a Feature has no story or task')
   const task = { ...tree[3], changedBy: 'Ana Costa', changedDate: '2026-10-20T09:00:00Z' }
-  const csv = itemCsv([task]).split('\r\n')
-  assert.equal(csv[0], 'ID,Work Item Type,Title,Area Path,Iteration Path,State,Created By,Updated By,Created On,Updated On,URL')
-  assert.equal(csv[1], '6,Task,"Task, one",Q\\Team,Q\\PI 1\\Sprint 1,Active,Ben Okafor,Ana Costa,2026-10-01,2026-10-20,u')
+  const csv = columnsCsv([task], defaultHealthColumns.unassigned, tree, iterations).split('\r\n')
+  assert.equal(csv[0], 'ID,Work Item Type,Title,Area Path,Iteration Path,State,Assigned To,Created By,Updated By,Created On,Updated On,URL')
+  assert.equal(csv[1], '6,Task,"Task, one",Q\\Team,Q\\PI 1\\Sprint 1,Active,,Ben Okafor,Ana Costa,2026-10-01,2026-10-20,u')
   const config = { organization: 'org', project: 'Q', team: 'T' }
   assert.equal(mapAzureWorkItem({ id: 9, fields: { 'System.Title': 'x', 'System.CreatedBy': { displayName: 'Ana Costa', uniqueName: 'ana@x' } } }, config).createdBy, 'Ana Costa')
   assert.equal(mapAzureWorkItem({ id: 9, fields: { 'System.Title': 'x', 'System.ChangedBy': { displayName: 'Ben Okafor' } } }, config).changedBy, 'Ben Okafor')
@@ -60,4 +60,14 @@ test('Features without DoD: Description as plain text in the CSV; people to filt
   assert.deepEqual(peopleOf(feature), ['Ana'])
   assert.deepEqual(peopleOf({ ...feature, assignedTo: '', createdBy: 'Ben', changedBy: 'Chen' }, true), ['Ben', 'Chen'])
   assert.deepEqual(peopleOf({ ...feature, assignedTo: '' }), [])
+})
+
+test('Backlog Health columns: chosen and ordered per list; ID always; CSV follows them', () => {
+  assert.deepEqual(normalizeHealthColumns(['title', 'nope', 'title', 'epic'], 'dod'), ['id', 'title', 'epic'], 'unknown and repeated dropped, ID added')
+  assert.deepEqual(normalizeHealthColumns(['state', 'id'], 'sprints'), ['state', 'id'], 'ID may be placed elsewhere')
+  assert.deepEqual(normalizeHealthColumns(null, 'dod'), defaultHealthColumns.dod)
+  const tree = [item(1, 'Epic', { title: 'Stream' }), item(2, 'Feature', { parentId: 1, title: 'Release' }), item(4, 'User Story', { parentId: 2, title: 'Story', tags: 'QE', description: '<p>Done <i>when</i></p>' })]
+  const csv = columnsCsv([tree[2]], ['epic', 'id', 'sprintEnd', 'parent', 'tags', 'description'], tree, iterations).split('\r\n')
+  assert.equal(csv[0], 'Epic,ID,Sprint end,Parent,Tags,Description,URL')
+  assert.equal(csv[1], '#1 Stream,4,2026-10-09,#2 Release,QE,Done when,u')
 })

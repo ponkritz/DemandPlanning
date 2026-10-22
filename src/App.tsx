@@ -20,7 +20,11 @@ import { useGitStorage } from './useGitStorage'
 import { useWindchill } from './useWindchill'
 import { WindchillExportImport, WindchillPage } from './components/WindchillViews'
 import { BacklogHealthPage } from './pages/BacklogHealthPage'
+import { PulseCheckPage } from './pages/PulseCheckPage'
+import { PiReviewPage } from './pages/PiReviewPage'
+import { QeMappingPage } from './pages/QeMappingPage'
 import { useAccess } from './useAccess'
+import { useFeatureSetup } from './useFeatureSetup'
 import type { Area } from './access'
 import { useMyWork } from './useMyWork'
 import { MyWorkPage } from './pages/MyWorkPage'
@@ -73,7 +77,23 @@ export default function App() {
     void azure.fetchCloud()
   }, [store.ready, azure, git.connected, setupSynced])
   const my = useMyWork(azure, store)
+  // Settings → Storage: everything shared through Git, loaded now (as at start, plus the planning data, roles and
+  // Feature setup); each part reports separately so one failure does not hide the rest.
+  async function loadEverything() {
+    const loaded: string[] = [], failed: string[] = []
+    const step = async (label: string, run: () => Promise<string>) => { try { loaded.push(await run()) } catch (failure) { failed.push(`${label}: ${failure instanceof Error ? failure.message : String(failure)}`) } }
+    await step('Planning data', async () => { await git.load(); return 'planning data (baselines, release scope, region / role mapping)' })
+    await step('Connection setup', async () => { const result = await git.syncViews(); azure.reloadConnectionProfiles(); return result ? `connection setup (${result.added.length} added, ${result.updated.length} updated, ${result.removed.length} removed, ${result.kept.length} kept as changed here)` : 'no connection setup in Git' })
+    await step('On-prem view data', async () => { const result = await git.pullSnapshots(); return `${result.files} on-prem view data file${result.files === 1 ? '' : 's'} (${result.applied.length} newer than here)` })
+    await step('Windchill exports', async () => { const result = await git.pullWindchill(); await windchill.reload(); return `${result.files} Windchill export${result.files === 1 ? '' : 's'} (${result.applied.length} newer)` })
+    await step('Access roles', async () => { await access.reload(); return 'access roles' })
+    await step('Feature setup', async () => { await featureSetup.reload(); return 'Feature setup' })
+    return { loaded, failed }
+  }
   const access = useAccess(git, azure)
+  const featureSetup = useFeatureSetup(git)
+  // Who creates new work items (the email on the Time Writing connection) and whether they may assign them to others.
+  const assign = { me: azure.creatorEmail.trim().toLowerCase(), canChoose: access.can('azure.createForOthers') }
   const [requested, setPage] = useState<Page>('overview')
   const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null)
   // The selected month starts on the viewer's current month (their time zone).
@@ -94,7 +114,7 @@ export default function App() {
   const openView = (id: string) => { setViewId(id); saveBacklogTab(id); setPage('board') }
   // Access roles: each menu entry belongs to an area; Settings is always there (each person's own connections and tokens).
   // A page the viewer's roles do not include falls back to the first one they do.
-  const areaOf = (id: Page): Area | null => id === 'admin' ? null : id === 'board' ? (view.onPrem ? 'release' : 'board') : id === 'windchill' ? 'release' : id
+  const areaOf = (id: Page): Area | null => id === 'admin' ? null : id === 'board' ? (view.onPrem ? 'release' : 'board') : id === 'windchill' ? 'release' : id === 'pulse' || id === 'pireview' ? 'overview' : id
   const allowed = (id: Page) => { const area = areaOf(id); return area == null || access.sees(area) }
   const page = allowed(requested) ? requested : pages.find((entry) => allowed(entry.id))?.id ?? 'admin'
   const meta = pageMeta(page)
@@ -103,6 +123,9 @@ export default function App() {
   const [windchillId, setWindchillId] = useState('')
   const windchillView = windchillViews.find((entry) => entry.id === windchillId)
   const openWindchill = (id: string) => { setWindchillId(id); setPage('windchill') }
+  // Menu headings and sub-lists can be collapsed; which ones are closed is remembered in this browser.
+  const [collapsed, setCollapsed] = useState<string[]>(() => { try { const saved = JSON.parse(localStorage.getItem('demand-planning-nav-collapsed-v1') ?? '[]'); return Array.isArray(saved) ? saved.filter((key): key is string => typeof key === 'string') : [] } catch { return [] } })
+  const toggleNav = (key: string) => setCollapsed((now) => { const next = now.includes(key) ? now.filter((entry) => entry !== key) : [...now, key]; try { localStorage.setItem('demand-planning-nav-collapsed-v1', JSON.stringify(next)) } catch { /* this visit only */ } return next })
   const navButton = (key: string, icon: string, label: string, active: boolean, onClick: () => void) => <button key={key} className={active ? 'nav-active' : ''} aria-current={active ? 'page' : undefined} onClick={onClick}><span className="nav-icon">{icon}</span>{label}</button>
   // Azure DevOps connections live at the top of Settings.
   const openConnection = () => { settingsTabOnOpen('connections'); setPage('admin') }
@@ -116,13 +139,25 @@ export default function App() {
     <aside className="sidebar">
       <div className="brand"><div className="brand-mark">DP</div><div><strong>Demand Planning</strong><span>Quality Engineering</span></div></div>
       <nav aria-label="Primary navigation">{pageGroups.map((group) => {
-        const entries = [
-          ...(group === 'Release Details' && access.sees('release') ? views.filter((entry) => entry.onPrem).map((entry) => navButton(`view:${entry.id}`, pageMeta('board').icon, entry.name, page === 'board' && view.id === entry.id, () => openView(entry.id))) : []),
-          ...pages.filter((item) => item.group === group).flatMap((item) => item.id === 'windchill' ? (access.sees('release') ? [...windchillViews.map((entry) => navButton(entry.id, item.icon, entry.name, page === 'windchill' && windchillView?.id === entry.id, () => openWindchill(entry.id))), ...(access.can('windchill.import') ? [navButton(item.id, '＋', item.label, page === 'windchill' && !windchillView, () => openWindchill(''))] : [])] : [])
-            : item.id === 'board' ? (access.sees('board') ? views.filter((entry) => !entry.onPrem).map((entry) => navButton(`view:${entry.id}`, item.icon, entry.name, page === 'board' && view.id === entry.id, () => openView(entry.id))) : [])
-              : !allowed(item.id) ? [] : [<button key={item.id} className={page === item.id ? 'nav-active' : ''} aria-current={page === item.id ? 'page' : undefined} onClick={() => setPage(item.id)}><span className="nav-icon">{item.icon}</span>{item.label}{item.id === 'mywork' && my.pending.length > 0 && <span className="nav-badge" aria-label={`${my.pending.length} pending`}>{my.pending.length}</span>}</button>]),
-        ]
-        return entries.length > 0 && <div key={group} className="nav-section">{group !== 'Overview' && <p className="nav-group">{group.toUpperCase()}</p>}{entries}</div>
+        const pageButton = (item: typeof pages[number]) => !allowed(item.id) ? [] : [<button key={item.id} className={page === item.id ? 'nav-active' : ''} aria-current={page === item.id ? 'page' : undefined} onClick={() => setPage(item.id)}><span className="nav-icon">{item.icon}</span>{item.label}{item.id === 'mywork' && my.pending.length > 0 && <span className="nav-badge" aria-label={`${my.pending.length} pending`}>{my.pending.length}</span>}</button>]
+        const windchillMeta = pageMeta('windchill')
+        // Release Details has two sub-lists: the on-prem Azure DevOps views and the Windchill exports.
+        const sections: { key: string; label?: string; entries: React.ReactNode[] }[] = group === 'Release Details' ? [
+          { key: 'release:ads', label: 'Azure DevOps Server', entries: access.sees('release') ? views.filter((entry) => entry.onPrem).map((entry) => navButton(`view:${entry.id}`, pageMeta('board').icon, entry.name, page === 'board' && view.id === entry.id, () => openView(entry.id))) : [] },
+          { key: 'release:windchill', label: 'Windchill exports', entries: access.sees('release') ? [...windchillViews.map((entry) => navButton(entry.id, windchillMeta.icon, entry.name, page === 'windchill' && windchillView?.id === entry.id, () => openWindchill(entry.id))), ...(access.can('windchill.import') ? [navButton('windchill', '＋', windchillMeta.label, page === 'windchill' && !windchillView, () => openWindchill(''))] : [])] : [] },
+        ] : [{ key: group, entries: pages.filter((item) => item.group === group).flatMap((item) => item.id === 'board' ? (access.sees('board') ? views.filter((entry) => !entry.onPrem).map((entry) => navButton(`view:${entry.id}`, item.icon, entry.name, page === 'board' && view.id === entry.id, () => openView(entry.id))) : []) : pageButton(item)) }]
+        const shown = sections.filter((section) => section.entries.length)
+        if (!shown.length) return null
+        const open = !collapsed.includes(group)
+        const holdsActive = group === (page === 'board' ? (view.onPrem ? 'Release Details' : 'I&D Board') : meta.group)
+        return <div key={group} className="nav-section">
+          <button type="button" className={`nav-group${holdsActive && !open ? ' nav-group-active' : ''}`} aria-expanded={open} onClick={() => toggleNav(group)}><span aria-hidden="true">{open ? '▾' : '▸'}</span>{group.toUpperCase()}</button>
+          {/* Collapsed lists stay in the page but are hidden on wide screens only: the narrow sidebar has no headings. */}
+          <div className={`nav-items${open ? '' : ' nav-collapsed'}`}>{shown.map((section) => section.label ? <div key={section.key} className="nav-subsection">
+            <button type="button" className="nav-subgroup" aria-expanded={!collapsed.includes(section.key)} onClick={() => toggleNav(section.key)}><span aria-hidden="true">{collapsed.includes(section.key) ? '▸' : '▾'}</span>{section.label}</button>
+            <div className={`nav-items${collapsed.includes(section.key) ? ' nav-collapsed' : ''}`}>{section.entries}</div>
+          </div> : <div key={section.key} className="nav-items">{section.entries}</div>)}</div>
+        </div>
       })}</nav>
       <div className="sidebar-footer"><DesktopDownload /><small className="storage-line" title="Where app data is saved">{storageLabel}</small>{buildStatus}</div>
     </aside>
@@ -132,15 +167,18 @@ export default function App() {
       {store.cache.status === 'error' && <Notice tone="error"><p>{store.cache.message}</p><div className="button-row"><button className="ghost" onClick={() => exportStateJson(store.state)}>Export JSON backup now</button><button className="primary" onClick={store.retrySave}>Retry browser save</button></div></Notice>}
       {store.connection.mode !== 'sharepoint' && store.connection.status === 'error' && <Notice tone="error">{store.connection.message}</Notice>}
       {page === 'overview' && <DashboardPage month={month} azure={azure} navigate={setPage} store={store} setMonth={setMonth} my={my} />}
+      {page === 'pulse' && <PulseCheckPage month={month} azure={azure} store={store} />}
+      {page === 'pireview' && <PiReviewPage />}
+      {page === 'qemapping' && <QeMappingPage />}
       {page === 'mywork' && <MyWorkPage azure={azure} store={store} my={my} onOpenBulk={() => setPage('bulk')} />}
-      {page === 'bulk' && <BulkActionsPage azure={azure} store={store} my={my} />}
+      {page === 'bulk' && <BulkActionsPage azure={azure} store={store} my={my} assign={assign} />}
       {page === 'monthly' && <MonthlyPage azure={azure} month={month} store={store} my={my} />}
       {page === 'baselines' && <BaselinesPage azure={azure} month={month} store={store} git={git} onOpenSettings={() => { settingsTabOnOpen('storage'); setPage('admin') }} canEdit={access.can('baselines.edit')} />}
       {page === 'windchill' && (windchillView ? <WindchillPage view={windchillView} windchill={windchill} git={git} gitNote={git.snapshotNotes[`wc:${windchillView.id}`]} /> : access.can('windchill.import') ? <WindchillExportImport windchill={windchill} git={git} onImported={openWindchill} /> : <Notice tone="info">Your role does not include importing Windchill exports. Open an export from the menu; an Admin can change this in Settings → Access.</Notice>)}
       {page === 'health' && <BacklogHealthPage azure={azure} store={store} />}
-      {page === 'board' && <BoardPage azure={azure} store={store} current={view} month={month} git={git} onOpenConnection={openConnection} />}
+      {page === 'board' && <BoardPage azure={azure} store={store} current={view} month={month} git={git} onOpenConnection={openConnection} assign={assign} featureSetup={featureSetup.file} />}
       {page === 'snapshots' && <SnapshotsPage {...pageProps} />}
-      {page === 'admin' && <AdminPage {...pageProps} azure={azure} git={git} access={access} onOpenBoard={() => setPage('board')} />}
+      {page === 'admin' && <AdminPage {...pageProps} azure={azure} git={git} access={access} featureSetup={featureSetup} loadEverything={loadEverything} onOpenBoard={() => setPage('board')} />}
       {page === 'docs' && <DocsPage />}
     </main>
   </div></HeaderSlot.Provider>

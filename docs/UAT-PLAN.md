@@ -20,6 +20,7 @@ The scenarios are the test cases marked **UAT** in [TEST-PLAN.md](TEST-PLAN.md).
 | 5 | Force Update, backup and restore, snapshots (where SharePoint is available), Documentation | TC-UPD-02, TC-STO-04, TC-SNP-02, TC-DOC-01 |
 | 6 | Sharing through Git (shared connection setup, Load from Git, read-only token), Release Details and Windchill exports, Overview by region and role, Backlog Health | TC-CON-16, TC-CON-17, TC-CON-18, TC-CON-19, TC-CON-21, TC-SCR-01 |
 | 7 | Roles and access: set up roles, assign a Scrum Master by email, check what each role sees (two people on two browsers) | TC-ACC-01 |
+| 8 | Menu (Data Insights, collapsing), Backlog Health columns and filters, assigning new work to others, Feature setup per Epic, State checks and Feature states | TC-NAV-17, TC-SCR-02, TC-SCR-03, TC-ACC-02, TC-CON-23, TC-ATM-06 |
 
 ## Entry criteria
 
