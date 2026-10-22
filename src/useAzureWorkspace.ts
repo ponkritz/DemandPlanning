@@ -349,6 +349,16 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
     setMessage(`${ok} of ${targets.length} connection${targets.length === 1 ? '' : 's'} fetched and saved.`)
   }
 
+  // At start: the cloud (Azure DevOps Services) connections of fetchAll that have a PAT here are fetched again, so the
+  // app opens on current data. On-prem connections are left to their own Fetch (VPN) or the data in Git.
+  async function fetchCloud() {
+    const timeWriting = activeConnectionProfileId || connectionProfiles.find((entry) => entry.role === 'time-tracking')?.id
+    const cloud = (baseUrl?: string) => { try { return !baseUrl || isCloudBase(baseUrl) } catch { return false } }
+    const targets = connectionProfiles.filter((profile) => (profile.role !== 'time-tracking' || profile.id === timeWriting) && cloud(profile.baseUrl) && loadAzureConnectionProfile(profile.id)?.token?.trim())
+    for (const profile of targets) await fetchConnection(profile.id)
+    return targets.length
+  }
+
   // Writes a fetched Time Writing result to the app cache, replacing the previous Azure cache for that scope.
   function storeFetched(result: AzureFetchResult, how: string) {
     store.update((draft) => {
@@ -378,7 +388,7 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
     setMessage(`${preview.items.length} team-backlog records saved. Old out-of-scope cached records were replaced; Azure DevOps and demand-planning data were not modified.`)
   }
 
-  return { reloadConnectionProfiles: () => setConnectionProfiles(listAzureConnectionProfiles()), projectUrl, changeProjectUrl, team, setTeam, pat, setPat, creatorEmail, setCreatorEmail, role, setRole, connectionStatus, saveConnection, removeConnection, fetchConnection, loadFromGit: (id: string) => loadFromGit(id), canLoadFromGit, fetchAll, testConnection, applyWorkItems, isSample, loadSampleData, connectionProfiles, activeConnectionProfileId, selectConnectionProfile, saveConnectionProfile, forgetConnectionProfile, busy, error, setError, message, setMessage, preview, setPreview, saved, items, config, needsScopedRefresh, fetchPreview, refresh, lastRefreshed, rememberPat, forgetPat, featureCreated, savePreview, saveTimeWritingEffort }
+  return { reloadConnectionProfiles: () => setConnectionProfiles(listAzureConnectionProfiles()), projectUrl, changeProjectUrl, team, setTeam, pat, setPat, creatorEmail, setCreatorEmail, role, setRole, connectionStatus, saveConnection, removeConnection, fetchConnection, loadFromGit: (id: string) => loadFromGit(id), canLoadFromGit, fetchAll, fetchCloud, testConnection, applyWorkItems, isSample, loadSampleData, connectionProfiles, activeConnectionProfileId, selectConnectionProfile, saveConnectionProfile, forgetConnectionProfile, busy, error, setError, message, setMessage, preview, setPreview, saved, items, config, needsScopedRefresh, fetchPreview, refresh, lastRefreshed, rememberPat, forgetPat, featureCreated, savePreview, saveTimeWritingEffort }
 }
 
 export type AzureWorkspace = ReturnType<typeof useAzureWorkspace>
