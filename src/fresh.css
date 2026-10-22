@@ -153,3 +153,31 @@ td small{color:var(--text-3)}
 .team-filter{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;margin-bottom:14px}
 .access-table th,.access-table td{text-align:center}.access-table th:first-child,.access-table td:first-child{text-align:left}.access-table td small{display:block;color:var(--text-2)}.access-table input[type=checkbox]{width:auto}
 .description-cell{min-width:260px;max-width:420px;white-space:normal;font-size:12px;color:var(--text-2)}
+.sort-header{all:unset;cursor:pointer;font:inherit;color:inherit;text-transform:inherit;letter-spacing:inherit;white-space:nowrap}.sort-header:hover,.sort-header:focus-visible{color:var(--accent-text);text-decoration:underline}.inline-select{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-2)}.inline-select select{max-width:240px}
+.assignee-confirm{display:grid;gap:12px}.assignee-confirm label{display:grid;gap:6px}
+.nav-items{display:grid;gap:2px}
+.sidebar nav button.nav-group,.sidebar nav button.nav-subgroup{background:none;border:0;box-shadow:none;cursor:pointer;display:flex;gap:6px;align-items:center;width:100%;text-align:left;color:var(--sidebar-muted);font-size:10.5px;font-weight:650;letter-spacing:.9px;padding:2px 10px;margin:0 0 4px}
+.sidebar nav button.nav-subgroup{letter-spacing:.3px;font-size:11px;padding-left:18px;margin:4px 0 2px}
+.sidebar nav button.nav-group:hover,.sidebar nav button.nav-subgroup:hover{color:#fff;background:none}
+.sidebar nav button.nav-group-active{color:var(--teal-light)}
+@media(min-width:1001px){.nav-collapsed{display:none}}
+@media(max-width:1000px){.sidebar nav button.nav-subgroup{display:none}}
+.feature-setup{display:grid;gap:10px}.setup-story{display:grid;grid-template-columns:2fr 3fr auto;gap:10px;align-items:start;border-bottom:1px solid var(--line-soft);padding-bottom:8px}.setup-story label{display:grid;gap:4px}@media(max-width:900px){.setup-story{grid-template-columns:1fr}}
+/* Menu levels: headings are bold capitals with a divider; sub-headings are smaller, in normal case and indented, and
+   their items sit inside a faint guide line so they read as nested. */
+.sidebar nav .nav-section+.nav-section{border-top:1px solid #ffffff14;padding-top:12px}
+.sidebar nav button.nav-group{font-size:11px;font-weight:800;letter-spacing:1.2px;color:#ffffffc4;padding:2px 8px;margin:0 0 6px}
+.sidebar nav button.nav-group>span{font-size:10px;width:10px}
+.sidebar nav button.nav-subgroup{text-transform:none;font-size:11.5px;font-weight:600;letter-spacing:.2px;color:var(--sidebar-muted);padding:3px 8px 3px 22px;margin:6px 0 2px}
+.sidebar nav button.nav-subgroup>span{font-size:9px;width:9px;opacity:.8}
+.sidebar nav .nav-subsection>.nav-items{margin-left:20px;padding-left:6px;border-left:1px solid #ffffff1f}
+.sidebar nav .nav-subsection>.nav-items button{font-size:13px;padding-top:6px;padding-bottom:6px}
+@media(max-width:1000px){.sidebar nav .nav-section+.nav-section{border-top:0;padding-top:0}.sidebar nav .nav-subsection>.nav-items{margin-left:0;padding-left:0;border-left:0}}
+/* Menu level colours: headings warm gold, sub-headings soft sky blue; teal stays for the open page. */
+.sidebar{--nav-heading:#f2c46d;--nav-subheading:#8ec5ff}
+.sidebar nav button.nav-group{color:var(--nav-heading)}
+.sidebar nav button.nav-subgroup{color:var(--nav-subheading)}
+.sidebar nav button.nav-group:hover{color:#ffe2a6}
+.sidebar nav button.nav-subgroup:hover{color:#c4e0ff}
+.sidebar nav .nav-subsection>.nav-items{border-left-color:#8ec5ff40}
+.sidebar nav button.nav-group-active{color:var(--teal-light)}

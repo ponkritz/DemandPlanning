@@ -1,8 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createRequire } from 'node:module'
 import { defaultPolicy, parseAccess, serializeAccess, rightsFor, keepsManager } from '../src/access.ts'
-import { readAzureIdentity, requestAzure, guardAzureWrites } from '../src/azureDevOps.ts'
+import { requestAzure, guardAzureWrites } from '../src/azureDevOps.ts'
 
 test('access: no policy means no restrictions; members get the union of their roles, others the default role', () => {
   const open = rightsFor(null, 'anyone@example.com')
@@ -17,10 +16,12 @@ test('access: no policy means no restrictions; members get the union of their ro
   const sm = rightsFor(policy, 'SM@example.com')
   assert.ok(sm.areas.has('health'), 'Scrum Master sees Backlog Health')
   assert.ok(!sm.actions.has('baselines.edit'))
+  assert.ok(sm.actions.has('azure.createForOthers'), 'Scrum Masters may create work for others')
   const member = rightsFor(policy, 'someone@example.com')
   assert.deepEqual(member.roles, ['Team Member'])
   assert.ok(!member.areas.has('health'), 'only the roles given Backlog Health see it')
   assert.ok(member.areas.has('mywork') && member.actions.has('azure.write'))
+  assert.ok(!member.actions.has('azure.createForOthers'), 'Team Members create work for themselves only')
   const both = rightsFor(policy, 'pm@example.com')
   assert.ok(both.areas.has('health') && both.areas.has('snapshots') && both.actions.has('baselines.edit'), 'union of People Manager and Product Owner')
   assert.deepEqual(rightsFor(policy, '').roles, ['Team Member'], 'unknown identity: default role')
@@ -42,30 +43,6 @@ test('access file: round trip, unknown entries dropped, broken files refused, ed
   assert.ok(keepsManager(policy, 'lead@example.com'))
   assert.ok(!keepsManager(policy, 'sm@example.com'))
   assert.ok(!keepsManager(policy, ''), 'an unknown editor cannot save')
-})
-
-test('identity: the email of the PAT owner from connectionData, at the organization or collection level', async () => {
-  const config = { organization: 'example-org', project: 'Quality Project', team: 'Team A' }
-  const seen = []
-  const identity = await readAzureIdentity(config, ' pat ', async (request) => { seen.push(request); return { authenticatedUser: { providerDisplayName: 'Synthetic Person', properties: { Account: { $type: 'System.String', $value: 'Synthetic.Person@Example.com' } } } } })
-  assert.deepEqual(identity, { email: 'synthetic.person@example.com', name: 'Synthetic Person' })
-  assert.equal(seen[0].operation, 'identity')
-  assert.equal(seen[0].pat, 'pat')
-  await assert.rejects(readAzureIdentity(config, 'pat', async () => ({ authenticatedUser: { id: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' } })), /did not return an email/)
-
-  const { azureReadRequest, requestAzureDevOps } = createRequire(import.meta.url)('../electron/azure-devops.cjs')
-  const cloud = azureReadRequest({ ...config, pat: 'p', operation: 'identity' })
-  assert.equal(cloud.url, 'https://dev.azure.com/example-org/_apis/connectionData?api-version=7.1-preview')
-  assert.equal(cloud.options.method, 'GET')
-  assert.equal(cloud.options.body, undefined)
-  const onPrem = azureReadRequest({ ...config, pat: 'p', operation: 'identity', baseUrl: 'https://tfs.example.com/tfs/Collection', apiVersion: '6.0' })
-  assert.equal(onPrem.url, 'https://tfs.example.com/tfs/Collection/_apis/connectionData?api-version=6.0-preview')
-  const urls = []
-  await requestAzureDevOps({ ...config, pat: 'p', operation: 'identity', baseUrl: 'https://tfs.example.com/tfs/Collection' }, async (url) => {
-    urls.push(url)
-    return url.includes('7.1') ? new Response('{"message":"VssVersionOutOfRangeException: The requested REST API version 7.1 is out of range"}', { status: 400 }) : new Response('{"authenticatedUser":{}}', { status: 200, headers: { 'content-type': 'application/json' } })
-  })
-  assert.deepEqual(urls.map((url) => new URL(url).searchParams.get('api-version')), ['7.1-preview', '6.0-preview'], 'older servers: same fallback, still a preview version')
 })
 
 test('a role without Azure changes: write requests are refused before anything is sent', async () => {

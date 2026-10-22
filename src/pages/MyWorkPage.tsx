@@ -3,7 +3,7 @@ import { PersonPicker } from '../components/PersonPicker'
 import { EmptyState, Metric, Metrics, Notice, Page, Pill, TablePanel, type Tone } from '../components/ui'
 import { currentIndiaMonth, updateAzureWorkItem } from '../azureDevOps'
 import { capacityContext } from '../capacity'
-import { finishStates, monthTaskCandidates, workTypes } from '../myWork'
+import { monthTaskCandidates, nextStateFor, workTypes } from '../myWork'
 import type { AzureWorkItem } from '../domain'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { MyWork } from '../useMyWork'
@@ -18,7 +18,6 @@ export function MyWorkPage({ azure, store, my, onOpenBulk }: { azure: AzureWorks
   const [log, setLog] = useState<Log[]>([])
   // Opens on Features; the list is always in ascending ID order.
   const [typeFilter, setTypeFilter] = useState('Feature')
-  const [choice, setChoice] = useState<Record<number, string>>({})
   const { config, pat } = azure
   const month = currentIndiaMonth()
   const absenceEpicId = capacityContext(store.state).absenceEpicId
@@ -32,10 +31,10 @@ export function MyWorkPage({ azure, store, my, onOpenBulk }: { azure: AzureWorks
 
   async function finish(item: AzureWorkItem, state: string) {
     if (blocked || !config) return
-    if (!window.confirm(`Set #${item.id} “${item.title}” to ${state} in Azure DevOps?`)) return
+    if (!window.confirm(`${state === 'Active' ? 'Set' : 'Close'} ${item.workItemType} #${item.id} “${item.title}”${state === 'Active' ? ' to Active' : ''}? Its State is set to ${state} in Azure DevOps.`)) return
     setBusy(`state-${item.id}`)
     // After every save the whole backlog is refreshed from Azure (and saved locally), so all pages show current data.
-    try { const updated = await updateAzureWorkItem(config, pat, item.id, { state }); azure.applyWorkItems([updated], 'Set state', `#${item.id} ${item.state} → ${updated.state}`); note({ tone: 'success', text: `#${item.id} is now ${updated.state}. Refreshing data…` }); await azure.refresh() }
+    try { const updated = await updateAzureWorkItem(config, pat, item.id, { state }); azure.applyWorkItems([updated], 'Close item', `#${item.id} ${item.state} → ${updated.state}`); note({ tone: 'success', text: `#${item.id} is now ${updated.state}. Refreshing data…` }); await azure.refresh() }
     catch (failure) { note({ tone: 'error', text: `#${item.id}: ${failure instanceof Error ? failure.message : 'update failed'}` }) }
     finally { setBusy('') }
   }
@@ -55,17 +54,16 @@ export function MyWorkPage({ azure, store, my, onOpenBulk }: { azure: AzureWorks
         </Metrics>
         {blocked && <Notice tone="warning">{blocked}</Notice>}
         {log.map((entry, index) => <Notice key={index} tone={entry.tone}>{entry.text}</Notice>)}
-        <TablePanel title="Pending work" detail="New and active items assigned to you, in ascending ID order. Finish an item with Resolved or Closed; Azure DevOps refuses a state its process does not allow." count={`${shown.length} of ${pending.length}`}
+        <TablePanel title="Pending work" detail="New and active items assigned to you, in ascending ID order. Close an item to set its State to Closed. A Feature is set to Active from New, and only an Active Feature can be closed. Azure DevOps refuses a change its process does not allow." count={`${shown.length} of ${pending.length}`}
           action={<div className="chip-row">{['All', ...workTypes, 'Other'].map((type) => <button type="button" key={type} className={`chip ${typeFilter === type ? 'chip-on' : ''}`} onClick={() => setTypeFilter(type)}>{type}{type !== 'All' && type !== 'Other' ? ` ${counts[type] ?? 0}` : ''}</button>)}</div>}
           empty={shown.length ? undefined : pending.length ? 'Nothing of this type.' : 'No pending work assigned to you.'}>
-          {shown.length > 0 && <table className="work-table"><thead><tr><th>Item</th><th>State</th><th>Feature</th><th>Iteration</th><th>Finish</th></tr></thead><tbody>{shown.map(({ item, feature }) => {
-            const states = finishStates[item.workItemType] ?? ['Closed'], selected = choice[item.id] ?? states[states.length - 1]
+          {shown.length > 0 && <table className="work-table"><thead><tr><th>Item</th><th>State</th><th>Feature</th><th>Iteration</th><th>Action</th></tr></thead><tbody>{shown.map(({ item, feature }) => {
             return <tr key={item.key}>
               <td><span className={`type-dot type-${item.workItemType.replace(/\s/g, '').toLowerCase()}`} aria-hidden="true" /><a href={item.url} target="_blank" rel="noreferrer">#{item.id}</a> <strong className="inline">{item.title}</strong><small>{item.workItemType}</small></td>
               <td><Pill tone={stateTone(item.state)}>{item.state}</Pill></td>
               <td>{feature && feature.id !== item.id ? <small className="plain">{feature.title}</small> : '—'}</td>
               <td><small className="plain">{shortPath(item.iterationPath)}</small></td>
-              <td><div className="button-row nowrap"><select aria-label={`New state for #${item.id}`} value={selected} onChange={(event) => setChoice({ ...choice, [item.id]: event.target.value })}>{states.map((state) => <option key={state}>{state}</option>)}</select><button type="button" className="ghost" disabled={Boolean(blocked) || busy === `state-${item.id}`} onClick={() => void finish(item, selected)}>{busy === `state-${item.id}` ? 'Saving…' : 'Set'}</button></div></td>
+              <td>{(() => { const next = nextStateFor(item); return next ? <button type="button" className="ghost" disabled={Boolean(blocked) || busy === `state-${item.id}`} onClick={() => void finish(item, next.state)}>{busy === `state-${item.id}` ? 'Saving…' : next.label}</button> : <small className="muted" title="Only an Active Feature can be closed">Set to Active first</small> })()}</td>
             </tr>
           })}</tbody></table>}
         </TablePanel>

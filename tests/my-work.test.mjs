@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { isMine, isPending, myPendingWork, monthTaskCandidates, moveCandidates } from '../src/myWork.ts'
-import { ensureMonthTask, updateAzureWorkItem, workItemUpdatePatch } from '../src/azureDevOps.ts'
+import { isMine, isPending, myPendingWork, monthTaskCandidates, moveCandidates, assignablePeople } from '../src/myWork.ts'
+import { ensureMonthTask, updateAzureWorkItem, workItemUpdatePatch, addChildWorkItem, requestAzure } from '../src/azureDevOps.ts'
 import { createRequire } from 'node:module'
 
 const base = { organization: 'org', project: 'Quality', state: 'Active', assignedTo: '', areaPath: 'Quality\\A', iterationPath: 'Quality\\PI 2026.4\\Sprint 1', tags: '', url: '', syncedAt: '' }
@@ -114,4 +114,56 @@ test('Windows app proxy: work-item update is limited to state and iteration path
   assert.deepEqual(JSON.parse(request.options.body).map((op) => op.path), ['/fields/System.State', '/fields/System.IterationPath'])
   assert.throws(() => azureWorkItemUpdateRequest({ organization: 'org', project: 'Quality', team: 'T', pat: 'p', operation: 'update-work-item', workItemId: 7 }), /Nothing/)
   assert.throws(() => azureWorkItemUpdateRequest({ organization: 'org', project: 'Quality', team: 'T', pat: 'p', operation: 'update-work-item', workItemId: 0, state: 'Closed' }), /Invalid work item/)
+})
+
+test('new work items are never unassigned: month story and task, Add child, and the request guards', async () => {
+  const config = { organization: 'org', project: 'Quality', team: 'T' }
+  const world = new Map([[2, raw(2, { 'System.WorkItemType': 'Feature', 'System.Title': 'CP | Care Pathways | v3.1', 'System.IterationPath': 'Quality\\PI 1' })]])
+  const { transport, calls } = fakeAzure(world)
+  await ensureMonthTask(config, 'pat', 2, 'ana@x.com', 'October 2026', transport)
+  const created = calls.filter((call) => call.operation === 'create-child')
+  assert.ok(created.length && created.every((call) => call.feature.assignedTo === 'ana@x.com'), 'the Time Writing story is assigned too')
+  const story = await addChildWorkItem(config, 'pat', 2, 'User Story', ' New story ', 'Ben@X.com', undefined, transport)
+  assert.deepEqual([story.workItemType, story.title, story.parentId, story.assignedToEmail, story.iterationPath], ['User Story', 'New story', 2, 'ben@x.com', 'Quality\\PI 1'])
+  const task = await addChildWorkItem(config, 'pat', story.id, 'Task', 'Task one', 'chen@x.com', 'Quality\\PI 1\\Sprint 2', transport)
+  assert.deepEqual([task.parentId, task.assignedToEmail, task.iterationPath], [story.id, 'chen@x.com', 'Quality\\PI 1\\Sprint 2'])
+  await assert.rejects(addChildWorkItem(config, 'pat', 2, 'Task', 'x', 'ana@x.com', undefined, transport), /goes under a User Story/)
+  await assert.rejects(addChildWorkItem(config, 'pat', 2, 'User Story', 'x', '', undefined, transport), /assigned to/)
+  // Both transports refuse a create without an assignee, before anything is sent.
+  const sent = []
+  globalThis.window = {}; const original = globalThis.fetch
+  globalThis.fetch = async (url) => { sent.push(url); return new Response('{}', { status: 200 }) }
+  try { await assert.rejects(requestAzure({ ...config, pat: 'p', operation: 'create-child', workItemType: 'Task', validateOnly: true, feature: { parentId: 2, title: 't', description: '', acceptanceCriteria: '', areaPath: 'A' } }), /assigned to someone/) }
+  finally { delete globalThis.window; globalThis.fetch = original }
+  assert.equal(sent.length, 0)
+  const { azureFeatureRequest } = createRequire(import.meta.url)('../electron/azure-devops.cjs')
+  assert.throws(() => azureFeatureRequest({ ...config, pat: 'p', operation: 'create-child', workItemType: 'Task', validateOnly: true, feature: { parentId: 2, title: 't', description: '', acceptanceCriteria: '', areaPath: 'A' } }), /assigned to someone/)
+  assert.doesNotThrow(() => azureFeatureRequest({ ...config, pat: 'p', operation: 'create-child', workItemType: 'Task', validateOnly: true, feature: { parentId: 2, title: 't', description: '', acceptanceCriteria: '', areaPath: 'A', assignedTo: 'ana@x.com' } }))
+})
+
+test('people to assign to: everyone with an email, by name; a shared name shows the email', () => {
+  const items = [item(1, 'Task', 'a', { assignedTo: 'Ana', assignedToEmail: 'ana@x.com' }), item(2, 'Task', 'b', { assignedTo: 'Ana', assignedToEmail: 'ana@x.com' }), item(3, 'Task', 'c', { assignedTo: 'Ben' }), item(4, 'Task', 'd', { assignedTo: 'Chen', assignedToEmail: 'chen@x.com' }), item(5, 'Task', 'e', { assignedTo: 'Chen', assignedToEmail: 'chen2@x.com' })]
+  assert.deepEqual(assignablePeople(items), [{ email: 'ana@x.com', name: 'Ana' }, { email: 'chen@x.com', name: 'Chen (chen@x.com)' }, { email: 'chen2@x.com', name: 'Chen (chen2@x.com)' }])
+})
+
+import { stateChecks, nextStateFor } from '../src/myWork.ts'
+test('state checks: closed stories close the Feature, closed tasks close the story, an Active Feature needs an Active story', () => {
+  const me = { email: 'ana@x.com' }
+  const mine = (id, type, state, parentId, extra = {}) => item(id, type, `${type} ${id}`, { state, parentId, assignedTo: 'Ana', assignedToEmail: 'ana@x.com', ...extra })
+  const items = [
+    mine(1, 'Feature', 'Active'), mine(11, 'User Story', 'Closed', 1), mine(12, 'User Story', 'Closed', 1), mine(13, 'User Story', 'Removed', 1),
+    mine(2, 'Feature', 'Active'), mine(21, 'User Story', 'New', 2), mine(22, 'User Story', 'Resolved', 2),
+    mine(3, 'Feature', 'Active'), mine(31, 'User Story', 'Active', 3), mine(311, 'Task', 'Closed', 31), mine(312, 'Task', 'Closed', 31),
+    mine(4, 'Feature', 'New'), mine(5, 'Feature', 'Active'),
+    mine(6, 'Feature', 'Closed'), mine(61, 'User Story', 'Closed', 6),
+    item(7, 'Feature', 'Ben feature', { state: 'Active', assignedTo: 'Ben', assignedToEmail: 'ben@x.com' }),
+    mine(90, 'Epic', 'Active'), mine(9, 'Feature', 'Active', 90), mine(91, 'User Story', 'Closed', 9),
+  ]
+  const checks = stateChecks(items, me, 90)
+  assert.deepEqual(checks.map((check) => [check.kind, check.item.id]), [
+    ['close-feature', 1], ['feature-needs-active-story', 2], ['feature-needs-active-story', 5], ['close-story', 31],
+  ])
+  assert.deepEqual(checks[0].children.map((child) => child.id), [11, 12], 'Removed stories are ignored')
+  assert.deepEqual([nextStateFor({ workItemType: 'Feature', state: 'New' }), nextStateFor({ workItemType: 'Feature', state: 'Active' }), nextStateFor({ workItemType: 'Feature', state: 'Resolved' }), nextStateFor({ workItemType: 'Task', state: 'New' })],
+    [{ state: 'Active', label: 'Set Feature to Active' }, { state: 'Closed', label: 'Close Feature' }, null, { state: 'Closed', label: 'Close Task' }])
 })

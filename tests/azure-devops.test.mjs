@@ -368,10 +368,12 @@ function fakeHierarchyServer() {
       if (request.feature.title === failureTitle) throw new Error('Synthetic project validation failure')
       if (request.validateOnly) return { id: 0, fields: {} }
       const source = request.feature
-      const item = { id: nextId++, fields: { 'System.Title': source.title, 'System.WorkItemType': request.operation === 'create-feature' ? 'Feature' : request.workItemType, 'System.State': 'New', 'System.Parent': source.parentId, 'System.AreaPath': source.areaPath, 'System.IterationPath': source.iterationPath || config.project, 'System.TeamProject': config.project, ...(source.assignedTo ? { 'System.AssignedTo': { id: source.assignedTo, displayName: 'Synthetic Creator' } } : {}) } }
+      assert.match(String(source.assignedTo ?? ''), /@/, 'every created item is assigned')
+      const item = { id: nextId++, fields: { 'System.Title': source.title, 'System.WorkItemType': request.operation === 'create-feature' ? 'Feature' : request.workItemType, 'System.State': 'New', 'System.Parent': source.parentId, 'System.AreaPath': source.areaPath, 'System.IterationPath': source.iterationPath || config.project, 'System.TeamProject': config.project, ...(source.assignedTo ? { 'System.AssignedTo': { id: source.assignedTo, uniqueName: source.assignedTo, displayName: 'Synthetic Creator' } } : {}) } }
       records.set(item.id, item); writes.push(item)
       return item
     }
+    if (request.operation === 'update-time-writing-effort') { const item = records.get(request.workItemId); if (request.planHours != null) item.fields['Microsoft.VSTS.Scheduling.OriginalEstimate'] = request.planHours; if (request.actualHours != null) item.fields['Microsoft.VSTS.Scheduling.CompletedWork'] = request.actualHours; return item }
     throw new Error(`Unexpected test operation: ${request.operation}`)
   }
   return { transport, records, writes, failOn: (title) => { failureTitle = title } }
@@ -536,4 +538,43 @@ test('backlog source maps real descriptions and numeric story points without inv
   assert.equal(mapAzureWorkItem({ id: 2, fields: { 'Microsoft.VSTS.Scheduling.StoryPoints': '5' } }, config).storyPoints, undefined)
   assert.equal(plainAzureText('<script>alert(1)</script><p>A &amp; B&nbsp; &#x41; &#66;</p>'), 'A & B A B')
   assert.equal(plainAzureText('<img src=x onerror=alert(1)>safe'), 'safe')
+})
+
+import { createFeatureFromSetup, completeFeatureFromSetup } from '../src/azureDevOps.ts'
+import { fillTitle, missingValues, titleValues, parseFeatureSetup, serializeFeatureSetup, setupFor } from '../src/featureSetup.ts'
+
+test('Feature setup: placeholders, plain text, and a clean shared file', () => {
+  const values = titleValues('CP | Care Pathways | v3.1', 'October 2026')
+  assert.equal(fillTitle('SFV : Review of Deliverables ({service} {version})', values), 'SFV : Review of Deliverables (Care Pathways 3.1)')
+  assert.equal(fillTitle('{MONTH} | {feature}', values), 'October 2026 | CP | Care Pathways | v3.1')
+  assert.equal(fillTitle('Plain text {unknown}', values), 'Plain text {unknown}', 'other braces are kept as typed')
+  assert.deepEqual(missingValues('{service} review', titleValues('No parts here', 'October 2026')), ['service'])
+  const file = parseFeatureSetup(JSON.stringify({ schema: 1, kind: 'feature-setup', epics: [
+    { epicId: 20, epicTitle: 'B', stories: [{ title: 'US 1' }, { title: '' }], task: { title: '', originalEstimate: 8, assignedTo: 'Not an email', areaPath: 'Q\\Area' } },
+    { epicId: 'x', stories: [] },
+    { epicId: 10, stories: [{ title: 'US 5', description: 'd' }], task: { assignedTo: 'Ana@X.com', originalEstimate: -1 } },
+  ] }))
+  assert.deepEqual(file.epics.map((entry) => entry.epicId), [10, 20])
+  assert.deepEqual(setupFor(file, 20).stories, [{ title: 'US 1', description: '' }], 'blank titles dropped')
+  assert.deepEqual(setupFor(file, 20).task, { title: '{month} | {feature}', description: '', originalEstimate: 8, assignedTo: '', areaPath: 'Q\\Area', iterationPath: '' })
+  assert.equal(setupFor(file, 10).task.assignedTo, 'ana@x.com'); assert.equal(setupFor(file, 10).task.originalEstimate, undefined)
+  assert.deepEqual(parseFeatureSetup(serializeFeatureSetup(file)), file)
+  assert.throws(() => parseFeatureSetup('{"schema":1}'), /not a Feature setup file/)
+  assert.deepEqual(JSON.parse(serializeFeatureSetup({ schema: 1, kind: 'feature-setup', epics: [{ epicId: 5, epicTitle: ' E ', stories: [{ title: ' ', description: '' }, { title: ' US ', description: '' }], task: { title: '', description: '', assignedTo: '', areaPath: '', iterationPath: '' } }] })).epics[0].stories, [{ title: 'US', description: '' }], 'saved without blank stories')
+})
+
+test('a Feature from its Epic setup: chosen stories, Time Writing story, Task defaults; completing adds nothing twice', async () => {
+  const server = fakeHierarchyServer()
+  const setup = { stories: [{ title: 'US 1 ({service})', description: 'First' }, { title: 'US 3', description: '' }], task: { title: '{month} | {feature}', description: 'Book here', originalEstimate: 6, assignedTo: 'lead@example.test', areaPath: 'Quality Project\\Time', iterationPath: 'Quality Project\\Current PI' } }
+  const result = await createFeatureFromSetup(config, pat, { ...feature, iterationPath: 'Current PI' }, setup, 'October 2026', server.transport)
+  const stories = result.items.filter((item) => item.workItemType === 'User Story')
+  assert.deepEqual(stories.map((item) => item.title), ['US 1 (Service)', 'US 3', 'Example | Service | v1.0 - Time Writing'])
+  const task = result.items.find((item) => item.workItemType === 'Task')
+  assert.deepEqual([task.title, task.originalEstimate, task.areaPath, task.iterationPath, task.assignedToEmail], ['October 2026 | Example | Service | v1.0', 6, 'Quality Project\\Time', 'Quality Project\\Current PI', 'lead@example.test'])
+  const created = server.writes.filter((item) => item.fields['System.WorkItemType'] === 'User Story')
+  assert.ok(created.every((item) => item.fields['System.AssignedTo'].uniqueName === feature.assignedTo), 'stories go to the Feature assignee')
+  const before = server.writes.length
+  await completeFeatureFromSetup(config, pat, result.feature.id, setup, 'October 2026', server.transport)
+  assert.equal(server.writes.length, before, 'nothing is created twice')
+  await assert.rejects(completeFeatureFromSetup(config, pat, result.feature.id, { ...setup, stories: [{ title: '{program} only', description: '' }] }, 'October 2026', async (request) => request.operation === 'items' ? { value: [{ id: result.feature.id, fields: { 'System.Title': 'No parts', 'System.WorkItemType': 'Feature', 'System.TeamProject': config.project, 'System.AssignedTo': { uniqueName: 'a@b.co' } } }] } : server.transport(request)), /does not provide/)
 })
