@@ -1,36 +1,25 @@
 # Verification Plan
 
-## Automated checks
+Verification is defined in [TEST-PLAN.md](TEST-PLAN.md) (TP-DPH-001), against the requirements in [REQUIREMENTS-SPECIFICATION.md](REQUIREMENTS-SPECIFICATION.md) (SRS-DPH-001). This page summarises the automated part and the evidence to keep.
 
-- TypeScript production compilation
-- Vite production bundle
-- Static lint with zero errors
-- Unit tests for month classification, extensions, effective baselines, variance threshold and utilization
-- Adapter contract tests using synthetic fixtures
+## Automated checks (every pull request and every push to main)
 
-## Functional verification
+- `pnpm lint` (oxlint), with zero errors.
+- `scripts/verify-version.mjs`: the package version is `x.y.z`, and a release tag matches it.
+- `pnpm test`: Node test runner over `tests/*.test.mjs`. The coverage per requirement is in TEST-PLAN.md §7.
+- `pnpm build:web` (`tsc -b && vite build`), which emits `build-info.json`.
+- The Windows installer (NSIS) and the macOS universal disk image, each with SHA-256 sums.
 
-| ID | Scenario | Expected result |
-|---|---|---|
-| V-01 | Add activity with valid dates | Activity appears with owner, QE, band and complexity |
-| V-02 | Add activity after locked planning deadline | Current-month effort is Ad-hoc; future open month remains Planned |
-| V-03 | Edit planned hours while planning locked | Entry is disabled unless a valid extension is active |
-| V-04 | Edit past actuals after actuals lock | Entry is disabled unless an authorized extension is active |
-| V-05 | Actual differs from baseline by exactly 25% | No flag |
-| V-06 | Actual differs by more than 25% | Visible non-blocking flag |
-| V-07 | Change baseline | New effective version is recorded; historical comparison remains reproducible |
-| V-08 | Import valid and invalid rows | Valid rows stage; invalid rows show actionable errors; totals reconcile |
-| V-09 | Contributor attempts admin action | Action is unavailable and rejected by the data layer |
-| V-10 | Snapshot created | Frozen input, timestamp, owner and month are retained |
+## Manual verification
 
-## Security verification
-
-- Confirm no secret in source, packaged files or logs.
-- Verify delegated permission scope and SharePoint group mapping.
-- Verify server-side authorization, not UI visibility alone.
-- Verify audit events cannot be edited by Contributors.
-- Scan packaged executable and validate enterprise signature before distribution.
+Run the L3 system test cases in TEST-PLAN.md §6 on the environments in §3. Record the results in §8, with the build number.
 
 ## Evidence
 
-Store build log, checksums, screenshots, test results, migration reconciliation and UAT sign-off under the controlled project evidence location.
+Keep the following for each verified build:
+
+- the CI run link (lint, test and build logs);
+- `latest.json` and SHA256SUMS from `desktop-latest`;
+- the completed result record;
+- screenshots for failed or UAT cases;
+- the UAT sign-off.

@@ -1,0 +1,151 @@
+/* Fresh look — light & airy. The final style layer: a white sidebar, a soft grey canvas, borderless cards with
+   subtle shadows, one indigo accent and quieter tables, pills and notices. Colours come from the tokens in index.css,
+   so the dark theme follows. */
+
+/* Headings used the brand colour, which is now the white sidebar: point them at the text colour. */
+:root,:root[data-theme="dark"]{--heading:var(--text);--navy:var(--text);--on-brand:var(--text)}
+body{background:var(--bg)}
+.app-shell{grid-template-columns:236px 1fr}
+
+/* Sidebar: navy (dark in dark mode), light text, a teal marker on the current page */
+.sidebar{background:linear-gradient(180deg,var(--brand),var(--brand-2));box-shadow:none;border-right:0;padding:18px 12px 16px;color:#fff}
+.brand{padding:2px 8px 18px;border-bottom:0;gap:10px}
+.sidebar .brand-mark{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--teal),var(--accent));box-shadow:none;color:#fff;font-size:13px;letter-spacing:.3px}
+.sidebar .brand strong{color:#fff;font-size:14.5px;font-weight:650}
+.sidebar .brand span{color:var(--sidebar-muted);font-size:11.5px;margin-top:1px}
+.sidebar nav{gap:2px;margin-top:6px}
+.sidebar nav button{color:var(--sidebar-text);font-size:13.5px;font-weight:500;padding:8px 10px;border-radius:8px;gap:10px;box-shadow:none}
+.sidebar nav button:hover{background:var(--sidebar-hover);color:#fff}
+.sidebar nav .nav-active,.sidebar nav .nav-active:hover{background:#ffffff1f;color:#fff;font-weight:600;box-shadow:inset 3px 0 0 var(--teal-light)}
+.sidebar nav button .nav-icon{width:20px;height:20px;flex:0 0 20px;border-radius:0;background:transparent;color:var(--sidebar-muted);font-size:14px}
+.sidebar nav .nav-active .nav-icon,.sidebar nav button.nav-active .nav-icon{background:transparent;color:var(--teal-light)}
+.nav-section+.nav-section{margin-top:14px}
+.nav-group{color:var(--sidebar-muted);opacity:1;font-size:10.5px;font-weight:650;letter-spacing:.9px;padding:0 10px;margin:0 0 4px}
+.nav-badge{background:var(--teal);color:#fff}
+.sidebar-footer{border-top:1px solid var(--sidebar-line);padding:14px 8px 0;color:var(--sidebar-text)}
+.sidebar-footer .build-status strong{color:#fff;font-size:12.5px}
+.sidebar-footer .build-status>small,.sidebar-footer small{color:var(--sidebar-muted)}
+.sidebar .force-update-button,.sidebar .download-link{background:transparent;border:1px solid #ffffff33;color:var(--sidebar-text);border-radius:8px;font-weight:600;font-size:12px;padding:7px 10px}
+.sidebar .force-update-button:hover,.sidebar .download-link:hover{background:var(--sidebar-hover);color:#fff}
+.desktop-note{color:var(--sidebar-muted)}
+
+/* Header and canvas */
+.topbar{background:var(--bg);border-bottom:1px solid var(--line-soft);min-height:60px;padding:12px 32px;box-shadow:none}
+.topbar h1{font-size:18px;font-weight:650;letter-spacing:-.01em;color:var(--text)}
+.content{max-width:1400px;padding:8px 32px 56px}
+.month-picker{border-right:0;padding-right:0}
+.month-picker input{border-radius:8px;padding:6px 10px;font-size:12.5px}
+
+/* Cards */
+.panel,.metric-grid article{background:var(--surface);border:1px solid var(--card-border);border-radius:12px;box-shadow:var(--card-shadow)}
+.panel{padding:22px 24px}
+.table-panel{padding:0}
+.table-panel .panel-heading{padding:20px 24px 14px}
+.panel-heading{margin-bottom:16px}
+.panel-heading h2,.section-heading h2{color:var(--text);font-size:16px;font-weight:650;letter-spacing:-.005em;margin:2px 0 4px}
+.panel-heading .muted,.panel-heading p{font-size:13px;line-height:1.55;max-width:90ch}
+.section-heading h2{font-size:22px}
+.eyebrow{color:var(--text-3);font-size:10.5px;font-weight:650;letter-spacing:.9px}
+.muted{color:var(--text-2)}
+
+/* Metrics: quiet labels, large numbers, no coloured bar */
+.metric-grid{gap:14px;margin-bottom:20px}
+.metric-grid article{padding:14px 16px}
+.metric-grid article::before{display:none}
+.metric-grid article:hover{transform:none;box-shadow:var(--card-shadow-hover)}
+.metric-grid span{font-size:12.5px;font-weight:500;letter-spacing:0;text-transform:none;color:var(--text-2)}
+.metric-grid strong{font-size:24px;font-weight:650;letter-spacing:-.02em;color:var(--text);margin:6px 0 2px}
+.metric-grid small{font-size:12px;color:var(--text-3);line-height:1.45}
+
+/* Buttons and inputs */
+.primary,.ghost,.danger-button{border-radius:8px;font-weight:600;font-size:12.5px;padding:8px 13px;transition:background .15s,border-color .15s,color .15s}
+.primary{background:var(--accent);color:#fff;border:1px solid var(--accent);box-shadow:0 1px 2px #1018280f}
+:root[data-theme="dark"] .primary{color:#11132b}
+.primary:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
+.primary:disabled{opacity:.45;box-shadow:none}
+.ghost{background:var(--surface);color:var(--text);border:1px solid var(--line)}
+.ghost:hover{background:var(--surface-2)}
+.text-button{color:var(--link);font-weight:600}
+input,select,textarea{border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--text)}
+input:focus,select:focus,textarea:focus{outline:0;border-color:var(--accent);box-shadow:0 0 0 3px var(--focus)}
+label{color:var(--text-2);font-weight:600}
+
+/* Pills */
+.pill{border-radius:999px;padding:3px 9px;font-size:11.5px;font-weight:600;background:var(--surface-2);color:var(--text-2)}
+.pill-info{background:var(--accent-soft);color:var(--accent-text)}
+.pill-open{background:var(--success-soft);color:var(--success-text)}
+.pill-locked,.pill-danger{background:var(--danger-soft);color:var(--danger-text)}
+.pill-warning{background:var(--warning-soft);color:var(--warning-text)}
+
+/* Tables */
+th{background:transparent;color:var(--text-3);font-size:11px;font-weight:600;letter-spacing:.4px;padding:10px 16px;border-top:0;border-bottom:1px solid var(--line-soft)}
+td{padding:12px 16px;border-bottom:1px solid var(--line-soft);font-size:12.5px}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover td{background:color-mix(in srgb,var(--surface-2) 60%,transparent)}
+td small{color:var(--text-3)}
+.progress{height:6px;background:var(--surface-2)}
+.progress i{background:var(--accent)}
+.progress i.over{background:var(--danger)}
+
+/* Notices: compact, no thick left bar */
+.data-notices{display:grid;gap:8px;margin-bottom:16px}
+.data-notices:empty{display:none}
+.data-notices .notice{margin:0}
+.notice{border:1px solid var(--accent-line);border-left-width:1px;border-radius:10px;padding:10px 14px;font-size:13px;line-height:1.5;background:var(--accent-soft);color:var(--accent-text)}
+.notice.warning{background:var(--warning-soft);border-color:var(--warning-line);color:var(--warning-text)}
+.notice.error{background:var(--danger-soft);border-color:var(--danger-line);color:var(--danger-text)}
+.notice.success{background:var(--success-soft);border-color:var(--success-line);color:var(--success-text)}
+.notice-dismissible{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.notice-close{border:0;background:transparent;color:inherit;opacity:.6;font-size:16px;line-height:1;padding:2px 4px;border-radius:6px}
+.notice-close:hover{opacity:1;background:#0000000d}
+
+/* Team / Individual switch: a segmented control on the canvas, not a card */
+.view-switch{background:transparent;border:0;box-shadow:none;padding:0;margin:4px 0 18px;gap:10px}
+.view-switch>span{font-size:12.5px;font-weight:500;color:var(--text-2);margin-right:0}
+.viz-range,.segmented{display:inline-flex;padding:3px;gap:2px;background:var(--surface-2);border:1px solid var(--line-soft);border-radius:10px}
+.viz-range button,.viz-range button.primary,.viz-range button.ghost,.viz-filters button,.viz-filters button.primary,.viz-filters button.ghost,.segmented button,.segmented button.primary,.segmented button.ghost{border:0;border-radius:7px;padding:6px 14px;font-size:12.5px;font-weight:600;background:transparent;color:var(--text-2);box-shadow:none}
+.viz-range button[aria-pressed="true"],.viz-filters button[aria-pressed="true"],.segmented button[aria-pressed="true"]{background:var(--surface);color:var(--text);box-shadow:0 1px 2px #10182814,0 1px 3px #1018280f}
+:root[data-theme="dark"] .viz-range button[aria-pressed="true"],.viz-filters button[aria-pressed="true"],.segmented button[aria-pressed="true"]{background:var(--line)}
+.view-switch select{border-radius:8px;padding:7px 10px}
+
+.viz-filters{gap:4px}
+.viz-filters button:not([aria-pressed="true"]):hover,.viz-range button:not([aria-pressed="true"]):hover,.segmented button:not([aria-pressed="true"]):hover{color:var(--text)}
+
+.tree-controls .button-row button,.tree-controls .button-row button.primary,.tree-controls .button-row button.ghost{border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--text-2);padding:6px 12px;box-shadow:none}
+.tree-controls .button-row button[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent-text)}
+
+/* Tabs */
+.overview-tabs{border-bottom:1px solid var(--line);gap:22px}
+.overview-tabs .backlog-tab{color:var(--text-2);font-weight:500}
+.overview-tabs .backlog-tab:hover{color:var(--text)}
+.overview-tabs .backlog-tab-active{color:var(--text);border-bottom-color:var(--accent);font-weight:600}
+
+/* Settings section links: a quiet chip row that stays in view */
+.settings-nav{position:sticky;top:60px;z-index:4;gap:6px;padding:8px 0 10px;margin-bottom:12px;background:var(--bg)}
+.settings-nav button.ghost{border:0;border-radius:999px;background:var(--surface-2);color:var(--text-2);padding:6px 12px;font-weight:600}
+.settings-nav button.ghost:hover{background:var(--accent-soft);color:var(--accent-text)}
+
+/* Dialogs and toasts */
+.modal{border-radius:16px;box-shadow:0 20px 50px var(--shadow-strong)}
+.update-toast{border-radius:14px;border:1px solid var(--line-soft);box-shadow:0 12px 32px var(--shadow-strong)}
+
+/* Data status chip */
+.data-status .icon-refresh{border-radius:8px}
+
+@media(max-width:1000px){.app-shell{grid-template-columns:72px 1fr}.topbar{padding-inline:20px}.content{padding-inline:20px}}
+@media(max-width:700px){.app-shell{display:block}.sidebar{border-right:0;border-bottom:1px solid var(--sidebar-line)}.settings-nav{position:static}.content{padding:12px}}
+.table-panel+.panel,.panel+.table-panel{margin-top:16px}
+
+/* Page header: title, then the page's own controls (Team / Individual), then data status, month and theme */
+.topbar{gap:16px}
+.topbar h1{white-space:nowrap}
+.topbar-slot{flex:1;display:flex;align-items:center;min-width:0}
+.topbar-slot:empty{display:none}
+.topbar .view-switch{margin:0;gap:8px;flex-wrap:nowrap}
+.topbar .view-switch>span{font-size:12px;color:var(--text-3)}
+.topbar .view-switch select{min-width:170px;padding:6px 10px;font-size:12.5px}
+@media(max-width:1000px){.topbar .view-switch>span{display:none}}
+.windchill-import{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin:8px 0}.windchill-import a.ghost,.windchill-import label.ghost{display:inline-flex;align-items:center;text-decoration:none;cursor:pointer;font-size:12.5px;font-weight:600}.windchill-import label.ghost input{display:none}
+.windchill-bookmark{margin-top:12px;font-size:13px}.windchill-bookmark a.ghost{display:inline-flex;text-decoration:none;cursor:grab;margin:0 4px}
+.file-button{display:inline-flex;align-items:center;cursor:pointer}.file-button input{display:none}
+.plain-fieldset{border:0;padding:0;margin:0;min-width:0}

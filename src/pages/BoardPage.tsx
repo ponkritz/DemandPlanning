@@ -1,50 +1,76 @@
 import { useState } from 'react'
-import { Heading, Panel, Pill } from '../components/ui'
+import { EmptyState, Page, Panel, Pill } from '../components/ui'
 import { AzureWorkItemTree } from '../components/AzureWorkItemTree'
-import type { AzureWorkspace } from '../useAzureWorkspace'
-import { bulkCreateMonthlyTimeWritingTasks, HierarchyCreationError, monthLabelFromKey } from '../azureDevOps'
+import { QueryView } from '../components/QueryView'
+import { ReleaseView } from '../components/ReleaseView'
+import { formatDate, formatDateTime, monthName } from '../format'
+import { approvalDateFrom, viewMonthOf } from '../releaseSource'
+import { viewSource } from '../viewSources'
+import { listAzureConnectionProfiles } from '../azureCredentials'
+import { connectionConfig, type AzureWorkspace } from '../useAzureWorkspace'
+import { loadAzureConnectionProfile } from '../azureCredentials'
+import type { BacklogView } from '../backlogViews'
+import type { AzureConfig } from '../azureDevOps'
+import type { PageProps } from './types'
+import type { GitStorage } from '../useGitStorage'
+import { columnName, queryLayout, type QueryColumn, type QueryOrder } from '../queryView'
 
-export function BoardPage({ azure, month, onOpenConnection }: { azure: AzureWorkspace; month: string; onOpenConnection: () => void }) {
-  const { items, config, preview, busy, pat, featureCreated, rememberPat, savePreview, refresh, lastRefreshed, error, needsScopedRefresh } = azure
+// One page for all configured Azure DevOps views (each its own entry in the sidebar): the Time Writing backlog
+// (QMS-0025) as an editable tree, and every other shown connection as a read-only query view.
+export function BoardPage({ azure, store, current, month, git, onOpenConnection }: { azure: AzureWorkspace; store: PageProps['store']; current: BacklogView; month: string; git?: GitStorage; onOpenConnection: () => void }) {
+  const { items, config, preview, pat, featureCreated, rememberPat } = azure
   const [filter, setFilter] = useState('')
-  const [taskMonth, setTaskMonth] = useState(month)
-  const [bulkBusy, setBulkBusy] = useState(false)
-  const [bulkMessage, setBulkMessage] = useState('')
+  if (current.readOnly) return <ReadOnlyView key={current.id} id={current.id} name={current.name} role={current.role} azure={azure} store={store} month={month} gitNote={git?.snapshotNotes[current.id]} onOpenConnection={onOpenConnection} />
   const activeItems = items.filter((item) => item.state.trim().toLowerCase() !== 'removed')
   const shown = activeItems.filter((item) => `${item.id} ${item.title} ${item.workItemType} ${item.state}`.toLowerCase().includes(filter.toLowerCase()))
   const counts = new Map<string, number>()
   for (const item of activeItems) counts.set(item.workItemType || 'Unknown', (counts.get(item.workItemType || 'Unknown') ?? 0) + 1)
-  const byId = new Map(activeItems.map(item => [item.id, item]))
-  const timeWritingStories = activeItems.filter(item => item.workItemType === 'User Story' && /\s*-\s*time\s*writ(?:ing|ting)\s*$/i.test(item.title) && item.parentId != null && byId.get(item.parentId)?.workItemType === 'Feature' && byId.get(item.parentId)?.state.trim().toLowerCase() === 'active')
-  async function addMonthlyTasks() {
-    if (!config || bulkBusy) return
-    setBulkBusy(true); setBulkMessage('')
-    try {
-      const tasks = await bulkCreateMonthlyTimeWritingTasks(config, pat, activeItems, monthLabelFromKey(taskMonth), azure.creatorEmail)
-      featureCreated(tasks)
-      setBulkMessage(`Verified ${tasks.length} Time Writing Task${tasks.length === 1 ? '' : 's'} for ${monthLabelFromKey(taskMonth)}. Existing matching Tasks were retained without duplication.`)
-    } catch (failure) {
-      const detail = failure instanceof Error ? failure.message : 'Unable to add monthly Time Writing Tasks.'
-      if (failure instanceof HierarchyCreationError && failure.createdItems.length) { featureCreated(failure.createdItems); setBulkMessage(`${failure.createdItems.length} Task(s) were created before the operation stopped: ${detail}`) }
-      else setBulkMessage(detail)
-    } finally { setBulkBusy(false) }
-  }
 
-  return <section className="content backlog-page"><Heading eyebrow="WORK ITEM MANAGEMENT" title="Backlogs" detail="Plan and track your team’s work in an expandable backlog." action={<div className="button-row"><button className="primary" disabled={busy || !config || !pat} onClick={() => void refresh()}>{busy ? 'Refreshing…' : 'Refresh from Azure'}</button><button className="ghost" onClick={onOpenConnection}>Connection settings</button></div>} />
-    <p className="muted">{lastRefreshed ? `Last successful refresh: ${new Date(lastRefreshed).toLocaleString()}.` : 'Saved data is a snapshot, not a live subscription.'} Refresh reads current source data; Save fetched work items retains it in the app.</p>
-    {error && <div className="notice error" role="alert">{error} Previously loaded data has been retained.</div>}
-    {busy && <div className="notice" role="status">Fetching work items… Backlogs will update when the preview is ready.</div>}
-    {needsScopedRefresh && !preview && <div className="notice">Previous cached work items have no verified scope for this team backlog and are hidden. Refresh from Azure, then save the scoped result to replace the old Azure cache. Other app data is unchanged.</div>}
-    {preview && <div className="notice board-preview"><span>Showing {preview.items.length} records from {preview.scope.team}'s Epic backlog hierarchy only. Saving replaces the old Azure cache, including out-of-scope records. Export a JSON backup first if you need that old cache.</span><button className="primary" onClick={savePreview}>Save team backlog — replace Azure cache</button></div>}
-    {config && <Panel className="connection-panel"><div className="panel-heading"><div><p className="eyebrow">BULK TIME WRITING</p><h2>Add monthly Tasks</h2><p className="muted">Creates or verifies one Task only for Time Writing User Stories beneath Active Features. Existing matching Tasks are never duplicated.</p></div><div className="button-row"><label>Month<input type="month" value={taskMonth} onChange={event => setTaskMonth(event.target.value)} disabled={bulkBusy} /></label><button className="primary" disabled={bulkBusy || !pat.trim() || !timeWritingStories.length} onClick={() => void addMonthlyTasks()}>{bulkBusy ? 'Adding Tasks…' : `Add ${timeWritingStories.length} Time Writing Tasks`}</button></div></div>{bulkMessage && <div className={bulkMessage.includes('stopped:') ? 'notice error' : 'notice'} role="status">{bulkMessage}</div>}{!timeWritingStories.length && <p className="muted">No Time Writing User Stories under Active Features are currently loaded. Refresh and save the Azure backlog first.</p>}</Panel>}
-    {config ? <Panel className="connection-panel backlog-panel"><AzureWorkItemTree items={items} config={config} onCreated={featureCreated} savedPat={pat} creatorEmail={azure.creatorEmail} onSavePat={rememberPat} /></Panel> : <Panel><p>Configure a valid Azure DevOps project to use Backlogs.</p><button className="primary" onClick={onOpenConnection}>Open connection settings</button></Panel>}
-    {!items.length && !busy && <div className="notice">No source data loaded yet. <button className="text-button" onClick={onOpenConnection}>Fetch work items from Azure DevOps →</button></div>}
+  return <Page className="backlog-page">
+    {config ? <Panel className="connection-panel backlog-panel"><AzureWorkItemTree items={items} config={config} tabs={<div className="backlog-tab">{current.name}</div>} onCreated={featureCreated} savedPat={pat} creatorEmail={azure.creatorEmail} onSavePat={rememberPat} /></Panel> : <Panel><EmptyState title="Configure a valid Azure DevOps project to use Backlogs." /><button className="primary" onClick={onOpenConnection}>Open connection settings</button></Panel>}
     <details className="source-details"><summary>Source details and dates ({items.length} items)</summary>
-      <Panel className="connection-panel"><div className="panel-heading"><div><h2>{preview ? 'Work-item preview' : 'Saved work items'}</h2><p className="muted">{items.length} items · {preview ? `Scope: ${preview.areaPaths.join(', ')}` : 'Refresh source data from connection settings.'}</p></div><input aria-label="Search work-item details" className="search" placeholder="Search ID, title, type or state" value={filter} onChange={(event) => setFilter(event.target.value)} /></div>
+      <Panel className="connection-panel" title={preview ? 'Work-item preview' : 'Saved work items'} detail={`${items.length} items · ${preview ? `Scope: ${preview.areaPaths.join(', ')}` : 'Refresh source data from connection settings.'}`} action={<input aria-label="Search work-item details" className="search" placeholder="Search ID, title, type or state" value={filter} onChange={(event) => setFilter(event.target.value)} />}>
         <div className="button-row">{[...counts].map(([type, count]) => <Pill key={type} tone="info">{type}: {count}</Pill>)}</div>
         <p className="muted">Only verified team-backlog records are shown. Missing target/closure dates stay blank. Saving a fresh scoped result replaces the Azure cache; no Azure source records or demand-planning data are deleted.</p>
-        {shown.length > 0 ? <div className="azure-table"><table><thead><tr><th>ID / Title</th><th>Type / State</th><th>Assigned to</th><th>Iteration / Parent</th><th>Target / Closed</th><th>Last fetched</th></tr></thead><tbody>{shown.slice(0, 100).map((item) => <tr key={item.key}><td><a href={item.url} target="_blank" rel="noreferrer">#{item.id}</a><strong>{item.title}</strong></td><td>{item.workItemType}<small>{item.state}</small></td><td>{item.assignedTo || 'Unassigned'}</td><td>{item.iterationPath}<small>{item.parentId ? `Parent #${item.parentId}` : 'No parent supplied'}</small></td><td>{item.targetDate?.slice(0, 10) ?? 'No target date'}<small>{item.closedDate?.slice(0, 10) ?? 'No closed date'}</small></td><td>{new Date(item.syncedAt).toLocaleString()}</td></tr>)}</tbody></table><p className="muted">Showing {Math.min(shown.length, 100)} of {shown.length} matching work items.</p></div> : <p className="empty-state">{items.length ? 'No matching work items.' : 'No work items loaded yet.'}</p>}
+        {shown.length > 0 ? <div className="azure-table"><table><thead><tr><th>ID / Title</th><th>Type / State</th><th>Assigned to</th><th>Iteration / Parent</th><th>Target / Closed</th><th>Last fetched</th></tr></thead><tbody>{shown.slice(0, 100).map((item) => <tr key={item.key}><td><a href={item.url} target="_blank" rel="noreferrer">#{item.id}</a><strong>{item.title}</strong></td><td>{item.workItemType}<small>{item.state}</small></td><td>{item.assignedTo || 'Unassigned'}</td><td>{item.iterationPath}<small>{item.parentId ? `Parent #${item.parentId}` : 'No parent supplied'}</small></td><td>{formatDate(item.targetDate, 'No target date')}<small>{formatDate(item.closedDate, 'No closed date')}</small></td><td>{formatDateTime(item.syncedAt)}</td></tr>)}</tbody></table><p className="muted">Showing {Math.min(shown.length, 100)} of {shown.length} matching work items.</p></div> : <EmptyState title={items.length ? 'No matching work items.' : 'No work items loaded yet.'} />}
       </Panel>
     </details>
-  </section>
+  </Page>
+}
+
+// A Backlog view connection: its last fetched snapshot as the same expandable tree, read only.
+function ReadOnlyView({ id, name, role, azure, store, month, gitNote, onOpenConnection }: { id: string; name: string; role: BacklogView['role']; azure: AzureWorkspace; store: PageProps['store']; month: string; gitNote?: { tone: string; text: string }; onOpenConnection: () => void }) {
+  const [allMonths, setAllMonths] = useState(false)
+  // Every connection's fetch is stored on its own (by connection ID).
+  const status = azure.connectionStatus[id]
+  const profile = loadAzureConnectionProfile(id)
+  const source = viewSource(store.state, id, role, profile?.query, listAzureConnectionProfiles().filter((entry) => entry.role === 'release-source').length)
+  let config: AzureConfig | null = null
+  try { config = profile ? connectionConfig(profile) : null } catch { config = null }
+  const busy = status?.state === 'busy'
+  // Columns saved with the fetch; a snapshot fetched before columns were stored, or with another query than the
+  // connection has now, shows the current query's columns until a refresh loads their values.
+  const current = profile?.query ? queryLayout(profile.query) : null
+  const stale = Boolean(source && current && (!source.columns?.length || source.query.trim() !== profile!.query!.trim()))
+  const columns: QueryColumn[] | undefined = stale && current ? current.columns.map((ref) => ({ ref, name: columnName(ref) })) : source?.columns
+  const orderBy: QueryOrder[] | undefined = stale && current ? current.orderBy : source?.orderBy
+  // Month filter (header month picker): items approved in the month, else changed in it; "All months" turns it off.
+  const items = source ? allMonths ? source.items : source.items.filter((item) => viewMonthOf(item) === month) : []
+  // Items without an approval date fall back to their Changed Date for the month filter; say how many.
+  const undated = source ? source.items.filter((item) => !(item.approvalDate ?? approvalDateFrom(item.fields ?? {}))).length : 0
+  // On-prem views with Git storage: Load from Git too; a fetch that cannot run falls back to it.
+  const refresh = <span className="button-row"><button className="primary" disabled={busy} onClick={() => void azure.fetchConnection(id)}>{busy ? (status?.message || 'Fetching…') : source ? 'Refresh from Azure' : 'Fetch from Azure'}</button>{azure.canLoadFromGit(id) && <button className="ghost" disabled={busy} onClick={() => void azure.loadFromGit(id)}>Load from Git</button>}</span>
+  return <Page className="backlog-page">
+    <Panel className="connection-panel backlog-panel">
+      <div className="view-source-bar"><div><strong>{name}</strong><span className="muted"> · {config ? `${config.organization} / ${config.project}` : 'connection not found'}{source ? ` · ${allMonths ? source.items.length : `${items.length} of ${source.items.length}`} items${allMonths ? '' : ` in ${monthName(month)}`} · fetched ${formatDateTime(source.fetchedAt)}${'fromGit' in source && source.fromGit ? ' (desktop app, via Git)' : ''}` : ''}</span>{profile?.query ? <small className="muted"> · query</small> : config?.team ? <small className="muted"> · team {config.team}</small> : null}</div><div className="button-row">{source && <label className="check"><input type="checkbox" checked={allMonths} onChange={(event) => setAllMonths(event.target.checked)} />All months</label>}{refresh}<button className="ghost" onClick={onOpenConnection}>Connection settings</button></div></div>
+      {status?.state === 'error' && <div className="notice error" role="alert">{status.message}</div>}
+      {status?.state === 'ok' && status.message.includes('Git') && <div className="notice" role="status">{status.message}</div>}
+      {azure.isSample ? null : gitNote && <div className={`notice ${gitNote.tone}`} role="status">{gitNote.text}</div>}
+      {source && !allMonths && undated > 0 && <div className="notice" role="status">Month filter: by Author Approval Date in your time zone. {undated} of {source.items.length} items have no approval date{role === 'release-source' ? '' : ' in the query’s columns'}, so their Changed Date is used.</div>}
+      {stale && !busy && <div className="notice warning" role="status">The saved data was fetched with different columns than the connection's query now has. Refresh from Azure to load every column's values.</div>}
+      {source && config && !items.length && source.items.length ? <EmptyState title={`No items in ${monthName(month)}.`} detail={`${source.items.length} items have an approval date (else a changed date) in other months. Pick another month in the header, or tick “All months”.`} />
+        : source && config ? role === 'release-source' ? <ReleaseView name={name} items={items} backlog={azure.items} azure={azure} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} /> : <QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} />
+        : <><EmptyState title={config ? `“${name}” has not been fetched yet.` : `The connection for “${name}” is not saved in this browser.`} detail={config ? 'Fetch it read-only; nothing is written to Azure DevOps. Its items stay on this page and are not counted in Overview, Monthly Time Writing or Assigned to Me.' : 'Add it again in Settings → Azure DevOps.'} /></>}
+    </Panel>
+  </Page>
 }

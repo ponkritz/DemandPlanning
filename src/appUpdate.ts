@@ -1,13 +1,14 @@
-export interface BuildInfo { app: 'demandplanning'; formatVersion: 1; version: string; buildId: string; builtAt: string; revision: string }
+export interface BuildInfo { app: 'demandplanning'; formatVersion: 1; version: string; buildId: string; builtAt: string; revision: string; buildNumber?: number }
 export function validateBuildInfo(value: unknown): BuildInfo {
   if (!value || typeof value !== 'object') throw new Error('Invalid build metadata.')
   const info = value as BuildInfo
-  if (info.app !== 'demandplanning' || info.formatVersion !== 1 || typeof info.version !== 'string' || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(info.version) || typeof info.buildId !== 'string' || !/^[\w.-]{1,160}$/.test(info.buildId) || typeof info.builtAt !== 'string' || !/^\d{4}-\d{2}-\d{2}T/.test(info.builtAt) || !Number.isFinite(Date.parse(info.builtAt)) || typeof info.revision !== 'string' || !/^(unknown|[a-f\d]{7,40})$/i.test(info.revision)) throw new Error('Build metadata is invalid. Nothing was reloaded.')
+  if (info.app !== 'demandplanning' || info.formatVersion !== 1 || typeof info.version !== 'string' || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(info.version) || typeof info.buildId !== 'string' || !/^[\w.-]{1,160}$/.test(info.buildId) || typeof info.builtAt !== 'string' || !/^\d{4}-\d{2}-\d{2}T/.test(info.builtAt) || !Number.isFinite(Date.parse(info.builtAt)) || (info.buildNumber !== undefined && !(Number.isInteger(info.buildNumber) && info.buildNumber >= 0)) || typeof info.revision !== 'string' || !/^(unknown|[a-f\d]{7,40})$/i.test(info.revision)) throw new Error('Build metadata is invalid. Nothing was reloaded.')
   return info
 }
 
-export function formatBuildDate(iso: string) {
-  return `${new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(new Date(iso))} IST`
+// When a build was made, in the viewer's time zone (with the zone shown). timeZone is for tests only.
+export function formatBuildDate(iso: string, timeZone?: string) {
+  return new Intl.DateTimeFormat(undefined, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', timeZoneName: 'short', ...(timeZone ? { timeZone } : {}) }).format(new Date(iso))
 }
 
 export function updateUrls(href: string, nonce: string, buildId?: string) {

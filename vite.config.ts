@@ -9,7 +9,9 @@ if (process.env.GITHUB_REF_TYPE === 'tag' && process.env.GITHUB_REF_NAME !== `v$
 let revision = process.env.GITHUB_SHA || 'unknown'
 if (revision === 'unknown') { try { revision = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim() } catch { /* Builds outside Git remain identifiable by timestamp. */ } }
 const builtAt = new Date().toISOString()
-const metadata = { app: 'demandplanning', formatVersion: 1, version: pkg.version, buildId: process.env.GITHUB_RUN_ID ? `${process.env.GITHUB_RUN_ID}.${process.env.GITHUB_RUN_ATTEMPT || '1'}` : `local-${revision.slice(0, 8)}-${builtAt.replace(/[^\d]/g, '')}`, builtAt, revision }
+let buildNumber = Number(process.env.GITHUB_RUN_NUMBER) || 0
+if (!buildNumber) { try { buildNumber = Number(execFileSync('git', ['rev-list', '--count', 'HEAD'], { encoding: 'utf8' }).trim()) || 0 } catch { /* Builds outside Git carry build number 0. */ } }
+const metadata = { app: 'demandplanning', formatVersion: 1, version: pkg.version, buildId: process.env.GITHUB_RUN_ID ? `${process.env.GITHUB_RUN_ID}.${process.env.GITHUB_RUN_ATTEMPT || '1'}` : `local-${revision.slice(0, 8)}-${builtAt.replace(/[^\d]/g, '')}`, builtAt, revision, buildNumber }
 
 export default defineConfig({
   base: './',

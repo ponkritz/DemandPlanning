@@ -9,27 +9,28 @@
 
 ## One-week UAT sequence
 
-| Day | Focus |
-|---|---|
-| 1 | Install/open, navigation, roles, masters and activity creation |
-| 2 | Monthly planning, baselines, capacity and 25% flags |
-| 3 | Planning freeze, ad-hoc work, actuals deadline and exception handling |
-| 4 | Historical migration rehearsal and source-to-target reconciliation |
-| 5 | Release data, dashboard insights, LTE/PI snapshot and exports |
+The scenarios are the test cases marked **UAT** in [TEST-PLAN.md](TEST-PLAN.md).
+
+| Day | Focus | Test cases |
+|---|---|---|
+| 1 | Install and open (web and desktop), navigation, connections, fetch and auto-save | TC-NAV-01, TC-NAV-06, TC-CON-03, TC-FET-02, TC-DSK-03 |
+| 2 | Monthly Time Writing: scope, locks, staging and save | TC-MON-01, TC-MON-04 |
+| 3 | Assigned to Me: finish, move to the current Sprint, month tasks; Feature creation | TC-ATM-03, TC-ATM-04, TC-ATM-05, TC-BKL-02 |
+| 4 | Overview (This month, Trends), baselines, Git storage | TC-OVR-01, TC-GIT-02 |
+| 5 | Force Update, backup and restore, snapshots (where SharePoint is available), Documentation | TC-UPD-02, TC-STO-04, TC-SNP-02, TC-DOC-01 |
 
 ## Entry criteria
 
 - Verified Release 1 build and SHA-256 checksum
 - Synthetic or approved masked test dataset
-- Named UAT users and role matrix
+- Named UAT users
 - Known limitations and issue log
 
 ## Exit criteria
 
 - No open critical/high defects
 - All core scenarios passed by at least one non-developer user
-- Migration totals reconciled and exceptions accepted
-- Owner signs off roles, lock behavior and audit evidence
+- Owner signs off lock behaviour, audit evidence and the open issues in SRS §6
 - Support owner, rollback route and production prerequisites confirmed
 
 ## Feedback record

@@ -2,12 +2,13 @@
   "name": "demandplanning",
   "private": true,
   "packageManager": "pnpm@11.19.0",
-  "version": "1.4.1",
+  "version": "1.2.2",
   "description": "Demand planning, capacity and release tracking desktop application",
   "author": "Demand Planning Team",
   "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
+    "test": "node --test \"tests/*.test.mjs\"",
     "test:azure": "node --test tests/azure-devops.test.mjs tests/browser-state.test.mjs tests/app-update.test.mjs tests/cloud-snapshots.test.mjs tests/azure-insights.test.mjs",
     "dev": "vite",
     "dev:desktop": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
@@ -15,13 +16,13 @@
     "build:web": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "start:desktop": "electron ."
+    "start:desktop": "electron .",
+    "build:mac": "pnpm build:web && electron-builder --mac dmg --universal"
   },
   "dependencies": {
     "@azure/msal-browser": "^5.24.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "read-excel-file": "^9.3.10"
+    "react-dom": "^19.2.8"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
@@ -52,11 +53,22 @@
     "win": {
       "target": [
         "nsis"
-      ]
+      ],
+      "artifactName": "Demand-Planning-Hub-Setup.${ext}"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.productivity",
+      "artifactName": "Demand-Planning-Hub-mac.${ext}"
+    },
+    "dmg": {
+      "artifactName": "Demand-Planning-Hub-mac.${ext}"
     }
   }
 }

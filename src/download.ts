@@ -1,5 +1,4 @@
 import type { AppState } from './domain'
-import { transformedDataHeaders } from './migration'
 
 function saveBlob(contents: BlobPart, mime: string, filename: string) {
   const url = URL.createObjectURL(new Blob([contents], { type: mime }))
@@ -28,7 +27,11 @@ export function exportStateJson(state: AppState) {
   saveBlob(JSON.stringify(state, null, 2), 'application/json', `demand-planning-backup-${new Date().toISOString().slice(0, 10)}.json`)
 }
 
-export function downloadTemplateCsv() {
-  const template = `${transformedDataHeaders.map(quote).join(',')}\r\n`
-  saveBlob(template, 'text/csv;charset=utf-8', 'demand-planning-transformed-data-template.csv')
+
+export function downloadCsv(contents: string, filename: string) {
+  saveBlob(`﻿${contents}`, 'text/csv;charset=utf-8', filename)
+}
+
+export function downloadMarkdown(contents: string, filename: string) {
+  saveBlob(contents, 'text/markdown;charset=utf-8', filename)
 }
