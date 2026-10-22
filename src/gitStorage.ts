@@ -117,6 +117,17 @@ export async function writeTextFile(config: GitConfig, token: string, text: stri
   return { sha: body.content.sha, commitUrl: body.commit?.html_url ?? historyUrl(config) }
 }
 
+// Deletes a file as one commit; false when it does not exist. The version id is read first, so the delete is of the
+// file as it is now.
+export async function deleteFile(config: GitConfig, token: string, message: string, fetchImpl: Fetch = fetch): Promise<boolean> {
+  const sha = await fileSha(config, token, fetchImpl)
+  if (!sha) return false
+  const response = await fetchImpl(fileUrl(config), { method: 'DELETE', headers: { ...headers(token), 'Content-Type': 'application/json' }, body: JSON.stringify({ message: message.trim() || `Delete ${config.path}`, sha, branch: config.branch }) })
+  if (response.status === 404) return false
+  if (!response.ok) throw await failure(response, config, `delete ${config.path}`)
+  return true
+}
+
 // Folder listing (files only); a missing folder is empty.
 export async function listFolder(config: GitConfig, token: string, fetchImpl: Fetch = fetch): Promise<{ name: string; path: string; sha: string }[]> {
   const response = await fetchImpl(`${fileUrl(config)}?ref=${encodeURIComponent(config.branch)}`, { headers: headers(token), cache: 'no-store' })

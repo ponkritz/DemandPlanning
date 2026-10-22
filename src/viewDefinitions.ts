@@ -1,4 +1,4 @@
-import { listAzureConnectionProfiles, loadAzureConnectionProfile, saveAzureConnectionProfile, type AzureConnectionProfileSummary } from './azureCredentials.ts'
+import { forgetAzureConnectionProfile, listAzureConnectionProfiles, loadAzureConnectionProfile, saveAzureConnectionProfile, type AzureConnectionProfileSummary } from './azureCredentials.ts'
 
 export { clean as cleanView }
 
@@ -58,7 +58,8 @@ export function restoreViews(views: AzureConnectionProfileSummary[], pat: string
 
 // The shared connection setup in Git is every user's default; a user may still change a connection here. At start
 // (Git storage connected) connections missing here are added, and those not changed here since the last sync follow
-// Git; connections changed here are kept as they are. Nothing is deleted. The PAT handling is as for a restore.
+// Git; connections changed here are kept as they are. A connection that came from Git, was removed there and was not
+// changed here is removed here too (never when the file lists no connections). The PAT handling is as for a restore.
 const baselineKey = 'demand-planning-views-git-baseline-v1'
 const fingerprint = (view: AzureConnectionProfileSummary) => JSON.stringify(clean(view))
 function readBaseline(storage: Pick<Storage, 'getItem'>): Record<string, string> {
@@ -68,9 +69,9 @@ function readBaseline(storage: Pick<Storage, 'getItem'>): Record<string, string>
 export function markViewsSynced(views: AzureConnectionProfileSummary[], storage: Pick<Storage, 'getItem' | 'setItem'> = localStorage) {
   try { storage.setItem(baselineKey, JSON.stringify({ ...readBaseline(storage), ...Object.fromEntries(views.map((view) => [view.id, fingerprint(view)])) })) } catch { /* next sync compares again */ }
 }
-export interface SyncResult { added: string[]; updated: string[]; kept: string[]; noPat: string[] }
+export interface SyncResult { added: string[]; updated: string[]; kept: string[]; noPat: string[]; removed: string[] }
 export function syncViewsFromGit(views: AzureConnectionProfileSummary[], storage: Pick<Storage, 'getItem' | 'setItem'> = localStorage): SyncResult {
-  const result: SyncResult = { added: [], updated: [], kept: [], noPat: [] }
+  const result: SyncResult = { added: [], updated: [], kept: [], noPat: [], removed: [] }
   const baseline = readBaseline(storage)
   const follow: AzureConnectionProfileSummary[] = [], synced: AzureConnectionProfileSummary[] = []
   for (const view of views) {
@@ -87,6 +88,27 @@ export function syncViewsFromGit(views: AzureConnectionProfileSummary[], storage
     if (!restored.skipped.includes(name)) synced.push(view)
   }
   result.noPat = restored.noPat
+  const gone: string[] = []
+  if (views.length) for (const [id, print] of Object.entries(baseline)) {
+    if (views.some((view) => view.id === id)) continue
+    gone.push(id)
+    const local = listAzureConnectionProfiles(storage).find((entry) => entry.id === id)
+    if (local && fingerprint(local) === print) { try { forgetAzureConnectionProfile(id, storage); result.removed.push(local.viewName || local.reason) } catch { /* kept */ } }
+  }
   markViewsSynced(synced, storage)
+  if (gone.length) { try { const next = readBaseline(storage); for (const id of gone) delete next[id]; storage.setItem(baselineKey, JSON.stringify(next)) } catch { /* compared again next time */ } }
   return result
+}
+
+// Makes a connection the only Time Writing connection: it becomes Time Writing (shown in the menu, keeping the creator
+// email and view name of the one it replaces when it has none), and the other Time Writing connections are removed
+// here. Returns the removed ones. The caller updates the shared setup in Git.
+export function promoteToTimeWriting(id: string, storage: Pick<Storage, 'getItem' | 'setItem'> = localStorage) {
+  const profile = loadAzureConnectionProfile(id, storage)
+  if (!profile) throw new Error('Connection not found in this browser.')
+  const replaced = listAzureConnectionProfiles(storage).filter((entry) => entry.role === 'time-tracking' && entry.id !== id)
+  const previous = replaced[0]
+  saveAzureConnectionProfile({ ...profile, role: 'time-tracking', showInMenu: true, ...(profile.creatorEmail || !previous?.creatorEmail ? {} : { creatorEmail: previous.creatorEmail }), ...(profile.viewName || !previous?.viewName ? {} : { viewName: previous.viewName }) }, storage)
+  for (const entry of replaced) forgetAzureConnectionProfile(entry.id, storage)
+  return replaced
 }

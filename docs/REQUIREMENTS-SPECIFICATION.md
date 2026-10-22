@@ -205,6 +205,8 @@ Stakeholders:
 | CON-43 | The menu shall show only the areas of the viewer's roles (union of their roles, else the everyone-else role while the email is unknown or not listed), and a page outside them shall fall back to the first allowed one. Without access.json nothing is restricted. Requests that change Azure DevOps shall be refused before sending when the viewer's roles lack that action; baselines shall be view only without "edit baselines"; the Windchill import without "import"; capacity, periods, resources, master data and the shared connection setup without "manage shared settings". |
 | CON-44 | Settings → Access shall show the viewer their email and roles, and the members and role matrix; it shall be editable only with "manage access" and a Git token that can write, saved as a commit with the loaded version (a concurrent change is refused), and shall refuse a change that removes "manage access" from the person saving it. The last policy read shall be kept in the browser and applied while Git storage is not connected. |
 | CON-45 | Settings shall show one tab at a time: Azure DevOps, Storage, Access, and, for roles that manage shared settings, Capacity & periods, Resources, Master data and Audit. The last tab shall be remembered in the browser; links to the connections or to Git storage shall open their tab. |
+| CON-46 | A backlog view without a query on the same server, project and team as the Time Writing connection shall be flagged in Settings → Azure DevOps as reading the same backlog, and any backlog view shall offer "Use as Time Writing": after confirmation it becomes the only Time Writing connection (keeping its PAT, taking over the creator email and view name of the one it replaces when it has none), the replaced Time Writing connection is removed here, and with a Git token that can save the shared connection setup in Git is updated and the replaced connection's data file in Git (azure-data/<id>.json) is deleted; the new Time Writing connection is then fetched. |
+| CON-47 | At start, a connection that came from the shared setup in Git, was removed there and was not changed here shall be removed here too; a connection changed here, or a setup file without connections, removes nothing. When the active Time Writing connection no longer exists, the first remaining one shall become active. |
 
 ### 3.3 Fetching and saving Azure DevOps data (FET) — UC-03
 
@@ -556,7 +558,7 @@ These describe as-built behaviour that is ambiguous, inconsistent, or may not ma
 | Use case | Requirements |
 |---|---|
 | UC-01 | NAV-01…16, FET-10, FET-12, UI-01…03 |
-| UC-02 | CON-01…26, CON-34, CON-35, CON-39, NAV-05 |
+| UC-02 | CON-01…26, CON-34, CON-35, CON-39, CON-46, CON-47, NAV-05 |
 | UC-03 | FET-01…17, CON-09 |
 | UC-04 | TWN-01…07, MON-01…17 |
 | UC-05 | TWN-08, MON-18, MON-19 |

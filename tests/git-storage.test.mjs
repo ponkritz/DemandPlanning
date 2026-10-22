@@ -75,3 +75,19 @@ test('write check: read-only tokens are told apart without writing anything', as
   assert.equal((await run(true, 500)).result, null, 'unknown')
   assert.equal(await canWrite(config, 't', async () => new Response('', { status: 401 })), null)
 })
+
+import { deleteFile } from '../src/gitStorage.ts'
+test('delete: the file as it is now, one commit; a missing file is not an error', async () => {
+  const calls = []
+  const target = { ...config, path: 'azure-data/tw.json' }
+  const done = await deleteFile(target, 't', 'Remove data of replaced connection', async (url, init = {}) => {
+    calls.push({ url, method: init.method ?? 'GET', body: init.body ? JSON.parse(init.body) : undefined })
+    return init.method === 'DELETE' ? response(200, {}) : response(200, { sha: 'cur' })
+  })
+  assert.equal(done, true)
+  assert.deepEqual(calls.map((call) => call.method), ['GET', 'DELETE'])
+  assert.match(calls[1].url, /\/contents\/azure-data\/tw\.json$/)
+  assert.deepEqual(calls[1].body, { message: 'Remove data of replaced connection', sha: 'cur', branch: 'main' })
+  assert.equal(await deleteFile(target, 't', 'x', async () => response(404, {})), false)
+  await assert.rejects(deleteFile(target, 't', 'x', async (_url, init = {}) => init.method === 'DELETE' ? response(403, {}) : response(200, { sha: 'cur' })), /refused to delete/)
+})

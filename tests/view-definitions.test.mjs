@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { saveAzureConnectionProfile, loadAzureConnectionProfile, listAzureConnectionProfiles } from '../src/azureCredentials.ts'
-import { viewsFile, serializeViews, parseViews, restoreViews, serverKey, syncViewsFromGit, markViewsSynced } from '../src/viewDefinitions.ts'
+import { viewsFile, serializeViews, parseViews, restoreViews, serverKey, syncViewsFromGit, markViewsSynced, promoteToTimeWriting } from '../src/viewDefinitions.ts'
 import { siblingConfig, readTextFile, writeTextFile } from '../src/gitStorage.ts'
 
 const memory = () => { const data = new Map(); return { getItem: (key) => data.get(key) ?? null, setItem: (key, value) => data.set(key, String(value)), removeItem: (key) => data.delete(key) } }
@@ -54,16 +54,16 @@ test('Git connection setup is the default: added and followed, unless changed he
   const cp = { ...dp, id: 'cp', reason: 'CP', viewName: 'CP', query: 'SELECT 1' }
   saveAzureConnectionProfile({ ...dp, token: 'my-pat' }, storage)
   // First start: dp is the same as in Git; cp is new and gets the PAT of the same server.
-  assert.deepEqual(syncViewsFromGit([dp, cp], storage), { added: ['CP'], updated: [], kept: [], noPat: [] })
+  assert.deepEqual(syncViewsFromGit([dp, cp], storage), { added: ['CP'], updated: [], kept: [], noPat: [], removed: [] })
   assert.equal(loadAzureConnectionProfile('cp', storage).token, 'my-pat')
   // Git changes cp's query; it was not changed here, so it follows Git (PAT kept).
   const cp2 = { ...cp, query: 'SELECT 2' }
-  assert.deepEqual(syncViewsFromGit([dp, cp2], storage), { added: [], updated: ['CP'], kept: [], noPat: [] })
+  assert.deepEqual(syncViewsFromGit([dp, cp2], storage), { added: [], updated: ['CP'], kept: [], noPat: [], removed: [] })
   assert.equal(loadAzureConnectionProfile('cp', storage).query, 'SELECT 2')
   assert.equal(loadAzureConnectionProfile('cp', storage).token, 'my-pat')
   // The user changes cp here; a later Git change does not overwrite it.
   saveAzureConnectionProfile({ ...loadAzureConnectionProfile('cp', storage), query: 'SELECT mine' }, storage)
-  assert.deepEqual(syncViewsFromGit([dp, { ...cp, query: 'SELECT 3' }], storage), { added: [], updated: [], kept: ['CP'], noPat: [] })
+  assert.deepEqual(syncViewsFromGit([dp, { ...cp, query: 'SELECT 3' }], storage), { added: [], updated: [], kept: ['CP'], noPat: [], removed: [] })
   assert.equal(loadAzureConnectionProfile('cp', storage).query, 'SELECT mine')
   // After Restore from Git (or saving to Git) the connection follows Git again.
   restoreViews([{ ...cp, query: 'SELECT 3' }], '', storage); markViewsSynced([{ ...cp, query: 'SELECT 3' }], storage)
@@ -72,8 +72,34 @@ test('Git connection setup is the default: added and followed, unless changed he
   const other = memory()
   saveAzureConnectionProfile({ ...dp, query: 'SELECT local', token: 'x' }, other)
   saveAzureConnectionProfile({ id: 'own', url: 'https://dev.azure.com/o/P', reason: 'Own', token: 'y' }, other)
-  assert.deepEqual(syncViewsFromGit([dp], other), { added: [], updated: [], kept: ['Digital Platform'], noPat: [] })
+  assert.deepEqual(syncViewsFromGit([dp], other), { added: [], updated: [], kept: ['Digital Platform'], noPat: [], removed: [] })
   assert.ok(loadAzureConnectionProfile('own', other))
   // A user without any connection gets them all, view only until a PAT is added.
-  assert.deepEqual(syncViewsFromGit([dp, cp], memory()), { added: ['Digital Platform', 'CP'], updated: [], kept: [], noPat: ['Digital Platform', 'CP'] })
+  assert.deepEqual(syncViewsFromGit([dp, cp], memory()), { added: ['Digital Platform', 'CP'], updated: [], kept: [], noPat: ['Digital Platform', 'CP'], removed: [] })
+})
+
+test('Git setup: a connection removed in Git is removed here unless changed here; an empty file removes nothing', () => {
+  const storage = memory()
+  const tw = { id: 'tw', url: 'https://dev.azure.com/org/Proj/Team', reason: 'QMS-0025', role: 'time-tracking' }
+  const bl = { id: 'bl', url: 'https://dev.azure.com/org/Proj/Team', reason: 'Backlog', role: 'backlog-view' }
+  const mine = { id: 'mine', url: 'https://dev.azure.com/org/Proj/Other', reason: 'Mine', role: 'reference' }
+  syncViewsFromGit([tw, bl, mine], storage)
+  saveAzureConnectionProfile({ ...loadAzureConnectionProfile('mine', storage), reason: 'Mine (changed here)' }, storage)
+  assert.deepEqual(syncViewsFromGit([], storage).removed, [], 'a file without connections removes nothing')
+  const result = syncViewsFromGit([{ ...bl, role: 'time-tracking' }], storage)
+  assert.deepEqual(result.removed, ['QMS-0025'])
+  assert.deepEqual(listAzureConnectionProfiles(storage).map((entry) => [entry.id, entry.role]).sort(), [['bl', 'time-tracking'], ['mine', 'reference']], 'changed here: kept')
+  assert.deepEqual(syncViewsFromGit([{ ...bl, role: 'time-tracking' }], storage).removed, [], 'removed once')
+})
+
+test('use a backlog view as Time Writing: it takes over, keeps the creator email, the old one is removed', () => {
+  const storage = memory()
+  saveAzureConnectionProfile({ id: 'tw', url: 'https://dev.azure.com/org/Proj/Team', reason: 'QMS-0025', viewName: 'QMS-0025', role: 'time-tracking', creatorEmail: 'me@example.com', token: 'old-pat' }, storage)
+  saveAzureConnectionProfile({ id: 'bl', url: 'https://dev.azure.com/org/Proj/Team', reason: 'Backlog', role: 'backlog-view', showInMenu: true, token: 'working-pat' }, storage)
+  const replaced = promoteToTimeWriting('bl', storage)
+  assert.deepEqual(replaced.map((entry) => entry.id), ['tw'])
+  const now = loadAzureConnectionProfile('bl', storage)
+  assert.equal(now.role, 'time-tracking'); assert.equal(now.token, 'working-pat'); assert.equal(now.creatorEmail, 'me@example.com'); assert.equal(now.viewName, 'QMS-0025')
+  assert.equal(loadAzureConnectionProfile('tw', storage), null)
+  assert.throws(() => promoteToTimeWriting('missing', storage), /not found/)
 })
