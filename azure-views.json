@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "kind": "azure-devops-views",
+  "views": [
+    {
+      "id": "4b2217a9e3c6497e83991d6defb321f2",
+      "reason": "Content_Completed",
+      "viewName": "Content [Completed Releases]",
+      "role": "release-source",
+      "showInMenu": true,
+      "url": "https://tfsapac04.ta.philips.com/tfs/DHPCollection/DHP.Vault",
+      "baseUrl": "https://tfsapac04.ta.philips.com/tfs/DHPCollection",
+      "query": "SELECT\n    [ID],\n    [Title],\n    [Work Item Type],\n    [Assigned To],\n    [Type],\n    [State],\n    [Attached File Count],\n    [Author Function],\n    [Area Path],\n    [Iteration Path],\n    [Target Date],\n    [Author Approval Date]\nFROM WorkItems\nWHERE\n    (\n        [Work Item Type] = 'Document'\n        OR [Work Item Type] = 'DHFIndex'\n        OR [Work Item Type] = 'Artifact'\n    )\n    AND\n    (\n        [Type] = 'DHFI'\n        OR [Type] = 'Design History File Index'\n    )\n    AND [State] = 'Approved'\n    AND\n    (\n        [Area Path] UNDER 'DHP.Vault\\Dev\\asp data etl view'\n        OR [Area Path] UNDER 'DHP.Vault\\Dev\\aspdataetlview'\n    )\n\nORDER BY [ID] DSC"
+    },
+    {
+      "id": "58472b40e87c42e88ff18af9acc0987e",
+      "reason": "Clinical_Completed",
+      "viewName": "CP [Completed Releases]",
+      "role": "release-source",
+      "showInMenu": true,
+      "url": "https://tfsapac04.ta.philips.com/tfs/DHPCollection/DHP.Vault",
+      "baseUrl": "https://tfsapac04.ta.philips.com/tfs/DHPCollection",
+      "query": "SELECT\n    [ID],\n    [Title],\n    [Work Item Type],\n    [Assigned To],\n    [Type],\n    [State],\n    [Attached File Count],\n    [Author Function],\n    [Area Path],\n    [Iteration Path],\n    [Target Date],\n    [Author Approval Date]\nFROM WorkItems\nWHERE\n    (\n        [Work Item Type] = 'Document'\n        OR [Work Item Type] = 'DHFIndex'\n        OR [Work Item Type] = 'Artifact'\n    )\n    AND\n    (\n        [Type] = 'DHFI'\n        OR [Type] = 'Design History File Index'\n    )\n    AND [State] = 'Approved'\n    AND\n    (\n        [Area Path] UNDER 'DHP.Vault\\Dev\\clinical platforms'\n        OR [Area Path] UNDER 'DHP.Vault\\Dev\\ClinicalPlatform'\n        OR [Area Path] UNDER 'DHP.Vault\\DevX\\ClinicalPlatform'\n        OR [Area Path] UNDER 'DHP.Vault\\xDev\\ClinicalPlatform'\n    )\nORDER BY [ID] DSC"
+    },
+    {
+      "id": "7894debde6ba4b7f9f7b73d249082b9c",
+      "reason": "IOCC_Completed",
+      "viewName": "IOCC [Completed Releases]",
+      "role": "release-source",
+      "showInMenu": true,
+      "url": "https://tfsapac04.ta.philips.com/tfs/DHPCollection/DHP.Vault",
+      "baseUrl": "https://tfsapac04.ta.philips.com/tfs/DHPCollection",
+      "query": "SELECT\n    [ID],\n    [Title],\n    [Work Item Type],\n    [Assigned To],\n    [Type],\n    [State],\n    [Attached File Count],\n    [Author Function],\n    [Area Path],\n    [Iteration Path],\n    [Target Date],\n    [Author Approval Date]\nFROM WorkItems\nWHERE\n    (\n        [Work Item Type] = 'Document'\n        OR [Work Item Type] = 'Artifact'\n    )\n    AND [State] = 'Approved'\n    AND [Area Path] UNDER 'DHP.Vault\\xDev\\IOCC'\n    AND\n    (\n        [Type] = 'Verification Specification and Report'\n        OR [Type] = 'Release Notes'\n    )"
+    },
+    {
+      "id": "93b332d0c3f8465488790b222f294b29",
+      "reason": "DP_Completed",
+      "viewName": "DP [Completed Releases]",
+      "role": "release-source",
+      "showInMenu": true,
+      "url": "https://tfsapac04.ta.philips.com/tfs/DHPCollection/DHP.Vault",
+      "baseUrl": "https://tfsapac04.ta.philips.com/tfs/DHPCollection",
+      "query": "SELECT\n    [ID],\n    [Title],\n    [Work Item Type],\n    [Assigned To],\n    [Type],\n    [State],\n    [Attached File Count],\n    [Author Function],\n    [Area Path],\n    [Iteration Path],\n    [Target Date],\n    [Author Approval Date]\nFROM WorkItems\nWHERE\n    (\n        [Work Item Type] = 'Document'\n        OR [Work Item Type] = 'DHFIndex'\n        OR [Work Item Type] = 'Artifact'\n    )\n    AND\n    (\n        [Type] = 'DHFI'\n        OR [Type] = 'Design History File Index'\n    )\n    AND [State] = 'Approved'\n    AND [Area Path] NOT UNDER 'DHP.Vault\\Dev\\clinical platforms'\n    AND [Area Path] NOT UNDER 'DHP.Vault\\Dev\\ClinicalPlatform'\n    AND [Area Path] NOT UNDER 'DHP.Vault\\DevX\\ClinicalPlatform'\n    AND [Area Path] NOT UNDER 'DHP.Vault\\xDev\\IOCC'\n    AND [Area Path] NOT UNDER 'DHP.Vault\\xDev\\ClinicalPlatform'\n    AND [Area Path] NOT UNDER 'DHP.Vault\\Dev\\asp data etl view'\n    AND [Area Path] NOT UNDER 'DHP.Vault\\Dev\\aspdataetlview'\n\nORDER BY [ID] DSC"
+    },
+    {
+      "id": "d131ca47855f4dcc85df4198cb0b48ae",
+      "reason": "Time Writing",
+      "viewName": "QMS-0025",
+      "role": "time-tracking",
+      "showInMenu": true,
+      "url": "https://dev.azure.com/ALMP-ORG-MSTP01/Patient%20Safety%20and%20Quality/_backlogs/backlog/InD%20Quality/Epics",
+      "creatorEmail": "krithikha.ponnamasivayam@philips.com"
+    },
+    {
+      "id": "d382a4ad433a4f09b102f2f3e0e5a870",
+      "reason": "DHP",
+      "viewName": "Releases (Pedastal)",
+      "role": "reference",
+      "showInMenu": false,
+      "url": "https://tfsapac04.ta.philips.com/tfs/DHPCollection/DHP",
+      "baseUrl": "https://tfsapac04.ta.philips.com/tfs/DHPCollection",
+      "query": "SELECT\n    [System.Id],\n    [System.WorkItemType],\n    [SourceProgram],\n    [PsName],\n    [Release],\n    [System.Title],\n    [System.State],\n    [VerificationDeviation],\n    [System.AssignedTo],\n    [ReleaseIntent],\n    [Year],\n    [PI],\n    [DRPEDate],\n    [DRPCDate],\n    [DRfHDate],\n    [DDTDate],\n    [DRPEStatus],\n    [DRPCStatus],\n    [DRfHStatus],\n    [DDTStatus],\n    [IsDesignReview]\nFROM WorkItems\nWHERE\n    [System.WorkItemType] = 'Release'\n    AND [System.State] <> 'Removed'\n    AND [System.AreaPath] <> 'DHP.Release\\Recycle Bin'\nORDER BY [System.Id] DESC"
+    }
+  ]
+}
