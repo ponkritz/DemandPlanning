@@ -449,7 +449,7 @@ Stakeholders:
 | DSK-04 | The desktop Azure DevOps proxy shall allow only the read operations areas, backlog-epics, iterations, iteration-tree, fields, query and items, plus the constrained writes create-feature, create-child, update-time-writing-effort and update-work-item. | T | M | UC-17 |
 | DSK-05 | The desktop proxy shall try API versions 7.1, 6.0 and 5.0 on a version error, and shall remember the working one per collection. | T | M | UC-17 |
 | DSK-06 | The desktop proxy shall not follow redirects. It shall report a redirect as a sign-in problem. | T | M | UC-17 |
-| DSK-07 | "Check for updates" shall read `latest.json` from `https://github.com/neurolooom-eng/Test2/releases/download/desktop-latest/` and report an update only when its buildNumber is greater than the installed one. | T | M | UC-17 |
+| DSK-07 | "Check for updates" shall read `latest.json` from `https://github.com/ponkritz/DemandPlanning/releases/download/desktop-latest/` and report an update only when its buildNumber is greater than the installed one. | T | M | UC-17 |
 | DSK-08 | The desktop updater shall download only the installer named for this OS from that fixed address. It shall install it only when its size and SHA-256 equal `latest.json`, and shall delete it otherwise. | T | M | UC-17 |
 | DSK-09 | On Windows the updater shall start the verified installer and close the app. On macOS it shall open the verified disk image. | D | M | UC-17 |
 | DSK-10 | The desktop app shall check quietly 5 s after start and every 4 hours. It shall show "Update available" with "Update now" and "Later". "Later" shall hide the notice until a newer build appears. | D | S | UC-17 |

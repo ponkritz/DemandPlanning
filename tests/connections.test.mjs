@@ -162,8 +162,8 @@ test('pre-filled connections: DHP on-prem and the cloud Time Writing project, un
 
 import { detectOs, desktopDownloads } from '../src/desktopDownloads.ts'
 test('desktop download: fixed links to the rolling release, OS detection', () => {
-  assert.equal(desktopDownloads.windows, 'https://github.com/neurolooom-eng/Test2/releases/download/desktop-latest/Demand-Planning-Hub-Setup.exe')
-  assert.equal(desktopDownloads.mac, 'https://github.com/neurolooom-eng/Test2/releases/download/desktop-latest/Demand-Planning-Hub-mac.dmg')
+  assert.equal(desktopDownloads.windows, 'https://github.com/ponkritz/DemandPlanning/releases/download/desktop-latest/Demand-Planning-Hub-Setup.exe')
+  assert.equal(desktopDownloads.mac, 'https://github.com/ponkritz/DemandPlanning/releases/download/desktop-latest/Demand-Planning-Hub-mac.dmg')
   assert.equal(detectOs('Mozilla/5.0 (Windows NT 10.0; Win64; x64)'), 'windows')
   assert.equal(detectOs('Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5)'), 'mac')
   assert.equal(detectOs('Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X)'), 'other')

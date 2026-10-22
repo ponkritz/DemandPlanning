@@ -1,5 +1,5 @@
 // Installers are published by CI to one rolling GitHub release with fixed file names, so these links never change.
-const release = 'https://github.com/neurolooom-eng/Test2/releases'
+const release = 'https://github.com/ponkritz/DemandPlanning/releases'
 export const desktopDownloads = {
   windows: `${release}/download/desktop-latest/Demand-Planning-Hub-Setup.exe`,
   mac: `${release}/download/desktop-latest/Demand-Planning-Hub-mac.dmg`,
