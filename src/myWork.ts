@@ -72,6 +72,9 @@ export function isPastSprint(path: string, iterations: DatedIteration[], date = 
 
 // Move to the current Sprint applies only to my pending User Stories sitting in a past Sprint. Stories already in the
 // current or a future Sprint, in an undated iteration (e.g. only the PI) and all other work item types are left alone.
-export function moveCandidates(items: AzureWorkItem[], me: Me, target: string, iterations: DatedIteration[], absenceEpicId?: number, date = new Date()) {
-  return myPendingWork(items, me, absenceEpicId).filter(({ item }) => item.workItemType === 'User Story' && item.iterationPath.trim().toLowerCase() !== target.trim().toLowerCase() && isPastSprint(item.iterationPath, iterations, date))
+// states: which of them to move — New, Active, or both (other pending states are left alone).
+export type MoveStates = 'new' | 'active' | 'both'
+export const matchesMoveStates = (state: string, states: MoveStates) => { const value = state.trim().toLowerCase(); return states === 'both' ? value === 'new' || value === 'active' : value === states }
+export function moveCandidates(items: AzureWorkItem[], me: Me, target: string, iterations: DatedIteration[], absenceEpicId?: number, date = new Date(), states: MoveStates = 'both') {
+  return myPendingWork(items, me, absenceEpicId).filter(({ item }) => item.workItemType === 'User Story' && matchesMoveStates(item.state, states) && item.iterationPath.trim().toLowerCase() !== target.trim().toLowerCase() && isPastSprint(item.iterationPath, iterations, date))
 }

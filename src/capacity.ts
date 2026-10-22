@@ -223,18 +223,36 @@ export function azureResources(source: AzureWorkItem[], month: string, settings:
 
 // One person's slice of the backlog for the Individual Overview: every Epic, Feature and Story stays (for hierarchy),
 // but only Tasks assigned to that person, plus regional holiday Tasks, which are unassigned and apply by region.
+// Region of a regional public-holiday Task (a holiday Feature under the absence Epic); undefined for any other item.
+function holidayRegionOf(task: AzureWorkItem, byId: Map<number, AzureWorkItem>, settings: CapacitySettings) {
+  let current = task.parentId == null ? undefined : byId.get(task.parentId), feature: AzureWorkItem | undefined
+  const seen = new Set<number>([task.id])
+  while (current && !seen.has(current.id)) {
+    seen.add(current.id)
+    if (current.workItemType === 'Feature') feature = current
+    if (current.workItemType === 'Epic') return current.id === settings.absenceEpicId && feature != null ? holidayRegion(feature.title) ?? undefined : undefined
+    current = current.parentId == null ? undefined : byId.get(current.parentId)
+  }
+  return undefined
+}
+
 export function itemsForPerson(source: AzureWorkItem[], person: Me, settings: CapacitySettings = defaultCapacitySettings) {
   const byId = new Map(source.map((item) => [item.id, item]))
-  const holiday = (task: AzureWorkItem) => {
-    let current = task.parentId == null ? undefined : byId.get(task.parentId), feature: AzureWorkItem | undefined
-    const seen = new Set<number>([task.id])
-    while (current && !seen.has(current.id)) {
-      seen.add(current.id)
-      if (current.workItemType === 'Feature') feature = current
-      if (current.workItemType === 'Epic') return current.id === settings.absenceEpicId && feature != null && holidayRegion(feature.title) != null
-      current = current.parentId == null ? undefined : byId.get(current.parentId)
-    }
-    return false
-  }
-  return source.filter((item) => item.workItemType !== 'Task' || isMine(item, person) || holiday(item))
+  return source.filter((item) => item.workItemType !== 'Task' || isMine(item, person) || holidayRegionOf(item, byId, settings) != null)
+}
+
+// The team narrowed to a region and to roles (none chosen = all): the Tasks of people whose profile (Settings →
+// Resources) matches, and the public holidays of the chosen region. People without a profile drop out while a filter
+// is on.
+export interface TeamFilter { region?: Region; roles: ResourceRole[] }
+export const teamFiltered = (filter: TeamFilter) => Boolean(filter.region || filter.roles.length)
+export function itemsForTeam(source: AzureWorkItem[], filter: TeamFilter, settings: CapacitySettings = defaultCapacitySettings) {
+  if (!teamFiltered(filter)) return source
+  const profiles = settings.profiles ?? {}, byId = new Map(source.map((item) => [item.id, item]))
+  const matches = (name: string) => { const profile = profiles[name]; return Boolean(profile) && (!filter.region || profile.region === filter.region) && (!filter.roles.length || (profile.role != null && filter.roles.includes(profile.role))) }
+  return source.filter((item) => {
+    if (item.workItemType !== 'Task') return true
+    const holiday = holidayRegionOf(item, byId, settings)
+    return holiday != null ? !filter.region || holiday === filter.region : matches(item.assignedTo)
+  })
 }

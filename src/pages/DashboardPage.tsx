@@ -9,7 +9,8 @@ import { ScopeSwitch } from '../components/ScopeSwitch'
 import { usePersonScope } from '../usePersonScope'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { MyWork } from '../useMyWork'
-import { capacityContext, capacityModel, itemsForPerson, monthlyHours, problemBreakdown, absenceKinds, type LoadStatus } from '../capacity'
+import { TeamFilterBar } from '../components/TeamFilterBar'
+import { capacityContext, capacityModel, itemsForPerson, itemsForTeam, regions, resourceRoles, teamFiltered, type TeamFilter, monthlyHours, problemBreakdown, absenceKinds, type LoadStatus } from '../capacity'
 import { formatHours, formatPercent, monthName } from '../format'
 import type { Page as PageId } from './registry'
 import type { PageProps } from './types'
@@ -29,7 +30,16 @@ export function DashboardPage({ month, azure, navigate, store, setMonth, my }: {
   const [tab, setTabState] = useState<'month' | 'trends' | 'releases'>(() => { try { const saved = localStorage.getItem('demand-planning-overview-tab-v1'); return saved === 'trends' || saved === 'releases' ? saved : 'month' } catch { return 'month' } })
   const setTab = (next: 'month' | 'trends' | 'releases') => { setTabState(next); try { localStorage.setItem('demand-planning-overview-tab-v1', next) } catch { /* convenience only */ } }
   const { scope, individual, who } = personScope
-  const items = scope ? itemsForPerson(azure.items, scope, settings) : individual ? [] : azure.items
+  // Team view: region and roles (remembered in this browser).
+  const [teamFilter, setTeamFilterState] = useState<TeamFilter>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('demand-planning-overview-team-filter-v1') ?? '{}') as Partial<TeamFilter>
+      return { region: regions.find((region) => region === saved.region), roles: Array.isArray(saved.roles) ? resourceRoles.filter((role) => saved.roles!.includes(role)) : [] }
+    } catch { return { roles: [] } }
+  })
+  const setTeamFilter = (next: TeamFilter) => { setTeamFilterState(next); try { localStorage.setItem('demand-planning-overview-team-filter-v1', JSON.stringify(next)) } catch { /* convenience only */ } }
+  const teamLabel = teamFiltered(teamFilter) ? [teamFilter.region, teamFilter.roles.join(', ')].filter(Boolean).join(' · ') : 'Team'
+  const items = scope ? itemsForPerson(azure.items, scope, settings) : individual ? [] : itemsForTeam(azure.items, teamFilter, settings)
   const profileLine = (name: string) => [settings.profiles?.[name]?.role, settings.profiles?.[name]?.region].filter(Boolean).join(' · ')
   const model = capacityModel(items, month, settings)
   const releaseStreamList = releaseStreams(store.state, azure.connectionProfiles, month)
@@ -48,9 +58,10 @@ export function DashboardPage({ month, azure, navigate, store, setMonth, my }: {
   const personOther = (streams: typeof model.people[number]['streams']) => streams.filter((stream) => otherStreams.some((other) => other.key === stream.key)).reduce((sum, stream) => sum + stream.work, 0)
   return <Page>
     <ScopeSwitch scope={personScope} label="Overview for" note="Only this person’s Tasks; regional holidays still apply by region." />
+    {!individual && <TeamFilterBar filter={teamFilter} onChange={setTeamFilter} />}
     {individual && !scope ? <EmptyState title="Choose whose overview to show." detail="Pick a person above, or set your Azure email on the Time Writing connection to make “Me” the default." /> : <>
     <Metrics>
-      <Metric label={individual ? `${who} · utilization` : 'Team utilization'} value={formatPercent(model.totals.utilization)} hint={`${formatHours(model.totals.work)}h booked of ${formatHours(model.totals.available)}h available`} tone={model.totals.utilization != null && model.totals.utilization >= settings.overloadedAt ? 'negative' : undefined} />
+      <Metric label={individual ? `${who} · utilization` : `${teamLabel} utilization`} value={formatPercent(model.totals.utilization)} hint={`${formatHours(model.totals.work)}h booked of ${formatHours(model.totals.available)}h available`} tone={model.totals.utilization != null && model.totals.utilization >= settings.overloadedAt ? 'negative' : undefined} />
       <Metric label="Overloaded" value={model.counts.overloaded} hint={`≥ ${settings.overloadedAt}% of available hours`} tone={model.counts.overloaded ? 'negative' : undefined} />
       <Metric label="Has capacity" value={model.counts.hasCapacity} hint={`< ${settings.availableBelow}% of available hours`} tone={model.counts.hasCapacity ? 'positive' : undefined} />
       <Metric label="Absence" value={formatHours(model.totals.absence)} hint={absenceKinds.filter((kind) => model.totals.absenceByKind[kind]).map((kind) => `${kind} ${formatHours(model.totals.absenceByKind[kind])}h`).join(' · ') || `Under Epic #${settings.absenceEpicId}`} />

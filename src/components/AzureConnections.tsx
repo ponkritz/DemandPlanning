@@ -1,13 +1,15 @@
 import { useState } from 'react'
 import { EmptyState, Notice, Panel, Pill, type Tone } from './ui'
 import { formatDateTime } from '../format'
-import { defaultShowInMenu, loadAzureConnectionProfile, showsInMenu, splitAzureUrl, viewNameOf, splitCollectionUrl, type AzureConnectionProfileSummary, type AzureConnectionRole } from '../azureCredentials'
+import { defaultShowInMenu, listAzureConnectionProfiles, loadAzureConnectionProfile, showsInMenu, splitAzureUrl, viewNameOf, splitCollectionUrl, type AzureConnectionProfileSummary, type AzureConnectionRole } from '../azureCredentials'
 import { defaultReleaseQuery, projectQuery } from '../releaseSource'
 import type { AzureWorkspace, ConnectionInput } from '../useAzureWorkspace'
 import { loadDismissedPresets, pendingPresets, saveDismissedPresets } from '../connectionPresets'
 import { timeWritingView } from '../backlogViews'
 import { viewSource } from '../viewSources'
 import type { PageProps } from '../pages/types'
+import type { GitStorage } from '../useGitStorage'
+import { markViewsSynced, serializeViews, viewsFile } from '../viewDefinitions'
 
 const roleLabel: Record<AzureConnectionRole, string> = { 'time-tracking': 'Time Writing (read & write)', 'release-source': 'Releases · DHFI (read only)', documents: 'Documents · Vault (read only)', reference: 'Reference (read only)', 'backlog-view': 'Backlog view (read only)' }
 const roleUse: Record<AzureConnectionRole, string> = {
@@ -21,10 +23,11 @@ const queryPlaceholder: Record<AzureConnectionRole, string> = { 'time-tracking':
 const empty = (role: AzureConnectionRole = 'time-tracking'): ConnectionInput => ({ name: '', viewName: '', showInMenu: defaultShowInMenu(role), role, serverUrl: '', organization: '', project: '', team: '', pat: '', query: '', creatorEmail: '', apiVersion: '' })
 
 // Azure DevOps connection setup, shown as the first section of Settings.
-export function AzureConnections({ azure, store, onOpenBoard }: { azure: AzureWorkspace; store: PageProps['store']; onOpenBoard: () => void }) {
+export function AzureConnections({ azure, store, git, onOpenBoard }: { azure: AzureWorkspace; store: PageProps['store']; git?: GitStorage; onOpenBoard: () => void }) {
   const { connectionProfiles, connectionStatus, activeConnectionProfileId, busy } = azure
   const [form, setForm] = useState<ConnectionInput | null>(null)
   const [formError, setFormError] = useState('')
+  const [cleanup, setCleanup] = useState<{ tone: 'success' | 'warning' | 'error'; text: string } | null>(null)
   const [fetchingAll, setFetchingAll] = useState(false)
   const [dismissed, setDismissed] = useState(loadDismissedPresets)
   const presets = pendingPresets(connectionProfiles, dismissed)
@@ -64,6 +67,25 @@ export function AzureConnections({ azure, store, onOpenBoard }: { azure: AzureWo
     return lastFetch(profile) ? ['open', 'Data saved'] : ['neutral', 'Not fetched']
   }
 
+  // Only one Time Writing connection is used (the active one); extra ones are duplicates. Clean up keeps the active one
+  // and removes the others here and, with a Git token that can save, from the shared connection setup in Git too
+  // (otherwise the setup in Git would add them back at the next start).
+  const timeWriting = connectionProfiles.filter((profile) => profile.role === 'time-tracking')
+  const keep = timeWriting.find((profile) => profile.id === activeConnectionProfileId) ?? timeWriting[0]
+  const extras = timeWriting.filter((profile) => profile.id !== keep?.id)
+  async function removeDuplicates() {
+    if (!keep || !extras.length) return
+    const names = extras.map((profile) => profile.reason).join(', '), toGit = Boolean(git?.connected && !git.readOnly && !azure.isSample)
+    if (!window.confirm(`Keep “${keep.reason}” as the only Time Writing connection and remove ${extras.length}: ${names}?${toGit ? ' The connection setup in Git is updated too, so they do not come back for anyone.' : ''} Their PATs are not revoked in Azure DevOps.`)) return
+    for (const profile of extras) azure.removeConnection(profile.id)
+    if (!toGit || !git) { setCleanup({ tone: git?.connected ? 'warning' : 'success', text: `Removed ${names}.${git?.connected ? ' They are still in the connection setup in Git (your Git token cannot save), so they come back at the next start until someone with write access removes them there.' : ''}` }); return }
+    try {
+      await git.writeViews(serializeViews(viewsFile(listAzureConnectionProfiles())), `Remove duplicate Time Writing connection${extras.length === 1 ? '' : 's'}: ${names}`)
+      markViewsSynced(listAzureConnectionProfiles())
+      setCleanup({ tone: 'success', text: `Removed ${names} here and from the connection setup in Git.` })
+    } catch (failure) { setCleanup({ tone: 'warning', text: `Removed ${names} here, but Git was not updated (${failure instanceof Error ? failure.message : String(failure)}); they may come back at the next start.` }) }
+  }
+
   return <section id="settings-connections" className="settings-section">
     <div className="settings-section-heading"><div><p className="eyebrow">SETTINGS</p><h2>Azure DevOps</h2><p className="muted">Each connection is one set: base URL (Azure DevOps Services or an on-prem Azure DevOps Server collection), project, PAT and an optional query, plus what its data is used for. Add as many as you need; Fetch all reads every connection read-only, one after another. PATs stay in this browser and are excluded from backups, SharePoint and Git.</p></div><button className="primary" onClick={onOpenBoard}>Open {timeWritingView(connectionProfiles, activeConnectionProfileId).name} →</button></div>
     <Panel className="connection-panel" eyebrow="AZURE DEVOPS" title="Connections" detail="Every connection is saved as soon as it is fetched (an empty Time Writing result never replaces saved data without asking). Nothing is written to Azure DevOps when fetching."
@@ -73,6 +95,8 @@ export function AzureConnections({ azure, store, onOpenBoard }: { azure: AzureWo
         <Pill tone="warning">Needs PAT</Pill>
         <div className="button-row nowrap"><button type="button" className="primary" onClick={() => { setFormError(''); setForm({ ...preset, pat: '' }) }}>Set up</button><button type="button" className="text-button" onClick={() => { const next = [...dismissed, preset.key]; setDismissed(next); saveDismissedPresets(next) }}>Dismiss</button></div>
       </div>)}</div>}
+      {extras.length > 0 && keep && <Notice tone="warning">{timeWriting.length} Time Writing (QMS-0025) connections: only “{keep.reason}” is used; {extras.map((profile) => `“${profile.reason}”`).join(', ')} {extras.length === 1 ? 'is a duplicate' : 'are duplicates'}. <button type="button" className="text-button" onClick={() => void removeDuplicates()}>Keep “{keep.reason}”, remove the other{extras.length === 1 ? '' : 's'}</button></Notice>}
+      {cleanup && <Notice tone={cleanup.tone}>{cleanup.text}</Notice>}
       {connectionProfiles.length ? <div className="azure-table"><table className="connection-table"><thead><tr><th>Connection</th><th>Used for</th><th>Organization / project</th><th>Query</th><th>Status</th><th /></tr></thead><tbody>{connectionProfiles.map((profile) => {
         const parts = splitAzureUrl(profile.url, profile.baseUrl), [tone, label] = statusTone(profile), status = connectionStatus[profile.id]
         const active = profile.role === 'time-tracking' && profile.id === activeConnectionProfileId

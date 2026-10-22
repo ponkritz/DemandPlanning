@@ -48,7 +48,7 @@ export default function App() {
   // Desktop app: every on-prem read-only fetch is saved to Git, so the web app can show it.
   onFetched.current = (profile, source) => { if (window.azureDevOps && git.connected && !azure.isSample && sharedThroughGit(profile)) void git.pushSnapshot(profile, source) }
   // At start with Git storage: the shared connection setup in Git is the default for every user (connections
-  // changed here are kept); the web app also loads the on-prem view data and Windchill exports saved to Git.
+  // changed here are kept); the Windchill exports saved to Git are loaded too, and in the web app the on-prem view data.
   const pulled = useRef(false)
   useEffect(() => {
     if (pulled.current || !store.ready || !git.connected || azure.isSample || git.status === 'loading') return
@@ -57,7 +57,7 @@ export default function App() {
     void git.syncViews().catch(() => null)
       .then(() => web ? git.pullSnapshots() : undefined).catch(() => { /* shown when loading from Settings */ })
       .finally(() => azure.reloadConnectionProfiles())
-    if (web) void git.pullWindchill().then(() => windchill.reload()).catch(() => { /* shown when loading from Settings */ })
+    void git.pullWindchill().then(() => windchill.reload()).catch(() => { /* shown when loading from Git on the import page */ })
   }, [store.ready, git, azure, windchill])
   const my = useMyWork(azure, store)
   const [page, setPage] = useState<Page>('overview')
@@ -108,7 +108,7 @@ export default function App() {
       {page === 'bulk' && <BulkActionsPage azure={azure} store={store} my={my} />}
       {page === 'monthly' && <MonthlyPage azure={azure} month={month} store={store} my={my} />}
       {page === 'baselines' && <BaselinesPage azure={azure} month={month} store={store} git={git} onOpenSettings={() => setPage('admin')} />}
-      {page === 'windchill' && (windchillView ? <WindchillPage view={windchillView} windchill={windchill} gitNote={git.snapshotNotes[`wc:${windchillView.id}`]} /> : <WindchillExportImport windchill={windchill} onImported={openWindchill} />)}
+      {page === 'windchill' && (windchillView ? <WindchillPage view={windchillView} windchill={windchill} git={git} gitNote={git.snapshotNotes[`wc:${windchillView.id}`]} /> : <WindchillExportImport windchill={windchill} git={git} onImported={openWindchill} />)}
       {page === 'board' && <BoardPage azure={azure} store={store} current={view} month={month} git={git} onOpenConnection={openConnection} />}
       {page === 'snapshots' && <SnapshotsPage {...pageProps} />}
       {page === 'admin' && <AdminPage {...pageProps} azure={azure} git={git} onOpenBoard={() => setPage('board')} />}

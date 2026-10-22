@@ -170,6 +170,20 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
       note(id, 'success', `Saved to Git (${target.path}).`)
     } catch (error) { note(id, 'error', `Not saved to Git: ${error instanceof Error ? error.message : String(error)}`) }
   }
+  // One Windchill export (or view) from Git: Load from Git on its page. Null when Git has none; the results here are
+  // replaced only by newer ones, and an export not set up here is added.
+  async function pullWindchillOne(viewId: string) {
+    if (!config || !token) throw new Error('Connect Git storage first.')
+    const text = await readRawFile(siblingConfig(config, `${windchillFolder}/${viewId}.json`), token)
+    if (!text) return null
+    const file = parseWindchillSnapshot(text)
+    if (file.view.id !== viewId) throw new Error(`${viewId}.json in Git belongs to another export.`)
+    const views = loadWindchillViews()
+    if (!views.some((view) => view.id === viewId)) { try { saveWindchillViews([...views, file.view]) } catch { /* shown for this session only */ } }
+    const applied = applyWindchillSnapshots(store.state.windchillSources, [file]).applied.length > 0
+    if (applied) store.update((draft) => { draft.windchillSources = applyWindchillSnapshots(draft.windchillSources, [file]).sources; return draft })
+    return { applied, fetchedAt: file.source.fetchedAt }
+  }
   async function pullWindchill() {
     if (!config || !token) throw new Error('Connect Git storage first.')
     const entries = (await listFolder(siblingConfig(config, windchillFolder), token)).filter((entry) => entry.name.endsWith('.json'))
@@ -189,6 +203,6 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     setConfig(null); setToken(''); setSynced(null); setStatus('off'); setMessage('Git storage disconnected in this browser. The data stays in the app and in the repository.'); sha.current = null
   }
 
-  return { config, connected, readOnly, status, message, dirty, commitUrl, history: config ? historyUrl(config) : '', isSample, load: () => load(), connect, save, disconnect, viewsPath: viewsConfig?.path ?? '', viewsHistory: viewsConfig ? historyUrl(viewsConfig) : '', readViews, writeViews, syncViews, viewsSync, snapshotNotes, pushSnapshot, pullSnapshot, pullSnapshots, pushWindchill, pullWindchill, snapshotsHistory: config ? historyUrl(siblingConfig(config, snapshotFolder)) : '' }
+  return { config, connected, readOnly, status, message, dirty, commitUrl, history: config ? historyUrl(config) : '', isSample, load: () => load(), connect, save, disconnect, viewsPath: viewsConfig?.path ?? '', viewsHistory: viewsConfig ? historyUrl(viewsConfig) : '', readViews, writeViews, syncViews, viewsSync, snapshotNotes, pushSnapshot, pullSnapshot, pullSnapshots, pushWindchill, pullWindchill, pullWindchillOne, snapshotsHistory: config ? historyUrl(siblingConfig(config, snapshotFolder)) : '' }
 }
 export type GitStorage = ReturnType<typeof useGitStorage>

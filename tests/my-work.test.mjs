@@ -50,6 +50,10 @@ test('move candidates: only my pending User Stories in a past Sprint; current, f
   ]
   assert.deepEqual(moveCandidates([...items, ...extra], me, target, iterations, 37778, today).map(({ item }) => item.id), [3, 5], 'Features and Tasks are never moved; only stories in Sprint 1 (past)')
   assert.deepEqual(moveCandidates(items, me, target, [], 37778, today), [], 'without iteration dates nothing is treated as past')
+  const all = [...items, ...extra, item(17, 'User Story', 'Committed in past sprint', { ...ana, state: 'Committed' })]
+  assert.deepEqual(moveCandidates(all, me, target, iterations, 37778, today, 'new').map(({ item }) => item.id), [5], 'New only')
+  assert.deepEqual(moveCandidates(all, me, target, iterations, 37778, today, 'active').map(({ item }) => item.id), [3], 'Active only')
+  assert.deepEqual(moveCandidates(all, me, target, iterations, 37778, today, 'both').map(({ item }) => item.id), [3, 5], 'both; other pending states are left alone')
 })
 
 const raw = (id, fields) => ({ id, fields: { 'System.TeamProject': 'Quality', 'System.State': 'Active', 'System.AreaPath': 'Quality\\A', 'System.IterationPath': 'Quality\\PI 2026.4\\Sprint 1', ...fields } })

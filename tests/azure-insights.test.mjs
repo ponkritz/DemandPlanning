@@ -90,6 +90,6 @@ test('source maps numeric scheduling fields preserving zero and rejecting string
 test('dashboard consumes shared Azure workspace only and removes sample/local metrics and assumed capacity', () => {
   const source = readFileSync(new URL('../src/pages/DashboardPage.tsx', import.meta.url), 'utf8')
   assert.match(source, /capacityModel\(items/)
-  assert.match(source, /const items = scope \? itemsForPerson\(azure\.items, scope, settings\) : individual \? \[\] : azure\.items/, 'team view = Azure items; individual view = one person\'s slice of them')
+  assert.match(source, /const items = scope \? itemsForPerson\(azure\.items, scope, settings\) : individual \? \[\] : itemsForTeam\(azure\.items, teamFilter, settings\)/, 'team view = Azure items (narrowed by region / roles); individual view = one person\'s slice of them')
   assert.doesNotMatch(source, /store\.state\.(?!capacitySettings)|capacityUtilization|\['May',64/)
 })
