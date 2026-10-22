@@ -42,7 +42,7 @@ export function WindchillSettingsPanel() {
     finally { setBusy(false) }
   }
 
-  return <Panel className="connection-panel" eyebrow="WINDCHILL" title="Windchill host" detail="Where Windchill is; the searches are the Windchill views below. Saved in this browser only; no password is stored. In the web app, the test and the searches run from this browser with your Windchill sign-in here (sign in to Windchill in another tab first); this works only if Windchill allows this app's address. Otherwise use Open in browser and Import on the views below."
+  return <Panel className="connection-panel" eyebrow="WINDCHILL" title="Windchill host" info="Where Windchill is; the searches are the Windchill views below. Saved in this browser only; no password is stored. In the web app, the test and the searches run from this browser with your Windchill sign-in here (sign in to Windchill in another tab first); this works only if Windchill allows this app's address. Otherwise use Open in browser and Import on the views below."
     action={<Pill tone={saved.host ? test?.ok ? 'open' : test ? 'danger' : 'info' : 'neutral'}>{saved.host ? test?.ok ? 'Connected' : test ? 'Test failed' : 'Saved' : 'Not set'}</Pill>}>
     <form className="connection-form" onSubmit={save}>
       <label>Host<input required value={draft.host} onChange={(event) => set({ host: event.target.value })} placeholder="plm.example.com" /></label>

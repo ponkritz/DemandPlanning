@@ -512,10 +512,11 @@ export async function createAzureReleaseHierarchy(config: AzureConfig, pat: stri
   }
 }
 
-// A Feature's children from the per-Epic setup: the selected optional User Stories, the "<Feature> - Time Writing" story
+// A Feature's children from the per-Epic setup: the selected optional User Stories, the Time Writing story (default
+// "<Feature> - Time Writing"; its Iteration Path, when set, wins over the Sprint chosen in the dialog)
 // and the month Task with the setup's defaults. Titles may carry placeholders ({feature}, {program}, {service},
 // {version}, {month}). Existing children with the same title are reused, so it can also complete a Feature.
-export interface SetupChildren { stories: { title: string; description: string }[]; task: { title: string; description: string; originalEstimate?: number; assignedTo: string; areaPath: string; iterationPath: string } }
+export interface SetupChildren { stories: { title: string; description: string }[]; timeWritingStory?: { title: string; description: string; assignedTo: string; areaPath: string; iterationPath: string }; task: { title: string; description: string; originalEstimate?: number; assignedTo: string; areaPath: string; iterationPath: string } }
 export async function completeFeatureFromSetup(config: AzureConfig, pat: string, featureId: number, setup: SetupChildren, monthLabel = currentIndiaMonth(), transport: AzureTransport = requestAzure, storyIterationPath?: string, assignee?: string) {
   const items: AzureWorkItem[] = []
   try {
@@ -529,6 +530,9 @@ export async function completeFeatureFromSetup(config: AzureConfig, pat: string,
     if (!isAssignee(owner)) throw new Error('Choose who the User Stories and Task are assigned to (an email); the Feature has no assignee with an email.')
     const taskOwner = setup.task.assignedTo.trim() || owner
     if (!isAssignee(taskOwner)) throw new Error('The Time Writing Task default assignee is not an email.')
+    const storySetup = setup.timeWritingStory
+    const storyOwner = storySetup?.assignedTo.trim() || owner
+    if (!isAssignee(storyOwner)) throw new Error('The Time Writing User Story default assignee is not an email.')
     const values = titleValues(feature.title, monthLabel)
     const fill = (template: string, what: string) => {
       const missing = missingValues(template, values)
@@ -538,10 +542,11 @@ export async function completeFeatureFromSetup(config: AzureConfig, pat: string,
       return title
     }
     const stories = setup.stories.map((story) => ({ ...story, title: fill(story.title, `User Story "${story.title}"`) }))
+    const storyTitle = fill(storySetup?.title || '{feature} - Time Writing', 'The Time Writing User Story title')
     const taskTitle = fill(setup.task.title || '{month} | {feature}', 'The Time Writing Task title')
     const children = await directChildren(config, pat, feature.id, transport)
     for (const story of stories) items.push(await ensureChild(config, pat, feature, 'User Story', story.title, children, owner, transport, storyIterationPath || feature.iterationPath, undefined, undefined, { description: story.description }))
-    const timeWriting = await ensureChild(config, pat, feature, 'User Story', `${feature.title.trim()} - Time Writing`, children, owner, transport, storyIterationPath || feature.iterationPath)
+    const timeWriting = await ensureChild(config, pat, feature, 'User Story', storyTitle, children, storyOwner, transport, storySetup?.iterationPath.trim() || storyIterationPath || feature.iterationPath, undefined, undefined, { description: storySetup?.description ?? '', areaPath: storySetup?.areaPath ?? '' })
     items.push(timeWriting)
     const tasks = await directChildren(config, pat, timeWriting.id, transport)
     let task = await ensureChild(config, pat, timeWriting, 'Task', taskTitle, tasks, taskOwner, transport, setup.task.iterationPath.trim() || config.project, undefined, undefined, { description: setup.task.description, areaPath: setup.task.areaPath })

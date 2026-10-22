@@ -19,7 +19,7 @@ export function ReleaseView({ name, items, backlog, columns, orderBy, unresolved
   const widths = useColumnWidths(`releases:${name}`)
   const headings = ['Name', 'Release', 'Approved', 'Documents', 'Time Writing Feature', 'Planned (h)', 'Booked (h)']
   return <>
-    <TablePanel title="Releases" detail="Release from the segment “Release x.y.z” of each document's Iteration Path, with the name from its Area Path (last segment); without a release in the Iteration Path, both from the Area Path (“…\Name\Release x.y.z”). Time Writing Feature = the QMS-0025 Feature whose title names both, in any order (extra words allowed), with the exact version, e.g. “Art-A, Dose Planning, v.1.1.0.1”. Planned and booked = Original Estimate and Completed Work, all months, on its Time Writing Tasks." count={`${register.length} releases`}>
+    <TablePanel title="Releases" info="Release from the segment “Release x.y.z” of each document's Iteration Path, with the name from its Area Path (last segment); without a release in the Iteration Path, both from the Area Path (“…\Name\Release x.y.z”). Time Writing Feature = the QMS-0025 Feature whose title names both, in any order (extra words allowed), with the exact version, e.g. “Art-A, Dose Planning, v.1.1.0.1”. Planned and booked = Original Estimate and Completed Work, all months, on its Time Writing Tasks." count={`${register.length} releases`}>
       {register.length ? <table className="release-register resizable"><thead><tr>{headings.map((heading) => <th key={heading} style={widths.style(heading)}>{heading}{widths.handle(heading)}</th>)}</tr></thead><tbody>
         {register.flatMap((release) => [
           <tr key={release.key}>

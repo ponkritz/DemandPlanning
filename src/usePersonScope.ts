@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { regions, resourceRoles, type TeamFilter } from './capacity'
 import type { Me } from './myWork'
 import type { MyWork } from './useMyWork'
 
@@ -16,3 +17,15 @@ export function usePersonScope(key: string, defaultView: ScopeView, my: MyWork) 
   return { view, setView, person, setPerson, individual, scope, who, my }
 }
 export type PersonScope = ReturnType<typeof usePersonScope>
+
+// Team view filter (region and roles), remembered in this browser; shared by Overview and Pulse Check.
+export function useTeamFilter() {
+  const [teamFilter, setTeamFilterState] = useState<TeamFilter>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('demand-planning-overview-team-filter-v1') ?? '{}') as Partial<TeamFilter>
+      return { region: regions.find((region) => region === saved.region), roles: Array.isArray(saved.roles) ? resourceRoles.filter((role) => saved.roles!.includes(role)) : [] }
+    } catch { return { roles: [] } }
+  })
+  const setTeamFilter = (next: TeamFilter) => { setTeamFilterState(next); try { localStorage.setItem('demand-planning-overview-team-filter-v1', JSON.stringify(next)) } catch { /* convenience only */ } }
+  return [teamFilter, setTeamFilter] as const
+}

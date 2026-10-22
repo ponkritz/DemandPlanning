@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
 export type Tone = 'neutral' | 'open' | 'locked' | 'warning' | 'danger' | 'info'
@@ -15,16 +15,39 @@ export function Page({ children, className = '', intro, actions }: { children: R
   </section>
 }
 
-export function Panel({ children, className = '', eyebrow, title, detail, action }: { children: ReactNode; className?: string; eyebrow?: string; title?: string; detail?: ReactNode; action?: ReactNode }) {
+// "ⓘ Info": explanations and rules of a view, shown on hover or keyboard focus (and on tap) instead of on the page.
+// Rendered in a portal so a scrolling table panel cannot clip it; it stays open while the pointer is on it, so links work.
+export function Info({ children, label = 'Info' }: { children: ReactNode; label?: string }) {
+  const id = useId()
+  const anchor = useRef<HTMLButtonElement>(null)
+  const timer = useRef<number | undefined>(undefined)
+  const [at, setAt] = useState<{ top: number; left: number } | null>(null)
+  const open = () => { window.clearTimeout(timer.current); const box = anchor.current?.getBoundingClientRect(); if (box) setAt({ top: box.bottom + 6, left: Math.max(8, Math.min(box.left, window.innerWidth - 428)) }) }
+  const close = () => { window.clearTimeout(timer.current); timer.current = window.setTimeout(() => setAt(null), 150) }
+  useEffect(() => {
+    if (!at) return
+    const hide = () => setAt(null)
+    const key = (event: KeyboardEvent) => { if (event.key === 'Escape') hide() }
+    window.addEventListener('scroll', hide, true); window.addEventListener('keydown', key)
+    return () => { window.removeEventListener('scroll', hide, true); window.removeEventListener('keydown', key) }
+  }, [at])
+  useEffect(() => () => window.clearTimeout(timer.current), [])
+  return <>
+    <button type="button" ref={anchor} className="info-button" aria-describedby={at ? id : undefined} aria-expanded={Boolean(at)} onMouseEnter={open} onMouseLeave={close} onFocus={open} onBlur={close} onClick={(event) => { event.preventDefault(); if (at) setAt(null); else open() }}>ⓘ {label}</button>
+    {at && createPortal(<div id={id} role="tooltip" className="info-pop" style={{ top: at.top, left: at.left }} onMouseEnter={open} onMouseLeave={close}>{children}</div>, document.body)}
+  </>
+}
+
+export function Panel({ children, className = '', eyebrow, title, detail, info, action }: { children: ReactNode; className?: string; eyebrow?: string; title?: string; detail?: ReactNode; info?: ReactNode; action?: ReactNode }) {
   return <article className={`panel ${className}`}>
-    {(title || action) && <div className="panel-heading"><div>{eyebrow && <p className="eyebrow">{eyebrow}</p>}{title && <h2>{title}</h2>}{detail && <p className="muted">{detail}</p>}</div>{action}</div>}
+    {(title || action || info) && <div className="panel-heading"><div>{eyebrow && <p className="eyebrow">{eyebrow}</p>}{title ? <h2>{title}{info && <> <Info>{info}</Info></>}</h2> : info && <Info>{info}</Info>}{detail && <p className="muted">{detail}</p>}</div>{action}</div>}
     {children}
   </article>
 }
 
 // A table inside a panel: optional heading, record count, search box and empty state so every list looks the same.
-export function TablePanel({ children, className = '', eyebrow, title, detail, count, action, empty }: { children: ReactNode; className?: string; eyebrow?: string; title?: string; detail?: ReactNode; count?: string; action?: ReactNode; empty?: string }) {
-  return <Panel className={`table-panel ${className}`} eyebrow={eyebrow} title={title} detail={detail} action={(count || action) && <div className="button-row">{count && <span className="record-count">{count}</span>}{action}</div>}>
+export function TablePanel({ children, className = '', eyebrow, title, detail, info, count, action, empty }: { children: ReactNode; className?: string; eyebrow?: string; title?: string; detail?: ReactNode; info?: ReactNode; count?: string; action?: ReactNode; empty?: string }) {
+  return <Panel className={`table-panel ${className}`} eyebrow={eyebrow} title={title} detail={detail} info={info} action={(count || action) && <div className="button-row">{count && <span className="record-count">{count}</span>}{action}</div>}>
     {children}
     {empty && <EmptyState title={empty} />}
   </Panel>

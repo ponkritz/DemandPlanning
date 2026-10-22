@@ -246,10 +246,16 @@ export function itemsForPerson(source: AzureWorkItem[], person: Me, settings: Ca
 // is on.
 export interface TeamFilter { region?: Region; roles: ResourceRole[] }
 export const teamFiltered = (filter: TeamFilter) => Boolean(filter.region || filter.roles.length)
+// Whether a person (by display name) is in the filtered team: their profile matches the region and roles.
+export function inTeam(name: string, filter: TeamFilter, settings: CapacitySettings = defaultCapacitySettings) {
+  if (!teamFiltered(filter)) return true
+  const profile = settings.profiles?.[name]
+  return Boolean(profile) && (!filter.region || profile!.region === filter.region) && (!filter.roles.length || (profile!.role != null && filter.roles.includes(profile!.role)))
+}
 export function itemsForTeam(source: AzureWorkItem[], filter: TeamFilter, settings: CapacitySettings = defaultCapacitySettings) {
   if (!teamFiltered(filter)) return source
-  const profiles = settings.profiles ?? {}, byId = new Map(source.map((item) => [item.id, item]))
-  const matches = (name: string) => { const profile = profiles[name]; return Boolean(profile) && (!filter.region || profile.region === filter.region) && (!filter.roles.length || (profile.role != null && filter.roles.includes(profile.role))) }
+  const byId = new Map(source.map((item) => [item.id, item]))
+  const matches = (name: string) => inTeam(name, filter, settings)
   return source.filter((item) => {
     if (item.workItemType !== 'Task') return true
     const holiday = holidayRegionOf(item, byId, settings)

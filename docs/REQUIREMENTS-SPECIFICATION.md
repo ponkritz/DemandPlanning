@@ -156,6 +156,7 @@ Stakeholders:
 | NAV-17 | The sidebar shall group pages as Data Insights (Overview, Pulse Check, PI Review), My Work (Assigned to Me, Monthly Time Writing, Bulk actions), I&D Board, Release Details (two lists: Azure DevOps Server views, Windchill exports) and Data & governance. Each heading and each Release Details list shall collapse and expand on click, remembered in this browser; a collapsed heading that holds the open page shall be highlighted; the narrow sidebar shall still show every page. Access roles shall treat Pulse Check and PI Review as part of the Data Insights area. |
 | NAV-18 | PI Review (planned) shall show a PI summary — Features and Stories planned vs. closed, hours planned vs. booked per stream and person, open work in the PI's Sprints — and further details still to be defined; until then the page says it is planned. |
 | NAV-19 | Data & governance shall hold a QE Mapping page (planned); until its content is defined it says so. Access roles shall treat it as its own area (default: Admin, Product Owner, People Manager). |
+| NAV-20 | Pulse Check shall have two tabs, remembered in this browser. **Releases** shall show the selected month's approved releases for exactly the pages under Release Details: one quadrant per Azure DevOps Server view in the menu (also when not fetched yet or without releases in its paths; other release connections such as a cloud release source are left out), and the Windchill exports in the menu with their row count, import time and a link. **Last month** (the month before the selected one) shall show Overview's This-month picture for that month (utilization metrics, Who has capacity, Streams of work, Hours by Epic, Funded hours, Absence, Hours by person and stream) with the same Team / Individual choice and team filter as Overview; releases and documents per Release Details view in that month next to the selected month, with the change; Features and User Stories created and closed in it per stream (Epic), without Removed items and the absence Epic; and its Time Writing gaps. | T | S | UC-01 |
 
 ### 3.2 Azure DevOps connections and views (CON) — UC-02
 
@@ -219,6 +220,7 @@ Stakeholders:
 | CON-54 | Bulk actions shall list State checks for the shown person's Features and User Stories (absence Epic and Removed children ignored): a Feature whose User Stories are all Closed (should be Closed), a User Story whose Tasks are all Closed (should be Closed), and an Active Feature without an Active User Story (needs one); each with what is off and, for the first two, the fix after confirmation (a New Feature is set to Active first). |
 | CON-55 | Settings → Storage shall offer "Load everything from Git": planning data, connection setup, on-prem view data, Windchill exports, access roles and Feature setup, each loaded on its own and reported (loaded, or failed with the reason); older Git data never replaces newer data here. |
 | CON-56 | The release view's "Create Feature" shall confirm with the person picker of CON-51, defaulting to the person creating it. |
+| CON-57 | Feature setup per Epic shall also configure the Time Writing User Story that holds the month Task: title (placeholders allowed; default “{feature} - Time Writing”), Description, Assigned to (default: the Feature's assignee), Area Path (default: the Feature's) and Iteration Path (default: the Sprint chosen when creating; when set it wins). Setup files without it keep the default. | T | S | UC-06 |
 
 ### 3.3 Fetching and saving Azure DevOps data (FET) — UC-03
 
@@ -305,6 +307,8 @@ Stakeholders:
 | ATM-12 | Creating month tasks shall be refused when Me has no email, with the message beginning "Month tasks are created for you only". | T | M | UC-06 |
 | ATM-13 | In sample mode, or without a Time Writing connection and PAT, every write action on the page shall be disabled, with the reason shown. | T | M | UC-06, UC-18 |
 | ATM-14 | The page shall keep the last 8 action results as notices. | D | C | UC-06 |
+| ATM-15 | The page shall offer one search box over the pending list that searches every type at once, ignoring the type chip: ID (with or without #), title, type, state, Feature, Epic, Area Path, Iteration Path and tags; every word must match, in any order and case. It shall show how many items match; Esc or a type chip shall clear it. | T | S | UC-06 |
+| ATM-16 | On every page, explanations of how a list, chart or rule works shall sit behind an "ⓘ Info" button next to the heading they belong to, shown on hover, keyboard focus or tap, instead of as text on the page; short status lines (counts, fetch times, totals) stay visible. | D | C | UC-01 |
 
 ### 3.7 Time Writing backlog view (BKL) — UC-07
 

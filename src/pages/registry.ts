@@ -6,7 +6,7 @@ export interface PageMeta { id: Page; label: string; icon: string; group: PageGr
 
 export const pages: PageMeta[] = [
   { id: 'overview', label: 'Overview', icon: '▦', group: 'Data Insights', detail: 'Plan, actuals, absence and utilization for the selected month from the saved Azure backlog.', usesMonth: true },
-  { id: 'pulse', label: 'Pulse Check', icon: '◔', group: 'Data Insights', detail: 'The month’s approved releases per stream, from the release views.', usesMonth: true },
+  { id: 'pulse', label: 'Pulse Check', icon: '◔', group: 'Data Insights', detail: 'The month’s approved releases per stream, and Last month: the month before it — utilization, releases compared, work closed and opened, Time Writing gaps.', usesMonth: true },
   { id: 'pireview', label: 'PI Review', icon: '◈', group: 'Data Insights', detail: 'PI summary for the PI Review (planned).', usesMonth: false },
   { id: 'mywork', label: 'Assigned to Me', icon: '◉', group: 'My Work', detail: 'Your pending Azure DevOps items; finish them with Resolved or Closed.', usesMonth: false },
   { id: 'monthly', label: 'Monthly Time Writing', icon: '◫', group: 'My Work', detail: 'Selected-month Tasks are the source for Azure Original Estimate and Completed Work.', usesMonth: true },
