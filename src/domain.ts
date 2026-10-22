@@ -176,6 +176,7 @@ export interface AzureWorkItem {
   targetDate?: string
   closedDate?: string
   changedDate?: string
+  changedBy?: string
   approvalDate?: string
   // Values of the connection query's selected columns (read-only views), keyed by field reference name.
   fields?: Record<string, string | number | boolean | null>

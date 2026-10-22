@@ -20,7 +20,7 @@ export function PersonPicker({ value, people, onChange, meLabel, label }: { valu
   return <span className="person-picker">
     <input type="text" role="combobox" aria-label={label} aria-expanded={open} aria-controls={listId} aria-autocomplete="list" aria-activedescendant={open && options.length ? `${listId}-${active}` : undefined}
       value={open ? query : value} placeholder={open ? 'Type to search…' : meLabel}
-      onFocus={() => { setOpen(true); setQuery(''); setActive(0) }} onBlur={() => { setOpen(false); setQuery('') }}
+      onFocus={() => { setOpen(true); setQuery(''); setActive(0) }} onClick={() => { if (!open) { setOpen(true); setQuery(''); setActive(0) } }} onBlur={() => { setOpen(false); setQuery('') }}
       onChange={(event) => { setQuery(event.target.value); setOpen(true); setActive(0) }} onKeyDown={keyDown} />
     {open && <ul id={listId} role="listbox" className="person-options">
       {options.length ? options.map((name, index) => <li key={name || 'me'} id={`${listId}-${index}`} role="option" aria-selected={name === value} className={index === active ? 'active' : ''} onMouseDown={(event) => { event.preventDefault(); choose(name) }} onMouseEnter={() => setActive(index)}>{name || meLabel}</li>)
