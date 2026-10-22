@@ -140,19 +140,30 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
   const [snapshotNotes, setSnapshotNotes] = useState<Record<string, { tone: 'success' | 'error' | 'info'; text: string }>>({})
   const digestKey = 'demand-planning-git-snapshot-digests-v1'
   const note = (id: string, tone: 'success' | 'error' | 'info', text: string) => setSnapshotNotes((current) => ({ ...current, [id]: { tone, text } }))
-  async function pushSnapshot(profile: AzureConnectionProfileSummary, source: ViewSnapshot) {
+  // Every fresh fetch of an on-prem view is saved to Git, also when the data is unchanged (its fetch time is new); the
+  // commit message says when only the fetch time changed. Saves run one after another, and a save that loses a race
+  // with another commit re-reads the file and tries once more.
+  const pushQueue = useRef<Promise<void>>(Promise.resolve())
+  function pushSnapshot(profile: AzureConnectionProfileSummary, source: ViewSnapshot) {
+    const run = pushQueue.current.then(() => pushSnapshotNow(profile, source))
+    pushQueue.current = run.catch(() => undefined)
+    return run
+  }
+  async function pushSnapshotNow(profile: AzureConnectionProfileSummary, source: ViewSnapshot) {
     if (!config || !token || isSample) return
     const target = siblingConfig(config, `${snapshotFolder}/${snapshotFileName(profile.id)}`)
     try {
       const digest = await snapshotDigest(source)
       let digests: Record<string, string> = {}
       try { digests = JSON.parse(localStorage.getItem(digestKey) ?? '{}') as Record<string, string> } catch { digests = {} }
-      if (digests[profile.id] === digest) { note(profile.id, 'info', 'Unchanged since the last save to Git.'); return }
+      const unchanged = digests[profile.id] === digest
       note(profile.id, 'info', 'Saving to Git…')
-      const sha = await fileSha(target, token)
-      await writeTextFile(target, token, serializeSnapshot(snapshotFile(profile, source)), sha, `${profile.viewName || profile.reason}: ${source.items.length} items fetched ${formatDateTime(source.fetchedAt)}`)
-      try { localStorage.setItem(digestKey, JSON.stringify({ ...digests, [profile.id]: digest })) } catch { /* next fetch commits again */ }
-      note(profile.id, 'success', `Saved to Git (${target.path}).`)
+      const message = `${profile.viewName || profile.reason}: ${source.items.length} items fetched ${formatDateTime(source.fetchedAt)}${unchanged ? ' (data unchanged)' : ''}`
+      const text = serializeSnapshot(snapshotFile(profile, source))
+      try { await writeTextFile(target, token, text, await fileSha(target, token), message) }
+      catch { await writeTextFile(target, token, text, await fileSha(target, token), message) }
+      try { localStorage.setItem(digestKey, JSON.stringify({ ...digests, [profile.id]: digest })) } catch { /* only used for the commit message */ }
+      note(profile.id, 'success', `Saved to Git (${target.path})${unchanged ? ' — data unchanged, fetch time updated' : ''}.`)
     } catch (error) { note(profile.id, 'error', `Not saved to Git: ${error instanceof Error ? error.message : String(error)}`) }
   }
   async function pullSnapshots() {

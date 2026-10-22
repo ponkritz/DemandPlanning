@@ -12,6 +12,7 @@ import { BaselinesPage } from './pages/BaselinesPage'
 import { SnapshotsPage } from './pages/SnapshotsPage'
 import { AdminPage } from './pages/AdminPage'
 import { settingsTabOnOpen } from './settingsTabs'
+import { defaultStreams, exportForStream, profileForStream } from './streams'
 import { DocsPage } from './pages/DocsPage'
 import { BoardPage } from './pages/BoardPage'
 import { useAzureWorkspace, type FetchListener, type GitDataSource } from './useAzureWorkspace'
@@ -53,8 +54,9 @@ export default function App() {
     },
   }
   const windchill = useWindchill(store, git)
-  // Desktop app: every on-prem read-only fetch is saved to Git, so the web app can show it.
-  onFetched.current = (profile, source) => { if (window.azureDevOps && git.connected && !azure.isSample && sharedThroughGit(profile)) void git.pushSnapshot(profile, source) }
+  // Every fresh fetch of on-prem data (desktop app, or the browser where the server is reachable) is saved to Git
+  // storage automatically, so everyone sees it.
+  onFetched.current = (profile, source) => { if (git.connected && !git.readOnly && !azure.isSample && sharedThroughGit(profile)) void git.pushSnapshot(profile, source) }
   // At start with Git storage: the shared connection setup in Git is the default for every user (connections
   // changed here are kept); the Windchill exports saved to Git are loaded too, and in the web app the on-prem view data.
   const pulled = useRef(false)
@@ -141,11 +143,13 @@ export default function App() {
       <nav aria-label="Primary navigation">{pageGroups.map((group) => {
         const pageButton = (item: typeof pages[number]) => !allowed(item.id) ? [] : [<button key={item.id} className={page === item.id ? 'nav-active' : ''} aria-current={page === item.id ? 'page' : undefined} onClick={() => setPage(item.id)}><span className="nav-icon">{item.icon}</span>{item.label}{item.id === 'mywork' && my.pending.length > 0 && <span className="nav-badge" aria-label={`${my.pending.length} pending`}>{my.pending.length}</span>}</button>]
         const windchillMeta = pageMeta('windchill')
-        // Release Details has two sub-lists: the on-prem Azure DevOps views and the Windchill exports.
+        // Release Details has two sub-lists: the default Azure streams (DP, CP, IOCC, Content, Tool Validations) and the
+        // Windchill streams (S&S IT; ECP later), each in a fixed order. Other connections and exports are not listed here.
         const sections: { key: string; label?: string; entries: React.ReactNode[] }[] = group === 'Release Details' ? [
-          { key: 'release:ads', label: 'Azure DevOps Server', entries: access.sees('release') ? views.filter((entry) => entry.onPrem).map((entry) => navButton(`view:${entry.id}`, pageMeta('board').icon, entry.name, page === 'board' && view.id === entry.id, () => openView(entry.id))) : [] },
-          { key: 'release:windchill', label: 'Windchill exports', entries: access.sees('release') ? [...windchillViews.map((entry) => navButton(entry.id, windchillMeta.icon, entry.name, page === 'windchill' && windchillView?.id === entry.id, () => openWindchill(entry.id))), ...(access.can('windchill.import') ? [navButton('windchill', '＋', windchillMeta.label, page === 'windchill' && !windchillView, () => openWindchill(''))] : [])] : [] },
-        ] : [{ key: group, entries: pages.filter((item) => item.group === group).flatMap((item) => item.id === 'board' ? (access.sees('board') ? views.filter((entry) => !entry.onPrem).map((entry) => navButton(`view:${entry.id}`, item.icon, entry.name, page === 'board' && view.id === entry.id, () => openView(entry.id))) : []) : pageButton(item)) }]
+          // The default streams in order; one without a connection (shown in the menu) leads to Settings to set it up.
+          { key: 'release:ads', label: 'Azure DevOps Server', entries: access.sees('release') ? defaultStreams.filter((stream) => stream.source === 'azure').map((stream) => { const profile = profileForStream(stream, azure.connectionProfiles), entry = profile && views.find((item) => item.id === profile.id); return entry ? navButton(`view:${entry.id}`, pageMeta('board').icon, stream.name, page === 'board' && view.id === entry.id, () => openView(entry.id)) : <button key={`stream:${stream.name}`} className="nav-missing" title={`Not set up: add a connection named “${stream.name}”`} onClick={openConnection}><span className="nav-icon">＋</span>{stream.name}</button> }) : [] },
+          { key: 'release:windchill', label: 'Windchill exports', entries: access.sees('release') ? [...defaultStreams.filter((stream) => stream.source === 'windchill').map((stream) => { const entry = exportForStream(stream, windchillViews); return entry ? navButton(entry.id, windchillMeta.icon, stream.name, page === 'windchill' && windchillView?.id === entry.id, () => openWindchill(entry.id)) : <button key={`stream:${stream.name}`} className="nav-missing" title={`Not imported yet: import a Windchill export named “${stream.name}”`} onClick={() => openWindchill('')}><span className="nav-icon">＋</span>{stream.name}</button> }), ...(access.can('windchill.import') ? [navButton('windchill', '＋', windchillMeta.label, page === 'windchill' && !windchillView, () => openWindchill(''))] : [])] : [] },
+        ] : [{ key: group, entries: pages.filter((item) => item.group === group).flatMap((item) => item.id === 'board' ? (access.sees('board') ? views.filter((entry) => !entry.onPrem && !defaultStreams.some((stream) => stream.source === 'azure' && profileForStream(stream, azure.connectionProfiles)?.id === entry.id)).map((entry) => navButton(`view:${entry.id}`, item.icon, entry.name, page === 'board' && view.id === entry.id, () => openView(entry.id))) : []) : pageButton(item)) }]
         const shown = sections.filter((section) => section.entries.length)
         if (!shown.length) return null
         const open = !collapsed.includes(group)

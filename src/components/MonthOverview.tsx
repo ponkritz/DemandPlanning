@@ -22,7 +22,8 @@ export function CapacityMetrics({ model, settings, label }: { model: CapacityMod
   </>
 }
 
-export function MonthSections({ items, month, settings, navigate }: { items: AzureWorkItem[]; month: string; settings: CapacitySettings; navigate: (page: PageId) => void }) {
+// utilizationOnly: just Who has capacity and how utilization is calculated (Pulse Check → Last month).
+export function MonthSections({ items, month, settings, navigate, utilizationOnly = false }: { items: AzureWorkItem[]; month: string; settings: CapacitySettings; navigate: (page: PageId) => void; utilizationOnly?: boolean }) {
   const model = capacityModel(items, month, settings)
   const profileLine = (name: string) => [settings.profiles?.[name]?.role, settings.profiles?.[name]?.region].filter(Boolean).join(' · ')
   const fundedOver = Math.max(0, model.totals.work + model.totals.absence - model.totals.funded)
@@ -37,10 +38,13 @@ export function MonthSections({ items, month, settings, navigate }: { items: Azu
     <TablePanel title="Who has capacity" info={`${monthName(month)} · ${model.workingDays} working days × ${settings.hoursPerDay}h = ${formatHours(model.fundedPerPerson)}h funded per person, less absence.`} count={`${model.people.length} people`} empty={model.people.length ? undefined : 'No Time Writing Tasks for this month.'}>
       <table><thead><tr><th>Person</th><th>Status</th><th>Available</th><th>Planned</th><th>Booked</th><th>Utilization</th><th>Main stream</th></tr></thead><tbody>{model.people.map((person) => <tr key={person.name}><td><strong>{person.name}</strong>{profileLine(person.name) && <small>{profileLine(person.name)}</small>}{person.absence > 0 && <small>{formatHours(person.absence)}h absence</small>}</td><td><Pill tone={statusTone[person.status]}>{person.status}</Pill></td><td>{formatHours(person.available)}</td><td>{formatHours(person.planned)}</td><td>{formatHours(person.work)}</td><td><div className="load"><div className="progress"><i className={person.status === 'Overloaded' ? 'over' : ''} style={{ width: `${Math.min(100, person.utilization ?? 0)}%` }} /></div><span>{formatPercent(person.utilization)}</span></div></td><td>{person.streams[0]?.title ?? '—'}{person.streams.length > 1 && <small>+{person.streams.length - 1} more</small>}</td></tr>)}</tbody></table>
     </TablePanel>
+    {!utilizationOnly && <>
     <TablePanel title="Streams of work" info="Epics with booked hours this month. Absence is excluded." count={`${model.streams.length} streams`} empty={model.streams.length ? undefined : 'No booked hours this month.'}>
       <table><thead><tr><th>Stream (Epic)</th><th>Booked</th><th>Share</th><th>Planned</th><th>People</th></tr></thead><tbody>{model.streams.map((stream) => <tr key={stream.key}><td>{stream.epic ? <a href={stream.epic.url} target="_blank" rel="noreferrer">#{stream.epic.id} {stream.title}</a> : stream.title}<small>{stream.features} feature{stream.features === 1 ? '' : 's'}</small></td><td>{formatHours(stream.work)}</td><td><div className="load"><div className="progress"><i style={{ width: `${stream.share ?? 0}%` }} /></div><span>{formatPercent(stream.share, 0)}</span></div></td><td>{formatHours(stream.planned)}</td><td>{stream.people}</td></tr>)}</tbody></table>
     </TablePanel>
+    </>}
   </div>
+  {!utilizationOnly && <>
   <Panel className="viz-panel" title={`Hours by Epic · ${monthName(month)}`} info="Bar = booked hours, tick = planned hours; share of the month's booked hours on the right. Absence is excluded.">
         {model.streams.length ? <EpicBulletChart streams={model.streams} colors={colors} /> : <EmptyState title="No booked hours this month." />}
   </Panel>
@@ -56,6 +60,7 @@ export function MonthSections({ items, month, settings, navigate }: { items: Azu
   <TablePanel className="matrix" title="Hours by person and stream" info={otherStreams.length ? `Top ${maxMatrixStreams} streams by hours; ${otherStreams.length} smaller stream(s) grouped under Other. Darker cells = more hours.` : 'Booked hours (Completed Work) per person and Epic; darker cells = more hours.'} empty={model.people.length && model.streams.length ? undefined : 'Nothing to break down yet.'}>
     {model.people.length > 0 && model.streams.length > 0 && <div className="azure-table"><table><thead><tr><th>Person</th>{matrixStreams.map((stream) => <th key={stream.key} title={stream.title}>{stream.title}</th>)}{otherStreams.length > 0 && <th>Other</th>}<th>Absence</th><th>Total</th></tr></thead><tbody>{model.people.map((person) => <tr key={person.name}><td><strong>{person.name}</strong></td>{matrixStreams.map((stream) => { const cell = person.streams.find((item) => item.key === stream.key); return <td key={stream.key} className={cell ? 'viz-shade' : 'muted'} style={cell ? { background: `color-mix(in srgb, var(--viz-diverge-lo) ${Math.round(cell.work / matrixMax * 40)}%, transparent)` } : undefined}>{cell ? formatHours(cell.work) : '·'}</td> })}{otherStreams.length > 0 && <td>{formatHours(personOther(person.streams)) || '·'}</td>}<td>{person.absence ? formatHours(person.absence) : '·'}</td><td><strong>{formatHours(person.work)}</strong></td></tr>)}<tr className="matrix-total"><td>Total</td>{matrixStreams.map((stream) => <td key={stream.key}>{formatHours(stream.work)}</td>)}{otherStreams.length > 0 && <td>{formatHours(otherStreams.reduce((sum, stream) => sum + stream.work, 0))}</td>}<td>{formatHours(model.totals.absence)}</td><td><strong>{formatHours(model.totals.work)}</strong></td></tr></tbody></table></div>}
   </TablePanel>
+  </>}
   <div className="how-calculated"><Info label="How utilization is calculated">
     <p>Funded hours per person: {model.workingDays} working days × {settings.hoursPerDay}h = {formatHours(model.fundedPerPerson)}h.</p>
     <p>Available = funded − absence hours (Completed Work on Tasks under Epic #{settings.absenceEpicId}; PTO, Sick Leave and Unplanned Leave are read from the Feature and Task titles).</p>

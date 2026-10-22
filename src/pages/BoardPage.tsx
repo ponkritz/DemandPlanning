@@ -15,6 +15,8 @@ import type { AzureConfig } from '../azureDevOps'
 import type { PageProps } from './types'
 import type { GitStorage } from '../useGitStorage'
 import { columnName, queryLayout, type QueryColumn, type QueryOrder } from '../queryView'
+import { defaultMatchThreshold, streamOfProfile } from '../streams'
+import { normalizeReleaseSourceSettings } from '../releaseSource'
 
 // One page for all configured Azure DevOps views (each its own entry in the sidebar): the Time Writing backlog
 // (QMS-0025) as an editable tree, and every other shown connection as a read-only query view.
@@ -46,6 +48,9 @@ function ReadOnlyView({ id, name, role, azure, store, month, gitNote, onOpenConn
   const status = azure.connectionStatus[id]
   const profile = loadAzureConnectionProfile(id)
   const source = viewSource(store.state, id, role, profile?.query, listAzureConnectionProfiles().filter((entry) => entry.role === 'release-source').length)
+  // A default stream (DP, CP, IOCC, …) reads its releases with its own rule; DP and IOCC match Features fuzzily.
+  const stream = profile ? streamOfProfile({ viewName: profile.viewName, reason: profile.reason, role }) : undefined
+  const threshold = normalizeReleaseSourceSettings(store.state.releaseSourceSettings).matchThreshold ?? defaultMatchThreshold
   let config: AzureConfig | null = null
   try { config = profile ? connectionConfig(profile) : null } catch { config = null }
   const busy = status?.state === 'busy'
@@ -70,7 +75,7 @@ function ReadOnlyView({ id, name, role, azure, store, month, gitNote, onOpenConn
       {source && !allMonths && undated > 0 && <div className="notice" role="status">Month filter: by Author Approval Date in your time zone. {undated} of {source.items.length} items have no approval date{role === 'release-source' ? '' : ' in the query’s columns'}, so their Changed Date is used.</div>}
       {stale && !busy && <div className="notice warning" role="status">The saved data was fetched with different columns than the connection's query now has. Refresh from Azure to load every column's values.</div>}
       {source && config && !items.length && source.items.length ? <EmptyState title={`No items in ${monthName(month)}.`} detail={`${source.items.length} items have an approval date (else a changed date) in other months. Pick another month in the header, or tick “All months”.`} />
-        : source && config ? role === 'release-source' ? <ReleaseView name={name} items={items} backlog={azure.items} azure={azure} assign={assign} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} /> : <QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} />
+        : source && config ? role === 'release-source' || stream ? <ReleaseView name={name} items={items} backlog={azure.items} azure={azure} assign={assign} rule={stream?.rule} fuzzy={stream?.fuzzy} threshold={threshold} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} /> : <QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} />
         : <><EmptyState title={config ? `“${name}” has not been fetched yet.` : `The connection for “${name}” is not saved in this browser.`} detail={config ? 'Fetch it read-only; nothing is written to Azure DevOps. Its items stay on this page and are not counted in Overview, Monthly Time Writing or Assigned to Me.' : 'Add it again in Settings → Azure DevOps.'} /></>}
     </Panel>
   </Page>

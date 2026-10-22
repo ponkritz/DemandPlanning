@@ -40,3 +40,18 @@ test('work flow: Features and User Stories opened and closed in the month, per E
   assert.deepEqual(flow.items.map(({ item, change }) => `${change} ${item.id}`), ['closed 11', 'closed 12', 'closed 13', 'created 10', 'created 12', 'created 30'])
   assert.deepEqual(workFlow(items, '2026-09', 2, 'UTC', (entry) => entry.assignedTo === 'Ben Okafor').totals.Feature, { created: 1, closed: 0 }, 'include narrows to a person')
 })
+
+import { ongoingWork } from '../src/pulseCheck.ts'
+import { timeWritingMonth } from '../src/azureInsights.ts'
+test('ongoing activities: in-progress Features and User Stories per stream, booked hours this month, overdue', () => {
+  const items = [
+    item(1, 'Epic', { title: 'CP' }), item(2, 'Epic', { title: 'Absence' }),
+    item(10, 'Feature', { parentId: 1, state: 'Active', targetDate: '2026-10-01T00:00:00Z' }),
+    item(11, 'User Story', { parentId: 10, state: 'In Progress' }), item(12, 'User Story', { parentId: 10, state: 'New' }),
+    item(13, 'Task', { parentId: 11, title: 'October 2026 | X', completedWork: 6 }), item(14, 'Task', { parentId: 11, title: 'September 2026 | X', completedWork: 9 }),
+    item(20, 'Feature', { parentId: 2, state: 'Active' }), item(30, 'Feature', { state: 'Closed' }),
+  ]
+  const work = ongoingWork(items, '2026-10', '2026-10-22', timeWritingMonth, 2)
+  assert.deepEqual(work.items.map(({ item, booked, overdue }) => [item.id, booked, overdue]), [[10, 6, true], [11, 6, false]])
+  assert.deepEqual([work.features, work.stories, work.overdue, work.streams], [1, 1, 1, ['CP']])
+})

@@ -52,7 +52,7 @@ Live reading was confirmed by the user. No production PAT was available to the c
 
 With Git storage connected (Settings → Storage), **Settings → Views in Git → Save N connections to Git** writes the connection setup (names, view names, queries, URLs, roles — never PATs) to `azure-views.json` in the data repository. Every app that connects to the same repository takes it as its default at start: missing connections are added, unchanged ones follow Git, ones changed locally are kept; **Restore from Git** brings a connection back to Git's version. A restored connection without a PAT shows the data saved to Git (view only) until a PAT is entered.
 
-The desktop app saves each on-prem fetch to `azure-data/<connection>.json`. The web app loads it at start; each on-prem view has **Load from Git**, and a fetch that fails or has no PAT falls back to it.
+Every fresh fetch of an on-prem view is saved automatically to `azure-data/<connection>.json` (also when the data is unchanged — the fetch time is new; needs a Git token that can write). The web app loads it at start; each on-prem view has **Load from Git**, and a fetch that fails or has no PAT falls back to it.
 
 ## One Time Writing connection
 
