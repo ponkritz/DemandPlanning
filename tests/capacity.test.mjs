@@ -107,3 +107,20 @@ test('individual overview: only that person\'s Tasks, hierarchy kept, regional h
   assert.deepEqual([aloneChen.work, aloneChen.absence, aloneChen.utilization], [teamChen.work, teamChen.absence, teamChen.utilization], 'same numbers as in the team view, India holiday included')
   assert.equal(aloneChen.absenceByKind['Public holiday'], 8)
 })
+
+import { itemsForTeam } from '../src/capacity.ts'
+test('team overview by region and roles: only matching people, the region\'s holidays; nothing chosen = everyone', () => {
+  const { items } = regionalSample({ organization: 'Org', project: 'Quality', team: 'T' }, '2026-10')
+  const settings = capacityContext({ resourceProfiles: sampleProfiles })
+  assert.equal(itemsForTeam(items, { roles: [] }, settings), items, 'no filter: the whole team')
+  const people = (filter) => capacityModel(itemsForTeam(items, filter, settings), '2026-10', settings).people.map((person) => person.name).sort()
+  const everyone = capacityModel(items, '2026-10', settings).people.map((person) => person.name)
+  const regionOf = (name) => sampleProfiles[name]?.region, roleOf = (name) => sampleProfiles[name]?.role
+  for (const region of ['India', 'Netherlands', 'US']) assert.deepEqual(people({ region, roles: [] }), everyone.filter((name) => regionOf(name) === region).sort(), region)
+  const roles = [...new Set(everyone.map(roleOf).filter(Boolean))].slice(0, 2)
+  assert.deepEqual(people({ roles }), everyone.filter((name) => roles.includes(roleOf(name))).sort(), 'several roles at once')
+  assert.deepEqual(people({ region: 'India', roles }), everyone.filter((name) => regionOf(name) === 'India' && roles.includes(roleOf(name))).sort(), 'region and roles together')
+  const india = capacityModel(itemsForTeam(items, { region: 'India', roles: [] }, settings), '2026-10', settings)
+  const indiaInTeam = capacityModel(items, '2026-10', settings).people.filter((person) => regionOf(person.name) === 'India')
+  assert.deepEqual(india.people.map((person) => [person.name, person.absence]).sort(), indiaInTeam.map((person) => [person.name, person.absence]).sort(), 'same absence (holidays) as in the team view')
+})

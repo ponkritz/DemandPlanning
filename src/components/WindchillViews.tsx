@@ -3,6 +3,7 @@ import { windchillOps, windchillCell, type WindchillFilter, type WindchillView }
 import { formatDateTime } from '../format'
 import { downloadCsv } from '../download'
 import type { WindchillWorkspace } from '../useWindchill'
+import type { GitStorage } from '../useGitStorage'
 import { EmptyState, Notice, Panel, Pill } from './ui'
 
 const blank = (): WindchillView => ({ id: crypto.randomUUID().replaceAll('-', ''), name: '', entitySet: '', filters: [{ field: '', op: 'eq', value: '' }], columns: [], showInMenu: true })
@@ -70,9 +71,20 @@ export function WindchillViewsPanel({ windchill }: { windchill: WindchillWorkspa
 
 // A Windchill view page: its last results with the chosen columns; search and CSV export; Fetch, or results opened in
 // the browser and imported.
-export function WindchillPage({ view, windchill, gitNote }: { view: WindchillView; windchill: WindchillWorkspace; gitNote?: { tone: string; text: string } }) {
+export function WindchillPage({ view, windchill, git, gitNote }: { view: WindchillView; windchill: WindchillWorkspace; git?: GitStorage; gitNote?: { tone: string; text: string } }) {
   const [search, setSearch] = useState('')
   const [error, setError] = useState('')
+  const [fromGit, setFromGit] = useState<{ tone: 'info' | 'success' | 'error'; text: string } | null>(null)
+  // Load from Git: the results saved to Git (from this or another computer), like the on-prem views.
+  async function loadFromGit() {
+    if (!git) return
+    setFromGit({ tone: 'info', text: 'Loading from Git…' })
+    try {
+      const result = await git.pullWindchillOne(view.id)
+      windchill.reload()
+      setFromGit(!result ? { tone: 'error', text: 'Git has no saved results for this export yet (they are saved at each import with Git storage connected).' } : { tone: 'success', text: result.applied ? `Loaded the results saved to Git (${formatDateTime(result.fetchedAt)}).` : `The results here are already the latest in Git (${formatDateTime(result.fetchedAt)}).` })
+    } catch (failure) { setFromGit({ tone: 'error', text: `Load from Git failed: ${failure instanceof Error ? failure.message : String(failure)}` }) }
+  }
   const source = windchill.sources.find((entry) => entry.viewId === view.id), status = windchill.status[view.id]
   const columns = source?.columns.length ? source.columns : view.columns
   const rows = (source?.rows ?? []).filter((row) => !search.trim() || columns.some((column) => windchillCell(row, column).toLowerCase().includes(search.trim().toLowerCase())))
@@ -80,9 +92,11 @@ export function WindchillPage({ view, windchill, gitNote }: { view: WindchillVie
   return <Panel className="connection-panel backlog-panel">
     <div className="view-source-bar"><div><strong>{view.name}</strong><span className="muted"> · {view.exportFile ? `Windchill export ${view.exportFile}` : view.entitySet}{source ? ` · ${source.rows.length} results · ${view.exportFile ? 'imported' : 'fetched'} ${formatDateTime(source.fetchedAt)}${source.fromGit ? ' (desktop app, via Git)' : ''}` : ''}</span></div>
       <div className="button-row">{view.exportFile ? <ExportFileButton label="Import newer export" onFile={(text, file) => windchill.importExport(text, file, '', view.id)} onError={setError} /> : <button className="primary" disabled={status?.state === 'busy'} onClick={() => void windchill.fetchView(view.id)}>{status?.state === 'busy' ? 'Searching…' : source ? 'Refresh from Windchill' : 'Fetch from Windchill'}</button>}
+        {git?.connected && <button type="button" className="ghost" disabled={fromGit?.text === 'Loading from Git…'} onClick={() => void loadFromGit()}>Load from Git</button>}
         {view.exportFile && <button type="button" className="text-button" onClick={() => { if (window.confirm(`Remove the Windchill export “${view.name}” from this app?`)) windchill.removeView(view.id) }}>Remove</button>}</div></div>
     {!view.exportFile && <WindchillImport view={view} windchill={windchill} />}
     {error && <Notice tone="error">{error}</Notice>}
+    {fromGit && <Notice tone={fromGit.tone}>{fromGit.text}</Notice>}
     {status && <Notice tone={status.state === 'error' ? 'error' : status.state === 'busy' ? 'info' : 'success'}>{status.message}</Notice>}
     {gitNote && <div className={`notice ${gitNote.tone}`} role="status">{gitNote.text}</div>}
     {!source ? <EmptyState title={`“${view.name}” has not been fetched yet.`} detail="Fetch it from Windchill, or Open in browser, save the results (Ctrl+S) or copy them, then Import file or Paste results. Results saved to Git from another computer also appear here." />
@@ -105,15 +119,27 @@ function ExportFileButton({ label, onFile, onError }: { label: string; onFile: (
 }
 
 // Release Details → Import Windchill export: a search run in Windchill and exported as CSV becomes a page here.
-export function WindchillExportImport({ windchill, onImported }: { windchill: WindchillWorkspace; onImported: (id: string) => void }) {
+export function WindchillExportImport({ windchill, git, onImported }: { windchill: WindchillWorkspace; git?: GitStorage; onImported: (id: string) => void }) {
   const [name, setName] = useState('')
   const [error, setError] = useState('')
+  const [fromGit, setFromGit] = useState<{ tone: 'info' | 'success' | 'warning' | 'error'; text: string } | null>(null)
+  // Restore every export saved to Git (e.g. on a new computer): missing ones are added, newer results replace older.
+  async function loadAll() {
+    if (!git) return
+    setFromGit({ tone: 'info', text: 'Loading from Git…' })
+    try {
+      const result = await git.pullWindchill()
+      windchill.reload()
+      setFromGit({ tone: result.failed.length ? 'warning' : result.files ? 'success' : 'info', text: result.files ? `${result.files} export${result.files === 1 ? '' : 's'} in Git; ${result.applied.length ? `newer results loaded for ${result.applied.join(', ')}` : 'the results here are already up to date'}.${result.added ? ` ${result.added} added to Release Details.` : ''}${result.failed.length ? ` Not readable: ${result.failed.join(', ')}.` : ''}` : 'No Windchill exports saved in Git yet.' })
+    } catch (failure) { setFromGit({ tone: 'error', text: `Load from Git failed: ${failure instanceof Error ? failure.message : String(failure)}` }) }
+  }
   return <Panel className="connection-panel" eyebrow="RELEASE DETAILS" title="Import a Windchill export" detail="In Windchill, run your search (e.g. a saved search), export the result list to a CSV file, then import it here. The columns are kept as in the file; with Git storage connected the export is also saved to Git for the web app.">
     <div className="connection-form">
       <label>Name<input value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. GSS_BST released documents (default: the file name)" /></label>
-      <div className="connection-actions"><ExportFileButton label="Choose CSV export…" onFile={(text, file) => { onImported(windchill.importExport(text, file, name)); setName('') }} onError={setError} /></div>
+      <div className="connection-actions"><ExportFileButton label="Choose CSV export…" onFile={(text, file) => { onImported(windchill.importExport(text, file, name)); setName('') }} onError={setError} />{git?.connected && <button type="button" className="ghost" disabled={fromGit?.text === 'Loading from Git…'} onClick={() => void loadAll()}>Load all exports from Git</button>}</div>
     </div>
     {error && <Notice tone="error">{error}</Notice>}
+    {fromGit && <Notice tone={fromGit.tone}>{fromGit.text}</Notice>}
     <p className="muted">CSV or tab-separated text. Excel files: open them and save as CSV first.</p>
   </Panel>
 }
