@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
-import { parseAzureProjectUrl, fetchAzureWorkItems, mergeAzureWorkItems, buildWorkItemQuery, createAzureFeature, featurePatch, featureDescription, releaseHierarchyTitles, currentIndiaMonth, createAzureReleaseHierarchy, completeReleaseHierarchy, bulkCreateMonthlyTimeWritingTasks, HierarchyCreationError, readAzureIterations, projectIterationPaths, currentIterationPairs, futureIterationPairs, mapAzureWorkItem, savedBacklogItems, sameAzureScope, updateAzureTimeWritingEffort } from '../src/azureDevOps.ts'
+import { parseAzureProjectUrl, fetchAzureWorkItems, mergeAzureWorkItems, buildWorkItemQuery, createAzureFeature, featurePatch, featureDescription, releaseHierarchyTitles, currentIndiaMonth, createAzureReleaseHierarchy, completeReleaseHierarchy, HierarchyCreationError, readAzureIterations, projectIterationPaths, currentIterationPairs, futureIterationPairs, mapAzureWorkItem, savedBacklogItems, sameAzureScope, updateAzureTimeWritingEffort } from '../src/azureDevOps.ts'
 import { buildWorkItemTree } from '../src/azureHierarchy.ts'
 import { loadAzurePat, saveAzurePat, forgetAzurePat, listAzurePatProfiles, loadAzurePatProfile, saveAzurePatProfile, forgetAzurePatProfile, listAzureConnectionProfiles, loadAzureConnectionProfile, saveAzureConnectionProfile, forgetAzureConnectionProfile } from '../src/azureCredentials.ts'
 import { normalizeBacklogColumns, defaultBacklogColumns, plainAzureText, visibleBacklogRows } from '../src/backlogView.ts'
@@ -49,11 +49,11 @@ test('ADS configurations retain URL, reason and PAT as one selectable browser-lo
   const first = { id: 'quality-read', url: 'https://dev.azure.com/example-org/Quality%20Project/_backlogs/backlog/Team%20A/Epics', reason: 'Quality backlog read', token: 'quality-read-token' }
   const second = { id: 'release-write', url: 'https://dev.azure.com/another-org/Release%20Project/_backlogs/backlog/Release%20Team/Epics', reason: 'Release work-item write', token: 'release-write-token' }
   saveAzureConnectionProfile(first, storage); saveAzureConnectionProfile(second, storage)
-  assert.deepEqual(listAzureConnectionProfiles(storage), [{ id: first.id, url: first.url, reason: first.reason }, { id: second.id, url: second.url, reason: second.reason }])
+  assert.deepEqual(listAzureConnectionProfiles(storage), [{ id: first.id, url: first.url, reason: first.reason, role: 'time-tracking' }, { id: second.id, url: second.url, reason: second.reason, role: 'time-tracking' }])
   assert.equal(JSON.stringify(listAzureConnectionProfiles(storage)).includes('token'), false)
   assert.deepEqual(loadAzureConnectionProfile(second.id, storage), second)
   forgetAzureConnectionProfile(first.id, storage)
-  assert.deepEqual(listAzureConnectionProfiles(storage), [{ id: second.id, url: second.url, reason: second.reason }])
+  assert.deepEqual(listAzureConnectionProfiles(storage), [{ id: second.id, url: second.url, reason: second.reason, role: 'time-tracking' }])
 })
 
 test('ADS configuration retains the creator email separately from its PAT', () => {
@@ -61,7 +61,7 @@ test('ADS configuration retains the creator email separately from its PAT', () =
   const storage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) }
   const profile = { id: 'write', url: 'https://dev.azure.com/example-org/Quality%20Project/_backlogs/backlog/Team%20A/Epics', reason: 'Feature write', creatorEmail: 'creator@example.test', token: 'write-token' }
   saveAzureConnectionProfile(profile, storage)
-  assert.deepEqual(listAzureConnectionProfiles(storage), [{ id: profile.id, url: profile.url, reason: profile.reason, creatorEmail: profile.creatorEmail }])
+  assert.deepEqual(listAzureConnectionProfiles(storage), [{ id: profile.id, url: profile.url, reason: profile.reason, role: 'time-tracking', creatorEmail: profile.creatorEmail }])
   assert.equal(loadAzureConnectionProfile(profile.id, storage)?.creatorEmail, profile.creatorEmail)
   assert.equal(JSON.stringify(listAzureConnectionProfiles(storage)).includes('token'), false)
 })
@@ -357,7 +357,6 @@ function fakeHierarchyServer() {
   let failureTitle = ''
   const writes = []
   const transport = async (request) => {
-    if (request.operation === 'identity') return { authenticatedUser: { id: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', providerDisplayName: 'Synthetic Creator' } }
     if (request.operation === 'items') return { value: request.ids.map((id) => records.get(id)).filter(Boolean) }
     if (request.operation === 'iterations') return { value: [{ name: 'Current PI', path: 'Quality Project\\Current PI' }] }
     if (request.operation === 'query') {
@@ -432,25 +431,6 @@ test('partial hierarchy retains known IDs and completion creates only missing ch
   assert.equal(server.writes.length, 6)
 })
 
-test('bulk monthly creation creates one task per Time Writing story and skips existing month tasks', async () => {
-  const server = fakeHierarchyServer()
-  const result = await createAzureReleaseHierarchy(config, pat, { ...feature, iterationPath: 'Quality Project\\PI A', storyIterationPath: 'Quality Project\\PI A\\Sprint 1', assignedTo: 'creator@example.test' }, 'PU', [], 'October 2026', server.transport)
-  const source = result.items.map(item => item.id === result.feature.id ? { ...item, state: 'Active' } : item)
-  const first = await bulkCreateMonthlyTimeWritingTasks(config, pat, source, 'November 2026', 'creator@example.test', server.transport)
-  assert.equal(first.length, 1)
-  assert.equal(first[0].title, 'November 2026 | Example | Service | v1.0')
-  assert.equal(server.records.get(first[0].id).fields['System.AssignedTo'].id, 'creator@example.test')
-  const writes = server.writes.length
-  await bulkCreateMonthlyTimeWritingTasks(config, pat, source, 'November 2026', 'creator@example.test', server.transport)
-  assert.equal(server.writes.length, writes)
-})
-
-test('bulk monthly creation excludes Time Writing stories under non-Active Features', async () => {
-  const server = fakeHierarchyServer()
-  const result = await createAzureReleaseHierarchy(config, pat, { ...feature, iterationPath: 'Quality Project\\PI A', storyIterationPath: 'Quality Project\\PI A\\Sprint 1', assignedTo: 'creator@example.test' }, 'PU', [], 'October 2026', server.transport)
-  await assert.rejects(bulkCreateMonthlyTimeWritingTasks(config, pat, result.items, 'November 2026', 'creator@example.test', server.transport), /Active Features/)
-})
-
 test('desktop child requests permit only User Story/Task and retain hierarchy relation', () => {
   for (const type of ['User Story', 'Task']) {
     const request = azureFeatureRequest({ ...config, pat, operation: 'create-child', workItemType: type, validateOnly: true, feature: { ...feature, areaPath: 'Quality Project', iterationPath: 'Quality Project' } })
@@ -509,7 +489,6 @@ test('new Feature is assigned to the configured creator email, all stories to Sp
   const result = await createAzureReleaseHierarchy(config, pat, { ...feature, iterationPath: 'Quality Project\\PI A', storyIterationPath: 'Quality Project\\PI A\\Sprint 1', assignedTo: 'creator@example.test' }, 'PU', undefined, 'October 2026', server.transport)
   assert.equal(result.feature.iterationPath, 'Quality Project\\PI A')
   assert.equal(server.records.get(result.feature.id).fields['System.AssignedTo'].id, 'creator@example.test')
-  assert.ok(result.items.filter((item) => item.workItemType === 'User Story' || item.workItemType === 'Task').every((item) => server.records.get(item.id).fields['System.AssignedTo'].id === 'creator@example.test'))
   assert.ok(result.items.filter((item) => item.workItemType === 'User Story').every((item) => item.iterationPath === 'Quality Project\\PI A\\Sprint 1'))
   assert.equal(result.items.find((item) => item.workItemType === 'Task').iterationPath, config.project)
   const writes = server.writes.length

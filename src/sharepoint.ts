@@ -78,7 +78,7 @@ export class SharePointStateClient {
   getSnapshotFolder() { return snapshotFolder(this.config.stateFilePath) }
 
   async saveSnapshot(state: AppState, type: Snapshot['type'], month: string, build: unknown) {
-    if (!this.account || !this.siteId) throw new Error('Connect to SharePoint in Administration first.')
+    if (!this.account || !this.siteId) throw new Error('Connect to SharePoint in Settings first.')
     const snapshot = freezeSnapshot(state, type, month, this.account.username, build)
     const folder = this.getSnapshotFolder()
     await this.ensureParentFolders(`${folder}/snapshot.json`)

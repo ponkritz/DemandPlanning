@@ -1,18 +1,29 @@
 // Tokens live in request memory only. Feature creation has a separate, constrained payload builder.
+// Base: Azure DevOps Services (https://dev.azure.com/<org>) or an Azure DevOps Server collection URL (https only).
+function projectBase(input) {
+  if (input.baseUrl == null || input.baseUrl === '') return `https://dev.azure.com/${encodeURIComponent(input.organization)}/${encodeURIComponent(input.project)}`
+  if (typeof input.baseUrl !== 'string' || input.baseUrl.length > 2048) throw new Error('Invalid base URL.')
+  let url
+  try { url = new URL(input.baseUrl) } catch { throw new Error('Invalid base URL.') }
+  if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) throw new Error('The base URL must be an https address without credentials, query or fragment.')
+  const parts = url.pathname.split('/').filter(Boolean).map(decodeURIComponent)
+  const base = url.hostname === 'dev.azure.com' ? `https://dev.azure.com/${encodeURIComponent(parts[0] ?? input.organization)}` : `${url.origin}${parts.map((part) => `/${encodeURIComponent(part)}`).join('')}`
+  return `${base}/${encodeURIComponent(input.project)}`
+}
+const apiVersion = (input) => typeof input.apiVersion === 'string' && /^\d{1,2}\.\d(-preview(\.\d)?)?$/.test(input.apiVersion) ? input.apiVersion : '7.1'
+
 function azureReadRequest(input) {
   if (!input || typeof input !== 'object') throw new Error('Invalid Azure DevOps request.')
   for (const field of ['organization', 'project', 'team', 'pat']) {
     if (typeof input[field] !== 'string' || !input[field].trim() || input[field].length > 4096) throw new Error('Invalid connection details.')
   }
-  const base = `https://dev.azure.com/${encodeURIComponent(input.organization)}/${encodeURIComponent(input.project)}`
+  const base = projectBase(input)
   let endpoint, body
-  if (input.operation === 'identity') {
-    return { url: `https://dev.azure.com/${encodeURIComponent(input.organization)}/_apis/connectionData?api-version=7.1-preview.1`, options: { method: 'GET', redirect: 'error', headers: { Authorization: `Basic ${Buffer.from(`:${input.pat.trim()}`).toString('base64')}`, Accept: 'application/json' } } }
-  }
   if (input.operation === 'areas') endpoint = `${encodeURIComponent(input.team)}/_apis/work/teamsettings/teamfieldvalues`
   else if (input.operation === 'backlog-epics') endpoint = `${encodeURIComponent(input.team)}/_apis/work/backlogs/Microsoft.EpicCategory/workItems`
   else if (input.operation === 'iterations') endpoint = `${encodeURIComponent(input.team)}/_apis/work/teamsettings/iterations`
   else if (input.operation === 'iteration-tree') endpoint = '_apis/wit/classificationnodes/iterations'
+  else if (input.operation === 'fields') endpoint = '_apis/wit/fields'
   else if (input.operation === 'query') {
     if (typeof input.query !== 'string' || !/^SELECT \[System.Id\] FROM WorkItems WHERE /i.test(input.query) || input.query.length > 100000) throw new Error('Invalid read query.')
     endpoint = '_apis/wit/wiql'; body = { query: input.query }
@@ -20,7 +31,7 @@ function azureReadRequest(input) {
     if (!Array.isArray(input.ids) || !input.ids.length || input.ids.length > 200 || input.ids.some((id) => !Number.isSafeInteger(id) || id < 1)) throw new Error('Invalid work-item batch.')
     endpoint = '_apis/wit/workitemsbatch'; body = { ids: input.ids, errorPolicy: 'Fail', $expand: 'Relations' }
   } else throw new Error('Only read operations are supported.')
-  return { url: `${base}/${endpoint}?api-version=7.1${input.operation === 'query' ? '&$top=1000' : ''}${input.operation === 'iteration-tree' ? '&$depth=10' : ''}`, options: {
+  return { url: `${base}/${endpoint}?api-version=${apiVersion(input)}${input.operation === 'query' ? '&$top=1000' : ''}${input.operation === 'iteration-tree' ? '&$depth=10' : ''}`, options: {
     method: body ? 'POST' : 'GET', redirect: 'error',
     headers: { Authorization: `Basic ${Buffer.from(`:${input.pat.trim()}`).toString('base64')}`, Accept: 'application/json', 'Content-Type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
@@ -41,7 +52,7 @@ function azureFeatureRequest(input) {
   if (feature.iterationPath != null && (typeof feature.iterationPath !== 'string' || feature.iterationPath.length > 4096)) throw new Error('Invalid iteration path.')
   for (const field of ['taskOriginalEstimate', 'taskCompletedWork']) if (feature[field] != null && (!Number.isFinite(feature[field]) || feature[field] < 0 || feature[field] > 1000000)) throw new Error('Invalid Task effort.')
   const htmlText = (value) => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('\n', '<br>')
-  const base = `https://dev.azure.com/${encodeURIComponent(input.organization)}/${encodeURIComponent(input.project)}`
+  const base = projectBase(input)
   const patch = [
     { op: 'add', path: '/fields/System.Title', value: feature.title },
     { op: 'add', path: '/fields/System.AreaPath', value: feature.areaPath },
@@ -52,7 +63,7 @@ function azureFeatureRequest(input) {
   if (feature.iterationPath) patch.push({ op: 'add', path: '/fields/System.IterationPath', value: feature.iterationPath })
   if (feature.assignedTo?.trim()) patch.push({ op: 'add', path: '/fields/System.AssignedTo', value: feature.assignedTo.trim() })
   if (feature.targetDate) patch.push({ op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.TargetDate', value: `${feature.targetDate}T00:00:00Z` })
-  return { url: `${base}/_apis/wit/workitems/$${encodeURIComponent(type)}?api-version=7.1&validateOnly=${input.validateOnly}`, options: {
+  return { url: `${base}/_apis/wit/workitems/$${encodeURIComponent(type)}?api-version=${apiVersion(input)}&validateOnly=${input.validateOnly}`, options: {
     method: 'POST', redirect: 'error', headers: { ...connection.options.headers, 'Content-Type': 'application/json-patch+json' }, body: JSON.stringify(patch),
   } }
 }
@@ -63,34 +74,80 @@ function azureTimeWritingEffortRequest(input) {
   if (!input || input.operation !== 'update-time-writing-effort') throw new Error('Invalid monthly effort request.')
   const connection = azureReadRequest({ ...input, operation: 'areas' })
   if (!Number.isSafeInteger(input.workItemId) || input.workItemId < 1 || (input.planHours == null && input.actualHours == null) || (input.planHours != null && (!Number.isFinite(input.planHours) || input.planHours < 0 || input.planHours > 1000000)) || (input.actualHours != null && (!Number.isFinite(input.actualHours) || input.actualHours < 0 || input.actualHours > 1000000)) || (input.tags != null && (typeof input.tags !== 'string' || input.tags.length > 100000))) throw new Error('Invalid Original Estimate or Completed Work.')
-  const base = `https://dev.azure.com/${encodeURIComponent(input.organization)}/${encodeURIComponent(input.project)}`
+  const base = projectBase(input)
   const patch = [
     ...(input.planHours == null ? [] : [{ op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.OriginalEstimate', value: input.planHours }]),
     ...(input.actualHours == null ? [] : [{ op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.CompletedWork', value: input.actualHours }]),
     ...(input.tags ? [{ op: 'add', path: '/fields/System.Tags', value: input.tags }] : []),
   ]
-  return { url: `${base}/_apis/wit/workitems/${input.workItemId}?api-version=7.1`, options: {
+  return { url: `${base}/_apis/wit/workitems/${input.workItemId}?api-version=${apiVersion(input)}`, options: {
     method: 'PATCH', redirect: 'error', headers: { ...connection.options.headers, 'Content-Type': 'application/json-patch+json' }, body: JSON.stringify(patch),
   } }
 }
 
-async function requestAzureDevOps(input) {
+// Deliberately constrained write: only State and Iteration Path of one known work item.
+function azureWorkItemUpdateRequest(input) {
+  if (!input || input.operation !== 'update-work-item') throw new Error('Invalid work-item update.')
+  const connection = azureReadRequest({ ...input, operation: 'areas' })
+  if (!Number.isSafeInteger(input.workItemId) || input.workItemId < 1) throw new Error('Invalid work item.')
+  const state = input.state == null ? undefined : input.state, iterationPath = input.iterationPath == null ? undefined : input.iterationPath
+  if (state === undefined && iterationPath === undefined) throw new Error('Nothing to update.')
+  if (state !== undefined && (typeof state !== 'string' || !state.trim() || state.length > 64 || !/^[\p{L}\p{N} _-]+$/u.test(state))) throw new Error('Invalid state.')
+  if (iterationPath !== undefined && (typeof iterationPath !== 'string' || !iterationPath.trim() || iterationPath.length > 4096 || /\p{Cc}/u.test(iterationPath))) throw new Error('Invalid iteration path.')
+  const patch = [
+    ...(state === undefined ? [] : [{ op: 'add', path: '/fields/System.State', value: state }]),
+    ...(iterationPath === undefined ? [] : [{ op: 'add', path: '/fields/System.IterationPath', value: iterationPath }]),
+  ]
+  return { url: `${projectBase(input)}/_apis/wit/workitems/${input.workItemId}?api-version=${apiVersion(input)}`, options: {
+    method: 'PATCH', redirect: 'error', headers: { ...connection.options.headers, 'Content-Type': 'application/json-patch+json' }, body: JSON.stringify(patch),
+  } }
+}
+
+// api-version negotiation: explicit version as is; otherwise 7.1, then 6.0 and 5.0 for older Azure DevOps Server.
+const detectedVersions = new Map()
+const isApiVersionError = (text) => /api[- ]?version|version of the api|VssVersionOutOfRange|out of range/i.test(text) && /version/i.test(text)
+
+// fetchImpl: the main process passes Electron's net.fetch (Chromium network stack: Windows certificate store, system
+// proxy), which on-prem servers with a company certificate need; tests pass a stub. Redirects are never followed.
+async function requestAzureDevOps(input, fetchImpl = fetch) {
   const creating = input?.operation === 'create-feature' || input?.operation === 'create-child'
-  const writing = creating || input?.operation === 'update-time-writing-effort'
-  const request = creating ? azureFeatureRequest(input) : input?.operation === 'update-time-writing-effort' ? azureTimeWritingEffortRequest(input) : azureReadRequest(input)
+  const updating = input?.operation === 'update-time-writing-effort' || input?.operation === 'update-work-item'
+  const writing = creating || updating
+  const request = creating ? azureFeatureRequest(input) : input?.operation === 'update-time-writing-effort' ? azureTimeWritingEffortRequest(input) : input?.operation === 'update-work-item' ? azureWorkItemUpdateRequest(input) : azureReadRequest(input)
+  const collection = projectBase(input).split('/').slice(0, -1).join('/').toLowerCase()
+  const explicit = typeof input.apiVersion === 'string' && apiVersion(input) === input.apiVersion
+  const versions = explicit ? [input.apiVersion] : detectedVersions.has(collection) ? [detectedVersions.get(collection)] : ['7.1', '6.0', '5.0']
   let response
-  try { response = await fetch(request.url, { ...request.options, signal: AbortSignal.timeout(45000) }) }
-  catch { throw new Error(writing && !input.validateOnly ? `${creating ? 'Creation' : 'Effort update'} could not be confirmed. Check the Azure DevOps work item before retrying.` : 'Azure DevOps could not be reached. Check network/VPN access and the organization URL.') }
+  for (const [attempt, version] of versions.entries()) {
+    const url = request.url.replace(/api-version=[^&]*/, `api-version=${version}`)
+    try { response = await fetchImpl(url, { ...request.options, redirect: 'manual', signal: AbortSignal.timeout(45000) }) }
+    catch (error) {
+      const detail = String(error?.cause?.code ?? error?.code ?? error?.message ?? '')
+      const certificate = /CERT|SSL|TLS|self.signed|issuer/i.test(detail)
+      throw new Error(writing && !input.validateOnly ? `${creating ? 'Creation' : 'Update'} could not be confirmed. Check the Azure DevOps work item before retrying.` : certificate ? `The server's certificate was not accepted (${detail.slice(0, 120)}). Ask IT whether the company root certificate is installed in Windows.` : `Azure DevOps could not be reached at ${new URL(url).host}. Check VPN, the server URL and the collection.${detail ? ` (${detail.slice(0, 120)})` : ''}`)
+    }
+    if (response.status === 400 && attempt < versions.length - 1) {
+      const text = await response.clone().text().catch(() => '')
+      if (isApiVersionError(text)) continue
+    }
+    if (response.ok && attempt > 0) detectedVersions.set(collection, version)
+    break
+  }
+  if (response.status >= 300 && response.status < 400) throw new Error('Azure DevOps redirected the request (usually to a sign-in page). Check the PAT and that PATs are enabled on this server.')
   if (response.status === 401) throw new Error('PAT rejected or expired. Check Work Items (Read) access.')
   if (response.status === 403) throw new Error(`Access denied by Azure DevOps. Check Work Items (${writing ? 'Read & Write' : 'Read'}) scope and project permissions.`)
   if (writing && (response.status === 400 || response.status === 422)) {
     const detail = await response.json().catch(() => ({}))
-    throw new Error(`Azure DevOps rejected the ${creating ? 'Feature' : 'effort update'}: ${String(detail.message ?? 'Check required fields and project rules.').replaceAll(input.pat, '[redacted]').slice(0, 1200)}`)
+    throw new Error(`Azure DevOps rejected the ${creating ? 'Feature' : 'update'}: ${String(detail.message ?? 'Check required fields and project rules.').replaceAll(input.pat, '[redacted]').slice(0, 1200)}`)
   }
-  if (response.status === 404) throw new Error('Project or team not found. Check connection details.')
-  if (!response.ok) throw new Error(writing && !input.validateOnly ? `${creating ? 'Create' : 'Effort update'} returned ${response.status}. Check Azure DevOps before retrying.` : `Azure DevOps returned ${response.status}. No data was imported.`)
+  if (response.status === 404) throw new Error(`Not found at ${projectBase(input).replace(/^https:\/\//, '')}. Check the collection, project and team names.`)
+  if (response.status === 400) {
+    const detail = await response.json().catch(() => ({}))
+    if (detail.message) throw new Error(`Azure DevOps refused the request: ${String(detail.message).replaceAll(input.pat, '[redacted]').slice(0, 600)}`)
+  }
+  if (!response.ok) throw new Error(writing && !input.validateOnly ? `${creating ? 'Create' : 'Update'} returned ${response.status}. Check Azure DevOps before retrying.` : `Azure DevOps returned ${response.status}. No data was imported.`)
   if (!(response.headers.get('content-type') ?? '').includes('application/json')) throw new Error('Azure DevOps returned a sign-in page. Check the PAT.')
   return response.json()
 }
 
-module.exports = { azureReadRequest, azureFeatureRequest, azureTimeWritingEffortRequest, requestAzureDevOps }
+module.exports = { azureReadRequest, azureFeatureRequest, azureTimeWritingEffortRequest, azureWorkItemUpdateRequest, requestAzureDevOps }

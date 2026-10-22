@@ -151,7 +151,7 @@ export function useAppStore() {
   }
 
   function snapshotClient() {
-    if (!client.current || !['sharepoint', 'empty'].includes(connection.mode)) throw new Error('Connect to SharePoint in Administration first. Snapshots are not saved in the browser.')
+    if (!client.current || !['sharepoint', 'empty'].includes(connection.mode)) throw new Error('Connect to SharePoint in Settings first. Snapshots are not saved in the browser.')
     return client.current
   }
 

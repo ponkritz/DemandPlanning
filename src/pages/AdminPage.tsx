@@ -1,16 +1,41 @@
 import { useState } from 'react'
-import type { MasterValue, UserRole } from '../domain'
+import type { MasterValue } from '../domain'
 import type { SharePointConfig } from '../sharepoint'
-import { Heading, Panel, Pill } from '../components/ui'
+import { EmptyState, Notice, Page, Panel, Pill, type Tone } from '../components/ui'
+import { formatDate, formatDateTime, formatHours, formatPercent, monthName } from '../format'
+import { azureResources, capacityContext, capacityModel, normalizeCapacitySettings, normalizeProfiles, regions, resourceRoles, type LoadStatus, type ResourceProfile } from '../capacity'
+import type { AzureWorkspace } from '../useAzureWorkspace'
+import type { GitStorage } from '../useGitStorage'
+import { GitStoragePanel, GitSyncBar } from '../components/GitStorage'
+import { AzureViewsGitPanel } from '../components/AzureViewsGit'
+import { AzureConnections } from '../components/AzureConnections'
 import type { PageProps } from './types'
 
-const roles: UserRole[] = ['Owner', 'Admin', 'ProcessOwner', 'Contributor', 'Viewer']
+const statusTone: Record<LoadStatus, Tone> = { 'Overloaded': 'danger', 'Balanced': 'open', 'Has capacity': 'info', 'No bookings': 'neutral' }
+const shortMonthName = (month: string) => new Intl.DateTimeFormat('en', { month: 'short', year: 'numeric' }).format(new Date(`${month}-01T00:00:00`))
 
-export function AdminPage({ store, month }: PageProps) {
+// The Windchill host and views setup is hidden (Windchill exports are imported under Release Details instead).
+export function AdminPage({ store, month, azure, git, onOpenBoard }: PageProps & { azure: AzureWorkspace; git: GitStorage; onOpenBoard: () => void }) {
   const [reason, setReason] = useState('Approved operational extension')
-  const [resourceMessage, setResourceMessage] = useState('')
+  const [capacityMessage, setCapacityMessage] = useState('')
   const [sharePointConfig, setSharePointConfig] = useState<SharePointConfig>(() => store.getSavedSharePointConfig())
   const period = store.state.periods.find((item) => item.month === month)
+  const capacity = capacityContext(store.state)
+  const profiles = capacity.profiles ?? {}
+  const resources = azureResources(azure.items, month, capacity)
+  const holidays = capacityModel(azure.items, month, capacity).holidays
+  const unmapped = resources.filter((person) => !profiles[person.name]?.region).map((person) => person.name)
+  const names = resources.map((person) => person.name)
+
+  function setProfile(name: string, patch: Partial<ResourceProfile>) {
+    store.update((draft) => {
+      const now = new Date().toISOString()
+      const current = normalizeProfiles(draft.resourceProfiles)
+      draft.resourceProfiles = normalizeProfiles({ ...current, [name]: { ...current[name], ...patch } })
+      draft.audits.unshift({ id: crypto.randomUUID(), timestamp: now, actor: 'u-owner', action: 'Update', entity: 'Resource', entityId: name, detail: `${name}: ${Object.entries(patch).map(([key, value]) => `${key} = ${value === undefined || value === '' ? 'cleared' : String(value)}`).join(', ')}` })
+      return draft
+    })
+  }
 
   function toggle(kind: 'planning' | 'actuals') {
     const now = new Date().toISOString()
@@ -41,33 +66,23 @@ export function AdminPage({ store, month }: PageProps) {
     })
   }
 
-  function setRole(id: string, role: UserRole) {
-    store.update((draft) => { const person = draft.people.find((item) => item.id === id); if (person) person.role = role; return draft })
-  }
-
-  function addResource(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const form = event.currentTarget
-    const data = new FormData(form)
-    const name = String(data.get('name') ?? '').trim()
-    const email = String(data.get('email') ?? '').trim().toLowerCase()
-    const role = data.get('role') as UserRole
-    if (!name || !email) return
-    if (store.state.people.some((person) => person.email.toLowerCase() === email)) { setResourceMessage('A resource with this email already exists.'); return }
-    const now = new Date().toISOString()
-    store.update((draft) => {
-      const id = crypto.randomUUID()
-      draft.people.push({ id, name, email, role, active: true })
-      draft.audits.unshift({ id: crypto.randomUUID(), timestamp: now, actor: 'u-owner', action: 'Create', entity: 'Resource', entityId: id, detail: `${name} added as ${role}` })
-      return draft
-    })
-    form.reset(); setResourceMessage(`${name} is now available for assignment.`)
-  }
-
   function addMaster(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); const form = event.currentTarget; const data = new FormData(form)
     store.update((draft) => { draft.masters.push({ id: crypto.randomUUID(), type: data.get('type') as MasterValue['type'], value: String(data.get('value')), sortOrder: draft.masters.length + 1, active: true }); return draft })
     form.reset()
+  }
+
+  function saveCapacity(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const data = new FormData(event.currentTarget)
+    const next = normalizeCapacitySettings({ absenceEpicId: data.get('absenceEpicId'), hoursPerDay: data.get('hoursPerDay'), overloadedAt: data.get('overloadedAt'), availableBelow: data.get('availableBelow') })
+    const now = new Date().toISOString()
+    store.update((draft) => {
+      draft.capacitySettings = next
+      draft.audits.unshift({ id: crypto.randomUUID(), timestamp: now, actor: 'u-owner', action: 'Update', entity: 'CapacitySettings', entityId: 'capacity', detail: `Absence Epic #${next.absenceEpicId}, ${next.hoursPerDay}h/day, overloaded ≥ ${next.overloadedAt}%, capacity < ${next.availableBelow}%` })
+      return draft
+    })
+    setCapacityMessage('Capacity settings saved with the shared app data.')
   }
 
   async function connectSharePoint(event: React.FormEvent<HTMLFormElement>) {
@@ -75,26 +90,81 @@ export function AdminPage({ store, month }: PageProps) {
     try { await store.connectSharePoint(sharePointConfig) } catch { /* Connection state displays the actionable error. */ }
   }
 
-  return <section className="content">
-    <Heading eyebrow="GOVERNANCE" title="Administration" detail="Owners and process owners manage periods, roles, masters and audit evidence." />
-    <Panel className="connection-panel"><div className="panel-heading"><div><p className="eyebrow">CENTRAL DATA</p><h2>SharePoint connection</h2><p className="muted">Uses Microsoft sign-in and stores one versioned JSON data file in the I&amp;D Quality document library. No client secret is stored in the browser.</p></div><Pill tone={store.connection.mode === 'sharepoint' ? 'open' : store.connection.status === 'error' || store.connection.status === 'conflict' ? 'danger' : 'neutral'}>{store.connection.status}</Pill></div>
+  const connectionFailed = store.connection.status === 'error' || store.connection.status === 'conflict'
+  const jump = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
+  return <Page>
+    <nav className="settings-nav" aria-label="Settings sections">{[['settings-connections', 'Azure DevOps'], ['settings-storage', 'Storage'], ['settings-capacity', 'Capacity & periods'], ['settings-resources', 'Resources'], ['settings-masters', 'Master data'], ['settings-audit', 'Audit']].map(([id, label]) => <button key={id} type="button" className="ghost" onClick={() => jump(id)}>{label}</button>)}</nav>
+    <AzureConnections azure={azure} store={store} onOpenBoard={onOpenBoard} />
+    <div id="settings-storage" className="settings-anchor" />
+    <GitStoragePanel git={git} />
+    <AzureViewsGitPanel git={git} azure={azure} />
+    <Panel className="connection-panel" eyebrow="CENTRAL DATA" title="SharePoint connection" detail="Uses Microsoft sign-in and stores one versioned JSON data file in the I&D Quality document library. No client secret is stored in the browser." action={<Pill tone={store.connection.mode === 'sharepoint' ? 'open' : connectionFailed ? 'danger' : 'neutral'}>{store.connection.status}</Pill>}>
       <form className="connection-form" onSubmit={connectSharePoint}><label>Tenant ID (optional)<input value={sharePointConfig.tenantId} onChange={(event) => setSharePointConfig({ ...sharePointConfig, tenantId: event.target.value })} placeholder="Auto-detect from work sign-in" /></label><label>Application (client) ID<input required value={sharePointConfig.clientId} onChange={(event) => setSharePointConfig({ ...sharePointConfig, clientId: event.target.value })} placeholder="Registered SPA client ID" /></label><label>SharePoint host<input required value={sharePointConfig.hostname} onChange={(event) => setSharePointConfig({ ...sharePointConfig, hostname: event.target.value })} /></label><label>Site path<input required value={sharePointConfig.sitePath} onChange={(event) => setSharePointConfig({ ...sharePointConfig, sitePath: event.target.value })} /></label><label className="wide-field">Central data file<input required value={sharePointConfig.stateFilePath} onChange={(event) => setSharePointConfig({ ...sharePointConfig, stateFilePath: event.target.value })} /></label><div className="connection-actions"><button className="primary" disabled={store.connection.status === 'connecting'}>{store.connection.status === 'connecting' ? 'Connecting…' : 'Connect to SharePoint'}</button>{store.connection.mode === 'empty' && <button type="button" className="primary" onClick={() => void store.initializeSharePoint()}>Initialize central data</button>}{store.connection.mode === 'sharepoint' && <><button type="button" className="ghost" onClick={() => void store.pullSharePoint()}>Pull latest</button><button type="button" className="ghost" onClick={store.disconnectSharePoint}>Disconnect</button></>}</div></form>
-      {store.connection.message && <div className={store.connection.status === 'error' || store.connection.status === 'conflict' ? 'notice error' : 'notice'}>{store.connection.message}{store.connection.account ? ` Signed in as ${store.connection.account}.` : ''}</div>}
+      {store.connection.message && <Notice tone={connectionFailed ? 'error' : 'info'}>{store.connection.message}{store.connection.account ? ` Signed in as ${store.connection.account}.` : ''}</Notice>}
     </Panel>
+    <div id="settings-capacity" className="settings-anchor" />
     <div className="admin-grid">
-      <Panel><div className="panel-heading"><div><p className="eyebrow">PERIOD CONTROL</p><h2>{month}</h2></div></div><label>Reason for change<textarea value={reason} onChange={(event) => setReason(event.target.value)} /></label>
-        <div className="control-card"><div><strong>Planning</strong><p>Deadline: {period?.planningDeadline?.slice(0, 10) ?? `${month}-05 (default)`}</p></div><Pill tone={period?.planningLocked ? 'locked' : 'open'}>{period?.planningLocked ? 'Locked' : 'Open'}</Pill><button className="primary" onClick={() => toggle('planning')}>{period?.planningLocked ? 'Unlock' : 'Lock'}</button><label>Extend until<input type="date" onChange={(event) => extend('planning', event.target.value)} /></label></div>
-        <div className="control-card"><div><strong>Actuals</strong><p>Deadline: {period?.actualsDeadline?.slice(0, 10) ?? `${month}-05 (default)`}</p></div><Pill tone={period?.actualsLocked ? 'locked' : 'open'}>{period?.actualsLocked ? 'Locked' : 'Open'}</Pill><button className="primary" onClick={() => toggle('actuals')}>{period?.actualsLocked ? 'Unlock' : 'Lock'}</button><label>Extend until<input type="date" onChange={(event) => extend('actuals', event.target.value)} /></label></div>
+      <Panel eyebrow="CAPACITY" title="Capacity and absence" detail="Used by the Overview to compute available hours and utilization. Stored with the shared app data, not per browser.">
+        <form onSubmit={saveCapacity}>
+          <div className="form-row"><label>Absence Epic ID<input name="absenceEpicId" type="number" min="1" step="1" required defaultValue={capacity.absenceEpicId} /><small>Everything under this Epic counts as absence; Feature and Task titles decide PTO, Sick Leave or Unplanned Leave.</small></label><label>Funded hours per working day<input name="hoursPerDay" type="number" min="0.25" step="0.25" required defaultValue={capacity.hoursPerDay} /></label></div>
+          <div className="form-row"><label>Overloaded at or above (%)<input name="overloadedAt" type="number" min="1" step="1" required defaultValue={capacity.overloadedAt} /></label><label>Has capacity below (%)<input name="availableBelow" type="number" min="0" step="1" required defaultValue={capacity.availableBelow} /></label></div>
+          <div className="button-row"><button className="primary">Save capacity settings</button></div>
+        </form>
+        {capacityMessage && <Notice tone="success">{capacityMessage}</Notice>}
       </Panel>
-      <Panel><div className="panel-heading"><div><p className="eyebrow">RBAC</p><h2>People and roles</h2></div></div>
-        <form className="resource-form" onSubmit={addResource}><div className="form-row"><label>Name<input name="name" required placeholder="Resource name" /></label><label>Work email<input name="email" type="email" required placeholder="name@philips.com" /></label></div><div className="form-row"><label>App role<select name="role" defaultValue="Contributor"><option>Contributor</option><option>ProcessOwner</option><option>Viewer</option><option>Admin</option><option>Owner</option></select></label><button className="primary resource-add-button">＋ Add resource</button></div></form>
-        {resourceMessage && <div className="notice">{resourceMessage}</div>}
-        {store.state.people.map((person) => <div className="people-row" key={person.id}><div><strong>{person.name}</strong><small>{person.email || 'Email not supplied during migration'}</small></div><select value={person.role} onChange={(event) => setRole(person.id, event.target.value as UserRole)}>{roles.map((role) => <option key={role}>{role}</option>)}</select></div>)}
+      <Panel eyebrow="PERIOD CONTROL" title={monthName(month)}>
+        <label>Reason for change<textarea value={reason} onChange={(event) => setReason(event.target.value)} /></label>
+        <div className="control-card"><div><strong>Planning</strong><p>Deadline: {formatDate(period?.planningDeadline, `${month}-05 (default)`)}</p></div><Pill tone={period?.planningLocked ? 'locked' : 'open'}>{period?.planningLocked ? 'Locked' : 'Open'}</Pill><button className="primary" onClick={() => toggle('planning')}>{period?.planningLocked ? 'Unlock' : 'Lock'}</button><label>Extend until<input type="date" onChange={(event) => extend('planning', event.target.value)} /></label></div>
+        <div className="control-card"><div><strong>Actuals</strong><p>Deadline: {formatDate(period?.actualsDeadline, `${month}-05 (default)`)}</p></div><Pill tone={period?.actualsLocked ? 'locked' : 'open'}>{period?.actualsLocked ? 'Locked' : 'Open'}</Pill><button className="primary" onClick={() => toggle('actuals')}>{period?.actualsLocked ? 'Unlock' : 'Lock'}</button><label>Extend until<input type="date" onChange={(event) => extend('actuals', event.target.value)} /></label></div>
       </Panel>
     </div>
-    <div className="admin-grid">
-      <Panel><div className="panel-heading"><div><p className="eyebrow">MASTER DATA</p><h2>Admin-controlled dropdowns</h2></div></div><form className="inline-form" onSubmit={addMaster}><select name="type"><option>Release Type</option><option>Activity Type</option><option>Status</option><option>Resource Band</option><option>Complexity</option></select><input name="value" required placeholder="New value" /><button className="primary">Add</button></form>{store.state.masters.map((item) => <div className="master-row" key={item.id}><span>{item.type}</span><strong>{item.value}</strong><Pill tone={item.active ? 'open' : 'neutral'}>{item.active ? 'Active' : 'Inactive'}</Pill></div>)}</Panel>
-      <Panel><div className="panel-heading"><div><p className="eyebrow">AUDIT</p><h2>Recent changes</h2></div></div>{store.state.audits.slice(0, 8).map((item) => <div className="audit-row" key={item.id}><span>{item.action}</span><div><strong>{item.entity}</strong><small>{item.detail}</small></div><time>{new Date(item.timestamp).toLocaleString()}</time></div>)}{!store.state.audits.length && <p className="muted">Changes made in the app will appear here.</p>}<button className="danger-button" onClick={store.reset}>Reset synthetic MVP data</button></Panel>
-    </div>
-  </section>
+    <div id="settings-resources" className="settings-anchor" />
+    <Panel className="admin-section" eyebrow="AZURE DEVOPS" title="Resources" detail="People come from Azure (everyone Assigned To a Time Writing Task, absence included); add or remove them in Azure DevOps. Region, role and reporting line are saved with the planning data in Git (see Git storage above). Region decides which regional holidays apply." action={<Pill tone={resources.length ? 'open' : 'neutral'}>{resources.length} {resources.length === 1 ? 'person' : 'people'}</Pill>}>
+      {resources.length > 0 && <GitSyncBar git={git} />}
+      {resources.length > 0 && <Notice tone={unmapped.length ? 'warning' : 'info'}>
+        {holidays.length ? `Regional holidays in ${monthName(month)}: ${holidays.map((item) => `${item.region} ${formatHours(item.hours)}h → ${item.people} ${item.people === 1 ? 'person' : 'people'}`).join(' · ')}.` : `No regional holidays in ${monthName(month)}. Add a Feature such as "Public Holidays - India" under absence Epic #${capacity.absenceEpicId} with a "… - Time Writing" story and "<Month YYYY> | <Holiday>" Tasks.`}
+        {unmapped.length > 0 && ` No region yet for ${unmapped.join(', ')}; regional holidays are not applied to them.`}
+      </Notice>}
+      {resources.length ? <div className="azure-table"><table className="resource-table"><thead><tr><th>Person</th><th>Region</th><th>Role</th><th>Reports to</th><th>Status in {shortMonthName(month)}</th><th>Utilization</th><th>Booked (h)</th><th>Absence (h)</th><th>Main streams</th></tr></thead><tbody>{resources.map((person) => {
+        const profile = profiles[person.name] ?? {}
+        return <tr key={person.name}>
+          <td><strong>{person.name}</strong><small>{person.months} {person.months === 1 ? 'month' : 'months'} · {person.firstMonth === person.lastMonth ? shortMonthName(person.firstMonth) : `${shortMonthName(person.firstMonth)} – ${shortMonthName(person.lastMonth)}`}</small></td>
+          <td><select aria-label={`Region for ${person.name}`} value={profile.region ?? ''} onChange={(event) => setProfile(person.name, { region: (event.target.value || undefined) as ResourceProfile['region'] })}><option value="">Not set</option>{regions.map((region) => <option key={region}>{region}</option>)}</select></td>
+          <td><select aria-label={`Role for ${person.name}`} value={profile.role ?? ''} onChange={(event) => setProfile(person.name, { role: (event.target.value || undefined) as ResourceProfile['role'] })}><option value="">Not set</option>{resourceRoles.map((role) => <option key={role}>{role}</option>)}</select><label className="check"><input type="checkbox" checked={Boolean(profile.peopleManager)} onChange={(event) => setProfile(person.name, { peopleManager: event.target.checked || undefined })} />People manager</label></td>
+          <td><select aria-label={`${person.name} reports to`} value={profile.reportsTo ?? ''} onChange={(event) => setProfile(person.name, { reportsTo: event.target.value || undefined })}><option value="">—</option>{names.filter((name) => name !== person.name).map((name) => <option key={name}>{name}</option>)}{profile.reportsTo && !names.includes(profile.reportsTo) && <option>{profile.reportsTo}</option>}</select></td>
+          <td><Pill tone={statusTone[person.status]}>{person.status}</Pill></td><td>{formatPercent(person.utilization)}</td><td>{formatHours(person.work)}</td><td>{formatHours(person.absence)}</td>
+          <td>{person.streams.slice(0, 2).join(', ') || '—'}{person.streams.length > 2 && <small>+{person.streams.length - 2} more</small>}</td>
+        </tr>
+      })}</tbody></table></div>
+        : <EmptyState title="No resources from Azure yet." detail="Refresh from Azure DevOps; people appear once they are Assigned To a Time Writing Task." />}
+      {!resources.length && <div className="button-row"><button className="primary" onClick={() => document.getElementById('settings-connections')?.scrollIntoView({ behavior: 'smooth' })}>Go to Azure connections</button></div>}
+      {resources.some((person) => profiles[person.name]?.reportsTo) && <TeamTree names={names} profiles={profiles} />}
+    </Panel>
+    <div id="settings-masters" className="settings-anchor" />
+    <Panel className="admin-section" eyebrow="MASTER DATA" title="Admin-controlled dropdowns">
+        <form className="inline-form" onSubmit={addMaster}><select name="type"><option>Release Type</option><option>Activity Type</option><option>Status</option><option>Resource Band</option><option>Complexity</option></select><input name="value" required placeholder="New value" /><button className="primary">Add</button></form>
+        {store.state.masters.map((item) => <div className="master-row" key={item.id}><span>{item.type}</span><strong>{item.value}</strong><Pill tone={item.active ? 'open' : 'neutral'}>{item.active ? 'Active' : 'Inactive'}</Pill></div>)}
+    </Panel>
+    <div id="settings-audit" className="settings-anchor" />
+    <Panel eyebrow="AUDIT" title="Recent changes">
+      {store.state.audits.slice(0, 8).map((item) => <div className="audit-row" key={item.id}><span>{item.action}</span><div><strong>{item.entity}</strong><small>{item.detail}</small></div><time>{formatDateTime(item.timestamp)}</time></div>)}
+      {!store.state.audits.length && <EmptyState title="No changes recorded yet." detail="Changes made in the app will appear here." />}
+      <button className="danger-button" onClick={store.reset}>Reset synthetic MVP data</button>
+    </Panel>
+  </Page>
+}
+
+// Reporting lines as a nested list: people whose manager is not in the Azure list (or who have none) are the roots.
+function TeamTree({ names, profiles }: { names: string[]; profiles: Record<string, ResourceProfile> }) {
+  const reports = (manager: string | undefined) => names.filter((name) => manager ? profiles[name]?.reportsTo === manager : !profiles[name]?.reportsTo || !names.includes(profiles[name].reportsTo!))
+  const label = (name: string) => [profiles[name]?.role, profiles[name]?.peopleManager ? 'people manager' : '', profiles[name]?.region].filter(Boolean).join(' · ')
+  const branch = (name: string, seen: Set<string>): React.ReactNode => {
+    const children = reports(name).filter((child) => !seen.has(child))
+    const next = new Set(seen).add(name)
+    return <li key={name}><strong>{name}</strong>{label(name) && <small>{label(name)}</small>}{children.length > 0 && <ul>{children.map((child) => branch(child, next))}</ul>}</li>
+  }
+  const placed = new Set<string>(), walk = (name: string) => { if (placed.has(name)) return; placed.add(name); reports(name).forEach(walk) }
+  reports(undefined).forEach(walk)
+  const circular = names.filter((name) => !placed.has(name))
+  return <div className="team-tree"><h3>Reporting lines</h3><ul>{reports(undefined).map((name) => branch(name, new Set()))}</ul>{circular.length > 0 && <Notice tone="warning">Circular reporting line, not shown above: {circular.join(', ')}.</Notice>}</div>
 }

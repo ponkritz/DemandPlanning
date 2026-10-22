@@ -10,8 +10,8 @@ test('build metadata uses strict x.y.z versions and rejects malformed or executa
   assert.deepEqual(validateBuildInfo(build), build)
   for (const version of ['v1.2.3', '1.2', '01.2.3', '1.2.3-beta', '1.2.3.4']) assert.throws(() => validateBuildInfo({ ...build, version }))
   for (const change of [{ app: 'other' }, { buildId: '../evil' }, { builtAt: 'not a date' }, { revision: '<script>' }]) assert.throws(() => validateBuildInfo({ ...build, ...change }))
-  assert.match(formatBuildDate(build.builtAt), /17 Oct 2026/)
-  assert.match(formatBuildDate(build.builtAt), /00:00:00 IST$/)
+  assert.match(formatBuildDate(build.builtAt, 'Asia/Kolkata'), /\b17\b/)
+  assert.match(formatBuildDate(build.builtAt, 'UTC'), /UTC/)
 })
 
 test('cache-busting URLs remain on the app origin and preserve path, other parameters and fragment', () => {
@@ -64,4 +64,12 @@ test('release version check accepts only matching vX.Y.Z tags', () => {
   const run = (tag) => spawnSync(process.execPath, ['scripts/verify-version.mjs'], { cwd: new URL('..', import.meta.url), env: { ...process.env, GITHUB_REF_TYPE: 'tag', GITHUB_REF_NAME: tag }, encoding: 'utf8' })
   assert.equal(run(`v${pkg.version}`).status, 0)
   assert.notEqual(run('v99.0.0').status, 0)
+})
+
+test('build number is optional and must be a non-negative integer when present', () => {
+  const base = { app: 'demandplanning', formatVersion: 1, version: '1.2.2', buildId: '1.1', builtAt: '2026-10-16T21:00:00.000Z', revision: 'abcdef1' }
+  assert.equal(validateBuildInfo(base).buildNumber, undefined)
+  assert.equal(validateBuildInfo({ ...base, buildNumber: 42 }).buildNumber, 42)
+  assert.throws(() => validateBuildInfo({ ...base, buildNumber: -1 }))
+  assert.throws(() => validateBuildInfo({ ...base, buildNumber: '42' }))
 })

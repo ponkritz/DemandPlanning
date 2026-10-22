@@ -1,3 +1,4 @@
+import type { BaselineRule, ReleaseScope } from './baseline'
 export type UserRole = 'Owner' | 'Admin' | 'ProcessOwner' | 'Contributor' | 'Viewer'
 export type ActivityStatus = 'Not Started' | 'In Progress' | 'On Track' | 'At Risk' | 'Completed' | 'On Hold'
 export type ActivityType = 'Project' | 'Release' | 'BAU' | 'Improvement' | 'Learning' | 'Other'
@@ -35,7 +36,7 @@ export interface Activity {
   sourceNote?: string
   region?: string
   discipline?: string
-  source: 'Manual' | 'Migration' | 'TFS' | 'Windchill'
+  source: 'Manual' | 'TFS' | 'Windchill'
   createdAt: string
   createdBy: string
 }
@@ -138,7 +139,18 @@ export interface AppState {
   snapshots: Snapshot[]
   masters: MasterValue[]
   azureWorkItems?: AzureWorkItem[]
-  azureBacklogScope?: { organization: string; project: string; team: string; itemKeys: string[]; areaPaths: string[]; fetchedAt: string }
+  azureBacklogScope?: { organization: string; project: string; team: string; itemKeys: string[]; areaPaths: string[]; fetchedAt: string; sample?: boolean }
+  capacitySettings?: { absenceEpicId?: number; hoursPerDay?: number; overloadedAt?: number; availableBelow?: number }
+  baselineRules?: BaselineRule[]
+  releaseScopes?: ReleaseScope[]
+  resourceProfiles?: Record<string, { region?: string; role?: string; reportsTo?: string; peopleManager?: boolean }>
+  releaseSource?: { organization: string; project: string; query: string; fetchedAt: string; items: AzureWorkItem[]; columns?: { ref: string; name: string }[]; orderBy?: { ref: string; desc: boolean }[]; unresolved?: string[] }
+  releaseSourceSettings?: { streamSegment?: number; releasePattern?: string; approvalDateField?: string }
+  releasePlans?: ReleasePlan[]
+  // Read-only snapshots from additional Azure connections (backlog views, document sources such as Vault, reference data).
+  // Windchill views' last results (Settings → Windchill views), fetched from the desktop app or loaded from Git.
+  windchillSources?: { viewId: string; name: string; fetchedAt: string; query: string; columns: string[]; rows: Record<string, unknown>[]; next?: string; fromGit?: boolean }[]
+  azureSources?: { connectionId: string; name: string; role: 'documents' | 'reference' | 'backlog-view' | 'release-source'; fromGit?: boolean; organization: string; project: string; query: string; fetchedAt: string; items: AzureWorkItem[]; columns?: { ref: string; name: string }[]; orderBy?: { ref: string; desc: boolean }[]; unresolved?: string[] }[]
 }
 
 export interface AzureWorkItem {
@@ -156,13 +168,31 @@ export interface AzureWorkItem {
   workItemType: string
   state: string
   assignedTo: string
+  assignedToEmail?: string
   areaPath: string
   iterationPath: string
   parentId?: number
   targetDate?: string
   closedDate?: string
   changedDate?: string
+  approvalDate?: string
+  // Values of the connection query's selected columns (read-only views), keyed by field reference name.
+  fields?: Record<string, string | number | boolean | null>
   tags: string
   url: string
   syncedAt: string
+}
+
+// Release planning record (TFS / Windchill / manual): milestone dates per release, kept beside the Azure data.
+export type ReleaseMilestone = 'PRD' | 'SFV' | 'DT' | 'PR' | 'Design Review'
+export interface ReleasePlan {
+  id: string
+  source: 'TFS' | 'Windchill' | 'Manual'
+  program: string
+  title: string
+  type: 'Release' | 'PU'
+  stream?: string
+  milestones: Partial<Record<ReleaseMilestone, string | undefined>>
+  updatedAt: string
+  sample?: boolean
 }

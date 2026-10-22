@@ -1,8 +1,31 @@
 import type { AzureWorkItem } from './domain'
+import { planMonthStory, timeWritingMonth } from './azureInsights.ts'
 
-export interface AzureConfig { organization: string; project: string; team: string }
+// baseUrl is the organization (https://dev.azure.com/<org>) or, on premises, the Azure DevOps Server collection
+// (e.g. https://tfs.example.com/tfs/DefaultCollection). Omitted means Azure DevOps Services for organization.
+export interface AzureConfig { organization: string; project: string; team: string; baseUrl?: string; apiVersion?: string }
+
+// Normalises a base URL: https only, no credentials, query or fragment. A dev.azure.com address keeps only the
+// organization segment, so a pasted project URL also works; an on-prem collection URL is kept as given.
+export function normalizeBaseUrl(value: string) {
+  let url: URL
+  try { url = new URL(value.trim()) } catch { throw new Error('Enter the base URL: https://dev.azure.com/<organization>, or your Azure DevOps Server collection URL.') }
+  if (url.protocol !== 'https:' || url.username || url.password) throw new Error('The base URL must use https and must not contain a user name or password.')
+  if (url.search || url.hash) throw new Error('Remove the ? or # part from the base URL.')
+  const parts = url.pathname.split('/').filter(Boolean).map(decodeURIComponent)
+  if (url.hostname === 'dev.azure.com') {
+    if (!parts[0]) throw new Error('The base URL must include the organization: https://dev.azure.com/<organization>.')
+    return `https://dev.azure.com/${encodeURIComponent(parts[0])}`
+  }
+  return `${url.origin}${parts.map(encodeURIComponent).map((part) => `/${part}`).join('')}`
+}
+export const isCloudBase = (baseUrl: string) => new URL(baseUrl).hostname === 'dev.azure.com'
+export function collectionUrl(config: Pick<AzureConfig, 'organization' | 'baseUrl'>) { return config.baseUrl ? normalizeBaseUrl(config.baseUrl) : `https://dev.azure.com/${encodeURIComponent(config.organization)}` }
+export const projectApiBase = (config: Pick<AzureConfig, 'organization' | 'project' | 'baseUrl'>) => `${collectionUrl(config)}/${encodeURIComponent(config.project)}`
+// Azure DevOps Services accepts 7.1; older Azure DevOps Server versions need a lower version (e.g. 6.0 or 5.0).
+export const apiVersionOf = (config: Pick<AzureConfig, 'apiVersion'>) => config.apiVersion && /^\d{1,2}\.\d(-preview(\.\d)?)?$/.test(config.apiVersion) ? config.apiVersion : '7.1'
 export interface AzureRequest extends AzureConfig {
-  operation: 'backlog-epics' | 'identity' | 'areas' | 'iterations' | 'iteration-tree' | 'query' | 'items' | 'create-feature' | 'create-child' | 'update-time-writing-effort'
+  operation: 'backlog-epics' | 'areas' | 'iterations' | 'iteration-tree' | 'fields' | 'query' | 'items' | 'create-feature' | 'create-child' | 'update-time-writing-effort' | 'update-work-item'
   pat: string
   query?: string
   ids?: number[]
@@ -13,6 +36,8 @@ export interface AzureRequest extends AzureConfig {
   planHours?: number
   actualHours?: number
   tags?: string
+  state?: string
+  iterationPath?: string
 }
 export interface FeatureInput { parentId: number; title: string; description: string; acceptanceCriteria: string; areaPath?: string; iterationPath?: string; assignedTo?: string; targetDate?: string; assignToCreator?: boolean; storyIterationPath?: string; taskOriginalEstimate?: number; taskCompletedWork?: number }
 export function featureDescription(kind: 'PU' | 'Release') {
@@ -89,7 +114,7 @@ export function futureIterationPairs(iterations: AzureIteration[], date = new Da
   return scheduledIterationPairs(iterations, date, 'future')
 }
 
-export interface AzureBacklogScope extends AzureConfig { itemKeys: string[]; areaPaths: string[]; fetchedAt: string }
+export interface AzureBacklogScope extends AzureConfig { itemKeys: string[]; areaPaths: string[]; fetchedAt: string; sample?: boolean }
 export interface AzureFetchResult { items: AzureWorkItem[]; areaPaths: string[]; asOf: string; scope: AzureBacklogScope }
 interface RawItem { id: number; fields: Record<string, unknown>; relations?: { rel: string; url: string }[] }
 interface TeamAreas { field: { referenceName: string }; values: { value: string; includeChildren: boolean }[] }
@@ -99,14 +124,27 @@ declare global {
   interface Window { azureDevOps?: { request: AzureTransport } }
 }
 
-export function parseAzureProjectUrl(input: string): AzureConfig {
+export function parseAzureProjectUrl(input: string, baseUrl?: string): AzureConfig {
   const url = new URL(input)
-  if (url.protocol !== 'https:' || url.hostname !== 'dev.azure.com' || url.username || url.password) throw new Error('Use an https://dev.azure.com organization/project URL.')
-  const parts = url.pathname.split('/').filter(Boolean).map(decodeURIComponent)
-  if (parts.length < 2) throw new Error('The URL must include the organization and project.')
+  if (url.username || url.password || url.protocol !== 'https:') throw new Error('Use an https Azure DevOps project URL.')
+  const base = baseUrl ? normalizeBaseUrl(baseUrl) : ''
+  if (!base || isCloudBase(base)) {
+    if (url.hostname !== 'dev.azure.com') throw new Error('Use an https://dev.azure.com organization/project URL, or set the base URL of your Azure DevOps Server collection.')
+    const parts = url.pathname.split('/').filter(Boolean).map(decodeURIComponent)
+    if (parts.length < 2) throw new Error('The URL must include the organization and project.')
+    const backlog = parts.indexOf('_backlogs')
+    const team = backlog >= 0 && parts[backlog + 1] === 'backlog' ? parts[backlog + 2] ?? '' : ''
+    return { organization: parts[0], project: parts[1], team }
+  }
+  // Azure DevOps Server: <collection URL>/<project>[/_backlogs/backlog/<team>/…]; organization = collection name.
+  const normalized = `${url.origin}${url.pathname.split('/').filter(Boolean).map((part) => `/${encodeURIComponent(decodeURIComponent(part))}`).join('')}`
+  if (!normalized.toLowerCase().startsWith(`${base.toLowerCase()}/`)) throw new Error('The project URL does not belong to the configured base URL.')
+  const parts = normalized.slice(base.length).split('/').filter(Boolean).map(decodeURIComponent)
+  if (!parts[0]) throw new Error('The URL must include the project.')
   const backlog = parts.indexOf('_backlogs')
   const team = backlog >= 0 && parts[backlog + 1] === 'backlog' ? parts[backlog + 2] ?? '' : ''
-  return { organization: parts[0], project: parts[1], team }
+  const collection = new URL(base).pathname.split('/').filter(Boolean).map(decodeURIComponent).at(-1) ?? new URL(base).hostname
+  return { organization: collection, project: parts[0], team, baseUrl: base }
 }
 
 const literal = (value: string) => `'${value.replaceAll("'", "''")}'`
@@ -171,7 +209,9 @@ export async function fetchAzureWorkItems(config: AzureConfig, pat: string, tran
 }
 
 export function sameAzureScope(left: AzureConfig | undefined | null, right: AzureConfig | undefined | null) {
-  return Boolean(left && right && ['organization', 'project', 'team'].every((key) => typeof left[key as keyof AzureConfig] === 'string' && typeof right[key as keyof AzureConfig] === 'string' && left[key as keyof AzureConfig].toLowerCase() === right[key as keyof AzureConfig].toLowerCase()))
+  if (!left || !right) return false
+  const same = (key: 'organization' | 'project' | 'team') => typeof left[key] === 'string' && typeof right[key] === 'string' && left[key].toLowerCase() === right[key].toLowerCase()
+  try { return collectionUrl(left).toLowerCase() === collectionUrl(right).toLowerCase() && same('organization') && same('project') && same('team') } catch { return false }
 }
 
 export function savedBacklogItems(items: AzureWorkItem[], scope: AzureBacklogScope | undefined, config: AzureConfig | null) {
@@ -185,12 +225,14 @@ export function mapAzureWorkItem(item: RawItem, config: AzureConfig): AzureWorkI
   const text = (name: string) => typeof fields[name] === 'string' ? fields[name] as string : ''
   const assignee = fields['System.AssignedTo']
   const assignedTo = typeof assignee === 'string' ? assignee : assignee && typeof assignee === 'object' && 'displayName' in assignee ? String(assignee.displayName) : ''
+  const assigneeEmail = assignee && typeof assignee === 'object' ? String((assignee as { uniqueName?: unknown; mailAddress?: unknown }).uniqueName ?? (assignee as { mailAddress?: unknown }).mailAddress ?? '') : ''
   const date = (name: string) => { const value = text(name); return /^\d{4}-\d{2}-\d{2}(T|$)/.test(value) ? value : undefined }
   const number = (name: string) => typeof fields[name] === 'number' && Number.isFinite(fields[name]) && (fields[name] as number) >= 0 ? fields[name] as number : undefined
   return {
     key: `${config.organization.toLowerCase()}/${config.project.toLowerCase()}/${item.id}`, id: item.id,
     organization: config.organization, project: config.project,
     title: text('System.Title'), workItemType: text('System.WorkItemType'), state: text('System.State'), assignedTo,
+    ...(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(assigneeEmail) ? { assignedToEmail: assigneeEmail.toLowerCase() } : {}),
     description: text('System.Description'),
     originalEstimate: number('Microsoft.VSTS.Scheduling.OriginalEstimate'),
     completedWork: number('Microsoft.VSTS.Scheduling.CompletedWork'),
@@ -201,7 +243,7 @@ export function mapAzureWorkItem(item: RawItem, config: AzureConfig): AzureWorkI
     parentId: typeof fields['System.Parent'] === 'number' ? fields['System.Parent'] : parentFromRelation(item),
     targetDate: date('Microsoft.VSTS.Scheduling.TargetDate'), closedDate: date('Microsoft.VSTS.Common.ClosedDate'),
     changedDate: date('System.ChangedDate'), tags: text('System.Tags'),
-    url: `https://dev.azure.com/${encodeURIComponent(config.organization)}/${encodeURIComponent(config.project)}/_workitems/edit/${item.id}`,
+    url: `${projectApiBase(config)}/_workitems/edit/${item.id}`,
     syncedAt: new Date().toISOString(),
   }
 }
@@ -253,7 +295,6 @@ export async function createAzureFeature(config: AzureConfig, pat: string, featu
 }
 
 const validHours = (value: number) => Number.isFinite(value) && value >= 0 && value <= 1_000_000
-const monthNamedTask = (title: string) => /^(January|February|March|April|May|June|July|August|September|October|November|December) \d{4}\s*\|/i.test(title.trim())
 
 /** Updates only the two Azure scheduling fields on a selected-month Task. */
 export async function updateAzureTimeWritingEffort(config: AzureConfig, pat: string, workItemId: number, planHours: number | undefined, actualHours: number | undefined, markAdhoc = false, transport: AzureTransport = requestAzure): Promise<AzureWorkItem> {
@@ -261,12 +302,8 @@ export async function updateAzureTimeWritingEffort(config: AzureConfig, pat: str
   if (!Number.isSafeInteger(workItemId) || workItemId < 1 || (planHours == null && actualHours == null) || (planHours != null && !validHours(planHours)) || (actualHours != null && !validHours(actualHours))) throw new Error('Original Estimate and Completed Work must be numbers from 0 to 1,000,000 hours.')
   const source = await transport({ ...config, pat, operation: 'items', ids: [workItemId] }) as { value?: RawItem[] }
   const raw = source.value?.find((item) => item.id === workItemId)
-  const parentId = raw && (typeof raw.fields['System.Parent'] === 'number' ? raw.fields['System.Parent'] : parentFromRelation(raw))
-  if (!raw || raw.fields['System.WorkItemType'] !== 'Task' || !monthNamedTask(String(raw.fields['System.Title'] ?? ''))) throw new Error('Only a month-named Time Writing Task can be updated from Monthly effort.')
-  if (!parentId) throw new Error('The monthly Task has no parent Time Writing User Story.')
-  const parentSource = await transport({ ...config, pat, operation: 'items', ids: [parentId] }) as { value?: RawItem[] }
-  const parent = parentSource.value?.find((item) => item.id === parentId)
-  if (!parent || parent.fields['System.WorkItemType'] !== 'User Story' || !/-\s*Time Writ(?:ing|ting)\s*$/i.test(String(parent.fields['System.Title'] ?? ''))) throw new Error('The Task parent is not a Time Writing User Story.')
+  // Only a Task whose title starts or ends with a month and year (any delimiter, any parent story name) can be edited here.
+  if (!raw || raw.fields['System.WorkItemType'] !== 'Task' || !timeWritingMonth(String(raw.fields['System.Title'] ?? ''))) throw new Error('Only a month-named Time Writing Task can be updated from Monthly effort.')
   const existingTags = typeof raw.fields['System.Tags'] === 'string' ? raw.fields['System.Tags'] : ''
   const tags = markAdhoc && !existingTags.split(';').some(tag => tag.trim().toLowerCase() === 'ad-hoc') ? [...existingTags.split(';').map(tag => tag.trim()).filter(Boolean), 'ad-hoc'].join('; ') : undefined
   const response = await transport({ ...config, pat, operation: 'update-time-writing-effort', workItemId, planHours, actualHours, tags }) as RawItem
@@ -283,7 +320,7 @@ export function featurePatch(config: AzureConfig, feature: FeatureInput & { area
     { op: 'add', path: '/fields/System.Title', value: feature.title },
     { op: 'add', path: '/fields/System.AreaPath', value: feature.areaPath },
     { op: 'add', path: '/fields/System.Description', value: htmlText(feature.description) },
-    { op: 'add', path: '/relations/-', value: { rel: 'System.LinkTypes.Hierarchy-Reverse', url: `https://dev.azure.com/${encodeURIComponent(config.organization)}/${encodeURIComponent(config.project)}/_apis/wit/workItems/${feature.parentId}` } },
+    { op: 'add', path: '/relations/-', value: { rel: 'System.LinkTypes.Hierarchy-Reverse', url: `${projectApiBase(config)}/_apis/wit/workItems/${feature.parentId}` } },
   ]
   if (feature.acceptanceCriteria.trim()) patch.push({ op: 'add', path: '/fields/Microsoft.VSTS.Common.AcceptanceCriteria', value: htmlText(feature.acceptanceCriteria) })
   if (feature.iterationPath) patch.push({ op: 'add', path: '/fields/System.IterationPath', value: feature.iterationPath })
@@ -313,11 +350,6 @@ export function currentIndiaMonth(date = new Date()) {
   return new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' }).format(date)
 }
 
-export function monthLabelFromKey(month: string) {
-  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error('Choose a valid month for bulk Time Writing Tasks.')
-  return new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' }).format(new Date(`${month}-01T12:00:00Z`))
-}
-
 export class HierarchyCreationError extends Error {
   createdItems: AzureWorkItem[]
   constructor(message: string, createdItems: AzureWorkItem[]) { super(message); this.name = 'HierarchyCreationError'; this.createdItems = createdItems }
@@ -337,7 +369,7 @@ async function directChildren(config: AzureConfig, pat: string, parentId: number
   return items
 }
 
-async function ensureChild(config: AzureConfig, pat: string, parent: AzureWorkItem, type: 'User Story' | 'Task', title: string, existing: AzureWorkItem[], transport: AzureTransport, iterationPath = parent.iterationPath, taskOriginalEstimate?: number, taskCompletedWork?: number, assignedTo?: string) {
+async function ensureChild(config: AzureConfig, pat: string, parent: AzureWorkItem, type: 'User Story' | 'Task', title: string, existing: AzureWorkItem[], transport: AzureTransport, iterationPath = parent.iterationPath, taskOriginalEstimate?: number, taskCompletedWork?: number) {
   const matches = existing.filter((item) => item.parentId === parent.id && item.workItemType === type && item.title.trim() === title)
   if (matches.length > 1) throw new Error(`Multiple matching ${type} items already exist under #${parent.id}. Review duplicates before continuing.`)
   if (matches.length === 1) {
@@ -346,7 +378,7 @@ async function ensureChild(config: AzureConfig, pat: string, parent: AzureWorkIt
   }
   if (title.length > 255) throw new Error('An automatic child title exceeds 255 characters. Shorten the Feature title.')
   const request: AzureRequest = { ...config, pat, operation: 'create-child', workItemType: type,
-    feature: { parentId: parent.id, title, description: '', acceptanceCriteria: '', areaPath: parent.areaPath, iterationPath, ...(assignedTo ? { assignedTo } : {}), ...(type === 'Task' && taskOriginalEstimate != null ? { taskOriginalEstimate } : {}), ...(type === 'Task' && taskCompletedWork != null ? { taskCompletedWork } : {}) } }
+    feature: { parentId: parent.id, title, description: '', acceptanceCriteria: '', areaPath: parent.areaPath, iterationPath, ...(type === 'Task' && taskOriginalEstimate != null ? { taskOriginalEstimate } : {}), ...(type === 'Task' && taskCompletedWork != null ? { taskCompletedWork } : {}) } }
   await transport({ ...request, validateOnly: true })
   const response = await transport({ ...request, validateOnly: false }) as RawItem
   if (!Number.isSafeInteger(response.id) || response.id < 1) throw new Error(`${type} creation could not be confirmed. Check children under #${parent.id} before retrying.`)
@@ -360,7 +392,49 @@ async function ensureChild(config: AzureConfig, pat: string, parent: AzureWorkIt
   } catch { throw new Error(`${type} #${response.id} was created but could not be verified. Check the source before using Complete children.`) }
 }
 
-export async function completeReleaseHierarchy(config: AzureConfig, pat: string, featureId: number, kind: 'PU' | 'Release', milestones?: string[], monthLabel = currentIndiaMonth(), transport: AzureTransport = requestAzure, storyIterationPath?: string, assignedTo?: string) {
+// Month Time Writing task for one person on one Feature: "<Feature> - Time Writing" story (created if missing) and
+// "<Month YYYY> | <Feature>" Task assigned to that person. Children are re-read from Azure first, so an existing task
+// for the same person is reused rather than duplicated; another person's task with the same title is left alone.
+export type MonthTaskResult = { status: 'exists' | 'created'; task: AzureWorkItem; story: AzureWorkItem; storyCreated: boolean }
+export async function ensureMonthTask(config: AzureConfig, pat: string, featureId: number, assignee: string, monthLabel = currentIndiaMonth(), transport: AzureTransport = requestAzure): Promise<MonthTaskResult> {
+  if (!pat.trim()) throw new Error('Enter a Work Items (Read & Write) PAT.')
+  const email = assignee.trim().toLowerCase()
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('Set your Azure DevOps email (Feature creator email on the Time Writing connection) first.')
+  const source = await transport({ ...config, pat, operation: 'items', ids: [featureId] }) as { value?: RawItem[] }
+  const raw = source.value?.find((item) => item.id === featureId)
+  if (!raw || raw.fields['System.WorkItemType'] !== 'Feature') throw new Error(`#${featureId} is not an accessible Feature.`)
+  const feature = mapAzureWorkItem(raw, config)
+  const storyTitle = `${feature.title.trim()} - Time Writing`, taskTitle = `${monthLabel} | ${feature.title.trim()}`
+  if (taskTitle.length > 255 || storyTitle.length > 255) throw new Error(`#${feature.id}: the Feature title is too long for an automatic child title.`)
+  // Every story under the Feature and its Tasks are re-read now, so a month Task of mine with any title or delimiter,
+  // under any story, is found and reused rather than duplicated.
+  const children = await directChildren(config, pat, feature.id, transport)
+  const stories = []
+  for (const story of children.filter((item) => item.workItemType === 'User Story' && item.state.toLowerCase() !== 'removed')) stories.push({ story, tasks: await directChildren(config, pat, story.id, transport) })
+  const plan = planMonthStory(stories, children.filter((item) => item.workItemType === 'Task'), timeWritingMonth(monthLabel) ?? '', storyTitle, (item) => item.assignedToEmail === email)
+  if (plan.status === 'exists') return { status: 'exists', task: plan.task, story: plan.story ?? feature, storyCreated: false }
+  if (plan.status === 'conflict') throw new Error(`#${feature.id} has ${plan.stories.length} possible Time Writing stories (${plan.stories.map((item) => `#${item.id}`).join(', ')}). Add your month Task under the right one in Azure DevOps.`)
+  let story: AzureWorkItem, storyCreated = false
+  if (plan.status === 'use') story = plan.story
+  else { story = await createChildItem(config, pat, feature, 'User Story', storyTitle, feature.iterationPath, undefined, transport); storyCreated = true }
+  const task = await createChildItem(config, pat, story, 'Task', taskTitle, config.project, email, transport)
+  return { status: 'created', task, story, storyCreated }
+}
+
+async function createChildItem(config: AzureConfig, pat: string, parent: AzureWorkItem, type: 'User Story' | 'Task', title: string, iterationPath: string, assignedTo: string | undefined, transport: AzureTransport) {
+  const request: AzureRequest = { ...config, pat, operation: 'create-child', workItemType: type, feature: { parentId: parent.id, title, description: '', acceptanceCriteria: '', areaPath: parent.areaPath, iterationPath, ...(assignedTo ? { assignedTo } : {}) } }
+  await transport({ ...request, validateOnly: true })
+  const response = await transport({ ...request, validateOnly: false }) as RawItem
+  if (!Number.isSafeInteger(response.id) || response.id < 1) throw new Error(`${type} creation under #${parent.id} could not be confirmed. Check it in Azure DevOps before retrying.`)
+  const read = await transport({ ...config, pat, operation: 'items', ids: [response.id] }) as { value?: RawItem[] }
+  const raw = read.value?.find((item) => item.id === response.id)
+  if (!raw) throw new Error(`${type} #${response.id} was created but could not be read back.`)
+  const item = mapAzureWorkItem(raw, config)
+  if (item.parentId !== parent.id || item.workItemType !== type || item.title.trim() !== title) throw new Error(`${type} #${response.id} was created but does not match what was requested. Check it in Azure DevOps.`)
+  return item
+}
+
+export async function completeReleaseHierarchy(config: AzureConfig, pat: string, featureId: number, kind: 'PU' | 'Release', milestones?: string[], monthLabel = currentIndiaMonth(), transport: AzureTransport = requestAzure, storyIterationPath?: string) {
   const items: AzureWorkItem[] = []
   try {
     if (!pat.trim()) throw new Error('Enter a Work Items (Read & Write) PAT.')
@@ -373,39 +447,14 @@ export async function completeReleaseHierarchy(config: AzureConfig, pat: string,
     const selected = milestones ?? titles.reviews.map((review) => review.milestone)
     if (selected.some((milestone) => !titles.reviews.some((review) => review.milestone === milestone))) throw new Error('Unsupported milestone selection for this release classification.')
     const children = await directChildren(config, pat, feature.id, transport)
-    for (const review of titles.reviews.filter((review) => selected.includes(review.milestone))) items.push(await ensureChild(config, pat, feature, 'User Story', review.title, children, transport, storyIterationPath || feature.iterationPath, undefined, undefined, assignedTo))
-    const timeWriting = await ensureChild(config, pat, feature, 'User Story', titles.timeWriting, children, transport, storyIterationPath || feature.iterationPath, undefined, undefined, assignedTo)
+    for (const review of titles.reviews.filter((review) => selected.includes(review.milestone))) items.push(await ensureChild(config, pat, feature, 'User Story', review.title, children, transport, storyIterationPath || feature.iterationPath))
+    const timeWriting = await ensureChild(config, pat, feature, 'User Story', titles.timeWriting, children, transport, storyIterationPath || feature.iterationPath)
     items.push(timeWriting)
     const tasks = await directChildren(config, pat, timeWriting.id, transport)
-    items.push(await ensureChild(config, pat, timeWriting, 'Task', titles.task, tasks, transport, config.project, undefined, undefined, assignedTo))
+    items.push(await ensureChild(config, pat, timeWriting, 'Task', titles.task, tasks, transport, config.project))
     return { feature, items }
   } catch (failure) {
     throw new HierarchyCreationError(failure instanceof Error ? failure.message : 'Unable to complete the release hierarchy.', items)
-  }
-}
-
-/** Ensures one selected-month Task beneath every supplied Time Writing User Story. */
-export async function bulkCreateMonthlyTimeWritingTasks(config: AzureConfig, pat: string, source: AzureWorkItem[], monthLabel = currentIndiaMonth(), assignedTo?: string, transport: AzureTransport = requestAzure) {
-  if (!pat.trim()) throw new Error('Enter a Work Items (Read & Write) PAT.')
-  if (!/^(January|February|March|April|May|June|July|August|September|October|November|December) \d{4}$/.test(monthLabel)) throw new Error('Choose a valid month for bulk Time Writing Tasks.')
-  if (!assignedTo?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(assignedTo.trim())) throw new Error('Configure a valid Feature creator email before bulk task creation.')
-  const byId = new Map(source.map(item => [item.id, item]))
-  const targets = [...new Map(source.filter((story) => {
-    const feature = story.parentId == null ? undefined : byId.get(story.parentId)
-    return story.workItemType === 'User Story' && /\s*-\s*time\s*writ(?:ing|ting)\s*$/i.test(story.title) && feature?.workItemType === 'Feature' && feature.state.trim().toLowerCase() === 'active'
-  }).map(story => [story.id, story])).values()]
-  if (!targets.length) throw new Error('No Time Writing User Stories under Active Features are loaded. Refresh and save the backlog first.')
-  const items: AzureWorkItem[] = []
-  try {
-    for (const story of targets) {
-      const featureTitle = story.title.replace(/\s*-\s*time\s*writ(?:ing|ting)\s*$/i, '').trim()
-      if (!featureTitle) throw new Error(`Time Writing User Story #${story.id} has no Feature title prefix.`)
-      const tasks = await directChildren(config, pat, story.id, transport)
-      items.push(await ensureChild(config, pat, story, 'Task', `${monthLabel} | ${featureTitle}`, tasks, transport, config.project, undefined, undefined, assignedTo.trim()))
-    }
-    return items
-  } catch (failure) {
-    throw new HierarchyCreationError(failure instanceof Error ? failure.message : 'Unable to bulk-create monthly Time Writing Tasks.', items)
   }
 }
 
@@ -415,7 +464,7 @@ export async function createAzureReleaseHierarchy(config: AzureConfig, pat: stri
   if (milestones?.some((milestone) => !titles.reviews.some((review) => review.milestone === milestone))) throw new Error('Unsupported milestone selection for this release classification.')
   const feature = await createAzureFeature(config, pat, input, transport)
   try {
-    const bundle = await completeReleaseHierarchy(config, pat, feature.id, kind, milestones, monthLabel, transport, input.storyIterationPath, input.assignedTo)
+    const bundle = await completeReleaseHierarchy(config, pat, feature.id, kind, milestones, monthLabel, transport, input.storyIterationPath)
     // Initial effort is deliberately saved on the month-named Task, not the User Story.
     if (input.taskOriginalEstimate != null || input.taskCompletedWork != null) {
       const task = bundle.items.find((item) => item.workItemType === 'Task')
@@ -432,31 +481,96 @@ export async function createAzureReleaseHierarchy(config: AzureConfig, pat: stri
   }
 }
 
-async function requestAzure(request: AzureRequest): Promise<unknown> {
+// Constrained write: only System.State and System.IterationPath can change through this path.
+export function workItemUpdatePatch(request: Pick<AzureRequest, 'state' | 'iterationPath'>) {
+  const patch: { op: 'add'; path: string; value: string }[] = []
+  if (request.state != null) patch.push({ op: 'add', path: '/fields/System.State', value: request.state })
+  if (request.iterationPath != null) patch.push({ op: 'add', path: '/fields/System.IterationPath', value: request.iterationPath })
+  return patch
+}
+
+// Changes a work item's state and/or iteration path, then reads it back and checks the change landed.
+export async function updateAzureWorkItem(config: AzureConfig, pat: string, workItemId: number, update: { state?: string; iterationPath?: string }, transport: AzureTransport = requestAzure): Promise<AzureWorkItem> {
+  if (!pat.trim()) throw new Error('Enter a Work Items (Read & Write) PAT.')
+  if (!Number.isSafeInteger(workItemId) || workItemId < 1) throw new Error('Invalid work item.')
+  const state = update.state?.trim(), iterationPath = update.iterationPath?.trim()
+  if (!state && !iterationPath) throw new Error('Nothing to change.')
+  if (state != null && (state.length > 64 || !/^[\p{L}\p{N} _-]+$/u.test(state))) throw new Error('Invalid state.')
+  if (iterationPath != null && (iterationPath.length > 4096 || /\p{Cc}/u.test(iterationPath))) throw new Error('Invalid iteration path.')
+  await transport({ ...config, pat, operation: 'update-work-item', workItemId, ...(state ? { state } : {}), ...(iterationPath ? { iterationPath } : {}) })
+  const read = await transport({ ...config, pat, operation: 'items', ids: [workItemId] }) as { value?: RawItem[] }
+  const raw = read.value?.find((item) => item.id === workItemId)
+  if (!raw) throw new Error(`#${workItemId} was updated but could not be read back. Check it in Azure DevOps.`)
+  const item = mapAzureWorkItem(raw, config)
+  if ((state && item.state.toLowerCase() !== state.toLowerCase()) || (iterationPath && item.iterationPath.toLowerCase() !== iterationPath.toLowerCase())) throw new Error(`#${workItemId} was saved but Azure DevOps reports ${item.state} · ${item.iterationPath}. Check its rules in Azure DevOps.`)
+  return item
+}
+
+// api-version negotiation: an explicit version is used as is; otherwise 7.1, then 6.0 and 5.0 for older Azure DevOps
+// Server releases. The version that worked is remembered per collection for the rest of the session.
+const detectedVersions = new Map<string, string>()
+export function versionsToTry(config: Pick<AzureConfig, 'apiVersion' | 'organization' | 'baseUrl'>) {
+  if (config.apiVersion && apiVersionOf(config) === config.apiVersion) return [config.apiVersion]
+  const known = detectedVersions.get(collectionUrl(config).toLowerCase())
+  return known ? [known] : ['7.1', '6.0', '5.0']
+}
+export const isApiVersionError = (text: string) => /api[- ]?version|version of the api|VssVersionOutOfRange|out of range/i.test(text) && /version/i.test(text)
+
+export async function requestAzure(request: AzureRequest): Promise<unknown> {
   if (window.azureDevOps) return window.azureDevOps.request(request)
-  const base = `https://dev.azure.com/${encodeURIComponent(request.organization)}/${encodeURIComponent(request.project)}`
-  const writing = request.operation === 'create-feature' || request.operation === 'create-child' || request.operation === 'update-time-writing-effort'
-  const readingMetadata = request.operation === 'backlog-epics' || request.operation === 'identity' || request.operation === 'areas' || request.operation === 'iterations' || request.operation === 'iteration-tree'
+  const base = projectApiBase(request)
+  const updating = request.operation === 'update-time-writing-effort' || request.operation === 'update-work-item'
+  const writing = request.operation === 'create-feature' || request.operation === 'create-child' || updating
+  const readingMetadata = request.operation === 'backlog-epics' || request.operation === 'areas' || request.operation === 'iterations' || request.operation === 'iteration-tree' || request.operation === 'fields'
   const create = request.operation === 'create-feature' || request.operation === 'create-child'
-  const endpoint = request.operation === 'update-time-writing-effort' ? `_apis/wit/workitems/${request.workItemId}` : create ? `_apis/wit/workitems/$${request.operation === 'create-feature' ? 'Feature' : encodeURIComponent(request.workItemType!)}` : request.operation === 'backlog-epics' ? `${encodeURIComponent(request.team)}/_apis/work/backlogs/Microsoft.EpicCategory/workItems` : request.operation === 'iteration-tree' ? '_apis/wit/classificationnodes/iterations' : readingMetadata ? `${encodeURIComponent(request.team)}/_apis/work/teamsettings/${request.operation === 'areas' ? 'teamfieldvalues' : 'iterations'}` : request.operation === 'query' ? '_apis/wit/wiql' : '_apis/wit/workitemsbatch'
-  const body = request.operation === 'update-time-writing-effort' ? [{ ...(request.planHours == null ? {} : { op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.OriginalEstimate', value: request.planHours }) }, { ...(request.actualHours == null ? {} : { op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.CompletedWork', value: request.actualHours }) }, ...(request.tags ? [{ op: 'add', path: '/fields/System.Tags', value: request.tags }] : [])].filter(patch => 'op' in patch) : create ? featurePatch(request, request.feature!) : request.operation === 'query' ? { query: request.query } : { ids: request.ids, errorPolicy: 'Fail', $expand: 'Relations' }
-  let response: Response
-  try {
-    const url = request.operation === 'identity' ? `https://dev.azure.com/${encodeURIComponent(request.organization)}/_apis/connectionData?api-version=7.1-preview.1` : `${base}/${endpoint}?api-version=7.1${request.operation === 'query' ? '&$top=1000' : ''}${request.operation === 'iteration-tree' ? '&$depth=10' : ''}${create ? `&validateOnly=${request.validateOnly === true}` : ''}`
-    response = await fetch(url, {
-      method: readingMetadata ? 'GET' : request.operation === 'update-time-writing-effort' ? 'PATCH' : 'POST', redirect: 'error', credentials: 'omit',
-      headers: { Authorization: `Basic ${btoa(`:${request.pat}`)}`, 'Content-Type': writing ? 'application/json-patch+json' : 'application/json', Accept: 'application/json' },
-      body: readingMetadata ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(45000),
-    })
-  } catch { throw new Error(writing && !request.validateOnly ? 'The create request could not be confirmed. Check the Azure DevOps backlog before retrying; a Feature may have been created.' : 'Azure DevOps could not be reached. Check your network/VPN. If browser cross-origin access is blocked, use the desktop package with the same PAT.') }
+  const endpoint = updating ? `_apis/wit/workitems/${request.workItemId}` : create ? `_apis/wit/workitems/$${request.operation === 'create-feature' ? 'Feature' : encodeURIComponent(request.workItemType!)}` : request.operation === 'backlog-epics' ? `${encodeURIComponent(request.team)}/_apis/work/backlogs/Microsoft.EpicCategory/workItems` : request.operation === 'iteration-tree' ? '_apis/wit/classificationnodes/iterations' : request.operation === 'fields' ? '_apis/wit/fields' : readingMetadata ? `${encodeURIComponent(request.team)}/_apis/work/teamsettings/${request.operation === 'areas' ? 'teamfieldvalues' : 'iterations'}` : request.operation === 'query' ? '_apis/wit/wiql' : '_apis/wit/workitemsbatch'
+  const body = request.operation === 'update-work-item' ? workItemUpdatePatch(request) : request.operation === 'update-time-writing-effort' ? [{ ...(request.planHours == null ? {} : { op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.OriginalEstimate', value: request.planHours }) }, { ...(request.actualHours == null ? {} : { op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.CompletedWork', value: request.actualHours }) }, ...(request.tags ? [{ op: 'add', path: '/fields/System.Tags', value: request.tags }] : [])].filter(patch => 'op' in patch) : create ? featurePatch(request, request.feature!) : request.operation === 'query' ? { query: request.query } : { ids: request.ids, errorPolicy: 'Fail', $expand: 'Relations' }
+  const versions = versionsToTry(request)
+  let response: Response | undefined
+  for (const [attempt, version] of versions.entries()) {
+    try {
+      const url = `${base}/${endpoint}?api-version=${version}${request.operation === 'query' ? '&$top=1000' : ''}${request.operation === 'iteration-tree' ? '&$depth=10' : ''}${create ? `&validateOnly=${request.validateOnly === true}` : ''}`
+      response = await fetch(url, {
+        method: readingMetadata ? 'GET' : updating ? 'PATCH' : 'POST', redirect: 'error', credentials: 'omit',
+        headers: { Authorization: `Basic ${btoa(`:${request.pat}`)}`, 'Content-Type': writing ? 'application/json-patch+json' : 'application/json', Accept: 'application/json' },
+        body: readingMetadata ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(45000),
+      })
+    } catch {
+      const host = new URL(base).hostname
+      throw new Error(updating ? `The update of #${request.workItemId} could not be confirmed. Check it in Azure DevOps before retrying.` : writing && !request.validateOnly ? 'The create request could not be confirmed. Check the Azure DevOps backlog before retrying; a Feature may have been created.'
+        : host === 'dev.azure.com' ? 'Azure DevOps could not be reached. Check your network/VPN. If browser cross-origin access is blocked, use the desktop package with the same PAT.'
+          : `The browser could not reach ${host}. On-premises servers usually block requests from other websites (CORS) or use a company certificate the browser page cannot use. Use the Windows app for on-prem connections (on VPN); it sends requests itself.`)
+    }
+    // An older Azure DevOps Server rejects a newer api-version with HTTP 400; try the next lower version once.
+    if (response.status === 400 && attempt < versions.length - 1) {
+      const text = await response.clone().text().catch(() => '')
+      if (isApiVersionError(text)) continue
+    }
+    if (response.ok && attempt > 0) detectedVersions.set(collectionUrl(request).toLowerCase(), version)
+    break
+  }
+  if (!response) throw new Error('Azure DevOps could not be reached.')
   if (response.status === 401) throw new Error('The PAT was rejected or has expired. Check your PAT.')
   if (response.status === 403) throw new Error(`Access denied. Check project access and PAT Work Items (${writing ? 'Read & Write' : 'Read'}) scope.`)
   if (writing && (response.status === 400 || response.status === 422)) {
     const detail = await response.json().catch(() => ({})) as { message?: string }
     throw new Error(`Azure DevOps rejected the work item: ${(detail.message ?? 'Check required fields and project rules.').replaceAll(request.pat, '[redacted]').slice(0, 1200)}`)
   }
-  if (response.status === 404) throw new Error('Project or team not found. Check the project URL and team name.')
-  if (!response.ok) throw new Error(writing && !request.validateOnly ? `Create request returned ${response.status}. Check the backlog before retrying to avoid duplicates.` : `Azure DevOps request failed (${response.status}). No data was imported.`)
+  if (response.status === 404) throw new Error(`Not found at ${projectApiBase(request).replace(/^https:\/\//, '')}. Check the organization / collection, project and team names.`)
+  if (!response.ok && response.status === 400) {
+    const detail = await response.json().catch(() => ({})) as { message?: string }
+    if (detail.message) throw new Error(`Azure DevOps refused the request: ${detail.message.replaceAll(request.pat, '[redacted]').slice(0, 600)}`)
+  }
+  if (!response.ok) throw new Error(updating ? `Update of #${request.workItemId} returned ${response.status}. Check it in Azure DevOps.` : writing && !request.validateOnly ? `Create request returned ${response.status}. Check the backlog before retrying to avoid duplicates.` : `Azure DevOps request failed (${response.status}). No data was imported.`)
   if (!(response.headers.get('content-type') ?? '').includes('application/json')) throw new Error('Azure DevOps returned a sign-in page. Check the PAT and organization access.')
   return response.json()
+}
+
+// Display names of the project's work-item fields (reference name → name), for query-view column headings.
+// Read-only; when it fails the view falls back to readable reference names.
+export async function readFieldNames(config: AzureConfig, pat: string, transport: AzureTransport = requestAzure): Promise<Record<string, string>> {
+  try {
+    const response = await transport({ ...config, team: config.team || config.project, pat, operation: 'fields' }) as { value?: { referenceName?: unknown; name?: unknown }[] }
+    return Object.fromEntries((response.value ?? []).flatMap((field) => typeof field.referenceName === 'string' && typeof field.name === 'string' ? [[field.referenceName, field.name]] : []))
+  } catch { return {} }
 }
