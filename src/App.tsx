@@ -13,6 +13,9 @@ import { SnapshotsPage } from './pages/SnapshotsPage'
 import { AdminPage } from './pages/AdminPage'
 import { settingsTabOnOpen } from './settingsTabs'
 import { defaultStreams, exportForStream, profileForStream } from './streams'
+import { connectionPresets } from './connectionPresets'
+import { gitSyncedIds, markViewsSynced, removeDuplicateConnections, serializeViews, viewsFile } from './viewDefinitions'
+import { listAzureConnectionProfiles } from './azureCredentials'
 import { DocsPage } from './pages/DocsPage'
 import { BoardPage } from './pages/BoardPage'
 import { useAzureWorkspace, type FetchListener, type GitDataSource } from './useAzureWorkspace'
@@ -70,6 +73,25 @@ export default function App() {
       .finally(() => { azure.reloadConnectionProfiles(); setSetupSynced(true) })
     void git.pullWindchill().then(() => windchill.reload()).catch(() => { /* shown when loading from Git on the import page */ })
   }, [store.ready, git, azure, windchill])
+  // Duplicate connections (same server, project, role and query — e.g. one from the shared setup and one set up again)
+  // are removed once the setup is in place: the copy with the shared ID stays, the other goes with its data here and,
+  // with a Git token that can save, in Git too, so nothing is listed, fetched or matched twice.
+  const deduped = useRef(false)
+  useEffect(() => {
+    if (deduped.current || !store.ready || (git.connected && !setupSynced)) return
+    deduped.current = true
+    // The copy kept: the one from the shared setup in Git, else from a preset, else the first saved.
+    const removed = removeDuplicateConnections([...gitSyncedIds(), ...connectionPresets.flatMap((preset) => preset.id ? [preset.id] : [])])
+    if (!removed.length) return
+    const ids = removed.map((profile) => profile.id)
+    store.update((draft) => { draft.azureSources = (draft.azureSources ?? []).filter((source) => !ids.includes(source.connectionId)); return draft })
+    azure.reloadConnectionProfiles()
+    if (git.connected && !git.readOnly && !azure.isSample) {
+      const names = removed.map((profile) => profile.viewName || profile.reason).join(', ')
+      void git.removeSnapshots(ids, `Remove duplicate connections: ${names}`).catch(() => undefined)
+      void git.writeViews(serializeViews(viewsFile(listAzureConnectionProfiles())), `Remove duplicate connections: ${names}`).then(() => markViewsSynced(listAzureConnectionProfiles())).catch(() => undefined)
+    }
+  }, [store, git, azure, setupSynced])
   // Every start (opening the app, Force Update, reload) fetches the cloud connections once, after the shared
   // connection setup from Git is in place.
   const autoFetched = useRef(false)

@@ -5,8 +5,8 @@ import { applySnapshots, parseSnapshot, serializeSnapshot, snapshotDigest, snaps
 import { formatDateTime } from './format'
 import { applyWindchillSnapshots, parseWindchillSnapshot, windchillDigest, windchillFolder, windchillSnapshotFile, type WindchillSnapshotFile, type WindchillSource } from './windchillSnapshots'
 import { loadWindchillViews, saveWindchillViews, type WindchillView } from './windchillViews'
-import { loadAzureConnectionProfile, saveAzureConnectionProfile, type AzureConnectionProfileSummary } from './azureCredentials'
-import { parseViews, syncViewsFromGit } from './viewDefinitions'
+import { loadAzureConnectionProfile, saveAzureConnectionProfile, type AzureConnectionProfileSummary, listAzureConnectionProfiles } from './azureCredentials'
+import { parseViews, syncViewsFromGit, connectionKey } from './viewDefinitions'
 
 export type GitStatus = 'off' | 'loading' | 'synced' | 'empty' | 'saving' | 'error' | 'conflict'
 
@@ -26,11 +26,15 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
   // A read-only token (e.g. the viewers' shared token): baselines are shown but not edited here.
   const accessKey = config && token ? `${config.owner}/${config.repo}|${token}` : ''
   const [writable, setWritable] = useState<{ key: string; value: boolean | null }>({ key: '', value: null })
+  // The pending write check, for saves queued before it has answered (null: the check itself failed).
+  const writeCheck = useRef<Promise<boolean | null>>(Promise.resolve(null))
   useEffect(() => {
     if (!config || !token) return
     let active = true
     const key = `${config.owner}/${config.repo}|${token}`
-    canWrite(config, token).then((value) => { if (active) setWritable({ key, value }) }, () => { if (active) setWritable({ key, value: null }) })
+    const check = canWrite(config, token).then((value) => value, () => null)
+    writeCheck.current = check
+    void check.then((value) => { if (active) setWritable({ key, value }) })
     return () => { active = false }
   }, [config, token])
   const readOnly = connected && writable.key === accessKey && writable.value === false
@@ -91,6 +95,8 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     const file = await readViews()
     if (file.text == null) return null
     const result = syncViewsFromGit(parseViews(file.text))
+    // A connection removed in Git goes with its data here, as a connection removed in Settings does.
+    if (result.removedIds.length) store.update((draft) => { if (draft.azureSources?.some((source) => result.removedIds.includes(source.connectionId))) draft.azureSources = draft.azureSources.filter((source) => !result.removedIds.includes(source.connectionId)); return draft })
     const parts = [result.added.length && `${result.added.length} added (${result.added.join(', ')})`, result.updated.length && `${result.updated.length} updated (${result.updated.join(', ')})`, result.kept.length && `kept as changed here: ${result.kept.join(', ')}`, result.removed.length && `${result.removed.length} removed as in Git (${result.removed.join(', ')})`].filter(Boolean)
     setViewsSync(parts.length ? `Connections from Git: ${parts.join('; ')}.${result.noPat.length ? ` No PAT here yet for ${result.noPat.join(', ')}: they show the data saved to Git; add a PAT in Settings to fetch.` : ''}` : 'Connections are the same as in Git.')
     return result
@@ -141,8 +147,9 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
   const digestKey = 'demand-planning-git-snapshot-digests-v1'
   const note = (id: string, tone: 'success' | 'error' | 'info', text: string) => setSnapshotNotes((current) => ({ ...current, [id]: { tone, text } }))
   // Every fresh fetch of an on-prem view is saved to Git, also when the data is unchanged (its fetch time is new); the
-  // commit message says when only the fetch time changed. Saves run one after another, and a save that loses a race
-  // with another commit re-reads the file and tries once more.
+  // commit message says when only the fetch time changed. Saves run one after another, wait for the token's write check
+  // (a read-only token saves nothing, with one note instead of a failed commit), and a save that loses a race with
+  // another commit re-reads the file and tries once more; any other failure is reported at once.
   const pushQueue = useRef<Promise<void>>(Promise.resolve())
   function pushSnapshot(profile: AzureConnectionProfileSummary, source: ViewSnapshot) {
     const run = pushQueue.current.then(() => pushSnapshotNow(profile, source))
@@ -153,6 +160,7 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     if (!config || !token || isSample) return
     const target = siblingConfig(config, `${snapshotFolder}/${snapshotFileName(profile.id)}`)
     try {
+      if ((await writeCheck.current) === false) { note(profile.id, 'info', 'Not saved to Git: the Git token here is read-only.'); return }
       const digest = await snapshotDigest(source)
       let digests: Record<string, string> = {}
       try { digests = JSON.parse(localStorage.getItem(digestKey) ?? '{}') as Record<string, string> } catch { digests = {} }
@@ -161,7 +169,7 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
       const message = `${profile.viewName || profile.reason}: ${source.items.length} items fetched ${formatDateTime(source.fetchedAt)}${unchanged ? ' (data unchanged)' : ''}`
       const text = serializeSnapshot(snapshotFile(profile, source))
       try { await writeTextFile(target, token, text, await fileSha(target, token), message) }
-      catch { await writeTextFile(target, token, text, await fileSha(target, token), message) }
+      catch (error) { if (!(error instanceof GitConflictError)) throw error; await writeTextFile(target, token, text, await fileSha(target, token), message) }
       try { localStorage.setItem(digestKey, JSON.stringify({ ...digests, [profile.id]: digest })) } catch { /* only used for the commit message */ }
       note(profile.id, 'success', `Saved to Git (${target.path})${unchanged ? ' — data unchanged, fetch time updated' : ''}.`)
     } catch (error) { note(profile.id, 'error', `Not saved to Git: ${error instanceof Error ? error.message : String(error)}`) }
@@ -177,9 +185,11 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     }
     // Connections not set up in this browser are added without a PAT, to show the data (fetching needs a PAT).
     let added = 0
-    for (const file of files) if (!loadAzureConnectionProfile(file.connection.id)) { try { saveAzureConnectionProfile({ ...file.connection, token: '' }); added += 1 } catch { failed.push(snapshotFileName(file.connection.id)) } }
-    const { applied } = applySnapshots(store.state.azureSources, files)
-    store.update((draft) => { draft.azureSources = applySnapshots(draft.azureSources, files).sources; return draft })
+    // A file whose connection duplicates one already here (same server, project, role and query) is skipped.
+    for (const file of files) if (!loadAzureConnectionProfile(file.connection.id) && !listAzureConnectionProfiles().some((profile) => connectionKey(profile) === connectionKey(file.connection))) { try { saveAzureConnectionProfile({ ...file.connection, token: '' }); added += 1 } catch { failed.push(snapshotFileName(file.connection.id)) } }
+    const usable = files.filter((file) => loadAzureConnectionProfile(file.connection.id))
+    const { applied } = applySnapshots(store.state.azureSources, usable)
+    store.update((draft) => { draft.azureSources = applySnapshots(draft.azureSources, usable).sources; return draft })
     return { files: files.length, applied, added, failed }
   }
 

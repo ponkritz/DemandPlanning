@@ -105,4 +105,10 @@ test('backup validation rejects unsupported schemas, malformed arrays and invali
   assert.throws(() => validateBackup({ ...emptyState(), activities: {} }))
   assert.throws(() => validateBackup({ ...emptyState(), people: [null] }))
   assert.throws(() => validateBackup({ ...emptyState(), azureWorkItems: [{ id: 1 }] }))
+  const item = { key: 'o/p/1', id: 1, organization: 'o', project: 'p', title: 't', workItemType: 'Document', state: 'Approved', assignedTo: '', areaPath: 'p', iterationPath: 'p', tags: '', url: '', syncedAt: '2026-10-20T10:00:00Z' }
+  const view = { connectionId: 'dp', name: 'DP', role: 'release-source', organization: 'o', project: 'p', query: '', fetchedAt: '2026-10-20T10:00:00Z', items: [item] }
+  assert.doesNotThrow(() => validateBackup({ ...emptyState(), azureSources: [view] }))
+  assert.throws(() => validateBackup({ ...emptyState(), azureSources: [{ ...view, items: [null] }] }), /view data/)
+  assert.throws(() => validateBackup({ ...emptyState(), azureSources: [{ ...view, items: [{ id: 1 }] }] }), /view data/)
+  assert.throws(() => validateBackup({ ...emptyState(), azureSources: [{ ...view, fetchedAt: 'yesterday' }] }), /view data/)
 })

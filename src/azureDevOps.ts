@@ -608,8 +608,14 @@ let writesAllowed: () => boolean = () => true
 export function guardAzureWrites(check: () => boolean) { writesAllowed = check }
 export const changesAzure = (operation: AzureRequest['operation']) => operation === 'create-feature' || operation === 'create-child' || operation === 'update-time-writing-effort' || operation === 'update-work-item'
 
+// Writes go to Azure DevOps Services (dev.azure.com) only: on-premises servers are read-only, whatever the connection's
+// role. Checked here and again in the desktop proxy.
+export function assertWritableBase(config: Pick<AzureConfig, 'organization' | 'baseUrl'>, operation: AzureRequest['operation']) {
+  if (changesAzure(operation) && !isCloudBase(collectionUrl(config))) throw new Error('Changes are written to Azure DevOps Services (dev.azure.com) only; on-premises servers are read-only. Nothing was changed.')
+}
 export async function requestAzure(request: AzureRequest): Promise<unknown> {
   if (changesAzure(request.operation) && !writesAllowed()) throw new Error('Your role does not allow changes in Azure DevOps. An Admin can change this in Settings → Access.')
+  assertWritableBase(request, request.operation)
   if ((request.operation === 'create-feature' || request.operation === 'create-child') && !isAssignee(request.feature?.assignedTo)) throw new Error('A new work item must be assigned to someone (an email). Nothing was created.')
   if (window.azureDevOps) return window.azureDevOps.request(request)
   const base = projectApiBase(request)

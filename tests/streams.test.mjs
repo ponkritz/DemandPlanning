@@ -37,6 +37,10 @@ test('fuzzy Feature match: a percentage; the best Feature counts at the threshol
   assert.equal(matchScore('DP | Dose Nav | v2.1', 'DoseNav', '2.1.0'), 100, 'spacing and trailing zeros do not matter')
   assert.ok(matchScore('DP | DoseNav | v2.0', 'DoseNav', '2.1.0') < 80, 'another version stays below the threshold')
   assert.equal(matchScore('CP | Care Pathways | v3.1', 'DoseNav', '2.1.0'), 0)
+  assert.ok(matchScore('Project_Name_3.0.0', 'RSGAMS', '3.0.0.2') < 10, 'a shared version alone is no match')
+  assert.ok(matchScore('DP | RSGAMS | v3.0.0.2', 'RSGAMS', '3.0.0.2') === 100)
+  assert.ok(matchScore('Project_Name_3.0.0', 'Project', '3.0.0.2') < 50, 'common words such as Project or Release do not make a match')
+  assert.ok(matchScore('Project_Name_3.0.0', '3.0', '3.0.0.2') < 50, 'numbers in the name do not make a match')
   const backlog = [feature(10, 'DP | Dose Nav | v2.1'), feature(11, 'DP | DoseNav | v2.0')]
   const [entry] = releaseRegister([doc(1, 'DHP\\DoseNav', 'DHP\\2.1.0\\Sprint 3')], backlog, { rule: 'dp', fuzzy: true, threshold: 80 })
   assert.deepEqual([entry.match.feature.id, entry.match.score, entry.tracked, entry.features.map((item) => item.id)], [10, 100, true, [10]])
@@ -51,5 +55,5 @@ test('Pulse Check streams: the five Azure streams in order, not-set-up ones list
   const state = { azureSources: [source('dp', [doc(1, 'DHP\\DoseNav', 'DHP\\2.1.0\\S1')]), source('io', [doc(2, 'DHP\\IOCC\\Core', '', 'Patient Monitor v1.4')])] }
   const profiles = [{ id: 'dp', reason: 'DP', role: 'reference' }, { id: 'io', reason: 'IOCC', role: 'reference' }, { id: 'ped', reason: 'Releases (Pedestal)', role: 'release-source' }]
   const streams = defaultStreamReleases(state, profiles, '2026-10', 'UTC')
-  assert.deepEqual(streams.map((stream) => [stream.name, Boolean(stream.notSetUp), stream.releases.map((entry) => `${entry.name} ${entry.release}`)]), [['DP', false, ['DoseNav 2.1.0']], ['CP', true, []], ['IOCC', false, ['Core · Patient Monitor 1.4']], ['Content', true, []], ['Tool Validations', true, []]])
+  assert.deepEqual(streams.map((stream) => [stream.name, Boolean(stream.notSetUp), stream.releases.map((entry) => `${entry.type ? `[${entry.type}] ` : ''}${entry.name} ${entry.release}`)]), [['DP', false, ['DoseNav 2.1.0']], ['CP', true, []], ['IOCC', false, ['[Core] Patient Monitor 1.4']], ['Content', true, []], ['Tool Validations', true, []]])
 })

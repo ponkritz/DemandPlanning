@@ -108,7 +108,7 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, load
   const openTab = (key: SettingsTab) => { setChosen(key); try { localStorage.setItem(tabKey, key) } catch { /* not remembered */ } }
   return <Page>
     <div className="overview-tabs settings-tabs" role="tablist" aria-label="Settings">{tabs.map(([key, label]) => <button key={key} type="button" role="tab" aria-selected={tab === key} className={`backlog-tab${tab === key ? ' active' : ''}`} onClick={() => openTab(key)}>{label}</button>)}</div>
-    {tab === 'connections' && <AzureConnections azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} />}
+    {tab === 'connections' && <AzureConnections azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={shared} />}
     {tab === 'storage' && <>
       <GitStoragePanel git={git} />
       {git.connected && <Panel className="connection-panel" eyebrow="GIT" title="Load everything from Git" info="Loads everything shared through Git at once: planning data, the connection setup, on-prem view data, Windchill exports, access roles and the Feature setup. Data here is replaced only by newer data from Git; connections you changed here are kept."

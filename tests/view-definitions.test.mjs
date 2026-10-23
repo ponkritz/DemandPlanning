@@ -1,6 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { saveAzureConnectionProfile, loadAzureConnectionProfile, listAzureConnectionProfiles } from '../src/azureCredentials.ts'
+import { saveServerPat } from '../src/azureCredentials.ts'
+import { gitSyncedIds, duplicateOf } from '../src/viewDefinitions.ts'
 import { viewsFile, serializeViews, parseViews, restoreViews, serverKey, syncViewsFromGit, markViewsSynced, promoteToTimeWriting } from '../src/viewDefinitions.ts'
 import { siblingConfig, readTextFile, writeTextFile } from '../src/gitStorage.ts'
 
@@ -34,7 +36,12 @@ test('restore: keeps the PAT here, else the entered PAT, else one for the same s
   assert.deepEqual(second, { added: [], updated: ['Digital Platform', 'IOCC', 'Cloud X'], skipped: [], noPat: [] })
   assert.equal(loadAzureConnectionProfile('dp', fresh).token, 'own-pat', 'an existing connection keeps its PAT')
   assert.equal(loadAzureConnectionProfile('cloud', fresh).token, 'entered-pat', 'a view-only connection gets the entered PAT')
-  assert.equal(loadAzureConnectionProfile('qms', fresh).token, 'onprem-pat', 'connections not in the file are untouched')
+  assert.equal(loadAzureConnectionProfile('qms', fresh).token, 'own-pat', 'one PAT per server: a new PAT on one connection is the PAT of every connection on that server')
+  // The server holds the PAT; a restore (also the sync at every start) leaves no copy on the connections, so removing it removes it.
+  const stored = JSON.parse(fresh.getItem('demand-planning-azure-connection-profiles-v1'))
+  assert.deepEqual(stored.filter((profile) => profile.baseUrl).map((profile) => profile.token), ['', '', ''], 'no on-prem connection keeps a copy of the server PAT')
+  saveServerPat(serverKey(dp), '', fresh)
+  assert.deepEqual(['dp', 'iocc', 'qms'].map((id) => loadAzureConnectionProfile(id, fresh).token), ['', '', ''], 'removing the server PAT removes it from every connection, after any number of restores')
 })
 
 test('views file sits next to the data file and is committed with the loaded version', async () => {
@@ -54,16 +61,16 @@ test('Git connection setup is the default: added and followed, unless changed he
   const cp = { ...dp, id: 'cp', reason: 'CP', viewName: 'CP', query: 'SELECT 1' }
   saveAzureConnectionProfile({ ...dp, token: 'my-pat' }, storage)
   // First start: dp is the same as in Git; cp is new and gets the PAT of the same server.
-  assert.deepEqual(syncViewsFromGit([dp, cp], storage), { added: ['CP'], updated: [], kept: [], noPat: [], removed: [] })
+  assert.deepEqual(syncViewsFromGit([dp, cp], storage), { added: ['CP'], updated: [], kept: [], noPat: [], removed: [], removedIds: [] })
   assert.equal(loadAzureConnectionProfile('cp', storage).token, 'my-pat')
   // Git changes cp's query; it was not changed here, so it follows Git (PAT kept).
   const cp2 = { ...cp, query: 'SELECT 2' }
-  assert.deepEqual(syncViewsFromGit([dp, cp2], storage), { added: [], updated: ['CP'], kept: [], noPat: [], removed: [] })
+  assert.deepEqual(syncViewsFromGit([dp, cp2], storage), { added: [], updated: ['CP'], kept: [], noPat: [], removed: [], removedIds: [] })
   assert.equal(loadAzureConnectionProfile('cp', storage).query, 'SELECT 2')
   assert.equal(loadAzureConnectionProfile('cp', storage).token, 'my-pat')
   // The user changes cp here; a later Git change does not overwrite it.
   saveAzureConnectionProfile({ ...loadAzureConnectionProfile('cp', storage), query: 'SELECT mine' }, storage)
-  assert.deepEqual(syncViewsFromGit([dp, { ...cp, query: 'SELECT 3' }], storage), { added: [], updated: [], kept: ['CP'], noPat: [], removed: [] })
+  assert.deepEqual(syncViewsFromGit([dp, { ...cp, query: 'SELECT 3' }], storage), { added: [], updated: [], kept: ['CP'], noPat: [], removed: [], removedIds: [] })
   assert.equal(loadAzureConnectionProfile('cp', storage).query, 'SELECT mine')
   // After Restore from Git (or saving to Git) the connection follows Git again.
   restoreViews([{ ...cp, query: 'SELECT 3' }], '', storage); markViewsSynced([{ ...cp, query: 'SELECT 3' }], storage)
@@ -72,10 +79,10 @@ test('Git connection setup is the default: added and followed, unless changed he
   const other = memory()
   saveAzureConnectionProfile({ ...dp, query: 'SELECT local', token: 'x' }, other)
   saveAzureConnectionProfile({ id: 'own', url: 'https://dev.azure.com/o/P', reason: 'Own', token: 'y' }, other)
-  assert.deepEqual(syncViewsFromGit([dp], other), { added: [], updated: [], kept: ['Digital Platform'], noPat: [], removed: [] })
+  assert.deepEqual(syncViewsFromGit([dp], other), { added: [], updated: [], kept: ['Digital Platform'], noPat: [], removed: [], removedIds: [] })
   assert.ok(loadAzureConnectionProfile('own', other))
   // A user without any connection gets them all, view only until a PAT is added.
-  assert.deepEqual(syncViewsFromGit([dp, cp], memory()), { added: ['Digital Platform', 'CP'], updated: [], kept: [], noPat: ['Digital Platform', 'CP'], removed: [] })
+  assert.deepEqual(syncViewsFromGit([dp, cp], memory()), { added: ['Digital Platform', 'CP'], updated: [], kept: [], noPat: ['Digital Platform', 'CP'], removed: [], removedIds: [] })
 })
 
 test('Git setup: a connection removed in Git is removed here unless changed here; an empty file removes nothing', () => {
@@ -88,6 +95,7 @@ test('Git setup: a connection removed in Git is removed here unless changed here
   assert.deepEqual(syncViewsFromGit([], storage).removed, [], 'a file without connections removes nothing')
   const result = syncViewsFromGit([{ ...bl, role: 'time-tracking' }], storage)
   assert.deepEqual(result.removed, ['QMS-0025'])
+  assert.deepEqual(result.removedIds, ['tw'], 'the IDs let the app drop the removed connections’ data too')
   assert.deepEqual(listAzureConnectionProfiles(storage).map((entry) => [entry.id, entry.role]).sort(), [['bl', 'time-tracking'], ['mine', 'reference']], 'changed here: kept')
   assert.deepEqual(syncViewsFromGit([{ ...bl, role: 'time-tracking' }], storage).removed, [], 'removed once')
 })
@@ -102,4 +110,42 @@ test('use a backlog view as Time Writing: it takes over, keeps the creator email
   assert.equal(now.role, 'time-tracking'); assert.equal(now.token, 'working-pat'); assert.equal(now.creatorEmail, 'me@example.com'); assert.equal(now.viewName, 'QMS-0025')
   assert.equal(loadAzureConnectionProfile('tw', storage), null)
   assert.throws(() => promoteToTimeWriting('missing', storage), /not found/)
+})
+
+import { duplicateConnections, removeDuplicateConnections, connectionKey } from '../src/viewDefinitions.ts'
+import { connectionPresets } from '../src/connectionPresets.ts'
+test('duplicate connections: same server, project, role and query; the shared ID is kept; Git does not add them back', () => {
+  const store = memory()
+  const base = 'https://tfsapac04.ta.philips.com/tfs/DHPCollection'
+  const dp = connectionPresets.find((preset) => preset.key === 'dp-completed')
+  assert.equal(dp.id, '93b332d0c3f8465488790b222f294b29', 'presets carry the ID of the shared setup')
+  saveAzureConnectionProfile({ id: 'copy1', url: `${base}/DHP.Vault`, baseUrl: base, reason: 'DP_Completed', viewName: 'DP [Completed Releases]', role: 'release-source', query: dp.query, token: 'p' }, store)
+  saveAzureConnectionProfile({ id: dp.id, url: `${base}/DHP.Vault`, baseUrl: base, reason: 'DP_Completed', viewName: 'DP [Completed Releases]', role: 'release-source', query: `  ${dp.query}\n`, token: '' }, store)
+  saveAzureConnectionProfile({ id: 'cp', url: `${base}/DHP.Vault`, baseUrl: base, reason: 'CP', role: 'release-source', query: 'SELECT [System.Id] FROM WorkItems WHERE x = 2', token: '' }, store)
+  assert.deepEqual(duplicateConnections(listAzureConnectionProfiles(store), [dp.id]).map((profile) => profile.id), ['copy1'], 'whitespace in the query does not matter; another query is not a duplicate')
+  assert.deepEqual(removeDuplicateConnections([dp.id], store).map((profile) => profile.id), ['copy1'])
+  assert.deepEqual(listAzureConnectionProfiles(store).map((profile) => profile.id).sort(), [dp.id, 'cp'].sort())
+  const again = syncViewsFromGit([{ id: 'copy1', url: `${base}/DHP.Vault`, baseUrl: base, reason: 'DP_Completed', role: 'release-source', query: dp.query }], store)
+  assert.equal(listAzureConnectionProfiles(store).some((profile) => profile.id === 'copy1'), false, 'a duplicate in Git is not added again')
+  assert.deepEqual(again.added, [])
+  assert.equal(connectionKey({ url: `${base}/DHP.Vault`, baseUrl: base, role: 'release-source', query: 'A  B' }), connectionKey({ url: `${base}/DHP.Vault/`, baseUrl: `${base}/`, role: 'release-source', query: 'a b' }))
+})
+
+test('duplicates: the copy from Git is kept over a preset copy and a local one; saving a duplicate is refused', () => {
+  const store = memory()
+  const base = 'https://tfsapac04.ta.philips.com/tfs/DHPCollection'
+  const view = (id, query = 'SELECT [System.Id] FROM WorkItems WHERE x = 1') => ({ id, url: `${base}/DHP.Vault`, baseUrl: base, reason: `View ${id}`, role: 'reference', query })
+  // Only "fromgit" came from the shared setup; "local" and "preset" (a preset's ID) were saved here later, as earlier
+  // versions allowed (a sync never adds a Git copy of a connection already here, and saving a duplicate is refused now).
+  syncViewsFromGit([view('fromgit')], store)
+  assert.deepEqual(gitSyncedIds(store), ['fromgit'])
+  saveAzureConnectionProfile({ ...view('local'), token: 'p' }, store)
+  saveAzureConnectionProfile({ ...view('preset'), token: '' }, store)
+  const preferred = [...gitSyncedIds(store), 'preset']
+  assert.deepEqual(duplicateConnections(listAzureConnectionProfiles(store), preferred).map((profile) => profile.id).sort(), ['local', 'preset'], 'the Git copy is kept, the preset and local copies go')
+  assert.deepEqual(duplicateConnections(listAzureConnectionProfiles(store), ['preset']).map((profile) => profile.id).sort(), ['fromgit', 'local'], 'without a Git copy the preset copy is kept')
+  assert.equal(duplicateOf(view('new'), listAzureConnectionProfiles(store))?.id, 'fromgit', 'a new connection with the same server, project, role and query duplicates a saved one')
+  assert.equal(duplicateOf(view('fromgit'), listAzureConnectionProfiles(store))?.id, 'local', 'editing one that still matches another is a duplicate too')
+  assert.equal(duplicateOf(view('new', 'SELECT [System.Id] FROM WorkItems WHERE x = 2'), listAzureConnectionProfiles(store)), undefined, 'another query is not')
+  assert.equal(duplicateOf({ ...view('tw'), role: 'time-tracking' }, listAzureConnectionProfiles(store)), undefined, 'Time Writing connections are handled apart')
 })

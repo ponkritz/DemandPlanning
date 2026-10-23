@@ -1,6 +1,7 @@
 import type { AppState } from './domain'
 import type { AzureConnectionProfileSummary } from './azureCredentials.ts'
 import { cleanView } from './viewDefinitions.ts'
+import { validAzureWorkItem, validFetchedAt } from './browserState.ts'
 
 // Fetches of the on-prem read-only views, saved by the desktop app to the Git data repository (one file per view in
 // azure-data/, next to the planning data) so the web app, which cannot reach the on-prem servers, can show them.
@@ -25,7 +26,9 @@ export function parseSnapshot(text: string): SnapshotFile {
   try { raw = JSON.parse(text) } catch { throw new Error('A view snapshot in Git is not valid JSON.') }
   const file = raw as Partial<SnapshotFile>
   const source = file?.source as Partial<ViewSnapshot> | undefined
-  if (!file || file.schema !== 1 || file.kind !== kind || !file.connection || typeof file.connection.id !== 'string' || !source || source.connectionId !== file.connection.id || !Array.isArray(source.items) || typeof source.fetchedAt !== 'string') throw new Error('A file in azure-data is not a Demand Planning view snapshot.')
+  if (!file || file.schema !== 1 || file.kind !== kind || !file.connection || typeof file.connection.id !== 'string' || !source || source.connectionId !== file.connection.id || !Array.isArray(source.items) || !validFetchedAt(source.fetchedAt)) throw new Error('A file in azure-data is not a Demand Planning view snapshot.')
+  // One malformed item would take the views down for everyone who loads the file: the whole file is refused.
+  if (source.items.some((item) => !validAzureWorkItem(item))) throw new Error(`The view snapshot for “${file.connection.viewName || file.connection.reason || file.connection.id}” in Git holds invalid work items and was not loaded.`)
   return file as SnapshotFile
 }
 
@@ -43,7 +46,10 @@ export function applySnapshots(sources: ViewSnapshot[] | undefined, files: Snaps
   const applied: string[] = []
   for (const file of files) {
     const index = next.findIndex((entry) => entry.connectionId === file.source.connectionId)
-    if (index >= 0 && Date.parse(next[index].fetchedAt) >= Date.parse(file.source.fetchedAt)) continue
+    // A snapshot replaces a view's data only when it is newer; one without a readable fetch time never does, and
+    // local data without one is replaced.
+    const incoming = Date.parse(file.source.fetchedAt), local = index >= 0 ? Date.parse(next[index].fetchedAt) : Number.NaN
+    if (!Number.isFinite(incoming) || (index >= 0 && Number.isFinite(local) && local >= incoming)) continue
     const entry = { ...file.source, fromGit: true }
     if (index >= 0) next[index] = entry; else next.push(entry)
     applied.push(file.connection.viewName || file.connection.reason)

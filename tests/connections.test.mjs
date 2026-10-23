@@ -207,3 +207,45 @@ test('View name and Show in menu are saved with the connection', () => {
   assert.equal(viewNameOf(summary), 'Digital Platform'); assert.equal(showsInMenu(summary), false)
   assert.equal(viewNameOf({ reason: 'DHFI' }), 'DHFI'); assert.equal(showsInMenu({ role: 'reference' }), false); assert.equal(showsInMenu({ role: 'backlog-view' }), true)
 })
+
+import { saveAzureConnectionProfile as saveProfile, loadAzureConnectionProfile as loadProfile, loadServerPat, saveServerPat, serverKey as keyOf } from '../src/azureCredentials.ts'
+test('one PAT per server: entered once, used by every connection on that server (collection or cloud organization)', () => {
+  const data = new Map(); const storage = { getItem: (key) => data.get(key) ?? null, setItem: (key, value) => data.set(key, value) }
+  const base = 'https://tfs.example/tfs/DHPCollection'
+  saveProfile({ id: 'dp', url: `${base}/DHP.Vault`, baseUrl: base, reason: 'DP', role: 'release-source', token: 'pat-1' }, storage)
+  saveProfile({ id: 'ped', url: `${base}/DHP`, baseUrl: base, reason: 'Pedestal', role: 'reference', token: '' }, storage)
+  saveProfile({ id: 'tw', url: 'https://dev.azure.com/Org/Project', reason: 'Time Writing', role: 'time-tracking', token: 'cloud-pat' }, storage)
+  assert.equal(keyOf({ url: `${base}/DHP`, baseUrl: base }), base.toLowerCase())
+  assert.equal(loadProfile('ped', storage).token, 'pat-1', 'another project on the same collection uses the server PAT')
+  assert.equal(loadProfile('tw', storage).token, 'cloud-pat')
+  saveServerPat(base, 'pat-2', storage)
+  assert.deepEqual(['dp', 'ped'].map((id) => loadProfile(id, storage).token), ['pat-2', 'pat-2'], 'changing the server PAT changes it for all')
+  assert.equal(loadProfile('tw', storage).token, 'cloud-pat', 'other servers untouched')
+  assert.equal(JSON.parse(data.get('demand-planning-azure-connection-profiles-v1')).find((p) => p.id === 'dp').token, '', 'the connection keeps no copy of the server PAT')
+  saveServerPat(base, '', storage)
+  assert.equal(loadServerPat(base, storage), '')
+  assert.deepEqual(['dp', 'ped'].map((id) => loadProfile(id, storage).token), ['', ''], 'removing the server PAT removes it for every connection on the server')
+  assert.equal(loadProfile('tw', storage).token, 'cloud-pat')
+})
+test('a PAT copy left on a connection by an earlier version is dropped when the server PAT is saved, replaced or removed', () => {
+  const data = new Map(); const storage = { getItem: (key) => data.get(key) ?? null, setItem: (key, value) => data.set(key, value) }
+  const base = 'https://tfs.example/tfs/DHPCollection'
+  data.set('demand-planning-azure-connection-profiles-v1', JSON.stringify([{ id: 'dp', url: `${base}/DHP.Vault`, baseUrl: base, reason: 'DP', role: 'release-source', token: 'old-copy' }, { id: 'own', url: `${base}/Other`, baseUrl: base, reason: 'Own', role: 'reference', token: 'different' }]))
+  saveServerPat(base, 'old-copy', storage)
+  assert.equal(JSON.parse(data.get('demand-planning-azure-connection-profiles-v1'))[0].token, '', 'the copy equal to the server PAT is dropped')
+  assert.equal(JSON.parse(data.get('demand-planning-azure-connection-profiles-v1'))[1].token, 'different', 'a PAT of its own stays')
+  saveServerPat(base, '', storage)
+  assert.equal(loadProfile('dp', storage).token, '', 'nothing comes back after removal')
+})
+
+import { listKnownServers, saveKnownServer, forgetKnownServer } from '../src/azureCredentials.ts'
+test('servers added in Settings without a connection are kept once, by their collection', () => {
+  const data = new Map(); const storage = { getItem: (key) => data.get(key) ?? null, setItem: (key, value) => data.set(key, value) }
+  assert.equal(saveKnownServer({ serverUrl: 'https://tfs.example/tfs', organization: 'QualityCollection' }, storage), 'https://tfs.example/tfs/QualityCollection')
+  saveKnownServer({ serverUrl: 'https://tfs.example/tfs/', organization: ' QualityCollection ' }, storage)
+  saveKnownServer({ serverUrl: '', organization: 'Org' }, storage)
+  assert.deepEqual(listKnownServers(storage).map((server) => server.organization), ['QualityCollection', 'Org'], 'the same collection is kept once')
+  assert.throws(() => saveKnownServer({ serverUrl: '', organization: '' }, storage), /organization/)
+  forgetKnownServer('https://dev.azure.com/Org', storage)
+  assert.deepEqual(listKnownServers(storage).map((server) => server.organization), ['QualityCollection'])
+})
