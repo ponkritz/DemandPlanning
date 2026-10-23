@@ -1,4 +1,13 @@
-import type { AppState } from './domain'
+import type { AppState, AzureWorkItem } from './domain'
+
+// A saved Azure DevOps work item as the views expect it: an integer ID and the text fields every item carries.
+const itemTextFields = ['key', 'organization', 'project', 'title', 'state', 'workItemType', 'assignedTo', 'areaPath', 'iterationPath', 'tags', 'url', 'syncedAt']
+export function validAzureWorkItem(value: unknown): value is AzureWorkItem {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const item = value as Record<string, unknown>
+  return Number.isSafeInteger(item.id) && itemTextFields.every((key) => typeof item[key] === 'string')
+}
+export const validFetchedAt = (value: unknown) => typeof value === 'string' && Number.isFinite(Date.parse(value))
 
 export const legacyStateKey = 'demand-planning-mvp-v1'
 const databaseName = 'demand-planning-data-v1'
@@ -14,7 +23,9 @@ export function validateBackup(value: unknown): AppState {
   for (const key of ['people', 'activities', 'efforts', 'baselines', 'periods', 'releases', 'audits', 'snapshots', 'masters', 'azureWorkItems'] as const) {
     if ((state[key] ?? []).some((item) => !item || typeof item !== 'object' || Array.isArray(item))) throw new Error(`Invalid ${key} records in backup.`)
   }
-  if (state.azureWorkItems?.some((item) => !Number.isSafeInteger(item.id) || !['key', 'organization', 'project', 'title', 'state', 'workItemType', 'assignedTo', 'areaPath', 'iterationPath', 'tags', 'url', 'syncedAt'].every((key) => typeof (item as unknown as Record<string, unknown>)[key] === 'string'))) throw new Error('Invalid Azure work items in backup.')
+  if (state.azureWorkItems?.some((item) => !validAzureWorkItem(item))) throw new Error('Invalid Azure work items in backup.')
+  // View data: each source names its connection, carries a fetch time and holds valid work items only.
+  if (state.azureSources?.some((source) => !source || typeof source !== 'object' || typeof source.connectionId !== 'string' || !validFetchedAt(source.fetchedAt) || !Array.isArray(source.items) || source.items.some((item) => !validAzureWorkItem(item)))) throw new Error('Invalid Azure view data in backup.')
   return state
 }
 

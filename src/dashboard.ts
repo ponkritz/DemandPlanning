@@ -121,21 +121,26 @@ export function concentration(rows: PersonMonth[], measure: 'actual' | 'plan') {
 
 // Rebalancing within the same role and month: overload (plan above capacity) can only move to headroom of that role
 // in that month. People without a role are left out.
+// Overload (plan above capacity) can move only to headroom of the same role in the same month, and only in current or
+// future months. People without a role (Settings → Resources) are left out of the moves — not listed as relief needs or
+// receivers — and counted apart so the Overview can say so; gross overload and headroom still count everyone.
 export function rebalancing(rows: PersonMonth[]) {
   let overload = 0, headroom = 0, movable = 0
   const receivers: { person: string; month: string; role?: string; region?: string; plan: number; headroom: number }[] = []
   const needs: { person: string; month: string; role?: string; region?: string; plan: number; capacity: number; need: number; actual: number }[] = []
+  const unmapped = { people: new Set<string>(), overload: 0, headroom: 0 }
   for (const group of groupBy(rows, (row) => `${row.month}|${row.role ?? ''}`)) {
+    const mapped = Boolean(group.rows[0]?.role)
     let over = 0, room = 0
     for (const row of group.rows) {
       const diff = row.plan - row.capacity
-      if (diff > 0) { over += diff; needs.push({ person: row.person, month: row.month, role: row.role, region: row.region, plan: row.plan, capacity: row.capacity, need: round(diff), actual: row.actual }) }
-      else if (diff < 0 && row.status !== 'elapsed') { room += -diff; receivers.push({ person: row.person, month: row.month, role: row.role, region: row.region, plan: row.plan, headroom: round(-diff) }) }
+      if (diff > 0) { over += diff; if (mapped) needs.push({ person: row.person, month: row.month, role: row.role, region: row.region, plan: row.plan, capacity: row.capacity, need: round(diff), actual: row.actual }); else { unmapped.people.add(row.person); unmapped.overload += diff } }
+      else if (diff < 0 && row.status !== 'elapsed') { room += -diff; if (mapped) receivers.push({ person: row.person, month: row.month, role: row.role, region: row.region, plan: row.plan, headroom: round(-diff) }); else { unmapped.people.add(row.person); unmapped.headroom += -diff } }
     }
     overload += over; headroom += room
-    if (group.rows[0]?.role) movable += Math.min(over, room)
+    if (mapped) movable += Math.min(over, room)
   }
-  return { overload: round(overload), headroom: round(headroom), movable: round(movable), shortfall: round(overload - movable), needs: needs.sort((a, b) => b.need - a.need), receivers: receivers.sort((a, b) => b.headroom - a.headroom) }
+  return { overload: round(overload), headroom: round(headroom), movable: round(movable), shortfall: round(overload - movable), needs: needs.sort((a, b) => b.need - a.need), receivers: receivers.sort((a, b) => b.headroom - a.headroom), unmapped: { people: unmapped.people.size, overload: round(unmapped.overload), headroom: round(unmapped.headroom) } }
 }
 
 // Hours per Epic over the rows.

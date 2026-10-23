@@ -10,6 +10,12 @@ function collectionBase(input) {
   return url.hostname === 'dev.azure.com' ? `https://dev.azure.com/${encodeURIComponent(parts[0] ?? input.organization)}` : `${url.origin}${parts.map((part) => `/${encodeURIComponent(part)}`).join('')}`
 }
 const projectBase = (input) => `${collectionBase(input)}/${encodeURIComponent(input.project)}`
+// Writes go to Azure DevOps Services (dev.azure.com) only: on-premises servers are read-only, whatever the connection's role.
+const writeOperations = ['create-feature', 'create-child', 'update-time-writing-effort', 'update-work-item']
+function assertWritableBase(input) {
+  if (!writeOperations.includes(input?.operation)) return
+  if (new URL(collectionBase(input)).hostname !== 'dev.azure.com') throw new Error('Changes are written to Azure DevOps Services (dev.azure.com) only; on-premises servers are read-only. Nothing was changed.')
+}
 const apiVersion = (input) => typeof input.apiVersion === 'string' && /^\d{1,2}\.\d(-preview(\.\d)?)?$/.test(input.apiVersion) ? input.apiVersion : '7.1'
 
 function azureReadRequest(input) {
@@ -40,6 +46,7 @@ function azureReadRequest(input) {
 
 function azureFeatureRequest(input) {
   if (!input || !['create-feature', 'create-child'].includes(input.operation) || typeof input.validateOnly !== 'boolean') throw new Error('Invalid work-item creation request.')
+  assertWritableBase(input)
   const type = input.operation === 'create-feature' ? 'Feature' : input.workItemType
   if (!['Feature', 'User Story', 'Task'].includes(type) || (input.operation === 'create-child' && type === 'Feature')) throw new Error('Unsupported child type.')
   // Reuse connection validation; callers never supply an arbitrary URL or JSON patch.
@@ -114,6 +121,7 @@ async function requestAzureDevOps(input, fetchImpl = fetch) {
   const creating = input?.operation === 'create-feature' || input?.operation === 'create-child'
   const updating = input?.operation === 'update-time-writing-effort' || input?.operation === 'update-work-item'
   const writing = creating || updating
+  if (writing) assertWritableBase(input)
   const request = creating ? azureFeatureRequest(input) : input?.operation === 'update-time-writing-effort' ? azureTimeWritingEffortRequest(input) : input?.operation === 'update-work-item' ? azureWorkItemUpdateRequest(input) : azureReadRequest(input)
   const collection = projectBase(input).split('/').slice(0, -1).join('/').toLowerCase()
   const explicit = typeof input.apiVersion === 'string' && apiVersion(input) === input.apiVersion
@@ -151,4 +159,4 @@ async function requestAzureDevOps(input, fetchImpl = fetch) {
   return response.json()
 }
 
-module.exports = { azureReadRequest, azureFeatureRequest, azureTimeWritingEffortRequest, azureWorkItemUpdateRequest, requestAzureDevOps }
+module.exports = { assertWritableBase, azureReadRequest, azureFeatureRequest, azureTimeWritingEffortRequest, azureWorkItemUpdateRequest, requestAzureDevOps }

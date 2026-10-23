@@ -7,7 +7,7 @@ import { loadAzurePat, saveAzurePat, forgetAzurePat, listAzurePatProfiles, loadA
 import { normalizeBacklogColumns, defaultBacklogColumns, plainAzureText, visibleBacklogRows } from '../src/backlogView.ts'
 
 const require = createRequire(import.meta.url)
-const { azureReadRequest, azureFeatureRequest } = require('../electron/azure-devops.cjs')
+const { azureReadRequest, azureFeatureRequest, assertWritableBase: proxyWritableBase, requestAzureDevOps } = require('../electron/azure-devops.cjs')
 const config = { organization: 'example-org', project: 'Quality Project', team: 'Team A' }
 const pat = 'synthetic-test-token'
 
@@ -590,4 +590,23 @@ test('Feature setup: the Time Writing User Story is configurable per Epic (title
   const task = result.items.find((item) => item.workItemType === 'Task')
   assert.equal(task.parentId, story.id, 'the month Task goes under the configured story')
   assert.equal(task.assignedToEmail, feature.assignedTo, 'the Task still defaults to the Feature assignee')
+})
+
+import { assertWritableBase } from '../src/azureDevOps.ts'
+test('writes go to dev.azure.com only: on-premises servers are read-only in the web app and in the desktop proxy', async () => {
+  const onPrem = { organization: 'DHPCollection', project: 'DHP', team: 'Team', baseUrl: 'https://tfs.example.invalid/tfs/DHPCollection' }
+  for (const operation of ['create-feature', 'create-child', 'update-time-writing-effort', 'update-work-item']) {
+    assert.throws(() => assertWritableBase(onPrem, operation), /read-only/)
+    assert.throws(() => proxyWritableBase({ ...onPrem, operation }), /read-only/)
+    assert.doesNotThrow(() => assertWritableBase(config, operation))
+  }
+  for (const operation of ['query', 'items', 'fields']) { assert.doesNotThrow(() => assertWritableBase(onPrem, operation)); assert.doesNotThrow(() => proxyWritableBase({ ...onPrem, operation })) }
+  // Reads still reach the on-prem server; a write never does: no fetch is made.
+  const calls = []
+  const fetchStub = async (url) => { calls.push(url); return { ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => ({ value: [] }) } }
+  await requestAzureDevOps({ ...onPrem, pat, operation: 'fields' }, fetchStub)
+  assert.equal(calls.length, 1)
+  await assert.rejects(requestAzureDevOps({ ...onPrem, pat, operation: 'update-work-item', workItemId: 5, state: 'Closed' }, fetchStub), /read-only/)
+  await assert.rejects(requestAzureDevOps({ ...onPrem, pat, operation: 'create-feature', validateOnly: true, feature: { ...feature, areaPath: 'DHP' } }, fetchStub), /read-only/)
+  assert.equal(calls.length, 1, 'nothing was sent for the writes')
 })

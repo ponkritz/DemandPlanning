@@ -2,12 +2,12 @@ import { useRef, useState } from 'react'
 import { fetchAzureWorkItems, isCloudBase, mapAzureWorkItem, mergeAzureWorkItems, parseAzureProjectUrl, readFieldNames, savedBacklogItems, sameAzureScope, updateAzureTimeWritingEffort, type AzureFetchResult, type AzureConfig } from './azureDevOps'
 import type { PageProps } from './pages/types'
 import type { AzureWorkItem } from './domain'
-import { loadAzurePat, saveAzurePat, forgetAzurePat, listAzureConnectionProfiles, loadAzureConnectionProfile, saveAzureConnectionProfile, forgetAzureConnectionProfile, composeAzureUrl, collectionUrlFrom, type AzureConnectionProfile, type AzureConnectionProfileSummary, type AzureConnectionRole } from './azureCredentials'
+import { loadAzurePat, saveAzurePat, forgetAzurePat, listAzureConnectionProfiles, loadAzureConnectionProfile, saveAzureConnectionProfile, forgetAzureConnectionProfile, composeAzureUrl, collectionUrlFrom, type AzureConnectionProfile, type AzureConnectionProfileSummary, type AzureConnectionRole, loadServerPat, serverKey } from './azureCredentials'
 import { approvalDateFrom, defaultReleaseQuery, fetchReleaseSource, normalizeReleaseSourceSettings, projectQuery, releaseQueryWhere, runWorkItemQuery, withAncestors } from './releaseSource'
 import { sampleDataset, sampleProfiles, sampleReleaseScopes } from './sampleData'
 import { indiaMonth } from './azureInsights'
 import { columnName, pickFields, queryLayout } from './queryView'
-import { promoteToTimeWriting } from './viewDefinitions'
+import { duplicateOf, promoteToTimeWriting } from './viewDefinitions'
 
 const defaultUrl = 'https://dev.azure.com/ALMP-ORG-MSTP01/Patient%20Safety%20and%20Quality/_backlogs/backlog/InD%20Quality/Epics'
 const defaultConfig = parseAzureProjectUrl(defaultUrl)
@@ -200,15 +200,22 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
     const url = composeAzureUrl(base, input.project, input.team)
     if (apiVersion && !/^\d{1,2}\.\d(-preview(\.\d)?)?$/.test(apiVersion)) throw new Error('API version looks like 7.1, 6.0 or 5.0.')
     const existing = input.id ? loadAzureConnectionProfile(input.id) : input.cloneOf ? loadAzureConnectionProfile(input.cloneOf) : null
-    const token = input.pat.trim() || existing?.token || ''
-    if (!token) throw new Error('Enter the PAT for this connection.')
+    // One PAT per server: a new PAT here becomes the server's PAT; without one, the server's saved PAT is used.
+    const serverPat = loadServerPat(serverKey({ url, ...(isCloudBase(base) ? {} : { baseUrl: base }) }))
+    // Stored on the connection only when typed here (it then also becomes the server's PAT) or when the server has none.
+    const token = input.pat.trim() || (serverPat ? '' : existing?.token ?? '')
+    if (!token && !serverPat) throw new Error('Enter the PAT for this server (it is then used by every connection on it).')
     const query = input.query.trim()
     if (query) releaseQueryWhere(query)
     if (input.role === 'time-tracking' && !input.team.trim() && !query) throw new Error('A Time Writing connection needs a team (its Epic backlog is read) or a query.')
+    if (input.role === 'time-tracking' && !isCloudBase(base)) throw new Error('Time Writing (read & write) works on Azure DevOps Services (dev.azure.com) only; on-premises servers are read-only. Choose another role for this server.')
     if (input.role === 'backlog-view' && !input.team.trim() && !query) throw new Error('A backlog view needs a team (its Epic backlog is shown) or a query.')
     const email = input.creatorEmail.trim().toLowerCase()
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('Enter a valid Feature creator email, or leave it empty.')
     const id = input.id || crypto.randomUUID().replaceAll('-', '')
+    // The same server, project, role and query as a saved connection: nothing is fetched, listed or matched twice.
+    const twin = duplicateOf({ id, url, role: input.role, ...(query ? { query } : {}), ...(isCloudBase(base) ? {} : { baseUrl: base }) }, listAzureConnectionProfiles())
+    if (twin) throw new Error(`“${twin.viewName || twin.reason}” already reads this project with this query. Edit it or choose another query, so nothing is fetched twice.`)
     saveAzureConnectionProfile({ id, url, reason: name, role: input.role, ...(input.viewName.trim() ? { viewName: input.viewName.trim() } : {}), showInMenu: input.showInMenu, token, ...(email ? { creatorEmail: email } : {}), ...(query ? { query } : {}), ...(isCloudBase(base) ? {} : { baseUrl: base }), ...(apiVersion ? { apiVersion } : {}) })
     const profiles = listAzureConnectionProfiles()
     setConnectionProfiles(profiles)
@@ -403,10 +410,12 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
 
   // After the connections changed outside this hook (Git sync): the active Time Writing connection is kept if it still
   // exists, else the first Time Writing connection becomes active.
+  // The active one is re-read so a PAT saved, replaced or removed for its server takes effect for writes at once.
   function reloadConnectionProfiles() {
     const profiles = listAzureConnectionProfiles()
     setConnectionProfiles(profiles)
-    if (!profiles.some((profile) => profile.id === activeConnectionProfileId && profile.role === 'time-tracking')) { const next = profiles.find((profile) => profile.role === 'time-tracking'); if (next) selectConnectionProfile(next.id) }
+    if (profiles.some((profile) => profile.id === activeConnectionProfileId && profile.role === 'time-tracking')) selectConnectionProfile(activeConnectionProfileId)
+    else { const next = profiles.find((profile) => profile.role === 'time-tracking'); if (next) selectConnectionProfile(next.id) }
   }
 
   // Makes a connection (e.g. a backlog view of the same project that loads) the only Time Writing connection; the

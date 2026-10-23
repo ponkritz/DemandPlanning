@@ -57,3 +57,13 @@ test('streams and month-on-month change', () => {
   assert.equal(roles.find((row) => row.name === 'QMS').previous, undefined)
   assert.equal(change(rows, '2026-08', '2026-09', byStream).find((row) => row.name === 'DP').change, -20)
 })
+
+test('rebalancing leaves people without a role out of the relief and receiver lists, and counts them apart', () => {
+  const row = (person, role, plan, capacity, status = 'current') => ({ month: '2026-10', status, person, role, plan, actual: 0, capacity, absence: 0, tasks: 1, planLines: 1, blankActuals: 0, streams: [] })
+  const moves = rebalancing([row('Ana', 'QE', 200, 160), row('Ben', 'QE', 100, 160), row('Dee', undefined, 220, 160), row('Eve', undefined, 100, 160)])
+  assert.deepEqual(moves.needs.map((entry) => entry.person), ['Ana'], 'Dee has no role: not a relief need the rule could move')
+  assert.deepEqual(moves.receivers.map((entry) => entry.person), ['Ben'], 'Eve has no role: not a receiver')
+  assert.deepEqual([moves.overload, moves.headroom, moves.movable, moves.shortfall], [100, 120, 40, 60], 'gross overload and headroom count everyone; only the QE overload can move')
+  assert.deepEqual(moves.unmapped, { people: 2, overload: 60, headroom: 60 })
+  assert.deepEqual(rebalancing([row('Ana', 'QE', 200, 160)]).unmapped, { people: 0, overload: 0, headroom: 0 })
+})

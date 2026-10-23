@@ -41,3 +41,20 @@ export const streamOfProfile = (profile: Pick<AzureConnectionProfileSummary, 'vi
 export function exportForStream<T extends { name: string; exportFile?: string }>(stream: StreamDef, views: T[]) {
   return stream.source === 'windchill' ? views.find((view) => view.exportFile && namesStream(view.name, stream.name)) : undefined
 }
+
+// Data sets that feed a stream without being one: DP combines the Pedestal release register (DHP, Release work items)
+// with the DHFI documents (see dpReleases). Each is the connection whose view name (or name) carries the data set's
+// name as a word — "Releases (Pedestal)", "DHFI [Approved]" — or the shared setup's connection for it.
+export interface DataSetDef { name: string; aliases: string[]; presetKey?: string; presetId?: string }
+export const dataSets: DataSetDef[] = [
+  { name: 'Pedestal', aliases: ['pedestal', 'pedastal'], presetKey: 'dhp-on-prem', presetId: 'd382a4ad433a4f09b102f2f3e0e5a870' },
+  { name: 'DHFI', aliases: ['dhfi'] },
+]
+export const dataSetNamed = (name: string) => dataSets.find((set) => set.name.toLowerCase() === name.toLowerCase())
+export function namesDataSet(name: string | undefined, set: DataSetDef) { const words = tokens(name); return set.aliases.some((alias) => words.includes(alias)) }
+export function profileForDataSet(name: string, profiles: AzureConnectionProfileSummary[]) {
+  const set = dataSetNamed(name)
+  if (!set) return undefined
+  return profiles.find((profile) => profile.role !== 'time-tracking' && (profile.id === set.presetId || namesDataSet(profile.viewName, set) || namesDataSet(profile.reason, set)))
+}
+export const dataSetOfProfile = (profile: Pick<AzureConnectionProfileSummary, 'id' | 'viewName' | 'reason' | 'role'>) => profile.role === 'time-tracking' ? undefined : dataSets.find((set) => profile.id === set.presetId || namesDataSet(profile.viewName, set) || namesDataSet(profile.reason, set))
