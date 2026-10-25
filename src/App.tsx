@@ -36,7 +36,7 @@ import { BulkActionsPage } from './pages/BulkActionsPage'
 import { DesktopDownload } from './components/DesktopDownload'
 import { exportStateJson } from './download'
 import { BuildStatus } from './components/BuildStatus'
-import { backlogViews, loadBacklogTab, saveBacklogTab, timeWritingView } from './backlogViews'
+import { backlogViews, loadBacklogTab, otherMenuViews, saveBacklogTab, timeWritingView } from './backlogViews'
 import { mergeAzureWorkItems } from './azureDevOps'
 import { formatDateTime, todayIso } from './format'
 import { HeaderSlot } from './headerSlot'
@@ -147,6 +147,9 @@ export default function App() {
   const [windchillId, setWindchillId] = useState('')
   const windchillView = windchillViews.find((entry) => entry.id === windchillId)
   const openWindchill = (id: string) => { setWindchillId(id); setPage('windchill') }
+  // Views shown in the menu that are not the Time Writing backlog nor a default stream: listed under "Other views".
+  const others = otherMenuViews(views, azure.connectionProfiles, windchillViews)
+  const isOther = page === 'board' ? others.azure.some((entry) => entry.id === view.id) : page === 'windchill' && Boolean(windchillView) && others.windchill.some((entry) => entry.id === windchillView?.id)
   // Menu headings and sub-lists can be collapsed; which ones are closed is remembered in this browser.
   // Phones: the sidebar is an off-canvas menu opened from the top bar; it closes on a choice, on Escape or on the backdrop.
   const [navOpen, setNavOpen] = useState(false)
@@ -171,16 +174,19 @@ export default function App() {
         const pageButton = (item: typeof pages[number]) => !allowed(item.id) ? [] : [<button key={item.id} className={page === item.id ? 'nav-active' : ''} aria-current={page === item.id ? 'page' : undefined} onClick={() => setPage(item.id)}><span className="nav-icon">{item.icon}</span>{item.label}{item.id === 'mywork' && my.pending.length > 0 && <span className="nav-badge" aria-label={`${my.pending.length} pending`}>{my.pending.length}</span>}</button>]
         const windchillMeta = pageMeta('windchill')
         // Release Details has two sub-lists: the default Azure streams (DP, CP, IOCC, Content, Tool Validations) and the
-        // Windchill streams (S&S IT; ECP later), each in a fixed order. Other connections and exports are not listed here.
+        // Windchill streams (S&S IT; ECP later), each in a fixed order. Other connections and exports go under "Other views".
         const sections: { key: string; label?: string; entries: React.ReactNode[] }[] = group === 'Release Details' ? [
           // The default streams in order; one without a connection (shown in the menu) leads to Settings to set it up.
           { key: 'release:ads', label: 'Azure DevOps Server', entries: access.sees('release') ? defaultStreams.filter((stream) => stream.source === 'azure').map((stream) => { const profile = profileForStream(stream, azure.connectionProfiles), entry = profile && views.find((item) => item.id === profile.id); return entry ? navButton(`view:${entry.id}`, pageMeta('board').icon, stream.name, page === 'board' && view.id === entry.id, () => openView(entry.id)) : <button key={`stream:${stream.name}`} className="nav-missing" title={`Not set up: add a connection named “${stream.name}”`} onClick={openConnection}><span className="nav-icon">＋</span>{stream.name}</button> }) : [] },
           { key: 'release:windchill', label: 'Windchill exports', entries: access.sees('release') ? [...defaultStreams.filter((stream) => stream.source === 'windchill').map((stream) => { const entry = exportForStream(stream, windchillViews); return entry ? navButton(entry.id, windchillMeta.icon, stream.name, page === 'windchill' && windchillView?.id === entry.id, () => openWindchill(entry.id)) : <button key={`stream:${stream.name}`} className="nav-missing" title={`Not imported yet: import a Windchill export named “${stream.name}”`} onClick={() => openWindchill('')}><span className="nav-icon">＋</span>{stream.name}</button> }), ...(access.can('windchill.import') ? [navButton('windchill', '＋', windchillMeta.label, page === 'windchill' && !windchillView, () => openWindchill(''))] : [])] : [] },
-        ] : [{ key: group, entries: pages.filter((item) => item.group === group).flatMap((item) => item.id === 'board' ? (access.sees('board') ? views.filter((entry) => !entry.onPrem && !defaultStreams.some((stream) => stream.source === 'azure' && profileForStream(stream, azure.connectionProfiles)?.id === entry.id)).map((entry) => navButton(`view:${entry.id}`, item.icon, entry.name, page === 'board' && view.id === entry.id, () => openView(entry.id))) : []) : pageButton(item)) }]
+        ] : group === 'Other views' ? [{ key: group, entries: [
+          ...others.azure.filter((entry) => access.sees(entry.onPrem ? 'release' : 'board')).map((entry) => navButton(`view:${entry.id}`, pageMeta('board').icon, entry.name, page === 'board' && view.id === entry.id, () => openView(entry.id))),
+          ...(access.sees('release') ? others.windchill.map((entry) => navButton(entry.id, pageMeta('windchill').icon, entry.name, page === 'windchill' && windchillView?.id === entry.id, () => openWindchill(entry.id))) : []),
+        ] }] : [{ key: group, entries: pages.filter((item) => item.group === group).flatMap((item) => item.id === 'board' ? (access.sees('board') ? views.filter((entry) => !entry.readOnly).map((entry) => navButton(`view:${entry.id}`, item.icon, entry.name, page === 'board' && view.id === entry.id, () => openView(entry.id))) : []) : pageButton(item)) }]
         const shown = sections.filter((section) => section.entries.length)
         if (!shown.length) return null
         const open = !collapsed.includes(group)
-        const holdsActive = group === (page === 'board' ? (view.onPrem ? 'Release Details' : 'I&D Board') : meta.group)
+        const holdsActive = group === (isOther ? 'Other views' : page === 'board' ? (view.onPrem ? 'Release Details' : 'I&D Board') : meta.group)
         return <div key={group} className="nav-section">
           <button type="button" className={`nav-group${holdsActive && !open ? ' nav-group-active' : ''}`} aria-expanded={open} onClick={() => toggleNav(group)}><span aria-hidden="true">{open ? '▾' : '▸'}</span>{group.toUpperCase()}</button>
           {/* Collapsed lists stay in the page but are hidden on wide screens only: the narrow sidebar has no headings. */}

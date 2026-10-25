@@ -287,11 +287,35 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-ACC-02 New work is always assigned; creating for others** — Req CON-50, CON-51 — L1 `my-work.test.mjs` (the month story and task carry the assignee; ＋ User Story / ＋ Task go under the right parent type with the chosen email and iteration; no assignee → refused in the browser transport before sending and in the Windows app request builder; people to choose: everyone with an email, a shared name shows the email), `azure-devops.test.mjs` (every item of a new Feature hierarchy is assigned), `access.test.mjs` (Scrum Master has the right, Team Member not); browser check with Azure DevOps mocked: ＋ User Story on a Feature → the picker starts on the Feature's assignee, choosing Ben creates the story assigned to ben@x.com. **UAT**
 
-**TC-OV-11 Overview dashboard** — Req OV-11 — L1 `dashboard.test.mjs` (periods: quarters and months of a year, none = whole year; month status; multi-select filters; person-month plan, actual, capacity, region and role, plan lines and blank actuals; filters incl. stream; planned and persistent overload; concentration; rebalancing receivers only in current or future months; streams; month-on-month change by role and stream); browser check on sample data: all eight tabs render without errors; the KPI arrows are red above and green below 100%; ticking Roles QE and Lead shows "2 selected" and narrows the scope line; Q2 adds April–June; Whole year shows the year. **UAT**
+**TC-OV-11 Dashboard: period, filters and six tabs** — Req OV-11 — L1 `dashboard.test.mjs` (periods: a year with any quarters and months, none = whole year; month status against today; person-month plan, actual, capacity, region, role, plan lines and blank actuals; filters incl. stream; streams and month-on-month change); browser check on sample data at 1500 px and 390 px: the tabs Summary, Insights, Months, People, Streams and Definitions open without console errors or horizontal page scroll; Months switches Recorded / Planned and hides months without entries; People groups by person, role or region; Streams shows the Epic mix and the overrun and ad-hoc Pareto for the period; each tab shows an empty state when nothing is planned or recorded. **UAT**
+
+**TC-OV-12 Rebalancing within role and month** — Req OV-12 — L1 `dashboard.test.mjs` ("overload, persistent overload, concentration and rebalancing within role and month"; "rebalancing leaves people without a role out of the relief and receiver lists, and counts them apart"); browser check: Summary → relief needs and receivers are full width, cut at 8 rows with "Show all (+N more)".
+
+**TC-OV-13 Insights** — Req OV-13 — L1 `insights.test.mjs` (elapsed share; month-end forecast; plan accuracy; stream momentum; resilience; unusual months; health score); browser check: every Insights section has its Info text, and the Delivery section says the Dashboard filters do not apply there. **UAT**
+
+**TC-OV-14 One utilization model from Settings** — Req OV-14 — L1 `dashboard.test.mjs` ("bandOf and plannedOverload follow the Settings thresholds"), `insights.test.mjs` ("the Settings bands decide what counts as over capacity and balanced"); browser check: with Settings → Capacity at 90 / 70, 92% shows ↑ red, 80% green and 65% ↓ blue on every tab, and differences in hours (+ / −) carry no colour.
 
 **TC-NAV-21 Pulse Check ongoing activities** — Req NAV-20 — L1 `pulse-check.test.mjs` (in-progress Features and User Stories per stream, booked hours this month, overdue; absence and finished items left out); browser check: tabs Releases (last month), Last month, Ongoing activities, Current month releases. **UAT**
 
 **TC-NAV-24 Servers, PATs and stream mapping** — Req NAV-24 — L1 `connections.test.mjs` (one PAT per server: another project on the same collection uses it, changing it changes it for all, other servers untouched, fallback to the connection's own PAT), `view-definitions.test.mjs`; browser check with Azure DevOps mocked: Settings lists the two servers; saving a PAT for the on-prem server marks it saved; Set up of IOCC and CP saves and fetches them without asking for a PAT, and no PAT is stored on the connections; Pedestal is under Other views. **UAT**
+
+**TC-NAV-25 DP releases from Pedestal and DHFI** — Req NAV-25 — L1 `dp-releases.test.mjs` (Pedestal fields read by name; a Pedestal Release Title names the release and its version; a DHFI document is dated by its approval date, else its Closed Date; every Pedestal Release is listed, dated by its DHFI documents, with "No DHFI yet" for the rest). **UAT**
+
+**TC-NAV-26 Fuzzy Feature match** — Req NAV-26 — L1 `dp-releases.test.mjs` ("the fuzzy match ignores spacing inside words and never takes another version as the same release"; "dpReleases returns the same result for the same inputs and indexes the DHFI list by version").
+
+**TC-NAV-27 Writes go to dev.azure.com only** — Req NAV-27 — L1 `azure-devops.test.mjs` ("writes go to dev.azure.com only: on-premises servers are read-only in the web app and in the desktop proxy"; "desktop bridge constrains credentials to Azure DevOps and rejects writes and oversized batches").
+
+**TC-NAV-28 One PAT per server** — Req NAV-28 — L1 `connections.test.mjs` ("one PAT per server …"; "a PAT copy left on a connection by an earlier version is dropped when the server PAT is saved, replaced or removed").
+
+**TC-NAV-29 Git sync removals** — Req NAV-29 — L1 `view-definitions.test.mjs` ("Git setup: a connection removed in Git is removed here unless changed here; an empty file removes nothing"), `git-snapshots.test.mjs`.
+
+**TC-NAV-30 Duplicate connections** — Req NAV-30 — L1 `view-definitions.test.mjs` ("duplicate connections: same server, project, role and query …"; "duplicates: the copy from Git is kept over a preset copy and a local one; saving a duplicate is refused").
+
+**TC-NAV-31 Phones and tablets** — Req NAV-31 — browser check at 390 × 844 and 820 × 1180: the menu opens from ☰ as an off-canvas panel with a backdrop and closes on a page change; tablets show the narrow menu rail; Dashboard tabs scroll sideways; no page scrolls horizontally. **UAT**
+
+**TC-NAV-32 Other views in the menu** — Req NAV-32, NAV-17 — L1 `connections.test.mjs` ("Other views: read-only views and Windchill exports that are not a default stream, from the cloud or on-prem"); browser check: add an on-prem connection named e.g. "Risk register" with Show in menu on: it appears under Other views (not under Release Details), opens its view, and the heading is highlighted while it is collapsed and the view is open; with Show in menu off it disappears, and the heading is hidden when empty. **UAT**
+
+**TC-CON-26 Personal and shared Feature setup** — Req CON-58, CON-52 — L1 `feature-setup.test.mjs` (one file per email with unsafe characters and runs of dots replaced; my setup of an Epic wins for me, the shared one otherwise, and the form can switch; Enable for everyone replaces only that Epic, as a copy); browser check: Settings → Feature setup opens for every role; with an email on the Time Writing connection it shows My setup and Shared (everyone), else only Shared with a notice; "Start my own from the shared one", "Remove my setup" and "Enable for everyone" save to Git with a writable token. **UAT**
 
 **TC-NAV-22 Default streams and stream rules** — Req NAV-22, NAV-23 — L1 `streams.test.mjs` (stream order and sources; connection and export found by name; DP and IOCC release rules; fuzzy match percentages and the threshold; Pulse Check lists the five Azure streams in order with not-set-up ones); browser check on sample data: Release Details lists DP, CP, IOCC, Content, Tool Validations and S&S IT; a not-set-up stream opens Settings, whose Default streams Set up pre-fills the name and role; Pulse Check → Current month releases shows the five Azure streams in order. **UAT**
 
@@ -303,7 +327,7 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-CON-23 Feature setup per Epic** — Req CON-52, CON-53 — L1 `azure-devops.test.mjs` (placeholders, plain text, unknown braces kept, missing values; the file is parsed and written clean; a Feature from its Epic setup gets the chosen stories, the Time Writing story and the Task with title, Original Estimate, Area Path, Iteration Path and assignee; completing again creates nothing; a placeholder the title cannot fill stops it); browser check with GitHub and Azure DevOps mocked: Settings → Feature setup, add “US 1 ({service})” and “US 4”, Original Estimate 6 → preview shows “US 1 (Service)”; Save to Git writes feature-setup.json; ＋ Feature under that Epic with “CP | Care Pathways | v3.1” lists “US 1 (Care Pathways)” and “US 4” ticked, the Task “October 2026 | CP | Care Pathways | v3.1” with 6 h, and no PU / Full Release choice. **UAT**
 
-**TC-ATM-06 State checks and Feature states** — Req CON-54, ATM-06 — L1 `my-work.test.mjs` (all stories Closed → close the Feature, Removed ignored; all Tasks Closed → close the story; Active Feature without an Active story, or without stories → flagged; Closed Features, other people's work and the absence Epic left out; Feature New → Set to Active, Active → Close, other states → none; other types → Close); browser check with Azure DevOps mocked: Bulk actions for Ben lists his two Active Features without User Stories with a link to Azure DevOps; Assigned to Me shows Close Feature for Active Features. **UAT**
+**TC-ATM-08 State checks and Feature / User Story states** — Req CON-54, ATM-06 — L1 `my-work.test.mjs` (all stories Closed → close the Feature, Removed ignored; all Tasks Closed → close the story; Active Feature without an Active story, or without stories → flagged; Closed Features, other people's work and the absence Epic left out; Feature New → Set to Active, Active → Close, other states → none; other types → Close); browser check with Azure DevOps mocked: Bulk actions for Ben lists his two Active Features without User Stories with a link to Azure DevOps; Assigned to Me shows Close Feature for Active Features. **UAT**
 
 **TC-CON-24 Load everything from Git; roles by the connection email; QE Mapping** — Req CON-55, CON-41, NAV-19 — browser check with GitHub mocked: Settings → Storage → Load everything from Git reads planning-data.json, azure-views.json, azure-data, windchill-data, access.json and feature-setup.json once each and lists what was loaded; Settings → Access says "You are me@x.com (the email on your Time Writing connection)"; QE Mapping appears under Data & governance with its planned notice. **UAT**
 
@@ -507,9 +531,15 @@ Cases marked **UAT** are also run in acceptance testing.
 - L1: `my-work.test.mjs` (blank search shows everything; ID with or without #; Feature title, Epic, Iteration Path, type and state match; every word must match).
 - Browser check on sample data: on the Feature chip, typing "task" lists the Tasks (all types searched, no chip highlighted, "N of M match, all types"); Esc clears it and the Feature chip applies again; a search with no match says “Nothing matches … in any type”. Hovering "ⓘ Info" shows the list rules; moving away hides them.
 
+**TC-ATM-09 Expand a Feature, then a User Story** — Req ATM-17 — L1 `my-work.test.mjs` ("featureChildren: stories, bugs and tasks under a Feature with their own children, any person, Removed left out"); browser check on sample data (person Ana Costa): ▸ on the Feature shows only its User Stories (and items placed straight under it), no Tasks; ▸ on a User Story then shows its Tasks with planned and recorded hours, and ▾ hides them again; a story without Tasks has no ▸; my New or Active items keep their action, other people's show "Not mine"; ▾ on the Feature closes it all.
+
+**TC-ATM-10 Month tasks: show with / without task, select all** — Req ATM-18 — browser check on sample data: the switch Without task / With task / Both filters the list and shows its counts; Select all and Deselect all act only on the shown Features whose task can be created and the "N of M selected" count follows; with nothing creatable both buttons are disabled.
+
+**TC-ATM-11 New Feature and Complete children on Assigned to Me** — Req ATM-19, BKL-10 — L1 `my-work.test.mjs` ("Complete children only for a Feature without optional User Stories"); browser check: ＋ New Feature opens the board's "Add Feature under an Epic" editor with the Epic selectable; Complete children shows only on a Feature with no User Story other than its Time Writing story; both are disabled with sample data; after a real create the result shows as a notice and the data refreshes. **UAT**
+
 **TC-ATM-03 Close an item** — Req ATM-06 — **UAT**
 - Steps:
-  1. Press Close User Story on a Story (on a New Feature: Set Feature to Active, then Close Feature).
+  1. On a New User Story press Set User Story to Active, then Close User Story; on a New Feature press Set Feature to Active, then Close Feature. A Resolved story or Feature shows "Set to Active first".
   2. Cancel at the confirmation.
   3. Repeat and confirm.
 - Expected:
@@ -569,9 +599,13 @@ Cases marked **UAT** are also run in acceptance testing.
   - With a schedule that is no longer current, the BKL-08 message shows and nothing is written.
   - Success creates the Feature (assigned to the creator email), the selected milestone stories titled "SFV : Review of Deliverables (Core 5.2)" and so on, the Time Writing story, and the month Task. All are verified, and the BKL-11 message shows.
 
-**TC-BKL-03 Complete children** — Req BKL-10
-- Steps: on a Feature missing its Time Writing story, choose "Complete Feature children".
-- Expected: only the missing items are created, and the Feature is not recreated.
+**TC-BKL-03 Complete children** — Req BKL-10 — L1 `my-work.test.mjs` ("Complete children only for a Feature without optional User Stories")
+- Steps:
+  1. On a Feature with only its Time Writing story (or no story), choose "Complete children".
+  2. Look at a Feature that already has an optional User Story (SFV, DT, a setup story, …).
+- Expected:
+  - Step 1 creates only the missing items, and the Feature is not recreated.
+  - Step 2 shows no "Complete children" button, on the board and on Assigned to Me.
 
 ### 6.8 Query views and Releases
 
@@ -616,22 +650,28 @@ Cases marked **UAT** are also run in acceptance testing.
   - DP | Dose Planning | v4.2 in the sample backlog tracks Dose Planning · 4.2, and v4.2 does not track 4.20.
   - Both views show the Name and Release columns after the ID. QMS-0025 shows neither.
 
-### 6.9 Overview and capacity
+**TC-QV-06 Create Feature from a release** — Req QV-20, CON-56 — L1 `release-source.test.mjs` ("tracking is an exact match of name and release segments in a Feature title"); browser check: a release without a tracking Feature offers Create Feature; a title that no longer names the release is refused; the confirmation offers the person picker, defaulting to the person creating it. **UAT**
 
-**TC-OVR-01 Scope and tabs** — Req OVR-01…04 — **UAT**
+**TC-QV-07 Create Feature title parts** — Req QV-21 — L1 `release-source.test.mjs` ("Create Feature title parts: Program · Service · Release for DP, Platform · Name · Release for CP, free elsewhere"); browser check (needs a DP and a CP connection): DP shows Program, Service and Release, giving "DP | <name> | v<release>"; CP shows a Platform list with Platform 1.0 and Platform 2.0, and "Add…" adds a platform kept in this browser; changing a part rebuilds the title, which stays editable.
+
+### 6.9 Dashboard and capacity
+
+TC-OVR-01 to TC-OVR-03 tested the earlier Overview and are **retired** with OVR-01 to OVR-08; the Dashboard is tested by TC-OV-11 to TC-OV-14 (§6.2).
+
+**TC-OVR-01 Scope and tabs (retired)** — Req OVR-01…04 — **UAT**
 - Expected:
   - The default is Team, and the choice is remembered.
   - Individual with no person shows "Choose whose overview to show.".
   - The tabs "This month · {Month}" and "Trends" are remembered.
   - The metrics show utilization, Overloaded, Has capacity and Absence.
 
-**TC-OVR-02 This month content** — Req OVR-05
+**TC-OVR-02 This month content (retired)** — Req OVR-05
 - Expected:
   - All the panels of OVR-05 are present for TD-01.
   - The matrix shows at most 8 streams plus Other.
   - "How utilization is calculated" is collapsed by default.
 
-**TC-OVR-03 Trends content** — Req OVR-06…08
+**TC-OVR-03 Trends content (retired)** — Req OVR-06…08
 - Steps:
   1. Switch between 6 and 12 months.
   2. Click a month bar.
@@ -950,6 +990,14 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | NAV-13 | TC-NAV-04 |
 | NAV-14, NAV-15 | TC-NAV-05 |
 | NAV-16 | TC-NAV-06 |
+| NAV-25 | TC-NAV-25 |
+| NAV-26 | TC-NAV-26 |
+| NAV-27 | TC-NAV-27 |
+| NAV-28 | TC-NAV-28 |
+| NAV-29 | TC-NAV-29 |
+| NAV-30 | TC-NAV-30 |
+| NAV-31 | TC-NAV-31 |
+| NAV-32 | TC-NAV-17, TC-NAV-32 |
 | CON-01…03 | TC-CON-01 |
 | CON-04…08, CON-19 | TC-CON-02 |
 | CON-09 | TC-CON-03 |
@@ -958,6 +1006,14 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CON-14…16 | TC-CON-04, TC-CON-05 |
 | CON-18 | TC-INS-01 |
 | CON-20 | TC-CON-07 |
+| CON-52, CON-53 | TC-CON-23, TC-CON-26 |
+| CON-54 | TC-ATM-08 |
+| CON-55 | TC-CON-24 |
+| CON-56 | TC-QV-06 |
+| CON-57 | TC-CON-25 |
+| CON-58 | TC-CON-26 |
+| QV-20 | TC-QV-06 |
+| QV-21 | TC-QV-07 |
 | CON-21, CON-22 | TC-CON-08 |
 | CON-23, CON-24 | TC-CON-09 |
 | CON-25, CON-26 | TC-CON-10 |
@@ -994,23 +1050,28 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | MON-18 | TC-MON-07 |
 | ATM-01…03 | TC-ATM-01 |
 | ATM-04, ATM-05 | TC-ATM-02 |
-| ATM-06 | TC-ATM-03 |
+| ATM-06 | TC-ATM-03, TC-ATM-08 |
 | ATM-07…09 | TC-ATM-04 |
 | ATM-10…12 | TC-ATM-05 |
 | ATM-13, ATM-14 | TC-ATM-06 |
 | ATM-15, ATM-16 | TC-ATM-07 |
+| ATM-17 | TC-ATM-09 |
+| ATM-18 | TC-ATM-10 |
+| ATM-19 | TC-ATM-11 |
 | BKL-01…03, BKL-12 | TC-BKL-01 |
 | BKL-04…09, BKL-11 | TC-BKL-02 |
-| BKL-10 | TC-BKL-03 |
+| BKL-10 | TC-BKL-03, TC-ATM-11 |
 | QV-01, QV-02 | TC-QV-01 |
 | QV-03, QV-05 | TC-QV-02 |
 | QV-04 | TC-FET-07 |
 | QV-06…10 | TC-QV-03 |
 | QV-11 | TC-QV-04 |
 | QV-12…17 | TC-QV-05 |
-| OVR-01…04 | TC-OVR-01 |
-| OVR-05 | TC-OVR-02 |
-| OVR-06…08 | TC-OVR-03 |
+| OVR-01…08 | retired (TC-OVR-01…03 retired) |
+| OV-11 | TC-OV-11 |
+| OV-12 | TC-OV-12 |
+| OV-13 | TC-OV-13 |
+| OV-14 | TC-OV-14 |
 | OVR-09, CAP-01…09 | TC-CAP-01 |
 | BAS-01…04 | TC-BAS-01 |
 | BAS-05…07 | TC-BAS-02 |
@@ -1064,11 +1125,11 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-03 | TC-CON-03, TC-FET-01…06 |
 | UC-04 | TC-TWN-01, TC-TWN-02, TC-MON-01…06 |
 | UC-05 | TC-MON-07 |
-| UC-06 | TC-ATM-01…06, TC-TWN-03, TC-CON-20 |
-| UC-07 | TC-BKL-01…03 |
+| UC-06 | TC-ATM-01…11, TC-TWN-03, TC-CON-20 |
+| UC-07 | TC-BKL-01…03, TC-CON-23, TC-CON-25, TC-CON-26 |
 | UC-08 | TC-QV-01…05, TC-FET-07, TC-CON-08, TC-CON-11…16 |
-| UC-09 | TC-OVR-01, TC-OVR-02, TC-CAP-01, TC-CON-21 |
-| UC-10 | TC-OVR-03 |
+| UC-09 | TC-OV-11…14, TC-CAP-01, TC-CON-21 |
+| UC-10 | TC-OV-11 (Months, Streams), TC-OV-13 |
 | UC-11 | TC-BAS-01…04 |
 | UC-12 | TC-GIT-01…04 |
 | UC-13 | TC-SNP-01…03 |
@@ -1080,6 +1141,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-19 | TC-INS-04, TC-CI-01 |
 | UC-20 | TC-DOC-01, TC-DOC-02 |
 | UC-21 | TC-SCR-01 |
+| UC-22 | TC-ACC-01, TC-ACC-02 |
 
 ## 8. Result record
 

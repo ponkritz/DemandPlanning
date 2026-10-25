@@ -249,3 +249,21 @@ test('servers added in Settings without a connection are kept once, by their col
   forgetKnownServer('https://dev.azure.com/Org', storage)
   assert.deepEqual(listKnownServers(storage).map((server) => server.organization), ['QualityCollection'])
 })
+
+test('Other views: read-only views and Windchill exports that are not a default stream, from the cloud or on-prem', async () => {
+  const { otherMenuViews } = await import('../src/backlogViews.ts')
+  const onPrem = 'https://tfs.example.com/tfs/DHPCollection'
+  const profiles = [
+    { id: 'tw', reason: 'Time Writing', role: 'time-tracking', showInMenu: true },
+    { id: 'cp', reason: 'CP', role: 'release-source', showInMenu: true, baseUrl: onPrem },
+    { id: 'iocc', reason: 'IOCC releases', role: 'release-source', showInMenu: true, baseUrl: onPrem },
+    { id: 'mine', reason: 'Risk register', role: 'backlog-view', showInMenu: true, baseUrl: onPrem },
+    { id: 'cloud', reason: 'Digital Platform', role: 'backlog-view', showInMenu: true },
+    { id: 'hidden', reason: 'Backend only', role: 'reference', showInMenu: false, baseUrl: onPrem },
+  ]
+  const views = backlogViews(profiles, 'tw')
+  const windchill = [{ id: 'w1', name: 'S&S IT', exportFile: 'a.csv' }, { id: 'w2', name: 'Supplier audit', exportFile: 'b.csv' }, { id: 'w3', name: 'Not imported yet' }]
+  const others = otherMenuViews(views, profiles, windchill)
+  assert.deepEqual(others.azure.map((view) => view.id), ['mine', 'cloud'], 'streams CP and IOCC stay under Release Details; the backlog under I&D Board; hidden views stay hidden')
+  assert.deepEqual(others.windchill.map((view) => view.id), ['w2'], 'S&S IT is a stream; an export without a file is not listed')
+})
