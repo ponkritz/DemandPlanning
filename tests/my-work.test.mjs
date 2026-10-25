@@ -166,6 +166,8 @@ test('state checks: closed stories close the Feature, closed tasks close the sto
   assert.deepEqual(checks[0].children.map((child) => child.id), [11, 12], 'Removed stories are ignored')
   assert.deepEqual([nextStateFor({ workItemType: 'Feature', state: 'New' }), nextStateFor({ workItemType: 'Feature', state: 'Active' }), nextStateFor({ workItemType: 'Feature', state: 'Resolved' }), nextStateFor({ workItemType: 'Task', state: 'New' })],
     [{ state: 'Active', label: 'Set Feature to Active' }, { state: 'Closed', label: 'Close Feature' }, null, { state: 'Closed', label: 'Close Task' }])
+  assert.deepEqual([nextStateFor({ workItemType: 'User Story', state: 'New' }), nextStateFor({ workItemType: 'User Story', state: 'Active' }), nextStateFor({ workItemType: 'User Story', state: 'Resolved' }), nextStateFor({ workItemType: 'Bug', state: 'Active' })],
+    [{ state: 'Active', label: 'Set User Story to Active' }, { state: 'Closed', label: 'Close User Story' }, null, { state: 'Closed', label: 'Close Bug' }], 'User Stories follow the Feature logic; Bugs and Tasks close directly')
 })
 
 test('Assigned to Me search: every word must match, across ID, title, type, state, Feature, Epic, paths and tags', () => {
@@ -178,4 +180,22 @@ test('Assigned to Me search: every word must match, across ID, title, type, stat
   assert.deepEqual(find('user story'), [3, 5], 'type matches')
   assert.deepEqual(find('sprint 1 cp'), [2, 3, 5, 7], 'Iteration Path and Epic title combine (the absence Feature has no Epic CP)')
   assert.deepEqual(find('nothing-like-this'), [])
+})
+
+test('featureChildren: stories, bugs and tasks under a Feature with their own children, any person, Removed left out', async () => {
+  const { featureChildren } = await import('../src/myWork.ts')
+  const data = [...items, item(11, 'Task', 'Removed task', { parentId: 2, ...ana, state: 'Removed' }), item(12, 'Task', 'Direct task', { parentId: 2, ...ben }), item(13, 'Feature', 'Other project', { parentId: 2, project: 'Elsewhere' })]
+  const tree = featureChildren(data, data.find((entry) => entry.id === 2))
+  assert.deepEqual(tree.map(({ item, children }) => [item.id, children.map((child) => child.id)]), [[3, [4]], [5, []], [12, []]], 'ascending ID; Ben\'s task under Ana\'s story is included; Removed and other projects are not')
+  assert.deepEqual(featureChildren(data, data.find((entry) => entry.id === 8)), [])
+})
+
+test('Complete children only for a Feature without optional User Stories (the Time Writing story does not count)', async () => {
+  const { hasOptionalStories } = await import('../src/myWork.ts')
+  const feature = items.find((entry) => entry.id === 2)
+  assert.equal(hasOptionalStories(items, feature), true, '#5 "SFV review" is an optional story')
+  const onlyTimeWriting = items.filter((entry) => entry.id !== 5)
+  assert.equal(hasOptionalStories(onlyTimeWriting, feature), false, 'only the Time Writing story #3: offer Complete children')
+  assert.equal(hasOptionalStories(items.filter((entry) => entry.id !== 3 && entry.id !== 4 && entry.id !== 5), feature), false, 'no stories at all')
+  assert.equal(hasOptionalStories([...onlyTimeWriting, item(20, 'User Story', 'Removed story', { parentId: 2, state: 'Removed' })], feature), false, 'Removed stories do not count')
 })

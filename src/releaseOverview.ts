@@ -66,3 +66,15 @@ export function releaseStreams(state: Pick<AppState, 'azureSources' | 'releaseSo
   }
   return streams.sort((a, b) => a.name.localeCompare(b.name))
 }
+
+// Dashboard: releases and documents per stream and month over a period — the default streams in their order, each
+// month counted as Pulse Check counts it (releases with documents approved, else changed, in the month; DP from the
+// Pedestal and DHFI data sets when they are mapped). Streams that are not set up are listed with no counts.
+export interface StreamCounts { id: string; name: string; notSetUp: boolean; months: { month: string; releases: number; documents: number }[]; releases: number; documents: number }
+export function streamCounts(state: Pick<AppState, 'azureSources' | 'releaseSource'>, profiles: AzureConnectionProfileSummary[], months: string[], timeZone?: string): StreamCounts[] {
+  const perMonth = months.map((month) => defaultStreamReleases(state, profiles, month, timeZone))
+  return (perMonth[0] ?? defaultStreamReleases(state, profiles, months[0] ?? '', timeZone)).map((stream, index) => {
+    const entries = months.map((month, at) => { const found = perMonth[at][index]; return { month, releases: found?.releases.length ?? 0, documents: found?.documents ?? 0 } })
+    return { id: stream.id, name: stream.name, notSetUp: Boolean(stream.notSetUp), months: entries, releases: entries.reduce((sum, entry) => sum + entry.releases, 0), documents: entries.reduce((sum, entry) => sum + entry.documents, 0) }
+  })
+}

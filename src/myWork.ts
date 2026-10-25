@@ -123,11 +123,32 @@ export function stateChecks(items: AzureWorkItem[], me: Me, absenceEpicId?: numb
   return checks
 }
 
-// What may be done to a Feature from Assigned to Me: a New Feature is set to Active; only an Active Feature is Closed.
-// Other work items are closed directly.
+// What may be done to an item from Assigned to Me: a New Feature or User Story is set to Active; only an Active one
+// is Closed (nothing in any other state). Tasks and Bugs are closed directly.
+export const stagedTypes = ['Feature', 'User Story'] as const
 export function nextStateFor(item: Pick<AzureWorkItem, 'workItemType' | 'state'>): { state: 'Active' | 'Closed'; label: string } | null {
-  if (item.workItemType !== 'Feature') return { state: 'Closed', label: `Close ${item.workItemType}` }
-  if (stateIs(item, 'new')) return { state: 'Active', label: 'Set Feature to Active' }
-  if (stateIs(item, 'active')) return { state: 'Closed', label: 'Close Feature' }
+  if (!(stagedTypes as readonly string[]).includes(item.workItemType)) return { state: 'Closed', label: `Close ${item.workItemType}` }
+  if (stateIs(item, 'new')) return { state: 'Active', label: `Set ${item.workItemType} to Active` }
+  if (stateIs(item, 'active')) return { state: 'Closed', label: `Close ${item.workItemType}` }
   return null
+}
+
+// The work under a Feature on Assigned to Me: its direct children (User Stories, Bugs, Tasks; any state but Removed)
+// in ascending ID order, each with its own children the same way. Items of other people are included: the point is
+// to see the whole Feature.
+export interface FeatureChild { item: AzureWorkItem; children: AzureWorkItem[] }
+export function featureChildren(items: AzureWorkItem[], feature: Pick<AzureWorkItem, 'id' | 'organization' | 'project'>): FeatureChild[] {
+  const live = items.filter((item) => item.state.trim().toLowerCase() !== 'removed' && item.organization === feature.organization && item.project === feature.project)
+  const childrenOf = (id: number) => live.filter((item) => item.parentId === id && item.id !== id).sort((a, b) => a.id - b.id)
+  return childrenOf(feature.id).map((item) => ({ item, children: childrenOf(item.id) }))
+}
+
+// "Complete children" is offered only for a Feature without any optional User Story: a User Story under it (not
+// Removed) that is not its Time Writing story. Once one exists, the Feature's children were created and the action
+// is hidden; single stories are still added with ＋ User Story.
+export function hasOptionalStories(items: AzureWorkItem[], feature: Pick<AzureWorkItem, 'id' | 'organization' | 'project'>) {
+  const stories = items.filter((item) => item.workItemType === 'User Story' && item.parentId === feature.id && item.state.trim().toLowerCase() !== 'removed' && item.organization === feature.organization && item.project === feature.project)
+  if (!stories.length) return false
+  const timeWriting = timeWritingStoryIds(items)
+  return stories.some((story) => !timeWriting.has(story.id))
 }

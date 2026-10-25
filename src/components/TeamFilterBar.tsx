@@ -1,6 +1,6 @@
 import { regions, resourceRoles, type TeamFilter } from '../capacity'
 
-// Overview (team): switch between regions and pick one or more roles. Nothing chosen = the whole team.
+// Dashboard (team): switch between regions and pick one or more roles. Nothing chosen = the whole team.
 export function TeamFilterBar({ filter, onChange }: { filter: TeamFilter; onChange: (filter: TeamFilter) => void }) {
   const toggleRole = (role: TeamFilter['roles'][number]) => onChange({ ...filter, roles: filter.roles.includes(role) ? filter.roles.filter((entry) => entry !== role) : [...filter.roles, role] })
   return <div className="team-filter">

@@ -67,3 +67,16 @@ test('rebalancing leaves people without a role out of the relief and receiver li
   assert.deepEqual(moves.unmapped, { people: 2, overload: 60, headroom: 60 })
   assert.deepEqual(rebalancing([row('Ana', 'QE', 200, 160)]).unmapped, { people: 0, overload: 0, headroom: 0 })
 })
+
+test('bandOf and plannedOverload follow the Settings thresholds', async () => {
+  const { bandOf, plannedOverload, persistentOverload } = await import('../src/dashboard.ts')
+  assert.deepEqual([bandOf(100), bandOf(99.9), bandOf(80), bandOf(79.9), bandOf(null)], ['over', 'balanced', 'balanced', 'spare', null])
+  assert.deepEqual([bandOf(90, { overloadedAt: 90, availableBelow: 70 }), bandOf(69, { overloadedAt: 90, availableBelow: 70 })], ['over', 'spare'])
+  const pm = (person, month, plan, actual) => ({ month, status: 'elapsed', person, role: 'QE', plan, actual, capacity: 100, absence: 0, tasks: 1, planLines: 1, blankActuals: 0, streams: [] })
+  const rows = [pm('Ana', '2026-07', 95, 95), pm('Ana', '2026-08', 95, 95), pm('Ana', '2026-09', 95, 95), pm('Ben', '2026-07', 100, 50)]
+  assert.deepEqual(plannedOverload(rows).over, ['Ben'])
+  assert.deepEqual(plannedOverload(rows, { overloadedAt: 90, availableBelow: 70 }).over.sort(), ['Ana', 'Ben'])
+  const months = ['2026-07', '2026-08', '2026-09']
+  assert.deepEqual(persistentOverload(rows, months, 'actual'), [])
+  assert.deepEqual(persistentOverload(rows, months, 'actual', 3, { overloadedAt: 90, availableBelow: 70 }), ['Ana'])
+})

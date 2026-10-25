@@ -29,6 +29,8 @@ export function BulkActionsPage({ azure, store, my, assign }: { azure: AzureWork
   const [iterations, setIterations] = useState<AzureIteration[]>([])
   const [skipTask, setSkipTask] = useState<Set<number>>(new Set())
   const [moveStates, setMoveStates] = useState<MoveStates>('both')
+  // The month-tasks list: show Features with a task, without one, or both; Select all / Deselect all act on the shown rows that can be created.
+  const [taskFilter, setTaskFilter] = useState<'both' | 'with' | 'without'>('both')
   const { config, pat } = azure
   const month = currentIndiaMonth()
   const absenceEpicId = capacityContext(store.state).absenceEpicId
@@ -37,6 +39,9 @@ export function BulkActionsPage({ azure, store, my, assign }: { azure: AzureWork
   const toMove = (target ? moveCandidates(azure.items, my.me, target, iterations, absenceEpicId, undefined, moveStates) : []).toSorted((a, b) => a.item.id - b.item.id)
   const candidates = (my.known ? monthTaskCandidates(azure.items, my.me, month, absenceEpicId) : []).toSorted((a, b) => a.feature.id - b.feature.id)
   const missing = candidates.filter((row) => row.status === 'needs-task' || row.status === 'needs-story')
+  const shownCandidates = candidates.filter((row) => taskFilter === 'both' || (taskFilter === 'with') === (row.status === 'exists'))
+  const shownMissing = shownCandidates.filter((row) => row.status === 'needs-task' || row.status === 'needs-story')
+  const selectShown = (on: boolean) => setSkipTask((current) => { const next = new Set(current); for (const row of shownMissing) { if (on) next.delete(row.feature.id); else next.add(row.feature.id) } return next })
   // State checks over the shown person's Features and User Stories (see stateChecks).
   const checks = my.known ? stateChecks(azure.items, my.me, absenceEpicId) : []
   const checkText: Record<StateCheck['kind'], (check: StateCheck) => string> = {
@@ -124,7 +129,11 @@ export function BulkActionsPage({ azure, store, my, assign }: { azure: AzureWork
                 </>}
           </Panel>
           <Panel className="action-card" eyebrow="BULK" title={`${month} Time Writing tasks`} info="For each of your pending Features (or Features holding your pending work): adds “<Feature> - Time Writing” if missing and a “<Month> | <Feature>” Task assigned to you. Azure is re-checked first, so nothing is duplicated.">
-            {candidates.length ? <ul className="pick-list">{candidates.map((row) => <li key={row.feature.id}><label className="check"><input type="checkbox" disabled={row.status === 'exists' || row.status === 'conflict'} checked={(row.status === 'needs-task' || row.status === 'needs-story') && !skipTask.has(row.feature.id)} onChange={(event) => setSkipTask((current) => { const next = new Set(current); if (event.target.checked) next.delete(row.feature.id); else next.add(row.feature.id); return next })} /><Pill tone={statusTone[row.status]}>{statusLabel[row.status]}</Pill>#{row.feature.id} {row.feature.title}</label></li>)}</ul> : <p className="muted">No pending Features for you.</p>}
+            {candidates.length > 0 && <div className="pick-tools">
+              <div className="view-switch" role="group" aria-label="Features to show"><span>Show</span><div className="segmented">{([['without', `Without task ${candidates.length - candidates.filter((row) => row.status === 'exists').length}`], ['with', `With task ${candidates.filter((row) => row.status === 'exists').length}`], ['both', `Both ${candidates.length}`]] as const).map(([value, text]) => <button key={value} type="button" aria-pressed={taskFilter === value} onClick={() => setTaskFilter(value)}>{text}</button>)}</div></div>
+              <div className="button-row"><button type="button" className="ghost" disabled={!shownMissing.length || shownMissing.every((row) => !skipTask.has(row.feature.id))} onClick={() => selectShown(true)}>Select all</button><button type="button" className="ghost" disabled={!shownMissing.length || shownMissing.every((row) => skipTask.has(row.feature.id))} onClick={() => selectShown(false)}>Deselect all</button><small className="muted">{missing.filter((row) => !skipTask.has(row.feature.id)).length} of {missing.length} selected</small></div>
+            </div>}
+            {candidates.length ? shownCandidates.length ? <ul className="pick-list">{shownCandidates.map((row) => <li key={row.feature.id}><label className="check"><input type="checkbox" disabled={row.status === 'exists' || row.status === 'conflict'} checked={(row.status === 'needs-task' || row.status === 'needs-story') && !skipTask.has(row.feature.id)} onChange={(event) => setSkipTask((current) => { const next = new Set(current); if (event.target.checked) next.delete(row.feature.id); else next.add(row.feature.id); return next })} /><Pill tone={statusTone[row.status]}>{statusLabel[row.status]}</Pill>#{row.feature.id} {row.feature.title}</label></li>)}</ul> : <p className="muted">{taskFilter === 'with' ? 'No Feature has its task yet.' : 'Every Feature has its task.'}</p> : <p className="muted">No pending Features for you.</p>}
             <div className="button-row"><button type="button" className="primary" disabled={Boolean(blocked) || busy === 'tasks' || !missing.some((row) => !skipTask.has(row.feature.id))} onClick={() => setConfirmTasks(true)}>{busy === 'tasks' ? 'Creating…' : ((count) => `Create ${count} task${count === 1 ? '' : 's'}`)(missing.filter((row) => !skipTask.has(row.feature.id)).length)}</button></div>
           </Panel>
         </div>

@@ -3,6 +3,9 @@
 // plain text, optionally with placeholders filled in at creation: {feature} (the whole Feature title), {program},
 // {service}, {version} (its parts, for titles like "Program | Service | v1.2"), {month} (e.g. "October 2026").
 // An Epic without a setup keeps the built-in PU / Full Release milestones.
+// Two layers: the shared setup (feature-setup.json, for everyone) and each person's own (feature-setup/<email>.json,
+// same format). For its owner a personal setup of an Epic wins over the shared one; anyone who can write to Git may
+// enable their setup of an Epic for everyone, which copies it into the shared file.
 export interface StoryTemplate { title: string; description: string }
 export interface TaskTemplate { title: string; description: string; originalEstimate?: number; assignedTo: string; areaPath: string; iterationPath: string }
 // The "Time Writing" User Story that holds the month Task: always created; its title and fields are configurable.
@@ -61,3 +64,23 @@ export function parseFeatureSetup(raw: string): FeatureSetupFile {
 // Written clean: blank User Stories dropped, values trimmed, one entry per Epic in Epic order.
 export const serializeFeatureSetup = (file: FeatureSetupFile) => `${JSON.stringify({ schema: 1, kind: 'feature-setup', epics: [...new Map(file.epics.map(cleanSetup).filter((entry): entry is EpicSetup => Boolean(entry)).map((entry) => [entry.epicId, entry])).values()].sort((a, b) => a.epicId - b.epicId) }, null, 2)}\n`
 export const setupFor = (file: FeatureSetupFile | null, epicId: number | undefined) => epicId == null ? undefined : file?.epics.find((entry) => entry.epicId === epicId)
+
+// The personal setup file of a person, next to the shared one: feature-setup/<email>.json (lower case; characters
+// outside letters, digits and . _ @ + - become _, and so do runs of dots). Empty for a missing or invalid email.
+export function personalSetupPath(email: string) {
+  const value = email.trim().toLowerCase()
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) ? `feature-setup/${value.replace(/[^a-z0-9._@+-]/g, '_').replace(/\.{2,}/g, '_')}.json` : ''
+}
+export interface FeatureSetups { shared: FeatureSetupFile | null; personal: FeatureSetupFile | null }
+export type SetupSource = 'personal' | 'shared'
+// The setup used for an Epic: my own first, else the shared one; preferShared skips mine when a shared one exists.
+export function chooseSetup(setups: FeatureSetups | null | undefined, epicId: number | undefined, preferShared = false): { setup?: EpicSetup; source?: SetupSource } {
+  const personal = setupFor(setups?.personal ?? null, epicId), shared = setupFor(setups?.shared ?? null, epicId)
+  if (personal && !(preferShared && shared)) return { setup: personal, source: 'personal' }
+  return shared ? { setup: shared, source: 'shared' } : {}
+}
+// Enable for everyone: the shared file with this Epic's entry replaced by (a copy of) the given one.
+export function publishSetup(shared: FeatureSetupFile | null, entry: EpicSetup): FeatureSetupFile {
+  const epics = (shared?.epics ?? []).filter((item) => item.epicId !== entry.epicId)
+  return { schema: 1, kind: 'feature-setup', epics: [...epics, structuredClone(entry)].sort((a, b) => a.epicId - b.epicId) }
+}
