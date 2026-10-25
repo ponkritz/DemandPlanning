@@ -1,4 +1,5 @@
 import { showsInMenu, viewNameOf, type AzureConnectionProfileSummary } from './azureCredentials.ts'
+import { defaultStreams, exportForStream, profileForStream } from './streams.ts'
 
 // The Azure DevOps menu: every connection marked "Show in menu", named by its View name (else the connection name).
 // The active Time Writing connection is the editable backlog; every other shown connection is a read-only view.
@@ -29,3 +30,17 @@ export function backlogViews(profiles: ViewProfile[], activeId: string): Backlog
 const tabKey = 'demand-planning-backlog-tab-v1'
 export function loadBacklogTab(storage: Pick<Storage, 'getItem'> = localStorage) { try { return storage.getItem(tabKey) ?? '' } catch { return '' } }
 export function saveBacklogTab(id: string, storage: Pick<Storage, 'setItem'> = localStorage) { try { storage.setItem(tabKey, id) } catch { /* kept for this session */ } }
+
+// The menu's "Other views": every read-only view shown in the menu that is not one of the default Azure streams
+// (DP, CP, IOCC, Content, Tool Validations, which sit under Release Details), from an on-prem server or the cloud, and
+// every Windchill export shown in the menu that is not a default Windchill stream (S&S IT). Without this heading such
+// views had no place in the menu. The Time Writing backlog stays under I&D Board.
+type StreamProfile = Parameters<typeof profileForStream>[1][number]
+export function otherMenuViews<W extends { id: string; name: string; exportFile?: string }>(views: BacklogView[], profiles: StreamProfile[], windchill: W[]) {
+  const streamIds = new Set(defaultStreams.map((stream) => profileForStream(stream, profiles)?.id).filter(Boolean))
+  const streamExports = new Set(defaultStreams.map((stream) => exportForStream(stream, windchill)?.id).filter(Boolean))
+  return {
+    azure: views.filter((view) => view.readOnly && !streamIds.has(view.id)),
+    windchill: windchill.filter((view) => view.exportFile && !streamExports.has(view.id)),
+  }
+}

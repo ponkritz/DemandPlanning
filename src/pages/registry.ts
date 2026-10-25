@@ -1,6 +1,6 @@
 // Single source for navigation labels, header text and grouping so the sidebar and page header always agree.
 export type Page = 'overview' | 'pulse' | 'pireview' | 'mywork' | 'bulk' | 'monthly' | 'baselines' | 'board' | 'health' | 'windchill' | 'snapshots' | 'qemapping' | 'admin' | 'docs'
-export type PageGroup = 'Data Insights' | 'My Work' | 'I&D Board' | 'Release Details' | 'Data & governance'
+export type PageGroup = 'Data Insights' | 'My Work' | 'I&D Board' | 'Release Details' | 'Other views' | 'Data & governance'
 
 export interface PageMeta { id: Page; label: string; icon: string; group: PageGroup; detail: string; usesMonth: boolean }
 
@@ -23,5 +23,5 @@ export const pages: PageMeta[] = [
 
 // The Azure DevOps views are split: cloud ones under I&D Board, on-prem (Azure DevOps Server) ones under Release Details
 // with the Windchill exports.
-export const pageGroups: PageGroup[] = ['Data Insights', 'My Work', 'I&D Board', 'Release Details', 'Data & governance']
+export const pageGroups: PageGroup[] = ['Data Insights', 'My Work', 'I&D Board', 'Release Details', 'Other views', 'Data & governance']
 export const pageMeta = (id: Page) => pages.find((page) => page.id === id)!

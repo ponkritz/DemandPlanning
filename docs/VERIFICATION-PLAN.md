@@ -14,6 +14,10 @@ Verification is defined in [TEST-PLAN.md](TEST-PLAN.md) (TP-DPH-001), against th
 
 Run the L3 system test cases in TEST-PLAN.md §6 on the environments in §3. Record the results in §8, with the build number.
 
+## Documents with every change
+
+Every pull request that changes behaviour updates, in the same pull request: the requirement rows (REQUIREMENTS-SPECIFICATION.md), the test cases and the coverage matrix (TEST-PLAN.md §6 and §7), the UAT plan when a UAT case is added or retired, and the README. The Documentation page bundles these files at build time, so the app always shows the documents of its own build.
+
 ## Evidence
 
 Keep the following for each verified build:

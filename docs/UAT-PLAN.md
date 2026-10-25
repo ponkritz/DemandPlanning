@@ -7,7 +7,7 @@
 - Three to five QE Contributors across Junior/Senior bands
 - One dashboard-only stakeholder
 
-## UAT sequence (six days)
+## UAT sequence (nine days)
 
 The scenarios are the test cases marked **UAT** in [TEST-PLAN.md](TEST-PLAN.md).
 
@@ -15,12 +15,13 @@ The scenarios are the test cases marked **UAT** in [TEST-PLAN.md](TEST-PLAN.md).
 |---|---|---|
 | 1 | Install and open (web and desktop), navigation, connections, fetch and auto-save | TC-NAV-01, TC-NAV-06, TC-CON-03, TC-FET-02, TC-DSK-03 |
 | 2 | Monthly Time Writing: scope, locks, staging and save | TC-MON-01, TC-MON-04 |
-| 3 | Assigned to Me: finish, move to the current Sprint, month tasks; Feature creation | TC-ATM-03, TC-ATM-04, TC-ATM-05, TC-BKL-02 |
-| 4 | Overview (This month, Trends), baselines, Git storage | TC-OVR-01, TC-GIT-02 |
+| 3 | Assigned to Me: finish (Features and User Stories: New → Active → Closed), move to the current Sprint, month tasks; New Feature and Complete children; Feature creation | TC-ATM-03, TC-ATM-04, TC-ATM-05, TC-ATM-11, TC-BKL-02 |
+| 4 | Dashboard (period, filters, six tabs, Insights), baselines, Git storage | TC-OV-11, TC-OV-13, TC-GIT-02 |
 | 5 | Force Update, backup and restore, snapshots (where SharePoint is available), Documentation | TC-UPD-02, TC-STO-04, TC-SNP-02, TC-DOC-01 |
 | 6 | Sharing through Git (shared connection setup, Load from Git, read-only token), Release Details and Windchill exports, Overview by region and role, Backlog Health | TC-CON-16, TC-CON-17, TC-CON-18, TC-CON-19, TC-CON-21, TC-SCR-01 |
 | 7 | Roles and access: set up roles, assign a Scrum Master by email, check what each role sees (two people on two browsers) | TC-ACC-01 |
-| 8 | Menu (Data Insights, collapsing), Backlog Health columns and filters, assigning new work to others, Feature setup per Epic, State checks and Feature states | TC-NAV-17, TC-SCR-02, TC-SCR-03, TC-ACC-02, TC-CON-23, TC-ATM-06 |
+| 8 | Menu (Data Insights, collapsing), Backlog Health columns and filters, assigning new work to others, Feature setup per Epic (personal and shared), State checks and Feature states | TC-NAV-17, TC-SCR-02, TC-SCR-03, TC-ACC-02, TC-CON-23, TC-CON-26, TC-ATM-08 |
+| 9 | Phones and tablets; Other views in the menu; DP releases (Pedestal and DHFI); creating a Feature from a release (title parts) | TC-NAV-31, TC-NAV-32, TC-NAV-25, TC-QV-06, TC-QV-07 |
 
 ## Entry criteria
 
