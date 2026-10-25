@@ -24,8 +24,8 @@ const tabKeys: Tab[] = ['releases', 'last', 'ongoing', 'current']
 const tabKey = 'demand-planning-pulse-tab-v1'
 const change = (now: number, before: number) => now === before ? <span className="muted">±0</span> : <span className={now > before ? 'positive' : 'negative'}>{now > before ? '+' : '−'}{Math.abs(now - before)}</span>
 
-// Pulse Check: the selected month's approved releases per stream (moved from Overview), and Last month — the month
-// before the selected one: Overview's "This month" picture for it, its releases next to the selected month's, the
+// Pulse Check: the selected month's approved releases per stream (moved from the Dashboard), and Last month — the month
+// before the selected one: the Dashboard's "This month" picture for it, its releases next to the selected month's, the
 // Features and User Stories created and closed, and its Time Writing gaps.
 export function PulseCheckPage({ month, azure, store, my, navigate, windchill, openWindchill }: { month: string; azure: AzureWorkspace; store: PageProps['store']; my: MyWork; navigate: (page: PageId) => void; windchill: WindchillWorkspace; openWindchill: (id: string) => void }) {
   const [tab, setTabState] = useState<Tab>(() => { try { const saved = localStorage.getItem(tabKey) as Tab; return tabKeys.includes(saved) ? saved : 'releases' } catch { return 'releases' } })
@@ -77,7 +77,7 @@ function Ongoing({ azure, month, absenceEpicId }: { azure: AzureWorkspace; month
 
 function LastMonth({ month, last, azure, store, my, navigate, current }: { month: string; last: string; azure: AzureWorkspace; store: PageProps['store']; my: MyWork; navigate: (page: PageId) => void; current: ReleaseStream[] }) {
   const settings = capacityContext(store.state)
-  // Same Team / Individual choice and team filter as Overview (shared in this browser).
+  // Same Team / Individual choice and team filter as the Dashboard (shared in this browser).
   const personScope = usePersonScope('demand-planning-overview-view-v1', 'team', my)
   const [teamFilter, setTeamFilter] = useTeamFilter()
   const { scope, individual, who } = personScope
@@ -90,7 +90,7 @@ function LastMonth({ month, last, azure, store, my, navigate, current }: { month
   const gaps = scope ? { ...allGaps, storiesWithoutTask: allGaps.storiesWithoutTask.filter((story) => isMine(story, scope) || items.some((item) => item.parentId === story.id && item.workItemType === 'Task')) } : allGaps
   const lastName = monthName(last), monthLabel = monthName(month)
   return <>
-    <ScopeSwitch scope={personScope} label="Last month for" note="Same choice as Overview. Only this person’s Tasks and work items." />
+    <ScopeSwitch scope={personScope} label="Last month for" note="Same choice as the Dashboard. Only this person’s Tasks and work items." />
     {!individual && <TeamFilterBar filter={teamFilter} onChange={setTeamFilter} />}
     {individual && !scope ? <EmptyState title="Choose whose last month to show." detail="Pick a person above, or set your Azure email on the Time Writing connection to make “Me” the default." /> : <>
       <CapacityMetrics model={model} settings={settings} label={`${individual ? who : teamLabel} utilization · ${lastName}`} />

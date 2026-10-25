@@ -5,7 +5,7 @@ export type PageGroup = 'Data Insights' | 'My Work' | 'I&D Board' | 'Release Det
 export interface PageMeta { id: Page; label: string; icon: string; group: PageGroup; detail: string; usesMonth: boolean }
 
 export const pages: PageMeta[] = [
-  { id: 'overview', label: 'Overview', icon: '▦', group: 'Data Insights', detail: 'Demand, capacity and the decisions ahead: utilization, overload, rebalancing, region and role, trends, people and streams for a period and filters.', usesMonth: false },
+  { id: 'overview', label: 'Dashboard', icon: '▦', group: 'Data Insights', detail: 'Demand, capacity and the decisions ahead: utilization, overload, rebalancing, region and role, trends, people and streams for a period and filters.', usesMonth: false },
   { id: 'pulse', label: 'Pulse Check', icon: '◔', group: 'Data Insights', detail: 'Last month’s releases and analysis, ongoing activities, and the current month’s releases.', usesMonth: true },
   { id: 'pireview', label: 'PI Review', icon: '◈', group: 'Data Insights', detail: 'PI summary for the PI Review (planned).', usesMonth: false },
   { id: 'mywork', label: 'Assigned to Me', icon: '◉', group: 'My Work', detail: 'Your pending Azure DevOps items; finish them with Resolved or Closed.', usesMonth: false },

@@ -181,3 +181,91 @@ td small{color:var(--text-3)}
 .sidebar nav button.nav-subgroup:hover{color:#c4e0ff}
 .sidebar nav .nav-subsection>.nav-items{border-left-color:#8ec5ff40}
 .sidebar nav button.nav-group-active{color:var(--teal-light)}
+
+/* Phones and small tablets (≤ 760px): the sidebar is an off-canvas menu with full labels, opened from the ☰ button in
+   the top bar; the content takes the whole width, filters and cards stack, wide tables scroll inside their panel, and
+   inputs are 16px so iOS does not zoom. These rules come last so they win over the narrow-sidebar rules above. */
+.menu-button{display:none}
+@media(max-width:760px){
+  .app-shell{display:block}
+  .menu-button{display:inline-grid;place-items:center;width:40px;height:40px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--text);font-size:18px;flex-shrink:0;margin-right:10px}
+  .nav-backdrop{position:fixed;inset:0;background:#06213a99;z-index:60}
+  .sidebar{position:fixed;top:0;left:0;bottom:0;height:100dvh;width:min(304px,86vw);z-index:70;display:flex;flex-direction:column;padding:16px 12px;overflow-y:auto;transform:translateX(-104%);transition:transform .22s ease;box-shadow:0 0 0 1px var(--sidebar-line),12px 0 40px -20px #000c;border-bottom:0}
+  .nav-open .sidebar{transform:none}
+  .sidebar .brand{display:flex}
+  .sidebar nav{display:block;overflow:visible;margin-top:8px}
+  .sidebar nav button,.sidebar nav button:not(.nav-active),.sidebar nav .nav-active{font-size:13.5px;display:flex;justify-content:flex-start;align-items:center;gap:10px;text-align:left;padding:11px 12px;min-height:44px;width:100%}
+  .sidebar nav .nav-active{display:flex}
+  .nav-icon{font-size:16px}
+  .nav-group,.sidebar nav button.nav-subgroup{display:flex;font-size:10px;min-height:0;padding:8px 12px 4px}
+  .nav-collapsed{display:none}
+  .sidebar nav .nav-section+.nav-section{border-top:1px solid var(--sidebar-line);padding-top:8px;margin-top:8px}
+  .sidebar-footer{display:block;font-size:11px;margin-top:auto;padding-top:12px}
+  .sidebar-footer small{display:block}
+  .nav-badge{position:static;margin-left:auto}
+  main{min-width:0}
+  .topbar{position:sticky;top:0;z-index:40;display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;min-height:56px;padding:8px 12px}
+  .topbar h1{font-size:18px;margin:0;flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .topbar .page-detail,.topbar .clock{display:none}
+  .topbar-slot{order:3;flex-basis:100%}
+  .topbar-actions{order:4;flex-basis:100%;display:flex;flex-wrap:nowrap;gap:8px;overflow-x:auto;margin-top:0;padding-bottom:2px;scrollbar-width:none}
+  .topbar-actions>*{flex-shrink:0}
+  .content{padding:12px}
+  .data-notices{padding:0 12px}
+  .panel{padding:14px 12px;margin-bottom:12px;overflow-x:auto}
+  .panel-heading{flex-wrap:wrap;gap:8px}
+  .metric-grid,.metric-grid:has(> article:nth-child(5)){grid-template-columns:repeat(2,1fr);gap:8px}
+  .dash-cards,.dash-cards-4,.dash-cards-5,.dash-grid-2,.dash-grid-wide,.release-quadrants,.dashboard-grid,.admin-grid,.connection-form,.form-row{grid-template-columns:1fr}
+  .dash-filters{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .dash-filters>button{grid-column:1/-1}
+  .multi-select,.multi-button,.dash-select select{width:100%;max-width:none;min-width:0}
+  .dash-period{display:grid;gap:10px}
+  .chip-row{flex-wrap:wrap}
+  .dash-tabs,.overview-tabs,.backlog-tabs{flex-wrap:nowrap;overflow-x:auto;gap:4px 14px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .dash-tabs button,.overview-tabs button,.backlog-tabs button{white-space:nowrap;flex-shrink:0;min-height:40px}
+  .azure-table{margin-top:10px}
+  .azure-table table{min-width:640px}
+  table.release-register,table.dash-heat{min-width:640px}
+  .dash-chart svg{min-width:480px}
+  .dash-chart{overflow-x:auto}
+  input,select,textarea{font-size:16px}
+  button,.ghost,.primary{min-height:40px}
+  .text-button{min-height:0}
+  .button-row{flex-wrap:wrap;gap:8px}
+  .view-source-bar{flex-wrap:wrap;gap:8px}
+  .update-toast{left:12px;right:12px}
+}
+@media(max-width:420px){
+  .metric-grid,.metric-grid:has(> article:nth-child(5)),.dash-filters{grid-template-columns:1fr}
+  .topbar h1{font-size:17px}
+}
+/* Tablets (761–1000px): the narrow icon rail shows icons only — no clipped brand text, group headings or labels; the
+   active page keeps a short label under its icon. */
+@media(min-width:761px) and (max-width:1000px){
+  .sidebar{padding:14px 8px;overflow-x:hidden}
+  .sidebar .brand{justify-content:center;padding:0 0 14px}
+  .sidebar .brand>div:last-child{display:none}
+  .nav-collapsed{display:block}
+  .sidebar nav button,.sidebar nav button:not(.nav-active),.sidebar nav .nav-items button.nav-missing{font-size:0!important;font-style:normal;display:grid;justify-items:center;padding:10px 4px;width:100%}
+  .sidebar nav button.nav-group,.sidebar nav button.nav-subgroup{display:none}
+  .sidebar nav button.nav-active{font-size:9.5px!important;line-height:1.2;text-align:center}
+  .nav-icon{font-size:18px}
+  .nav-badge{position:absolute;top:2px;right:4px}
+  .sidebar-footer{font-size:0}
+  .sidebar-footer small{display:none}
+}
+/* Dashboard: one utilization model (Settings bands) and colourless hour differences. */
+.util-over{color:var(--danger)}.util-balanced{color:var(--success)}.util-spare{color:var(--viz-series-1,#3987e5)}.delta{color:var(--text);font-weight:700}
+.heat-balanced{background:var(--success-soft)}.heat-spare{background:color-mix(in srgb,var(--viz-series-1,#3987e5) 14%,var(--surface))}.heat-mid{background:var(--warning-soft)}.heat-zero{background:var(--surface-2);color:var(--muted)}
+.dash-card-warning strong{color:var(--warning,#b45309)}.dash-card-ok strong{color:var(--success)}
+.dash-key{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center;font-size:12px;margin:0 0 12px}.warning-text{color:var(--warning,#b45309)}
+.dash-section .panel-heading .chip-row{margin:0}
+.dash-grid-2>*,.dash-grid-wide>*{min-width:0}.dash-grid-2 .azure-table{margin-top:8px}
+.dash-stack{display:grid;gap:18px;margin-bottom:18px}.dash-stack>*{min-width:0}
+/* Assigned to Me: Features expand to their User Stories, Bugs and Tasks. */
+.work-toggle{background:none;border:0;padding:0;margin-right:6px;width:18px;color:var(--text-2);cursor:pointer;font-size:14px;line-height:1}.work-toggle-empty{display:inline-block;text-align:center;cursor:default}
+.work-open td{border-bottom-color:transparent}.work-child td{background:var(--surface-2)}.work-child .work-indent{display:inline-block;width:26px}.work-depth-2 .work-indent{width:52px}.work-child strong.inline{font-weight:500}
+/* Create Feature: the title's three parts (Program · Service · Release / Platform · Name · Release). */
+.create-release-feature .title-parts{display:grid;grid-template-columns:minmax(140px,1fr) minmax(180px,2fr) minmax(120px,1fr);gap:10px}.create-release-feature .title-parts label{display:grid;gap:4px;font-size:12px;color:var(--text-2)}.create-release-feature .add-platform{display:flex;gap:6px;align-items:center}.create-release-feature .add-platform input{flex:1;min-width:0}
+@media (max-width:760px){.create-release-feature .title-parts{grid-template-columns:1fr}}
+.pick-tools{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;margin-bottom:8px}.pick-tools .button-row{margin:0;align-items:center;gap:8px}

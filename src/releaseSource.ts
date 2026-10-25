@@ -266,3 +266,18 @@ export function attachFeatures(entries: ReleaseEntry[], backlog: AzureWorkItem[]
     return { ...entry, ...(best ? { match: best } : {}), tracked: trackedBy.length > 0, trackedBy, features: tracking, planned, booked, hourTasks: tasks.size }
   }).sort((a, b) => a.name.localeCompare(b.name) || b.release.localeCompare(a.release, undefined, { numeric: true }))
 }
+
+// Structured Feature titles for the Create Feature form. The three parts are the ones the Epic setup templates read
+// ({program} | {service} | v{version}): DP names them Program · Service · Release; CP names them Platform · Name ·
+// Release, with the platform picked from a list (Platform 1.0 and 2.0 to start; more can be typed and are kept in
+// this browser). Other streams keep the free title.
+export type TitleScheme = 'dp' | 'cp' | 'free'
+export interface TitleParts { first: string; second: string; release: string }
+export const defaultPlatforms = ['Platform 1.0', 'Platform 2.0']
+export function titleScheme(stream: string): TitleScheme { const key = stream.trim().toLowerCase().replace(/[^a-z0-9]+/g, ''); return key === 'dp' ? 'dp' : key === 'cp' ? 'cp' : 'free' }
+export const titleLabels: Record<TitleScheme, [string, string, string]> = { dp: ['Program', 'Service', 'Release'], cp: ['Platform', 'Name', 'Release'], free: ['Stream', 'Name', 'Release'] }
+export function defaultTitleParts(stream: string, name: string, release: string, platforms = defaultPlatforms): TitleParts {
+  const scheme = titleScheme(stream)
+  return { first: scheme === 'cp' ? platforms[0] ?? '' : stream.trim(), second: name.trim(), release: release.trim() }
+}
+export const titleFromParts = (parts: TitleParts) => releaseFeatureTitle(parts.first, parts.second, parts.release)

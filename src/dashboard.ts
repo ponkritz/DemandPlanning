@@ -89,21 +89,33 @@ export function groupBy<K extends string>(rows: PersonMonth[], key: (row: Person
   return [...groups].map(([name, entries]) => ({ name, rows: entries, ...totals(entries) }))
 }
 
-// People whose total planned hours over the period exceed their capacity.
-export function plannedOverload(rows: PersonMonth[]) {
+// One utilization model for the whole Dashboard, from Settings → Capacity: overloaded at or above `overloadedAt` %
+// of capacity, spare below `availableBelow` %, balanced in between.
+export interface Bands { overloadedAt: number; availableBelow: number }
+export const defaultBands: Bands = { overloadedAt: 100, availableBelow: 80 }
+export type Band = 'over' | 'balanced' | 'spare'
+export function bandOf(utilization: number | null | undefined, bands: Bands = defaultBands): Band | null {
+  if (utilization == null) return null
+  return utilization >= bands.overloadedAt ? 'over' : utilization < bands.availableBelow ? 'spare' : 'balanced'
+}
+const utilOf = (hours: number, capacity: number) => capacity > 0 ? hours / capacity * 100 : null
+
+// People whose planned utilization over the period reaches the overloaded threshold.
+export function plannedOverload(rows: PersonMonth[], bands: Bands = defaultBands) {
   const people = groupBy(rows, (row) => row.person)
-  return { over: people.filter((person) => person.plan > person.capacity).map((person) => person.name), people: people.length }
+  return { over: people.filter((person) => bandOf(person.planUtil, bands) === 'over').map((person) => person.name), people: people.length }
 }
 
-// Persistent overload: above 100% of capacity in at least `streak` consecutive elapsed months (missing months break it).
-export function persistentOverload(rows: PersonMonth[], months: string[], measure: 'actual' | 'plan', streak = 3) {
+// Persistent overload: at or above the overloaded threshold in at least `streak` consecutive elapsed months (missing
+// months break it).
+export function persistentOverload(rows: PersonMonth[], months: string[], measure: 'actual' | 'plan', streak = 3, bands: Bands = defaultBands) {
   const elapsed = months.filter((month) => rows.some((row) => row.month === month && row.status === 'elapsed'))
   const names = [...new Set(rows.map((row) => row.person))].sort()
   return names.filter((name) => {
     let run = 0, best = 0
     for (const month of elapsed) {
       const row = rows.find((entry) => entry.person === name && entry.month === month)
-      run = row && row.capacity > 0 && row[measure] > row.capacity ? run + 1 : 0
+      run = row && bandOf(utilOf(row[measure], row.capacity), bands) === 'over' ? run + 1 : 0
       best = Math.max(best, run)
     }
     return best >= streak

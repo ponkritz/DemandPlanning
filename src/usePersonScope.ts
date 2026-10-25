@@ -5,7 +5,7 @@ import type { MyWork } from './useMyWork'
 
 export type ScopeView = 'team' | 'individual'
 
-// Team / Individual choice shared by Overview and Monthly Time Writing, remembered per page in this browser.
+// Team / Individual choice shared by the Dashboard and Monthly Time Writing, remembered per page in this browser.
 // Individual defaults to "me" (Time Writing connection email); any other assignee can be picked.
 export function usePersonScope(key: string, defaultView: ScopeView, my: MyWork) {
   const [view, setViewState] = useState<ScopeView>(() => { try { const saved = localStorage.getItem(key); return saved === 'team' || saved === 'individual' ? saved : defaultView } catch { return defaultView } })
@@ -18,7 +18,7 @@ export function usePersonScope(key: string, defaultView: ScopeView, my: MyWork) 
 }
 export type PersonScope = ReturnType<typeof usePersonScope>
 
-// Team view filter (region and roles), remembered in this browser; shared by Overview and Pulse Check.
+// Team view filter (region and roles), remembered in this browser; shared by the Dashboard and Pulse Check.
 export function useTeamFilter() {
   const [teamFilter, setTeamFilterState] = useState<TeamFilter>(() => {
     try {

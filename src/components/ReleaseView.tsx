@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import type { AzureWorkItem } from '../domain'
-import { matchScore, releaseFeatureTitle, releaseRegister, tracksRelease, type ReleaseEntry } from '../releaseSource'
+import { defaultPlatforms, defaultTitleParts, matchScore, releaseRegister, titleFromParts, titleLabels, titleScheme, tracksRelease, type ReleaseEntry, type TitleParts } from '../releaseSource'
 import type { ReleaseRule } from '../streams'
 import { createAzureFeature } from '../azureDevOps'
 import type { AzureWorkspace } from '../useAzureWorkspace'
@@ -82,6 +82,7 @@ function PedestalCells({ plan }: { plan?: PedestalRelease }) {
 // edited; it must still name the release (tracksRelease) so the release maps back to it. Parent: the Epic named like the stream (DP, CP, IOCC, …) unless another is chosen; assigned to the Time
 // Writing connection's creator email. Azure DevOps validates the Feature before it is saved.
 // The new Feature is assigned to the person chosen in the confirmation: by default the person creating it.
+const platformsKey = 'demand-planning-cp-platforms-v1', addOption = '__add__'
 function CreateReleaseFeature({ stream, release, azure, onDone, assign, fuzzy = false, threshold = 80 }: { stream: string; release: ReleaseEntry; azure: AzureWorkspace; onDone: () => void; assign?: { me: string; canChoose: boolean }; fuzzy?: boolean; threshold?: number }) {
   const [confirming, setConfirming] = useState(false)
   const me = (assign?.me || azure.creatorEmail).trim().toLowerCase()
@@ -91,7 +92,22 @@ function CreateReleaseFeature({ stream, release, azure, onDone, assign, fuzzy = 
   const [epicId, setEpicId] = useState(suggested?.id ?? 0)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [title, setTitle] = useState(() => releaseFeatureTitle(stream, [release.group, release.name].filter(Boolean).join(' '), release.release))
+  // The title is built from three parts (Program · Service · Release for DP; Platform · Name · Release for CP, the
+  // platform from a list that grows with "Add…"; Stream · Name · Release elsewhere) and can still be edited as a whole.
+  const scheme = titleScheme(stream)
+  const [platforms, setPlatforms] = useState<string[]>(() => { try { const saved = JSON.parse(localStorage.getItem(platformsKey) ?? 'null'); return Array.isArray(saved) && saved.every((entry) => typeof entry === 'string') && saved.length ? saved : defaultPlatforms } catch { return defaultPlatforms } })
+  const [parts, setParts] = useState<TitleParts>(() => defaultTitleParts(stream, [release.group, release.name].filter(Boolean).join(' '), release.release, platforms))
+  const [title, setTitle] = useState(() => titleFromParts(parts))
+  const [adding, setAdding] = useState(false)
+  const [newPlatform, setNewPlatform] = useState('')
+  const labels = titleLabels[scheme]
+  const setPart = (change: Partial<TitleParts>) => { const next = { ...parts, ...change }; setParts(next); setTitle(titleFromParts(next)) }
+  const addPlatform = () => {
+    const value = newPlatform.trim(); if (!value) return
+    const next = platforms.some((entry) => entry.toLowerCase() === value.toLowerCase()) ? platforms : [...platforms, value]
+    setPlatforms(next); try { localStorage.setItem(platformsKey, JSON.stringify(next)) } catch { /* kept for this session */ }
+    setPart({ first: next.find((entry) => entry.toLowerCase() === value.toLowerCase()) ?? value }); setAdding(false); setNewPlatform('')
+  }
   const score = fuzzy ? matchScore(title, release.name, release.release, release.group) : undefined
   const mapsBack = score != null ? score >= threshold : tracksRelease(title, release.name, release.release)
   const blocked = azure.isSample ? 'Synthetic sample data is loaded: creating in Azure DevOps is disabled.' : !azure.config || !azure.pat.trim() ? 'Connect the QMS-0025 Time Writing connection (with its PAT) to create Features.' : !azure.creatorEmail ? 'Set the Feature creator email on the Time Writing connection: new Features are assigned to it.' : ''
@@ -106,6 +122,13 @@ function CreateReleaseFeature({ stream, release, azure, onDone, assign, fuzzy = 
     finally { setBusy(false) }
   }
   return <div className="create-release-feature">
+    <div className="title-parts">
+      {scheme === 'cp' ? <label>{labels[0]}{adding ? <span className="add-platform"><input value={newPlatform} placeholder="New platform, e.g. Platform 3.0" maxLength={60} autoFocus onChange={(event) => setNewPlatform(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addPlatform() } if (event.key === 'Escape') { setAdding(false); setNewPlatform('') } }} /><button type="button" className="ghost" disabled={!newPlatform.trim()} onClick={addPlatform}>Add</button><button type="button" className="text-button" onClick={() => { setAdding(false); setNewPlatform('') }}>Cancel</button></span>
+        : <select value={parts.first} onChange={(event) => { if (event.target.value === addOption) setAdding(true); else setPart({ first: event.target.value }) }}>{platforms.map((entry) => <option key={entry} value={entry}>{entry}</option>)}{!platforms.includes(parts.first) && parts.first && <option value={parts.first}>{parts.first}</option>}<option value={addOption}>Add…</option></select>}</label>
+        : <label>{labels[0]}<input value={parts.first} maxLength={80} onChange={(event) => setPart({ first: event.target.value })} /></label>}
+      <label>{labels[1]}<input value={parts.second} maxLength={120} onChange={(event) => setPart({ second: event.target.value })} /></label>
+      <label>{labels[2]}<input value={parts.release} maxLength={40} placeholder="e.g. 3.0.0.2" onChange={(event) => setPart({ release: event.target.value })} /></label>
+    </div>
     <label>Feature title<input value={title} maxLength={255} onChange={(event) => setTitle(event.target.value)} /></label>
     <small className={mapsBack ? 'muted' : 'negative'}>{score != null ? `${score}% match with ${[release.group, release.name, release.release].filter(Boolean).join(' ')}${mapsBack ? ' — the release maps to this Feature.' : ` — below ${threshold}%, the release would not map to it. Keep the name and version in the title.`}` : mapsBack ? `Maps back to ${release.name} ${release.release}: the title names the release and its version.` : `This title does not name “${release.name}” and version ${release.release}; the release would not map to the Feature. Keep both in the title.`}</small>
     {blocked ? <p className="notice warning">{blocked}</p> : <div className="button-row">
