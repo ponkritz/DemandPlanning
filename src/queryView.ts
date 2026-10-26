@@ -129,3 +129,10 @@ const csvCell = (value: string) => /[",\r\n]/.test(value) ? `"${value.replaceAll
 export function viewCsv(items: AzureWorkItem[], columns: QueryColumn[]) {
   return [columns.map((column) => csvCell(column.name)).join(','), ...items.map((item) => columns.map((column) => csvCell(formatCell(cellValue(item, column.ref)))).join(','))].join('\r\n')
 }
+// The column chooser of a query view: the columns not hidden, in the query's order (never none: with every column
+// hidden, the first one stays), and the hidden ones remembered per view in this browser.
+export const hiddenColumnsKey = (view: string) => `demand-planning-query-hidden-columns-v1:${view}`
+export function visibleColumns<T extends { ref: string }>(columns: T[], hidden: string[]): T[] {
+  const shown = columns.filter((column) => !hidden.includes(column.ref))
+  return shown.length ? shown : columns.slice(0, 1)
+}

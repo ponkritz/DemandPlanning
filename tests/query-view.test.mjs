@@ -68,3 +68,13 @@ test('read-only views get Name and Release columns from the paths, after the ID'
   assert.deepEqual([cellValue(item, releaseNameRef), cellValue(item, releaseRef)], ['DoseNav', '2.1.0'])
   assert.equal(withReleaseColumns(columns, [{ ...item, areaPath: 'DHP\\Team' }], make), columns, 'no release in any path: columns unchanged')
 })
+
+import { visibleColumns, hiddenColumnsKey } from '../src/queryView.ts'
+test('column chooser: hidden columns left out in the query order, never all of them, remembered per view', () => {
+  const columns = [{ ref: 'System.Id' }, { ref: 'System.Title' }, { ref: 'Custom.ReleaseDate' }, { ref: 'System.State' }]
+  assert.deepEqual(visibleColumns(columns, []).map((column) => column.ref), ['System.Id', 'System.Title', 'Custom.ReleaseDate', 'System.State'])
+  assert.deepEqual(visibleColumns(columns, ['System.Title', 'System.State']).map((column) => column.ref), ['System.Id', 'Custom.ReleaseDate'])
+  assert.deepEqual(visibleColumns(columns, columns.map((column) => column.ref)).map((column) => column.ref), ['System.Id'], 'with every column hidden the first one stays')
+  assert.deepEqual(visibleColumns(columns, ['Unknown.Field']).length, 4, 'a column no longer in the query is ignored')
+  assert.notEqual(hiddenColumnsKey('DP'), hiddenColumnsKey('CP'))
+})

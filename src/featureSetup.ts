@@ -131,3 +131,12 @@ export const removeSetup = (file: FeatureSetupFile, epicId: number): FeatureSetu
 export function setupsMissingDoD(draft: FeatureSetupFile, saved: FeatureSetupFile | null): number[] {
   return draft.epics.filter((entry) => !(entry.featureDoD ?? '').trim() && JSON.stringify(entry) !== JSON.stringify(setupFor(saved, entry.epicId) ?? null)).map((entry) => entry.epicId).sort((a, b) => a - b)
 }
+// The default Feature DoD for a setup that has none: Full Release when it has a PRD story (only Full Releases do),
+// else PU. Only a pre-fill — it is reviewed and saved by the user.
+export const defaultDoDFor = (entry: Pick<EpicSetup, 'stories'>) => featureDoD(entry.stories.some((story) => /\bPRD\b/i.test(story.title)) ? 'Release' : 'PU')
+export const missingDoD = (entry: Pick<EpicSetup, 'featureDoD'>) => !(entry.featureDoD ?? '').trim()
+export function fillMissingDoD(file: FeatureSetupFile): { file: FeatureSetupFile; filled: number[] } {
+  const filled = file.epics.filter(missingDoD).map((entry) => entry.epicId)
+  if (!filled.length) return { file, filled }
+  return { file: { ...file, epics: file.epics.map((entry) => missingDoD(entry) ? { ...structuredClone(entry), featureDoD: defaultDoDFor(entry) } : entry) }, filled }
+}

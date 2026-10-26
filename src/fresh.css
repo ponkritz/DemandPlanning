@@ -333,3 +333,6 @@ td small{color:var(--text-3)}
 .setup-all-table .setup-all-actions{flex-direction:column;align-items:stretch;gap:6px}
 .setup-all-table .setup-all-actions button{width:100%;justify-content:center}
 .setup-all-edit li input{min-width:0}.setup-all-table td>input,.setup-all-estimate input{width:100%}
+.setup-fill-dod{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:0 0 10px;padding:10px 12px;border:1px solid var(--warning-line);border-radius:10px;background:var(--warning-soft)}.setup-fill-dod small{flex-basis:100%}
+.column-chooser{border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin:0 0 12px;background:var(--surface)}.column-chooser legend{font-size:12px;font-weight:700;color:var(--text-2);padding:0 4px}.column-chooser-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px 14px;margin-top:8px}.column-chooser-list small{display:block;width:100%;font-size:10px}
+.column-chooser-list label{display:grid;grid-template-columns:auto 1fr;align-items:center;column-gap:8px}.column-chooser-list label small{grid-column:2}
