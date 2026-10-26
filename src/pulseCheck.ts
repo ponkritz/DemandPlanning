@@ -9,12 +9,14 @@ export function previousMonth(month: string) {
 }
 
 // Releases and documents per stream in the previous month next to the selected month (streams in either month).
-export interface ReleaseChange { name: string; releases: number; documents: number; previousReleases: number; previousDocuments: number }
+// supported / previousSupported: DP's Supported Releases (it counts no documents).
+export interface ReleaseChange { name: string; releases: number; documents: number; previousReleases: number; previousDocuments: number; supported?: number; previousSupported?: number }
 export function releaseComparison(current: ReleaseStream[], previous: ReleaseStream[]): ReleaseChange[] {
   const names = [...new Set([...current, ...previous].map((stream) => stream.name))].sort((a, b) => a.localeCompare(b))
   return names.map((name) => {
     const now = current.find((stream) => stream.name === name), before = previous.find((stream) => stream.name === name)
-    return { name, releases: now?.releases.length ?? 0, documents: now?.documents ?? 0, previousReleases: before?.releases.length ?? 0, previousDocuments: before?.documents ?? 0 }
+    const supported = now?.supported != null || before?.supported != null ? { supported: now?.supported ?? 0, previousSupported: before?.supported ?? 0 } : {}
+    return { name, releases: now?.releases.length ?? 0, documents: now?.documents ?? 0, previousReleases: before?.releases.length ?? 0, previousDocuments: before?.documents ?? 0, ...supported }
   })
 }
 
