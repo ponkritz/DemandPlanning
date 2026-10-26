@@ -371,3 +371,4 @@ body:has(.modal-backdrop){overflow:hidden}
 /* Same order in every pop-up: Cancel, then the main action on the right. */
 .modal .connection-actions,.modal .connection-editor>.button-row{flex-direction:row-reverse;justify-content:flex-start}
 .modal .shared-time-form button{margin-top:0}
+.board-match{display:inline-flex;gap:.5rem;align-items:center}.board-match small{font-size:.78em}

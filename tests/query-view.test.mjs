@@ -88,3 +88,11 @@ test('a bare field name finds its prefixed reference name ("SourceProgram" → C
   assert.deepEqual(pickFields(fields, ['SourceProgram', 'Year', 'System.Title']), { SourceProgram: 'RSGMS', 'System.Title': 'RSGMS 3.0.0.2' }, 'an ambiguous bare name stays blank rather than guessing')
   assert.deepEqual(pickFields({ 'Custom.SourceProgram': 'X' }, ['Other.SourceProgram']), {}, 'a written prefix is never swapped for another')
 })
+
+test('rich-text values (Acceptance Criteria) show as text: tags removed, entities decoded, lines joined', async () => {
+  const { formatCell, htmlToText } = await import('../src/queryView.ts')
+  assert.equal(formatCell('<div><b>Given</b> a release&nbsp;is Done</div><div>When &lt;DDT&gt; &amp; DRfH<br>Then it counts</div>'), 'Given a release is Done · When <DDT> & DRfH · Then it counts')
+  assert.equal(formatCell('<ul><li>One</li><li>Two &#8211; &#x2713;</li></ul><p></p>'), 'One · Two – ✓')
+  assert.equal(htmlToText('<style>p{}</style><p>Only text</p>'), 'Only text')
+  assert.equal(formatCell('Value <5> and a < b'), 'Value <5> and a < b', 'plain text with angle brackets stays as it is')
+})

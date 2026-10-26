@@ -5,7 +5,9 @@ import { AzureWorkItemTree } from '../components/AzureWorkItemTree'
 import { QueryView } from '../components/QueryView'
 import { ReleaseView } from '../components/ReleaseView'
 import { DpMonthCounts } from '../components/DpMonthCounts'
-import { ddtMonthOf } from '../dpMilestones'
+import { useDpBoardColumn } from '../useDpBoardColumn'
+import type { AzureWorkItem } from '../domain'
+import { ddtMonthOf, dpMilestoneNames, dpMilestones } from '../dpMilestones'
 import { formatDate, formatDateTime, monthName } from '../format'
 import { approvalDateFrom, viewMonthOf } from '../releaseSource'
 import { viewSource } from '../viewSources'
@@ -44,6 +46,7 @@ export function BoardPage({ azure, store, current, month, git, onOpenConnection,
 }
 
 // A Backlog view connection: its last fetched snapshot as the same expandable tree, read only.
+const noItems: AzureWorkItem[] = []
 function ReadOnlyView({ id, name, role, azure, store, month, gitNote, onOpenConnection, assign }: { id: string; name: string; role: BacklogView['role']; azure: AzureWorkspace; store: PageProps['store']; month: string; gitNote?: { tone: string; text: string }; onOpenConnection: () => void; assign?: { me: string; canChoose: boolean } }) {
   const [allMonths, setAllMonths] = useState(false)
   // Every connection's fetch is stored on its own (by connection ID).
@@ -65,22 +68,29 @@ function ReadOnlyView({ id, name, role, azure, store, month, gitNote, onOpenConn
   // Month filter (header month picker): items approved in the month, else changed in it; "All months" turns it off.
   // DP: the month is the DDT Date's (dpMilestones); other views: Author Approval Date, else Changed Date.
   const isDp = stream?.rule === 'dp'
-  const items = source ? allMonths ? source.items : source.items.filter((item) => (isDp ? ddtMonthOf(item) : viewMonthOf(item)) === month) : []
+  const items = source ? allMonths ? source.items : source.items.filter((item) => (isDp ? ddtMonthOf(item) : viewMonthOf(item)) === month) : noItems
+  // DP rows matched to the QMS-0025 board (Feature / User Story by SourceProgram + Title), with Create Feature.
+  const boardColumn = useDpBoardColumn(isDp ? items : noItems, azure, threshold, assign)
   // Items without an approval date fall back to their Changed Date for the month filter; say how many.
   const undated = source ? source.items.filter((item) => isDp ? !ddtMonthOf(item) : !(item.approvalDate ?? approvalDateFrom(item.fields ?? {}))).length : 0
   // On-prem views with Git storage: Load from Git too; a fetch that cannot run falls back to it.
   const refresh = <span className="button-row"><button className="primary" disabled={busy} onClick={() => void azure.fetchConnection(id)}>{busy ? (status?.message || 'Fetching…') : source ? 'Refresh from Azure' : 'Fetch from Azure'}</button>{azure.canLoadFromGit(id) && <button className="ghost" disabled={busy} onClick={() => void azure.loadFromGit(id)}>Load from Git</button>}</span>
+  // Information about the view sits behind the ⓘ next to its name, not as banners; only errors and warnings stay on the page.
+  const notes = [
+    source && isDp ? `Month filter: by DDT Date in your time zone.${undated > 0 ? ` ${undated} of ${source.items.length} releases have no DDT Date and show only with “All months”.` : ''}` : '',
+    source && !isDp && undated > 0 ? `Month filter: by Author Approval Date in your time zone. ${undated} of ${source.items.length} items have no approval date${role === 'release-source' ? '' : ' in the query’s columns'}, so their Changed Date is used.` : '',
+    isDp ? dpMilestones.map(([milestone]) => `${dpMilestoneNames[milestone].short} = ${dpMilestoneNames[milestone].long} (${milestone})`).join(' · ') : '',
+    status?.state === 'ok' && status.message.includes('Git') ? status.message : '',
+    !azure.isSample && gitNote && gitNote.tone !== 'error' ? gitNote.text : '',
+  ].filter(Boolean)
   return <Page className="backlog-page">
     <Panel className="connection-panel backlog-panel">
-      <div className="view-source-bar"><div><strong>{name}</strong><span className="muted"> · {config ? `${config.organization} / ${config.project}` : 'connection not found'}{source ? ` · ${allMonths ? source.items.length : `${items.length} of ${source.items.length}`} items${allMonths ? '' : ` in ${monthName(month)}`} · fetched ${formatDateTime(source.fetchedAt)}${'fromGit' in source && source.fromGit ? ' (desktop app, via Git)' : ''}` : ''}</span>{profile?.query ? <small className="muted"> · query</small> : config?.team ? <small className="muted"> · team {config.team}</small> : null}</div><div className="button-row">{source && <label className="check"><input type="checkbox" checked={allMonths} onChange={(event) => setAllMonths(event.target.checked)} />All months</label>}{refresh}<button className="ghost" onClick={onOpenConnection}>Connection settings</button></div></div>
+      <div className="view-source-bar"><div><strong>{name}</strong><span className="muted"> · {config ? `${config.organization} / ${config.project}` : 'connection not found'}{source ? ` · ${allMonths ? source.items.length : `${items.length} of ${source.items.length}`} items${allMonths ? '' : ` in ${monthName(month)}`} · fetched ${formatDateTime(source.fetchedAt)}${'fromGit' in source && source.fromGit ? ' (desktop app, via Git)' : ''}` : ''}</span>{profile?.query ? <small className="muted"> · query</small> : config?.team ? <small className="muted"> · team {config.team}</small> : null}{notes.length > 0 && <Info>{notes.map((note) => <p key={note}>{note}</p>)}</Info>}</div><div className="button-row">{source && <label className="check"><input type="checkbox" checked={allMonths} onChange={(event) => setAllMonths(event.target.checked)} />All months</label>}{refresh}<button className="ghost" onClick={onOpenConnection}>Connection settings</button></div></div>
       {status?.state === 'error' && <div className="notice error" role="alert">{status.message}</div>}
-      {status?.state === 'ok' && status.message.includes('Git') && <div className="notice" role="status">{status.message}</div>}
-      {azure.isSample ? null : gitNote && <div className={`notice ${gitNote.tone}`} role="status">{gitNote.text}</div>}
-      {source && !allMonths && isDp && <div className="notice" role="status">Month filter: by DDT Date in your time zone.{undated > 0 ? ` ${undated} of ${source.items.length} releases have no DDT Date and show only with “All months”.` : ''}</div>}
-      {source && !allMonths && !isDp && undated > 0 && <div className="notice" role="status">Month filter: by Author Approval Date in your time zone. {undated} of {source.items.length} items have no approval date{role === 'release-source' ? '' : ' in the query’s columns'}, so their Changed Date is used.</div>}
+      {!azure.isSample && gitNote?.tone === 'error' && <div className="notice error" role="alert">{gitNote.text}</div>}
       {stale && !busy && <div className="notice warning" role="status">The saved data was fetched with different columns than the connection's query now has. Refresh from Azure to load every column's values.</div>}
       {source && config && !items.length && source.items.length ? isDp ? <><DpMonthCounts items={source.items} month={month} /><EmptyState title={`No release has its DDT Date in ${monthName(month)}.`} detail="Pick another month in the header, or tick “All months”. The counts above still include milestones Done in the month." /></> : <EmptyState title={`No items in ${monthName(month)}.`} detail={`${source.items.length} items have an approval date (else a changed date) in other months. Pick another month in the header, or tick “All months”.`} />
-        : source && config ? isDp ? <><DpMonthCounts items={source.items} month={month} /><QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} queryOnly choose /></> : role === 'release-source' || stream ? <ReleaseView name={name} items={items} backlog={azure.items} azure={azure} assign={assign} rule={stream?.rule} fuzzy={stream?.fuzzy} threshold={threshold} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} /> : <QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} />
+        : source && config ? isDp ? <><DpMonthCounts items={source.items} month={month} /><QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} queryOnly choose extra={boardColumn} /></> : role === 'release-source' || stream ? <ReleaseView name={name} items={items} backlog={azure.items} azure={azure} assign={assign} rule={stream?.rule} fuzzy={stream?.fuzzy} threshold={threshold} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} /> : <QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} />
         : <><EmptyState title={config ? `“${name}” has not been fetched yet.` : `The connection for “${name}” is not saved in this browser.`} detail={config ? 'Fetch it read-only; nothing is written to Azure DevOps. Its items stay on this page and are not counted in Overview, Monthly Time Writing or Assigned to Me.' : 'Add it again in Settings → Azure DevOps.'} /></>}
     </Panel>
   </Page>

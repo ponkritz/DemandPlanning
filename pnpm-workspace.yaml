@@ -1,3 +1,8 @@
 allowBuilds:
   electron: true
   electron-winstaller: false
+# Security fixes for packages pulled in only by electron-builder (build time), until it ships them itself.
+overrides:
+  http-cache-semantics: ^4.2.1
+  undici@6: ^6.29.1
+  fast-uri: ^3.1.9

@@ -54,7 +54,9 @@ function ReleaseTable({ name, title = 'Releases', detail, register, azure, assig
 // Writing connection's creator email. Azure DevOps validates the Feature before it is saved.
 // The new Feature is assigned to the person chosen in the confirmation: by default the person creating it.
 const platformsKey = 'demand-planning-cp-platforms-v1', addOption = '__add__'
-function CreateReleaseFeature({ stream, release, azure, onDone, assign, fuzzy = false, threshold = 80 }: { stream: string; release: ReleaseEntry; azure: AzureWorkspace; onDone: () => void; assign?: { me: string; canChoose: boolean }; fuzzy?: boolean; threshold?: number }) {
+// program: the first title part when it is not the stream (DP rows: their SourceProgram); scoreOf: how the new title
+// maps back (DP rows: dpTitleScore); note: the Description text after the Feature DoD.
+export function CreateReleaseFeature({ stream, release, azure, onDone, assign, fuzzy = false, threshold = 80, program, scoreOf, note }: { stream: string; release: ReleaseEntry; azure: AzureWorkspace; onDone: () => void; assign?: { me: string; canChoose: boolean }; fuzzy?: boolean; threshold?: number; program?: string; scoreOf?: (title: string) => number; note?: string }) {
   const [confirming, setConfirming] = useState(false)
   const me = (assign?.me || azure.creatorEmail).trim().toLowerCase()
   const epics = azure.items.filter((item) => item.workItemType === 'Epic' && item.state.trim().toLowerCase() !== 'removed').sort((a, b) => a.title.localeCompare(b.title))
@@ -67,7 +69,7 @@ function CreateReleaseFeature({ stream, release, azure, onDone, assign, fuzzy = 
   // platform from a list that grows with "Add…"; Stream · Name · Release elsewhere) and can still be edited as a whole.
   const scheme = titleScheme(stream)
   const [platforms, setPlatforms] = useState<string[]>(() => { try { const saved = JSON.parse(localStorage.getItem(platformsKey) ?? 'null'); return Array.isArray(saved) && saved.every((entry) => typeof entry === 'string') && saved.length ? saved : defaultPlatforms } catch { return defaultPlatforms } })
-  const [parts, setParts] = useState<TitleParts>(() => defaultTitleParts(stream, [release.group, release.name].filter(Boolean).join(' '), release.release, platforms))
+  const [parts, setParts] = useState<TitleParts>(() => ({ ...defaultTitleParts(stream, [release.group, release.name].filter(Boolean).join(' '), release.release, platforms), ...(program ? { first: program } : {}) }))
   const [title, setTitle] = useState(() => titleFromParts(parts))
   const [dod, setDod] = useState('')
   const [adding, setAdding] = useState(false)
@@ -80,14 +82,14 @@ function CreateReleaseFeature({ stream, release, azure, onDone, assign, fuzzy = 
     setPlatforms(next); try { localStorage.setItem(platformsKey, JSON.stringify(next)) } catch { /* kept for this session */ }
     setPart({ first: next.find((entry) => entry.toLowerCase() === value.toLowerCase()) ?? value }); setAdding(false); setNewPlatform('')
   }
-  const score = fuzzy ? matchScore(title, release.name, release.release, release.group) : undefined
+  const score = scoreOf ? scoreOf(title) : fuzzy ? matchScore(title, release.name, release.release, release.group) : undefined
   const mapsBack = score != null ? score >= threshold : tracksRelease(title, release.name, release.release)
   const blocked = azure.isSample ? 'Synthetic sample data is loaded: creating in Azure DevOps is disabled.' : !azure.config || !azure.pat.trim() ? 'Connect the QMS-0025 Time Writing connection (with its PAT) to create Features.' : !azure.creatorEmail ? 'Set the Feature creator email on the Time Writing connection: new Features are assigned to it.' : ''
   async function create(assignee: string) {
     if (blocked || !azure.config || !epicId || !mapsBack || !title.trim() || !dod.trim()) return
     setBusy(true); setError('')
     try {
-      const created = await createAzureFeature(azure.config, azure.pat, { parentId: epicId, title: title.trim(), description: withFeatureDoD(dod, `Release ${release.name} ${release.release} (${stream}); created from the ${stream} release view. ${release.documents} document(s).`), acceptanceCriteria: '', assignedTo: assignee })
+      const created = await createAzureFeature(azure.config, azure.pat, { parentId: epicId, title: title.trim(), description: withFeatureDoD(dod, note ?? `Release ${release.name} ${release.release} (${stream}); created from the ${stream} release view. ${release.documents} document(s).`), acceptanceCriteria: '', assignedTo: assignee })
       azure.featureCreated([created])
       setConfirming(false); onDone()
     } catch (failure) { setError(failure instanceof Error ? failure.message : 'The Feature could not be created.') }

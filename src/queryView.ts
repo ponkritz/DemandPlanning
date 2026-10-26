@@ -99,10 +99,23 @@ export function columnName(ref: string, names: Record<string, string> = {}) {
 }
 
 const isDate = (value: FieldValue | undefined): value is string => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value)
+// Rich-text fields (Acceptance Criteria, Description, …) come as HTML: shown as their text, one line per paragraph,
+// list item or line break joined with " · ", the tags removed and the entities decoded.
+const entities: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' }
+const looksLikeHtml = (value: string) => /<\/?[a-z][a-z0-9]*(\s[^<>]*)?\/?>/i.test(value)
+export function htmlToText(value: string) {
+  return value
+    .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, '')
+    .replace(/<br\s*\/?>|<\/(p|div|li|tr|h[1-6])>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (match, code: string) => code[0] === '#' ? String.fromCodePoint(code[1].toLowerCase() === 'x' ? parseInt(code.slice(2), 16) : Number(code.slice(1))) : entities[code.toLowerCase()] ?? match)
+    .split('\n').map((line) => line.replace(/\s+/g, ' ').trim()).filter(Boolean).join(' · ')
+}
 export function formatCell(value: FieldValue | undefined) {
   if (value == null || value === '') return ''
   if (isDate(value)) return formatDate(value)
   if (typeof value === 'boolean') return value ? 'Yes' : 'No'
+  if (typeof value === 'string' && looksLikeHtml(value)) return htmlToText(value)
   return String(value)
 }
 
@@ -132,8 +145,9 @@ export function viewSummary(items: AzureWorkItem[], today: string) {
 }
 
 const csvCell = (value: string) => /[",\r\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value
-export function viewCsv(items: AzureWorkItem[], columns: QueryColumn[]) {
-  return [columns.map((column) => csvCell(column.name)).join(','), ...items.map((item) => columns.map((column) => csvCell(formatCell(cellValue(item, column.ref)))).join(','))].join('\r\n')
+// extra: one more column after the query's (DP: the board match), by its text.
+export function viewCsv(items: AzureWorkItem[], columns: QueryColumn[], extra?: { name: string; text: (item: AzureWorkItem) => string }) {
+  return [[...columns.map((column) => column.name), ...(extra ? [extra.name] : [])].map(csvCell).join(','), ...items.map((item) => [...columns.map((column) => formatCell(cellValue(item, column.ref))), ...(extra ? [extra.text(item)] : [])].map(csvCell).join(','))].join('\r\n')
 }
 // The column chooser of a query view: the columns not hidden, in the query's order (never none: with every column
 // hidden, the first one stays), and the hidden ones remembered per view in this browser.

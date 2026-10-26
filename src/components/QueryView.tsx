@@ -1,17 +1,18 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import type { AzureWorkItem } from '../domain'
 import { cellValue, columnName, defaultViewColumns, formatCell, hiddenColumnsKey, sortItems, viewCsv, viewSummary, visibleColumns, withReleaseColumns, type QueryColumn, type QueryOrder } from '../queryView'
 import { downloadCsv } from '../download'
 import { todayIso } from '../format'
 import { EmptyState } from './ui'
 import { useColumnWidths } from './columnWidths'
-
 // Read-only view of a connection's query results: a summary strip (by state, type and person; overdue; changed this
 // week), then the query's own columns. Click a heading to sort; search, state and type filters; CSV export.
 // unresolved: SELECT entries of the query that are not fields of the project (named in a notice instead of dropped silently).
 // queryOnly: exactly the query's columns (no Name / Release read from the paths); choose: a column chooser whose
-// choice is remembered per view in this browser.
-export function QueryView({ name, items, columns, orderBy = [], unresolved = [], queryOnly = false, choose = false }: { name: string; items: AzureWorkItem[]; columns?: QueryColumn[]; orderBy?: QueryOrder[]; unresolved?: string[]; queryOnly?: boolean; choose?: boolean }) {
+// choice is remembered per view in this browser. extra: one more column after the query's (DP: the board match),
+// searched and exported with its text.
+export interface ExtraColumn { name: string; text: (item: AzureWorkItem) => string; cell: (item: AzureWorkItem) => ReactNode }
+export function QueryView({ name, items, columns, orderBy = [], unresolved = [], queryOnly = false, choose = false, extra }: { name: string; items: AzureWorkItem[]; columns?: QueryColumn[]; orderBy?: QueryOrder[]; unresolved?: string[]; queryOnly?: boolean; choose?: boolean; extra?: ExtraColumn }) {
   const base = columns?.length ? columns : defaultViewColumns.map((ref) => ({ ref, name: columnName(ref) }))
   const all = queryOnly ? base : withReleaseColumns(base, items, (ref) => ({ ref, name: columnName(ref) }))
   const [hidden, setHidden] = useState<string[]>(() => { if (!choose) return []; try { const saved = JSON.parse(localStorage.getItem(hiddenColumnsKey(name)) ?? '[]'); return Array.isArray(saved) ? saved.filter((ref) => typeof ref === 'string') : [] } catch { return [] } })
@@ -27,9 +28,9 @@ export function QueryView({ name, items, columns, orderBy = [], unresolved = [],
   const summary = useMemo(() => viewSummary(items, today), [items, today])
   const shown = useMemo(() => {
     const text = search.trim().toLowerCase()
-    const filtered = items.filter((item) => (!state || item.state === state) && (!type || item.workItemType === type) && (!text || cols.some((column) => formatCell(cellValue(item, column.ref)).toLowerCase().includes(text))))
+    const filtered = items.filter((item) => (!state || item.state === state) && (!type || item.workItemType === type) && (!text || cols.some((column) => formatCell(cellValue(item, column.ref)).toLowerCase().includes(text)) || Boolean(extra?.text(item).toLowerCase().includes(text))))
     return sortItems(filtered, sort)
-  }, [items, state, type, search, sort, cols])
+  }, [items, state, type, search, sort, cols, extra])
   const toggleSort = (ref: string) => setSort((current) => current[0]?.ref === ref ? [{ ref, desc: !current[0].desc }] : [{ ref, desc: false }])
   const chips = (rows: [string, number][], active: string, pick: (value: string) => void, limit = 8) => rows.slice(0, limit).map(([label, count]) => <button key={label} type="button" className={`summary-chip ${active === label ? 'summary-chip-active' : ''}`} aria-pressed={active === label} onClick={() => pick(active === label ? '' : label)}><strong>{count}</strong> {label}</button>)
   if (!items.length) return <EmptyState title={`“${name}” returned no work items.`} detail="Check the connection's query in Settings → Azure DevOps." />
@@ -40,13 +41,13 @@ export function QueryView({ name, items, columns, orderBy = [], unresolved = [],
       <div className="summary-row"><span className="summary-label">Type</span>{chips(summary.byType, type, setType)}</div>
       <div className="summary-row"><span className="summary-label">People</span>{summary.byPerson.slice(0, 8).map(([person, count]) => <span key={person} className="summary-person">{person} <b>{count}</b></span>)}{summary.byPerson.length > 8 && <span className="muted">+{summary.byPerson.length - 8} more</span>}</div>
     </div>
-    <div className="query-toolbar"><input className="search" aria-label={`Search ${name}`} placeholder="Search all columns" value={search} onChange={(event) => setSearch(event.target.value)} /><span className="muted">{shown.length} of {items.length} items{state || type ? ' · filtered' : ''}</span>{widths.resized && <button type="button" className="ghost" onClick={widths.reset}>Reset widths</button>}{choose && <button type="button" className="ghost" aria-expanded={picking} onClick={() => setPicking(!picking)}>Columns ({cols.length} of {all.length})</button>}<button type="button" className="ghost" onClick={() => downloadCsv(viewCsv(shown, cols), `${name.replace(/[^\w-]+/g, '-')}.csv`)}>Export CSV</button></div>
+    <div className="query-toolbar"><input className="search" aria-label={`Search ${name}`} placeholder="Search all columns" value={search} onChange={(event) => setSearch(event.target.value)} /><span className="muted">{shown.length} of {items.length} items{state || type ? ' · filtered' : ''}</span>{widths.resized && <button type="button" className="ghost" onClick={widths.reset}>Reset widths</button>}{choose && <button type="button" className="ghost" aria-expanded={picking} onClick={() => setPicking(!picking)}>Columns ({cols.length} of {all.length})</button>}<button type="button" className="ghost" onClick={() => downloadCsv(viewCsv(shown, cols, extra), `${name.replace(/[^\w-]+/g, '-')}.csv`)}>Export CSV</button></div>
     {choose && picking && <fieldset className="column-chooser"><legend>Columns from the query — tick the ones to show</legend>
       <div className="button-row"><button type="button" className="text-button" onClick={() => hide([])}>Show all</button><button type="button" className="text-button" onClick={() => hide(all.slice(1).map((column) => column.ref))}>Only the first</button></div>
       <div className="column-chooser-list">{all.map((column) => <label key={column.ref} className="check"><input type="checkbox" checked={!hidden.includes(column.ref)} onChange={(event) => hide(event.target.checked ? hidden.filter((ref) => ref !== column.ref) : [...hidden, column.ref])} />{column.name}<small className="muted">{column.ref}</small></label>)}</div>
     </fieldset>}
-    <div className="azure-table query-table"><table className="resizable"><thead><tr>{cols.map((column) => { const active = sort[0]?.ref === column.ref; return <th key={column.ref} style={widths.style(column.ref)} aria-sort={active ? (sort[0].desc ? 'descending' : 'ascending') : 'none'}><button type="button" className="sort-button" title={column.ref} onClick={() => toggleSort(column.ref)}>{column.name}{active ? (sort[0].desc ? ' ↓' : ' ↑') : ''}</button>{widths.handle(column.ref, column.name)}</th> })}</tr></thead>
-      <tbody>{shown.slice(0, 500).map((item) => <tr key={item.key}>{cols.map((column) => <td key={column.ref} style={widths.style(column.ref)}>{column.ref === 'System.Id' ? <a href={item.url} target="_blank" rel="noreferrer">{item.id}</a> : column.ref === 'System.Title' ? <a href={item.url} target="_blank" rel="noreferrer">{formatCell(cellValue(item, column.ref))}</a> : formatCell(cellValue(item, column.ref))}</td>)}</tr>)}</tbody></table></div>
+    <div className="azure-table query-table"><table className="resizable"><thead><tr>{cols.map((column) => { const active = sort[0]?.ref === column.ref; return <th key={column.ref} style={widths.style(column.ref)} aria-sort={active ? (sort[0].desc ? 'descending' : 'ascending') : 'none'}><button type="button" className="sort-button" title={column.ref} onClick={() => toggleSort(column.ref)}>{column.name}{active ? (sort[0].desc ? ' ↓' : ' ↑') : ''}</button>{widths.handle(column.ref, column.name)}</th> })}{extra && <th>{extra.name}</th>}</tr></thead>
+      <tbody>{shown.slice(0, 500).map((item) => <tr key={item.key}>{cols.map((column) => <td key={column.ref} style={widths.style(column.ref)} title={column.ref === 'System.Id' ? undefined : formatCell(cellValue(item, column.ref)) || undefined}>{column.ref === 'System.Id' ? <a href={item.url} target="_blank" rel="noreferrer">{item.id}</a> : column.ref === 'System.Title' ? <a href={item.url} target="_blank" rel="noreferrer">{formatCell(cellValue(item, column.ref))}</a> : formatCell(cellValue(item, column.ref))}</td>)}{extra && <td className="extra-cell" title={extra.text(item)}>{extra.cell(item)}</td>}</tr>)}</tbody></table></div>
     {shown.length > 500 && <p className="muted">Showing the first 500 of {shown.length} rows; search or filter to narrow, or export CSV for all.</p>}
   </div>
 }
