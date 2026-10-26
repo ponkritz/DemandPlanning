@@ -29,6 +29,7 @@ import { PiReviewPage } from './pages/PiReviewPage'
 import { QeMappingPage } from './pages/QeMappingPage'
 import { useAccess } from './useAccess'
 import { useFeatureSetup } from './useFeatureSetup'
+import { useQeMapping } from './useQeMapping'
 import type { Area } from './access'
 import { useMyWork } from './useMyWork'
 import { MyWorkPage } from './pages/MyWorkPage'
@@ -120,6 +121,7 @@ export default function App() {
   }
   const access = useAccess(git, azure)
   const featureSetup = useFeatureSetup(git, azure.creatorEmail)
+  const qeMapping = useQeMapping(git)
   // Who creates new work items (the email on the Time Writing connection) and whether they may assign them to others.
   const assign = { me: azure.creatorEmail.trim().toLowerCase(), canChoose: access.can('azure.createForOthers') }
   const [requested, setPage] = useState<Page>('overview')
@@ -225,7 +227,7 @@ export default function App() {
       {page === 'overview' && <DashboardPage month={month} azure={azure} navigate={setPage} store={store} setMonth={setMonth} my={my} />}
       {page === 'pulse' && <PulseCheckPage month={month} azure={azure} store={store} my={my} navigate={setPage} windchill={windchill} openWindchill={openWindchill} />}
       {page === 'pireview' && <PiReviewPage />}
-      {page === 'qemapping' && <QeMappingPage />}
+      {page === 'qemapping' && <QeMappingPage git={git} store={qeMapping} />}
       {page === 'mywork' && <MyWorkPage azure={azure} store={store} my={my} onOpenBulk={() => setPage('bulk')} assign={assign} featureSetup={featureSetup.setups} />}
       {page === 'bulk' && <BulkActionsPage azure={azure} store={store} my={my} assign={assign} />}
       {page === 'monthly' && <MonthlyPage azure={azure} month={month} store={store} my={my} />}

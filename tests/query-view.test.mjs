@@ -78,3 +78,13 @@ test('column chooser: hidden columns left out in the query order, never all of t
   assert.deepEqual(visibleColumns(columns, ['Unknown.Field']).length, 4, 'a column no longer in the query is ignored')
   assert.notEqual(hiddenColumnsKey('DP'), hiddenColumnsKey('CP'))
 })
+
+test('a bare field name finds its prefixed reference name ("SourceProgram" → Custom.SourceProgram), only when exactly one field ends with it', () => {
+  const names = { 'System.Id': 'ID', 'System.Title': 'Title', 'Custom.SourceProgram': 'Source Program', 'Custom.Intent': 'Release Intent', 'Philips.Intent': 'Intent (Philips)', 'Custom.Year': 'Year' }
+  const layout = queryLayout('SELECT [ID], [Title], [SourceProgram], [Intent], [Year] FROM WorkItems', names)
+  assert.deepEqual(layout.columns, ['System.Id', 'System.Title', 'Custom.SourceProgram', 'Intent', 'Custom.Year'], 'Intent matches two fields, so it stays as written; Year is a display name')
+  // When the field list could not be read, the column stays "SourceProgram" and the value is still found.
+  const fields = { 'System.Id': 7, 'System.Title': 'RSGMS 3.0.0.2', 'Custom.SourceProgram': 'RSGMS', 'Custom.Year': '2026', 'Philips.Year': '2025' }
+  assert.deepEqual(pickFields(fields, ['SourceProgram', 'Year', 'System.Title']), { SourceProgram: 'RSGMS', 'System.Title': 'RSGMS 3.0.0.2' }, 'an ambiguous bare name stays blank rather than guessing')
+  assert.deepEqual(pickFields({ 'Custom.SourceProgram': 'X' }, ['Other.SourceProgram']), {}, 'a written prefix is never swapped for another')
+})
