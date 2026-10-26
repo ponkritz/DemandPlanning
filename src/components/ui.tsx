@@ -71,6 +71,12 @@ export function EmptyState({ title, detail }: { title: string; detail?: string }
 
 // Every dialog is rendered into <body> above all page layers (sticky sidebar, top bar, cards), so nothing behind it
 // can draw over it, wherever in the page the dialog is opened from.
-export function Modal({ title, eyebrow, onClose, children }: { title: string; eyebrow: string; onClose: () => void; children: ReactNode }) {
-  return createPortal(<div className="modal-backdrop" role="presentation" onMouseDown={onClose}><div className="modal" role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}><div className="modal-heading"><div><p className="eyebrow">{eyebrow}</p><h2>{title}</h2></div><button type="button" className="icon-button" onClick={onClose} aria-label="Close">×</button></div>{children}</div></div>, document.body)
+// A pop-up window. Forms pass wide (settings editors) and form (a click beside it does not close it and lose what was
+// typed; × and Cancel do).
+export function Modal({ title, eyebrow, onClose, children, wide = false, form = false }: { title: string; eyebrow: string; onClose: () => void; children: ReactNode; wide?: boolean; form?: boolean }) {
+  return createPortal(<div className="modal-backdrop" role="presentation" onMouseDown={form ? undefined : onClose}><div className={wide ? 'modal modal-wide' : 'modal'} role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}><div className="modal-heading"><div><p className="eyebrow">{eyebrow}</p><h2>{title}</h2></div><button type="button" className="icon-button" onClick={onClose} aria-label="Close">×</button></div>{children}</div></div>, document.body)
+}
+// The saved values of a setting, shown on the page while its editor is a pop-up.
+export function SettingsSummary({ rows }: { rows: [string, ReactNode][] }) {
+  return <dl className="settings-summary">{rows.map(([term, value]) => <div key={term}><dt>{term}</dt><dd>{value || '—'}</dd></div>)}</dl>
 }

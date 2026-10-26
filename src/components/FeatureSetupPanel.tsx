@@ -6,7 +6,7 @@ import { assignablePeople } from '../myWork'
 import type { FeatureSetup } from '../useFeatureSetup'
 import type { GitStorage } from '../useGitStorage'
 import { PersonPicker } from './PersonPicker'
-import { EmptyState, Notice, Panel, Info } from './ui'
+import { EmptyState, Modal, Notice, Panel, Info } from './ui'
 
 // Settings → Feature setup: per Epic, the optional User Stories offered when a Feature is created under it (all ticked
 // by default) and the defaults of the month Time Writing Task. Two layers: "My setup" (feature-setup/<my email>.json,
@@ -23,6 +23,7 @@ export function FeatureSetupPanel({ setup, git, items }: { setup: FeatureSetup; 
   const [result, setResult] = useState<{ tone: 'success' | 'error'; text: string; url?: string } | null>(null)
   const [goTo, setGoTo] = useState('')
   const [copyTo, setCopyTo] = useState('')
+  const [editing, setEditing] = useState(false)
   // Which layer is shown and edited: mine (default when my email is known) or the shared one.
   const [layer, setLayer] = useState<'mine' | 'shared'>(setup.email ? 'mine' : 'shared')
   const mine = layer === 'mine' && Boolean(setup.email)
@@ -32,6 +33,8 @@ export function FeatureSetupPanel({ setup, git, items }: { setup: FeatureSetup; 
   const chosen = epicId || base?.epics[0]?.epicId || setup.shared?.epics[0]?.epicId || epics[0]?.id || 0
   const sharedEntry = setupFor(setup.shared, chosen), myEntry = setupFor(setup.personal, chosen)
   const switchLayer = (next: 'mine' | 'shared') => { if (draft && !window.confirm('Discard the unsaved changes?')) return; setDraft(null); setResult(null); setLayer(next) }
+  // The editor is a pop-up; closing it with unsaved changes asks first.
+  const closeEditor = () => { if (draft && !window.confirm('Discard the unsaved changes?')) return; setDraft(null); setEditing(false) }
   const epic = epics.find((item) => item.id === chosen)
   const current = setupFor(file, chosen)
   const epicLabel = `#${chosen}${epic ? ` ${epic.title}` : current?.epicTitle ? ` ${current.epicTitle}` : ''}`
@@ -58,7 +61,7 @@ export function FeatureSetupPanel({ setup, git, items }: { setup: FeatureSetup; 
     event.preventDefault()
     if (!draft) return
     setBusy(true)
-    try { const saved = mine ? await setup.savePersonal(draft, commit.trim() || `Update my Feature setup (${setup.email})`) : await setup.saveShared(draft, commit.trim() || 'Update the shared Feature setup'); setDraft(null); setCommit(''); setResult({ tone: 'success', text: mine ? 'Your setup is saved to Git. It applies when you create a Feature.' : 'The shared setup is saved to Git. It applies to everyone without their own setup of the Epic.', url: saved.commitUrl }) }
+    try { const saved = mine ? await setup.savePersonal(draft, commit.trim() || `Update my Feature setup (${setup.email})`) : await setup.saveShared(draft, commit.trim() || 'Update the shared Feature setup'); setDraft(null); setEditing(false); setCommit(''); setResult({ tone: 'success', text: mine ? 'Your setup is saved to Git. It applies when you create a Feature.' : 'The shared setup is saved to Git. It applies to everyone without their own setup of the Epic.', url: saved.commitUrl }) }
     catch (failure) { setResult({ tone: 'error', text: failure instanceof Error ? failure.message : String(failure) }) }
     finally { setBusy(false) }
   }
@@ -92,10 +95,14 @@ export function FeatureSetupPanel({ setup, git, items }: { setup: FeatureSetup; 
       <p className="muted">Applies now: <strong>{appliesNow === 'mine' ? 'my setup' : appliesNow === 'shared' ? 'the shared setup' : 'the built-in milestones'}</strong>. The Time Writing User Story and the month Task are always created.</p>
     </div>}
     {!epics.length && !chosen ? <EmptyState title="No Epics loaded yet." detail="Fetch the Time Writing connection; its Epics appear here." /> : <>
-      <div className="form-row">
+      <div className="setup-summary">
         <label>Epic<select value={chosen} onChange={(event) => setEpicId(Number(event.target.value))}>{!epic && chosen > 0 && <option value={chosen}>#{chosen}{current?.epicTitle ? ` ${current.epicTitle}` : ' (not in the fetched data)'}</option>}{epics.map((item) => <option key={item.id} value={item.id}>{setupFor(file, item.id) ? '● ' : ''}#{item.id} {item.title}{mine && !setupFor(file, item.id) && setupFor(setup.shared, item.id) ? ' (shared)' : ''}</option>)}</select></label>
-        <label>Preview with Feature title<input value={sample} onChange={(event) => setSample(event.target.value)} /></label>
+        <div><span className="field-label">{current ? `${mine ? 'My' : 'Shared'} setup of this Epic` : 'No setup of this Epic here'}</span><p>{current ? <>{current.stories.length ? current.stories.map((entry) => entry.title || '(untitled)').join(' · ') : 'No optional User Stories'} · Time Writing story “{story.title}” · Task “{current.task.title}”</> : mine && sharedEntry ? 'The shared setup applies (see above).' : 'The built-in milestones apply (see above).'}</p></div>
+        <button type="button" className="primary" onClick={() => { setResult(null); setEditing(true) }}>{editable ? current ? 'Edit setup…' : 'Create setup…' : 'View setup…'}</button>
       </div>
+      {mine && editable && myEntry && !draft && <div className="button-row setup-share"><button type="button" className="ghost" disabled={busy} onClick={() => void enableForEveryone()} title="Copies your setup of this Epic into the shared setup">Enable for everyone</button><small className="muted">{sharedEntry ? 'Replaces the shared setup of this Epic.' : 'This Epic has no shared setup yet.'}</small></div>}
+      {editing && <Modal title={`${mine ? 'My' : 'Shared'} Feature setup · Epic ${epicLabel}`} eyebrow={editable ? 'SETTINGS · FEATURE SETUP' : 'SETTINGS · FEATURE SETUP · VIEW ONLY'} wide form onClose={closeEditor}>
+        <label>Preview with Feature title<input value={sample} onChange={(event) => setSample(event.target.value)} /></label>
       <p className="info-line"><Info label="Placeholders">Placeholders: {placeholders.map((key) => `{${key}}`).join(' ')} — {'{feature}'} is the whole title; {'{program}'}, {'{service}'}, {'{version}'} are its parts for titles like “Program | Service | v1.2”; {'{month}'} is e.g. “{currentIndiaMonth()}”. Text without placeholders is used as typed. ● marks Epics with a setup.</Info></p>
       <fieldset className="plain-fieldset feature-setup" disabled={!editable || busy}>
         {mine && !current && sharedEntry && <Notice tone="info">You use the shared setup of this Epic. <button type="button" className="text-button" onClick={() => { const next = structuredClone(file); next.epics.push(structuredClone(sharedEntry)); setDraft(next); setResult(null) }}>Start my own from the shared one</button></Notice>}
@@ -132,14 +139,16 @@ export function FeatureSetupPanel({ setup, git, items }: { setup: FeatureSetup; 
         {current && <button type="button" className="text-button" onClick={() => { const next = structuredClone(file); next.epics = next.epics.filter((entry) => entry.epicId !== chosen); setDraft(next); setResult(null) }}>{mine ? `Remove my setup of this Epic (${sharedEntry ? 'use the shared one' : 'back to PU / Full Release'})` : 'Remove the shared setup of this Epic (back to PU / Full Release)'}</button>}
       </fieldset>
       {editable && current && <div className="button-row setup-copy"><label>Copy this setup to Epic #<input inputMode="numeric" value={copyTo} placeholder="e.g. 13946" onChange={(event) => setCopyTo(event.target.value)} /></label><button type="button" className="ghost" disabled={!idOf(copyTo) || idOf(copyTo) === chosen} onClick={copy}>Copy</button></div>}
-      {mine && editable && myEntry && !draft && <div className="button-row setup-share"><button type="button" className="ghost" disabled={busy} onClick={() => void enableForEveryone()} title="Copies your setup of this Epic into the shared setup">Enable for everyone</button><small className="muted">{sharedEntry ? 'Replaces the shared setup of this Epic.' : 'This Epic has no shared setup yet.'}</small></div>}
       {editable && draft && <form className="git-bar git-bar-dirty" onSubmit={save}>
         <span><strong>Unsaved {mine ? 'personal' : 'shared'} Feature setup</strong> — not yet in Git</span>
         <input aria-label="Change description" value={commit} onChange={(event) => setCommit(event.target.value)} placeholder="Describe the change" />
         <button type="button" className="ghost" disabled={busy} onClick={() => { setDraft(null); setResult(null) }}>Discard</button>
         <button className="primary" disabled={busy}>{busy ? 'Saving…' : 'Save to Git'}</button>
       </form>}
+        {result?.tone === 'error' && <Notice tone="error">{result.text}</Notice>}
+        {!draft && <div className="modal-actions"><button type="button" className="primary" onClick={closeEditor}>Close</button></div>}
+      </Modal>}
     </>}
-    {result && <Notice tone={result.tone}>{result.text}{result.url && <> <a href={result.url} target="_blank" rel="noreferrer">View commit</a></>}</Notice>}
+    {result && !(editing && result.tone === 'error') && <Notice tone={result.tone}>{result.text}{result.url && <> <a href={result.url} target="_blank" rel="noreferrer">View commit</a></>}</Notice>}
   </Panel>
 }

@@ -40,6 +40,10 @@ import { backlogViews, loadBacklogTab, otherMenuViews, saveBacklogTab, timeWriti
 import { mergeAzureWorkItems } from './azureDevOps'
 import { formatDateTime, todayIso } from './format'
 import { HeaderSlot } from './headerSlot'
+import { SetupGuide } from './components/SetupGuide'
+import { guideKey, requiredOpen, setupSteps } from './setupGuide'
+import { capacityContext } from './capacity'
+import { hasServerPat, serverKey } from './azureCredentials'
 
 export default function App() {
   const store = useAppStore()
@@ -160,6 +164,20 @@ export default function App() {
   const navButton = (key: string, icon: string, label: string, active: boolean, onClick: () => void) => <button key={key} className={active ? 'nav-active' : ''} aria-current={active ? 'page' : undefined} onClick={onClick}><span className="nav-icon">{icon}</span>{label}</button>
   // Azure DevOps connections live at the top of Settings.
   const openConnection = () => { settingsTabOnOpen('connections'); setPage('admin') }
+  // Get started: the setup steps with their live status; the pop-up opens by itself while a required step is open,
+  // unless dismissed in this browser. The Setup button in the top bar reopens it.
+  const steps = setupSteps({
+    gitConnected: git.connected, gitReadOnly: git.readOnly,
+    timeWriting: Boolean(azure.config), email: azure.creatorEmail.trim(), pat: Boolean(azure.pat.trim()),
+    fetched: azure.items.length > 0 && !azure.isSample, sample: azure.isSample,
+    region: my.me.name ? capacityContext(store.state).profiles?.[my.me.name]?.region : undefined, canManage: access.can('settings.manage'),
+    streams: defaultStreams.filter((stream) => stream.source === 'azure').map((stream) => { const profile = profileForStream(stream, azure.connectionProfiles); return { name: stream.name, connected: Boolean(profile && hasServerPat(serverKey(profile))) } }),
+  })
+  const openSteps = requiredOpen(steps)
+  const [guideOpen, setGuideOpen] = useState(false)
+  const [guideAuto, setGuideAuto] = useState(() => { try { return localStorage.getItem(guideKey) !== 'dismissed' } catch { return true } })
+  useEffect(() => { if (store.ready && guideAuto && openSteps > 0 && git.status !== 'loading') { setGuideOpen(true); setGuideAuto(false) } }, [store.ready, guideAuto, openSteps, git.status])
+  const dismissGuide = () => { try { localStorage.setItem(guideKey, 'dismissed') } catch { /* this visit only */ } setGuideOpen(false) }
   const pageProps = { store, month, setMonth }
   const buildStatus = <BuildStatus pending={store.hasPendingSave} failed={store.ready && (store.cache.status === 'error' || (store.connection.mode === 'sharepoint' && ['error', 'conflict'].includes(store.connection.status)))} busy={azure.busy} preview={Boolean(azure.preview)} onBackup={store.ready ? () => exportStateJson({ ...store.state, azureWorkItems: mergeAzureWorkItems(store.state.azureWorkItems ?? [], azure.preview?.items ?? []), ...(azure.preview ? { azureBacklogScope: azure.preview.scope } : {}) }) : undefined} />
   const storageLabel = store.connection.mode === 'sharepoint' ? '● Live SharePoint' : store.cache.status === 'error' ? '⚠ Not saved locally' : store.cache.status === 'saving' ? '◌ Saving locally' : '○ Local IndexedDB'
@@ -199,8 +217,9 @@ export default function App() {
       <div className="sidebar-footer"><DesktopDownload /><small className="storage-line" title="Where app data is saved">{storageLabel}</small>{buildStatus}</div>
     </aside>
     <main>
-      <header className="topbar"><button type="button" className="menu-button" aria-label={navOpen ? 'Close menu' : 'Open menu'} aria-expanded={navOpen} aria-controls="primary-navigation" onClick={() => setNavOpen((open) => !open)}>{navOpen ? '✕' : '☰'}</button><h1 title={meta.detail}>{page === 'board' ? view.name : page === 'windchill' && windchillView ? windchillView.name : meta.label}</h1><div className="topbar-slot" ref={setHeaderSlot} /><div className="topbar-actions"><DataStatus azure={azure} />{(meta.usesMonth || (page === 'board' && view.readOnly)) && <label className="month-picker"><span className="sr-only">Month</span><input type="month" aria-label="Month" value={month} onChange={(event) => /^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value) && setMonth(event.target.value)} /></label>}<ThemeToggle /></div></header>
+      <header className="topbar"><button type="button" className="menu-button" aria-label={navOpen ? 'Close menu' : 'Open menu'} aria-expanded={navOpen} aria-controls="primary-navigation" onClick={() => setNavOpen((open) => !open)}>{navOpen ? '✕' : '☰'}</button><h1 title={meta.detail}>{page === 'board' ? view.name : page === 'windchill' && windchillView ? windchillView.name : meta.label}</h1><div className="topbar-slot" ref={setHeaderSlot} /><div className="topbar-actions">{openSteps > 0 && <button type="button" className="ghost setup-button" title="What to configure and how" onClick={() => setGuideOpen(true)}>Setup · {steps.filter((step) => step.required && step.state === 'done').length}/{steps.filter((step) => step.required).length}</button>}<DataStatus azure={azure} />{(meta.usesMonth || (page === 'board' && view.readOnly)) && <label className="month-picker"><span className="sr-only">Month</span><input type="month" aria-label="Month" value={month} onChange={(event) => /^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value) && setMonth(event.target.value)} /></label>}<ThemeToggle /></div></header>
       <DataNotices azure={azure} onOpenConnection={openConnection} />
+      {guideOpen && <SetupGuide steps={steps} busy={azure.busy} onClose={() => setGuideOpen(false)} onDismiss={dismissGuide} onOpenTab={(tab) => { settingsTabOnOpen(tab); setPage('admin'); setGuideOpen(false) }} onFetch={() => void azure.refresh()} />}
       {store.cache.status === 'error' && <Notice tone="error"><p>{store.cache.message}</p><div className="button-row"><button className="ghost" onClick={() => exportStateJson(store.state)}>Export JSON backup now</button><button className="primary" onClick={store.retrySave}>Retry browser save</button></div></Notice>}
       {store.connection.mode !== 'sharepoint' && store.connection.status === 'error' && <Notice tone="error">{store.connection.message}</Notice>}
       {page === 'overview' && <DashboardPage month={month} azure={azure} navigate={setPage} store={store} setMonth={setMonth} my={my} />}

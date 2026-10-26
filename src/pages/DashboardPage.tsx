@@ -248,7 +248,8 @@ function Heatmap({ title, info, lines, months, measure, bands }: { title: string
       const tracked = entries.length > 0 && entries.some((row) => row.tasks)
       const zero = tracked && hours <= 0
       const band = tracked && !zero ? bandOf(util, bands) : null
-      const tip = entries.length ? `${formatHours(hours)}h ${measure === 'actual' ? 'recorded' : 'planned'} / ${formatHours(t.capacity)}h capacity${t.absence ? ` · ${formatHours(t.absence)}h absence` : ''}` : 'No entry'
+      const reserved = entries.reduce((sum, row) => sum + row.reserved, 0)
+      const tip = entries.length ? `${formatHours(hours)}h ${measure === 'actual' ? 'recorded' : 'planned'} / ${formatHours(t.capacity)}h capacity${t.absence ? ` · ${formatHours(t.absence)}h absence` : ''}${reserved ? ` · ${formatHours(reserved)}h common activities` : ''}` : 'No entry'
       return <td key={month} className={zero ? 'heat-zero' : band ? `heat-${band}` : 'heat-none'} title={tip}>{!tracked ? <span className="muted">No entry</span> : zero ? <span className="muted">0 {measure === 'actual' ? 'recorded' : 'planned'}</span> : <Util value={util} bands={bands} />}</td> })}</tr>)}
   </tbody></table></div></TablePanel>
 }
@@ -476,7 +477,7 @@ function DefinitionsTab({ hoursPerDay, absenceEpicId, bands }: { hoursPerDay: nu
       <dt>Source</dt><dd>The Time Writing connection (QMS-0025): month Time Writing Tasks, matched to a month when their title starts or ends with the month and year.</dd>
       <dt>Planned hours</dt><dd>Original Estimate on the month's Tasks.</dd>
       <dt>Recorded (actual) hours</dt><dd>Completed Work on the month's Tasks. A blank value is missing, a 0 is recorded zero.</dd>
-      <dt>Capacity</dt><dd>Working days × {hoursPerDay}h, less absence (Tasks under Epic #{absenceEpicId}) and regional public holidays, counted once per person and month.</dd>
+      <dt>Capacity</dt><dd>Working days × {hoursPerDay}h, less absence (Tasks under Epic #{absenceEpicId}), holidays and common activities such as PI Planning or an audit (Epics / Features mapped in Settings → Capacity, applied to everyone or to everyone in a region), counted once per person and month.</dd>
       <dt>Utilization and its colours</dt><dd>Planned or recorded hours ÷ capacity. One model for the whole Dashboard, from Settings → Capacity: <span className="util util-over">↑ red</span> at or above {bands.overloadedAt}% (overloaded), <span className="util util-balanced">green</span> balanced, <span className="util util-spare">↓ blue</span> below {bands.availableBelow}% (spare). Colours show capacity position, not performance. Hour differences (+ / −) carry no colour.</dd>
       <dt>Month status</dt><dd>Elapsed (before the current month), partial (the current month) and future. Partial and future months do not establish spare capacity or results.</dd>
       <dt>Region and role</dt><dd>From Settings → Resources; people without a mapping show as No region / No role and are left out of rebalancing.</dd>

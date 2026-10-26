@@ -140,7 +140,7 @@ export interface AppState {
   masters: MasterValue[]
   azureWorkItems?: AzureWorkItem[]
   azureBacklogScope?: { organization: string; project: string; team: string; itemKeys: string[]; areaPaths: string[]; fetchedAt: string; sample?: boolean }
-  capacitySettings?: { absenceEpicId?: number; hoursPerDay?: number; overloadedAt?: number; availableBelow?: number }
+  capacitySettings?: { absenceEpicId?: number; hoursPerDay?: number; overloadedAt?: number; availableBelow?: number; sharedTime?: { id: number; kind: 'holiday' | 'activity'; scope: string; label?: string }[] }
   baselineRules?: BaselineRule[]
   releaseScopes?: ReleaseScope[]
   resourceProfiles?: Record<string, { region?: string; role?: string; reportsTo?: string; peopleManager?: boolean }>

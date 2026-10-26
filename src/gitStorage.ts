@@ -1,12 +1,14 @@
 import type { AppState } from './domain'
 import { normalizeRules, normalizeScopes, type BaselineRule, type ReleaseScope } from './baseline.ts'
-import { normalizeProfiles, type ResourceProfile } from './capacity.ts'
+import { normalizeCapacitySettings, normalizeProfiles, type CapacitySettings, type ResourceProfile } from './capacity.ts'
 
-// Planning data kept in a private GitHub repository: estimation rules, release scopes and the resource
-// region/role mapping. One JSON file; every save is a commit, so the repository history is the audit trail.
+// Planning data kept in a private GitHub repository: estimation rules, release scopes, the resource
+// region/role mapping and the capacity settings (absence Epic, hours per day, thresholds, holidays and common
+// activities), so everyone who loads the file gets the same ones. One JSON file; every save is a commit, so the repository history is the audit trail.
 // The token stays in this browser (like the Azure PAT) and is never written to app data or exports.
 export interface GitConfig { owner: string; repo: string; branch: string; path: string }
-export interface PlanningData { schema: 1; baselineRules: BaselineRule[]; releaseScopes: ReleaseScope[]; resourceProfiles: Record<string, ResourceProfile> }
+export type StoredCapacity = Omit<CapacitySettings, 'profiles'>
+export interface PlanningData { schema: 1; baselineRules: BaselineRule[]; releaseScopes: ReleaseScope[]; resourceProfiles: Record<string, ResourceProfile>; capacitySettings?: StoredCapacity }
 
 export const defaultGitPath = 'planning-data.json'
 const configKey = 'demand-planning-git-storage-v1'
@@ -30,9 +32,12 @@ export function loadGitToken(storage: Pick<Storage, 'getItem'> = localStorage) {
 export function saveGitToken(token: string, storage: Pick<Storage, 'setItem'> = localStorage) { storage.setItem(tokenKey, token) }
 export function forgetGitStorage(storage: Pick<Storage, 'removeItem'> = localStorage) { storage.removeItem(tokenKey); storage.removeItem(configKey) }
 
-export function planningData(state: Pick<AppState, 'baselineRules' | 'releaseScopes' | 'resourceProfiles'>): PlanningData {
+// Capacity settings are written once they exist (an older file without them loads as before and keeps this browser's).
+export function planningData(state: Pick<AppState, 'baselineRules' | 'releaseScopes' | 'resourceProfiles' | 'capacitySettings'>): PlanningData {
   const profiles = normalizeProfiles(state.resourceProfiles)
-  return { schema: 1, baselineRules: normalizeRules(state.baselineRules), releaseScopes: normalizeScopes(state.releaseScopes), resourceProfiles: Object.fromEntries(Object.keys(profiles).sort().map((key) => [key, profiles[key]])) }
+  const capacity = state.capacitySettings == null ? undefined : normalizeCapacitySettings(state.capacitySettings)
+  if (capacity?.sharedTime) capacity.sharedTime = [...capacity.sharedTime].sort((a, b) => a.id - b.id)
+  return { schema: 1, baselineRules: normalizeRules(state.baselineRules), releaseScopes: normalizeScopes(state.releaseScopes), resourceProfiles: Object.fromEntries(Object.keys(profiles).sort().map((key) => [key, profiles[key]])), ...(capacity ? { capacitySettings: capacity } : {}) }
 }
 // Stable, diff-friendly text: the same data always serialises to the same file.
 export const serializePlanning = (data: PlanningData) => `${JSON.stringify(data, null, 2)}\n`
@@ -42,7 +47,7 @@ export function parsePlanning(text: string): PlanningData {
   try { raw = JSON.parse(text) } catch { throw new Error('The Git data file is not valid JSON. Fix or revert it in the repository; nothing was loaded.') }
   if (!raw || typeof raw !== 'object' || (raw as { schema?: unknown }).schema !== 1) throw new Error('The Git data file is not a Demand Planning data file (schema 1). Nothing was loaded.')
   const input = raw as Record<string, unknown>
-  return planningData({ baselineRules: (Array.isArray(input.baselineRules) ? input.baselineRules : []) as BaselineRule[], releaseScopes: input.releaseScopes as ReleaseScope[], resourceProfiles: input.resourceProfiles as Record<string, ResourceProfile> })
+  return planningData({ baselineRules: (Array.isArray(input.baselineRules) ? input.baselineRules : []) as BaselineRule[], releaseScopes: input.releaseScopes as ReleaseScope[], resourceProfiles: input.resourceProfiles as Record<string, ResourceProfile>, capacitySettings: input.capacitySettings == null ? undefined : input.capacitySettings as AppState['capacitySettings'] })
 }
 
 export function encodeBase64(text: string) { let binary = ''; for (const byte of new TextEncoder().encode(text)) binary += String.fromCharCode(byte); return btoa(binary) }

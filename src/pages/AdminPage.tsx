@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import type { MasterValue } from '../domain'
 import type { SharePointConfig } from '../sharepoint'
-import { EmptyState, Notice, Page, Panel, Pill, type Tone } from '../components/ui'
+import { EmptyState, Modal, Notice, Page, Panel, Pill, SettingsSummary, type Tone } from '../components/ui'
 import { formatDate, formatDateTime, formatHours, formatPercent, monthName } from '../format'
-import { azureResources, capacityContext, capacityModel, normalizeCapacitySettings, normalizeProfiles, regions, resourceRoles, type LoadStatus, type ResourceProfile } from '../capacity'
+import { azureResources, capacityContext, capacityModel, normalizeCapacitySettings, normalizeProfiles, regions, resourceRoles, type LoadStatus, type ResourceProfile, type SharedTimeRule } from '../capacity'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { GitStorage } from '../useGitStorage'
 import { GitStoragePanel, GitSyncBar } from '../components/GitStorage'
@@ -11,6 +11,7 @@ import { AzureViewsGitPanel } from '../components/AzureViewsGit'
 import { AzureConnections } from '../components/AzureConnections'
 import { AccessPanel } from '../components/AccessPanel'
 import { FeatureSetupPanel } from '../components/FeatureSetupPanel'
+import { SharedTimePanel } from '../components/SharedTimePanel'
 import type { FeatureSetup } from '../useFeatureSetup'
 import type { Access } from '../useAccess'
 import type { PageProps } from './types'
@@ -27,6 +28,8 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, load
   const [reason, setReason] = useState('Approved operational extension')
   const [capacityMessage, setCapacityMessage] = useState('')
   const [sharePointConfig, setSharePointConfig] = useState<SharePointConfig>(() => store.getSavedSharePointConfig())
+  const [sharePointOpen, setSharePointOpen] = useState(false)
+  const [capacityOpen, setCapacityOpen] = useState(false)
   const period = store.state.periods.find((item) => item.month === month)
   const capacity = capacityContext(store.state)
   const profiles = capacity.profiles ?? {}
@@ -88,11 +91,23 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, load
     const next = normalizeCapacitySettings({ absenceEpicId: data.get('absenceEpicId'), hoursPerDay: data.get('hoursPerDay'), overloadedAt: data.get('overloadedAt'), availableBelow: data.get('availableBelow') })
     const now = new Date().toISOString()
     store.update((draft) => {
-      draft.capacitySettings = next
+      // The holiday and activity mappings are kept: this form edits the numbers only.
+      draft.capacitySettings = normalizeCapacitySettings({ ...next, sharedTime: normalizeCapacitySettings(draft.capacitySettings).sharedTime })
       draft.audits.unshift({ id: crypto.randomUUID(), timestamp: now, actor: 'u-owner', action: 'Update', entity: 'CapacitySettings', entityId: 'capacity', detail: `Absence Epic #${next.absenceEpicId}, ${next.hoursPerDay}h/day, overloaded ≥ ${next.overloadedAt}%, capacity < ${next.availableBelow}%` })
       return draft
     })
-    setCapacityMessage('Capacity settings saved with the shared app data.')
+    setCapacityMessage('Capacity settings saved here. Save to Git (bar below) so everyone gets them.')
+  }
+
+  // Holidays and common activities: saved with the capacity settings (shared app data), audited.
+  function saveSharedTime(rules: SharedTimeRule[], detail: string) {
+    const now = new Date().toISOString()
+    store.update((draft) => {
+      draft.capacitySettings = normalizeCapacitySettings({ ...normalizeCapacitySettings(draft.capacitySettings), sharedTime: rules })
+      draft.audits.unshift({ id: crypto.randomUUID(), timestamp: now, actor: 'u-owner', action: 'Update', entity: 'CapacitySettings', entityId: 'shared-time', detail })
+      return draft
+    })
+    setCapacityMessage(`${detail}. Save to Git (bar above) so everyone gets it.`)
   }
 
   async function connectSharePoint(event: React.FormEvent<HTMLFormElement>) {
@@ -119,7 +134,9 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, load
       </Panel>}
       {shared && <AzureViewsGitPanel git={git} azure={azure} />}
       <Panel className="connection-panel" eyebrow="CENTRAL DATA" title="SharePoint connection" info="Uses Microsoft sign-in and stores one versioned JSON data file in the I&D Quality document library. No client secret is stored in the browser." action={<Pill tone={store.connection.mode === 'sharepoint' ? 'open' : connectionFailed ? 'danger' : 'neutral'}>{store.connection.status}</Pill>}>
-        <form className="connection-form" onSubmit={connectSharePoint}><label>Tenant ID (optional)<input value={sharePointConfig.tenantId} onChange={(event) => setSharePointConfig({ ...sharePointConfig, tenantId: event.target.value })} placeholder="Auto-detect from work sign-in" /></label><label>Application (client) ID<input required value={sharePointConfig.clientId} onChange={(event) => setSharePointConfig({ ...sharePointConfig, clientId: event.target.value })} placeholder="Registered SPA client ID" /></label><label>SharePoint host<input required value={sharePointConfig.hostname} onChange={(event) => setSharePointConfig({ ...sharePointConfig, hostname: event.target.value })} /></label><label>Site path<input required value={sharePointConfig.sitePath} onChange={(event) => setSharePointConfig({ ...sharePointConfig, sitePath: event.target.value })} /></label><label className="wide-field">Central data file<input required value={sharePointConfig.stateFilePath} onChange={(event) => setSharePointConfig({ ...sharePointConfig, stateFilePath: event.target.value })} /></label><div className="connection-actions"><button className="primary" disabled={store.connection.status === 'connecting'}>{store.connection.status === 'connecting' ? 'Connecting…' : 'Connect to SharePoint'}</button>{store.connection.mode === 'empty' && <button type="button" className="primary" onClick={() => void store.initializeSharePoint()}>Initialize central data</button>}{store.connection.mode === 'sharepoint' && <><button type="button" className="ghost" onClick={() => void store.pullSharePoint()}>Pull latest</button><button type="button" className="ghost" onClick={store.disconnectSharePoint}>Disconnect</button></>}</div></form>
+        <SettingsSummary rows={[['Host', sharePointConfig.hostname], ['Site', sharePointConfig.sitePath], ['Data file', sharePointConfig.stateFilePath], ['Application ID', sharePointConfig.clientId ? 'Set' : '']]} />
+        <div className="button-row"><button type="button" className={store.connection.mode === 'sharepoint' ? 'ghost' : 'primary'} onClick={() => setSharePointOpen(true)}>{store.connection.mode === 'sharepoint' ? 'Change connection…' : 'Connect to SharePoint…'}</button>{store.connection.mode === 'empty' && <button type="button" className="primary" onClick={() => void store.initializeSharePoint()}>Initialize central data</button>}{store.connection.mode === 'sharepoint' && <><button type="button" className="ghost" onClick={() => void store.pullSharePoint()}>Pull latest</button><button type="button" className="ghost" onClick={store.disconnectSharePoint}>Disconnect</button></>}</div>
+        {sharePointOpen && <Modal title="SharePoint connection" eyebrow="SETTINGS · STORAGE" wide form onClose={() => setSharePointOpen(false)}><form className="connection-form" onSubmit={(event) => { setSharePointOpen(false); void connectSharePoint(event) }}><label>Tenant ID (optional)<input value={sharePointConfig.tenantId} onChange={(event) => setSharePointConfig({ ...sharePointConfig, tenantId: event.target.value })} placeholder="Auto-detect from work sign-in" /></label><label>Application (client) ID<input required value={sharePointConfig.clientId} onChange={(event) => setSharePointConfig({ ...sharePointConfig, clientId: event.target.value })} placeholder="Registered SPA client ID" /></label><label>SharePoint host<input required value={sharePointConfig.hostname} onChange={(event) => setSharePointConfig({ ...sharePointConfig, hostname: event.target.value })} /></label><label>Site path<input required value={sharePointConfig.sitePath} onChange={(event) => setSharePointConfig({ ...sharePointConfig, sitePath: event.target.value })} /></label><label className="wide-field">Central data file<input required value={sharePointConfig.stateFilePath} onChange={(event) => setSharePointConfig({ ...sharePointConfig, stateFilePath: event.target.value })} /></label><div className="connection-actions"><button className="primary" disabled={store.connection.status === 'connecting'}>{store.connection.status === 'connecting' ? 'Connecting…' : 'Connect to SharePoint'}</button><button type="button" className="ghost" onClick={() => setSharePointOpen(false)}>Cancel</button></div></form></Modal>}
         {store.connection.message && <Notice tone={connectionFailed ? 'error' : 'info'}>{store.connection.message}{store.connection.account ? ` Signed in as ${store.connection.account}.` : ''}</Notice>}
       </Panel>
     </>}
@@ -127,14 +144,18 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, load
     {tab === 'access' && <AccessPanel access={access} git={git} people={people} />}
     {!shared && tab === 'access' && <Notice tone="info">Capacity, periods, resources, master data and the shared connection setup are managed by roles with “Manage shared settings”.</Notice>}
     {tab === 'capacity' && <div className="admin-grid">
-      <Panel eyebrow="CAPACITY" title="Capacity and absence" info="Used by the Dashboard to compute available hours and utilization. Stored with the shared app data, not per browser.">
-        <form onSubmit={saveCapacity}>
+      <Panel eyebrow="CAPACITY" title="Capacity and absence" info="Used by the Dashboard to compute available hours and utilization. Saved with the planning data in Git (with the holidays and common activities), so everyone who loads from Git gets the same settings.">
+        <SettingsSummary rows={[['Absence Epic', `#${capacity.absenceEpicId}`], ['Funded hours per day', `${capacity.hoursPerDay}h`], ['Overloaded at', `${capacity.overloadedAt}%`], ['Has capacity below', `${capacity.availableBelow}%`]]} />
+        <div className="button-row"><button type="button" className="ghost" onClick={() => setCapacityOpen(true)}>Edit capacity settings…</button></div>
+        {capacityOpen && <Modal title="Capacity and absence" eyebrow="SETTINGS · CAPACITY" form onClose={() => setCapacityOpen(false)}><form onSubmit={(event) => { saveCapacity(event); setCapacityOpen(false) }}>
           <div className="form-row"><label>Absence Epic ID<input name="absenceEpicId" type="number" min="1" step="1" required defaultValue={capacity.absenceEpicId} /><small>Everything under this Epic counts as absence; Feature and Task titles decide PTO, Sick Leave or Unplanned Leave.</small></label><label>Funded hours per working day<input name="hoursPerDay" type="number" min="0.25" step="0.25" required defaultValue={capacity.hoursPerDay} /></label></div>
           <div className="form-row"><label>Overloaded at or above (%)<input name="overloadedAt" type="number" min="1" step="1" required defaultValue={capacity.overloadedAt} /></label><label>Has capacity below (%)<input name="availableBelow" type="number" min="0" step="1" required defaultValue={capacity.availableBelow} /></label></div>
-          <div className="button-row"><button className="primary">Save capacity settings</button></div>
-        </form>
+          <div className="modal-actions"><button type="button" className="ghost" onClick={() => setCapacityOpen(false)}>Cancel</button><button className="primary">Save capacity settings</button></div>
+        </form></Modal>}
         {capacityMessage && <Notice tone="success">{capacityMessage}</Notice>}
       </Panel>
+      <div className="shared-time-panel"><GitSyncBar git={git} /></div>
+      <SharedTimePanel settings={capacity} items={azure.items} month={month} onSave={saveSharedTime} />
       <Panel eyebrow="PERIOD CONTROL" title={monthName(month)}>
         <label>Reason for change<textarea value={reason} onChange={(event) => setReason(event.target.value)} /></label>
         <div className="control-card"><div><strong>Planning</strong><p>Deadline: {formatDate(period?.planningDeadline, `${month}-05 (default)`)}</p></div><Pill tone={period?.planningLocked ? 'locked' : 'open'}>{period?.planningLocked ? 'Locked' : 'Open'}</Pill><button className="primary" onClick={() => toggle('planning')}>{period?.planningLocked ? 'Unlock' : 'Lock'}</button><label>Extend until<input type="date" onChange={(event) => extend('planning', event.target.value)} /></label></div>

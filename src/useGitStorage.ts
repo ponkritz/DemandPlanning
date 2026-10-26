@@ -49,7 +49,7 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
       sha.current = file.sha
       if (!file.data) { setSynced(''); setStatus('empty'); setMessage(`${target.path} does not exist yet in ${target.owner}/${target.repo}. Save to create it from the data in this app.`); return }
       const data = file.data
-      store.update((draft) => { draft.baselineRules = data.baselineRules; draft.releaseScopes = data.releaseScopes; draft.resourceProfiles = data.resourceProfiles; return draft })
+      store.update((draft) => { draft.baselineRules = data.baselineRules; draft.releaseScopes = data.releaseScopes; draft.resourceProfiles = data.resourceProfiles; if (data.capacitySettings) draft.capacitySettings = data.capacitySettings; return draft })
       setSynced(serializePlanning(data)); setCommitUrl(historyUrl(target)); setStatus('synced'); setMessage(`Loaded from ${target.owner}/${target.repo} · ${target.path}`)
     } catch (error) { setStatus('error'); setMessage(error instanceof Error ? error.message : String(error)) }
   }, [config, token, store])

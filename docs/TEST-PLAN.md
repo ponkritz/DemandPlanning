@@ -185,7 +185,7 @@ Cases marked **UAT** are also run in acceptance testing.
   3. Switch "Used for" through all five roles.
 - Expected:
   - The section is first, with id `settings-connections`.
-  - Team appears only for Time Writing and Backlog view. Feature creator email appears only for Time Writing.
+  - Team appears only for Time Writing and Backlog view. "Your work email (required)" appears only for Time Writing.
   - Show in menu turns on for Time Writing and Backlog view, and off for the other three roles.
 
 **TC-CON-02 Validation messages** — Req CON-04…08
@@ -314,6 +314,12 @@ Cases marked **UAT** are also run in acceptance testing.
 **TC-NAV-31 Phones and tablets** — Req NAV-31 — browser check at 390 × 844 and 820 × 1180: the menu opens from ☰ as an off-canvas panel with a backdrop and closes on a page change; tablets show the narrow menu rail; Dashboard tabs scroll sideways; no page scrolls horizontally. **UAT**
 
 **TC-NAV-32 Other views in the menu** — Req NAV-32, NAV-17 — L1 `connections.test.mjs` ("Other views: read-only views and Windchill exports that are not a default stream, from the cloud or on-prem"); browser check: add an on-prem connection named e.g. "Risk register" with Show in menu on: it appears under Other views (not under Release Details), opens its view, and the heading is highlighted while it is collapsed and the view is open; with Show in menu off it disappears, and the heading is hidden when empty. **UAT**
+
+**TC-NAV-33 Get started pop-up** — Req NAV-33 — L1 `setup-guide.test.mjs` ("a first-time user: Git first, the rest waits for the step it depends on"; "partly set up: Git and the connection done, the PAT is next, then Fetch"; "fully set up: nothing required left; region and streams follow the facts and who may change them"); browser check: a new browser without data opens the pop-up by itself with "Connect the shared Git storage" as the next step and the PAT and fetch steps "After the step above"; "Open Storage settings" closes it and shows Settings → Storage; the top bar shows "Setup · 0/4" and reopens it; a reload opens it again; after "Don't show again automatically" a reload does not, the Setup button still does; at 390 × 844 nothing overflows. **UAT**
+
+**TC-NAV-34 Settings editors as pop-ups** — Req NAV-34 — browser check: Settings → Storage shows the Git storage and SharePoint summaries; "Connect Git storage…" and "Connect to SharePoint…" open pop-ups, a click beside them keeps them open, Cancel closes them; Settings → Azure DevOps: Edit on the Time Writing row and "＋ Add server" open pop-ups; Settings → Capacity & periods: "Edit capacity settings…" opens the form in a pop-up; "＋ Map an Epic or Feature…" maps #424242 and closes, the mapping's Edit opens "Change the mapping of #424242"; Settings → Feature setup: Go to Epic #13946 → the summary and "View setup…" (no Git) open "Shared Feature setup · Epic #13946", Close closes it; every pop-up form is one column (title, input, explanation per field) with Cancel then the main action at the bottom right; at 390 × 844 the connection pop-up fits without horizontal scrolling; no page errors. **UAT**
+
+**TC-CON-28 Work email required for Time Writing** — Req CON-60, CON-02 — browser check: a saved Time Writing connection without an email shows "Work email missing: Edit to add it" in the Stream mapping; Edit → Save without the email is blocked ("Please fill out this field"); with me@company.com it saves, the pop-up closes, the connection stores the email and the hint disappears; in the form at 1300px the PAT and email titles are one line and the inputs of each row line up. **UAT**
 
 **TC-CON-27 Map a Feature setup to an Epic** — Req CON-59 — L1 `feature-setup.test.mjs` ("built-in stories as a setup give exactly the titles of the built-in creation"; "copy a setup to another Epic: replaces the target, keeps the source, no-op without a source"); browser check with a writable Git store holding a personal setup of another Epic: My setup shows it with "applies now" on step 1; "Copy this setup to Epic #" 13946 → the four stories appear under #13946 and the panel says "changed here, not saved yet"; Save to Git commits `feature-setup/<email>.json` holding both Epics and the panel then marks My setup as applying to #13946; "Go to Epic #" another number with no setup offers the two built-in buttons. **UAT**
 
@@ -682,6 +688,8 @@ TC-OVR-01 to TC-OVR-03 tested the earlier Overview and are **retired** with OVR-
   - Epic colours are unchanged between 6 and 12 months.
   - The click changes the header month.
 
+**TC-CAP-02 Holidays and common activities** — Req CAP-04, CAP-05, CAP-10…12 — L1 `capacity.test.mjs` ("holidays and common activities: mapped Epics / Features apply their month Tasks to everyone in scope": PI Planning for everyone lowers each person's available hours and is not their booked work; a region-scoped audit applies to that region only and the nearest mapping wins; a name-based holiday Feature still applies; mapping it explicitly replaces the name rule without counting twice; invalid mappings are dropped); browser check: Settings → Capacity → Holidays and common activities: enter the PI Planning Feature ID, Common activity, Everyone → it is listed with its hours and people for the header month; Pulse Check → Last month shows "… h common activities" per person and a Common activities part of the funded-hours ring; saving the capacity numbers keeps the mapping; Remove restores the Task to its assignee. **UAT**
+
 **TC-CAP-01 Capacity calculation** — Req CAP-01…09, OVR-09 — L1 `capacity.test.mjs`, `monthly-hours.test.mjs`, `azure-insights.test.mjs`. Plus L3 analysis (A) with one person in October 2026:
 - 22 working days × 8 = 176 h funded.
 - An India holiday of 8 h gives 168 h available.
@@ -742,6 +750,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 ### 6.11 Git storage
 
 **TC-GIT-01 Config validation** — Req GIT-01 — L1 `git-storage.test.mjs`.
+
+**TC-GIT-05 Capacity settings and mappings in Git** — Req GIT-03, GIT-04, GIT-08, CAP-10 — L1 `git-storage.test.mjs` ("capacity settings, holidays and common activities travel in the Git planning file": round-trip without change, mappings sorted by ID, an older file without them loads as before and makes Save to Git appear, invalid mappings dropped); browser check: add a mapping on Settings → Capacity → the sync bar there says "Unsaved changes"; Save to Git; on a second browser Load latest shows the same mapping. **UAT**
 - L3 expected:
   - `my org` is rejected (owner).
   - `a..b` is rejected (branch).
@@ -1000,6 +1010,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | NAV-30 | TC-NAV-30 |
 | NAV-31 | TC-NAV-31 |
 | NAV-32 | TC-NAV-17, TC-NAV-32 |
+| NAV-33 | TC-NAV-33 |
+| NAV-34 | TC-NAV-34 |
 | CON-01…03 | TC-CON-01 |
 | CON-04…08, CON-19 | TC-CON-02 |
 | CON-09 | TC-CON-03 |
@@ -1015,6 +1027,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CON-57 | TC-CON-25 |
 | CON-58 | TC-CON-26 |
 | CON-59 | TC-CON-27 |
+| CON-60 | TC-CON-28 |
 | QV-20 | TC-QV-06 |
 | QV-21 | TC-QV-07 |
 | CON-21, CON-22 | TC-CON-08 |
@@ -1076,11 +1089,13 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | OV-13 | TC-OV-13 |
 | OV-14 | TC-OV-14 |
 | OVR-09, CAP-01…09 | TC-CAP-01 |
+| CAP-04, CAP-05, CAP-10…12 | TC-CAP-02 |
 | BAS-01…04 | TC-BAS-01 |
 | BAS-05…07 | TC-BAS-02 |
 | BAS-08…10 | TC-BAS-03 |
 | BAS-11 | TC-BAS-04 |
 | GIT-01 | TC-GIT-01 |
+| GIT-03, GIT-04, GIT-08 | TC-GIT-02, TC-GIT-05 |
 | GIT-02…04, GIT-06, GIT-08, GIT-12 | TC-GIT-02 |
 | GIT-05, GIT-07, GIT-11 | TC-GIT-03 |
 | GIT-09, GIT-10 | TC-GIT-04 |
@@ -1123,20 +1138,20 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 | Use case | Test cases |
 |---|---|
-| UC-01 | TC-NAV-01…06, TC-UI-01 |
-| UC-02 | TC-CON-01…07, TC-CON-17…19, TC-NAV-02 |
+| UC-01 | TC-NAV-01…06, TC-NAV-33, TC-UI-01 |
+| UC-02 | TC-CON-01…07, TC-CON-17…19, TC-CON-28, TC-NAV-02, TC-NAV-34 |
 | UC-03 | TC-CON-03, TC-FET-01…06 |
 | UC-04 | TC-TWN-01, TC-TWN-02, TC-MON-01…06 |
 | UC-05 | TC-MON-07 |
 | UC-06 | TC-ATM-01…11, TC-TWN-03, TC-CON-20 |
 | UC-07 | TC-BKL-01…03, TC-CON-23, TC-CON-25…27 |
 | UC-08 | TC-QV-01…05, TC-FET-07, TC-CON-08, TC-CON-11…16 |
-| UC-09 | TC-OV-11…14, TC-CAP-01, TC-CON-21 |
+| UC-09 | TC-OV-11…14, TC-CAP-01, TC-CAP-02, TC-CON-21 |
 | UC-10 | TC-OV-11 (Months, Streams), TC-OV-13 |
 | UC-11 | TC-BAS-01…04 |
-| UC-12 | TC-GIT-01…04 |
+| UC-12 | TC-GIT-01…04, TC-GIT-05 |
 | UC-13 | TC-SNP-01…03 |
-| UC-14 | TC-SET-01…04 |
+| UC-14 | TC-SET-01…04, TC-CAP-02, TC-NAV-34 |
 | UC-15 | TC-STO-01…04, TC-SNP-04 |
 | UC-16 | TC-UPD-01, TC-UPD-02 |
 | UC-17 | TC-DSK-01…03, TC-INS-02 |

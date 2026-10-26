@@ -124,3 +124,42 @@ test('team overview by region and roles: only matching people, the region\'s hol
   const indiaInTeam = capacityModel(items, '2026-10', settings).people.filter((person) => regionOf(person.name) === 'India')
   assert.deepEqual(india.people.map((person) => [person.name, person.absence]).sort(), indiaInTeam.map((person) => [person.name, person.absence]).sort(), 'same absence (holidays) as in the team view')
 })
+
+test('holidays and common activities: mapped Epics / Features apply their month Tasks to everyone in scope', async () => {
+  const { normalizeSharedTime, sharedTimeOf, itemsForTeam } = await import('../src/capacity.ts')
+  const events = [
+    item(700, { workItemType: 'Epic', title: 'Common activities' }),
+    item(701, { workItemType: 'Feature', parentId: 700, title: 'PI Planning' }), item(702, { parentId: 701, title: 'PI Planning - Time Writing' }),
+    item(703, { workItemType: 'Task', parentId: 702, title: 'October 2026 | PI Planning', assignedTo: 'Ana', originalEstimate: 16, completedWork: 12 }),
+    item(711, { workItemType: 'Feature', parentId: 700, title: 'Site audit NL' }), item(712, { parentId: 711, title: 'Audit - Time Writing' }),
+    item(713, { workItemType: 'Task', parentId: 712, title: 'October 2026 | Site audit', assignedTo: 'Ben' }),
+    item(60, { workItemType: 'Feature', parentId: 900, title: 'Public Holidays - India' }), item(61, { parentId: 60, title: 'Holidays - Time Writing' }),
+    item(62, { workItemType: 'Task', parentId: 61, title: 'October 2026 | Diwali', originalEstimate: 8 }),
+  ]
+  const profiles = { Ana: { region: 'India' }, Ben: { region: 'Netherlands' } }
+  const sharedTime = [{ id: 700, kind: 'activity', scope: 'everyone', label: 'Common activities' }, { id: 711, kind: 'activity', scope: 'Netherlands' }]
+  const model = capacityModel([...backlog, ...events], '2026-10', { ...settings, sharedTime, profiles })
+  const ana = model.people.find((person) => person.name === 'Ana'), ben = model.people.find((person) => person.name === 'Ben')
+  assert.deepEqual([ana.reserved, ben.reserved], [16, 16 + 8], 'PI Planning (16h: Original Estimate first) for everyone; the NL audit (no hours: one working day) for Ben only, by the nearer mapping')
+  assert.equal(ana.available, ana.funded - ana.absence - 16, 'reserved time lowers available capacity')
+  assert.equal(ana.absenceByKind['Public holiday'], 8, 'the India holiday Feature still applies by its name')
+  assert.equal(ben.absenceByKind['Public holiday'], 0)
+  assert.equal(ana.work, 160, 'the PI Planning Task assigned to Ana is not her booked work')
+  const summary = Object.fromEntries(model.sharedTime.map((entry) => [entry.id, [entry.kind, entry.scope, entry.hours, entry.people, entry.title]]))
+  assert.deepEqual(summary, { 700: ['activity', 'everyone', 16, 2, 'Common activities'], 711: ['activity', 'Netherlands', 8, 1, 'Site audit NL'], 60: ['holiday', 'India', 8, 1, 'Public Holidays - India'] })
+  assert.equal(model.totals.reserved, 40)
+  // Mapping the holiday Feature explicitly replaces the name rule, without counting twice.
+  const mapped = capacityModel([...backlog, ...events], '2026-10', { ...settings, profiles, sharedTime: [{ id: 60, kind: 'holiday', scope: 'everyone' }] })
+  assert.deepEqual(Object.fromEntries(mapped.people.map((person) => [person.name, person.absenceByKind['Public holiday']])), { Ana: 8, Ben: 8 }, 'mapped for everyone: 8h each, not 16h for Ana')
+  assert.deepEqual(mapped.sharedTime.map((entry) => entry.id), [60])
+  // Saved settings keep only valid mappings, one per ID.
+  assert.deepEqual(normalizeSharedTime([{ id: 5, kind: 'activity', scope: 'everyone' }, { id: 5, kind: 'holiday', scope: 'US', label: ' US ' }, { id: 0, kind: 'activity', scope: 'everyone' }, { id: 6, kind: 'party', scope: 'everyone' }, { id: 7, kind: 'holiday', scope: 'Mars' }]), [{ id: 5, kind: 'holiday', scope: 'US', label: 'US' }])
+  assert.deepEqual(normalizeCapacitySettings({ ...settings, sharedTime }).sharedTime, sharedTime)
+  assert.equal('sharedTime' in normalizeCapacitySettings(settings), false)
+  // Region filters keep everyone's activities and the region's own ones.
+  const byId = new Map([...backlog, ...events].map((entry) => [entry.id, entry]))
+  const chain = (id) => { const out = []; let current = byId.get(byId.get(id).parentId); while (current) { out.push(current); current = byId.get(current.parentId) } return out }
+  assert.equal(sharedTimeOf(byId.get(713), chain(713), { ...settings, sharedTime }).id, 711, 'the nearest mapping wins')
+  const india = itemsForTeam([...backlog, ...events], { region: 'India', roles: [] }, { ...settings, sharedTime, profiles }).filter((entry) => entry.workItemType === 'Task').map((entry) => entry.id)
+  assert.deepEqual([india.includes(703), india.includes(713), india.includes(62)], [true, false, true])
+})
