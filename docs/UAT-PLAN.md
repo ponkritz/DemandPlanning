@@ -22,7 +22,7 @@ The scenarios are the test cases marked **UAT** in [TEST-PLAN.md](TEST-PLAN.md).
 | 7 | Roles and access: set up roles, assign a Scrum Master by email, check what each role sees (two people on two browsers) | TC-ACC-01 |
 | 8 | Menu (Data Insights, collapsing), Backlog Health columns and filters, assigning new work to others, Feature setup per Epic (personal and shared), State checks and Feature states | TC-NAV-17, TC-SCR-02, TC-SCR-03, TC-ACC-02, TC-CON-23, TC-CON-26, TC-CON-27, TC-ATM-08 |
 | 9 | Holidays and common activities (map PI Planning and regional holidays in Settings → Capacity); phones and tablets; Other views in the menu; DP releases (Pedestal and DHFI); creating a Feature from a release (title parts) | TC-CAP-02, TC-GIT-05, TC-NAV-31, TC-NAV-32, TC-NAV-25, TC-QV-06, TC-QV-07 |
-| 10 | First-time setup: the Get started pop-up in a new browser, the required work email on Time Writing, the Settings editors as pop-ups | TC-NAV-33, TC-CON-28, TC-NAV-34 |
+| 10 | First-time setup: the Get started pop-up in a new browser, the required work email on Time Writing, the Settings editors as pop-ups; editing shared Feature setups in their list; the mandatory Feature DoD (creating a Feature and in the Feature setup); deleting a Feature setup; the Time Writing story at the project root (not in a Sprint) | TC-NAV-33, TC-CON-28, TC-NAV-34, TC-CON-30, TC-BKL-04, TC-CON-31, TC-CON-32, TC-BKL-05 |
 
 ## Entry criteria
 

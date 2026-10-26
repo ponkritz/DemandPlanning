@@ -10,14 +10,19 @@ export interface StoryTemplate { title: string; description: string }
 export interface TaskTemplate { title: string; description: string; originalEstimate?: number; assignedTo: string; areaPath: string; iterationPath: string }
 // The "Time Writing" User Story that holds the month Task: always created; its title and fields are configurable.
 export interface TimeWritingStoryTemplate { title: string; description: string; assignedTo: string; areaPath: string; iterationPath: string }
-export interface EpicSetup { epicId: number; epicTitle: string; stories: StoryTemplate[]; timeWritingStory: TimeWritingStoryTemplate; task: TaskTemplate }
+// featureDoD: the Feature DoD (Definition of Done) a new Feature under the Epic starts with — mandatory in a setup.
+export interface EpicSetup { epicId: number; epicTitle: string; featureDoD: string; stories: StoryTemplate[]; timeWritingStory: TimeWritingStoryTemplate; task: TaskTemplate }
 export interface FeatureSetupFile { schema: 1; kind: 'feature-setup'; epics: EpicSetup[] }
 
 export const featureSetupFile = 'feature-setup.json'
 export const placeholders = ['feature', 'program', 'service', 'version', 'month'] as const
 export const defaultTask: TaskTemplate = { title: '{month} | {feature}', description: '', assignedTo: '', areaPath: '', iterationPath: '' }
 export const defaultTimeWritingStory: TimeWritingStoryTemplate = { title: '{feature} - Time Writing', description: '', assignedTo: '', areaPath: '', iterationPath: '' }
-export const emptySetup = (epicId: number, epicTitle = ''): EpicSetup => ({ epicId, epicTitle, stories: [], timeWritingStory: { ...defaultTimeWritingStory }, task: { ...defaultTask } })
+// The default Feature DoD per release classification (also used by the built-in PU / Full Release creation).
+export function featureDoD(kind: 'PU' | 'Release') {
+  return kind === 'PU' ? 'DT finished. This is a PU release.' : 'IQOQ finished and Checklist uploaded into the Feature.'
+}
+export const emptySetup = (epicId: number, epicTitle = ''): EpicSetup => ({ epicId, epicTitle, featureDoD: '', stories: [], timeWritingStory: { ...defaultTimeWritingStory }, task: { ...defaultTask } })
 
 // The values of the placeholders for a Feature title and month.
 export function titleValues(featureTitle: string, month: string): Record<(typeof placeholders)[number], string> {
@@ -49,7 +54,7 @@ export function cleanSetup(input: Partial<Record<keyof EpicSetup, unknown>>): Ep
   const epicId = Number(input.epicId)
   if (!Number.isSafeInteger(epicId) || epicId < 1) return null
   const stories = Array.isArray(input.stories) ? input.stories.map((story: Partial<Record<keyof StoryTemplate, unknown>>) => ({ title: text(story?.title, 255), description: text(story?.description, 100000) })).filter((story) => story.title) : []
-  return { epicId, epicTitle: text(input.epicTitle, 255), stories, timeWritingStory: cleanTimeWritingStory(input.timeWritingStory as Partial<Record<keyof TimeWritingStoryTemplate, unknown>> | undefined), task: cleanTask(input.task as Partial<Record<keyof TaskTemplate, unknown>> | undefined) }
+  return { epicId, epicTitle: text(input.epicTitle, 255), featureDoD: text(input.featureDoD, 100000), stories, timeWritingStory: cleanTimeWritingStory(input.timeWritingStory as Partial<Record<keyof TimeWritingStoryTemplate, unknown>> | undefined), task: cleanTask(input.task as Partial<Record<keyof TaskTemplate, unknown>> | undefined) }
 }
 
 export function parseFeatureSetup(raw: string): FeatureSetupFile {
@@ -79,6 +84,17 @@ export function chooseSetup(setups: FeatureSetups | null | undefined, epicId: nu
   if (personal && !(preferShared && shared)) return { setup: personal, source: 'personal' }
   return shared ? { setup: shared, source: 'shared' } : {}
 }
+// Every shared setup at a glance, by Epic number: what a Feature under the Epic gets, and whether my own setup of the
+// Epic replaces it for me.
+export interface SharedSetupRow { epicId: number; epicTitle: string; featureDoD: string; stories: string[]; timeWritingStory: string; storyAreaPath: string; storyIterationPath: string; task: string; originalEstimate?: number; mineInstead: boolean }
+export function sharedSetupRows(setups: FeatureSetups | null | undefined): SharedSetupRow[] {
+  return [...(setups?.shared?.epics ?? [])].sort((a, b) => a.epicId - b.epicId).map((entry) => ({
+    epicId: entry.epicId, epicTitle: entry.epicTitle, featureDoD: entry.featureDoD ?? '', stories: entry.stories.map((story) => story.title),
+    timeWritingStory: (entry.timeWritingStory ?? defaultTimeWritingStory).title, storyAreaPath: entry.timeWritingStory?.areaPath ?? '', storyIterationPath: entry.timeWritingStory?.iterationPath ?? '', task: entry.task.title,
+    ...(entry.task.originalEstimate != null ? { originalEstimate: entry.task.originalEstimate } : {}),
+    mineInstead: Boolean(setupFor(setups?.personal ?? null, entry.epicId)),
+  }))
+}
 // Enable for everyone: the shared file with this Epic's entry replaced by (a copy of) the given one.
 export function publishSetup(shared: FeatureSetupFile | null, entry: EpicSetup): FeatureSetupFile {
   const epics = (shared?.epics ?? []).filter((item) => item.epicId !== entry.epicId)
@@ -90,7 +106,7 @@ export function publishSetup(shared: FeatureSetupFile | null, entry: EpicSetup):
 // the built-in creation gives — with the default Time Writing story and Task.
 export const builtinMilestones = { PU: ['SFV', 'DT', 'IQOQ'], Release: ['PRD', 'SFV', 'DT', 'IQOQ'] } as const
 export function builtinSetup(epicId: number, epicTitle: string, kind: keyof typeof builtinMilestones): EpicSetup {
-  return { ...emptySetup(epicId, epicTitle), stories: builtinMilestones[kind].map((milestone) => ({ title: `${milestone} : Review of Deliverables ({service} {version})`, description: '' })) }
+  return { ...emptySetup(epicId, epicTitle), featureDoD: featureDoD(kind), stories: builtinMilestones[kind].map((milestone) => ({ title: `${milestone} : Review of Deliverables ({service} {version})`, description: '' })) }
 }
 // Copy one Epic's setup to another Epic in the same file (replacing what the target had).
 export function copySetup(file: FeatureSetupFile, fromEpicId: number, toEpicId: number, toEpicTitle = ''): FeatureSetupFile {
@@ -98,4 +114,20 @@ export function copySetup(file: FeatureSetupFile, fromEpicId: number, toEpicId: 
   if (!source || fromEpicId === toEpicId) return file
   const copy = { ...structuredClone(source), epicId: toEpicId, epicTitle: toEpicTitle }
   return { ...file, epics: [...file.epics.filter((entry) => entry.epicId !== toEpicId), copy].sort((a, b) => a.epicId - b.epicId) }
+}
+// Editing the shared setups in their list: a copy of the file with one Epic's entry changed (nothing happens for an
+// Epic without a setup), or without it.
+export function editSetup(file: FeatureSetupFile, epicId: number, update: (entry: EpicSetup) => void): FeatureSetupFile {
+  if (!setupFor(file, epicId)) return file
+  const next = structuredClone(file)
+  const entry = next.epics.find((item) => item.epicId === epicId)!
+  entry.timeWritingStory ??= { ...defaultTimeWritingStory }
+  update(entry)
+  return next
+}
+export const removeSetup = (file: FeatureSetupFile, epicId: number): FeatureSetupFile => ({ ...file, epics: file.epics.filter((entry) => entry.epicId !== epicId) })
+// A setup is saved only with its Feature DoD: the Epics of a draft that are new or changed against the saved file and
+// have none (unchanged older entries without one do not block saving).
+export function setupsMissingDoD(draft: FeatureSetupFile, saved: FeatureSetupFile | null): number[] {
+  return draft.epics.filter((entry) => !(entry.featureDoD ?? '').trim() && JSON.stringify(entry) !== JSON.stringify(setupFor(saved, entry.epicId) ?? null)).map((entry) => entry.epicId).sort((a, b) => a - b)
 }

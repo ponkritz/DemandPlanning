@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import type { AzureWorkItem } from '../domain'
 import { defaultPlatforms, defaultTitleParts, matchScore, releaseRegister, titleFromParts, titleLabels, titleScheme, tracksRelease, type ReleaseEntry, type TitleParts } from '../releaseSource'
 import type { ReleaseRule } from '../streams'
-import { createAzureFeature } from '../azureDevOps'
+import { createAzureFeature, withFeatureDoD } from '../azureDevOps'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import { formatDate, formatHours, monthName } from '../format'
 import { QueryView } from './QueryView'
@@ -98,6 +98,7 @@ function CreateReleaseFeature({ stream, release, azure, onDone, assign, fuzzy = 
   const [platforms, setPlatforms] = useState<string[]>(() => { try { const saved = JSON.parse(localStorage.getItem(platformsKey) ?? 'null'); return Array.isArray(saved) && saved.every((entry) => typeof entry === 'string') && saved.length ? saved : defaultPlatforms } catch { return defaultPlatforms } })
   const [parts, setParts] = useState<TitleParts>(() => defaultTitleParts(stream, [release.group, release.name].filter(Boolean).join(' '), release.release, platforms))
   const [title, setTitle] = useState(() => titleFromParts(parts))
+  const [dod, setDod] = useState('')
   const [adding, setAdding] = useState(false)
   const [newPlatform, setNewPlatform] = useState('')
   const labels = titleLabels[scheme]
@@ -112,10 +113,10 @@ function CreateReleaseFeature({ stream, release, azure, onDone, assign, fuzzy = 
   const mapsBack = score != null ? score >= threshold : tracksRelease(title, release.name, release.release)
   const blocked = azure.isSample ? 'Synthetic sample data is loaded: creating in Azure DevOps is disabled.' : !azure.config || !azure.pat.trim() ? 'Connect the QMS-0025 Time Writing connection (with its PAT) to create Features.' : !azure.creatorEmail ? 'Set the Feature creator email on the Time Writing connection: new Features are assigned to it.' : ''
   async function create(assignee: string) {
-    if (blocked || !azure.config || !epicId || !mapsBack || !title.trim()) return
+    if (blocked || !azure.config || !epicId || !mapsBack || !title.trim() || !dod.trim()) return
     setBusy(true); setError('')
     try {
-      const created = await createAzureFeature(azure.config, azure.pat, { parentId: epicId, title: title.trim(), description: `Release ${release.name} ${release.release} (${stream}); created from the ${stream} release view. ${release.documents} document(s).`, acceptanceCriteria: '', assignedTo: assignee })
+      const created = await createAzureFeature(azure.config, azure.pat, { parentId: epicId, title: title.trim(), description: withFeatureDoD(dod, `Release ${release.name} ${release.release} (${stream}); created from the ${stream} release view. ${release.documents} document(s).`), acceptanceCriteria: '', assignedTo: assignee })
       azure.featureCreated([created])
       setConfirming(false); onDone()
     } catch (failure) { setError(failure instanceof Error ? failure.message : 'The Feature could not be created.') }
@@ -130,10 +131,11 @@ function CreateReleaseFeature({ stream, release, azure, onDone, assign, fuzzy = 
       <label>{labels[2]}<input value={parts.release} maxLength={40} placeholder="e.g. 3.0.0.2" onChange={(event) => setPart({ release: event.target.value })} /></label>
     </div>
     <label>Feature title<input value={title} maxLength={255} onChange={(event) => setTitle(event.target.value)} /></label>
+    <label>Feature DoD (Definition of Done) — required<textarea rows={2} required maxLength={100000} value={dod} placeholder="e.g. IQOQ finished and Checklist uploaded into the Feature." onChange={(event) => setDod(event.target.value)} /><small>Saved at the top of the Feature's Description as “Feature DoD: …”.</small></label>
     <small className={mapsBack ? 'muted' : 'negative'}>{score != null ? `${score}% match with ${[release.group, release.name, release.release].filter(Boolean).join(' ')}${mapsBack ? ' — the release maps to this Feature.' : ` — below ${threshold}%, the release would not map to it. Keep the name and version in the title.`}` : mapsBack ? `Maps back to ${release.name} ${release.release}: the title names the release and its version.` : `This title does not name “${release.name}” and version ${release.release}; the release would not map to the Feature. Keep both in the title.`}</small>
     {blocked ? <p className="notice warning">{blocked}</p> : <div className="button-row">
       <label>Parent Epic<select value={epicId || ''} onChange={(event) => setEpicId(Number(event.target.value))}><option value="">Choose an Epic…</option>{epics.map((epic) => <option key={epic.id} value={epic.id}>#{epic.id} {epic.title}</option>)}</select></label>
-      <button type="button" className="primary" disabled={busy || !epicId || !mapsBack} onClick={() => setConfirming(true)}>Create Feature</button>
+      <button type="button" className="primary" disabled={busy || !epicId || !mapsBack || !dod.trim()} title={dod.trim() ? undefined : 'Enter the Feature DoD first'} onClick={() => setConfirming(true)}>Create Feature</button>
       <button type="button" className="ghost" disabled={busy} onClick={onDone}>Cancel</button>
     </div>}
     {error && <p className="notice error">{error}</p>}

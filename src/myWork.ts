@@ -1,5 +1,5 @@
 import type { AzureWorkItem } from './domain'
-import { planMonthStory, timeWritingMonth, timeWritingStoryIds } from './azureInsights.ts'
+import { isTimeWritingStory, planMonthStory, timeWritingMonth, timeWritingStoryIds } from './azureInsights.ts'
 
 // "Me" is matched by Azure email (Assigned To unique name) when known, otherwise by display name.
 export interface Me { email?: string; name?: string }
@@ -82,8 +82,9 @@ export function isPastSprint(path: string, iterations: DatedIteration[], date = 
 // states: which of them to move — New, Active, or both (other pending states are left alone).
 export type MoveStates = 'new' | 'active' | 'both'
 export const matchesMoveStates = (state: string, states: MoveStates) => { const value = state.trim().toLowerCase(); return states === 'both' ? value === 'new' || value === 'active' : value === states }
+// Time Writing stories are not tied to a PI or Sprint, so they are never moved.
 export function moveCandidates(items: AzureWorkItem[], me: Me, target: string, iterations: DatedIteration[], absenceEpicId?: number, date = new Date(), states: MoveStates = 'both') {
-  return myPendingWork(items, me, absenceEpicId).filter(({ item }) => item.workItemType === 'User Story' && matchesMoveStates(item.state, states) && item.iterationPath.trim().toLowerCase() !== target.trim().toLowerCase() && isPastSprint(item.iterationPath, iterations, date))
+  return myPendingWork(items, me, absenceEpicId).filter(({ item }) => item.workItemType === 'User Story' && !isTimeWritingStory(item) && matchesMoveStates(item.state, states) && item.iterationPath.trim().toLowerCase() !== target.trim().toLowerCase() && isPastSprint(item.iterationPath, iterations, date))
 }
 
 // Everyone in the backlog with an Azure email (for choosing who a new work item is assigned to), sorted by name. A name

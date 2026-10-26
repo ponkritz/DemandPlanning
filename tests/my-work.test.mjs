@@ -47,13 +47,14 @@ test('move candidates: only my pending User Stories in a past Sprint; current, f
     item(14, 'User Story', 'In future sprint', { ...ana, iterationPath: 'Quality\\PI 2026.4\\Sprint 3' }),
     item(15, 'User Story', 'Only in the PI', { ...ana, iterationPath: 'Quality\\PI 2026.4' }),
     item(16, 'User Story', 'Ben in past sprint', { ...ben }),
+    item(18, 'User Story', 'CP | Care | v1 - Time Writing', { ...ana, iterationPath: 'Quality\\PI 2026.4\\Sprint 1' }),
   ]
-  assert.deepEqual(moveCandidates([...items, ...extra], me, target, iterations, 37778, today).map(({ item }) => item.id), [3, 5], 'Features and Tasks are never moved; only stories in Sprint 1 (past)')
+  assert.deepEqual(moveCandidates([...items, ...extra], me, target, iterations, 37778, today).map(({ item }) => item.id), [5], 'Features, Tasks and Time Writing stories (#3, #18) are never moved; only other stories in Sprint 1 (past)')
   assert.deepEqual(moveCandidates(items, me, target, [], 37778, today), [], 'without iteration dates nothing is treated as past')
-  const all = [...items, ...extra, item(17, 'User Story', 'Committed in past sprint', { ...ana, state: 'Committed' })]
+  const all = [...items, ...extra, item(17, 'User Story', 'Committed in past sprint', { ...ana, state: 'Committed' }), item(19, 'User Story', 'DT review', { parentId: 2, ...ana })]
   assert.deepEqual(moveCandidates(all, me, target, iterations, 37778, today, 'new').map(({ item }) => item.id), [5], 'New only')
-  assert.deepEqual(moveCandidates(all, me, target, iterations, 37778, today, 'active').map(({ item }) => item.id), [3], 'Active only')
-  assert.deepEqual(moveCandidates(all, me, target, iterations, 37778, today, 'both').map(({ item }) => item.id), [3, 5], 'both; other pending states are left alone')
+  assert.deepEqual(moveCandidates(all, me, target, iterations, 37778, today, 'active').map(({ item }) => item.id), [19], 'Active only (#3 is a Time Writing story)')
+  assert.deepEqual(moveCandidates(all, me, target, iterations, 37778, today, 'both').map(({ item }) => item.id), [5, 19], 'both; other pending states are left alone')
 })
 
 const raw = (id, fields) => ({ id, fields: { 'System.TeamProject': 'Quality', 'System.State': 'Active', 'System.AreaPath': 'Quality\\A', 'System.IterationPath': 'Quality\\PI 2026.4\\Sprint 1', ...fields } })
@@ -82,6 +83,7 @@ test('ensureMonthTask creates story and task once, then reuses them; another per
   const { transport, calls } = fakeAzure(world)
   const first = await ensureMonthTask(config, 'pat', 2, 'Ana@x.com', 'October 2026', transport)
   assert.deepEqual([first.status, first.storyCreated, first.story.title, first.task.title, first.task.assignedToEmail, first.task.iterationPath], ['created', true, 'CP | Care Pathways | v3.1 - Time Writing', 'October 2026 | CP | Care Pathways | v3.1', 'ana@x.com', 'Quality'])
+  assert.equal(first.story.iterationPath, config.project, 'a new Time Writing story sits at the project root, not in the Feature’s PI')
   const second = await ensureMonthTask(config, 'pat', 2, 'ana@x.com', 'October 2026', transport)
   assert.deepEqual([second.status, second.storyCreated, second.task.id], ['exists', false, first.task.id], 'running again creates nothing')
   assert.equal(calls.filter((call) => call.operation === 'create-child' && !call.validateOnly).length, 2)
