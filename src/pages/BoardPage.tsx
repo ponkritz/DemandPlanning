@@ -1,16 +1,15 @@
 import type { FeatureSetups } from '../featureSetup'
-import { dpDataSets } from '../dpReleases'
 import { useState } from 'react'
 import { EmptyState, Page, Panel, Pill, Info } from '../components/ui'
 import { AzureWorkItemTree } from '../components/AzureWorkItemTree'
 import { QueryView } from '../components/QueryView'
-import { DpReleasesView, ReleaseView } from '../components/ReleaseView'
+import { ReleaseView } from '../components/ReleaseView'
 import { formatDate, formatDateTime, monthName } from '../format'
 import { approvalDateFrom, viewMonthOf } from '../releaseSource'
 import { viewSource } from '../viewSources'
 import { listAzureConnectionProfiles } from '../azureCredentials'
 import { connectionConfig, type AzureWorkspace } from '../useAzureWorkspace'
-import { loadAzureConnectionProfile, type AzureConnectionProfileSummary } from '../azureCredentials'
+import { loadAzureConnectionProfile } from '../azureCredentials'
 import type { BacklogView } from '../backlogViews'
 import type { AzureConfig } from '../azureDevOps'
 import type { PageProps } from './types'
@@ -67,21 +66,6 @@ function ReadOnlyView({ id, name, role, azure, store, month, gitNote, onOpenConn
   const undated = source ? source.items.filter((item) => !(item.approvalDate ?? approvalDateFrom(item.fields ?? {}))).length : 0
   // On-prem views with Git storage: Load from Git too; a fetch that cannot run falls back to it.
   const refresh = <span className="button-row"><button className="primary" disabled={busy} onClick={() => void azure.fetchConnection(id)}>{busy ? (status?.message || 'Fetching…') : source ? 'Refresh from Azure' : 'Fetch from Azure'}</button>{azure.canLoadFromGit(id) && <button className="ghost" disabled={busy} onClick={() => void azure.loadFromGit(id)}>Load from Git</button>}</span>
-  // DP with the Pedestal and DHFI data sets mapped (Settings → Stream mapping): the combined view, fetching both.
-  const sets = stream?.rule === 'dp' ? dpDataSets(store.state, azure.connectionProfiles) : undefined
-  if (sets?.dhfiProfile && config) {
-    const fetchSet = (profile: AzureConnectionProfileSummary | undefined, label: string) => profile && <button key={profile.id} className="primary" disabled={azure.connectionStatus[profile.id]?.state === 'busy'} onClick={() => void azure.fetchConnection(profile.id)}>{azure.connectionStatus[profile.id]?.state === 'busy' ? (azure.connectionStatus[profile.id]?.message || 'Fetching…') : `${label}: ${(profile === sets.pedestalProfile ? sets.pedestalSource : sets.dhfiSource) ? 'Refresh' : 'Fetch'} from Azure`}</button>
-    const fetched = (source: typeof sets.dhfiSource, label: string) => source ? `${label} ${source.items.length} items · fetched ${formatDateTime(source.fetchedAt)}` : `${label} not fetched`
-    return <Page className="backlog-page">
-      <Panel className="connection-panel backlog-panel">
-        <div className="view-source-bar"><div><strong>{name}</strong><span className="muted"> · {fetched(sets.pedestalSource, 'Pedestal')} · {fetched(sets.dhfiSource, 'DHFI')}</span></div><label className="check"><input type="checkbox" checked={allMonths} onChange={(event) => setAllMonths(event.target.checked)} />All months</label></div>
-        {[sets.pedestalProfile, sets.dhfiProfile].flatMap((profile) => profile && azure.connectionStatus[profile.id]?.state === 'error' ? [<div key={profile.id} className="notice error" role="alert">{azure.connectionStatus[profile.id]!.message}</div>] : [])}
-        {!sets.pedestalProfile && <div className="notice warning" role="status">The Pedestal data set is not mapped: set it up in Settings → Azure DevOps → Stream mapping.</div>}
-        {azure.isSample ? null : gitNote && <div className={`notice ${gitNote.tone}`} role="status">{gitNote.text}</div>}
-        <DpReleasesView pedestal={sets.pedestal} dhfi={sets.dhfi} backlog={azure.items} month={month} allMonths={allMonths} azure={azure} assign={assign} threshold={threshold} action={<span className="button-row">{fetchSet(sets.pedestalProfile, 'Pedestal')}{fetchSet(sets.dhfiProfile, 'DHFI')}<button className="ghost" onClick={onOpenConnection}>Settings</button></span>} />
-      </Panel>
-    </Page>
-  }
   return <Page className="backlog-page">
     <Panel className="connection-panel backlog-panel">
       <div className="view-source-bar"><div><strong>{name}</strong><span className="muted"> · {config ? `${config.organization} / ${config.project}` : 'connection not found'}{source ? ` · ${allMonths ? source.items.length : `${items.length} of ${source.items.length}`} items${allMonths ? '' : ` in ${monthName(month)}`} · fetched ${formatDateTime(source.fetchedAt)}${'fromGit' in source && source.fromGit ? ' (desktop app, via Git)' : ''}` : ''}</span>{profile?.query ? <small className="muted"> · query</small> : config?.team ? <small className="muted"> · team {config.team}</small> : null}</div><div className="button-row">{source && <label className="check"><input type="checkbox" checked={allMonths} onChange={(event) => setAllMonths(event.target.checked)} />All months</label>}{refresh}<button className="ghost" onClick={onOpenConnection}>Connection settings</button></div></div>
@@ -91,7 +75,7 @@ function ReadOnlyView({ id, name, role, azure, store, month, gitNote, onOpenConn
       {source && !allMonths && undated > 0 && <div className="notice" role="status">Month filter: by Author Approval Date in your time zone. {undated} of {source.items.length} items have no approval date{role === 'release-source' ? '' : ' in the query’s columns'}, so their Changed Date is used.</div>}
       {stale && !busy && <div className="notice warning" role="status">The saved data was fetched with different columns than the connection's query now has. Refresh from Azure to load every column's values.</div>}
       {source && config && !items.length && source.items.length ? <EmptyState title={`No items in ${monthName(month)}.`} detail={`${source.items.length} items have an approval date (else a changed date) in other months. Pick another month in the header, or tick “All months”.`} />
-        : source && config ? role === 'release-source' || stream ? <ReleaseView name={name} items={items} backlog={azure.items} azure={azure} assign={assign} rule={stream?.rule} fuzzy={stream?.fuzzy} threshold={threshold} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} /> : <QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} />
+        : source && config ? stream?.rule === 'dp' ? <QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} queryOnly choose /> : role === 'release-source' || stream ? <ReleaseView name={name} items={items} backlog={azure.items} azure={azure} assign={assign} rule={stream?.rule} fuzzy={stream?.fuzzy} threshold={threshold} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} /> : <QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} />
         : <><EmptyState title={config ? `“${name}” has not been fetched yet.` : `The connection for “${name}” is not saved in this browser.`} detail={config ? 'Fetch it read-only; nothing is written to Azure DevOps. Its items stay on this page and are not counted in Overview, Monthly Time Writing or Assigned to Me.' : 'Add it again in Settings → Azure DevOps.'} /></>}
     </Panel>
   </Page>

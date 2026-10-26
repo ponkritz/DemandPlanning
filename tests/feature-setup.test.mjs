@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { chooseSetup, emptySetup, personalSetupPath, publishSetup, removeSetup, editSetup, sharedSetupRows, setupsMissingDoD, builtinSetup, parseFeatureSetup, serializeFeatureSetup, featureDoD } from '../src/featureSetup.ts'
+import { chooseSetup, emptySetup, personalSetupPath, publishSetup, removeSetup, editSetup, sharedSetupRows, setupsMissingDoD, builtinSetup, parseFeatureSetup, serializeFeatureSetup, featureDoD, defaultDoDFor, fillMissingDoD } from '../src/featureSetup.ts'
 
 const file = (...epics) => ({ schema: 1, kind: 'feature-setup', epics })
 const withStory = (epicId, title) => ({ ...emptySetup(epicId, `Epic ${epicId}`), stories: [{ title, description: '' }] })
@@ -96,4 +96,19 @@ test('Feature DoD in a setup: kept through save, built-in defaults, and required
   assert.deepEqual(setupsMissingDoD(file(legacy, withDoD, emptySetup(99)), saved), [99], 'a new setup needs one')
   assert.deepEqual(setupsMissingDoD(file({ ...legacy, stories: [{ title: 'X', description: '' }] }, withDoD), saved), [37810], 'so does a changed one')
   assert.deepEqual(setupsMissingDoD(file({ ...legacy, featureDoD: 'Done' }, withDoD), saved), [])
+})
+
+test('default Feature DoD for setups without one: Full Release with a PRD story, else PU; only missing ones are filled', () => {
+  const release = { ...emptySetup(1), stories: [{ title: 'PRD : Review of Deliverables ({service} {version})', description: '' }] }
+  const pu = { ...emptySetup(2), stories: [{ title: 'SFV : Review', description: '' }] }
+  const done = { ...emptySetup(3), featureDoD: 'Own DoD' }
+  assert.equal(defaultDoDFor(release), featureDoD('Release'))
+  assert.equal(defaultDoDFor(pu), featureDoD('PU'))
+  assert.equal(defaultDoDFor(emptySetup(4)), featureDoD('PU'))
+  const source = file(release, pu, done)
+  const { file: filled, filled: ids } = fillMissingDoD(source)
+  assert.deepEqual(ids, [1, 2])
+  assert.deepEqual(filled.epics.map((entry) => entry.featureDoD), [featureDoD('Release'), featureDoD('PU'), 'Own DoD'])
+  assert.equal(source.epics[0].featureDoD, '', 'the original is unchanged')
+  assert.equal(fillMissingDoD(filled).file, filled, 'nothing missing: the same file')
 })

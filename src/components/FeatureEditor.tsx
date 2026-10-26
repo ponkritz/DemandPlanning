@@ -4,7 +4,7 @@ import { completeFeatureFromSetup, createFeatureFromSetup, updateAzureTimeWritin
 import { Modal, Info } from './ui'
 import { PersonPicker } from './PersonPicker'
 import { assignablePeople } from '../myWork'
-import { chooseSetup, fillTitle, missingValues, setupFor, titleValues, type FeatureSetups } from '../featureSetup'
+import { chooseSetup, defaultDoDFor, fillTitle, missingValues, setupFor, titleValues, type FeatureSetups } from '../featureSetup'
 
 // The "Add Feature under an Epic" / "Complete Feature children" modal, shared by the QMS-0025 board and Assigned to
 // Me. mode.parent: create a Feature (the Epic can still be changed) with its children; mode.resume: add the missing
@@ -50,7 +50,7 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
   const { setup: epicSetup, source: setupSource } = chooseSetup(featureSetup, epicId, preferShared)
   const bothSetups = Boolean(setupFor(featureSetup?.personal ?? null, epicId) && setupFor(featureSetup?.shared ?? null, epicId))
   const [skipStories, setSkipStories] = useState<number[]>([])
-  const dod = dodText ?? (epicSetup?.featureDoD.trim() || featureDoD(releaseKind))
+  const dod = dodText ?? (epicSetup ? epicSetup.featureDoD.trim() || defaultDoDFor(epicSetup) : featureDoD(releaseKind))
   const needsDoD = Boolean(parent) && !resumeFeature
   const values = titleValues(title, monthLabel)
   const filled = (template: string) => missingValues(template, values).length ? `${template} (needs “Program | Service | vRelease”)` : fillTitle(template, values)

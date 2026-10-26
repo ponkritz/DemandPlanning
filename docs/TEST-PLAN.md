@@ -333,6 +333,8 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-CON-34 Time Writing story paths in the setup** — Req CON-66 — L1 `feature-setup.test.mjs` (rows carry the story's Area and Iteration Path); browser check with GitHub mocked: the row of #37810 shows "Area: the Feature’s · Iteration: project root"; Edit → set Area Path "QMS\Quality Engineering" and Iteration Path "QMS" (with the DoD) → Save to Git → the saved story holds both and the row shows them; the setup pop-up's placeholders say "Empty: the Feature's Area Path" and "Empty: the project root … (no PI, Sprint or year)".
 
+**TC-CON-35 Default Feature DoD for setups without one** — Req CON-67 — L1 `feature-setup.test.mjs` ("default Feature DoD for setups without one: Full Release with a PRD story, else PU; only missing ones are filled"); browser check with GitHub mocked (#13946 without stories, #37810 with PRD and SFV, both without DoD): the banner says "2 shared setups have no Feature DoD."; #37810 shows "Missing · Default: IQOQ finished and Checklist uploaded into the Feature."; Edit #13946 pre-fills "DT finished. This is a PU release."; "Fill missing DoDs with the default" marks both rows changed and removes the banner; Save to Git saves #13946 with the PU and #37810 with the Full Release DoD; "All fields…" has its tooltip. **UAT**
+
 **TC-CON-27 Map a Feature setup to an Epic** — Req CON-59 — L1 `feature-setup.test.mjs` ("built-in stories as a setup give exactly the titles of the built-in creation"; "copy a setup to another Epic: replaces the target, keeps the source, no-op without a source"); browser check with a writable Git store holding a personal setup of another Epic: My setup shows it with "applies now" on step 1; "Copy this setup to Epic #" 13946 → the four stories appear under #13946 and the panel says "changed here, not saved yet"; Save to Git commits `feature-setup/<email>.json` holding both Epics and the panel then marks My setup as applying to #13946; "Go to Epic #" another number with no setup offers the two built-in buttons. **UAT**
 
 **TC-CON-26 Personal and shared Feature setup** — Req CON-58, CON-52 — L1 `feature-setup.test.mjs` (one file per email with unsafe characters and runs of dots replaced; my setup of an Epic wins for me, the shared one otherwise, and the form can switch; Enable for everyone replaces only that Epic, as a copy); browser check: Settings → Feature setup opens for every role; with an email on the Time Writing connection it shows My setup and Shared (everyone), else only Shared with a notice; "Start my own from the shared one", "Remove my setup" and "Enable for everyone" save to Git with a writable token. **UAT**
@@ -677,6 +679,8 @@ Cases marked **UAT** are also run in acceptance testing.
 **TC-QV-06 Create Feature from a release** — Req QV-20, CON-56 — L1 `release-source.test.mjs` ("tracking is an exact match of name and release segments in a Feature title"); browser check: a release without a tracking Feature offers Create Feature; a title that no longer names the release is refused; the confirmation offers the person picker, defaulting to the person creating it. **UAT**
 
 **TC-QV-07 Create Feature title parts** — Req QV-21 — L1 `release-source.test.mjs` ("Create Feature title parts: Program · Service · Release for DP, Platform · Name · Release for CP, free elsewhere"); browser check (needs a DP and a CP connection): DP shows Program, Service and Release, giving "DP | <name> | v<release>"; CP shows a Platform list with Platform 1.0 and Platform 2.0, and "Add…" adds a platform kept in this browser; changing a part rebuilds the title, which stays editable.
+
+**TC-QV-08 DP shows only its query** — Req QV-22 — L1 `query-view.test.mjs` ("column chooser: hidden columns left out in the query order, never all of them, remembered per view"); browser check with Azure DevOps mocked (a release-source connection "DP" whose query selects ID, Title, State, Custom.ReleaseType, Target Date and Area Path; three Release items): Release Details → DP → Fetch → the table has exactly ID, Title, State, Release Type, Target Date, Area Path; no "Time Writing Feature", DHFI or Pedestal text; "Columns (6 of 6)" → untick Area Path → "Columns (5 of 6)" and the column is gone; after a reload it stays hidden; CP still shows its Releases list. **UAT**
 
 ### 6.9 Dashboard and capacity
 
@@ -1052,6 +1056,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CON-64 | TC-CON-32 |
 | CON-65 | TC-CON-33 |
 | CON-66 | TC-CON-34 |
+| CON-67 | TC-CON-35 |
 | QV-20 | TC-QV-06 |
 | QV-21 | TC-QV-07 |
 | CON-21, CON-22 | TC-CON-08 |
@@ -1109,6 +1114,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | QV-06…10 | TC-QV-03 |
 | QV-11 | TC-QV-04 |
 | QV-12…17 | TC-QV-05 |
+| QV-22 | TC-QV-08 |
 | OVR-01…08 | retired (TC-OVR-01…03 retired) |
 | OV-11 | TC-OV-11 |
 | OV-12 | TC-OV-12 |
@@ -1171,8 +1177,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-04 | TC-TWN-01, TC-TWN-02, TC-MON-01…06 |
 | UC-05 | TC-MON-07 |
 | UC-06 | TC-ATM-01…11, TC-TWN-03, TC-CON-20, TC-CON-33, TC-CON-34 |
-| UC-07 | TC-BKL-01…05, TC-CON-23, TC-CON-25…27, TC-CON-29…32 |
-| UC-08 | TC-QV-01…05, TC-FET-07, TC-CON-08, TC-CON-11…16 |
+| UC-07 | TC-BKL-01…05, TC-CON-23, TC-CON-25…27, TC-CON-29…32, TC-CON-35 |
+| UC-08 | TC-QV-01…05, TC-FET-07, TC-CON-08, TC-CON-11…16, TC-QV-08 |
 | UC-09 | TC-OV-11…14, TC-CAP-01, TC-CAP-02, TC-CON-21 |
 | UC-10 | TC-OV-11 (Months, Streams), TC-OV-13 |
 | UC-11 | TC-BAS-01…04 |

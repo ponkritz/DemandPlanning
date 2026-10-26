@@ -1,5 +1,4 @@
 # Project Plan
-
 ## Objective
 
 Deliver a centrally governed demand-planning tool for 20–25 Quality Engineering users, replacing monthly spreadsheet handling.
@@ -41,3 +40,9 @@ The 3–5 day target is viable for a testable Release 1, not for every productio
 - Process Owner: master values, deadline exceptions and data quality
 - Contributor: owned activities and monthly actuals
 - Viewer: dashboards and exports
+
+## Backlog
+
+Deferred on request; to be decided again when needed:
+
+- **DP release matching and DHFI linking (Release Details → DP).** The DP page now shows only the DP connection's query with chosen columns (QV-22). Matching DP releases to their QMS-0025 Time Writing Feature (fuzzy match, Create Feature) and linking the DHFI documents and the Pedestal register are off the page (OI-14). Pulse Check and the Dashboard delivery counts still use the DP releases logic until this is revisited.

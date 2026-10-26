@@ -4,14 +4,13 @@ import { defaultPlatforms, defaultTitleParts, matchScore, releaseRegister, title
 import type { ReleaseRule } from '../streams'
 import { createAzureFeature, withFeatureDoD } from '../azureDevOps'
 import type { AzureWorkspace } from '../useAzureWorkspace'
-import { formatDate, formatHours, monthName } from '../format'
+import { formatDate, formatHours } from '../format'
 import { QueryView } from './QueryView'
 import { EmptyState, Pill, TablePanel } from './ui'
 import type { QueryColumn, QueryOrder } from '../queryView'
 import { useColumnWidths } from './columnWidths'
 import { AssigneeConfirm } from './AssigneeConfirm'
 import { assignablePeople } from '../myWork'
-import { designReviews, dpReleases, type DpRelease, type PedestalRelease } from '../dpReleases'
 
 // Release source view, one page: the releases found in the documents' paths (see releasePath: release from the
 // Iteration Path with the name from the Area Path, else "…\Name\Release x.y.z" in the Area Path) as a flat list — no grouping by stream — and below it the documents with the query's columns.
@@ -24,28 +23,14 @@ export function ReleaseView({ name, items, backlog, columns, orderBy, unresolved
   </>
 }
 
-// DP with the Pedestal and DHFI data sets (dpReleases): the Pedestal Releases dated by their DHFI documents in the
-// month, then those without a DHFI document (or a dated one) under "No DHFI yet". Each with its Pedestal plan and
-// its QMS-0025 Feature match.
-export function DpReleasesView({ pedestal, dhfi, backlog, month, allMonths, azure, assign, threshold = 80, action }: { pedestal: AzureWorkItem[]; dhfi: AzureWorkItem[]; backlog: AzureWorkItem[]; month: string; allMonths: boolean; azure?: AzureWorkspace; assign?: { me: string; canChoose: boolean }; threshold?: number; action?: ReactNode }) {
-  const register = useMemo(() => dpReleases(pedestal, dhfi, backlog, { threshold }), [pedestal, dhfi, backlog, threshold])
-  const dated = register.filter((release) => release.month && (allMonths || release.month === month))
-  const undated = register.filter((release) => !release.month)
-  const info = `DP combines two data sets (Settings → Azure DevOps → Stream mapping): the Pedestal release register — every Release work item is a DP release, its Title naming the release and its version (“RSGMS 3.0.0.2”) — and the DHFI documents. The DHFI list is searched for documents whose Title names both the release and its exact version, ignoring spaces and punctuation inside words (“RS GMS” = “RSGMS”); the latest Author Approval Date (else Closed Date) of those documents dates the release and puts it in the month. Pedestal Release shows its State, Intent and PI / Year; Design reviews the DRPE, DRPC, DRfH and DDT dates and statuses. Time Writing Feature = the best fuzzy match among QMS-0025 Features (name 60%, version 40%; spacing inside words ignored, another version never counts as the same release); it counts — with its planned and booked hours — at ${threshold}% or more. Releases without a dated DHFI document are listed under “No DHFI yet”.`
-  return <>
-    <ReleaseTable name="DP" title={allMonths ? 'Releases (all months)' : `Releases in ${monthName(month)}`} register={dated} azure={azure} assign={assign} fuzzy threshold={threshold} pedestal info={info} action={action} empty={<EmptyState title={allMonths ? 'No Pedestal Release has a dated DHFI document.' : `No DP release dated in ${monthName(month)}.`} detail={!pedestal.length ? 'Fetch the Pedestal data set (Settings → Azure DevOps → Stream mapping).' : !dhfi.length ? 'Fetch the DHFI data set (Settings → Azure DevOps → Stream mapping).' : 'A release is dated by the Author Approval Date (else Closed Date) of the DHFI documents whose Title names it.'} />} />
-    {undated.length > 0 && <ReleaseTable name="DP" title="No DHFI yet" detail={`${undated.length} Pedestal Release${undated.length === 1 ? '' : 's'} without a dated DHFI document`} register={undated} azure={azure} assign={assign} fuzzy threshold={threshold} pedestal />}
-  </>
-}
-
 // The release table shared by the views: one row per release with its documents, Feature match and hours; with
-// pedestal, the Pedestal Release and Design reviews columns; with typed, the IOCC Type of Release column.
-function ReleaseTable({ name, title = 'Releases', detail, register, azure, assign, fuzzy = false, threshold = 80, pedestal = false, typed, info, action, empty }: { name: string; title?: string; detail?: string; register: ReleaseEntry[]; azure?: AzureWorkspace; assign?: { me: string; canChoose: boolean }; fuzzy?: boolean; threshold?: number; pedestal?: boolean; typed?: boolean; info?: ReactNode; action?: ReactNode; empty?: ReactNode }) {
+// typed, the IOCC Type of Release column.
+function ReleaseTable({ name, title = 'Releases', detail, register, azure, assign, fuzzy = false, threshold = 80, typed, info, action, empty }: { name: string; title?: string; detail?: string; register: ReleaseEntry[]; azure?: AzureWorkspace; assign?: { me: string; canChoose: boolean }; fuzzy?: boolean; threshold?: number; typed?: boolean; info?: ReactNode; action?: ReactNode; empty?: ReactNode }) {
   const [open, setOpen] = useState('')
   const widths = useColumnWidths(`releases:${name}:${title}`)
   // IOCC: the Area Path segment after IOCC is the Type of Release, in its own column.
   const grouped = typed || register.some((release) => release.group)
-  const headings = [...(grouped ? ['Type of Release'] : []), 'Name', 'Release', 'Approved', 'Documents', ...(pedestal ? ['Pedestal Release', 'Design reviews'] : []), 'Time Writing Feature', 'Planned (h)', 'Booked (h)']
+  const headings = [...(grouped ? ['Type of Release'] : []), 'Name', 'Release', 'Approved', 'Documents', 'Time Writing Feature', 'Planned (h)', 'Booked (h)']
   return <TablePanel title={title} detail={detail} info={info} action={action}>
       {register.length ? <table className="release-register resizable"><thead><tr>{headings.map((heading) => <th key={heading} style={widths.style(heading)}>{heading}{widths.handle(heading)}</th>)}</tr></thead><tbody>
         {register.flatMap((release) => [
@@ -53,7 +38,6 @@ function ReleaseTable({ name, title = 'Releases', detail, register, azure, assig
             {grouped && <td>{release.group || '—'}</td>}
             <td><button type="button" className="text-button" aria-expanded={open === release.key} onClick={() => setOpen(open === release.key ? '' : release.key)}>{open === release.key ? '▾' : '▸'} {release.name}</button></td>
             <td>{release.release || '—'}</td><td>{release.approvalDate ? formatDate(release.approvalDate) : '—'}</td><td>{release.documents}</td>
-            {pedestal && <PedestalCells plan={'pedestal' in release ? (release as DpRelease).pedestal : undefined} />}
             <td>{release.match && release.match.score >= 50 && <Pill tone={release.match.score >= threshold ? 'open' : 'warning'}>{release.match.score}% match</Pill>}{release.features.length ? release.features.map((feature) => <a key={feature.id} className="feature-link" href={feature.url} target="_blank" rel="noreferrer">#{feature.id} {feature.title}</a>) : release.match && release.match.score >= 50 ? <><small className="muted">Closest: <a href={release.match.feature.url} target="_blank" rel="noreferrer">#{release.match.feature.id} {release.match.feature.title}</a> — below {threshold}%</small>{azure && <button type="button" className="text-button" onClick={() => setOpen(`${release.key}/create`)}>＋ Create Feature</button>}</> : release.tracked ? <Pill tone="info">Named by {release.trackedBy.length} item{release.trackedBy.length === 1 ? '' : 's'}, no Feature</Pill> : <><Pill tone="warning">Not tracked</Pill>{azure && <button type="button" className="text-button" onClick={() => setOpen(`${release.key}/create`)}>＋ Create Feature</button>}</>}</td>
             <td>{release.hourTasks ? formatHours(release.planned) : '—'}</td>
             <td>{release.hourTasks ? <>{formatHours(release.booked)}{release.planned > 0 && release.booked > release.planned && <small className="negative">+{formatHours(release.booked - release.planned)} over plan</small>}</> : '—'}<small>{release.hourTasks ? `${release.hourTasks} task${release.hourTasks === 1 ? '' : 's'}` : ''}</small></td>
@@ -63,19 +47,6 @@ function ReleaseTable({ name, title = 'Releases', detail, register, azure, assig
         ])}
       </tbody></table> : empty ?? <EmptyState title="No releases." />}
     </TablePanel>
-}
-
-// The Pedestal plan and status of a release: its Release work item (State, Intent, PI / Year) and its design reviews
-// (date and status).
-function PedestalCells({ plan }: { plan?: PedestalRelease }) {
-  if (!plan) return <><td><span className="muted">—</span></td><td>—</td></>
-  const { item, values } = plan
-  const when = [values.PI && `PI ${values.PI}`, values.Year].filter(Boolean).join(' · ')
-  const reviews = designReviews.filter(([, date, status]) => values[date] || values[status])
-  return <>
-    <td><a className="feature-link" href={item.url} target="_blank" rel="noreferrer">#{item.id} {item.title}</a><small>{[item.state, values.ReleaseIntent, when].filter(Boolean).join(' · ')}</small></td>
-    <td>{reviews.length ? reviews.map(([label, date, status]) => <small key={label}>{label}: {values[date] ? formatDate(values[date]!) : '—'}{values[status] ? ` · ${values[status]}` : ''}</small>) : '—'}</td>
-  </>
 }
 
 // Creates the QMS-0025 Feature for a release. The title is pre-filled as "<Stream> | <Name> | v<release>" and can be
