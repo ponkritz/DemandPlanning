@@ -151,18 +151,9 @@ test('versions equal up to trailing zero parts, for matching and for grouping', 
   assert.deepEqual(register.map((entry) => [entry.release, entry.documents, entry.features.map((feature) => feature.id)]), [['3.1', 2, [9]]], '3.1 and 3.1.0.0 are one release')
 })
 
-test('Create Feature title parts: Program · Service · Release for DP, Platform · Name · Release for CP, free elsewhere', async () => {
-  const { defaultTitleParts, titleFromParts, titleScheme, titleLabels, defaultPlatforms } = await import('../src/releaseSource.ts')
-  assert.deepEqual([titleScheme('DP'), titleScheme('cp'), titleScheme('IOCC')], ['dp', 'cp', 'free'])
-  assert.deepEqual(titleLabels.dp, ['Program', 'Service', 'Release'])
-  assert.deepEqual(titleLabels.cp, ['Platform', 'Name', 'Release'])
-  const dp = defaultTitleParts('DP', 'RSGMS', '3.0.0.2')
-  assert.deepEqual(dp, { first: 'DP', second: 'RSGMS', release: '3.0.0.2' })
-  assert.equal(titleFromParts(dp), 'DP | RSGMS | v3.0.0.2')
-  assert.equal(tracksRelease(titleFromParts(dp), 'RSGMS', '3.0.0.2'), true, 'still maps back to the release')
-  const cp = defaultTitleParts('CP', 'Care Pathways', '3.1')
-  assert.deepEqual(cp, { first: defaultPlatforms[0], second: 'Care Pathways', release: '3.1' })
-  assert.equal(titleFromParts(cp), 'Platform 1.0 | Care Pathways | v3.1')
-  assert.equal(titleFromParts(defaultTitleParts('CP', 'Care Pathways', '3.1', ['Platform 2.0'])).startsWith('Platform 2.0 |'), true, 'the first platform of the list is the default')
-  assert.equal(titleFromParts({ first: 'DP', second: 'RSGMS', release: '' }), 'DP | RSGMS', 'no version, no v')
+test('Create Feature title from a release: "Stream | Name | vRelease", mapping back to the release', async () => {
+  const { releaseFeatureTitle, tracksRelease } = await import('../src/releaseSource.ts')
+  assert.equal(releaseFeatureTitle('DP', 'RSGMS', '3.0.0.2'), 'DP | RSGMS | v3.0.0.2')
+  assert.equal(tracksRelease(releaseFeatureTitle('DP', 'RSGMS', '3.0.0.2'), 'RSGMS', '3.0.0.2'), true, 'still maps back to the release')
+  assert.equal(releaseFeatureTitle('DP', 'RSGMS', ''), 'DP | RSGMS', 'no version, no v')
 })

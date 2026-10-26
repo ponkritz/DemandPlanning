@@ -145,9 +145,11 @@ export function viewSummary(items: AzureWorkItem[], today: string) {
 }
 
 const csvCell = (value: string) => /[",\r\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value
-// extra: one more column after the query's (DP: the board match), by its text.
-export function viewCsv(items: AzureWorkItem[], columns: QueryColumn[], extra?: { name: string; text: (item: AzureWorkItem) => string }) {
-  return [[...columns.map((column) => column.name), ...(extra ? [extra.name] : [])].map(csvCell).join(','), ...items.map((item) => [...columns.map((column) => formatCell(cellValue(item, column.ref))), ...(extra ? [extra.text(item)] : [])].map(csvCell).join(','))].join('\r\n')
+// extra: a column that is not a field (DP: the board match, ref extraColumnRef), exported by its text where it stands.
+export const extraColumnRef = '@extra'
+export function viewCsv(items: AzureWorkItem[], columns: { ref: string; name: string }[], extra?: { text: (item: AzureWorkItem) => string }) {
+  const text = (item: AzureWorkItem, ref: string) => ref === extraColumnRef ? extra?.text(item) ?? '' : formatCell(cellValue(item, ref))
+  return [columns.map((column) => csvCell(column.name)).join(','), ...items.map((item) => columns.map((column) => csvCell(text(item, column.ref))).join(','))].join('\r\n')
 }
 // The column chooser of a query view: the columns not hidden, in the query's order (never none: with every column
 // hidden, the first one stays), and the hidden ones remembered per view in this browser.
@@ -155,4 +157,27 @@ export const hiddenColumnsKey = (view: string) => `demand-planning-query-hidden-
 export function visibleColumns<T extends { ref: string }>(columns: T[], hidden: string[]): T[] {
   const shown = columns.filter((column) => !hidden.includes(column.ref))
   return shown.length ? shown : columns.slice(0, 1)
+}
+// The column order of a query view, remembered per view in this browser: the saved order first; a column the saved
+// order does not know (added to the query later) keeps its place after the column it follows in the query.
+export const columnOrderKey = (view: string) => `demand-planning-query-column-order-v1:${view}`
+export function orderColumns<T extends { ref: string }>(columns: T[], order: string[]): T[] {
+  const byRef = new Map(columns.map((column) => [column.ref, column]))
+  const result = [...new Set(order)].flatMap((ref) => byRef.get(ref) ?? [])
+  columns.forEach((column, index) => {
+    if (result.includes(column)) return
+    const before = index > 0 ? result.indexOf(columns[index - 1]) : -1
+    result.splice(before + 1, 0, column)
+  })
+  return result
+}
+// The order after moving one column to another's place (drag and drop) or one step left / right.
+export function moveColumnTo(refs: string[], ref: string, target: string) {
+  const from = refs.indexOf(ref), to = refs.indexOf(target)
+  if (from < 0 || to < 0 || from === to) return refs
+  const next = refs.filter((entry) => entry !== ref); next.splice(to, 0, ref); return next
+}
+export function moveColumnBy(refs: string[], ref: string, by: -1 | 1) {
+  const at = refs.indexOf(ref), to = at + by
+  return at < 0 || to < 0 || to >= refs.length ? refs : moveColumnTo(refs, ref, refs[to])
 }

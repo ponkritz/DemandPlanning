@@ -27,7 +27,7 @@ import { normalizeReleaseSourceSettings } from '../releaseSource'
 export function BoardPage({ azure, store, current, month, git, onOpenConnection, assign, featureSetup }: { azure: AzureWorkspace; store: PageProps['store']; current: BacklogView; month: string; git?: GitStorage; onOpenConnection: () => void; assign?: { me: string; canChoose: boolean }; featureSetup?: FeatureSetups | null }) {
   const { items, config, preview, pat, featureCreated, rememberPat } = azure
   const [filter, setFilter] = useState('')
-  if (current.readOnly) return <ReadOnlyView key={current.id} id={current.id} name={current.name} role={current.role} azure={azure} store={store} month={month} gitNote={git?.snapshotNotes[current.id]} onOpenConnection={onOpenConnection} assign={assign} />
+  if (current.readOnly) return <ReadOnlyView key={current.id} id={current.id} name={current.name} role={current.role} azure={azure} store={store} month={month} gitNote={git?.snapshotNotes[current.id]} onOpenConnection={onOpenConnection} assign={assign} featureSetup={featureSetup} />
   const activeItems = items.filter((item) => item.state.trim().toLowerCase() !== 'removed')
   const shown = activeItems.filter((item) => `${item.id} ${item.title} ${item.workItemType} ${item.state}`.toLowerCase().includes(filter.toLowerCase()))
   const counts = new Map<string, number>()
@@ -47,7 +47,7 @@ export function BoardPage({ azure, store, current, month, git, onOpenConnection,
 
 // A Backlog view connection: its last fetched snapshot as the same expandable tree, read only.
 const noItems: AzureWorkItem[] = []
-function ReadOnlyView({ id, name, role, azure, store, month, gitNote, onOpenConnection, assign }: { id: string; name: string; role: BacklogView['role']; azure: AzureWorkspace; store: PageProps['store']; month: string; gitNote?: { tone: string; text: string }; onOpenConnection: () => void; assign?: { me: string; canChoose: boolean } }) {
+function ReadOnlyView({ id, name, role, azure, store, month, gitNote, onOpenConnection, assign, featureSetup }: { featureSetup?: FeatureSetups | null; id: string; name: string; role: BacklogView['role']; azure: AzureWorkspace; store: PageProps['store']; month: string; gitNote?: { tone: string; text: string }; onOpenConnection: () => void; assign?: { me: string; canChoose: boolean } }) {
   const [allMonths, setAllMonths] = useState(false)
   // Every connection's fetch is stored on its own (by connection ID).
   const status = azure.connectionStatus[id]
@@ -70,7 +70,7 @@ function ReadOnlyView({ id, name, role, azure, store, month, gitNote, onOpenConn
   const isDp = stream?.rule === 'dp'
   const items = source ? allMonths ? source.items : source.items.filter((item) => (isDp ? ddtMonthOf(item) : viewMonthOf(item)) === month) : noItems
   // DP rows matched to the QMS-0025 board (Feature / User Story by SourceProgram + Title), with Create Feature.
-  const boardColumn = useDpBoardColumn(isDp ? items : noItems, azure, threshold, assign)
+  const boardColumn = useDpBoardColumn(isDp ? items : noItems, azure, threshold, assign, featureSetup)
   // Items without an approval date fall back to their Changed Date for the month filter; say how many.
   const undated = source ? source.items.filter((item) => isDp ? !ddtMonthOf(item) : !(item.approvalDate ?? approvalDateFrom(item.fields ?? {}))).length : 0
   // On-prem views with Git storage: Load from Git too; a fetch that cannot run falls back to it.
@@ -90,7 +90,7 @@ function ReadOnlyView({ id, name, role, azure, store, month, gitNote, onOpenConn
       {!azure.isSample && gitNote?.tone === 'error' && <div className="notice error" role="alert">{gitNote.text}</div>}
       {stale && !busy && <div className="notice warning" role="status">The saved data was fetched with different columns than the connection's query now has. Refresh from Azure to load every column's values.</div>}
       {source && config && !items.length && source.items.length ? isDp ? <><DpMonthCounts items={source.items} month={month} /><EmptyState title={`No release has its DDT Date in ${monthName(month)}.`} detail="Pick another month in the header, or tick “All months”. The counts above still include milestones Done in the month." /></> : <EmptyState title={`No items in ${monthName(month)}.`} detail={`${source.items.length} items have an approval date (else a changed date) in other months. Pick another month in the header, or tick “All months”.`} />
-        : source && config ? isDp ? <><DpMonthCounts items={source.items} month={month} /><QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} queryOnly choose extra={boardColumn} /></> : role === 'release-source' || stream ? <ReleaseView name={name} items={items} backlog={azure.items} azure={azure} assign={assign} rule={stream?.rule} fuzzy={stream?.fuzzy} threshold={threshold} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} /> : <QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} />
+        : source && config ? isDp ? <><DpMonthCounts items={source.items} month={month} /><QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} queryOnly choose extra={boardColumn} /></> : role === 'release-source' || stream ? <ReleaseView name={name} items={items} backlog={azure.items} azure={azure} assign={assign} featureSetup={featureSetup} rule={stream?.rule} fuzzy={stream?.fuzzy} threshold={threshold} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} /> : <QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} />
         : <><EmptyState title={config ? `“${name}” has not been fetched yet.` : `The connection for “${name}” is not saved in this browser.`} detail={config ? 'Fetch it read-only; nothing is written to Azure DevOps. Its items stay on this page and are not counted in Overview, Monthly Time Writing or Assigned to Me.' : 'Add it again in Settings → Azure DevOps.'} /></>}
     </Panel>
   </Page>

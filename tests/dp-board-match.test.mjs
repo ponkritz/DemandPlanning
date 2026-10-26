@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { boardMatchText, dpBoardCandidates, dpBoardMatch, dpServiceOf, dpTitleScore, dpVersionOf } from '../src/dpBoardMatch.ts'
+import { boardMatchText, dpBoardCandidates, dpBoardMatch, dpFeatureTitle, dpServiceOf, dpTitleScore, dpVersionOf } from '../src/dpBoardMatch.ts'
 
 const row = (id, title, fields = {}) => ({ key: `dp/${id}`, id, title, workItemType: 'Release', state: 'Active', fields })
 const board = (id, workItemType, title, state = 'Active') => ({ key: `b/${id}`, id, title, workItemType, state, url: `https://x/${id}` })
@@ -47,4 +47,9 @@ test('a new Feature title maps back when it holds the Title; the service part dr
   assert.equal(dpServiceOf(row(5, 'RSGMS Viewer v3.0.0.2')), 'RSGMS Viewer')
   assert.ok(dpTitleScore('DHP | RSGMS Viewer | v3.0.0.2', 'RSGMS Viewer 3.0.0.2', 'DHP') >= 80)
   assert.ok(dpTitleScore('DHP | Something else', 'RSGMS Viewer 3.0.0.2', 'DHP') < 80)
+})
+
+test('Create Feature from a DP row: Program (SourceProgram, else DP) | PsName | vRelease, falling back to the Title', () => {
+  assert.equal(dpFeatureTitle(row(9, 'RSGMS Viewer 3.0.0.2', { 'Custom.SourceProgram': 'DHP', 'Custom.PsName': 'RSGMS', 'Custom.Release': '3.0.0.2' })), 'DHP | RSGMS | v3.0.0.2')
+  assert.equal(dpFeatureTitle(row(10, 'Cardio Suite 2.1')), 'DP | Cardio Suite | v2.1', 'no SourceProgram, PsName or Release: DP and the Title')
 })
