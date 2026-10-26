@@ -90,11 +90,11 @@ jobs:
     permissions:
       contents: write
 
-  # macOS runners often queue for a long time, so the disk image is built only for main (and tags or manual runs),
-  # not for pull requests, and is published on its own: Web and Windows never wait for it.
+  # macOS packaging is intentionally disabled for this Windows/web release stream.
+  # Web deployment and the Windows installer remain independent of it.
   package-macos:
     name: Package macOS application
-    if: github.event_name != 'pull_request'
+    if: ${{ false }}
     runs-on: macos-latest
     timeout-minutes: 40
 
@@ -186,7 +186,7 @@ jobs:
 
   publish-macos:
     name: Publish macOS installer
-    if: github.ref == 'refs/heads/main'
+    if: ${{ false }}
     needs: package-macos
     runs-on: ubuntu-latest
     timeout-minutes: 10
