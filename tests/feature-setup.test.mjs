@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { chooseSetup, emptySetup, personalSetupPath, publishSetup } from '../src/featureSetup.ts'
+import { chooseSetup, emptySetup, personalSetupPath, publishSetup, removeSetup, editSetup, sharedSetupRows, setupsMissingDoD, builtinSetup, parseFeatureSetup, serializeFeatureSetup, featureDoD } from '../src/featureSetup.ts'
 
 const file = (...epics) => ({ schema: 1, kind: 'feature-setup', epics })
 const withStory = (epicId, title) => ({ ...emptySetup(epicId, `Epic ${epicId}`), stories: [{ title, description: '' }] })
@@ -57,4 +57,43 @@ test('copy a setup to another Epic: replaces the target, keeps the source, no-op
   assert.equal(source.epics[0].stories[0].title, 'Mine', 'the copy is independent')
   assert.equal(copySetup(source, 99, 13946), source)
   assert.equal(copySetup(source, 5, 5), source)
+})
+
+test('all shared setups: by Epic number, with stories, Time Writing story, Task and whether mine replaces it', () => {
+  const later = { ...emptySetup(37810, 'Later'), stories: [{ title: 'SFV : Review', description: '' }, { title: 'DT', description: '' }], task: { ...emptySetup(1).task, title: '{month} | {feature}', originalEstimate: 4 } }
+  const earlier = emptySetup(13946, 'Earlier')
+  const rows = sharedSetupRows({ shared: file(later, earlier), personal: file(emptySetup(37810)) })
+  assert.deepEqual(rows.map((row) => row.epicId), [13946, 37810])
+  assert.deepEqual(rows[1], { epicId: 37810, epicTitle: 'Later', featureDoD: '', stories: ['SFV : Review', 'DT'], timeWritingStory: '{feature} - Time Writing', storyAreaPath: '', storyIterationPath: '', task: '{month} | {feature}', originalEstimate: 4, mineInstead: true })
+  assert.equal(rows[0].mineInstead, false)
+  assert.equal('originalEstimate' in rows[0], false)
+  assert.deepEqual(sharedSetupRows({ shared: null, personal: null }), [])
+  assert.deepEqual(sharedSetupRows(null), [])
+})
+
+test('editing in the list: change one Epic in a copy, remove one, leave Epics without a setup alone', () => {
+  const shared = file({ ...emptySetup(13946, 'A'), stories: [{ title: 'SFV', description: 'keep' }] }, emptySetup(37810, 'B'))
+  const edited = editSetup(shared, 13946, (entry) => { entry.stories[0].title = 'SFV : Review'; entry.stories.push({ title: 'DT', description: '' }); entry.task.originalEstimate = 6 })
+  assert.deepEqual(edited.epics[0].stories, [{ title: 'SFV : Review', description: 'keep' }, { title: 'DT', description: '' }])
+  assert.equal(edited.epics[0].task.originalEstimate, 6)
+  assert.equal(shared.epics[0].stories[0].title, 'SFV', 'the original is unchanged')
+  assert.equal(editSetup(shared, 99, () => { throw new Error('not called') }), shared)
+  const legacy = file({ ...emptySetup(5), timeWritingStory: undefined })
+  assert.equal(editSetup(legacy, 5, (entry) => { entry.timeWritingStory.title = 'TW' }).epics[0].timeWritingStory.title, 'TW', 'an entry without a Time Writing story gets the default to edit')
+  assert.deepEqual(removeSetup(shared, 13946).epics.map((entry) => entry.epicId), [37810])
+  assert.equal(shared.epics.length, 2)
+})
+
+test('Feature DoD in a setup: kept through save, built-in defaults, and required for new or changed setups', () => {
+  const withDoD = { ...emptySetup(13946, 'A'), featureDoD: ' IQOQ finished ' }
+  assert.equal(parseFeatureSetup(serializeFeatureSetup(file(withDoD))).epics[0].featureDoD, 'IQOQ finished')
+  assert.equal(parseFeatureSetup(JSON.stringify(file({ epicId: 5, stories: [], task: {} }))).epics[0].featureDoD, '', 'older files read without one')
+  assert.equal(builtinSetup(1, '', 'PU').featureDoD, featureDoD('PU'))
+  assert.equal(builtinSetup(1, '', 'Release').featureDoD, 'IQOQ finished and Checklist uploaded into the Feature.')
+  const legacy = emptySetup(37810, 'Old')
+  const saved = file(legacy, withDoD)
+  assert.deepEqual(setupsMissingDoD(saved, saved), [], 'unchanged older setups without a DoD do not block saving')
+  assert.deepEqual(setupsMissingDoD(file(legacy, withDoD, emptySetup(99)), saved), [99], 'a new setup needs one')
+  assert.deepEqual(setupsMissingDoD(file({ ...legacy, stories: [{ title: 'X', description: '' }] }, withDoD), saved), [37810], 'so does a changed one')
+  assert.deepEqual(setupsMissingDoD(file({ ...legacy, featureDoD: 'Done' }, withDoD), saved), [])
 })

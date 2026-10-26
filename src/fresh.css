@@ -291,3 +291,45 @@ td small{color:var(--text-3)}
 @media (max-width:760px){.setup-button{padding:6px 8px;font-size:12px}}
 .modal .shared-time-form{grid-template-columns:1fr 1fr;margin-bottom:0}.modal .shared-time-form .modal-actions{grid-column:1/-1}@media (max-width:760px){.modal .shared-time-form{grid-template-columns:1fr}}
 .setup-summary{display:grid;grid-template-columns:minmax(220px,1fr) 2fr auto;gap:14px;align-items:end;margin:4px 0 12px}.setup-summary p{margin:4px 0 0;font-size:13px}.setup-summary .field-label{font-size:11px;font-weight:700;color:var(--text-2)}@media (max-width:760px){.setup-summary{grid-template-columns:1fr;align-items:start}}
+.setup-all{margin:4px 0 14px;border:1px solid var(--line);border-radius:10px;padding:10px 14px}.setup-all>summary{cursor:pointer;padding:2px 0}.setup-all[open]>summary{margin-bottom:10px}.setup-all-stories{margin:0;padding-left:18px}.setup-all-stories li{margin:2px 0}
+.setup-all .danger-text{color:var(--danger-text)}.setup-all-table td{vertical-align:top}.setup-all-editing td{background:var(--accent-soft)}.setup-all-table td>input{width:100%}
+.setup-all-edit{list-style:decimal;padding-left:20px}.setup-all-edit li{display:flex;gap:4px;align-items:center;margin:0 0 6px}.setup-all-edit li input{flex:1;min-width:160px}.setup-all-edit li button{padding:6px 8px}
+.setup-all-estimate{margin-top:8px;font-weight:600}.setup-all-estimate input{width:110px}.setup-all-actions{flex-wrap:wrap;justify-content:flex-end}.setup-all .git-bar{margin-top:10px}
+.setup-all-dod{width:100%;min-width:180px;font:inherit;font-size:12px}.setup-dod textarea{min-height:56px}
+.setup-summary .danger-text{color:var(--danger-text)}
+.item-link{color:var(--link);font-weight:600;text-decoration:none}.item-link:hover{text-decoration:underline}
+
+/* Button system: every action button is raised (shadow, lifts on hover) and coloured by what it does —
+   indigo = main action, outlined indigo = secondary, tinted = small inline action, green = save to Git,
+   red = delete / remove. Disabled buttons go flat and grey. Toggles (segmented, filter chips) keep their own look. */
+:root{--on-success:#fff;--on-danger:#fff;--btn-shadow:0 1px 2px rgb(16 24 40 / .14),0 4px 10px -4px rgb(16 24 40 / .22);--btn-shadow-hover:0 2px 4px rgb(16 24 40 / .16),0 10px 20px -8px rgb(16 24 40 / .32)}
+:root[data-theme="dark"]{--on-success:#052e16;--on-danger:#2a0a0a;--btn-shadow:0 1px 2px rgb(0 0 0 / .5),0 4px 12px -4px rgb(0 0 0 / .6);--btn-shadow-hover:0 2px 6px rgb(0 0 0 / .55),0 10px 22px -8px rgb(0 0 0 / .7)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--on-success:#052e16;--on-danger:#2a0a0a;--btn-shadow:0 1px 2px rgb(0 0 0 / .5),0 4px 12px -4px rgb(0 0 0 / .6);--btn-shadow-hover:0 2px 6px rgb(0 0 0 / .55),0 10px 22px -8px rgb(0 0 0 / .7)}}
+.primary,.ghost,.danger-button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:8px 16px;border-radius:10px;font-size:12.5px;font-weight:650;letter-spacing:.1px;line-height:1.2;cursor:pointer;box-shadow:var(--btn-shadow);transition:transform .12s ease,box-shadow .15s ease,background .15s ease,border-color .15s ease,color .15s ease}
+.primary:not(:disabled):hover,.ghost:not(:disabled):hover,.danger-button:not(:disabled):hover{transform:translateY(-1px);box-shadow:var(--btn-shadow-hover)}
+.primary:not(:disabled):active,.ghost:not(:disabled):active,.danger-button:not(:disabled):active{transform:translateY(0);box-shadow:var(--btn-shadow)}
+.primary:focus-visible,.ghost:focus-visible,.danger-button:focus-visible,.text-button:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+/* Main action: solid indigo, white text */
+.primary{background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 82%,#fff),var(--accent));border:1px solid color-mix(in srgb,var(--accent) 80%,#000);color:var(--on-accent)}
+.primary:not(:disabled):hover{background:linear-gradient(180deg,var(--accent),var(--accent-hover))}
+/* Secondary: white with an indigo outline */
+.ghost{background:var(--surface);border:1.5px solid var(--accent-line);color:var(--accent-text)}
+.ghost:not(:disabled):hover{background:var(--accent-soft);border-color:var(--accent)}
+/* Small inline actions: a tinted pill instead of bare text */
+.text-button{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border:1px solid transparent;border-radius:999px;background:var(--accent-soft);color:var(--accent-text);font-weight:650;font-size:12px;cursor:pointer;transition:background .15s,border-color .15s}
+.text-button:not(:disabled):hover{border-color:var(--accent-line);background:color-mix(in srgb,var(--accent-soft) 70%,var(--accent-line))}
+/* Save to Git: green */
+.git-bar .primary,.git-bar-dirty .primary{background:linear-gradient(180deg,color-mix(in srgb,var(--success) 85%,#fff),var(--success));border-color:color-mix(in srgb,var(--success) 80%,#000);color:var(--on-success)}
+.git-bar .primary:not(:disabled):hover,.git-bar-dirty .primary:not(:disabled):hover{background:var(--success)}
+/* Delete / remove: red */
+.danger-button,.ghost.danger-text,.text-button.danger-text{background:var(--danger-soft);border:1.5px solid var(--danger-line);color:var(--danger-text)}
+.danger-button:not(:disabled):hover,.ghost.danger-text:not(:disabled):hover,.text-button.danger-text:not(:disabled):hover{background:var(--danger);border-color:var(--danger);color:var(--on-danger)}
+/* Disabled: flat and grey, clearly not clickable */
+.primary:disabled,.ghost:disabled,.danger-button:disabled,.text-button:disabled,.git-bar .primary:disabled{background:var(--surface-2);border-color:var(--line);color:var(--text-3,var(--muted));box-shadow:none;transform:none;opacity:.8;cursor:not-allowed}
+/* All shared setups: fixed columns so the row buttons always stay in view; buttons stack in their column. */
+.setup-all-table{table-layout:fixed;min-width:860px}
+.setup-all-table th:nth-child(1){width:11%}.setup-all-table th:nth-child(2){width:21%}.setup-all-table th:nth-child(3){width:28%}.setup-all-table th:nth-child(4){width:13%}.setup-all-table th:nth-child(5){width:14%}.setup-all-table th:nth-child(6){width:13%}
+.setup-all-table td{overflow-wrap:anywhere}
+.setup-all-table .setup-all-actions{flex-direction:column;align-items:stretch;gap:6px}
+.setup-all-table .setup-all-actions button{width:100%;justify-content:center}
+.setup-all-edit li input{min-width:0}.setup-all-table td>input,.setup-all-estimate input{width:100%}
