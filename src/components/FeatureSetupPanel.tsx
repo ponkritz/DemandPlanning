@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { AzureWorkItem } from '../domain'
-import { defaultTimeWritingStory, emptySetup, fillTitle, missingValues, placeholders, setupFor, titleValues, type EpicSetup, type FeatureSetupFile } from '../featureSetup'
+import { builtinMilestones, builtinSetup, copySetup, defaultTimeWritingStory, emptySetup, fillTitle, missingValues, placeholders, setupFor, titleValues, type EpicSetup, type FeatureSetupFile } from '../featureSetup'
 import { currentIndiaMonth } from '../azureDevOps'
 import { assignablePeople } from '../myWork'
 import type { FeatureSetup } from '../useFeatureSetup'
@@ -21,6 +21,8 @@ export function FeatureSetupPanel({ setup, git, items }: { setup: FeatureSetup; 
   const [commit, setCommit] = useState('')
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<{ tone: 'success' | 'error'; text: string; url?: string } | null>(null)
+  const [goTo, setGoTo] = useState('')
+  const [copyTo, setCopyTo] = useState('')
   // Which layer is shown and edited: mine (default when my email is known) or the shared one.
   const [layer, setLayer] = useState<'mine' | 'shared'>(setup.email ? 'mine' : 'shared')
   const mine = layer === 'mine' && Boolean(setup.email)
@@ -32,6 +34,13 @@ export function FeatureSetupPanel({ setup, git, items }: { setup: FeatureSetup; 
   const switchLayer = (next: 'mine' | 'shared') => { if (draft && !window.confirm('Discard the unsaved changes?')) return; setDraft(null); setResult(null); setLayer(next) }
   const epic = epics.find((item) => item.id === chosen)
   const current = setupFor(file, chosen)
+  const epicLabel = `#${chosen}${epic ? ` ${epic.title}` : current?.epicTitle ? ` ${current.epicTitle}` : ''}`
+  // Which setup a new Feature under this Epic gets when I create it: mine, else the shared one, else the built-in milestones.
+  const appliesNow: 'mine' | 'shared' | 'builtin' = myEntry ? 'mine' : sharedEntry ? 'shared' : 'builtin'
+  const idOf = (text: string) => { const id = Number(text.trim().replace(/^#/, '')); return Number.isSafeInteger(id) && id > 0 ? id : 0 }
+  const jump = () => { const id = idOf(goTo); if (id) { if (draft && !window.confirm('Discard the unsaved changes?')) return; setDraft(null); setEpicId(id); setGoTo(''); setCopyTo(''); setResult(null) } }
+  const startFromBuiltin = (kind: keyof typeof builtinMilestones) => { const next = structuredClone(file); next.epics = [...next.epics.filter((entry) => entry.epicId !== chosen), builtinSetup(chosen, epic?.title ?? '', kind)]; setDraft(next); setResult(null) }
+  const copy = () => { const id = idOf(copyTo); if (!id || id === chosen) return; const target = epics.find((item) => item.id === id); if (setupFor(file, id) && !window.confirm(`Epic #${id} already has a setup here. Replace it with the setup of Epic #${chosen}?`)) return; setDraft(copySetup(file, chosen, id, target?.title ?? '')); setEpicId(id); setCopyTo(''); setResult({ tone: 'success', text: `Copied to Epic #${id}. Review it below and save to Git.` }) }
   const values = titleValues(sample, currentIndiaMonth())
   const change = (update: (entry: EpicSetup) => void) => {
     const next = structuredClone(file)
@@ -72,14 +81,25 @@ export function FeatureSetupPanel({ setup, git, items }: { setup: FeatureSetup; 
     {!git.connected && <Notice tone="info">Connect Git storage (Storage tab) to share the Feature setup.{setup.shared || setup.personal ? ' The setup last loaded in this browser is used meanwhile.' : ''}</Notice>}
     {git.connected && git.readOnly && <Notice tone="info">View only: your Git token can read but not save.</Notice>}
     {setup.error && <Notice tone="error">Feature setup: {setup.error}</Notice>}
-    {!epics.length ? <EmptyState title="No Epics loaded yet." detail="Fetch the Time Writing connection; its Epics appear here." /> : <>
+    <div className="setup-jump"><label>Go to Epic #<input inputMode="numeric" value={goTo} placeholder="e.g. 13946" onChange={(event) => setGoTo(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); jump() } }} /></label><button type="button" className="ghost" disabled={!idOf(goTo)} onClick={jump}>Open</button></div>
+    {chosen > 0 && <div className="setup-flow" role="group" aria-label={`Which setup applies to Epic #${chosen}`}>
+      <p><strong>When you create a Feature under Epic {epicLabel}</strong>, the first of these that exists is used:</p>
+      <ol>
+        <li className={appliesNow === 'mine' ? 'setup-flow-on' : ''}><strong>My setup</strong> of this Epic{setup.email ? '' : ' (needs your email on the Time Writing connection)'} — {myEntry ? `${myEntry.stories.length} optional User Stor${myEntry.stories.length === 1 ? 'y' : 'ies'}` : 'none'}{mine && draft && current ? <em className="setup-unsaved"> · changed here, not saved yet: save to Git to apply</em> : null}</li>
+        <li className={appliesNow === 'shared' ? 'setup-flow-on' : ''}><strong>Shared setup</strong> of this Epic — {sharedEntry ? `${sharedEntry.stories.length} optional User Stor${sharedEntry.stories.length === 1 ? 'y' : 'ies'}` : 'none'}{!mine && draft && current ? <em className="setup-unsaved"> · changed here, not saved yet: save to Git to apply</em> : null}</li>
+        <li className={appliesNow === 'builtin' ? 'setup-flow-on' : ''}><strong>Built-in</strong> — you choose PU (SFV, DT, IQOQ) or Full Release (PRD, SFV, DT, IQOQ) in the New Feature form</li>
+      </ol>
+      <p className="muted">Applies now: <strong>{appliesNow === 'mine' ? 'my setup' : appliesNow === 'shared' ? 'the shared setup' : 'the built-in milestones'}</strong>. The Time Writing User Story and the month Task are always created.</p>
+    </div>}
+    {!epics.length && !chosen ? <EmptyState title="No Epics loaded yet." detail="Fetch the Time Writing connection; its Epics appear here." /> : <>
       <div className="form-row">
-        <label>Epic<select value={chosen} onChange={(event) => setEpicId(Number(event.target.value))}>{epics.map((item) => <option key={item.id} value={item.id}>{setupFor(file, item.id) ? '● ' : ''}#{item.id} {item.title}{mine && !setupFor(file, item.id) && setupFor(setup.shared, item.id) ? ' (shared)' : ''}</option>)}</select></label>
+        <label>Epic<select value={chosen} onChange={(event) => setEpicId(Number(event.target.value))}>{!epic && chosen > 0 && <option value={chosen}>#{chosen}{current?.epicTitle ? ` ${current.epicTitle}` : ' (not in the fetched data)'}</option>}{epics.map((item) => <option key={item.id} value={item.id}>{setupFor(file, item.id) ? '● ' : ''}#{item.id} {item.title}{mine && !setupFor(file, item.id) && setupFor(setup.shared, item.id) ? ' (shared)' : ''}</option>)}</select></label>
         <label>Preview with Feature title<input value={sample} onChange={(event) => setSample(event.target.value)} /></label>
       </div>
       <p className="info-line"><Info label="Placeholders">Placeholders: {placeholders.map((key) => `{${key}}`).join(' ')} — {'{feature}'} is the whole title; {'{program}'}, {'{service}'}, {'{version}'} are its parts for titles like “Program | Service | v1.2”; {'{month}'} is e.g. “{currentIndiaMonth()}”. Text without placeholders is used as typed. ● marks Epics with a setup.</Info></p>
       <fieldset className="plain-fieldset feature-setup" disabled={!editable || busy}>
         {mine && !current && sharedEntry && <Notice tone="info">You use the shared setup of this Epic. <button type="button" className="text-button" onClick={() => { const next = structuredClone(file); next.epics.push(structuredClone(sharedEntry)); setDraft(next); setResult(null) }}>Start my own from the shared one</button></Notice>}
+        {!current && <div className="setup-builtin"><p><strong>No {mine ? 'personal' : 'shared'} setup of Epic {epicLabel} yet.</strong> Start from the built-in stories (editable afterwards):</p><div className="button-row"><button type="button" className="ghost" onClick={() => startFromBuiltin('Release')}>Use built-in Full Release ({builtinMilestones.Release.join(', ')})</button><button type="button" className="ghost" onClick={() => startFromBuiltin('PU')}>Use built-in PU ({builtinMilestones.PU.join(', ')})</button></div></div>}
         <h3>Optional User Stories</h3>
         {!current?.stories.length && <p className="muted">{current ? 'No optional User Stories: only the Time Writing story and Task are created.' : mine && sharedEntry ? 'No setup of your own for this Epic: the shared one applies (see above).' : 'No setup for this Epic yet: Features under it use the PU / Full Release milestones. Add a User Story or set the Task defaults to start one.'}</p>}
         {current?.stories.map((story, index) => <div key={index} className="setup-story">
@@ -111,6 +131,7 @@ export function FeatureSetupPanel({ setup, git, items }: { setup: FeatureSetup; 
         </div>
         {current && <button type="button" className="text-button" onClick={() => { const next = structuredClone(file); next.epics = next.epics.filter((entry) => entry.epicId !== chosen); setDraft(next); setResult(null) }}>{mine ? `Remove my setup of this Epic (${sharedEntry ? 'use the shared one' : 'back to PU / Full Release'})` : 'Remove the shared setup of this Epic (back to PU / Full Release)'}</button>}
       </fieldset>
+      {editable && current && <div className="button-row setup-copy"><label>Copy this setup to Epic #<input inputMode="numeric" value={copyTo} placeholder="e.g. 13946" onChange={(event) => setCopyTo(event.target.value)} /></label><button type="button" className="ghost" disabled={!idOf(copyTo) || idOf(copyTo) === chosen} onClick={copy}>Copy</button></div>}
       {mine && editable && myEntry && !draft && <div className="button-row setup-share"><button type="button" className="ghost" disabled={busy} onClick={() => void enableForEveryone()} title="Copies your setup of this Epic into the shared setup">Enable for everyone</button><small className="muted">{sharedEntry ? 'Replaces the shared setup of this Epic.' : 'This Epic has no shared setup yet.'}</small></div>}
       {editable && draft && <form className="git-bar git-bar-dirty" onSubmit={save}>
         <span><strong>Unsaved {mine ? 'personal' : 'shared'} Feature setup</strong> — not yet in Git</span>

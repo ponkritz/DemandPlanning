@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | SRS-DPH-001 |
-| Product version | v1.2.2 (build tracked by CI run number) |
+| Product version | v1.4.1 (build tracked by CI run number) |
 | Baseline | `main` at the Feature-milestones removal, Dashboard tabs and query views (PR #29) |
 | Status | As-built baseline, for review |
 | Companion | [TEST-PLAN.md](TEST-PLAN.md) — test cases traced to every requirement ID below |
@@ -237,6 +237,7 @@ Stakeholders:
 | CON-56 | The release view's "Create Feature" shall confirm with the person picker of CON-51, defaulting to the person creating it. |
 | CON-57 | Feature setup per Epic shall also configure the Time Writing User Story that holds the month Task: title (placeholders allowed; default “{feature} - Time Writing”), Description, Assigned to (default: the Feature's assignee), Area Path (default: the Feature's) and Iteration Path (default: the Sprint chosen when creating; when set it wins). Setup files without it keep the default. | T | S | UC-06 |
 | CON-58 | Settings → Feature setup shall be open to every user and keep two layers in Git: each person's own setup (feature-setup/<email>.json, the email of their Time Writing connection) and the shared setup (feature-setup.json). When a person creates a Feature, their own setup of the Epic shall be used before the shared one, the New Feature form shall say which one is used and offer the other when both exist. "Enable for everyone" shall copy the person's setup of an Epic into the shared setup, replacing that Epic only. Saving either layer shall need a Git token that can write. | T | S | UC-07 |
+| CON-59 | Settings → Feature setup shall make the mapping to an Epic explicit: a "Go to Epic #" box opens any Epic by number, also one not in the fetched data; for the chosen Epic a panel shall list, in order, my setup, the shared setup and the built-in milestones, mark which one applies when I create a Feature, and say when a change is not saved yet; an Epic without a setup in the shown layer shall offer "Use built-in Full Release (PRD, SFV, DT, IQOQ)" and "Use built-in PU (SFV, DT, IQOQ)", giving the same titles as the built-in creation; "Copy this setup to Epic #" shall copy the shown Epic's setup to another Epic in the same layer, asking before replacing one. Saving stays as in CON-58. | T | S | UC-07 |
 
 ### 3.3 Fetching and saving Azure DevOps data (FET) — UC-03
 

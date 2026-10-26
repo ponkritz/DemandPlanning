@@ -84,3 +84,18 @@ export function publishSetup(shared: FeatureSetupFile | null, entry: EpicSetup):
   const epics = (shared?.epics ?? []).filter((item) => item.epicId !== entry.epicId)
   return { schema: 1, kind: 'feature-setup', epics: [...epics, structuredClone(entry)].sort((a, b) => a.epicId - b.epicId) }
 }
+
+// The built-in milestone stories (used when an Epic has no setup) as an editable setup: PU = SFV, DT, IQOQ; Full
+// Release = PRD, SFV, DT, IQOQ, titled "{milestone} : Review of Deliverables ({service} {version})" — the same titles
+// the built-in creation gives — with the default Time Writing story and Task.
+export const builtinMilestones = { PU: ['SFV', 'DT', 'IQOQ'], Release: ['PRD', 'SFV', 'DT', 'IQOQ'] } as const
+export function builtinSetup(epicId: number, epicTitle: string, kind: keyof typeof builtinMilestones): EpicSetup {
+  return { ...emptySetup(epicId, epicTitle), stories: builtinMilestones[kind].map((milestone) => ({ title: `${milestone} : Review of Deliverables ({service} {version})`, description: '' })) }
+}
+// Copy one Epic's setup to another Epic in the same file (replacing what the target had).
+export function copySetup(file: FeatureSetupFile, fromEpicId: number, toEpicId: number, toEpicTitle = ''): FeatureSetupFile {
+  const source = setupFor(file, fromEpicId)
+  if (!source || fromEpicId === toEpicId) return file
+  const copy = { ...structuredClone(source), epicId: toEpicId, epicTitle: toEpicTitle }
+  return { ...file, epics: [...file.epics.filter((entry) => entry.epicId !== toEpicId), copy].sort((a, b) => a.epicId - b.epicId) }
+}

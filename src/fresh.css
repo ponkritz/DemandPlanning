@@ -269,3 +269,9 @@ td small{color:var(--text-3)}
 .create-release-feature .title-parts{display:grid;grid-template-columns:minmax(140px,1fr) minmax(180px,2fr) minmax(120px,1fr);gap:10px}.create-release-feature .title-parts label{display:grid;gap:4px;font-size:12px;color:var(--text-2)}.create-release-feature .add-platform{display:flex;gap:6px;align-items:center}.create-release-feature .add-platform input{flex:1;min-width:0}
 @media (max-width:760px){.create-release-feature .title-parts{grid-template-columns:1fr}}
 .pick-tools{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;margin-bottom:8px}.pick-tools .button-row{margin:0;align-items:center;gap:8px}
+/* Feature setup: jump to an Epic, which setup applies, built-in start, copy. */
+.setup-jump{display:flex;gap:8px;align-items:flex-end;margin:4px 0 12px}.setup-jump label{display:grid;gap:4px;font-size:12px;color:var(--text-2)}.setup-jump input{width:140px}
+.setup-flow{border:1px solid var(--line);border-radius:var(--radius-sm);padding:10px 14px;margin:0 0 14px;background:var(--surface-2)}.setup-flow p{margin:0 0 6px;font-size:13px}.setup-flow ol{margin:0 0 6px;padding-left:20px;display:grid;gap:4px;font-size:13px;color:var(--text-2)}.setup-flow li.setup-flow-on{color:var(--text);font-weight:600}.setup-flow li.setup-flow-on::marker{color:var(--accent)}.setup-flow li.setup-flow-on::after{content:'  ← applies now';color:var(--accent);font-weight:600}
+.setup-builtin{border:1px dashed var(--line);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:12px}.setup-builtin p{margin:0 0 8px;font-size:13px}
+.setup-copy{align-items:flex-end;margin-top:12px}.setup-copy label{display:grid;gap:4px;font-size:12px;color:var(--text-2)}.setup-copy input{width:140px}
+.setup-unsaved{color:var(--warning,#b45309);font-style:normal;font-weight:600}
