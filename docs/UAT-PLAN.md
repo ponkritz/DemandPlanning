@@ -7,7 +7,7 @@
 - Three to five QE Contributors across Junior/Senior bands
 - One dashboard-only stakeholder
 
-## UAT sequence (ten days)
+## UAT sequence (eleven days)
 
 The scenarios are the test cases marked **UAT** in [TEST-PLAN.md](TEST-PLAN.md).
 
@@ -23,6 +23,7 @@ The scenarios are the test cases marked **UAT** in [TEST-PLAN.md](TEST-PLAN.md).
 | 8 | Menu (Data Insights, collapsing), Backlog Health columns and filters, assigning new work to others, Feature setup per Epic (personal and shared), State checks and Feature states | TC-NAV-17, TC-SCR-02, TC-SCR-03, TC-ACC-02, TC-CON-23, TC-CON-26, TC-CON-27, TC-ATM-08 |
 | 9 | Holidays and common activities (map PI Planning and regional holidays in Settings → Capacity); phones and tablets; Other views in the menu; DP releases (Pedestal and DHFI); creating a Feature from a release (title parts) | TC-CAP-02, TC-GIT-05, TC-NAV-31, TC-NAV-32, TC-NAV-25, TC-QV-06, TC-QV-07 |
 | 10 | First-time setup: the Get started pop-up in a new browser, the required work email on Time Writing, the Settings editors as pop-ups; editing shared Feature setups in their list; the mandatory Feature DoD (creating a Feature and in the Feature setup); deleting a Feature setup; the Time Writing story at the project root (not in a Sprint); filling missing DoDs with the default; Release Details → DP as its query table with chosen columns | TC-NAV-33, TC-CON-28, TC-NAV-34, TC-CON-30, TC-BKL-04, TC-CON-31, TC-CON-32, TC-BKL-05, TC-CON-35, TC-QV-08 |
+| 11 | QE Mapping: upload the existing Excel, edit, filter, group, add and delete rows and columns, Save to Git, export | TC-QEM-04 |
 
 ## Entry criteria
 

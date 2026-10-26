@@ -32,7 +32,10 @@ function fieldResolver(names: Record<string, string>) {
   const byRef = new Map(Object.keys(names).map((ref) => [ref.toLowerCase(), ref]))
   const byName = new Map(Object.entries(names).map(([ref, name]) => [name.toLowerCase(), ref]))
   const common = (key: string) => commonNames[key] ? byRef.get(commonNames[key].toLowerCase()) ?? commonNames[key] : undefined
-  return (part: string) => { const text = entryText(part); const key = text.toLowerCase(); return byRef.get(key) ?? byName.get(key) ?? common(key) ?? (refShape.test(text) ? text : undefined) }
+  // A bare name such as "SourceProgram" also finds the one field whose reference name ends with it
+  // ("Custom.SourceProgram"); with none or several, it stays as written.
+  const bySuffix = (key: string) => { const found = [...byRef.keys()].filter((ref) => ref.endsWith(`.${key}`)); return found.length === 1 ? byRef.get(found[0]) : undefined }
+  return (part: string) => { const text = entryText(part); const key = text.toLowerCase(); return byRef.get(key) ?? byName.get(key) ?? common(key) ?? (key.includes('.') ? undefined : bySuffix(key)) ?? (refShape.test(text) ? text : undefined) }
 }
 
 export interface QueryLayout { columns: string[]; orderBy: QueryOrder[]; unresolved: string[] }
@@ -55,8 +58,11 @@ export function pickFields(fields: Record<string, unknown>, refs: string[]): Rec
   const picked: Record<string, FieldValue> = {}
   // Field keys come back in the server's spelling; a reference written in another letter case still finds its value.
   const byLower = new Map(Object.keys(fields).map((key) => [key.toLowerCase(), key]))
+  // A column kept as a bare name ("SourceProgram") takes the one field whose reference name ends with it
+  // ("Custom.SourceProgram"), e.g. when the project's field list could not be read.
+  const suffixed = (ref: string) => { if (ref.includes('.')) return ''; const end = `.${ref.toLowerCase()}`; const found = [...byLower.keys()].filter((key) => key.endsWith(end)); return found.length === 1 ? byLower.get(found[0])! : '' }
   for (const ref of refs) {
-    const value = fields[ref] ?? fields[byLower.get(ref.toLowerCase()) ?? '']
+    const value = fields[ref] ?? fields[byLower.get(ref.toLowerCase()) ?? ''] ?? fields[suffixed(ref)]
     if (value == null) continue
     if (typeof value === 'object') { const named = value as { displayName?: unknown; uniqueName?: unknown }; picked[ref] = typeof named.displayName === 'string' ? named.displayName : typeof named.uniqueName === 'string' ? named.uniqueName : JSON.stringify(value) }
     else if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') picked[ref] = value
