@@ -18,6 +18,5 @@ export function DpMonthCounts({ items, month }: { items: AzureWorkItem[]; month:
         {counts.supported.map((entry) => { const release = dpReleaseName(entry.item); return <tr key={`${entry.item.id}:${entry.milestone}`}><td title={`${entry.milestone}: ${dpMilestoneNames[entry.milestone].long}`}><strong>{dpMilestoneNames[entry.milestone].short}</strong><small>{dpMilestoneNames[entry.milestone].long}{entry.milestone === 'DDT' ? ' · Completed' : ''}</small></td><td>{formatDate(entry.date)}</td><td><a href={entry.item.url} target="_blank" rel="noreferrer">{entry.item.id}</a></td><td>{[release.name, release.release].filter(Boolean).join(' ')}</td><td>{entry.item.title}</td></tr> })}
       </tbody></table></div>
     </details>}
-    <p className="muted dp-legend">{dpMilestones.map(([milestone]) => `${dpMilestoneNames[milestone].short} = ${dpMilestoneNames[milestone].long} (${milestone})`).join(' · ')}</p>
   </div>
 }

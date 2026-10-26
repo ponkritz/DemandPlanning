@@ -20,24 +20,24 @@
     "build:mac": "pnpm build:web && electron-builder --mac dmg --universal"
   },
   "dependencies": {
-    "@azure/msal-browser": "^5.24.0",
+    "@azure/msal-browser": "^5.26.0",
     "read-excel-file": "^9.3.10",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   },
   "devDependencies": {
-    "@types/node": "^24.13.3",
-    "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.7",
-    "@vitejs/plugin-react": "^6.1.1",
-    "concurrently": "^10.0.5",
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "concurrently": "^10.0.6",
     "cross-env": "^10.1.0",
-    "electron": "^44.5.1",
-    "electron-builder": "^26.15.3",
-    "fake-indexeddb": "^6.2.5",
-    "oxlint": "^1.81.0",
-    "typescript": "~6.0.2",
-    "vite": "^8.3.0",
+    "electron": "^44.9.3",
+    "electron-builder": "^26.18.0",
+    "fake-indexeddb": "^6.2.6",
+    "oxlint": "^1.89.0",
+    "typescript": "~6.0.3",
+    "vite": "^8.3.5",
     "wait-on": "^9.5.1"
   },
   "build": {
