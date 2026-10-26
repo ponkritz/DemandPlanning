@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { EmptyState, Notice, Panel, Pill, type Tone, Info } from './ui'
+import { EmptyState, Modal, Notice, Panel, Pill, type Tone, Info } from './ui'
 import { formatDateTime } from '../format'
 import { dataSetOfProfile, dataSets, defaultMatchThreshold, defaultStreams, namesStream, profileForDataSet, profileForStream, streamOfProfile } from '../streams'
 import { normalizeReleaseSourceSettings } from '../releaseSource'
@@ -190,7 +190,7 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
           </form>{patNote?.key === server.key && <small className="positive">{patNote.text}</small>}</td>
         </tr>)}
       </tbody></table></div>
-      {newServer && <form className="connection-editor" onSubmit={(event) => {
+      {newServer && <Modal title="Add server" eyebrow="AZURE DEVOPS · STEP 1" wide form onClose={() => setNewServer(null)}><form className="connection-editor" onSubmit={(event) => {
         event.preventDefault()
         try {
           if (!newServer.pat.trim()) throw new Error('Enter the PAT for this server.')
@@ -199,7 +199,6 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
           setNewServer(null); setPatNote({ key: serverKey({ url: base, ...(isCloudBase(base) ? {} : { baseUrl: base }) }), text: 'Server added with its PAT. New queries can now be created on it.' }); azure.reloadConnectionProfiles()
         } catch (failure) { setNewServer({ ...newServer, error: failure instanceof Error ? failure.message : String(failure) }) }
       }}>
-        <h3>Add server</h3>
         <div className="connection-form">
           <label>Server URL (on-prem only)<input type="url" value={newServer.serverUrl} onChange={(event) => setNewServer({ ...newServer, serverUrl: event.target.value })} placeholder="Empty for dev.azure.com · e.g. https://tfs.company.com/tfs" /><small>Leave empty for Azure DevOps Services (cloud).</small></label>
           <label>Organization / collection<input required value={newServer.organization} onChange={(event) => setNewServer({ ...newServer, organization: event.target.value })} placeholder={newServer.serverUrl.trim() ? 'e.g. DHPCollection' : 'Azure DevOps organization'} /></label>
@@ -207,14 +206,14 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
         </div>
         {newServer.error && <Notice tone="error">{newServer.error}</Notice>}
         <div className="button-row"><button className="primary">Add server</button><button type="button" className="ghost" onClick={() => setNewServer(null)}>Cancel</button></div>
-      </form>}
+      </form></Modal>}
     </Panel>
     <Panel className="connection-panel" eyebrow="STEP 2" title="Stream mapping" info={<ul><li>Which server, project and query feed each stream. Time Writing (QMS-0025) is the team's backlog; DP, CP, IOCC, Content and Tool Validations are queries on the on-prem DHP.Vault project; S&amp;S IT comes from the Windchill export named like it (ECP will follow). Pedestal (the DHP release register) and DHFI are DP's two data sets: with both mapped, DP lists every Pedestal Release, dated by the DHFI documents whose Title names it.</li><li>Release rules: DP — name from the Area Path, number from the Iteration Path. IOCC — Type of Release from the Area Path segment after “IOCC”, name from the Title. Others — a “Release x.y.z” path segment. DP and IOCC are matched to QMS-0025 Features fuzzily; the best Feature counts at the threshold.</li><li>The mapping is shared with everyone through Git (azure-views.json); roles with “Manage shared settings” change it. Everyone else only enters their PAT per server.</li></ul>}
       action={<div className="button-row">{mapping.some((row) => !row.profile && row.preset && !row.timeWriting && presetHasPat(row.preset)) && <button type="button" className="primary" onClick={() => { for (const row of mapping) if (!row.profile && row.preset && !row.timeWriting && presetHasPat(row.preset)) setUpStream(row.preset) }}>Set up all with saved PATs</button>}<label className="inline-select">Fuzzy match threshold<input type="number" min={1} max={100} step={1} value={threshold} disabled={!canManage} aria-label="Fuzzy match threshold (%)" onChange={(event) => { const value = Math.round(Number(event.target.value)); if (value >= 1 && value <= 100) store.update((draft) => { draft.releaseSourceSettings = { ...normalizeReleaseSourceSettings(draft.releaseSourceSettings), matchThreshold: value }; return draft }) }} />%</label></div>}>
       {!canManage && <Notice tone="info">The stream mapping is managed by roles with “Manage shared settings” and comes from Git. Enter your PAT per server above.</Notice>}
       <div className="azure-table"><table><thead><tr><th>Stream</th><th>Server · project</th><th>Query</th><th>Rule</th><th>Status</th><th /></tr></thead><tbody>
         {mapping.map((row) => { const [tone, label] = row.profile ? statusTone(row.profile) : ['warning' as Tone, row.windchill ? 'Windchill export' : 'Not mapped']; const status = row.profile ? connectionStatus[row.profile.id] : undefined; return <tr key={row.name}>
-          <td><strong>{row.name}</strong>{row.profile && <small>{viewNameOf(row.profile)}</small>}</td>
+          <td><strong>{row.name}</strong>{row.profile && <small>{viewNameOf(row.profile)}</small>}{row.timeWriting && row.profile && !row.profile.creatorEmail && <small className="warning-text">Work email missing: Edit to add it</small>}</td>
           <td>{row.windchill ? <small className="plain">Windchill export “{row.name}”</small> : row.where ? <small className="plain">{row.where}</small> : <span className="muted">—</span>}</td>
           <td>{row.windchill ? '—' : row.query ? <span className="query-chip" title={row.query}>Query</span> : row.timeWriting ? <small>Team Epic backlog</small> : <span className="muted">—</span>}</td>
           <td><small className="plain">{row.rule}</small></td>
@@ -251,8 +250,8 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
         </tr>
       })}</tbody></table></div>
         : otherPresets.length ? null : <EmptyState title="No other views." detail="Time Writing and the streams are in the Stream mapping above; add any other view here." />}
-      {form && <form className="connection-editor" onSubmit={submit}>
-        <h3>{form.id ? `Edit “${connectionProfiles.find((profile) => profile.id === form.id)?.reason ?? form.name}”` : clonedFrom ? `Clone of “${clonedFrom}”` : 'New connection'}</h3>{clonedFrom ? <Notice>All settings and the PAT of “{clonedFrom}” are copied. Change the name and what differs (query, project, team, …), then Save and refresh data. “{clonedFrom}” itself is not changed.</Notice> : !form.id && form.organization && <Notice>Pre-filled settings: enter your PAT, change anything else if needed, then Save and Test.</Notice>}
+      {form && <Modal title={form.id ? `Edit “${connectionProfiles.find((profile) => profile.id === form.id)?.reason ?? form.name}”` : clonedFrom ? `Clone of “${clonedFrom}”` : 'New connection'} eyebrow={`AZURE DEVOPS · ${roleLabel[form.role].toUpperCase()}`} wide form onClose={() => { setForm(null); setFormError('') }}><form className="connection-editor" onSubmit={submit}>
+        {clonedFrom ? <Notice>All settings and the PAT of “{clonedFrom}” are copied. Change the name and what differs (query, project, team, …), then Save and refresh data. “{clonedFrom}” itself is not changed.</Notice> : !form.id && form.organization && <Notice>Pre-filled settings: enter your PAT, change anything else if needed, then Save and Test.</Notice>}
         <div className="connection-form">
           <label>Name<input required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="e.g. QMS-0025, Digital Platform, DHFI releases" /></label>
           <label>View name (optional)<input value={form.viewName} maxLength={80} onChange={(event) => setForm({ ...form, viewName: event.target.value })} placeholder={form.name.trim() || 'Same as the connection name'} /><small>Name in the Azure DevOps menu and on its tab, e.g. QMS-0025.</small></label>
@@ -262,14 +261,14 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
           <label>Project<input required list="server-projects" value={form.project} onChange={(event) => setForm({ ...form, project: event.target.value })} placeholder="Project name" /><datalist id="server-projects">{(servers.find((server) => server.key === formServerKey)?.projects ?? []).map((project) => <option key={project} value={project} />)}</datalist></label>
           {(form.role === 'time-tracking' || form.role === 'backlog-view') && <label>Team{form.query.trim() ? ' (optional with a query)' : ''}<input value={form.team} onChange={(event) => setForm({ ...form, team: event.target.value })} placeholder="Team whose Epic backlog is read" /></label>}
           <label>API version (optional)<input value={form.apiVersion} onChange={(event) => setForm({ ...form, apiVersion: event.target.value })} placeholder="Automatic" /><small>Leave empty to detect it: 7.1, then 6.0 and 5.0 for older Azure DevOps Server.</small></label>
-          <label>PAT for this server{formServerPat ? ' (leave empty: the saved server PAT is used)' : form.id ? ' (leave empty to keep the saved one)' : clonedFrom ? ` (leave empty to use the PAT of “${clonedFrom}”)` : ''}<input type="password" autoComplete="off" required={!formServerPat && (form.id ? !loadAzureConnectionProfile(form.id)?.token : !(form.cloneOf && loadAzureConnectionProfile(form.cloneOf)?.token))} value={form.pat} onChange={(event) => setForm({ ...form, pat: event.target.value })} placeholder={form.role === 'time-tracking' ? 'Work Items (Read & Write)' : 'Work Items (Read)'} /><small>One PAT per server: a PAT entered here is used by every connection on the same server.</small></label>
-          {form.role === 'time-tracking' && <label>Feature creator email (optional)<input type="email" value={form.creatorEmail} onChange={(event) => setForm({ ...form, creatorEmail: event.target.value })} placeholder="Assigned to Features created from the app" /></label>}
+          <label>PAT for this server<input type="password" autoComplete="off" required={!formServerPat && (form.id ? !loadAzureConnectionProfile(form.id)?.token : !(form.cloneOf && loadAzureConnectionProfile(form.cloneOf)?.token))} value={form.pat} onChange={(event) => setForm({ ...form, pat: event.target.value })} placeholder={form.role === 'time-tracking' ? 'Work Items (Read & Write)' : 'Work Items (Read)'} /><small>{formServerPat ? 'Leave empty: the saved server PAT is used. ' : form.id ? 'Leave empty to keep the saved one. ' : clonedFrom ? `Leave empty to use the PAT of “${clonedFrom}”. ` : ''}One PAT per server: it is used by every connection on the same server.</small></label>
+          {form.role === 'time-tracking' && <label>Your work email (required)<input type="email" required autoComplete="email" value={form.creatorEmail} onChange={(event) => setForm({ ...form, creatorEmail: event.target.value })} placeholder="name@company.com" /><small>As Azure DevOps shows it for you: finds your work (Assigned to me) and is assigned to the Features you create.</small></label>}
           <label className="query-field">Query (optional, WIQL)<textarea rows={4} spellCheck={false} value={form.query} onChange={(event) => setForm({ ...form, query: event.target.value })} placeholder={queryPlaceholder[form.role]} /><small>A flat query: SELECT … FROM WorkItems WHERE …. Only the WHERE clause is used; results are read in pages. {form.role === 'time-tracking' || form.role === 'backlog-view' ? '' : 'Empty uses the default shown.'}</small></label>
         </div>
         <Notice>{roleUse[form.role]}</Notice>
         {formError && <Notice tone="error">{formError}</Notice>}
-        <div className="button-row"><button className="primary">Save and refresh data</button><button type="button" className="ghost" onClick={() => setForm(null)}>Cancel</button></div>
-      </form>}
+        <div className="button-row"><button className="primary">Save and refresh data</button><button type="button" className="ghost" onClick={() => { setForm(null); setFormError('') }}>Cancel</button></div>
+      </form></Modal>}
     </Panel>
     {sources.length > 0 && <Panel className="connection-panel" eyebrow="READ ONLY" title="Fetched read-only sources" info="Snapshots from document and reference connections, stored with the app data.">
       <div className="azure-table"><table><thead><tr><th>Connection</th><th>Project</th><th>Work items</th><th>By type</th><th>Fetched</th></tr></thead><tbody>{sources.map((source) => {

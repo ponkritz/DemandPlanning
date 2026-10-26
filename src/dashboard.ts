@@ -1,9 +1,10 @@
 import type { AzureWorkItem } from './domain'
-import { capacityModel, defaultCapacitySettings, type CapacitySettings, type Region, type ResourceRole } from './capacity.ts'
+import { capacityModel, defaultCapacitySettings, sharedTimeOf, type CapacitySettings, type Region, type ResourceRole } from './capacity.ts'
 import { isMonthTask, timeWritingMonth } from './azureInsights.ts'
 
 // Overview dashboard: one record per person and month from the Time Writing data — planned hours (Original Estimate),
-// actual hours (Completed Work) and capacity (working days × hours per day, less absence and regional holidays) —
+// actual hours (Completed Work) and capacity (working days × hours per day, less absence, holidays and common
+// activities such as PI Planning, see capacity.ts sharedTimeOf) —
 // filtered by region, role, person and stream, and the analyses built on them. Absence is never demand: it lowers
 // capacity. Capacity is counted once per person and month.
 
@@ -12,7 +13,7 @@ export type MonthStatus = 'elapsed' | 'partial' | 'future'
 export interface DashboardFilter { regions: Region[]; roles: ResourceRole[]; people: string[]; streams: string[] }
 export const noFilter: DashboardFilter = { regions: [], roles: [], people: [], streams: [] }
 export interface StreamHours { key: string; title: string; plan: number; actual: number }
-export interface PersonMonth { month: string; status: MonthStatus; person: string; region?: Region; role?: ResourceRole; plan: number; actual: number; capacity: number; absence: number; tasks: number; planLines: number; blankActuals: number; streams: StreamHours[] }
+export interface PersonMonth { month: string; status: MonthStatus; person: string; region?: Region; role?: ResourceRole; plan: number; actual: number; capacity: number; absence: number; reserved: number; tasks: number; planLines: number; blankActuals: number; streams: StreamHours[] }
 export interface Totals { plan: number; actual: number; capacity: number; absence: number; people: number; planUtil: number | null; actualUtil: number | null; gap: number; ratio: number | null }
 
 const ratio = (part: number, whole: number) => whole > 0 ? Math.round(part / whole * 1000) / 10 : null
@@ -40,6 +41,7 @@ export function personMonths(source: AzureWorkItem[], months: string[], today: s
   const profiles = settings.profiles ?? {}
   const byId = new Map(source.map((item) => [item.id, item]))
   const epicOf = (item: AzureWorkItem) => { const seen = new Set([item.id]); let current = item.parentId == null ? undefined : byId.get(item.parentId); while (current && !seen.has(current.id)) { if (current.workItemType === 'Epic') return current; seen.add(current.id); current = current.parentId == null ? undefined : byId.get(current.parentId) } return undefined }
+  const chainOf = (item: AzureWorkItem) => { const chain: AzureWorkItem[] = []; const seen = new Set([item.id]); let current = item.parentId == null ? undefined : byId.get(item.parentId); while (current && !seen.has(current.id)) { chain.push(current); seen.add(current.id); current = current.parentId == null ? undefined : byId.get(current.parentId) } return chain }
   const rows: PersonMonth[] = []
   for (const month of months) {
     const model = capacityModel(source, month, settings)
@@ -47,7 +49,7 @@ export function personMonths(source: AzureWorkItem[], months: string[], today: s
     const lines = new Map<string, { planLines: number; blankActuals: number }>()
     for (const task of source) {
       if (!isMonthTask(task) || timeWritingMonth(task.title) !== month || task.state.trim().toLowerCase() === 'removed' || !(task.originalEstimate && task.originalEstimate > 0)) continue
-      if (epicOf(task)?.id === settings.absenceEpicId) continue
+      if (epicOf(task)?.id === settings.absenceEpicId || sharedTimeOf(task, chainOf(task), settings)) continue
       const entry = lines.get(task.assignedTo) ?? { planLines: 0, blankActuals: 0 }
       entry.planLines++; if (task.completedWork == null) entry.blankActuals++
       lines.set(task.assignedTo, entry)
@@ -57,7 +59,7 @@ export function personMonths(source: AzureWorkItem[], months: string[], today: s
       const profile = profiles[person.name]
       rows.push({
         month, status: monthStatus(month, today), person: person.name, region: profile?.region, role: profile?.role,
-        plan: round(person.planned), actual: round(person.work), capacity: round(person.available), absence: round(person.absence), tasks: person.tasks,
+        plan: round(person.planned), actual: round(person.work), capacity: round(person.available), absence: round(person.absence), reserved: round(person.reserved), tasks: person.tasks,
         planLines: lines.get(person.name)?.planLines ?? 0, blankActuals: lines.get(person.name)?.blankActuals ?? 0,
         streams: person.streams.map((stream) => ({ key: stream.key, title: stream.title, plan: round(stream.planned), actual: round(stream.work) })),
       })

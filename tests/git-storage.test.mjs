@@ -91,3 +91,16 @@ test('delete: the file as it is now, one commit; a missing file is not an error'
   assert.equal(await deleteFile(target, 't', 'x', async () => response(404, {})), false)
   await assert.rejects(deleteFile(target, 't', 'x', async (_url, init = {}) => init.method === 'DELETE' ? response(403, {}) : response(200, { sha: 'cur' })), /refused to delete/)
 })
+
+test('capacity settings, holidays and common activities travel in the Git planning file', () => {
+  const capacitySettings = { absenceEpicId: 37778, hoursPerDay: 8, overloadedAt: 100, availableBelow: 80, sharedTime: [{ id: 900, kind: 'activity', scope: 'everyone', label: 'PI Planning' }, { id: 60, kind: 'holiday', scope: 'India' }] }
+  const data = planningData({ ...state, capacitySettings })
+  assert.deepEqual(data.capacitySettings.sharedTime.map((rule) => rule.id), [60, 900], 'mappings sorted by ID for clean diffs')
+  const text = serializePlanning(data)
+  assert.deepEqual(parsePlanning(text), data)
+  assert.equal(serializePlanning(planningData(parsePlanning(text))), text, 'loading then saving does not change the file')
+  const old = serializePlanning(planningData(state))
+  assert.equal('capacitySettings' in parsePlanning(old), false, 'an older file without capacity settings leaves this browser\'s settings alone')
+  assert.notEqual(serializePlanning(planningData({ ...state, capacitySettings })), old, 'a local mapping makes the data differ from an older file, so Save to Git is offered')
+  assert.deepEqual(parsePlanning(serializePlanning({ ...data, capacitySettings: { ...capacitySettings, sharedTime: [{ id: 'x', kind: 'party', scope: 'Mars' }] } })).capacitySettings.sharedTime, undefined, 'invalid mappings in the file are dropped')
+})

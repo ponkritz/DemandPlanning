@@ -211,7 +211,8 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
     if (input.role === 'time-tracking' && !isCloudBase(base)) throw new Error('Time Writing (read & write) works on Azure DevOps Services (dev.azure.com) only; on-premises servers are read-only. Choose another role for this server.')
     if (input.role === 'backlog-view' && !input.team.trim() && !query) throw new Error('A backlog view needs a team (its Epic backlog is shown) or a query.')
     const email = input.creatorEmail.trim().toLowerCase()
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('Enter a valid Feature creator email, or leave it empty.')
+    if (input.role === 'time-tracking' && !email) throw new Error('Enter your work email: the Time Writing connection uses it to find your work and to assign the Features you create.')
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('Enter a valid work email, e.g. name@company.com.')
     const id = input.id || crypto.randomUUID().replaceAll('-', '')
     // The same server, project, role and query as a saved connection: nothing is fetched, listed or matched twice.
     const twin = duplicateOf({ id, url, role: input.role, ...(query ? { query } : {}), ...(isCloudBase(base) ? {} : { baseUrl: base }) }, listAzureConnectionProfiles())
