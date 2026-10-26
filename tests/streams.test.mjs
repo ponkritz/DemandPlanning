@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { defaultStreams, profileForStream, streamOfProfile, exportForStream, sameStream } from '../src/streams.ts'
 import { dpRelease, ioccRelease, releaseFor } from '../src/releasePath.ts'
 import { matchScore, releaseRegister, normalizeReleaseSourceSettings, releaseFeatureTitle } from '../src/releaseSource.ts'
-import { defaultStreamReleases } from '../src/releaseOverview.ts'
+import { defaultStreamReleases, streamCounts } from '../src/releaseOverview.ts'
 
 const doc = (id, areaPath, iterationPath, title = `Doc ${id}`, approvalDate = '2026-10-05T10:00:00Z') => ({ key: `o/p/${id}`, id, title, workItemType: 'Document', state: 'Approved', assignedTo: '', areaPath, iterationPath, tags: '', url: '', organization: 'o', project: 'p', syncedAt: '', approvalDate })
 const feature = (id, title) => ({ key: `o/q/${id}`, id, title, workItemType: 'Feature', state: 'Active', assignedTo: '', areaPath: 'Q', iterationPath: 'Q', tags: '', url: '', organization: 'o', project: 'q', syncedAt: '' })
@@ -52,8 +52,16 @@ test('fuzzy Feature match: a percentage; the best Feature counts at the threshol
 
 test('Pulse Check streams: the five Azure streams in order, not-set-up ones listed, each read with its rule', () => {
   const source = (connectionId, items) => ({ connectionId, name: connectionId, role: 'reference', organization: 'o', project: 'p', query: 'q', fetchedAt: '2026-10-20T00:00:00Z', items })
-  const state = { azureSources: [source('dp', [doc(1, 'DHP\\DoseNav', 'DHP\\2.1.0\\S1')]), source('io', [doc(2, 'DHP\\IOCC\\Core', '', 'Patient Monitor v1.4')])] }
+  // DP counts from its own query's milestone fields (dpMilestones), not from the paths.
+  const dpRelease = { ...doc(1, 'DHP\\DoseNav', 'DHP\\2.1.0\\S1'), fields: { PsName: 'DoseNav', Release: '2.1.0', 'Custom.DDTDate': '2026-10-05T00:00:00Z', 'Custom.DDTStatus': 'Done', DRfHDate: '2026-10-02T00:00:00Z', DRfHStatus: 'Done', DRPEDate: '2026-09-01T00:00:00Z', DRPEStatus: 'Done' } }
+  const state = { azureSources: [source('dp', [dpRelease]), source('io', [doc(2, 'DHP\\IOCC\\Core', '', 'Patient Monitor v1.4')])] }
   const profiles = [{ id: 'dp', reason: 'DP', role: 'reference' }, { id: 'io', reason: 'IOCC', role: 'reference' }, { id: 'ped', reason: 'Releases (Pedestal)', role: 'release-source' }]
   const streams = defaultStreamReleases(state, profiles, '2026-10', 'UTC')
   assert.deepEqual(streams.map((stream) => [stream.name, Boolean(stream.notSetUp), stream.releases.map((entry) => `${entry.type ? `[${entry.type}] ` : ''}${entry.name} ${entry.release}`)]), [['DP', false, ['DoseNav 2.1.0']], ['CP', true, []], ['IOCC', false, ['[Core] Patient Monitor 1.4']], ['Content', true, []], ['Tool Validations', true, []]])
+  assert.deepEqual([streams[0].supported, streams[0].documents, streams[0].titles.map((entry) => entry.release)], [2, 0, ['SFV Done', 'DT Done']], 'DP: Supported Releases = DDT + DRfH Done in October')
+  assert.equal(streams[2].supported, undefined, 'other streams keep documents')
+  // The Dashboard's delivery table: DP per month and over the period.
+  const counts = streamCounts(state, profiles, ['2026-09', '2026-10'], 'UTC')
+  assert.deepEqual([counts[0].name, counts[0].months.map((entry) => [entry.month, entry.releases, entry.supported]), counts[0].releases, counts[0].supported], ['DP', [['2026-09', 0, 1], ['2026-10', 1, 2]], 1, 3])
+  assert.equal(counts[2].supported, undefined)
 })

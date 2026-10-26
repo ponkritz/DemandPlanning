@@ -4,6 +4,8 @@ import { EmptyState, Page, Panel, Pill, Info } from '../components/ui'
 import { AzureWorkItemTree } from '../components/AzureWorkItemTree'
 import { QueryView } from '../components/QueryView'
 import { ReleaseView } from '../components/ReleaseView'
+import { DpMonthCounts } from '../components/DpMonthCounts'
+import { ddtMonthOf } from '../dpMilestones'
 import { formatDate, formatDateTime, monthName } from '../format'
 import { approvalDateFrom, viewMonthOf } from '../releaseSource'
 import { viewSource } from '../viewSources'
@@ -61,9 +63,11 @@ function ReadOnlyView({ id, name, role, azure, store, month, gitNote, onOpenConn
   const columns: QueryColumn[] | undefined = stale && current ? current.columns.map((ref) => ({ ref, name: columnName(ref) })) : source?.columns
   const orderBy: QueryOrder[] | undefined = stale && current ? current.orderBy : source?.orderBy
   // Month filter (header month picker): items approved in the month, else changed in it; "All months" turns it off.
-  const items = source ? allMonths ? source.items : source.items.filter((item) => viewMonthOf(item) === month) : []
+  // DP: the month is the DDT Date's (dpMilestones); other views: Author Approval Date, else Changed Date.
+  const isDp = stream?.rule === 'dp'
+  const items = source ? allMonths ? source.items : source.items.filter((item) => (isDp ? ddtMonthOf(item) : viewMonthOf(item)) === month) : []
   // Items without an approval date fall back to their Changed Date for the month filter; say how many.
-  const undated = source ? source.items.filter((item) => !(item.approvalDate ?? approvalDateFrom(item.fields ?? {}))).length : 0
+  const undated = source ? source.items.filter((item) => isDp ? !ddtMonthOf(item) : !(item.approvalDate ?? approvalDateFrom(item.fields ?? {}))).length : 0
   // On-prem views with Git storage: Load from Git too; a fetch that cannot run falls back to it.
   const refresh = <span className="button-row"><button className="primary" disabled={busy} onClick={() => void azure.fetchConnection(id)}>{busy ? (status?.message || 'Fetching…') : source ? 'Refresh from Azure' : 'Fetch from Azure'}</button>{azure.canLoadFromGit(id) && <button className="ghost" disabled={busy} onClick={() => void azure.loadFromGit(id)}>Load from Git</button>}</span>
   return <Page className="backlog-page">
@@ -72,10 +76,11 @@ function ReadOnlyView({ id, name, role, azure, store, month, gitNote, onOpenConn
       {status?.state === 'error' && <div className="notice error" role="alert">{status.message}</div>}
       {status?.state === 'ok' && status.message.includes('Git') && <div className="notice" role="status">{status.message}</div>}
       {azure.isSample ? null : gitNote && <div className={`notice ${gitNote.tone}`} role="status">{gitNote.text}</div>}
-      {source && !allMonths && undated > 0 && <div className="notice" role="status">Month filter: by Author Approval Date in your time zone. {undated} of {source.items.length} items have no approval date{role === 'release-source' ? '' : ' in the query’s columns'}, so their Changed Date is used.</div>}
+      {source && !allMonths && isDp && <div className="notice" role="status">Month filter: by DDT Date in your time zone.{undated > 0 ? ` ${undated} of ${source.items.length} releases have no DDT Date and show only with “All months”.` : ''}</div>}
+      {source && !allMonths && !isDp && undated > 0 && <div className="notice" role="status">Month filter: by Author Approval Date in your time zone. {undated} of {source.items.length} items have no approval date{role === 'release-source' ? '' : ' in the query’s columns'}, so their Changed Date is used.</div>}
       {stale && !busy && <div className="notice warning" role="status">The saved data was fetched with different columns than the connection's query now has. Refresh from Azure to load every column's values.</div>}
-      {source && config && !items.length && source.items.length ? <EmptyState title={`No items in ${monthName(month)}.`} detail={`${source.items.length} items have an approval date (else a changed date) in other months. Pick another month in the header, or tick “All months”.`} />
-        : source && config ? stream?.rule === 'dp' ? <QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} queryOnly choose /> : role === 'release-source' || stream ? <ReleaseView name={name} items={items} backlog={azure.items} azure={azure} assign={assign} rule={stream?.rule} fuzzy={stream?.fuzzy} threshold={threshold} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} /> : <QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} />
+      {source && config && !items.length && source.items.length ? isDp ? <><DpMonthCounts items={source.items} month={month} /><EmptyState title={`No release has its DDT Date in ${monthName(month)}.`} detail="Pick another month in the header, or tick “All months”. The counts above still include milestones Done in the month." /></> : <EmptyState title={`No items in ${monthName(month)}.`} detail={`${source.items.length} items have an approval date (else a changed date) in other months. Pick another month in the header, or tick “All months”.`} />
+        : source && config ? isDp ? <><DpMonthCounts items={source.items} month={month} /><QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} queryOnly choose /></> : role === 'release-source' || stream ? <ReleaseView name={name} items={items} backlog={azure.items} azure={azure} assign={assign} rule={stream?.rule} fuzzy={stream?.fuzzy} threshold={threshold} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} /> : <QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} />
         : <><EmptyState title={config ? `“${name}” has not been fetched yet.` : `The connection for “${name}” is not saved in this browser.`} detail={config ? 'Fetch it read-only; nothing is written to Azure DevOps. Its items stay on this page and are not counted in Overview, Monthly Time Writing or Assigned to Me.' : 'Add it again in Settings → Azure DevOps.'} /></>}
     </Panel>
   </Page>
