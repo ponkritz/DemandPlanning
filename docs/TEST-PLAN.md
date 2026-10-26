@@ -315,6 +315,8 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-NAV-32 Other views in the menu** — Req NAV-32, NAV-17 — L1 `connections.test.mjs` ("Other views: read-only views and Windchill exports that are not a default stream, from the cloud or on-prem"); browser check: add an on-prem connection named e.g. "Risk register" with Show in menu on: it appears under Other views (not under Release Details), opens its view, and the heading is highlighted while it is collapsed and the view is open; with Show in menu off it disappears, and the heading is hidden when empty. **UAT**
 
+**TC-CON-27 Map a Feature setup to an Epic** — Req CON-59 — L1 `feature-setup.test.mjs` ("built-in stories as a setup give exactly the titles of the built-in creation"; "copy a setup to another Epic: replaces the target, keeps the source, no-op without a source"); browser check with a writable Git store holding a personal setup of another Epic: My setup shows it with "applies now" on step 1; "Copy this setup to Epic #" 13946 → the four stories appear under #13946 and the panel says "changed here, not saved yet"; Save to Git commits `feature-setup/<email>.json` holding both Epics and the panel then marks My setup as applying to #13946; "Go to Epic #" another number with no setup offers the two built-in buttons. **UAT**
+
 **TC-CON-26 Personal and shared Feature setup** — Req CON-58, CON-52 — L1 `feature-setup.test.mjs` (one file per email with unsafe characters and runs of dots replaced; my setup of an Epic wins for me, the shared one otherwise, and the form can switch; Enable for everyone replaces only that Epic, as a copy); browser check: Settings → Feature setup opens for every role; with an email on the Time Writing connection it shows My setup and Shared (everyone), else only Shared with a notice; "Start my own from the shared one", "Remove my setup" and "Enable for everyone" save to Git with a writable token. **UAT**
 
 **TC-NAV-22 Default streams and stream rules** — Req NAV-22, NAV-23 — L1 `streams.test.mjs` (stream order and sources; connection and export found by name; DP and IOCC release rules; fuzzy match percentages and the threshold; Pulse Check lists the five Azure streams in order with not-set-up ones); browser check on sample data: Release Details lists DP, CP, IOCC, Content, Tool Validations and S&S IT; a not-set-up stream opens Settings, whose Default streams Set up pre-fills the name and role; Pulse Check → Current month releases shows the five Azure streams in order. **UAT**
@@ -1012,6 +1014,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CON-56 | TC-QV-06 |
 | CON-57 | TC-CON-25 |
 | CON-58 | TC-CON-26 |
+| CON-59 | TC-CON-27 |
 | QV-20 | TC-QV-06 |
 | QV-21 | TC-QV-07 |
 | CON-21, CON-22 | TC-CON-08 |
@@ -1126,7 +1129,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-04 | TC-TWN-01, TC-TWN-02, TC-MON-01…06 |
 | UC-05 | TC-MON-07 |
 | UC-06 | TC-ATM-01…11, TC-TWN-03, TC-CON-20 |
-| UC-07 | TC-BKL-01…03, TC-CON-23, TC-CON-25, TC-CON-26 |
+| UC-07 | TC-BKL-01…03, TC-CON-23, TC-CON-25…27 |
 | UC-08 | TC-QV-01…05, TC-FET-07, TC-CON-08, TC-CON-11…16 |
 | UC-09 | TC-OV-11…14, TC-CAP-01, TC-CON-21 |
 | UC-10 | TC-OV-11 (Months, Streams), TC-OV-13 |
