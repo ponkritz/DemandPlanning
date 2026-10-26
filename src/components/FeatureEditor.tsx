@@ -9,9 +9,10 @@ import { chooseSetup, defaultDoDFor, fillTitle, missingValues, setupFor, titleVa
 // The "Add Feature under an Epic" / "Complete Feature children" modal, shared by the QMS-0025 board and Assigned to
 // Me. mode.parent: create a Feature (the Epic can still be changed) with its children; mode.resume: add the missing
 // children of an existing Feature. The Feature and every new child are assigned to the person chosen, else to me.
+// initialTitle: the Feature title to start from (Release Details: "Program | Service | vRelease" of the release).
 export type FeatureEditorMode = { parent: AzureWorkItem; resume?: undefined } | { resume: AzureWorkItem; parent?: undefined }
 export interface FeatureEditorResult { feature: AzureWorkItem; items: AzureWorkItem[]; text: string; parent?: AzureWorkItem }
-export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoose, featureSetup, onSavePat, onCreated, onDone, onPartial, onClose }: { mode: FeatureEditorMode; items: AzureWorkItem[]; config: AzureConfig; savedPat?: string; me: string; canChoose: boolean; featureSetup?: FeatureSetups | null; onSavePat?: (pat: string) => void; onCreated?: (items: AzureWorkItem[]) => void; onDone: (result: FeatureEditorResult) => void; onPartial: (text: string, items: AzureWorkItem[], parent?: AzureWorkItem) => void; onClose: () => void }) {
+export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoose, featureSetup, initialTitle = '', onSavePat, onCreated, onDone, onPartial, onClose }: { mode: FeatureEditorMode; initialTitle?: string; items: AzureWorkItem[]; config: AzureConfig; savedPat?: string; me: string; canChoose: boolean; featureSetup?: FeatureSetups | null; onSavePat?: (pat: string) => void; onCreated?: (items: AzureWorkItem[]) => void; onDone: (result: FeatureEditorResult) => void; onPartial: (text: string, items: AzureWorkItem[], parent?: AzureWorkItem) => void; onClose: () => void }) {
   const people = useMemo(() => assignablePeople(items), [items])
   const resumeFeature = mode.resume ?? null
   const scoped = useMemo(() => items.filter((item) => item.state.trim().toLowerCase() !== 'removed' && item.organization.toLowerCase() === config.organization.toLowerCase() && item.project.toLowerCase() === config.project.toLowerCase()), [items, config.organization, config.project])
@@ -19,7 +20,7 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
   const [parent, setParent] = useState<AzureWorkItem | null>(mode.parent ?? null)
   const [assigneeName, setAssigneeName] = useState(() => resumeFeature && canChoose ? people.find((person) => person.email === resumeFeature.assignedToEmail && person.email !== me)?.name ?? '' : '')
   const assignee = canChoose && assigneeName ? people.find((person) => person.name === assigneeName)?.email ?? '' : me
-  const [title, setTitle] = useState(resumeFeature?.title ?? '')
+  const [title, setTitle] = useState(resumeFeature?.title ?? initialTitle)
   const [releaseKind, setReleaseKind] = useState<'PU' | 'Release'>('PU')
   const [milestones, setMilestones] = useState<string[]>(['SFV', 'DT', 'IQOQ'])
   // The Feature DoD is mandatory: it starts from the Epic's setup, else the PU / Full Release default, until typed.

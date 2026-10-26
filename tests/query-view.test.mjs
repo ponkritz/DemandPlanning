@@ -96,3 +96,17 @@ test('rich-text values (Acceptance Criteria) show as text: tags removed, entitie
   assert.equal(htmlToText('<style>p{}</style><p>Only text</p>'), 'Only text')
   assert.equal(formatCell('Value <5> and a < b'), 'Value <5> and a < b', 'plain text with angle brackets stays as it is')
 })
+
+test('column order: saved order first, new query columns keep their place; move by drag or one step', async () => {
+  const { orderColumns, moveColumnTo, moveColumnBy, viewCsv, extraColumnRef } = await import('../src/queryView.ts')
+  const cols = ['A', 'B', 'C', 'D'].map((ref) => ({ ref, name: ref }))
+  assert.deepEqual(orderColumns(cols, []).map((c) => c.ref), ['A', 'B', 'C', 'D'])
+  assert.deepEqual(orderColumns(cols, ['C', 'A', 'B', 'D']).map((c) => c.ref), ['C', 'A', 'B', 'D'])
+  assert.deepEqual(orderColumns(cols, ['C', 'A', 'X']).map((c) => c.ref), ['C', 'D', 'A', 'B'], 'unknown saved refs dropped; a column the order does not know goes right after the one it follows in the query (B after A, D after C)')
+  assert.deepEqual(moveColumnTo(['A', 'B', 'C', 'D'], 'D', 'B'), ['A', 'D', 'B', 'C'])
+  assert.deepEqual(moveColumnTo(['A', 'B', 'C', 'D'], 'A', 'C'), ['B', 'C', 'A', 'D'])
+  assert.deepEqual(moveColumnBy(['A', 'B', 'C'], 'B', -1), ['B', 'A', 'C'])
+  assert.deepEqual(moveColumnBy(['A', 'B', 'C'], 'C', 1), ['A', 'B', 'C'], 'the last stays last')
+  const item = { key: 'k', id: 7, title: 'T', workItemType: 'Release', state: 'Active', fields: {} }
+  assert.equal(viewCsv([item], [{ ref: extraColumnRef, name: 'Match' }, { ref: 'System.Id', name: 'ID' }], { text: () => 'Feature 1 (90%)' }), 'Match,ID\r\nFeature 1 (90%),7', 'the extra column is exported where it stands')
+})

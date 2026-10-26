@@ -1,7 +1,7 @@
 import type { AzureWorkItem } from './domain'
 import { isTimeWritingStory } from './azureInsights.ts'
 import { fieldOf } from './dpReleases.ts'
-import { matchScore, prepareName, prepareTitle, type PreparedName, type PreparedTitle } from './releaseSource.ts'
+import { matchScore, prepareName, prepareTitle, releaseFeatureTitle, type PreparedName, type PreparedTitle } from './releaseSource.ts'
 
 // DP row → QMS-0025 board: the Feature and the User Story whose title matches the row's SourceProgram and Title.
 // Not everyone writes the SourceProgram into the board title, so the score is the better of Title alone and
@@ -19,6 +19,10 @@ const versions = /\bv?\d+(\.\d+)+\b/gi
 export const dpServiceOf = (item: AzureWorkItem) => item.title.replace(versions, ' ').replace(/\s+/g, ' ').trim()
 // The row's version: the last one in its Title, else its Release field.
 export const dpVersionOf = (item: Pick<AzureWorkItem, 'title' | 'fields'>) => [...item.title.matchAll(versions)].at(-1)?.[0].replace(/^v/i, '') ?? fieldOf(item, 'Release')?.trim() ?? ''
+
+// Create Feature from a DP row: Program (SourceProgram, else DP) | Service (PsName, else the Title without its version)
+// | vRelease (the Release field, else the Title's version).
+export const dpFeatureTitle = (row: AzureWorkItem) => releaseFeatureTitle(dpProgramOf(row) || 'DP', fieldOf(row, 'PsName')?.trim() || dpServiceOf(row), fieldOf(row, 'Release')?.trim() || dpVersionOf(row))
 
 const names = (title: string, program: string): PreparedName[] => program && !title.toLowerCase().includes(program.toLowerCase()) ? [prepareName(title), prepareName(title, program)] : [prepareName(title)]
 export function dpTitleScore(boardTitle: string | PreparedTitle, title: string, program = '', version = dpVersionOf({ title, fields: {} })) {
