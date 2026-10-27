@@ -1,4 +1,5 @@
 import { formatDate } from './format.ts'
+import { csvCell } from './csv.ts'
 import type { AzureWorkItem } from './domain'
 import { releaseOf } from './releasePath.ts'
 
@@ -108,7 +109,7 @@ export function htmlToText(value: string) {
     .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, '')
     .replace(/<br\s*\/?>|<\/(p|div|li|tr|h[1-6])>/gi, '\n')
     .replace(/<[^>]*>/g, '')
-    .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (match, code: string) => code[0] === '#' ? String.fromCodePoint(code[1].toLowerCase() === 'x' ? parseInt(code.slice(2), 16) : Number(code.slice(1))) : entities[code.toLowerCase()] ?? match)
+    .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (match, code: string) => { if (code[0] !== '#') return entities[code.toLowerCase()] ?? match; const point = code[1].toLowerCase() === 'x' ? parseInt(code.slice(2), 16) : Number(code.slice(1)); return Number.isFinite(point) && point >= 0 && point <= 0x10ffff ? String.fromCodePoint(point) : match })
     .split('\n').map((line) => line.replace(/\s+/g, ' ').trim()).filter(Boolean).join(' · ')
 }
 export function formatCell(value: FieldValue | undefined) {
@@ -144,7 +145,6 @@ export function viewSummary(items: AzureWorkItem[], today: string) {
   }
 }
 
-const csvCell = (value: string) => /[",\r\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value
 // extra: a column that is not a field (DP: the board match, ref extraColumnRef), exported by its text where it stands.
 export const extraColumnRef = '@extra'
 export function viewCsv(items: AzureWorkItem[], columns: { ref: string; name: string }[], extra?: { text: (item: AzureWorkItem) => string }) {

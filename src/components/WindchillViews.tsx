@@ -1,3 +1,4 @@
+import { csvCell } from '../csv'
 import { useState } from 'react'
 import { windchillOps, windchillCell, type WindchillFilter, type WindchillView } from '../windchillViews'
 import { formatDateTime } from '../format'
@@ -88,7 +89,7 @@ export function WindchillPage({ view, windchill, git, gitNote }: { view: Windchi
   const source = windchill.sources.find((entry) => entry.viewId === view.id), status = windchill.status[view.id]
   const columns = source?.columns.length ? source.columns : view.columns
   const rows = (source?.rows ?? []).filter((row) => !search.trim() || columns.some((column) => windchillCell(row, column).toLowerCase().includes(search.trim().toLowerCase())))
-  const csv = () => [columns.join(','), ...rows.map((row) => columns.map((column) => { const value = windchillCell(row, column); return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value }).join(','))].join('\r\n')
+  const csv = () => [columns.join(','), ...rows.map((row) => columns.map((column) => csvCell(windchillCell(row, column))).join(','))].join('\r\n')
   return <Panel className="connection-panel backlog-panel">
     <div className="view-source-bar"><div><strong>{view.name}</strong><span className="muted"> · {view.exportFile ? `Windchill export ${view.exportFile}` : view.entitySet}{source ? ` · ${source.rows.length} results · ${view.exportFile ? 'imported' : 'fetched'} ${formatDateTime(source.fetchedAt)}${source.fromGit ? ' (desktop app, via Git)' : ''}` : ''}</span></div>
       <div className="button-row">{view.exportFile ? <ExportFileButton label="Import newer export" onFile={(text, file) => windchill.importExport(text, file, '', view.id)} onError={setError} /> : <button className="primary" disabled={status?.state === 'busy'} onClick={() => void windchill.fetchView(view.id)}>{status?.state === 'busy' ? 'Searching…' : source ? 'Refresh from Windchill' : 'Fetch from Windchill'}</button>}

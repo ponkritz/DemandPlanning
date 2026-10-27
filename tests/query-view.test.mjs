@@ -110,3 +110,13 @@ test('column order: saved order first, new query columns keep their place; move 
   const item = { key: 'k', id: 7, title: 'T', workItemType: 'Release', state: 'Active', fields: {} }
   assert.equal(viewCsv([item], [{ ref: extraColumnRef, name: 'Match' }, { ref: 'System.Id', name: 'ID' }], { text: () => 'Feature 1 (90%)' }), 'Match,ID\r\nFeature 1 (90%),7', 'the extra column is exported where it stands')
 })
+
+test('CSV exports neutralise formula cells and keep numbers; a bad numeric entity stays as written', async () => {
+  const { csvCell, csvSafe } = await import('../src/csv.ts')
+  assert.equal(csvCell('=HYPERLINK("https://evil")'), `"'=HYPERLINK(""https://evil"")"`)
+  assert.equal(csvCell('@SUM(A1)'), "'@SUM(A1)"); assert.equal(csvCell("+cmd|' /C calc'!A0"), "'+cmd|' /C calc'!A0"); assert.equal(csvCell('-cmd'), "'-cmd")
+  assert.equal(csvCell('-3'), '-3'); assert.equal(csvCell('+1.5'), '+1.5'); assert.equal(csvCell('Done, mostly'), '"Done, mostly"'); assert.equal(csvSafe(null), '')
+  assert.equal(formatCell('<p>Bad &#1114112; point &#x110000; ok &#65;</p>'), 'Bad &#1114112; point &#x110000; ok A')
+  const item = { key: 'k', id: 1, title: '=1+1', workItemType: 'Release', state: 'Active', fields: {} }
+  assert.equal(viewCsv([item], [{ ref: 'System.Title', name: 'Title' }]), "Title\r\n'=1+1")
+})

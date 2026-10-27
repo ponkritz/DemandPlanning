@@ -9,9 +9,22 @@ export interface WorkbookSheet { name: string; rows: string[][] }
 const u16 = (bytes: Uint8Array, at: number) => bytes[at] | (bytes[at + 1] << 8)
 const u32 = (bytes: Uint8Array, at: number) => (bytes[at] | (bytes[at + 1] << 8) | (bytes[at + 2] << 16) | (bytes[at + 3] << 24)) >>> 0
 
+// An entry may inflate to at most this many bytes: a tiny zip that inflates to gigabytes would otherwise freeze the tab.
+export const maxInflatedBytes = 100 * 1024 * 1024
 async function inflateRaw(data: Uint8Array): Promise<Uint8Array> {
-  const stream = new Blob([data as BlobPart]).stream().pipeThrough(new DecompressionStream('deflate-raw'))
-  return new Uint8Array(await new Response(stream).arrayBuffer())
+  const reader = new Blob([data as BlobPart]).stream().pipeThrough(new DecompressionStream('deflate-raw')).getReader()
+  const parts: Uint8Array[] = []
+  let total = 0
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    total += value.length
+    if (total > maxInflatedBytes) { await reader.cancel(); throw new Error('The Excel file is too large to read in the browser (over 100 MB unpacked). Remove sheets or rows and upload it again.') }
+    parts.push(value)
+  }
+  const out = new Uint8Array(total); let at = 0
+  for (const part of parts) { out.set(part, at); at += part.length }
+  return out
 }
 
 export async function unzip(bytes: Uint8Array): Promise<Map<string, Uint8Array>> {
@@ -68,7 +81,7 @@ const unescapeXml = (text: string) => text.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt
   const lower = code.toLowerCase()
   if (lower === 'amp') return '&'; if (lower === 'lt') return '<'; if (lower === 'gt') return '>'; if (lower === 'quot') return '"'; if (lower === 'apos') return "'"
   const value = lower.startsWith('#x') ? parseInt(lower.slice(2), 16) : parseInt(lower.slice(1), 10)
-  return Number.isFinite(value) ? String.fromCodePoint(value) : ''
+  return Number.isFinite(value) && value >= 0 && value <= 0x10ffff ? String.fromCodePoint(value) : ''
 })
 const escapeXml = (text: string) => text.replace(/[&<>"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[char]!).split('').filter((char) => { const code = char.charCodeAt(0); return code >= 32 || code === 9 || code === 10 || code === 13 }).join('')
 function attributes(tag: string) {

@@ -1,5 +1,5 @@
 import type { AzureWorkItem } from './domain'
-import { capacityModel, defaultCapacitySettings, sharedTimeOf, type CapacitySettings, type Region, type ResourceRole } from './capacity.ts'
+import { capacityModel, defaultCapacitySettings, isNpraTask, sharedTimeOf, type CapacitySettings, type Region, type ResourceRole } from './capacity.ts'
 import { isMonthTask, timeWritingMonth } from './azureInsights.ts'
 
 // Overview dashboard: one record per person and month from the Time Writing data — planned hours (Original Estimate),
@@ -45,11 +45,11 @@ export function personMonths(source: AzureWorkItem[], months: string[], today: s
   const rows: PersonMonth[] = []
   for (const month of months) {
     const model = capacityModel(source, month, settings)
-    // Planned lines and blank actuals per person (month Tasks outside the absence Epic with an estimate).
+    // Planned lines and blank actuals per person (month Tasks outside the absence Epic, shared time and NPRA, with an estimate).
     const lines = new Map<string, { planLines: number; blankActuals: number }>()
     for (const task of source) {
       if (!isMonthTask(task) || timeWritingMonth(task.title) !== month || task.state.trim().toLowerCase() === 'removed' || !(task.originalEstimate && task.originalEstimate > 0)) continue
-      if (epicOf(task)?.id === settings.absenceEpicId || sharedTimeOf(task, chainOf(task), settings)) continue
+      if (epicOf(task)?.id === settings.absenceEpicId || sharedTimeOf(task, chainOf(task), settings) || isNpraTask(task, chainOf(task))) continue
       const entry = lines.get(task.assignedTo) ?? { planLines: 0, blankActuals: 0 }
       entry.planLines++; if (task.completedWork == null) entry.blankActuals++
       lines.set(task.assignedTo, entry)

@@ -1,4 +1,6 @@
-# Demand Planning Hub
+# I&D Quality Demand Planning
+
+*Formerly “Demand Planning Hub”. The desktop installer and its update feed keep their file names (`Demand-Planning-Hub-Setup.exe`, `Demand-Planning-Hub-mac.dmg`) so installed apps keep updating.*
 
 Windows desktop MVP for demand planning, effort tracking, capacity, release milestones, governance and monthly reporting.
 
@@ -222,6 +224,8 @@ A **separate private GitHub repository** (Settings → Storage → Git storage: 
 **Data & governance → QE Mapping** keeps the QE mapping Excel as a shared table in Git (`qe-mapping.json`). **Upload Excel…** reads an .xlsx (or CSV) as it is — every sheet becomes a tab and its first row the columns, without knowing them in advance; dates come out as YYYY-MM-DD. Then, with a Git token that can save: click a cell to edit it, **＋ Add row**, select rows and **Delete**, **＋ Add column**, and per column (▾ menu) **Rename**, **Move left / right**, **Delete column**. Everyone can search, **Filter by column**, **Group by** a column and hide columns (**Columns (n of m)**, kept in your browser). Changes are a draft until **Save to Git**; **Export Excel** downloads every tab, **Export CSV** the current view. Old .xls files must be saved as .xlsx first; a mapping over 900 KB cannot be saved to Git.
 
 ### Release Details and Windchill exports
+
+**NPRA (non-project related activities).** Internal meetings (stand-up, special projects, town hall) and trainings (white belt, AI, Cornerstone) are Time Writing Tasks tagged **NPRA** (on the Task, or on its Story / Feature; "NPRA Hours" counts too). They are not project work. Only the NPRA hours actually **booked** come off a person's available hours — nothing is reserved up front. They are tracked against the **NPRA maximum** of 20 h per person per month (Settings → Capacity) on Pulse Check → Last month (NPRA metric and table, "NPRA 12h / 20h" under each person), and hours over the maximum are flagged. Set the maximum to 0 to track without one. **Unplanned sick leave is not NPRA:** book it under the absence Epic by the end of the month at the latest; it is deducted from the available hours.
 
 **Rearrange columns.** In the DP view, drag a column heading onto another to move it, or open **Columns** and drag a column in the list or use ← →. The order (and which columns are shown) is remembered per view in this browser and used by the CSV; **Query order** resets it.
 

@@ -1,4 +1,5 @@
 import type { WorkbookSheet } from './xlsx'
+import { csvCell } from './csv.ts'
 
 // QE Mapping: an uploaded Excel (or CSV) kept as it is — every sheet a tab, its first non-empty row the column names,
 // every value text — then edited in the app (cells, rows, columns) and shared through Git as qe-mapping.json.
@@ -79,8 +80,7 @@ export function groupRows(rows: QeRow[], columnId: string) {
   return [...groups.entries()].sort(([a], [b]) => a === '' ? 1 : b === '' ? -1 : a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })).map(([value, items]) => ({ value, rows: items }))
 }
 export const tableRows = (columns: QeColumn[], rows: QeRow[]) => [columns.map((column) => column.name), ...rows.map((row) => columns.map((column) => row.cells[column.id] ?? ''))]
-const quote = (value: string) => /[",\r\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value
-export const tableCsv = (columns: QeColumn[], rows: QeRow[]) => tableRows(columns, rows).map((row) => row.map(quote).join(',')).join('\r\n')
+export const tableCsv = (columns: QeColumn[], rows: QeRow[]) => tableRows(columns, rows).map((row) => row.map(csvCell).join(',')).join('\r\n')
 
 // ---- the Git file ----
 const text = (value: unknown, max: number) => typeof value === 'string' ? value.slice(0, max) : typeof value === 'number' || typeof value === 'boolean' ? String(value) : ''
