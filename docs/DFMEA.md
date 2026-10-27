@@ -66,7 +66,7 @@ An RPN ≥ 40, or S = 5 with D ≥ 3, needs an action. The **Residual RPN** is t
 | DF-23 | Export CSV | A cell or header runs as a formula in the spreadsheet | Code execution in the user's spreadsheet (SM-12) | Data starting with `=`, `+`, `-`, `@` | 5 | 3 | 3 | 45 | Every cell and the header prefixed when formula-like, quoted when it holds separators (CON-69) | 5×1×1 = 5 | TC-CON-37 | PT-01 fixed in this pull request |
 | DF-24 | Render rich text and documents | HTML or script from a field or document runs | Credential theft (SM-09) | Azure rich-text fields; Markdown | 5 | 3 | 2 | 30 | HTML converted to text; Markdown rendered as React elements; https-only links (QV-27, DOC-03, DOC-05) | 5×1×1 = 5 | TC-QV-13, TC-DOC-01 | R-08 (CSP) planned |
 | DF-25 | Import an export (CSV, Excel) | A huge or malformed file freezes the tab | Function unavailable (the uploader's tab only) | Crafted or accidental file | 2 | 2 | 3 | 12 | Size limits, 1000 rows shown, ErrorBoundary (QEM-02, STO-07, CON-70) | 2×2×2 = 8 | TC-QEM-02, TC-CON-38 | PT-05, PT-06 caps open (KB-03, KB-04) |
-| DF-26 | Read releases from Windchill names | A release is missed or two spellings are listed twice | Wrong unique-release count | Free-text names (about one in ten) | 3 | 4 | 3 | 36 | Parser for versions, prefixes, clubbed names; unmatched documents listed apart; clubbed count shown (CON-71) | 3×3×2 = 18 | TC-CON-39 | LIM-04: correction table planned |
+| DF-26 | Read releases from Windchill exports | A release is missed or two spellings are listed twice | Wrong unique-release count | Free-text document names (about one in ten); folder names outside the known shapes | 3 | 4 | 3 | 36 | Location column (controlled folder names) read first — a clubbed folder one release as written, numbers kept as written — document names as fallback; the unique locations with the release read from each are listed and saved to Git for analysis; unmatched documents listed apart (CON-72, CON-71) | 3×2×2 = 12 | TC-CON-39, TC-CON-40 | Review the saved locations against the real exports; correction table if shapes remain outside the parser (LIM-04) |
 
 ## 6. Update and deployment
 
@@ -75,16 +75,17 @@ An RPN ≥ 40, or S = 5 with D ≥ 3, needs an action. The **Residual RPN** is t
 | DF-27 | Desktop self-update | A tampered or wrong installer is started | Code execution (SM-13) | Release or network compromise | 5 | 1 | 3 | 15 | Fixed release URL, installer named for the OS, SHA-256 verified, mismatch deletes the file (DSK-07…DSK-09) | 5×1×1 = 5 | TC-DSK-03, TC-INS-02 | R-06 code signing open |
 | DF-28 | CI build and publish | Dependency code in CI replaces the published installers (SM-16) | Code execution on every desktop | Compromised dependency with a write token | 5 | 1 | 4 | 20 | Read-only token for jobs that run dependency code; publishing jobs only download artefacts (CI-07) | 5×1×1 = 5 | TC-CI-03 | PT-02 fixed in this pull request; R-07 SHA pinning open |
 | DF-29 | Web update | Users keep running an old build, or reload while a fetch is running | Stale behaviour; interrupted save | Browser cache | 2 | 3 | 2 | 12 | Build id in the HTML, manifest check, reload blocked while busy (UPD-01…UPD-05) | 2×1×1 = 2 | TC-UPD-01, TC-UPD-02 | — |
+| DF-31 | Save the Windchill locations analysis to Git | The file goes to the wrong repository or carries document contents | Data in the wrong place | Wrong Git configuration | 3 | 2 | 2 | 12 | Written only to the configured data repository next to the planning data, under windchill-analysis/; holds unique folders, counts and releases only, no rows, no credentials; refused in sample mode and with a read-only token (CON-72, GIT-02, GIT-09) | 3×1×1 = 3 | TC-CON-40 | — |
 | DF-30 | Release the documents | The app shows documents that do not match its build | Wrong instructions or requirements | Documents published separately | 2 | 3 | 3 | 18 | Documents bundled at build time; the traceability matrix regenerated and checked in CI (DOC-02, DOC-10) | 2×1×1 = 2 | TC-DOC-01, TC-DOC-03 | — |
 
 ## 7. Summary
 
 | | Count |
 |---|---|
-| Failure modes analysed | 30 |
+| Failure modes analysed | 31 |
 | With S = 5 | 10 (DF-01…04, 06, 23, 24, 27, 28) — all with residual D = 1 |
 | Initial RPN ≥ 40 | 3 (DF-01, DF-02, DF-23) — all reduced to 5 |
-| Residual RPN ≥ 15 | 1 (DF-26, 18: name variants in Windchill exports; mitigation planned, LIM-04) |
+| Residual RPN ≥ 15 | 0 (DF-26 reduced to 12 by reading the Location column first; LIM-04 keeps the correction table as a further option) |
 | Open actions | R-06 code signing, R-07 SHA pinning, R-08 CSP, KB-03/KB-04 input caps, PT-11 https check, LIM-04 correction table; open decisions OI-02, OI-03, OI-11, OI-12 |
 
 The DFMEA is reviewed with every pull request that adds a function or changes a control (the pull request names the DF rows it touches), and in full at each release.
