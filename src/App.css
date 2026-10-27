@@ -372,3 +372,5 @@ body:has(.modal-backdrop){overflow:hidden}
 .modal .connection-actions,.modal .connection-editor>.button-row{flex-direction:row-reverse;justify-content:flex-start}
 .modal .shared-time-form button{margin-top:0}
 .board-match{display:inline-flex;gap:.5rem;align-items:center}.board-match small{font-size:.78em}
+
+.release-summaries{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}@media(max-width:1000px){.release-summaries{grid-template-columns:1fr}}

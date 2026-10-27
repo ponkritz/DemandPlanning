@@ -166,6 +166,15 @@ export function windchillReleases(rows: Record<string, unknown>[], columns: stri
   return { releases, unmatched, clubbed, nameColumn, locationColumn: location, source, locations, dateColumn: date }
 }
 
+// The month (YYYY-MM) of a release's latest date, from the parsed value; undefined when no date could be read.
+export const releaseMonth = (entry: Pick<WindchillRelease, 'latestAt'>) => entry.latestAt === undefined ? undefined : new Date(entry.latestAt).toISOString().slice(0, 7)
+// The releases whose latest date falls in the month (YYYY-MM), as chosen in the header month picker (CON-73).
+export const releasesInMonth = <T extends Pick<WindchillRelease, 'latestAt'>>(releases: T[], month: string) => releases.filter((entry) => releaseMonth(entry) === month)
+
+// The releases of a Windchill export with the latest date in the month, as "name number" texts for the Pulse Check
+// Supported line (QV-33), newest first.
+export const windchillSupported = (rows: Record<string, unknown>[], columns: string[], month: string) => releasesInMonth(windchillReleases(rows, columns).releases, month).map((entry) => `${entry.name} ${entry.release}`)
+
 // The analysis file saved to the Git data repository (windchill-analysis/<export>-locations.json): every distinct
 // Location with its document count and the release read from it, plus the unique releases — so that the folder
 // naming can be studied and the parser checked against the real exports. No document contents, no credentials.

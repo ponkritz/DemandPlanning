@@ -69,13 +69,13 @@ This document lists every software component of the system: the in-house source 
 | PersonPicker | `src/components/PersonPicker.tsx` | Typeable person list with "me" first and keyboard selection. | ATM, UI |
 | QueryView | `src/components/QueryView.tsx` | Read-only query results view: summary strip, query columns, sorting, filters, search and CSV export. | QV |
 | ReleaseFeatureEditor | `src/components/ReleaseFeatureEditor.tsx` | Create Feature button from Release Details, pre-filling the default Feature form from the release. | QV |
-| ReleaseQuadrants | `src/components/ReleaseQuadrants.tsx` | Releases summary lines and a 2×2 quadrant per stream with documents approved in the month and totals. | OVR |
+| ReleaseQuadrants | `src/components/ReleaseQuadrants.tsx` | Releases summary lines, the Supported summary next to them (DP Supported Releases, S&S IT export releases of the month), and a 2×2 quadrant per stream with documents approved in the month and totals. | OVR, QV |
 | ReleaseView | `src/components/ReleaseView.tsx` | Release source view: flat list of releases derived from document paths. | QV |
 | ScopeSwitch | `src/components/ScopeSwitch.tsx` | Team / Individual toggle with person picker, in the header or page top. | MON, OVR |
 | SetupGuide | `src/components/SetupGuide.tsx` | "Get started" pop-up listing setup steps with live status and buttons to the right place. | NAV |
 | SharedTimePanel | `src/components/SharedTimePanel.tsx` | Settings → Capacity: map Epics/Features as regional holidays or common activities applied to people in scope. | CAP, SET |
 | TeamFilterBar | `src/components/TeamFilterBar.tsx` | Region switch and role multi-select filter for team views. | OVR |
-| WindchillReleasesPanel | `src/components/WindchillReleasesPanel.tsx` | Lists a Windchill export's unique releases from Location or document names (source and columns chosen), the unique locations, CSV exports and Save locations to Git. | CON |
+| WindchillReleasesPanel | `src/components/WindchillReleasesPanel.tsx` | Lists a Windchill export's unique releases from Location or document names (source and columns chosen), filtered to the header month, sortable, with draggable widths; the unique locations, CSV exports and Save locations to Git. | CON |
 | WindchillSettingsPanel | `src/components/WindchillSettingsPanel.tsx` | Windchill host and service path setup with connection test and sign-in (browser or desktop). | CON |
 | WindchillViews | `src/components/WindchillViews.tsx` | Windchill views settings, the Windchill export page and import of results saved or copied from the browser. | CON |
 | WorkloadCharts | `src/components/WorkloadCharts.tsx` | SVG charts: utilization, Epic mix, Epic bullet, Pareto, utilization heatmap and donut. | OVR |
@@ -110,7 +110,7 @@ This document lists every software component of the system: the in-house source 
 | qeMapping | `src/qeMapping.ts` | QE Mapping table model: sheets with stable column/row ids, edits, filter, group, CSV, Git file parse/serialise. | QEM |
 | queryView | `src/queryView.ts` | Query-view layout from WIQL SELECT/ORDER BY, field resolution, cell formatting, sorting, summary, CSV, column order. | QV |
 | releaseOverview | `src/releaseOverview.ts` | Releases with documents approved in the month per stream, with counts and totals. | OVR |
-| releasePath | `src/releasePath.ts` | Reads release name and number from Area/Iteration Paths; DP and IOCC stream rules. | QV |
+| releasePath | `src/releasePath.ts` | Reads release name and number from Area/Iteration Paths; DP, IOCC and Tool Validations (one entry per tool) stream rules. | QV |
 | rules | `src/rules.ts` | Period lock rules, demand classification, baseline lookup, variance flag and capacity utilization. | SET, BAS |
 | setupGuide | `src/setupGuide.ts` | "Get started" setup steps with live status and required-step logic. | NAV |
 | streams | `src/streams.ts` | Release stream definitions and data sets, name matching and connection/export lookup per stream. | QV, OVR |
