@@ -75,7 +75,7 @@ This document lists every software component of the system: the in-house source 
 | SetupGuide | `src/components/SetupGuide.tsx` | "Get started" pop-up listing setup steps with live status and buttons to the right place. | NAV |
 | SharedTimePanel | `src/components/SharedTimePanel.tsx` | Settings → Capacity: map Epics/Features as regional holidays or common activities applied to people in scope. | CAP, SET |
 | TeamFilterBar | `src/components/TeamFilterBar.tsx` | Region switch and role multi-select filter for team views. | OVR |
-| WindchillReleasesPanel | `src/components/WindchillReleasesPanel.tsx` | Lists a Windchill export's unique releases from document names, with chosen name column. | CON |
+| WindchillReleasesPanel | `src/components/WindchillReleasesPanel.tsx` | Lists a Windchill export's unique releases from Location or document names (source and columns chosen), the unique locations, CSV exports and Save locations to Git. | CON |
 | WindchillSettingsPanel | `src/components/WindchillSettingsPanel.tsx` | Windchill host and service path setup with connection test and sign-in (browser or desktop). | CON |
 | WindchillViews | `src/components/WindchillViews.tsx` | Windchill views settings, the Windchill export page and import of results saved or copied from the browser. | CON |
 | WorkloadCharts | `src/components/WorkloadCharts.tsx` | SVG charts: utilization, Epic mix, Epic bullet, Pareto, utilization heatmap and donut. | OVR |
@@ -115,7 +115,7 @@ This document lists every software component of the system: the in-house source 
 | setupGuide | `src/setupGuide.ts` | "Get started" setup steps with live status and required-step logic. | NAV |
 | streams | `src/streams.ts` | Release stream definitions and data sets, name matching and connection/export lookup per stream. | QV, OVR |
 | viewSources | `src/viewSources.ts` | Picks the saved fetch snapshot for a read-only connection, with legacy shared release snapshot rule. | QV, FET |
-| windchillReleases | `src/windchillReleases.ts` | Extracts release names and numbers (including clubbed releases) from Windchill document names; unique releases. | CON |
+| windchillReleases | `src/windchillReleases.ts` | Unique releases of a Windchill export from the Location column (deepest folder with a version) or the document names (clubbed names included); unique locations; the windchill-locations analysis file. | CON |
 | xlsx | `src/xlsx.ts` | Library-free .xlsx zip reader/writer and CSV reader with inflate size limit. | QEM |
 
 ### 1.4 Data, storage and sync
@@ -158,7 +158,7 @@ This document lists every software component of the system: the in-house source 
 | useAzureWorkspace | `src/useAzureWorkspace.ts` | Azure connections state: fetch, save, preview, sample data, Git-backed on-prem data and fetch listeners. | CON, FET, SMP |
 | useDpBoardColumn | `src/useDpBoardColumn.tsx` | DP table "QMS-0025 match" column with search/export text and Create Feature. | QV |
 | useFeatureSetup | `src/useFeatureSetup.ts` | Shared and personal Feature setup from Git, cached locally, saved with a writable token. | CON |
-| useGitStorage | `src/useGitStorage.ts` | Git storage state: load/save planning data, views file, access, Feature setup and QE Mapping files. | GIT, CON, QEM |
+| useGitStorage | `src/useGitStorage.ts` | Git storage state: load/save planning data, views file, access, Feature setup, QE Mapping and Windchill files, including the windchill-analysis locations file. | GIT, CON, QEM |
 | useMyWork | `src/useMyWork.ts` | Who "me" is: Time Writing connection email plus a remembered display name. | ATM |
 | useNow | `src/useNow.ts` | Date that re-renders on an interval for clock and freshness labels. | NAV |
 | usePersonScope | `src/usePersonScope.ts` | Team / Individual scope and team filter, remembered per page. | MON, OVR |
@@ -242,7 +242,7 @@ The end-to-end suite (`pnpm test:e2e`, after `pnpm build:web`) drives the built 
 |---|---|---|---|
 | helpers | `e2e/helpers.mjs` | Starts `vite preview` on a free port, opens Chromium pages with clean storage, records page errors, shared actions (navigate, load sample). | CI |
 | shell.e2e | `e2e/shell.e2e.mjs` | Sidebar groups and footer, header and month picker, Get started pop-up, synthetic sample, theme toggle, phone width, Force Update dialog (TC-NAV-01, 03, 31, 33, TC-UI-01, TC-SMP-01, TC-UPD-02). | NAV, UI, SMP, UPD |
-| documents-and-data.e2e | `e2e/documents-and-data.e2e.mjs` | Documentation tabs, links and download; Windchill export releases and neutralised CSV; JSON backup without credentials (TC-DOC-01, 02, TC-CON-39, 37, TC-STO-04, TC-INS-01). | DOC, CON, STO, NFR |
+| documents-and-data.e2e | `e2e/documents-and-data.e2e.mjs` | Documentation tabs, links and download; Windchill export releases from names and from Location with the locations CSV; neutralised CSV; JSON backup without credentials (TC-DOC-01, 02, TC-CON-39, 40, 37, TC-STO-04, TC-INS-01). | DOC, CON, STO, NFR |
 
 ## 2. Third-party components (SOUP)
 

@@ -341,7 +341,19 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-CON-38 No blank app on bad data; desktop navigation guards** — Req CON-70 — L1 `windchill-views.test.mjs` ("a Windchill snapshot from Git drops rows that are not plain objects instead of crashing the view (CON-70, PT-07)"), `query-view.test.mjs` (the entity &#1114112; stays as written, &#65; becomes A); browser check: a Description holding "&#1114112;" renders in the query view; the ErrorBoundary page (throw inside a page in dev) shows Reload and Try to continue; a QE Mapping upload of a zip bomb .xlsx is refused with "too large"; desktop: dragging a link onto the window opens it in the browser and the window keeps the app.
 
-**TC-CON-39 Unique releases from a Windchill export** — Req CON-71 — L1 `windchill-releases.test.mjs` ("a document name splits at its first version: release name, release number, document name"; "clubbed names: every name + release pair is a release, whatever the delimiters; the rest is the document name"; "a clubbed document counts once for each release it names"; "unique releases from an export: name + number, case and trailing zeros ignored; documents and latest date kept"); browser check: import an S&S IT export with "Remote Diagnostics 1.6 Verification Report", "remote diagnostics 1.6.0 - Test Plan", "Remote Diagnostics 1.7 SRS", "CareLink_R3.2_SRS", "IntelliSpace Portal - v12.1 - Test Plan", "Service1_rel1_Service2_rel2_Test Plan" and "Quality Manual" → Releases shows "6 releases · 6 of 7 documents · 1 clubbed" (Remote Diagnostics 1.6 with 2 documents; Service1 1 and Service2 2 each with Test Plan), "1 document without a release number in the name", Export releases CSV; Pulse Check → Windchill exports shows Releases 6; no page errors. **UAT**
+**TC-CON-39 Unique releases from a Windchill export** — Req CON-71 — L1 `windchill-releases.test.mjs` ("a document name splits at its first version: release name, release number, document name"; "clubbed names: every name + version pair is a part, whatever the delimiters; the rest is the document name"; "a clubbed name is one release, kept as written and counted once; a part written on its own is another release"; "export dates are read in the formats Windchill writes, and the list is newest first with unreadable dates last"; "unique releases from an export: name + number, case and trailing zeros ignored; documents and latest date kept"); browser check: import an S&S IT export with "Remote Diagnostics 1.6 Verification Report", "remote diagnostics 1.6.0 - Test Plan", "Remote Diagnostics 1.7 SRS", "CareLink_R3.2_SRS", "IntelliSpace Portal - v12.1 - Test Plan", "Service1_rel1_Service2_rel2_Test Plan" and "Quality Manual" → Releases shows "5 releases · 6 of 7 documents · 1 clubbed" (Remote Diagnostics 1.6 with 2 documents; "Service1_rel1_Service2_rel2" as one clubbed release, number "1 + 2", with Test Plan), newest Last Modified first (the clubbed release on 2026-10-06, then IntelliSpace Portal 12.1, Remote Diagnostics 1.7, Remote Diagnostics 1.6, CareLink 3.2), "1 document without a release number in the name", Export releases CSV; Pulse Check → Windchill exports shows Releases 6; no page errors. **UAT**
+
+**TC-CON-40 Unique releases from the Location column; locations saved to Git** — Req CON-72 — **UAT** — L1 `windchill-releases.test.mjs` ("Location: the release is read from the deepest folder that holds a version, in one folder or in name/version folders (CON-72)"; "Location source: unique releases and unique locations of an export, with the names as fallback"; "Location: a clubbed folder is one release counted once; numbers written differently stay different releases"); E2E `documents-and-data.e2e.mjs` ("TC-CON-40": an export with a Location column reads from Location, lists the unique locations and exports them); browser check with GitHub mocked (writable token): import an export with a Location column → the count ends "from Location"; "Read from" offers Automatic (Location), Location, Document name; the unique locations table shows each folder path, its document count and the release read from it; Save locations to Git → one PUT of `windchill-analysis/<id>-locations.json` with kind `windchill-locations`, the unique locations and releases, and no rows; "Saved to Git (…)" shown; with a read-only token the button is absent; switching to Document name gives the CON-71 result; no page errors.
+- Steps:
+  1. Import `e2e/fixtures/windchill-locations.csv` (7 documents; Locations such as `/Products/Remote Diagnostics 1.6/DHF`, `/Products/Remote Diagnostics/1.7/Design Inputs`, `/Products/CareLink/R3.2/DHF`, `/Quality/Manuals`).
+  2. Read the Releases panel; open "unique locations"; press Export locations CSV.
+  3. With Git storage connected (writable), press Save locations to Git; open the data repository.
+  4. Switch "Read from" to Document name.
+- Expected:
+  - "5 releases · 6 of 7 documents · from Location": CareLink R3.2 (the number as the folder writes it), IntelliSpace Portal 12.1, Remote Diagnostics 1.7, Remote Diagnostics 1.6 (2 documents, 1 location), Service1 1.0; "1 document without a release in the Location" lists `/Quality/Manuals`.
+  - The unique locations table lists 6 folders with their counts and releases; the CSV has the same rows.
+  - `windchill-analysis/<id>-locations.json` exists in the data repository with the unique locations and releases, and holds no document rows; the page says "Saved to Git (windchill-analysis/<id>-locations.json)".
+  - From Document name the result is the CON-71 one: with this fixture's plain names only the clubbed document counts, as one release ("1 release · 1 of 7 documents · 1 clubbed · from Document name").
 
 **TC-CON-27 Map a Feature setup to an Epic** — Req CON-59 — L1 `feature-setup.test.mjs` ("built-in stories as a setup give exactly the titles of the built-in creation"; "copy a setup to another Epic: replaces the target, keeps the source, no-op without a source"); browser check with a writable Git store holding a personal setup of another Epic: My setup shows it with "applies now" on step 1; "Copy this setup to Epic #" 13946 → the four stories appear under #13946 and the panel says "changed here, not saved yet"; Save to Git commits `feature-setup/<email>.json` holding both Epics and the panel then marks My setup as applying to #13946; "Go to Epic #" another number with no setup offers the two built-in buttons. **UAT**
 
@@ -1127,6 +1139,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CON-69 | TC-CON-37 |
 | CON-70 | TC-CON-38 |
 | CON-71 | TC-CON-39 |
+| CON-72 | TC-CON-40 |
 | QV-20 | TC-QV-06 |
 | QV-21 | TC-QV-07 |
 | CON-21, CON-22 | TC-CON-08 |
@@ -1266,7 +1279,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-05 | TC-MON-07 |
 | UC-06 | TC-ATM-01…11, TC-TWN-03, TC-CON-20, TC-CON-33, TC-CON-34 |
 | UC-07 | TC-BKL-01…05, TC-CON-23, TC-CON-25…27, TC-CON-29…32, TC-CON-35 |
-| UC-08 | TC-QV-01…05, TC-FET-07, TC-CON-08, TC-CON-11…16, TC-QV-08, TC-QV-09, TC-QV-10, TC-QV-11, TC-QV-12, TC-QV-13, TC-QV-14, TC-QV-15, TC-QV-16, TC-CON-37, TC-CON-38, TC-CON-39 |
+| UC-08 | TC-QV-01…05, TC-FET-07, TC-CON-08, TC-CON-11…16, TC-QV-08, TC-QV-09, TC-QV-10, TC-QV-11, TC-QV-12, TC-QV-13, TC-QV-14, TC-QV-15, TC-QV-16, TC-CON-37, TC-CON-38, TC-CON-39, TC-CON-40 |
 | UC-09 | TC-OV-11…14, TC-CAP-01, TC-CAP-02, TC-CAP-03, TC-QV-17, TC-CON-21, TC-QV-10, TC-QV-11 |
 | UC-10 | TC-OV-11 (Months, Streams), TC-OV-13 |
 | UC-11 | TC-BAS-01…04 |
