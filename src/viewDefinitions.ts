@@ -34,7 +34,10 @@ export function restoreViews(views: AzureConnectionProfileSummary[], pat: string
   const result: RestoreResult = { added: [], updated: [], skipped: [], noPat: [] }
   const local = listAzureConnectionProfiles(storage)
   const tokenFor = (view: AzureConnectionProfileSummary) => {
-    const existing = loadAzureConnectionProfile(view.id, storage)?.token
+    // The connection's own PAT follows it only while it stays on the same server: a view whose URL was moved to
+    // another host in Git never carries the old server's PAT to the new one.
+    const current = loadAzureConnectionProfile(view.id, storage)
+    const existing = current && serverKey(current).toLowerCase() === serverKey(view).toLowerCase() ? current.token : ''
     if (existing) return existing
     if (pat.trim()) return pat.trim()
     const same = local.find((profile) => serverKey(profile) === serverKey(view))

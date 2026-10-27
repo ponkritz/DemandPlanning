@@ -96,6 +96,7 @@ ipcMain.handle('windchill:sign-in', async (event, request) => {
   signInWindow = window
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   window.webContents.on('will-navigate', (navigation, target) => { if (!target.startsWith('https://')) navigation.preventDefault() })
+  window.webContents.on('will-redirect', (navigation, target) => { if (!target.startsWith('https://')) navigation.preventDefault() })
   return new Promise((resolve) => {
     let done = false, checking = false
     const finish = (result) => {
@@ -148,7 +149,12 @@ function createWindow() {
     if (url.startsWith('https://')) shell.openExternal(url)
     return { action: 'deny' }
   })
+  // The main window shows only the bundled app (or the Vite dev server): a dropped link or in-page navigation never
+  // loads another site with the preload attached.
   const devUrl = process.env.VITE_DEV_SERVER_URL
+  const allowed = (target) => target === bundledUrl || target.startsWith(`${bundledUrl}#`) || target.startsWith(`${bundledUrl}?`) || Boolean(devUrl && new URL(target).origin === new URL(devUrl).origin)
+  window.webContents.on('will-navigate', (navigation, target) => { if (!allowed(target)) { navigation.preventDefault(); if (target.startsWith('https://')) shell.openExternal(target) } })
+  window.webContents.on('will-redirect', (navigation, target) => { if (!allowed(target)) navigation.preventDefault() })
   if (devUrl) window.loadURL(devUrl)
   else window.loadFile(path.join(__dirname, '..', 'dist', 'index.html'))
 }

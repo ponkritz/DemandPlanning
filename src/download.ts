@@ -1,4 +1,5 @@
 import type { AppState } from './domain'
+import { csvSafe } from './csv'
 
 function saveBlob(contents: BlobPart, mime: string, filename: string) {
   const url = URL.createObjectURL(new Blob([contents], { type: mime }))
@@ -9,7 +10,7 @@ function saveBlob(contents: BlobPart, mime: string, filename: string) {
   URL.revokeObjectURL(url)
 }
 
-const quote = (value: unknown) => `"${String(value ?? '').replaceAll('"', '""')}"`
+const quote = (value: unknown) => `"${csvSafe(value).replaceAll('"', '""')}"`
 
 export function exportEffortCsv(state: AppState, month?: string) {
   const rows = state.efforts

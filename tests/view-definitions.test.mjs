@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { saveAzureConnectionProfile, loadAzureConnectionProfile, listAzureConnectionProfiles } from '../src/azureCredentials.ts'
-import { saveServerPat } from '../src/azureCredentials.ts'
+import { saveServerPat, loadServerPat } from '../src/azureCredentials.ts'
 import { gitSyncedIds, duplicateOf } from '../src/viewDefinitions.ts'
 import { viewsFile, serializeViews, parseViews, restoreViews, serverKey, syncViewsFromGit, markViewsSynced, promoteToTimeWriting } from '../src/viewDefinitions.ts'
 import { siblingConfig, readTextFile, writeTextFile } from '../src/gitStorage.ts'
@@ -148,4 +148,17 @@ test('duplicates: the copy from Git is kept over a preset copy and a local one; 
   assert.equal(duplicateOf(view('fromgit'), listAzureConnectionProfiles(store))?.id, 'local', 'editing one that still matches another is a duplicate too')
   assert.equal(duplicateOf(view('new', 'SELECT [System.Id] FROM WorkItems WHERE x = 2'), listAzureConnectionProfiles(store)), undefined, 'another query is not')
   assert.equal(duplicateOf({ ...view('tw'), role: 'time-tracking' }, listAzureConnectionProfiles(store)), undefined, 'Time Writing connections are handled apart')
+})
+
+test('restore: a view moved to another host in Git never carries the old server PAT to the new host', () => {
+  const storage = memory()
+  saveAzureConnectionProfile({ ...dp, token: 'onprem-pat' }, storage)
+  const moved = { ...dp, url: 'https://evil.example/tfs/Coll/DHFI', baseUrl: 'https://evil.example/tfs' }
+  const result = restoreViews([moved], '', storage)
+  assert.deepEqual(result, { added: [], updated: ['Digital Platform'], skipped: [], noPat: ['Digital Platform'] })
+  assert.equal(loadAzureConnectionProfile('dp', storage).token, '', 'the moved connection has no PAT')
+  assert.equal(loadServerPat('https://evil.example/tfs', storage), '', 'the new host got no PAT')
+  assert.equal(loadServerPat(serverKey(dp), storage), 'onprem-pat', 'the old server keeps its PAT')
+  restoreViews([moved], 'typed-for-new-host', storage)
+  assert.equal(loadServerPat('https://evil.example/tfs', storage), 'typed-for-new-host', 'a PAT entered for the restore applies to the new host')
 })

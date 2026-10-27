@@ -21,6 +21,7 @@ export function ReleaseView({ name, items, backlog, columns, orderBy, unresolved
     <QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={unresolved} />
   </>
 }
+
 // The release table shared by the views: one row per release with its documents, Feature match and hours; with
 // typed, the IOCC Type of Release column.
 function ReleaseTable({ name, title = 'Releases', detail, register, azure, assign, featureSetup, threshold = 80, typed, info, action, empty }: { name: string; title?: string; detail?: string; register: ReleaseEntry[]; featureSetup?: FeatureSetups | null; azure?: AzureWorkspace; assign?: { me: string; canChoose: boolean }; fuzzy?: boolean; threshold?: number; typed?: boolean; info?: ReactNode; action?: ReactNode; empty?: ReactNode }) {

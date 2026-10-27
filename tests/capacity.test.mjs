@@ -17,7 +17,7 @@ const backlog = [
   item(43, { workItemType: 'Task', parentId: 41, title: 'October 2026 | Ana - Sick leave', assignedTo: 'Ana', completedWork: 8 }),
   item(50, { workItemType: 'Task', parentId: 21, title: 'October 2026 | Removed', state: 'Removed', assignedTo: 'Ben', completedWork: 500 }),
 ]
-const settings = { ...defaultCapacitySettings, absenceEpicId: 900 }
+const settings = { ...defaultCapacitySettings, npraHoursPerMonth: 0, absenceEpicId: 900 }
 
 test('per-person load deducts absence from funded hours and classifies utilization', () => {
   const model = capacityModel(backlog, '2026-10', settings)
@@ -28,7 +28,7 @@ test('per-person load deducts absence from funded hours and classifies utilizati
   assert.equal(ana.utilization, 105.26); assert.equal(ana.status, 'Overloaded')
   assert.equal(ben.absence, 0); assert.equal(ben.work, 50); assert.equal(ben.utilization, 28.41); assert.equal(ben.status, 'Has capacity')
   assert.equal(model.people[0].name, 'Ana', 'sorted by utilization descending')
-  assert.deepEqual(model.counts, { overloaded: 1, balanced: 0, hasCapacity: 1, noBookings: 0 })
+  assert.deepEqual(model.counts, { npraOver: 0, overloaded: 1, balanced: 0, hasCapacity: 1, noBookings: 0 })
 })
 test('streams are Epics with hours, people and feature counts; absence is not a stream', () => {
   const model = capacityModel(backlog, '2026-10', settings)
@@ -48,7 +48,7 @@ test('status thresholds and settings normalisation', () => {
   assert.equal(loadStatus(null, defaultCapacitySettings), 'No bookings'); assert.equal(loadStatus(100, defaultCapacitySettings), 'Overloaded')
   assert.equal(loadStatus(79.9, defaultCapacitySettings), 'Has capacity'); assert.equal(loadStatus(80, defaultCapacitySettings), 'Balanced')
   assert.deepEqual(normalizeCapacitySettings(undefined), defaultCapacitySettings)
-  assert.deepEqual(normalizeCapacitySettings({ absenceEpicId: '123', hoursPerDay: 7.5, overloadedAt: 110, availableBelow: 70 }), { absenceEpicId: 123, hoursPerDay: 7.5, overloadedAt: 110, availableBelow: 70 })
+  assert.deepEqual(normalizeCapacitySettings({ absenceEpicId: '123', hoursPerDay: 7.5, overloadedAt: 110, availableBelow: 70 }), { absenceEpicId: 123, hoursPerDay: 7.5, overloadedAt: 110, availableBelow: 70, npraHoursPerMonth: 20 })
   assert.deepEqual(normalizeCapacitySettings({ overloadedAt: 50, availableBelow: 90 }), defaultCapacitySettings, 'inverted thresholds fall back')
   assert.throws(() => capacityModel([], '2026-13'))
 })
@@ -78,8 +78,8 @@ test('resource profiles keep only known regions and roles, never self as manager
 
 test('regional holidays apply to everyone mapped to the region, not to the assignee', () => {
   const { items } = regionalSample({ organization: 'Org', project: 'Quality', team: 'T' }, '2026-10')
-  const without = capacityModel(items, '2026-10')
-  const withProfiles = capacityModel(items, '2026-10', capacityContext({ resourceProfiles: sampleProfiles }))
+  const without = capacityModel(items, '2026-10', { ...defaultCapacitySettings, npraHoursPerMonth: 0 })
+  const withProfiles = capacityModel(items, '2026-10', capacityContext({ capacitySettings: { npraHoursPerMonth: 0 }, resourceProfiles: sampleProfiles }))
   // October in the sample has one India holiday (8h); India people are Chen Wei and Diya Sharma.
   assert.deepEqual(withProfiles.holidays, [{ region: 'India', hours: 8, people: 2 }])
   assert.equal(without.people.some((person) => person.name === 'Unassigned'), false, 'unassigned holiday Tasks do not create a person')
@@ -88,7 +88,7 @@ test('regional holidays apply to everyone mapped to the region, not to the assig
     const expected = sampleProfiles[person.name]?.region === 'India' ? 8 : 0
     assert.equal(person.absence - before.absence, expected, person.name)
     assert.equal(person.absenceByKind['Public holiday'], expected)
-    assert.equal(person.available, Math.max(0, person.funded - person.absence))
+    assert.equal(person.available, Math.max(0, person.funded - person.absence - person.reserved - person.npraDeducted))
   }
   assert.equal(withProfiles.totals.absenceByKind['Public holiday'], 16)
   assert.equal(without.totals.absenceByKind['Public holiday'], 0, 'no region mapped, nothing applied')
@@ -162,4 +162,34 @@ test('holidays and common activities: mapped Epics / Features apply their month 
   assert.equal(sharedTimeOf(byId.get(713), chain(713), { ...settings, sharedTime }).id, 711, 'the nearest mapping wins')
   const india = itemsForTeam([...backlog, ...events], { region: 'India', roles: [] }, { ...settings, sharedTime, profiles }).filter((entry) => entry.workItemType === 'Task').map((entry) => entry.id)
   assert.deepEqual([india.includes(703), india.includes(713), india.includes(62)], [true, false, true])
+})
+
+// NPRA: Tasks tagged NPRA (or under a tagged Feature) are not project work; only the booked NPRA hours come off the
+// available hours, and they are tracked against the per-person maximum (hours over it are flagged).
+test('NPRA: only booked hours are deducted; tracked against the per-person maximum, hours over it flagged', () => {
+  const withNpra = [...backlog,
+    item(12, { workItemType: 'Feature', parentId: 2, title: 'Trainings', tags: 'NPRA Hours; Training' }), item(22, { parentId: 12 }),
+    item(60, { workItemType: 'Task', parentId: 20, title: 'October 2026 | Stand-ups', assignedTo: 'Ana', tags: 'npra', originalEstimate: 10, completedWork: 12 }),
+    item(61, { workItemType: 'Task', parentId: 22, title: 'October 2026 | White belt', assignedTo: 'Ben', originalEstimate: 20, completedWork: 30 }),
+  ]
+  const model = capacityModel(withNpra, '2026-10', { ...settings, npraHoursPerMonth: 20 })
+  const ana = model.people.find((person) => person.name === 'Ana'), ben = model.people.find((person) => person.name === 'Ben')
+  assert.deepEqual([ana.npra, ana.npraPlanned, ana.npraTasks, ana.npraAllowance, ana.npraOver, ana.npraDeducted], [12, 10, 1, 20, 0, 12], 'Ana: within the 20h maximum; only the 12h booked are deducted')
+  assert.equal(ana.available, 176 - 24 - 12); assert.equal(ana.work, 160, 'NPRA hours are not project work')
+  assert.deepEqual([ben.npra, ben.npraOver, ben.npraDeducted], [30, 10, 30], 'Ben: 10h over the maximum is flagged, the 30h booked come off the funded hours')
+  assert.equal(ben.available, 176 - 30); assert.equal(ben.work, 50)
+  assert.deepEqual([model.totals.npra, model.totals.npraDeducted, model.totals.npraOver, model.counts.npraOver], [42, 42, 10, 1])
+  assert.equal(model.totals.available, 176 * 2 - 24 - 42)
+  assert.ok(!model.streams.some((stream) => stream.title === 'Trainings'), 'NPRA is not a stream')
+  const tracked = capacityModel(withNpra, '2026-10', { ...settings, npraHoursPerMonth: 0 })
+  const anaTracked = tracked.people.find((person) => person.name === 'Ana')
+  assert.deepEqual([anaTracked.npra, anaTracked.npraAllowance, anaTracked.npraOver, anaTracked.npraDeducted, anaTracked.available], [12, 0, 0, 12, 176 - 24 - 12], 'maximum 0: no maximum to exceed, booked NPRA hours still come off the available hours')
+  assert.equal(capacityModel(withNpra, '2026-10', { absenceEpicId: 900, hoursPerDay: 8, overloadedAt: 100, availableBelow: 80 }).people.find((person) => person.name === 'Ana').npraAllowance, 20, 'settings without the field take the default 20h')
+  assert.equal(normalizeCapacitySettings({ npraHoursPerMonth: -5 }).npraHoursPerMonth, 20); assert.equal(normalizeCapacitySettings({ npraHoursPerMonth: 0 }).npraHoursPerMonth, 0)
+})
+
+test('NPRA: nobody is charged for NPRA they did not book', () => {
+  const model = capacityModel(backlog, '2026-10', { ...settings, npraHoursPerMonth: 20 })
+  for (const person of model.people) { assert.equal(person.npraDeducted, 0, person.name); assert.equal(person.available, person.funded - person.absence - person.reserved) }
+  assert.equal(model.totals.npraDeducted, 0)
 })

@@ -1,4 +1,4 @@
-# Demand Planning Hub — working notes
+# I&D Quality Demand Planning — working notes
 
 ## Keep the documents current with every change
 

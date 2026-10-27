@@ -1,3 +1,4 @@
+import { csvCell } from './csv.ts'
 import type { AzureWorkItem } from './domain'
 import { isPastSprint, isPending, type DatedIteration } from './myWork.ts'
 import { plainAzureText } from './backlogView.ts'
@@ -50,7 +51,7 @@ export const peopleOf = (item: AzureWorkItem, unassigned = false) => (unassigned
 // CSV of the rows (quoted, comma-separated, CRLF), with the parent's title for context, and the Description if asked.
 export function healthCsv(rows: AzureWorkItem[], all: AzureWorkItem[], iterations: DatedIteration[], list = '', description = false) {
   const byId = new Map(all.map((item) => [item.id, item]))
-  const quote = (value: unknown) => { const text = String(value ?? ''); return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text }
+  const quote = csvCell
   const header = [...(list ? ['List'] : []), 'ID', 'Type', 'Title', 'State', 'Assigned To', 'Iteration', 'Sprint end', 'Parent', 'URL', ...(description ? ['Description'] : [])]
   return [header, ...rows.map((item) => [...(list ? [list] : []), item.id, item.workItemType, item.title, item.state, item.assignedTo, item.iterationPath, sprintEnd(item, iterations), item.parentId != null ? `#${item.parentId} ${byId.get(item.parentId)?.title ?? ''}`.trim() : '', item.url, ...(description ? [descriptionText(item)] : [])])].map((row) => row.map(quote).join(',')).join('\r\n')
 }
@@ -129,6 +130,6 @@ export function healthValue(column: HealthColumn, item: AzureWorkItem, byId: Map
 
 export function columnsCsv(rows: AzureWorkItem[], columns: HealthColumn[], all: AzureWorkItem[], iterations: DatedIteration[]) {
   const byId = new Map(all.map((item) => [item.id, item]))
-  const quote = (value: unknown) => { const text = String(value ?? ''); return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text }
+  const quote = csvCell
   return [[...columns.map(healthColumnLabel), 'URL'], ...rows.map((item) => [...columns.map((column) => healthValue(column, item, byId, iterations)), item.url])].map((row) => row.map(quote).join(',')).join('\r\n')
 }

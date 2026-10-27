@@ -5,7 +5,7 @@ import { personMonths, applyFilter, totals, plannedOverload, persistentOverload,
 const base = { organization: 'o', project: 'p', state: 'Active', assignedTo: '', areaPath: 'p', iterationPath: 'p', tags: '', url: '', syncedAt: '' }
 let next = 1
 const item = (workItemType, title, extra = {}) => { const id = next++; return { ...base, key: `o/p/${id}`, id, workItemType, title, ...extra } }
-const settings = { absenceEpicId: 999, hoursPerDay: 8, overloadedAt: 100, availableBelow: 80, profiles: { Ana: { region: 'India', role: 'QE' }, Ben: { region: 'India', role: 'QE' }, Cy: { region: 'US', role: 'QMS' } } }
+const settings = { absenceEpicId: 999, hoursPerDay: 8, overloadedAt: 100, availableBelow: 80, npraHoursPerMonth: 0, profiles: { Ana: { region: 'India', role: 'QE' }, Ben: { region: 'India', role: 'QE' }, Cy: { region: 'US', role: 'QMS' } } }
 const cp = item('Epic', 'CP'), dp = item('Epic', 'DP')
 const f1 = item('Feature', 'CP | A | v1', { parentId: cp.id }), f2 = item('Feature', 'DP | B | v2', { parentId: dp.id })
 const s1 = item('User Story', 'CP | A | v1 - Time Writing', { parentId: f1.id }), s2 = item('User Story', 'DP | B | v2 - Time Writing', { parentId: f2.id })
