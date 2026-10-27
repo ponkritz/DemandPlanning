@@ -4,16 +4,17 @@ import type { AzureConnectionProfileSummary } from './azureCredentials.ts'
 // Azure DevOps connection with a query (connection named like the stream); S&S IT from a Windchill export (ECP will
 // follow as a Windchill export). Release Details and Pulse Check show exactly these. Each stream reads its releases
 // with its own rule (see releasePath): DP — release name from the Area Path, number from the Iteration Path; IOCC —
-// grouped by the Area Path segment after "IOCC", release name from the document Title; the others keep the general
-// path rule. DP and IOCC releases are matched to QMS-0025 Features by a fuzzy match with a percentage.
-export type ReleaseRule = 'path' | 'dp' | 'iocc'
+// grouped by the Area Path segment after "IOCC", release name from the document Title; Tool Validations — one entry
+// per tool (the tool's Area Path folder, else the Title before its version or document word), whatever the number of
+// its documents; the others keep the general path rule. DP and IOCC releases are matched to QMS-0025 Features by a fuzzy match with a percentage.
+export type ReleaseRule = 'path' | 'dp' | 'iocc' | 'tool'
 export interface StreamDef { name: string; source: 'azure' | 'windchill'; rule: ReleaseRule; fuzzy: boolean }
 export const defaultStreams: StreamDef[] = [
   { name: 'DP', source: 'azure', rule: 'dp', fuzzy: true },
   { name: 'CP', source: 'azure', rule: 'path', fuzzy: false },
   { name: 'IOCC', source: 'azure', rule: 'iocc', fuzzy: true },
   { name: 'Content', source: 'azure', rule: 'path', fuzzy: false },
-  { name: 'Tool Validations', source: 'azure', rule: 'path', fuzzy: false },
+  { name: 'Tool Validations', source: 'azure', rule: 'tool', fuzzy: false },
   { name: 'S&S IT', source: 'windchill', rule: 'path', fuzzy: false },
 ]
 export const defaultMatchThreshold = 80

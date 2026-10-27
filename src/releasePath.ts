@@ -58,6 +58,30 @@ export function ioccRelease(item: Pick<AzureWorkItem, 'areaPath' | 'title'>): St
   const name = `${before} ${after}`.replace(/\s*[|:_–-]\s*$/, '').replace(/^\s*[|:_–-]\s*/, '').replace(/\s+/g, ' ').trim() || title
   return { group, name, release: found[1] }
 }
-export function releaseFor(item: Pick<AzureWorkItem, 'areaPath' | 'iterationPath' | 'title'>, rule: 'path' | 'dp' | 'iocc' = 'path'): StreamRelease | undefined {
-  return rule === 'dp' ? dpRelease(item) : rule === 'iocc' ? ioccRelease(item) : releaseOf(item)
+// Tool Validations: a validation has several documents (plan, protocol, report, …) for the same tool, so the unique
+// list is per tool, not per document. The tool is the Area Path's deepest segment below the project that is neither a
+// release segment nor the stream's own folder ("Tool Validations", "Validation"); without one, the Title before its version, else
+// before its first document word (Validation, Plan, Protocol, Report, Summary, Record, Checklist, IQ, OQ, PQ, Test).
+// The version is the Iteration Path's "Release x" or the Title's version when there is one. Documents of the same
+// tool (and version) are one entry.
+const documentWord = /\s*[-–:|_]?\s*\b(?:validation|plan|protocol|report|summary|record|checklist|iq|oq|pq|test|assessment)\b.*$/i
+const streamFolder = (segment: string) => /^(?:tools?(?:\s*validations?)?|validations?)$/i.test(segment.replace(/[^a-z0-9 ]+/gi, ' ').replace(/\s+/g, ' ').trim())
+export function toolRelease(item: Pick<AzureWorkItem, 'areaPath' | 'iterationPath' | 'title'>): StreamRelease | undefined {
+  const title = (item.title ?? '').replace(/\s+/g, ' ').trim()
+  const folders = segments(item.areaPath).slice(1).filter((part) => !releaseSegment.test(part) && !streamFolder(part))
+  const fromPath = releaseOf(item)?.release
+  const inTitle = versionPart.exec(title)
+  const release = fromPath ?? inTitle?.[1] ?? ''
+  if (folders.length) return { name: folders.at(-1)!, release }
+  if (!title) return undefined
+  if (inTitle) {
+    const index = title.indexOf(inTitle[1], inTitle.index)
+    const name = title.slice(0, index).replace(/(?:\bv\.?|\brel(?:ease)?)\s*[-_:.]?\s*$/i, '').replace(/\s*[|:_–-]\s*$/, '').trim()
+    if (name) return { name, release }
+  }
+  const name = title.replace(documentWord, '').replace(/\s*[|:_–-]\s*$/, '').trim() || title
+  return { name, release }
+}
+export function releaseFor(item: Pick<AzureWorkItem, 'areaPath' | 'iterationPath' | 'title'>, rule: 'path' | 'dp' | 'iocc' | 'tool' = 'path'): StreamRelease | undefined {
+  return rule === 'dp' ? dpRelease(item) : rule === 'iocc' ? ioccRelease(item) : rule === 'tool' ? toolRelease(item) : releaseOf(item)
 }

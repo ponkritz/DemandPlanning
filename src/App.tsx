@@ -233,7 +233,7 @@ export default function App() {
       {page === 'bulk' && <BulkActionsPage azure={azure} store={store} my={my} assign={assign} />}
       {page === 'monthly' && <MonthlyPage azure={azure} month={month} store={store} my={my} />}
       {page === 'baselines' && <BaselinesPage azure={azure} month={month} store={store} git={git} onOpenSettings={() => { settingsTabOnOpen('storage'); setPage('admin') }} canEdit={access.can('baselines.edit')} />}
-      {page === 'windchill' && (windchillView ? <WindchillPage view={windchillView} windchill={windchill} git={git} gitNote={git.snapshotNotes[`wc:${windchillView.id}`]} /> : access.can('windchill.import') ? <WindchillExportImport windchill={windchill} git={git} onImported={openWindchill} /> : <Notice tone="info">Your role does not include importing Windchill exports. Open an export from the menu; an Admin can change this in Settings → Access.</Notice>)}
+      {page === 'windchill' && (windchillView ? <WindchillPage view={windchillView} windchill={windchill} git={git} gitNote={git.snapshotNotes[`wc:${windchillView.id}`]} month={month} /> : access.can('windchill.import') ? <WindchillExportImport windchill={windchill} git={git} onImported={openWindchill} /> : <Notice tone="info">Your role does not include importing Windchill exports. Open an export from the menu; an Admin can change this in Settings → Access.</Notice>)}
       {page === 'health' && <BacklogHealthPage azure={azure} store={store} />}
       {page === 'board' && <BoardPage azure={azure} store={store} current={view} month={month} git={git} onOpenConnection={openConnection} assign={assign} featureSetup={featureSetup.setups} />}
       {page === 'snapshots' && <SnapshotsPage {...pageProps} />}

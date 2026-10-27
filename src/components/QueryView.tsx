@@ -8,13 +8,14 @@ import { useColumnWidths } from './columnWidths'
 
 // Read-only view of a connection's query results: a summary strip (by state, type and person; overdue; changed this
 // week), then the query's own columns. Click a heading to sort; search, state and type filters; CSV export.
+// summary: false leaves out the summary strip and its State / Type filters (Tool Validations, QV-35).
 // unresolved: SELECT entries of the query that are not fields of the project (named in a notice instead of dropped silently).
 // queryOnly: exactly the query's columns (no Name / Release read from the paths); choose: a column chooser whose
 // choice is remembered per view in this browser, and the columns can be rearranged (drag a heading onto another, or
 // ← → in the chooser; the order is remembered per view too). extra: one more column after the query's (DP: the board match),
 // searched and exported with its text.
 export interface ExtraColumn { name: string; text: (item: AzureWorkItem) => string; cell: (item: AzureWorkItem) => ReactNode }
-export function QueryView({ name, items, columns, orderBy = [], unresolved = [], queryOnly = false, choose = false, extra }: { name: string; items: AzureWorkItem[]; columns?: QueryColumn[]; orderBy?: QueryOrder[]; unresolved?: string[]; queryOnly?: boolean; choose?: boolean; extra?: ExtraColumn }) {
+export function QueryView({ name, items, columns, orderBy = [], unresolved = [], queryOnly = false, choose = false, extra, summary: withSummary = true }: { name: string; items: AzureWorkItem[]; columns?: QueryColumn[]; orderBy?: QueryOrder[]; unresolved?: string[]; queryOnly?: boolean; choose?: boolean; extra?: ExtraColumn; summary?: boolean }) {
   const base = columns?.length ? columns : defaultViewColumns.map((ref) => ({ ref, name: columnName(ref) }))
   const all = queryOnly ? base : withReleaseColumns(base, items, (ref) => ({ ref, name: columnName(ref) }))
   const [hidden, setHidden] = useState<string[]>(() => { if (!choose) return []; try { const saved = JSON.parse(localStorage.getItem(hiddenColumnsKey(name)) ?? '[]'); return Array.isArray(saved) ? saved.filter((ref) => typeof ref === 'string') : [] } catch { return [] } })
@@ -50,11 +51,11 @@ export function QueryView({ name, items, columns, orderBy = [], unresolved = [],
   if (!items.length) return <EmptyState title={`“${name}” returned no work items.`} detail="Check the connection's query in Settings → Azure DevOps." />
   return <div className="query-view">
     {unresolved.length > 0 && <div className="notice warning" role="status">{columns?.length ? "Not shown" : "Showing the default columns"}: {unresolved.map((entry) => `“${entry}”`).join(", ")} {unresolved.length === 1 ? "is" : "are"} not a field of this project. Check the spelling in the query (reference name such as System.Title, or the field name such as Assigned To), then refresh.</div>}
-    <div className="view-summary">
+    {withSummary && <div className="view-summary">
       <div className="summary-row"><span className="summary-label">State</span>{chips(summary.byState, state, setState)}<span className="summary-facts"><b>{summary.overdue}</b> overdue · <b>{summary.changedThisWeek}</b> changed in 7 days</span></div>
       <div className="summary-row"><span className="summary-label">Type</span>{chips(summary.byType, type, setType)}</div>
       <div className="summary-row"><span className="summary-label">People</span>{summary.byPerson.slice(0, 8).map(([person, count]) => <span key={person} className="summary-person">{person} <b>{count}</b></span>)}{summary.byPerson.length > 8 && <span className="muted">+{summary.byPerson.length - 8} more</span>}</div>
-    </div>
+    </div>}
     <div className="query-toolbar"><input className="search" aria-label={`Search ${name}`} placeholder="Search all columns" value={search} onChange={(event) => setSearch(event.target.value)} /><span className="muted">{shown.length} of {items.length} items{state || type ? ' · filtered' : ''}</span>{widths.resized && <button type="button" className="ghost" onClick={widths.reset}>Reset widths</button>}{choose && <button type="button" className="ghost" aria-expanded={picking} onClick={() => setPicking(!picking)}>Columns ({cols.length} of {ordered.length})</button>}<button type="button" className="ghost" onClick={() => downloadCsv(viewCsv(shown, cols, extra), `${name.replace(/[^\w-]+/g, '-')}.csv`)}>Export CSV</button></div>
     {choose && picking && <fieldset className="column-chooser"><legend>Columns — tick the ones to show; drag or use ← → to rearrange</legend>
       <div className="button-row"><button type="button" className="text-button" onClick={() => hide([])}>Show all</button><button type="button" className="text-button" onClick={() => hide(ordered.slice(1).map((column) => column.ref))}>Only the first</button><button type="button" className="text-button" disabled={!order.length} onClick={() => arrange([])}>Query order</button></div>

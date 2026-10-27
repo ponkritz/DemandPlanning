@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { defaultStreams, profileForStream, streamOfProfile, exportForStream, sameStream } from '../src/streams.ts'
-import { dpRelease, ioccRelease, releaseFor } from '../src/releasePath.ts'
+import { dpRelease, ioccRelease, releaseFor, toolRelease } from '../src/releasePath.ts'
 import { matchScore, releaseRegister, normalizeReleaseSourceSettings, releaseFeatureTitle } from '../src/releaseSource.ts'
 import { defaultStreamReleases, streamCounts } from '../src/releaseOverview.ts'
 
@@ -64,4 +64,23 @@ test('Pulse Check streams: the five Azure streams in order, not-set-up ones list
   const counts = streamCounts(state, profiles, ['2026-09', '2026-10'], 'UTC')
   assert.deepEqual([counts[0].name, counts[0].months.map((entry) => [entry.month, entry.releases, entry.supported]), counts[0].releases, counts[0].supported], ['DP', [['2026-09', 0, 1], ['2026-10', 1, 1]], 1, 1], 'the same release supported in September and October counts once over the period')
   assert.equal(counts[2].supported, undefined)
+})
+
+test('Tool Validations: one entry per tool, whatever the number of its documents (QV-34)', () => {
+  const tool = (areaPath, iterationPath, title) => { const found = toolRelease(doc(9, areaPath, iterationPath, title)); return found ? `${found.name}|${found.release}` : undefined }
+  // The tool's folder below the project (the stream's own folder and release segments skipped), version from the paths.
+  assert.equal(tool('DHP\\Tool Validations\\Minitab', 'DHP\\Release 21.1\\S1', 'Minitab Validation Plan'), 'Minitab|21.1')
+  assert.equal(tool('DHP\\Tool Validations\\Minitab', 'DHP', 'Minitab Validation Report'), 'Minitab|')
+  assert.equal(tool('DHP\\Tool Validations', 'DHP', 'JIRA Cloud v9.4 Validation Protocol'), 'JIRA Cloud|9.4', 'no tool folder: the Title before its version')
+  assert.equal(tool('DHP', 'DHP', 'Polarion Validation Summary Report'), 'Polarion|', 'no version: the Title before its document word')
+  // The real query: Iteration Path "DHP.Vault\\Validation" holds no release; a "Validation" folder is not a tool.
+  assert.equal(tool('DHP.Vault\\Validation\\Minitab', 'DHP.Vault\\Validation', 'Minitab Validation Report'), 'Minitab|')
+  assert.equal(tool('DHP.Vault\\Validation', 'DHP.Vault\\Validation', 'Minitab 21.1 Validation Report'), 'Minitab|21.1')
+  assert.equal(tool('DHP', 'DHP', 'Polarion - IQ OQ Checklist'), 'Polarion|')
+  assert.equal(tool('DHP', 'DHP', ''), undefined)
+  const items = [doc(1, 'DHP\\Tool Validations\\Minitab', 'DHP', 'Minitab Validation Plan'), doc(2, 'DHP\\Tool Validations\\Minitab', 'DHP', 'Minitab Validation Protocol'), doc(3, 'DHP\\Tool Validations\\Minitab', 'DHP', 'Minitab Validation Report'), doc(4, 'DHP\\Tool Validations', 'DHP', 'JIRA Cloud v9.4 Validation Protocol'), doc(5, 'DHP\\Tool Validations', 'DHP', 'JIRA Cloud v9.4 Validation Report')]
+  const state = { azureSources: [{ connectionId: 'tv', name: 'tv', role: 'reference', organization: 'o', project: 'p', query: 'q', fetchedAt: '2026-10-20T00:00:00Z', items }] }
+  const streams = defaultStreamReleases(state, [{ id: 'tv', reason: 'Tool Validations', role: 'reference' }], '2026-10', 'UTC')
+  const tools = streams.find((stream) => stream.name === 'Tool Validations')
+  assert.deepEqual(tools.releases.map((entry) => [`${entry.name} ${entry.release}`.trim(), entry.documents]), [['JIRA Cloud 9.4', 2], ['Minitab', 3]], 'five documents, two tools')
 })

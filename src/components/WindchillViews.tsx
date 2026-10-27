@@ -72,7 +72,7 @@ export function WindchillViewsPanel({ windchill }: { windchill: WindchillWorkspa
 
 // A Windchill view page: its last results with the chosen columns; search and CSV export; Fetch, or results opened in
 // the browser and imported.
-export function WindchillPage({ view, windchill, git, gitNote }: { view: WindchillView; windchill: WindchillWorkspace; git?: GitStorage; gitNote?: { tone: string; text: string } }) {
+export function WindchillPage({ view, windchill, git, gitNote, month }: { view: WindchillView; windchill: WindchillWorkspace; git?: GitStorage; gitNote?: { tone: string; text: string }; month?: string }) {
   const [search, setSearch] = useState('')
   const [error, setError] = useState('')
   const [fromGit, setFromGit] = useState<{ tone: 'info' | 'success' | 'error'; text: string } | null>(null)
@@ -101,7 +101,7 @@ export function WindchillPage({ view, windchill, git, gitNote }: { view: Windchi
     {status && <Notice tone={status.state === 'error' ? 'error' : status.state === 'busy' ? 'info' : 'success'}>{status.message}</Notice>}
     {gitNote && <div className={`notice ${gitNote.tone}`} role="status">{gitNote.text}</div>}
     {!source ? <EmptyState title={`“${view.name}” has not been fetched yet.`} detail="Fetch it from Windchill, or Open in browser, save the results (Ctrl+S) or copy them, then Import file or Paste results. Results saved to Git from another computer also appear here." />
-      : <><WindchillReleasesPanel view={view} rows={source.rows} columns={columns} git={git} /><div className="query-view">
+      : <><WindchillReleasesPanel view={view} rows={source.rows} columns={columns} git={git} month={month} /><div className="query-view">
         <div className="query-toolbar"><input className="search" aria-label={`Search ${view.name}`} placeholder="Search all columns" value={search} onChange={(event) => setSearch(event.target.value)} /><span className="muted">{rows.length} of {source.rows.length}</span>{!view.exportFile && <Pill tone="info">{view.filters.length} filter{view.filters.length === 1 ? '' : 's'}</Pill>}<button type="button" className="ghost" onClick={() => downloadCsv(csv(), `${view.name.replace(/[^\w-]+/g, '-')}.csv`)}>Export CSV</button></div>
         <div className="azure-table query-table"><table><thead><tr>{columns.map((column) => <th key={column}>{column}</th>)}</tr></thead><tbody>{rows.slice(0, 1000).map((row, index) => <tr key={index}>{columns.map((column) => <td key={column}>{windchillCell(row, column)}</td>)}</tr>)}</tbody></table></div>
         {rows.length > 1000 && <p className="muted">Showing the first 1000 of {rows.length}; search to narrow, or export CSV for all.</p>}

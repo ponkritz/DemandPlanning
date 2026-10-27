@@ -14,7 +14,7 @@ export const pages: PageMeta[] = [
   { id: 'baselines', label: 'Baselines', icon: '⌁', group: 'Data & governance', detail: 'Release baselines from estimation rules and scope, against booked hours; plus the monthly task plan check.', usesMonth: true },
   { id: 'board', label: 'Backlogs', icon: '▤', group: 'I&D Board', detail: 'Plan and track the team’s work in an expandable Epic → Feature → User Story → Task backlog.', usesMonth: false },
   { id: 'health', label: 'Backlog Health', icon: '◎', group: 'I&D Board', detail: 'What the Scrum Master needs from the backlog, for everyone in Time Writing: open work in Sprints that have ended, Features without DoD, unassigned work; each list as CSV.', usesMonth: false },
-  { id: 'windchill', label: 'Import Windchill export', icon: '◇', group: 'Release Details', detail: 'A Windchill search exported to CSV and imported here: its results with the file’s columns.', usesMonth: false },
+  { id: 'windchill', label: 'Import Windchill export', icon: '◇', group: 'Release Details', detail: 'A Windchill search exported to CSV and imported here: its results with the file’s columns, and its releases for the chosen month.', usesMonth: true },
   { id: 'qemapping', label: 'QE Mapping', icon: '⇄', group: 'Data & governance', detail: 'QE mapping (planned).', usesMonth: false },
   { id: 'snapshots', label: 'Snapshots', icon: '▣', group: 'Data & governance', detail: 'Save point-in-time app data to SharePoint for LTE and PI Review; manage browser backups.', usesMonth: true },
   { id: 'admin', label: 'Settings', icon: '⚙', group: 'Data & governance', detail: 'Azure DevOps connections, Git and SharePoint storage, capacity, periods, resources, master data and audit.', usesMonth: true },

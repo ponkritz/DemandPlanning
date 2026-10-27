@@ -1,7 +1,7 @@
-import { windchillReleases } from '../windchillReleases'
+import { windchillReleases, windchillSupported } from '../windchillReleases'
 import { SupportedReleasesTable } from '../components/DpMonthCounts'
 import { useState } from 'react'
-import { ReleaseQuadrants } from '../components/ReleaseQuadrants'
+import { ReleaseQuadrants, SupportedSummary, type SupportedLine } from '../components/ReleaseQuadrants'
 import { CapacityMetrics, MonthSections } from '../components/MonthOverview'
 import { GapsPanel } from '../components/GapsPanel'
 import { ScopeSwitch } from '../components/ScopeSwitch'
@@ -38,8 +38,17 @@ export function PulseCheckPage({ month, azure, store, my, navigate, windchill, o
   const exports = defaultStreams.filter((stream) => stream.source === 'windchill').map((stream) => ({ stream, view: exportForStream(stream, windchill.views) }))
   const streams = defaultStreamReleases(store.state, azure.connectionProfiles, month)
   const lastStreams = defaultStreamReleases(store.state, azure.connectionProfiles, last)
+  // The Supported summary (QV-33, QV-34): DP's Supported Releases, the Tool Validations' unique tools, then the Windchill
+  // streams' releases with the latest date in the month — every line for the tab's month (the month filter follows the
+  // page: Releases shows last month, Current month releases the header month), in the default stream order.
+  const supportedLines = (shown: ReleaseStream[], at: string): SupportedLine[] => [
+    ...shown.filter((stream) => stream.supportedReleases).map((stream) => ({ name: stream.name, releases: stream.supportedReleases!.map((entry) => `${entry.name} ${entry.release}`) })),
+    // Tool Validations: the unique tools with a document in the tab's month (validated or supported), one entry per tool.
+    ...shown.filter((stream) => defaultStreams.find((def) => def.name === stream.name)?.rule === 'tool').map((stream) => ({ name: stream.name, releases: stream.releases.map((entry) => [entry.name, entry.release].filter(Boolean).join(' ')) })),
+    ...exports.map(({ stream, view }) => { const source = view ? windchill.sources.find((entry) => entry.viewId === view.id) : undefined; return { name: stream.name, releases: source ? windchillSupported(source.rows, source.columns.length ? source.columns : view?.columns ?? [], at) : [] } }),
+  ]
   const releases = (shown: ReleaseStream[], at: string) => <>
-    {shown.length ? <ReleaseQuadrants streams={shown} month={at} /> : <EmptyState title="No Azure DevOps Server views under Release Details." detail="Add an on-prem connection shown in the menu (Settings → Azure DevOps); fetch it in the desktop app or load its data from Git." />}
+    {shown.length ? <ReleaseQuadrants streams={shown} month={at} supported={supportedLines(shown, at)} /> : <><EmptyState title="No Azure DevOps Server views under Release Details." detail="Add an on-prem connection shown in the menu (Settings → Azure DevOps); fetch it in the desktop app or load its data from Git." />{supportedLines(shown, at).some((line) => line.releases.length) && <SupportedSummary lines={supportedLines(shown, at)} month={at} />}</>}
     {shown.filter((stream) => stream.supportedReleases).map((stream) => <TablePanel key={`supported:${stream.id}`} title={`Supported Releases · ${stream.name} · ${monthName(at)}`} info={<p>Each release once that passed at least one milestone in {monthName(at)} — DT (Design Transfer), SFV (Start of Verification / Hardening), PRD (PRD Milestone) or RPE (Release Planning Event) — with that milestone's Status Done and its Date in the month (your time zone). A release passing several milestones in the month counts once; two rows with the same PsName and Release are one release. Completed Releases are those whose DT is among them.</p>} count={`${stream.supportedReleases!.length} release${stream.supportedReleases!.length === 1 ? '' : 's'} · ${stream.milestones ?? 0} milestone${stream.milestones === 1 ? '' : 's'}`} empty={stream.supportedReleases!.length ? undefined : stream.fetchedAt ? `No release passed a milestone in ${monthName(at)}.` : 'The DP view has not been fetched yet (Release Details → DP).'}>
       {stream.supportedReleases!.length > 0 && <SupportedReleasesTable releases={stream.supportedReleases!} />}
     </TablePanel>)}
