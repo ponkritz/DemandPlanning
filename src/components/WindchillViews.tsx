@@ -1,11 +1,11 @@
-import { csvCell } from '../csv'
 import { useState } from 'react'
-import { windchillOps, windchillCell, type WindchillFilter, type WindchillView } from '../windchillViews'
+import { windchillCsv, windchillOps, windchillCell, type WindchillFilter, type WindchillView } from '../windchillViews'
 import { formatDateTime } from '../format'
 import { downloadCsv } from '../download'
 import type { WindchillWorkspace } from '../useWindchill'
 import type { GitStorage } from '../useGitStorage'
 import { EmptyState, Notice, Panel, Pill } from './ui'
+import { WindchillReleasesPanel } from './WindchillReleasesPanel'
 
 const blank = (): WindchillView => ({ id: crypto.randomUUID().replaceAll('-', ''), name: '', entitySet: '', filters: [{ field: '', op: 'eq', value: '' }], columns: [], showInMenu: true })
 
@@ -89,7 +89,7 @@ export function WindchillPage({ view, windchill, git, gitNote }: { view: Windchi
   const source = windchill.sources.find((entry) => entry.viewId === view.id), status = windchill.status[view.id]
   const columns = source?.columns.length ? source.columns : view.columns
   const rows = (source?.rows ?? []).filter((row) => !search.trim() || columns.some((column) => windchillCell(row, column).toLowerCase().includes(search.trim().toLowerCase())))
-  const csv = () => [columns.join(','), ...rows.map((row) => columns.map((column) => csvCell(windchillCell(row, column))).join(','))].join('\r\n')
+  const csv = () => windchillCsv(columns, rows)
   return <Panel className="connection-panel backlog-panel">
     <div className="view-source-bar"><div><strong>{view.name}</strong><span className="muted"> · {view.exportFile ? `Windchill export ${view.exportFile}` : view.entitySet}{source ? ` · ${source.rows.length} results · ${view.exportFile ? 'imported' : 'fetched'} ${formatDateTime(source.fetchedAt)}${source.fromGit ? ' (desktop app, via Git)' : ''}` : ''}</span></div>
       <div className="button-row">{view.exportFile ? <ExportFileButton label="Import newer export" onFile={(text, file) => windchill.importExport(text, file, '', view.id)} onError={setError} /> : <button className="primary" disabled={status?.state === 'busy'} onClick={() => void windchill.fetchView(view.id)}>{status?.state === 'busy' ? 'Searching…' : source ? 'Refresh from Windchill' : 'Fetch from Windchill'}</button>}
@@ -101,11 +101,11 @@ export function WindchillPage({ view, windchill, git, gitNote }: { view: Windchi
     {status && <Notice tone={status.state === 'error' ? 'error' : status.state === 'busy' ? 'info' : 'success'}>{status.message}</Notice>}
     {gitNote && <div className={`notice ${gitNote.tone}`} role="status">{gitNote.text}</div>}
     {!source ? <EmptyState title={`“${view.name}” has not been fetched yet.`} detail="Fetch it from Windchill, or Open in browser, save the results (Ctrl+S) or copy them, then Import file or Paste results. Results saved to Git from another computer also appear here." />
-      : <div className="query-view">
+      : <><WindchillReleasesPanel name={view.name} rows={source.rows} columns={columns} /><div className="query-view">
         <div className="query-toolbar"><input className="search" aria-label={`Search ${view.name}`} placeholder="Search all columns" value={search} onChange={(event) => setSearch(event.target.value)} /><span className="muted">{rows.length} of {source.rows.length}</span>{!view.exportFile && <Pill tone="info">{view.filters.length} filter{view.filters.length === 1 ? '' : 's'}</Pill>}<button type="button" className="ghost" onClick={() => downloadCsv(csv(), `${view.name.replace(/[^\w-]+/g, '-')}.csv`)}>Export CSV</button></div>
         <div className="azure-table query-table"><table><thead><tr>{columns.map((column) => <th key={column}>{column}</th>)}</tr></thead><tbody>{rows.slice(0, 1000).map((row, index) => <tr key={index}>{columns.map((column) => <td key={column}>{windchillCell(row, column)}</td>)}</tr>)}</tbody></table></div>
         {rows.length > 1000 && <p className="muted">Showing the first 1000 of {rows.length}; search to narrow, or export CSV for all.</p>}
-      </div>}
+      </div></>}
   </Panel>
 }
 

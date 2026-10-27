@@ -19,7 +19,7 @@ This plan verifies every requirement in SRS-DPH-001 and covers all of its use ca
 Out of scope:
 
 - load testing beyond NFR-02;
-- penetration testing;
+- penetration testing (done separately: SECURITY-ASSESSMENT.md §2);
 - validation of Azure DevOps process rules (which states a process allows).
 
 ## 2. Test levels
@@ -137,7 +137,7 @@ Cases marked **UAT** are also run in acceptance testing.
   - Step 3: it lists "Digital Platform" only.
   - Step 4: it lists "DP view".
 
-**TC-NAV-03 Header content and month picker** — Req NAV-08…12
+**TC-NAV-03 Header content and month picker** — Req NAV-08…11, NAV-35
 - Pre: TD-01 loaded.
 - Steps:
   1. Visit every page.
@@ -188,7 +188,7 @@ Cases marked **UAT** are also run in acceptance testing.
   - Team appears only for Time Writing and Backlog view. "Your work email (required)" appears only for Time Writing.
   - Show in menu turns on for Time Writing and Backlog view, and off for the other three roles.
 
-**TC-CON-02 Validation messages** — Req CON-04…08
+**TC-CON-02 Validation messages** — Req CON-04…08, CON-19
 - Steps: save the form, each time with:
   - (a) an empty name;
   - (b) Time Writing with no team and no query;
@@ -337,9 +337,11 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-CON-36 A PAT never follows a connection to another host** — Req CON-68, NAV-28 — L1 `view-definitions.test.mjs` ("restore: a view moved to another host in Git never carries the old server PAT to the new host": the moved connection has no PAT and is reported under noPat, the old server keeps its PAT, the new host gets none, a PAT entered for the restore applies to the new host); browser check: edit `azure-views.json` in the data repo so one connection's URL points to another host, Load from Git → the connection shows "no PAT" and Settings → Azure DevOps → Servers and PATs lists no PAT for the new host.
 
-**TC-CON-37 CSV formula cells neutralised** — Req CON-69 — L1 `query-view.test.mjs` ("CSV exports neutralise formula cells and keep numbers; a bad numeric entity stays as written": =HYPERLINK, @SUM, +cmd, -cmd get an apostrophe; -3, +1.5 and ordinary text do not; viewCsv), `qe-mapping.test.mjs` and `backlog-health.test.mjs` (their CSV cases still pass through the shared helper); browser check: a work item titled "=1+1" exports as '=1+1 and opens in Excel as text.
+**TC-CON-37 CSV formula cells neutralised** — Req CON-69 — L1 `windchill-views.test.mjs` ("CSV export neutralises formulas in the header row as well as in cells, and quotes column names (CON-69, PT-01)"), `query-view.test.mjs` ("CSV exports neutralise formula cells and keep numbers; a bad numeric entity stays as written": =HYPERLINK, @SUM, +cmd, -cmd get an apostrophe; -3, +1.5 and ordinary text do not; viewCsv), `qe-mapping.test.mjs` and `backlog-health.test.mjs` (their CSV cases still pass through the shared helper); browser check: a work item titled "=1+1" exports as '=1+1 and opens in Excel as text.
 
-**TC-CON-38 No blank app on bad data; desktop navigation guards** — Req CON-70 — L1 `query-view.test.mjs` (the entity &#1114112; stays as written, &#65; becomes A); browser check: a Description holding "&#1114112;" renders in the query view; the ErrorBoundary page (throw inside a page in dev) shows Reload and Try to continue; a QE Mapping upload of a zip bomb .xlsx is refused with "too large"; desktop: dragging a link onto the window opens it in the browser and the window keeps the app.
+**TC-CON-38 No blank app on bad data; desktop navigation guards** — Req CON-70 — L1 `windchill-views.test.mjs` ("a Windchill snapshot from Git drops rows that are not plain objects instead of crashing the view (CON-70, PT-07)"), `query-view.test.mjs` (the entity &#1114112; stays as written, &#65; becomes A); browser check: a Description holding "&#1114112;" renders in the query view; the ErrorBoundary page (throw inside a page in dev) shows Reload and Try to continue; a QE Mapping upload of a zip bomb .xlsx is refused with "too large"; desktop: dragging a link onto the window opens it in the browser and the window keeps the app.
+
+**TC-CON-39 Unique releases from a Windchill export** — Req CON-71 — L1 `windchill-releases.test.mjs` ("a document name splits at its first version: release name, release number, document name"; "clubbed names: every name + release pair is a release, whatever the delimiters; the rest is the document name"; "a clubbed document counts once for each release it names"; "unique releases from an export: name + number, case and trailing zeros ignored; documents and latest date kept"); browser check: import an S&S IT export with "Remote Diagnostics 1.6 Verification Report", "remote diagnostics 1.6.0 - Test Plan", "Remote Diagnostics 1.7 SRS", "CareLink_R3.2_SRS", "IntelliSpace Portal - v12.1 - Test Plan", "Service1_rel1_Service2_rel2_Test Plan" and "Quality Manual" → Releases shows "6 releases · 6 of 7 documents · 1 clubbed" (Remote Diagnostics 1.6 with 2 documents; Service1 1 and Service2 2 each with Test Plan), "1 document without a release number in the name", Export releases CSV; Pulse Check → Windchill exports shows Releases 6; no page errors. **UAT**
 
 **TC-CON-27 Map a Feature setup to an Epic** — Req CON-59 — L1 `feature-setup.test.mjs` ("built-in stories as a setup give exactly the titles of the built-in creation"; "copy a setup to another Epic: replaces the target, keeps the source, no-op without a source"); browser check with a writable Git store holding a personal setup of another Epic: My setup shows it with "applies now" on step 1; "Copy this setup to Epic #" 13946 → the four stories appear under #13946 and the panel says "changed here, not saved yet"; Save to Git commits `feature-setup/<email>.json` holding both Epics and the panel then marks My setup as applying to #13946; "Go to Epic #" another number with no setup offers the two built-in buttons. **UAT**
 
@@ -690,7 +692,7 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-QV-09 Bare field names with a prefix** — Req QV-23 — L1 `query-view.test.mjs` ("a bare field name finds its prefixed reference name (\"SourceProgram\" → Custom.SourceProgram), only when exactly one field ends with it"); browser check with Azure DevOps mocked: a DP query selecting [SourceProgram] over items whose field is Custom.SourceProgram shows RSGMS, RSGMS, DHP in that column, with and without the project's field list (before the fix the column was blank).
 
-**TC-QV-10 DP: DDT month, Completed and Supported Releases** — Req QV-24, QV-25 — L1 `dp-milestones.test.mjs` ("DP counts for a month: Completed = DDT Done in the month; Supported = DDT + DRfH + DRPC + DRPE Done in the month"; "the DP table month is the DDT Date month; a row without DDT Date has none; release name from PsName and Release"), `streams.test.mjs` ("Pulse Check streams: …": DP supported 2, titles "SFV Done", "DT Done"; the Dashboard's streamCounts per month and in total); browser check with Azure DevOps mocked (DP query with PsName, Release and the eight milestone fields; #501 DDT Done 5 Oct + DRfH Done 2 Oct, #502 DDT In Progress 20 Oct + DRPC Done 21 Oct, #503 DDT Done 3 Nov + DRPE Done 8 Oct, #504 DDT Done 10 Sep): DP in October shows "Month filter: by DDT Date", rows 501 and 502, "Completed Releases · October 2026: 1", "Supported Releases: 4 — DT 1 · SFV 1 · PRD 1 · RPE 1" and the four milestones counted in date order; Pulse Check → September: DP 1 completed · 1 supported (Release 504, DT Done); Current month (October): DP 1 completed · 4 supported with four titles; no page errors. **UAT**
+**TC-QV-10 DP: DDT month, Completed and Supported Releases** — Req QV-24, QV-25 — L1 `dp-milestones.test.mjs` ("DP counts for a month: Completed = releases with DDT Done in the month; Supported = unique releases with any milestone Done in the month"; "Supported Releases are unique by PsName + Release: two rows of the same release count once; rows without them by work item"; "the DP table month is the DDT Date month; a row without DDT Date has none; release name from PsName and Release"), `streams.test.mjs` ("Pulse Check streams: …": DP supported 1, title "SFV · DT Done"; the same release supported in two months counts once over the period; the Dashboard's streamCounts per month and in total); browser check with Azure DevOps mocked (DP query with PsName, Release and the eight milestone fields; #501 DDT Done 5 Oct + DRfH Done 2 Oct, #502 DDT In Progress 20 Oct + DRPC Done 21 Oct, #503 DDT Done 3 Nov + DRPE Done 8 Oct, #504 DDT Done 10 Sep): DP in October shows "Month filter: by DDT Date", rows 501 and 502, "Completed Releases · October 2026: 1", "Supported Releases: 3" with "4 milestones: DT 1 · SFV 1 · PRD 1 · RPE 1" and the three releases counted, #501 once with SFV and DT; Pulse Check → September: DP 1 completed · 1 supported (Release 504, DT Done); Current month (October): DP 1 completed · 3 supported with three titles; no page errors. **UAT**
 
 **TC-QV-11 DP milestone names and query scope** — Req QV-26 — L1 `dp-milestones.test.mjs` ("DP milestones carry the team names: DT, SFV, PRD, RPE"), `streams.test.mjs` (titles "SFV Done", "DT Done"); browser check with Azure DevOps mocked (DP query rows from two projects): the Supported Releases hint reads "DT n · SFV n · PRD n · RPE n", "What was counted" shows "DT · Design Transfer · Completed", "SFV · Start of Verification / Start of Hardening", the legend lists all four names, and rows of both projects are shown and counted.
 
@@ -702,13 +704,15 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-QV-15 Rearrange the DP columns** — Req QV-30 — L1 `query-view.test.mjs` ("column order: saved order first, new query columns keep their place; move by drag or one step"); browser check with Azure DevOps mocked (DP view): dragging the Title heading onto the first heading makes Title the first column; dragging "QMS-0025 match" onto the second heading puts it second with its cells; Columns → "Move ID right" moves ID one step; the order is kept after a reload; "Query order" restores the query's order with QMS-0025 match last; no page errors.
 
-**TC-QV-16 Create Feature from Release Details opens the default form** — Req QV-31 — L1 `dp-board-match.test.mjs` ("Create Feature from a DP row: Program (SourceProgram, else DP) | PsName | vRelease, falling back to the Title"), `release-source.test.mjs` ("Create Feature title from a release: \"Stream | Name | vRelease\", mapping back to the release"); browser check with Azure DevOps mocked (QMS-0025 board with Epic #700 "DP"; DP row #502 SourceProgram DHP, PsName DoseNav, Release 2.1, no match): Create Feature opens "Add Feature under an Epic" with Parent Epic "#700 · DP" and the title "DHP | DoseNav | v2.1"; without a Time Writing connection the button is disabled and says so; no page errors. **UAT**
+**TC-QV-16 Create Feature from Release Details opens the default form** — Req QV-31, CON-56 — L1 `dp-board-match.test.mjs` ("Create Feature from a DP row: Program (SourceProgram, else DP) | PsName | vRelease, falling back to the Title"), `release-source.test.mjs` ("Create Feature title from a release: \"Stream | Name | vRelease\", mapping back to the release"); browser check with Azure DevOps mocked (QMS-0025 board with Epic #700 "DP"; DP row #502 SourceProgram DHP, PsName DoseNav, Release 2.1, no match): Create Feature opens "Add Feature under an Epic" with Parent Epic "#700 · DP" and the title "DHP | DoseNav | v2.1"; without a Time Writing connection the button is disabled and says so; no page errors. **UAT**
+
+**TC-QV-17 Supported Releases section in Pulse Check** — Req QV-32, QV-24, QV-25 — L1 `dp-milestones.test.mjs` (the two unique-release tests), `streams.test.mjs` ("Pulse Check streams: …"); browser check with Azure DevOps mocked (the TC-QV-10 data): Pulse Check → Current month releases (October) shows "Supported Releases · DP · October 2026" with "3 releases · 4 milestones", #501 RSGMS 3.0.0.2 once with SFV and DT chips and "Completed (DT)"; the Releases tab (September) shows #504 with DT; no page errors.
 
 ### 6.9 Dashboard and capacity
 
 TC-OVR-01 to TC-OVR-03 tested the earlier Overview and are **retired** with OVR-01 to OVR-08; the Dashboard is tested by TC-OV-11 to TC-OV-14 (§6.2).
 
-**TC-OVR-01 Scope and tabs (retired)** — Req OVR-01…04 — **UAT**
+**TC-OVR-01 Scope and tabs** — *(Retired — see TC-OV-11)* Req OVR-01…04
 - Expected:
   - The default is Team, and the choice is remembered.
   - Individual with no person shows "Choose whose overview to show.".
@@ -983,17 +987,17 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 ### 6.18 Documentation
 
-**TC-DOC-01 Documents and rendering** — Req DOC-01…03, DOC-05 — **UAT** — L1 `markdown.test.mjs` (every document in `docs/` is bundled and parses; anchors, tables, nested lists, inline formatting; link schemes).
+**TC-DOC-01 Documents and rendering** — Req DOC-01…03, DOC-05 — **UAT** — L1 `markdown.test.mjs` (every document in `docs/` is bundled and parses; anchors, tables, nested lists, inline formatting; link schemes); E2E `documents-and-data.e2e.mjs` (one tab per document, each rendered without raw Markdown, the Validation Package tabs present).
 - Steps:
   1. Open Documentation.
   2. Open each tab.
 - Expected:
-  - There are six tabs, matching the files in `docs/`.
+  - There is one tab per file in `docs/` (thirteen in this build), in the order of DOC-01, Validation package first.
   - Headings, tables, nested lists, bold text and code display formatted, with no raw Markdown characters such as `|---|` or `**`.
   - The panel shows "docs/{file} · this build".
   - Inspection: the Markdown component builds React elements and does not use `dangerouslySetInnerHTML`.
 
-**TC-DOC-02 Links, sections and download** — Req DOC-04, DOC-06…08
+**TC-DOC-02 Links, sections and download** — Req DOC-04, DOC-06…08 — E2E `documents-and-data.e2e.mjs` (the TEST-PLAN.md §7 link opens the Test plan at section 7; Download .md gives the identical file)
 - Steps:
   1. In Requirements, click the "TEST-PLAN.md §7" link.
   2. Click a section in "On this page".
@@ -1005,13 +1009,25 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
   - Step 3 downloads a file with the document's file name and identical content.
   - After step 4 the last document opened is still shown.
 
+**TC-DOC-03 Validation Package: documents, traceability and consistency checks** — Req DOC-09, DOC-10, DOC-11 — **UAT** — L1 `traceability.test.mjs` ("requirement IDs expand ranges and keep their width"; "the requirements have three levels, chained without gaps, with unique IDs"; "every test case names known requirements, every UAT day live test cases, every known issue known requirements"; "every source file is a listed software component, with requirement areas that exist"; "the committed traceability matrix is complete and current"), `validation-package.test.mjs` ("every package document has its required sections"; "mitigations, DFMEA rows, findings, risks and issues have unique IDs and the summary counts match"; "every ID cited in the package exists where it is defined"; "the package index lists every document in docs/, and the app bundles them all"); inspection: `node scripts/traceability.mjs --check` prints "Traceability: complete and current."; editing a requirement row without regenerating the matrix, or removing a test case that covers a requirement, makes `pnpm test` fail with the gap named.
+- Steps:
+  1. Open Documentation → Validation package.
+  2. Open Traceability matrix; read the header table and §8.
+  3. Open Known issues, Software components, Security assessment, DFMEA and Development process.
+  4. In Security assessment §4, follow a mitigation's requirement ID to Requirements and its test case ID to the Test plan.
+- Expected:
+  - The Validation package tab lists the thirteen documents with their standard clauses and the approval table.
+  - The matrix header shows 0 requirements in force without a test case and 0 trace gaps; §8 says "None".
+  - Every document opens, rendered; the Known issues register has the KB, OI, residual-risk and limitation tables; the components inventory lists the in-house files by layer, the SOUP table with versions and licences, and the audit result.
+  - The IDs resolve: the requirement row exists and the test case exists and names that requirement.
+
 ### 6.19 User interface
 
 **TC-UI-01 Theme** — Req UI-01, UI-02 — L1 `theme.test.mjs`.
 
 **TC-UI-02 Buttons** — Req UI-05 — browser check in light and dark theme: Settings → Azure DevOps shows "Open QMS-0025 →" solid indigo with white text and a shadow, "＋ Add server" and "Fetch 1" outlined, disabled "Save PAT" flat grey; Settings → Feature setup list: Edit indigo, Delete red, the Save to Git bar's button green (grey while disabled); every text action in a notice is a tinted pill; the row buttons stay in view.
 
-**TC-UI-03 App name and mark** — Req UI-06 — browser check: the sidebar shows the bars-and-check mark with "I&D Quality" over "Demand Planning"; the tab title reads "I&D Quality Demand Planning"; the favicon is the mark on the teal-to-indigo tile; the desktop update feed still names Demand-Planning-Hub-Setup.exe (`scripts/desktop-manifest.cjs`, build-and-deploy.yml unchanged).
+**TC-UI-03 App name and mark** — Req UI-06 — browser check: the sidebar shows the calendar-and-shield mark with "I&D Quality" over "Demand Planning"; the tab title reads "I&D Quality Demand Planning"; the favicon is the mark on the teal-to-indigo tile; the desktop update feed still names Demand-Planning-Hub-Setup.exe (`scripts/desktop-manifest.cjs`, build-and-deploy.yml unchanged).
 - L3 steps:
   1. Click the toggle three times.
   2. Load `?theme=dark` and then reload without the parameter.
@@ -1039,6 +1055,20 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
   - `desktop-latest/latest.json` has the same buildNumber;
   - its SHA-256 values equal SHA256SUMS.
 
+**TC-CI-02 End-to-end suite** — Req CI-06 — E2E `shell.e2e.mjs`, `documents-and-data.e2e.mjs` (`pnpm test:e2e` after `pnpm build:web`: every scenario passes; each scenario is named after the UAT case it automates); inspection: the workflow job "End-to-end tests" runs on every pull request and push to main and fails the run when a scenario fails.
+- Steps:
+  1. Run `pnpm build:web && pnpm test:e2e` locally.
+  2. Open the CI run of a pull request.
+- Expected:
+  - All scenarios pass with no page errors; the suite needs no network.
+  - The "End-to-end tests" job is present and green; a deliberately failing scenario turns the run red.
+
+**TC-CI-03 CI token scope** — Req CI-07 — inspection of `.github/workflows/build-and-deploy.yml`.
+- Expected:
+  - The top-level `permissions` is `contents: read`; the jobs that run `pnpm install`, `pnpm lint`, `pnpm test`, `pnpm build:web`, `pnpm test:e2e` or electron-builder have no `contents: write`.
+  - Every `actions/checkout` step sets `persist-credentials: false`.
+  - The jobs that write to releases (`publish-tagged-release`, `publish-windows`, `publish-macos`) only download artefacts and run `gh release`; their `run:` steps read `$TAG`, `$REPO` and similar environment variables, never `${{ }}` inside the script.
+
 ### 6.21 QE Mapping
 
 **TC-QEM-01 Read an Excel as it is** — Req QEM-02 — L1 `qe-mapping.test.mjs` ("reads an Excel workbook as it is: every sheet, shared / rich / inline strings, dates, numbers, booleans, formulas"; "reads CSV with commas, semicolons or tabs, quotes and line breaks in fields"; "a sheet becomes a table as it is: header from the first non-empty row, names made unique, empty rows and columns dropped").
@@ -1056,7 +1086,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | NAV-01…04 | TC-NAV-01 |
 | NAV-05, NAV-06 | TC-NAV-02 |
 | NAV-07 | TC-NAV-01 |
-| NAV-08…12 | TC-NAV-03 |
+| NAV-08…11, NAV-35 | TC-NAV-03 |
 | NAV-13 | TC-NAV-04 |
 | NAV-14, NAV-15 | TC-NAV-05 |
 | NAV-16 | TC-NAV-06 |
@@ -1081,7 +1111,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CON-52, CON-53 | TC-CON-23, TC-CON-26 |
 | CON-54 | TC-ATM-08 |
 | CON-55 | TC-CON-24 |
-| CON-56 | TC-QV-06 |
+| CON-56 | TC-QV-16 |
 | CON-57 | TC-CON-25 |
 | CON-58 | TC-CON-26 |
 | CON-59 | TC-CON-27 |
@@ -1096,6 +1126,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CON-68 | TC-CON-36 |
 | CON-69 | TC-CON-37 |
 | CON-70 | TC-CON-38 |
+| CON-71 | TC-CON-39 |
 | QV-20 | TC-QV-06 |
 | QV-21 | TC-QV-07 |
 | CON-21, CON-22 | TC-CON-08 |
@@ -1162,6 +1193,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | QV-29 | TC-QV-14 |
 | QV-30 | TC-QV-15 |
 | QV-31 | TC-QV-16 |
+| QV-32 | TC-QV-17 |
 | OVR-01…08 | retired (TC-OVR-01…03 retired) |
 | OV-11 | TC-OV-11 |
 | OV-12 | TC-OV-12 |
@@ -1202,12 +1234,15 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | SMP-01…04 | TC-SMP-01 |
 | DOC-01…03, DOC-05 | TC-DOC-01 |
 | DOC-04, DOC-06…08 | TC-DOC-02 |
+| DOC-09…11 | TC-DOC-03 |
 | UI-01, UI-02 | TC-UI-01 |
 | UI-03, UI-04 | TC-INS-03 |
 | UI-05 | TC-UI-02 |
 | UI-06 | TC-UI-03 |
 | CI-01…04 | TC-INS-04, TC-CI-01 |
 | CI-05 | TC-UPD-01 |
+| CI-06 | TC-CI-02 |
+| CI-07 | TC-CI-03 |
 | QEM-01 | TC-QEM-03, TC-QEM-04 |
 | QEM-02 | TC-QEM-01, TC-QEM-04 |
 | QEM-03…QEM-06 | TC-QEM-02, TC-QEM-04 |
@@ -1231,8 +1266,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-05 | TC-MON-07 |
 | UC-06 | TC-ATM-01…11, TC-TWN-03, TC-CON-20, TC-CON-33, TC-CON-34 |
 | UC-07 | TC-BKL-01…05, TC-CON-23, TC-CON-25…27, TC-CON-29…32, TC-CON-35 |
-| UC-08 | TC-QV-01…05, TC-FET-07, TC-CON-08, TC-CON-11…16, TC-QV-08, TC-QV-09, TC-QV-10, TC-QV-11, TC-QV-12, TC-QV-13, TC-QV-14, TC-QV-15, TC-QV-16, TC-CON-37, TC-CON-38 |
-| UC-09 | TC-OV-11…14, TC-CAP-01, TC-CAP-02, TC-CAP-03, TC-CON-21, TC-QV-10, TC-QV-11 |
+| UC-08 | TC-QV-01…05, TC-FET-07, TC-CON-08, TC-CON-11…16, TC-QV-08, TC-QV-09, TC-QV-10, TC-QV-11, TC-QV-12, TC-QV-13, TC-QV-14, TC-QV-15, TC-QV-16, TC-CON-37, TC-CON-38, TC-CON-39 |
+| UC-09 | TC-OV-11…14, TC-CAP-01, TC-CAP-02, TC-CAP-03, TC-QV-17, TC-CON-21, TC-QV-10, TC-QV-11 |
 | UC-10 | TC-OV-11 (Months, Streams), TC-OV-13 |
 | UC-11 | TC-BAS-01…04 |
 | UC-12 | TC-GIT-01…04, TC-GIT-05 |
@@ -1242,8 +1277,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-16 | TC-UPD-01, TC-UPD-02 |
 | UC-17 | TC-DSK-01…03, TC-INS-02 |
 | UC-18 | TC-SMP-01, TC-ATM-06, TC-GIT-04 |
-| UC-19 | TC-INS-04, TC-CI-01 |
-| UC-20 | TC-DOC-01, TC-DOC-02 |
+| UC-19 | TC-INS-04, TC-CI-01, TC-CI-02, TC-CI-03, TC-DOC-03 |
+| UC-20 | TC-DOC-01, TC-DOC-02, TC-DOC-03 |
 | UC-21 | TC-SCR-01 |
 | UC-22 | TC-ACC-01, TC-ACC-02 |
 | UC-23 | TC-QEM-01…04 |

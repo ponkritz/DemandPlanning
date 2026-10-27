@@ -1,6 +1,8 @@
 // Windchill views (Option A): a name, an object type (an OData entity set such as DocMgmt/Documents), filter rows
 // (field, condition, value) and the columns to show. The app turns them into one read-only REST query, run from the
 // desktop app. Saved in this browser like the Azure DevOps connections; results are stored with the app data.
+import { csvCell } from './csv.ts'
+
 export type WindchillOp = 'eq' | 'ne' | 'startswith' | 'contains' | 'gt' | 'ge' | 'lt' | 'le'
 export interface WindchillFilter { field: string; op: WindchillOp; value: string }
 // exportFile: an imported Windchill export (Release Details) rather than a search; its columns are the file's.
@@ -85,6 +87,9 @@ export function windchillCell(row: Record<string, unknown>, column: string): str
   if (typeof value === 'object') { const entry = value as Record<string, unknown>; return String(entry.Display ?? entry.Value ?? JSON.stringify(value)) }
   return String(value)
 }
+
+// CSV of a view's rows: header and cells both through csvCell (quoted, formula-safe — CON-69), CRLF line ends.
+export const windchillCsv = (columns: string[], rows: Record<string, unknown>[]) => [columns.map(csvCell).join(','), ...rows.map((row) => columns.map((column) => csvCell(windchillCell(row, column))).join(','))].join('\r\n')
 
 const validStored = (value: unknown): value is WindchillView => Boolean(value && typeof value === 'object' && typeof (value as WindchillView).id === 'string' && /^[\w-]{1,80}$/.test((value as WindchillView).id) && typeof (value as WindchillView).name === 'string' && typeof (value as WindchillView).entitySet === 'string' && Array.isArray((value as WindchillView).filters) && Array.isArray((value as WindchillView).columns))
 export function loadWindchillViews(storage: Pick<Storage, 'getItem'> = localStorage): WindchillView[] {

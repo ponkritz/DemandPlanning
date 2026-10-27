@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
-import { buildWindchillQuery, validateWindchillView, windchillCell, windchillSearchUrl, parseWindchillPage } from '../src/windchillViews.ts'
+import { buildWindchillQuery, validateWindchillView, windchillCell, windchillCsv, windchillSearchUrl, parseWindchillPage } from '../src/windchillViews.ts'
 import { windchillSnapshotFile, parseWindchillSnapshot, applyWindchillSnapshots } from '../src/windchillSnapshots.ts'
 const { queryWindchill } = createRequire(import.meta.url)('../electron/windchill.cjs')
 
@@ -60,4 +60,17 @@ test('browser route: the search address to open, and results saved or copied fro
   assert.throws(() => parseWindchillPage('not json', service), /not the JSON/)
   assert.throws(() => parseWindchillPage('[{"id":"DocMgmt"}]', service), /domain list/)
   assert.throws(() => parseWindchillPage('{"error":{"message":"Invalid property Foo"}}', service), /error: Invalid property Foo/)
+})
+
+test('CSV export neutralises formulas in the header row as well as in cells, and quotes column names (CON-69, PT-01)', () => {
+  const csv = windchillCsv(['=cmd|\' /C calc\'!A0', 'Name, full', 'Number'], [{ '=cmd|\' /C calc\'!A0': 'x', 'Name, full': '=1+1', Number: '-3' }])
+  const [header, row] = csv.split('\r\n')
+  assert.equal(header, `'=cmd|' /C calc'!A0,"Name, full",Number`)
+  assert.equal(row, `x,'=1+1,-3`)
+})
+
+test('a Windchill snapshot from Git drops rows that are not plain objects instead of crashing the view (CON-70, PT-07)', () => {
+  const source = { viewId: 'dhf', name: 'Released DHF', fetchedAt: '2026-10-20T10:00:00Z', query: 'q', columns: ['Number'], rows: [{ Number: 'DHF-1' }, null, 5, 'text', ['a'], { Number: 'DHF-2' }] }
+  const file = parseWindchillSnapshot(JSON.stringify(windchillSnapshotFile(view, source)))
+  assert.deepEqual(file.source.rows.map((row) => windchillCell(row, 'Number')), ['DHF-1', 'DHF-2'])
 })

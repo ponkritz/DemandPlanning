@@ -147,12 +147,12 @@ async function requestAzureDevOps(input, fetchImpl = fetch) {
   if (response.status === 403) throw new Error(`Access denied by Azure DevOps. Check Work Items (${writing ? 'Read & Write' : 'Read'}) scope and project permissions.`)
   if (writing && (response.status === 400 || response.status === 422)) {
     const detail = await response.json().catch(() => ({}))
-    throw new Error(`Azure DevOps rejected the ${creating ? 'Feature' : 'update'}: ${String(detail.message ?? 'Check required fields and project rules.').replaceAll(input.pat, '[redacted]').slice(0, 1200)}`)
+    throw new Error(`Azure DevOps rejected the ${creating ? 'Feature' : 'update'}: ${String(detail.message ?? 'Check required fields and project rules.').replaceAll(input.pat.trim(), '[redacted]').slice(0, 1200)}`)
   }
   if (response.status === 404) throw new Error(`Not found at ${projectBase(input).replace(/^https:\/\//, '')}. Check the collection, project and team names.`)
   if (response.status === 400) {
     const detail = await response.json().catch(() => ({}))
-    if (detail.message) throw new Error(`Azure DevOps refused the request: ${String(detail.message).replaceAll(input.pat, '[redacted]').slice(0, 600)}`)
+    if (detail.message) throw new Error(`Azure DevOps refused the request: ${String(detail.message).replaceAll(input.pat.trim(), '[redacted]').slice(0, 600)}`)
   }
   if (!response.ok) throw new Error(writing && !input.validateOnly ? `${creating ? 'Create' : 'Update'} returned ${response.status}. Check Azure DevOps before retrying.` : `Azure DevOps returned ${response.status}. No data was imported.`)
   if (!(response.headers.get('content-type') ?? '').includes('application/json')) throw new Error('Azure DevOps returned a sign-in page. Check the PAT.')
