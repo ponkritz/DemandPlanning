@@ -667,12 +667,12 @@ export async function requestAzure(request: AzureRequest): Promise<unknown> {
   if (response.status === 403) throw new Error(`Access denied. Check project access and PAT Work Items (${writing ? 'Read & Write' : 'Read'}) scope.`)
   if (writing && (response.status === 400 || response.status === 422)) {
     const detail = await response.json().catch(() => ({})) as { message?: string }
-    throw new Error(`Azure DevOps rejected the work item: ${(detail.message ?? 'Check required fields and project rules.').replaceAll(request.pat, '[redacted]').slice(0, 1200)}`)
+    throw new Error(`Azure DevOps rejected the work item: ${(detail.message ?? 'Check required fields and project rules.').replaceAll(request.pat.trim(), '[redacted]').slice(0, 1200)}`)
   }
   if (response.status === 404) throw new Error(`Not found at ${projectApiBase(request).replace(/^https:\/\//, '')}. Check the organization / collection, project and team names.`)
   if (!response.ok && response.status === 400) {
     const detail = await response.json().catch(() => ({})) as { message?: string }
-    if (detail.message) throw new Error(`Azure DevOps refused the request: ${detail.message.replaceAll(request.pat, '[redacted]').slice(0, 600)}`)
+    if (detail.message) throw new Error(`Azure DevOps refused the request: ${detail.message.replaceAll(request.pat.trim(), '[redacted]').slice(0, 600)}`)
   }
   if (!response.ok) throw new Error(updating ? `Update of #${request.workItemId} returned ${response.status}. Check it in Azure DevOps.` : writing && !request.validateOnly ? `Create request returned ${response.status}. Check the backlog before retrying to avoid duplicates.` : `Azure DevOps request failed (${response.status}). No data was imported.`)
   if (!(response.headers.get('content-type') ?? '').includes('application/json')) throw new Error('Azure DevOps returned a sign-in page. Check the PAT and organization access.')

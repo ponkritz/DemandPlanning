@@ -1,0 +1,103 @@
+import test, { after, before } from 'node:test'
+import assert from 'node:assert/strict'
+import { loadSample, navigate, openPage, startApp, text } from './helpers.mjs'
+
+// Shell, navigation and first-run scenarios of the UAT (TC-NAV-01, TC-NAV-03, TC-NAV-31, TC-NAV-33, TC-UI-01, TC-SMP-01,
+// TC-UPD-02), automated against the built web app.
+let app
+before(async () => { app = await startApp() })
+after(async () => { await app.stop() })
+
+test('TC-NAV-01 / TC-NAV-17: the sidebar shows the groups in order, with Documentation under Data & governance', async () => {
+  const { page, context, errors } = await openPage(app)
+  const groups = await page.locator('.sidebar nav .nav-group').allInnerTexts()
+  assert.deepEqual(groups.map((group) => group.replace(/^[▾▸]\s*/, '').trim().toLowerCase()), ['data insights', 'my work', 'i&d board', 'release details', 'data & governance'])
+  const entries = (await page.locator('.sidebar nav .nav-items button').allInnerTexts()).map((entry) => entry.replace(/\s+/g, ' ').trim())
+  for (const entry of ['Dashboard', 'Pulse Check', 'Assigned to Me', 'Monthly Time Writing', 'Bulk actions', 'Backlog Health', 'Settings', 'Documentation']) assert.ok(entries.some((item) => item.endsWith(entry)), `${entry} is in the menu`)
+  assert.match(await text(page.locator('.sidebar-footer')), /v\d+\.\d+\.\d+/, 'the footer shows the version (NAV-15)')
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
+test('TC-NAV-03: the header shows the page title with its description, and the month picker only where a month applies', async () => {
+  const { page, context, errors } = await openPage(app)
+  await navigate(page, 'Pulse Check')
+  const title = page.locator('header.topbar h1')
+  assert.equal(await text(title), 'Pulse Check')
+  assert.ok((await title.getAttribute('title'))?.length > 20, 'the title carries the page description (NAV-35)')
+  const month = page.locator('header.topbar input[type=month]')
+  assert.equal(await month.count(), 1, 'Pulse Check has the month picker')
+  assert.match(await month.inputValue(), /^\d{4}-(0[1-9]|1[0-2])$/)
+  await navigate(page, 'Documentation')
+  assert.equal(await month.count(), 0, 'Documentation has no month picker')
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
+test('TC-NAV-33: a new browser gets the Get started pop-up; dismissing it keeps it closed after a reload', async () => {
+  const { page, context, errors } = await openPage(app, { guide: true })
+  const dialog = page.getByRole('dialog').filter({ hasText: 'Get started' })
+  await dialog.waitFor()
+  assert.match(await text(dialog), /REQUIRED STEPS DONE/)
+  await dialog.getByRole('button', { name: /Don.t show again automatically/ }).click()
+  await page.reload()
+  await page.locator('.sidebar nav').waitFor()
+  assert.equal(await page.getByRole('dialog').filter({ hasText: 'Get started' }).count(), 0)
+  await page.getByRole('button', { name: /^Setup ·/ }).click()
+  await page.getByRole('dialog').filter({ hasText: 'Get started' }).waitFor()
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
+test('TC-SMP-01: Load synthetic sample fills the app and is marked as a sample', async () => {
+  const { page, context, errors } = await openPage(app)
+  await loadSample(page)
+  assert.match(await text(page.locator('.data-status')), /Saved|Sample|items/i)
+  await navigate(page, 'Dashboard')
+  await page.locator('.content table tbody tr, .content article').first().waitFor()
+  assert.match(await text(page.locator('.content')), /utili[sz]ation/i, 'the Dashboard shows the sample capacity')
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
+test('TC-UI-01: the theme toggle cycles Auto → Light → Dark and the choice survives a reload', async () => {
+  const { page, context, errors } = await openPage(app)
+  const theme = () => page.evaluate(() => document.documentElement.getAttribute('data-theme'))
+  assert.equal(await theme(), null)
+  const toggle = page.locator('header.topbar button', { hasText: /theme/i }).or(page.getByRole('button', { name: /theme/i })).first()
+  await toggle.click()
+  assert.equal(await theme(), 'light')
+  await toggle.click()
+  assert.equal(await theme(), 'dark')
+  await page.reload()
+  await page.locator('.sidebar nav').waitFor()
+  assert.equal(await theme(), 'dark')
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
+test('TC-NAV-31: at phone width the navigation sits behind a menu button and the pages still open', async () => {
+  const { page, context, errors } = await openPage(app, { width: 520, height: 900 })
+  const menu = page.getByRole('button', { name: 'Open menu' })
+  await menu.waitFor()
+  await menu.click()
+  await page.getByRole('button', { name: 'Close menu' }).waitFor()
+  await page.locator('.sidebar nav button', { hasText: 'Documentation' }).first().click()
+  assert.equal(await text(page.locator('header.topbar h1')), 'Documentation')
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)
+  assert.equal(overflow, false, 'no horizontal page scroll')
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
+test('TC-UPD-02: Force Update shows the running version, build number and build id', async () => {
+  const { page, context, errors } = await openPage(app)
+  await page.locator('.sidebar-footer button', { hasText: /Force Update/ }).first().click()
+  const dialog = page.getByRole('dialog').filter({ hasText: 'Force Update' })
+  await dialog.waitFor()
+  const body = await text(dialog)
+  assert.match(body, /v\d+\.\d+\.\d+/)
+  assert.match(body, /Build number \d+/)
+  assert.deepEqual(errors, [])
+  await context.close()
+})

@@ -6,7 +6,8 @@
 | Product version | v1.4.1 (build tracked by CI run number) |
 | Baseline | `main` at the Feature-milestones removal, Dashboard tabs and query views (PR #29) |
 | Status | As-built baseline, for review |
-| Companion | [TEST-PLAN.md](TEST-PLAN.md) — test cases traced to every requirement ID below |
+| Levels | §3 user requirements (UR) → §4 system requirements (SR) → §5 detailed requirements (prefix-NN) |
+| Companions | [TEST-PLAN.md](TEST-PLAN.md) — test cases traced to every requirement ID below · [TRACEABILITY-MATRIX.md](TRACEABILITY-MATRIX.md) — generated end-to-end trace · [KNOWN-ISSUES.md](KNOWN-ISSUES.md) — open issues and known bugs · [VALIDATION-PACKAGE.md](VALIDATION-PACKAGE.md) — the package index |
 
 ## 1. Introduction
 
@@ -53,6 +54,10 @@ The requirements are written to the characteristics of good requirements that th
 
 In practice:
 
+- **Levels.** Requirements are kept at three levels, each traced to the level above:
+  - **User requirements (UR-NN, §3)** state what the stakeholders need, in their words, with the use cases (§2) they come from. They are the design inputs in the sense of ISO 13485 §7.3.3.
+  - **System requirements (SR-NN, §4)** state what the system provides for each user requirement, one per functional area; each names the detailed-requirement prefix that refines it. They are the software requirements of IEC 62304 §5.2.
+  - **Detailed requirements (prefix-NN, §5 to §7)** are the verifiable "shall" statements that the test cases (TEST-PLAN.md §6) verify.
 - **Wording.** Each requirement is a single "The app shall …" statement with one result. Where a statement lists alternatives, the list is closed and named. Vague terms ("user-friendly", "fast", "etc.", "and/or") are not used. Numbers carry units.
 - **Definitions.** Terms with a specific meaning are defined in §1.4 and used consistently.
 - **Conditions.** These are written as "When …" or "If …" clauses at the start of the statement.
@@ -68,13 +73,13 @@ In practice:
     - **M** Must: release-blocking.
     - **S** Should.
     - **C** Could.
-  - **Trace**: up to the use cases (§2) and across to test cases (TEST-PLAN.md §6).
+  - **Trace**: up to the use cases (§2) and, through the prefix, the system and user requirements (§3, §4); across to test cases (TEST-PLAN.md §6). The complete chain is generated in [TRACEABILITY-MATRIX.md](TRACEABILITY-MATRIX.md).
 - **Rationale placement.** Rationale is kept out of the requirement text. Where several requirements share one rationale, the rationale is given once at the head of the group.
 - **UI strings.** Quoted strings are the exact UI text and are part of the requirement.
 
 Known deviations from the INCOSE guide:
 
-- Some requirements describe as-built behaviour that has an open question attached. These are cross-referenced to §6 (Open issues) instead of being changed silently.
+- Some requirements describe as-built behaviour that has an open question attached. These are cross-referenced to the open issues (OI-NN) in [KNOWN-ISSUES.md](KNOWN-ISSUES.md) instead of being changed silently.
 - This document is a self-assessment against the guide's characteristics. It has not been reviewed against a specific edition of the guide by an INCOSE-qualified reviewer.
 
 ### 1.4 Definitions
@@ -84,7 +89,7 @@ Known deviations from the INCOSE guide:
 | Connection | A saved Azure DevOps configuration in this browser. Fields: name, view name, show-in-menu, role, base URL (collection), project, optional team, PAT, optional WIQL query, creator email (the work email, required for Time Writing), optional API version. |
 | Role (of a connection) | One of: `time-tracking` (Time Writing, read & write), `backlog-view` (read only), `release-source` (DHFI release documents, read only), `documents` (read only), `reference` (read only). |
 | Active Time Writing connection | The selected `time-tracking` connection whose data feeds Dashboard, Monthly Time Writing, Assigned to Me and Baselines. |
-| Month Task | An Azure DevOps Task whose title starts or ends with a month and year (§3.4). |
+| Month Task | An Azure DevOps Task whose title starts or ends with a month and year (§5.4). |
 | Time Writing story | A User Story that is the parent of at least one Month Task, or whose title contains "Time Writing" (case-insensitive; space, `_` or `-` allowed between the words). |
 | Absence Epic | The Epic whose ID is set in Capacity settings (default 37778). Tasks under it count as absence, not work. |
 | Selected month | The `YYYY-MM` month chosen in the header month picker. Defaults to the current month in India time (Asia/Kolkata). |
@@ -129,9 +134,69 @@ Stakeholders:
 | UC-22 | Decide which menu areas each role sees and what it may do, and assign roles to people by email | Admin |
 | UC-23 | Upload the existing QE mapping Excel and keep it up to date in the app — filter, edit, add and delete rows and columns — shared with the team | QE lead |
 
-## 3. Functional requirements
+## 3. User requirements
 
-### 3.1 Navigation and layout (NAV) — UC-01
+User requirements are what the stakeholders of §2 need from the tool, written as needs, not as solutions. Each traces to the use cases it comes from and is refined by the system requirements of §4. They are the design inputs; the system and detailed requirements are the design outputs that implement them.
+
+| ID | User requirement | Stakeholder | Use cases | Refined by |
+|---|---|---|---|---|
+| UR-01 | I need one place that shows the pages I use, how fresh the data is, which month is selected and what is still unsaved, so that I never work on stale data without knowing it. | All | UC-01 | SR-01, SR-03 |
+| UR-02 | I need the tool to read our Azure DevOps backlogs (cloud and on-premises) and our Windchill exports with my own credentials, without any server component that IT would have to host. | App owner, lead | UC-02, UC-03 | SR-02, SR-03, SR-24 |
+| UR-03 | I need to record my planned and actual hours per month on Azure DevOps Tasks, with deadlines and locks that the process owner controls, so that time writing is complete and on time. | Team member, process owner | UC-04, UC-05 | SR-04, SR-05 |
+| UR-04 | I need to see and work through the items assigned to me — finish them, move them to the current Sprint, create this month's tasks — in bulk where possible. | Team member | UC-06 | SR-06 |
+| UR-05 | I need new Features, User Stories and Tasks created in a consistent hierarchy with the agreed titles and a Definition of Done, so that the backlog stays uniform. | Team member, lead | UC-07 | SR-07 |
+| UR-06 | I need read-only views of releases and documents (Azure DevOps Server queries, Windchill exports) with the unique releases and their milestones, and the link to the Feature that tracks each release. | Lead, app owner | UC-08 | SR-08 |
+| UR-07 | I need to review capacity, utilization, non-project time (NPRA) and trends per person, region, role and stream, so that I can balance the load. | Lead, manager | UC-09, UC-10 | SR-09, SR-10 |
+| UR-08 | I need estimation rules, release scopes and baselines per stream, with the history of changes, to compare planned and booked effort. | Process owner | UC-11 | SR-11 |
+| UR-09 | I need the shared planning data, the connection setup and the imported exports kept in a governed private repository (and, where available, SharePoint) so that the whole team sees the same data. | Process owner, app owner | UC-12, UC-13 | SR-12, SR-13 |
+| UR-10 | I need to configure capacity, periods, resources and master data, and to see who changed what. | Process owner | UC-14 | SR-14, SR-10 |
+| UR-11 | I must not lose data: local data is saved automatically, can be backed up and restored, and a failure is shown, never hidden. | All | UC-15 | SR-15, SR-23 |
+| UR-12 | I need to run the current release in the browser and on the desktop, with updates I can trust (verified downloads) and that never lose my settings. | All | UC-16, UC-17 | SR-16, SR-17 |
+| UR-13 | I need a synthetic sample to explore and demonstrate the tool without real data. | All | UC-18 | SR-18 |
+| UR-14 | The tool must be built, verified and deployed automatically, with evidence (lint, tests, build, checksums) for every release. | App owner | UC-19 | SR-21 |
+| UR-15 | I need the requirements, test plan, validation package and setup guides available inside the tool, for the build I am running. | All | UC-20 | SR-19 |
+| UR-16 | I need to see backlog hygiene for the whole team: work left in ended Sprints, Features without a Definition of Done, unassigned work. | Scrum Master, lead | UC-21 | SR-02 |
+| UR-17 | I need role-based access: which areas each role sees and what it may change, assigned to people by their work email. | Admin | UC-22 | SR-02 |
+| UR-18 | I need the QE mapping Excel maintained in the tool and shared with the team. | QE lead | UC-23 | SR-22 |
+| UR-19 | Credentials must stay on my computer, writes must go to Azure DevOps Services only, and no production data, tokens or employee details may enter the source repository. | App owner, security | UC-02, UC-12, UC-17 | SR-02, SR-17, SR-23, SR-24 |
+| UR-20 | I need the tool usable on a phone or tablet as well as a desktop, accessible, and in light or dark mode. | All | UC-01 | SR-20 |
+
+## 4. System requirements
+
+System requirements state what the system provides for the user requirements, one per functional area. Each is refined by the detailed requirements with the prefix named in **Refined by** (§5 to §7); every detailed requirement therefore traces to exactly one system requirement through its prefix.
+
+| ID | System requirement | Derived from | Refined by |
+|---|---|---|---|
+| SR-01 | The system shall provide a single-page shell with a grouped sidebar, a header with the page title, month picker and data status, notices, a modal layer and a footer with storage and build information. | UR-01, UR-20 | NAV (§5.1) |
+| SR-02 | The system shall manage Azure DevOps and Windchill connections per browser (servers, PATs, roles, views, presets), share the setup through Git, sync and clean duplicates, provide role-based access, Backlog Health, work-item creation rules, Feature setups and the Windchill release list. | UR-02, UR-06, UR-16, UR-17, UR-19 | CON (§5.2) |
+| SR-03 | The system shall fetch work items from Azure DevOps in batches, keep previews and saved caches apart, save fetched data automatically and show the data status and notices. | UR-01, UR-02 | FET (§5.3) |
+| SR-04 | The system shall recognise Month Tasks and Time Writing stories from their titles and parent chain according to the naming rules. | UR-03 | TWN (§5.4) |
+| SR-05 | The system shall provide Monthly Time Writing: the month's Tasks per team or person, planning and actuals locks, staged edits validated before one save, and the not-picked-up check. | UR-03 | MON (§5.5) |
+| SR-06 | The system shall provide Assigned to Me and Bulk actions: my pending items, close, move to the current Sprint, create month tasks, state checks and search. | UR-04 | ATM (§5.6) |
+| SR-07 | The system shall provide the Time Writing backlog tree and the creation of a Feature hierarchy (Feature, optional stories, Time Writing story, month Task) with mandatory DoD and read-back. | UR-05 | BKL (§5.7) |
+| SR-08 | The system shall render read-only query views (columns from the query, sort, filter, search, CSV), the DP table with milestones, column arrangement and QMS-0025 match, the Releases list and Pulse Check's Supported Releases. | UR-06 | QV, OV-10 (§5.8) |
+| SR-09 | The system shall provide the Dashboard over a period with utilization, overload, rebalancing, trends, streams and insights on one utilization model. | UR-07 | OVR, OV (§5.9) |
+| SR-10 | The system shall compute capacity: working days, funded and available hours, absence, shared time, NPRA, utilization status, streams and people. | UR-07, UR-10 | CAP (§5.10) |
+| SR-11 | The system shall maintain baseline rules, release scopes with history, baseline vs. actual hours and the task plan check. | UR-08 | BAS (§5.11) |
+| SR-12 | The system shall keep planning data in a private Git repository: validated owner/repo, token in this browser only, schema-checked file, conflict detection, automatic load. | UR-09, UR-19 | GIT (§5.12) |
+| SR-13 | The system shall optionally keep the app state and snapshots in SharePoint through Microsoft Graph with etag conflict handling and size limits. | UR-09 | SNP (§5.13) |
+| SR-14 | The system shall provide Settings for capacity, periods, resources, master data and the audit trail. | UR-10 | SET (§5.14) |
+| SR-15 | The system shall persist the app state in IndexedDB, migrate legacy data, report save failures, and export and restore validated JSON backups without credentials. | UR-11, UR-19 | STO (§5.15) |
+| SR-16 | The system shall emit build information and update the web app only to the deployed build, blocking the reload while work is unsaved. | UR-12 | UPD (§5.16) |
+| SR-17 | The system shall run as a hardened desktop shell with a read-only on-premises proxy and an updater that downloads only from the fixed release and verifies SHA-256. | UR-12, UR-19 | DSK (§5.17) |
+| SR-18 | The system shall provide a deterministic synthetic sample covering every model and shall mark sample mode. | UR-13 | SMP (§5.18) |
+| SR-19 | The system shall show the project documents of its own build on the Documentation page, rendered without HTML injection. | UR-15 | DOC (§5.19) |
+| SR-20 | The system shall provide themes, accessible controls, visible actions and the product name and mark. | UR-20 | UI (§5.20) |
+| SR-21 | The system shall be built, tested, packaged, published (installers with SHA-256 sums and `latest.json`) and deployed by CI on every pull request and push to main. | UR-14 | CI (§5.21) |
+| SR-22 | The system shall keep the QE Mapping as a shared, editable, filterable table in Git with Excel import and export. | UR-18 | QEM (§5.22) |
+| SR-23 | The system shall meet the non-functional requirements: no server component, data volume, timeouts, confirmed writes, PAT handling, window size, no production data in the repository. | UR-11, UR-19 | NFR (§6) |
+| SR-24 | The system shall use the external interfaces as specified: Azure DevOps REST 7.1 with a limited write set, the GitHub contents API, Microsoft Graph v1.0. | UR-02, UR-19 | IF (§7) |
+
+## 5. Detailed requirements
+
+The detailed requirements are grouped by functional area. Each group heading names its prefix and the use cases it serves; the system requirement it refines is the one that names the prefix in §4.
+
+### 5.1 Navigation and layout (NAV) — UC-01
 
 *Group rationale: the user asked for a compact header with refresh and data notices in one place, and a sidebar grouped by purpose.*
 
@@ -149,14 +214,14 @@ Stakeholders:
 | NAV-10 | The month picker shall accept only values of the form `YYYY-MM`. | T | M | UC-01 |
 | NAV-11 | The month picker shall default to the current month in the Asia/Kolkata time zone. | T | S | UC-01 |
 | NAV-12 | Every date and time that tells when data was fetched, saved or built (view bars, connection list, header status tooltip, build details, Git commit messages) shall be shown in the viewer's own time zone with the zone named (e.g. "20 Oct 2026, 21:05 CEST"), and "today" (overdue, changed in 7 days, plan checks) shall be the viewer's local date. Month assignment of Time Writing stays on Asia/Kolkata (NAV-11). | T | S | UC-01 |
-| NAV-12 | The page title's tooltip shall carry the page description from the page registry. Pages shall not repeat a page header inside the content. | I | S | UC-01 |
+| NAV-35 | The page title's tooltip shall carry the page description from the page registry. Pages shall not repeat a page header inside the content. | I | S | UC-01 |
 | NAV-13 | The app shall show the data notices (FET-12 to FET-16) once, directly below the header, on every page. | D | M | UC-01, UC-03 |
 | NAV-14 | The sidebar footer shall show the storage label, exactly one of: "● Live SharePoint", "⚠ Not saved locally", "◌ Saving locally", "○ Local IndexedDB". | D | S | UC-15 |
 | NAV-15 | The sidebar footer shall show the app version as "v{x.y.z}", "Build {n} · ID {buildId}", and the local build time. | D | M | UC-16 |
 | NAV-16 | A modal dialog shall render above all page content, with nothing from the page drawn over it. Page scrolling behind it shall be blocked while it is open. | D | M | UC-01 |
-| NAV-17 | The sidebar shall group pages as Data Insights (Dashboard, Pulse Check, PI Review), My Work (Assigned to Me, Monthly Time Writing, Bulk actions), I&D Board (the Time Writing backlog, Backlog Health), Release Details (two lists: the default Azure DevOps streams, the default Windchill streams), Other views (NAV-32) and Data & governance. Each heading and each Release Details list shall collapse and expand on click, remembered in this browser; a collapsed heading that holds the open page shall be highlighted; the narrow sidebar shall still show every page. Access roles shall treat Pulse Check and PI Review as part of the Data Insights area. |
-| NAV-18 | PI Review (planned) shall show a PI summary — Features and Stories planned vs. closed, hours planned vs. booked per stream and person, open work in the PI's Sprints — and further details still to be defined; until then the page says it is planned. |
-| NAV-19 | *(Retired — see QEM-01…QEM-07)* Data & governance shall hold a QE Mapping page (planned); until its content is defined it says so. Access roles shall treat it as its own area (default: Admin, Product Owner, People Manager). |
+| NAV-17 | The sidebar shall group pages as Data Insights (Dashboard, Pulse Check, PI Review), My Work (Assigned to Me, Monthly Time Writing, Bulk actions), I&D Board (the Time Writing backlog, Backlog Health), Release Details (two lists: the default Azure DevOps streams, the default Windchill streams), Other views (NAV-32) and Data & governance. Each heading and each Release Details list shall collapse and expand on click, remembered in this browser; a collapsed heading that holds the open page shall be highlighted; the narrow sidebar shall still show every page. Access roles shall treat Pulse Check and PI Review as part of the Data Insights area. | T | M | UC-01 |
+| NAV-18 | PI Review (planned) shall show a PI summary — Features and Stories planned vs. closed, hours planned vs. booked per stream and person, open work in the PI's Sprints — and further details still to be defined; until then the page says it is planned. | D | C | UC-01 |
+| NAV-19 | *(Retired — see QEM-01…QEM-07)* Data & governance shall hold a QE Mapping page (planned); until its content is defined it says so. Access roles shall treat it as its own area (default: Admin, Product Owner, People Manager). | I | C | UC-23 |
 | NAV-20 | Pulse Check shall have four tabs, remembered in this browser: **Releases** (the month before the selected one) and **Current month releases** (the selected month), each showing exactly the pages under Release Details — one quadrant per Azure DevOps Server view in the menu (also when not fetched yet or without releases in its paths; release connections outside Release Details are left out) and the Windchill exports with row count, import time and a link; **Last month** — utilization for the previous month (utilization metrics and Who has capacity) with the same Team / Individual choice, releases per view compared with the selected month, Features and User Stories created and closed per stream, and its Time Writing gaps; **Ongoing activities** — Features and User Stories in an Active, In Progress, Committed or Doing state per stream (absence Epic excluded), with assignee, iteration, Target Date (flagged when passed) and the hours booked on them in the selected month, filterable by stream. | T | S | UC-01 |
 | NAV-22 | The app shall know the default release streams, in this order: DP, CP, IOCC, Content and Tool Validations (each from the Azure DevOps connection whose name or view name is, or starts with as whole words, the stream's name, ignoring case and punctuation — e.g. "DP [Completed Releases]") and S&S IT (from the Windchill export named like it; ECP to follow as a Windchill export). Release Details and Pulse Check shall show exactly these, in this order, also before they are set up (a stream without a connection leads to Settings, without an export to the import page); other connections and exports are not listed under Release Details. Settings → Azure DevOps → Default connections shall list the Time Writing connection (QMS-0025, pre-filled with the team's organization, project and team; PAT and creator email left to each user) and these streams, each with its status and a Set up that pre-fills the connection: for DP, CP, IOCC and Content the team's completed-release views (on-prem DHPCollection / DHP.Vault with their queries), otherwise the name, view name, role and Show in menu. The connection presets shall also offer QMS-0025 and the DHP release register (Pedestal); a preset in a shared project disappears once a connection with the same query or name is saved. No PAT or personal email is pre-filled. | T | S | UC-08 |
 | NAV-23 | DP releases shall take the release name from the Area Path (last segment) and the number from the Iteration Path (a "Release x.y.z" segment, else a segment holding a version). IOCC releases shall take their Type of Release from the Area Path segment right after "IOCC" — shown in its own column — and the release name from the document Title (a version in it is the number). For DP and IOCC the QMS-0025 Feature shall be found by a fuzzy match with a percentage (name and Type of Release 60%, version 40%: exact 1, same major.minor 0.6, same major 0.3; the version counts only when the name scores at least 50%, and numbers, one- or two-letter words and common words such as Project, Release or Notes never make a name match; below 50% no closest Feature is shown); the best match and its percentage are shown and it counts as the release's Feature — with its planned and booked hours — at or above a threshold set in Settings (default 80%). CP, Content and Tool Validations keep the general path rule and exact match until their rules are defined. | T | S | UC-08 |
@@ -176,7 +241,7 @@ Stakeholders:
 | OV-13 | The Overview page shall be named Dashboard and carry an Insights tab: a health score (balance, recording, resilience); a month-end forecast from the run rate (on track within ±10% of plan; heading over capacity); plan accuracy per person over elapsed months (error, bias, verdicts reliable / under-records / over-runs / uneven); stream momentum (latest up to 3 elapsed months against the 3 before, ±20% and 8 h); resilience (streams with one person at ≥ 80% of hours, specialists at ≥ 90% in one stream); unusual months (≥ 50% and 8 h from the person's median, 3 months needed); and releases and documents per stream and month of the period, as Pulse Check counts them. Every rule is stated in the tab's Info texts and Definitions. | T | S | UC-01 |
 | OV-14 | The Dashboard shall use one utilization model everywhere, from Settings → Capacity: at or above the overloaded threshold = ↑ red (overloaded), below the available threshold = ↓ blue (spare), green in between (balanced). Planned overload, persistent overload, the forecast's "heading over capacity" and the health score's balance component shall use the same thresholds. Differences in hours (+ / −) shall carry no colour; colour is reserved for utilization against capacity. Each tab shall show an empty state when the selection has no planned or recorded hours. | T | S | UC-01 |
 
-### 3.2 Azure DevOps connections and views (CON) — UC-02
+### 5.2 Azure DevOps connections and views (CON) — UC-02
 
 *Group rationale: several Azure DevOps sources differ by query or by base URL. Only some of them are views; the rest serve as backend data.*
 
@@ -222,22 +287,22 @@ Stakeholders:
 | CON-38 | Dashboard (Team) shall offer a Region switch (All, India, Netherlands, US) and a multi-select of roles (All, or any of QE, QMS, CAPA, Lead, Manager), remembered in this browser: the numbers then cover only people whose Settings → Resources profile matches, with the chosen region's public holidays; people without a profile drop out while a filter is on. | T | S | UC-09 |
 | CON-39 | When more than one Time Writing connection exists, Settings → Connections shall say which one is used (the active one) and offer to keep it and remove the others after confirmation; with a Git token that can save, the connection setup in Git shall be updated in the same step so they do not come back, otherwise the user shall be told they return at the next start. PATs are not revoked. | T | S | UC-02 |
 | CON-40 | A Backlog Health page (I&D Board; formerly Scrum Master) shall list, for everyone in the Time Writing backlog and leaving out work under the absence Epic: (1) open Features, User Stories and Tasks whose Sprint has ended (Sprint dates read from Azure DevOps), (2) Features whose Description does not mention "DoD" (open only by default), (3) open Features, User Stories and Tasks without an assignee, shown with their Epic, Feature, User Story and Task, Area Path, Iteration Path, State, Created By and Created On; with type filters and search, and CSV export of the shown list or of all three lists (with a List column). | T | S | UC-21 |
-| CON-41 | The app shall identify the viewer by the email entered on the Time Writing connection (the email new work is assigned to); without one, the policy's default role applies. Reading the PAT owner's email from Azure DevOps (connectionData) is not used: it does not work in this setup. |
-| CON-42 | Roles (Admin, Product Owner, People Manager, Scrum Master, Team Member) shall be kept in the Git data repository as access.json: for each role the menu areas it sees (Dashboard, Assigned to Me, Bulk actions, Monthly Time Writing, I&D Board backlogs, Backlog Health, Release Details, Baselines, Snapshots, Documentation) and the actions it may take (change work items in Azure DevOps, edit baselines, import Windchill exports, manage shared settings, manage access); members by email with one or more roles; and a role for everyone else (or none). Settings shall stay available to everyone for their own connections and tokens. |
-| CON-43 | The menu shall show only the areas of the viewer's roles (union of their roles, else the everyone-else role while the email is unknown or not listed), and a page outside them shall fall back to the first allowed one. Without access.json nothing is restricted. Requests that change Azure DevOps shall be refused before sending when the viewer's roles lack that action; baselines shall be view only without "edit baselines"; the Windchill import without "import"; capacity, periods, resources, master data and the shared connection setup without "manage shared settings". |
-| CON-44 | Settings → Access shall show the viewer their email and roles, and the members and role matrix; it shall be editable only with "manage access" and a Git token that can write, saved as a commit with the loaded version (a concurrent change is refused), and shall refuse a change that removes "manage access" from the person saving it. The last policy read shall be kept in the browser and applied while Git storage is not connected. |
-| CON-45 | Settings shall show one tab at a time: Azure DevOps, Storage, Access, and, for roles that manage shared settings, Capacity & periods, Resources, Master data and Audit. The last tab shall be remembered in the browser; links to the connections or to Git storage shall open their tab. |
-| CON-46 | A backlog view without a query on the same server, project and team as the Time Writing connection shall be flagged in Settings → Azure DevOps as reading the same backlog, and any backlog view shall offer "Use as Time Writing": after confirmation it becomes the only Time Writing connection (keeping its PAT, taking over the creator email and view name of the one it replaces when it has none), the replaced Time Writing connection is removed here, and with a Git token that can save the shared connection setup in Git is updated and the replaced connection's data file in Git (azure-data/<id>.json) is deleted; the new Time Writing connection is then fetched. |
-| CON-47 | At start, a connection that came from the shared setup in Git, was removed there and was not changed here shall be removed here too; a connection changed here, or a setup file without connections, removes nothing. When the active Time Writing connection no longer exists, the first remaining one shall become active. |
-| CON-48 | Backlog Health shall show, for In older Sprints and Unassigned, the columns ID, Work Item Type, Title, Area Path, Iteration Path, State, Created By, Updated By (System.ChangedBy), Created On and Updated On (System.ChangedDate), in the table and in Export CSV; Features without DoD shall show the Description as plain text (HTML removed) in the table and its CSV. Every tab shall offer a person filter: Assigned To on In older Sprints and Features without DoD, Created By or Updated By on Unassigned; "Everyone" shows all. |
-| CON-49 | Each Backlog Health tab shall let the viewer choose and reorder its columns from ID, Work Item Type, Title, Area Path, Iteration Path, State, Assigned To, Created By, Updated By, Created On, Updated On, Sprint end, Parent, Epic, Feature, User Story, Tags and Description (ID always shown; saved per tab in this browser; Reset defaults restores the tab's default, which includes Assigned To on every tab), sort by any shown column from its header (ascending, descending, list order; empty values last), and filter by State and Iteration Path (the values present in the tab). Export CSV shall follow the shown rows, their order and columns, plus the URL. |
-| CON-50 | Every work item the app creates (Features, User Stories, Tasks, including the review and Time Writing stories of a new Feature and the month Time Writing story) shall be assigned: to the person chosen in the confirmation, else to the person creating it. The browser and the Windows app shall refuse a create request without an assignee email before sending it. |
-| CON-51 | A role right "Create work items for other people" (default: Admin, Product Owner, People Manager, Scrum Master) shall let the confirmation of Bulk actions → month tasks, Backlogs → new Feature / Complete children, and Backlogs → ＋ User Story (under a Feature) / ＋ Task (under a User Story, with title and Iteration Path) choose the assignee from everyone in the backlog with an email; without it the assignee is the person creating it. |
-| CON-52 | Settings → Feature setup (every user; see CON-58) shall keep per Epic the optional User Stories (title, Description, order) and the Time Writing Task defaults (title, Description, Original Estimate, Assigned to, Area Path, Iteration Path) in the Git data repository as feature-setup.json, written clean (blank stories dropped) and with the loaded version (concurrent change refused). Titles shall accept plain text and the placeholders {feature}, {program}, {service}, {version}, {month}, with a preview. |
-| CON-53 | Creating or completing a Feature under an Epic with a setup shall offer its optional User Stories all ticked and create the ticked ones, the "{feature} - Time Writing" User Story and the month Task with the setup's defaults (the Original Estimate only on a newly created Task; the Task's assignee, else the Feature's); existing children with the same title shall be reused; a placeholder the Feature title cannot fill shall stop creation with a message. An Epic without a setup shall keep the PU / Full Release milestones. |
-| CON-54 | Bulk actions shall list State checks for the shown person's Features and User Stories (absence Epic and Removed children ignored): a Feature whose User Stories are all Closed (should be Closed), a User Story whose Tasks are all Closed (should be Closed), and an Active Feature without an Active User Story (needs one); each with what is off and, for the first two, the fix after confirmation (a New Feature is set to Active first). |
-| CON-55 | Settings → Storage shall offer "Load everything from Git": planning data, connection setup, on-prem view data, Windchill exports, access roles and Feature setup, each loaded on its own and reported (loaded, or failed with the reason); older Git data never replaces newer data here. |
-| CON-56 | The release view's "Create Feature" shall confirm with the person picker of CON-51, defaulting to the person creating it. |
+| CON-41 | The app shall identify the viewer by the email entered on the Time Writing connection (the email new work is assigned to); without one, the policy's default role applies. Reading the PAT owner's email from Azure DevOps (connectionData) is not used: it does not work in this setup. | T | M | UC-22 |
+| CON-42 | Roles (Admin, Product Owner, People Manager, Scrum Master, Team Member) shall be kept in the Git data repository as access.json: for each role the menu areas it sees (Dashboard, Assigned to Me, Bulk actions, Monthly Time Writing, I&D Board backlogs, Backlog Health, Release Details, Baselines, Snapshots, Documentation) and the actions it may take (change work items in Azure DevOps, edit baselines, import Windchill exports, manage shared settings, manage access); members by email with one or more roles; and a role for everyone else (or none). Settings shall stay available to everyone for their own connections and tokens. | T | M | UC-22 |
+| CON-43 | The menu shall show only the areas of the viewer's roles (union of their roles, else the everyone-else role while the email is unknown or not listed), and a page outside them shall fall back to the first allowed one. Without access.json nothing is restricted. Requests that change Azure DevOps shall be refused before sending when the viewer's roles lack that action; baselines shall be view only without "edit baselines"; the Windchill import without "import"; capacity, periods, resources, master data and the shared connection setup without "manage shared settings". | T | M | UC-22 |
+| CON-44 | Settings → Access shall show the viewer their email and roles, and the members and role matrix; it shall be editable only with "manage access" and a Git token that can write, saved as a commit with the loaded version (a concurrent change is refused), and shall refuse a change that removes "manage access" from the person saving it. The last policy read shall be kept in the browser and applied while Git storage is not connected. | T | M | UC-22 |
+| CON-45 | Settings shall show one tab at a time: Azure DevOps, Storage, Access, and, for roles that manage shared settings, Capacity & periods, Resources, Master data and Audit. The last tab shall be remembered in the browser; links to the connections or to Git storage shall open their tab. | D | S | UC-02 |
+| CON-46 | A backlog view without a query on the same server, project and team as the Time Writing connection shall be flagged in Settings → Azure DevOps as reading the same backlog, and any backlog view shall offer "Use as Time Writing": after confirmation it becomes the only Time Writing connection (keeping its PAT, taking over the creator email and view name of the one it replaces when it has none), the replaced Time Writing connection is removed here, and with a Git token that can save the shared connection setup in Git is updated and the replaced connection's data file in Git (azure-data/<id>.json) is deleted; the new Time Writing connection is then fetched. | T | M | UC-02 |
+| CON-47 | At start, a connection that came from the shared setup in Git, was removed there and was not changed here shall be removed here too; a connection changed here, or a setup file without connections, removes nothing. When the active Time Writing connection no longer exists, the first remaining one shall become active. | T | M | UC-02 |
+| CON-48 | Backlog Health shall show, for In older Sprints and Unassigned, the columns ID, Work Item Type, Title, Area Path, Iteration Path, State, Created By, Updated By (System.ChangedBy), Created On and Updated On (System.ChangedDate), in the table and in Export CSV; Features without DoD shall show the Description as plain text (HTML removed) in the table and its CSV. Every tab shall offer a person filter: Assigned To on In older Sprints and Features without DoD, Created By or Updated By on Unassigned; "Everyone" shows all. | T | M | UC-21 |
+| CON-49 | Each Backlog Health tab shall let the viewer choose and reorder its columns from ID, Work Item Type, Title, Area Path, Iteration Path, State, Assigned To, Created By, Updated By, Created On, Updated On, Sprint end, Parent, Epic, Feature, User Story, Tags and Description (ID always shown; saved per tab in this browser; Reset defaults restores the tab's default, which includes Assigned To on every tab), sort by any shown column from its header (ascending, descending, list order; empty values last), and filter by State and Iteration Path (the values present in the tab). Export CSV shall follow the shown rows, their order and columns, plus the URL. | T | S | UC-21 |
+| CON-50 | Every work item the app creates (Features, User Stories, Tasks, including the review and Time Writing stories of a new Feature and the month Time Writing story) shall be assigned: to the person chosen in the confirmation, else to the person creating it. The browser and the Windows app shall refuse a create request without an assignee email before sending it. | T | M | UC-06, UC-07 |
+| CON-51 | A role right "Create work items for other people" (default: Admin, Product Owner, People Manager, Scrum Master) shall let the confirmation of Bulk actions → month tasks, Backlogs → new Feature / Complete children, and Backlogs → ＋ User Story (under a Feature) / ＋ Task (under a User Story, with title and Iteration Path) choose the assignee from everyone in the backlog with an email; without it the assignee is the person creating it. | T | M | UC-22 |
+| CON-52 | Settings → Feature setup (every user; see CON-58) shall keep per Epic the optional User Stories (title, Description, order) and the Time Writing Task defaults (title, Description, Original Estimate, Assigned to, Area Path, Iteration Path) in the Git data repository as feature-setup.json, written clean (blank stories dropped) and with the loaded version (concurrent change refused). Titles shall accept plain text and the placeholders {feature}, {program}, {service}, {version}, {month}, with a preview. | T | M | UC-14 |
+| CON-53 | Creating or completing a Feature under an Epic with a setup shall offer its optional User Stories all ticked and create the ticked ones, the "{feature} - Time Writing" User Story and the month Task with the setup's defaults (the Original Estimate only on a newly created Task; the Task's assignee, else the Feature's); existing children with the same title shall be reused; a placeholder the Feature title cannot fill shall stop creation with a message. An Epic without a setup shall keep the PU / Full Release milestones. | T | M | UC-07 |
+| CON-54 | Bulk actions shall list State checks for the shown person's Features and User Stories (absence Epic and Removed children ignored): a Feature whose User Stories are all Closed (should be Closed), a User Story whose Tasks are all Closed (should be Closed), and an Active Feature without an Active User Story (needs one); each with what is off and, for the first two, the fix after confirmation (a New Feature is set to Active first). | T | M | UC-06 |
+| CON-55 | Settings → Storage shall offer "Load everything from Git": planning data, connection setup, on-prem view data, Windchill exports, access roles and Feature setup, each loaded on its own and reported (loaded, or failed with the reason); older Git data never replaces newer data here. | T | M | UC-12 |
+| CON-56 | The release view's "Create Feature" shall confirm with the person picker of CON-51, defaulting to the person creating it. | T | M | UC-08 |
 | CON-57 | *(Retired — see CON-66)* Feature setup per Epic shall also configure the Time Writing User Story that holds the month Task: title (placeholders allowed; default “{feature} - Time Writing”), Description, Assigned to (default: the Feature's assignee), Area Path (default: the Feature's) and Iteration Path (default: the Sprint chosen when creating; when set it wins). Setup files without it keep the default. | T | S | UC-06 |
 | CON-58 | Settings → Feature setup shall be open to every user and keep two layers in Git: each person's own setup (feature-setup/<email>.json, the email of their Time Writing connection) and the shared setup (feature-setup.json). When a person creates a Feature, their own setup of the Epic shall be used before the shared one, the New Feature form shall say which one is used and offer the other when both exist. "Enable for everyone" shall copy the person's setup of an Epic into the shared setup, replacing that Epic only. Saving either layer shall need a Git token that can write. | T | S | UC-07 |
 | CON-59 | Settings → Feature setup shall make the mapping to an Epic explicit: a "Go to Epic #" box opens any Epic by number, also one not in the fetched data; for the chosen Epic a panel shall list, in order, my setup, the shared setup and the built-in milestones, mark which one applies when I create a Feature, and say when a change is not saved yet; an Epic without a setup in the shown layer shall offer "Use built-in Full Release (PRD, SFV, DT, IQOQ)" and "Use built-in PU (SFV, DT, IQOQ)", giving the same titles as the built-in creation; "Copy this setup to Epic #" shall copy the shown Epic's setup to another Epic in the same layer, asking before replacing one. Saving stays as in CON-58. | T | S | UC-07 |
@@ -250,10 +315,11 @@ Stakeholders:
 | CON-66 | Feature setup per Epic shall configure the Time Writing User Story that holds the month Task: title (placeholders allowed; default "{feature} - Time Writing"), Description, Assigned to (default: the Feature's assignee), Area Path (empty: the Feature's) and Iteration Path (empty: the project root; never the PI or Sprint chosen when creating — BKL-14). Area Path and Iteration Path shall be editable in the setup pop-up and, while editing a row, in "All shared setups", whose rows show them ("Area: …", "Iteration: …", or the defaults). Setup files without them keep the defaults. | T | S | UC-06 |
 | CON-67 | A Feature setup without a Feature DoD shall get a default DoD as a pre-fill (never saved without the user): the Full Release DoD ("IQOQ finished and Checklist uploaded into the Feature.") when the setup has a PRD story, else the PU DoD ("DT finished. This is a PU release."). "All shared setups" shall show it under "Missing" ("Default: …"), offer "Fill missing DoDs with the default" (n setups; all marked changed, saved with Save to Git) when the token can save, and pre-fill it when a row without one is edited; the setup pop-up shall pre-fill it on "Edit setup…" and offer "Use the default: …"; the New Feature form shall pre-fill it for an Epic whose setup has no DoD. "All fields…" shall explain itself on hover (the full editor with Descriptions, Assigned to and Area / Iteration Paths). | T | S | UC-07 |
 | CON-68 | A PAT shall never follow a connection to another server: when the views synced from Git (at every start) or restored by hand move a connection's URL to a different host, the connection's own PAT is not carried over — the connection is restored without a PAT (reported under "no PAT"), the old server keeps its PAT and the new host gets none unless a PAT is entered for the restore or another connection already holds one for that server. | T | M | UC-01 |
-| CON-69 | Every CSV export (query views, Backlog Health, QE Mapping, Windchill views, effort export) shall neutralise cells a spreadsheet would run as a formula: a value starting with =, @, a tab or a carriage return, or with + or − when it is not a plain number, is prefixed with an apostrophe before quoting, so Excel shows it as text. Numbers such as "-3" and "+1.5" stay as they are. | T | M | UC-08 |
-| CON-70 | The app shall not go blank on bad data: a numeric HTML / XML entity outside the Unicode range (e.g. &amp;#1114112;) stays as written instead of failing the render; a render error in a view shows an error page naming the failure with Reload and "Try to continue" instead of an empty screen; an .xlsx entry that unpacks to more than 100 MB is refused with a message; in the desktop app the main window only ever shows the bundled app (an outside link opens in the browser, redirects elsewhere are blocked) and the Windchill sign-in window blocks non-https redirects. | T | M | UC-01, UC-08 |
+| CON-69 | Every CSV export (query views, Backlog Health, QE Mapping, Windchill views, effort export) shall neutralise cells a spreadsheet would run as a formula: a value starting with =, @, a tab or a carriage return, or with + or − when it is not a plain number, is prefixed with an apostrophe before quoting, so Excel shows it as text. Numbers such as "-3" and "+1.5" stay as they are. The header row (column names) shall be neutralised and quoted in the same way as the cells. | T | M | UC-08 |
+| CON-70 | The app shall not go blank on bad data: a numeric HTML / XML entity outside the Unicode range (e.g. &amp;#1114112;) stays as written instead of failing the render; a render error in a view shows an error page naming the failure with Reload and "Try to continue" instead of an empty screen; an .xlsx entry that unpacks to more than 100 MB is refused with a message; in the desktop app the main window only ever shows the bundled app (an outside link opens in the browser, redirects elsewhere are blocked) and the Windchill sign-in window blocks non-https redirects. A Windchill snapshot from Git whose rows are not plain objects shall have those rows dropped at parse time instead of failing the view. | T | M | UC-01, UC-08 |
+| CON-71 | A Windchill export page shall list the export's **unique releases** read from the document names, which hold the release name, the release number and then the document name, with any delimiters, and may be **clubbed** over several releases (name + number pairs one after the other: "Service1_rel1_Service2_rel2_Test Plan", "Viewer 1.6 & 1.7 SRS"): every version in the name (two or more numbers joined by dots, optionally after v, ver, version, R, Rel or Release; a single number only after one of those words; a version in brackets such as "(v2)" is the document's revision and is skipped) ends a release whose name is the text since the previous version — a version with no name before it keeps the previous name — and the text after the last version is the document name; separators (space, -, _, \|, /, :, ;, comma, +, &, "and", brackets) are dropped. A clubbed document counts once for each release it names, and the number of clubbed documents is shown. Each release (name ignoring case and spaces, number ignoring trailing zeros: 3.1 = 3.1.0) is listed once with its document count (expandable to the document names) and the latest date of a date column (e.g. Last Modified); the count reads "n releases · m of k documents"; the name column ("Name", else the first column naming a name) can be changed; documents without a release number in the name are listed apart; the releases export to CSV. Pulse Check's Windchill exports table shows the number of unique releases per stream. | T | M | UC-08, UC-09 |
 
-### 3.3 Fetching and saving Azure DevOps data (FET) — UC-03
+### 5.3 Fetching and saving Azure DevOps data (FET) — UC-03
 
 *Group rationale: the user asked that "every time a Fetch happens, it should save automatically", and that Save means save and refresh.*
 
@@ -280,7 +346,7 @@ Stakeholders:
 | FET-19 | When a query is fetched, the app shall read Azure DevOps field names through the read-only `fields` operation. On failure it shall fall back to readable reference names. | T | S | UC-08 |
 | FET-20 | At every start (opening the app, Force Update, reload), once the shared connection setup from Git is in place, the app shall fetch the active Time Writing connection and the read-only cloud (Azure DevOps Services) connections that have a PAT in this browser, one after another, with the same saving and failure rules as a manual fetch. On-prem connections shall not be fetched at start. Sample data shall not trigger it. A Time Writing fetch requested while one is running shall join the running fetch and report its result, not fail. | T | M | UC-03 |
 
-### 3.4 Time Writing naming rules (TWN) — UC-04, UC-05
+### 5.4 Time Writing naming rules (TWN) — UC-04, UC-05
 
 *Group rationale: story names are free text ("what I wrote randomly"). The Month Task is the anchor.*
 
@@ -296,7 +362,7 @@ Stakeholders:
 | TWN-08 | The app shall identify Time Writing stories per the definition in §1.4. | T | M | UC-05 |
 | TWN-09 | When placing a new Month Task under a Feature, the app shall choose, in this order: (1) an existing live Task of mine for that month, which is reused rather than created; (2) the one live story titled exactly "{Feature} - Time Writing"; (3) the one story holding my Month Tasks; (4) the Feature's only Time Writing story; (5) a new story. When more than one candidate exists at step 2, 3 or 5, the result shall be a conflict and nothing shall be created. | T | M | UC-06 |
 
-### 3.5 Monthly Time Writing (MON) — UC-04, UC-05
+### 5.5 Monthly Time Writing (MON) — UC-04, UC-05
 
 | ID | Requirement | Ver. | Pri. | Trace |
 |---|---|---|---|---|
@@ -320,7 +386,7 @@ Stakeholders:
 | MON-18 | The page shall show a check panel, titled "Not picked up for {Month YYYY} ({n})" or "Everything picked up for {Month YYYY}". It shall list: (a) open Time Writing stories with no Month Task for the month; (b) Tasks under a Time Writing story with no month in the title; (c) Month Tasks with no Feature above them, with the parent shown. | T | M | UC-05 |
 | MON-19 | In Individual mode, the check panel shall list only the chosen person's stories: those assigned to them, or holding one of their Tasks. | T | S | UC-05 |
 
-### 3.6 Assigned to Me (ATM) — UC-06
+### 5.6 Assigned to Me (ATM) — UC-06
 
 | ID | Requirement | Ver. | Pri. | Trace |
 |---|---|---|---|---|
@@ -344,7 +410,7 @@ Stakeholders:
 | ATM-18 | The month-tasks panel shall offer a switch to show the Features without a task, with a task, or both (with counts), and Select all / Deselect all over the shown Features whose task can be created, with the selected count next to them. | D | S | UC-06 |
 | ATM-19 | Assigned to Me shall offer "＋ New Feature" (the board's "Add Feature under an Epic" editor, BKL-04 to BKL-11, the Epic selectable) and, on each Feature row, "Complete children" (BKL-10), both disabled in sample mode or without the Time Writing connection and PAT. The outcome shall be shown on the page and the data refreshed. | D | S | UC-06 |
 
-### 3.7 Time Writing backlog view (BKL) — UC-07
+### 5.7 Time Writing backlog view (BKL) — UC-07
 
 | ID | Requirement | Ver. | Pri. | Trace |
 |---|---|---|---|---|
@@ -363,7 +429,7 @@ Stakeholders:
 | BKL-13 | The Feature DoD (Definition of Done) shall be mandatory for a new Feature. The New Feature form ("Add Feature under an Epic", also from Assigned to Me) shall have a required field "Feature DoD (Definition of Done) — required", pre-filled from the Feature setup of the Epic (CON-63) or else by the release classification (PU: "DT finished. This is a PU release."; Full Release: "IQOQ finished and Checklist uploaded into the Feature."), and "Create Feature and children" shall stay disabled while it is empty ("Enter the Feature DoD first"). The release view's "Create Feature" shall have the same required field (empty at first) and stay disabled without it. The Feature's Description shall start with "Feature DoD: {DoD}" (the prefix is not doubled when typed), followed by the optional Description. Creating a Feature whose Description has no DoD text shall be refused before anything is sent to Azure DevOps, with "Enter the Feature DoD (Definition of Done): a Feature is not created without it." Completing the children of an existing Feature does not ask for it. | T | M | UC-07 |
 | BKL-14 | Creation shall always add the Time Writing User Story (title "{Feature} - Time Writing", or the Epic setup's) and a "{Month YYYY} \| {Feature}" Task under it. The Time Writing story is not tied to a PI, Sprint or year: its Iteration Path is the one set in the Epic's Feature setup, else the project root (e.g. "QMS") — never the PI or Sprint chosen when creating (only the optional User Stories go to that Sprint); its Area Path is the setup's, else the Feature's. The same applies when completing children and when Bulk actions add a missing Time Writing story. An existing Time Writing story is used wherever it sits (not refused for another path, not duplicated), and Bulk actions → Move to current PI + Sprint never moves Time Writing stories. The Feature is assigned to the chosen person (default the creator email). | T | M | UC-07 |
 
-### 3.8 Read-only query views and Releases (QV) — UC-08
+### 5.8 Read-only query views and Releases (QV) — UC-08
 
 | ID | Requirement | Ver. | Pri. | Trace |
 |---|---|---|---|---|
@@ -391,18 +457,19 @@ Stakeholders:
 | QV-21 | *(Retired — see QV-31)* The Create Feature title shall be built from three parts that match the Epic setup placeholders ({program} \| {service} \| v{version}): for DP, Program (default DP) · Service (the release name) · Release; for CP, Platform · Name (the release name) · Release, the platform chosen from a list starting with Platform 1.0 and Platform 2.0 and extended with "Add…" (new entries kept in this browser); for other streams, Stream · Name · Release. Changing a part rebuilds the title; the whole title shall stay editable and must still map back to the release. | D | S | UC-02 |
 | QV-22 | Release Details → DP shall show only the DP connection's own query as a table: exactly the query's columns in query order (no Name / Release read from the paths), with the query view's summary, search, sorting, month filter and CSV export (QV-03…QV-10, QV-16) — no Releases list, no QMS-0025 Feature match, no Create Feature, no Pedestal or DHFI data. "Columns (n of m)" shall open a chooser listing every column of the query (name and reference name) to tick the ones shown, with "Show all" and "Only the first"; at least one column stays shown, the choice is remembered per view in this browser, and the CSV holds the shown columns. CP, IOCC, Content and Tool Validations are unchanged. The DP Feature matching and DHFI linking are in the backlog (OI-14). | T | S | UC-08 |
 | QV-23 | A query column written as a bare field name ("[SourceProgram]") whose field has a prefixed reference name ("Custom.SourceProgram") shall show that field's values: when the name is neither a reference name nor a display name of the project, the one field whose reference name ends with ".{name}" is used, both when resolving the query's columns and when keeping the fetched values (also when the field list cannot be read). With several such fields the column stays as written and is not guessed; a written prefix is never replaced. Data fetched before this needs one "Refresh from Azure". | T | M | UC-08 |
-| QV-24 | Release Details → DP shall filter its query's rows by **DDT Date** (in the viewer's time zone) for the header month — "Month filter: by DDT Date in your time zone" (in the view's ⓘ Info, QV-28), rows without a DDT Date only with "All months" — and show two counts for the month above the table: **Completed Releases** = rows whose DDTStatus is Done with the DDT Date in the month; **Supported Releases** = every milestone Done with its own date in the month — DDT (DDTDate / DDTStatus), DRfH, DRPC and DRPE — with the split per milestone and, folded, "What was counted" (milestone, date, ID, release from PsName and Release, Title). "Done" is matched ignoring case and spaces; the fields may carry a prefix (Custom.DDTDate). With no DDT Date in the month the counts stay above "No release has its DDT Date in …". | T | M | UC-08 |
-| QV-25 | Pulse Check and the Dashboard shall count DP from the DP connection's query in the same way: its releases are the Completed Releases and, in place of documents, the Supported Releases ("n completed" / "n supported" in the stream quadrant, the comparison with the previous month and the totals table; "· n supported" per month and in total in the Dashboard's delivery table), the milestones counted listed as its titles by their team names ("DT Done", "SFV Done", …, QV-26). Other streams keep releases and documents. | T | M | UC-08, UC-09 |
+| QV-24 | Release Details → DP shall filter its query's rows by **DDT Date** (in the viewer's time zone) for the header month — "Month filter: by DDT Date in your time zone" (in the view's ⓘ Info, QV-28), rows without a DDT Date only with "All months" — and show two counts for the month above the table: **Completed Releases** = the releases whose DDTStatus is Done with the DDT Date in the month; **Supported Releases** = the **unique releases** with at least one milestone Done with its own date in the month — DDT (DDTDate / DDTStatus), DRfH, DRPC or DRPE — each release counted once however many of its milestones fell in the month; a release is its PsName + Release (two rows naming the same release count once), else its work item. The hint shows how many milestones were Done and the split per milestone; folded, "What was counted" lists each release once with its milestones and their dates, the latest date, ID and Title. "Done" is matched ignoring case and spaces; the fields may carry a prefix (Custom.DDTDate). With no DDT Date in the month the counts stay above "No release has its DDT Date in …". | T | M | UC-08 |
+| QV-25 | Pulse Check and the Dashboard shall count DP from the DP connection's query in the same way: its releases are the Completed Releases and, in place of documents, the Supported Releases ("n completed" / "n supported" in the stream quadrant, the comparison with the previous month and the totals table; "· n supported" per month and in total in the Dashboard's delivery table), each supported release listed once as its titles with the milestones it passed by their team names ("SFV · DT Done", QV-26); the Dashboard's total over a period counts a release supported in several months once. Other streams keep releases and documents. | T | M | UC-08, UC-09 |
 | QV-26 | The DP milestones shall be shown by the DP team's names while the query fields keep theirs: DT = Design Transfer (DDT), SFV = Start of Verification / Start of Hardening (DRfH), PRD = PRD Milestone (DRPC), RPE = Release Planning Event (DRPE) — in the Supported Releases split ("DT n · SFV n · PRD n · RPE n"), the "What was counted" table (short name with the long name), a legend in the view's ⓘ Info (QV-28), the Pulse Check / Dashboard titles ("DT Done") and the info texts. The counts depend only on the field names (…Date / …Status, prefix allowed), so a changed DP query keeps working as long as it returns these fields; the app adds no project condition, so every row the query returns — from any project of the collection — is shown and counted. | T | S | UC-08, UC-09 |
 | QV-27 | A query view cell whose value is HTML (rich-text fields such as Acceptance Criteria or Description) shall show its text only: tags removed, entities decoded (&amp;nbsp;, &amp;amp;, &amp;lt;, numeric), each paragraph, list item or line break joined with " · "; the full text also shows on hover, the CSV export holds the same text, and search matches it. Values that are not HTML (e.g. "a < b") stay as they are. | T | M | UC-08 |
 | QV-28 | A Release Details / on-prem view shall keep its top short: information about the view — the month filter note (DDT Date for DP, Author Approval Date otherwise, with the count of undated rows), the DP milestone legend, "loaded the data saved to Git…" and the Git save note ("Saved to Git (…)") — sits behind one ⓘ Info next to the view's name, not as banners. Only errors (fetch or Git save failed) and warnings (data fetched with other columns) stay as banners. | T | S | UC-08 |
 | QV-29 | The DP table shall end with a **QMS-0025 match** column: for each row, the Feature and the User Story on the Time Writing board (QMS-0025 items in this browser; removed items and Time Writing stories left out) whose title matches the row's **SourceProgram + Title** — or the Title alone, since not every board title carries the SourceProgram — by fuzzy match at the match threshold (80% by default). The Title holds the name and the version and **both must match** (the NAV-26 score: name 60%, version 40% — the exact version full, the same major.minor a quarter, the same major a tenth); the version is the one in the Title, else the Release field, so a board title without the version or with another one stays below 80%. Shown as "Feature id n%" / "Story id n%" linking to Azure DevOps; with no match, the closest item below the threshold ("closest Feature id · n%") or "no match" / "board not loaded", and **Create Feature** (QV-31). The column is searched and exported to CSV ("Feature 10 (92%); User Story 11 (85%)" or "No match (closest …)"). | T | M | UC-02, UC-08 |
 | QV-30 | The DP view's columns shall be rearrangeable: drag a column heading onto another to put it in that place, or in **Columns** drag a column in the list or use ← → to move it one step; the QMS-0025 match column moves and hides like the query's columns. The order is remembered per view in this browser, survives a refresh (a column added to the query later goes right after the column it follows in the query) and is used by the CSV export; **Query order** goes back to the query's order. Sorting by a click on a heading is unchanged. | T | S | UC-08 |
 | QV-31 | Create Feature from Release Details — a DP row without a QMS-0025 match (QV-29) or an untracked release of CP, IOCC, Content or Tool Validations — shall always open the one default Create Feature form ("Add Feature under an Epic", as on the QMS-0025 board and Assigned to Me: Parent Epic, Feature title, Area Path, PI / Sprint, Feature DoD, User Stories and the Time Writing task from the Epic's setup, assignee, PAT), never a separate form. It starts with the title "Program \| Service \| vRelease" — DP: Program = SourceProgram (else DP), Service = **PsName**, Release = **Release** (each falling back to the Title and its version); other streams: the stream \| the release name \| vRelease — and the Epic named like the stream (else the first Epic); both stay editable. When it cannot open, the button is disabled and says why (sample data; no Time Writing connection; no Epic loaded). | T | M | UC-02, UC-08 |
+| QV-32 | Pulse Check shall show a **Supported Releases** section under the release quadrants, on both the previous-month and the current-month release tabs: for the DP stream, each supported release of that month once (QV-24) with its name and release, the milestones it passed in the month (DT, SFV, PRD, RPE, each with its date), "Completed (DT)" when DT is among them, the latest date, a link to the work item and its Title; the count reads "n releases · m milestones"; with none, "No release passed a milestone in …", or "The DP view has not been fetched yet". | T | M | UC-09 |
 
-### 3.9 Dashboard (OVR) — UC-09, UC-10
+### 5.9 Dashboard (OVR) — UC-09, UC-10
 
-OVR-01 to OVR-08 describe the earlier Overview (Team / Individual switch, "This month" and "Trends" tabs). They are **retired**: the Dashboard rebuild replaced them with OV-11 to OV-14 (§3.3), and the month capacity view moved to Pulse Check → Last month. OVR-09 still applies (Dashboard → Streams). The rows are kept for traceability.
+OVR-01 to OVR-08 describe the earlier Overview (Team / Individual switch, "This month" and "Trends" tabs). They are **retired**: the Dashboard rebuild replaced them with OV-11 to OV-14 (§5.9), and the month capacity view moved to Pulse Check → Last month. OVR-09 still applies (Dashboard → Streams). The rows are kept for traceability.
 
 | ID | Requirement | Ver. | Pri. | Trace |
 |---|---|---|---|---|
@@ -416,7 +483,7 @@ OVR-01 to OVR-08 describe the earlier Overview (Team / Individual switch, "This 
 | OVR-08 | *(Retired — see OV-11…OV-14.)* An Epic's colour shall not change when switching between 6 and 12 months. | T | S | UC-10 |
 | OVR-09 | Overrun hours shall be Completed Work above Original Estimate on Tasks that have an estimate. Ad-hoc hours shall be Completed Work on Tasks tagged `ad-hoc`. | T | M | UC-10 |
 
-### 3.10 Capacity model (CAP) — UC-09, UC-14
+### 5.10 Capacity model (CAP) — UC-09, UC-14
 
 | ID | Requirement | Ver. | Pri. | Trace |
 |---|---|---|---|---|
@@ -434,7 +501,7 @@ OVR-01 to OVR-08 describe the earlier Overview (Team / Individual switch, "This 
 | CAP-12 | Region and person views shall keep shared-time Tasks whose scope is everyone or the chosen region; the month capacity view shall show common activities per person, in the Absence metric and as their own part of the funded-hours ring; Dashboard definitions and heatmap tooltips shall name them. | D | S | UC-09 |
 | CAP-13 | **NPRA** (non-project related activities: internal meetings such as stand-up, special projects and town hall; trainings such as white belt, AI and Cornerstone) shall be the Time Writing Tasks that carry, themselves or on a Story / Feature / Epic above them, a tag starting with "NPRA" (e.g. "NPRA", "NPRA Hours"; the absence Epic and mapped shared time take precedence). Their hours are not project work: they count in no stream, utilization or plan line. Only the **booked** NPRA hours come off the available hours — nothing is reserved up front: available = funded − absence − shared time − NPRA booked. They are tracked against an **NPRA maximum** per person per month (Settings → Capacity, default 20 h); hours over it are flagged; 0 tracks without a maximum. The month view shall show an NPRA metric (booked hours, the maximum, how many people are over it), per person "NPRA booked / maximum" with the hours over the maximum flagged, and an NPRA table (booked, planned, maximum, left, status). Unplanned sick leave is not NPRA: it is booked under the absence Epic by the end of the month at the latest and deducted from the available hours (CAP-02); the view says so. | T | M | UC-09, UC-14 |
 
-### 3.11 Baselines (BAS) — UC-11
+### 5.11 Baselines (BAS) — UC-11
 
 | ID | Requirement | Ver. | Pri. | Trace |
 |---|---|---|---|---|
@@ -450,7 +517,7 @@ OVR-01 to OVR-08 describe the earlier Overview (Team / Individual switch, "This 
 | BAS-10 | "Load example values" shall load the example rules into the draft without saving. | D | C | UC-11 |
 | BAS-11 | The "Task plan check · this month" panel shall flag a Month Task with ">25%" when Original Estimate > 0 and Completed Work > 1.25 × Original Estimate. See OI-07. | T | S | UC-11 |
 
-### 3.12 Git storage (GIT) — UC-12
+### 5.12 Git storage (GIT) — UC-12
 
 | ID | Requirement | Ver. | Pri. | Trace |
 |---|---|---|---|---|
@@ -467,7 +534,7 @@ OVR-01 to OVR-08 describe the earlier Overview (Team / Individual switch, "This 
 | GIT-11 | The app shall map HTTP 401, 403 and 404 to the specific messages listed in the code (`gitStorage.ts`). | T | S | UC-12 |
 | GIT-12 | When Git is connected and a token is available, the app shall load the Git file automatically once at start. | D | S | UC-12 |
 
-### 3.13 SharePoint and snapshots (SNP) — UC-13
+### 5.13 SharePoint and snapshots (SNP) — UC-13
 
 | ID | Requirement | Ver. | Pri. | Trace |
 |---|---|---|---|---|
@@ -481,7 +548,7 @@ OVR-01 to OVR-08 describe the earlier Overview (Team / Individual switch, "This 
 | SNP-08 | Snapshot history shall list only matching snapshot files, newest first, following pagination only within `graph.microsoft.com/v1.0/`. | T | M | UC-13 |
 | SNP-09 | The Snapshots page shall offer CSV and JSON exports. | D | S | UC-15 |
 
-### 3.14 Settings (SET) — UC-14
+### 5.14 Settings (SET) — UC-14
 
 | ID | Requirement | Ver. | Pri. | Trace |
 |---|---|---|---|---|
@@ -498,7 +565,7 @@ OVR-01 to OVR-08 describe the earlier Overview (Team / Individual switch, "This 
 | SET-11 | The Audit section shall show the 8 most recent entries (action, entity, detail, time). | D | M | UC-14 |
 | SET-12 | "Reset synthetic MVP data" shall replace the app state with the seed state. See OI-09. | D | C | UC-14 |
 
-### 3.15 Local storage, backup and recovery (STO) — UC-15
+### 5.15 Local storage, backup and recovery (STO) — UC-15
 
 | ID | Requirement | Ver. | Pri. | Trace |
 |---|---|---|---|---|
@@ -512,7 +579,7 @@ OVR-01 to OVR-08 describe the earlier Overview (Team / Individual switch, "This 
 | STO-08 | Restore shall require the confirmation checkbox, and shall be refused while SharePoint is connected. | T | M | UC-15 |
 | STO-09 | PATs, connection profiles, the Git token and the SharePoint configuration shall never be part of the app state, a JSON backup, a snapshot, the SharePoint state file or the Git file. | I, T | M | UC-15 |
 
-### 3.16 Web update (UPD) — UC-16
+### 5.16 Web update (UPD) — UC-16
 
 | ID | Requirement | Ver. | Pri. | Trace |
 |---|---|---|---|---|
@@ -523,7 +590,7 @@ OVR-01 to OVR-08 describe the earlier Overview (Team / Individual switch, "This 
 | UPD-05 | The update check shall use no-store, no credentials, no redirects and a 15 s timeout. | T | M | UC-16 |
 | UPD-06 | Force Update shall not clear IndexedDB data, PAT settings or column preferences. | T | M | UC-16 |
 
-### 3.17 Desktop app and updater (DSK) — UC-17
+### 5.17 Desktop app and updater (DSK) — UC-17
 
 | ID | Requirement | Ver. | Pri. | Trace |
 |---|---|---|---|---|
@@ -538,7 +605,7 @@ OVR-01 to OVR-08 describe the earlier Overview (Team / Individual switch, "This 
 | DSK-09 | On Windows the updater shall start the verified installer and close the app. On macOS it shall open the verified disk image. | D | M | UC-17 |
 | DSK-10 | The desktop app shall check quietly 5 s after start and every 4 hours. It shall show "Update available" with "Update now" and "Later". "Later" shall hide the notice until a newer build appears. | D | S | UC-17 |
 
-### 3.18 Sample data (SMP) — UC-18
+### 5.18 Sample data (SMP) — UC-18
 
 | ID | Requirement | Ver. | Pri. | Trace |
 |---|---|---|---|---|
@@ -547,13 +614,13 @@ OVR-01 to OVR-08 describe the earlier Overview (Team / Individual switch, "This 
 | SMP-03 | In sample mode the app shall show "Showing a synthetic sample dataset, not Azure DevOps data. Refresh from Azure to replace it." | D | M | UC-18 |
 | SMP-04 | The sample shall cover every model the pages use: people with profiles, streams, absence, holidays for three regions, the release source, and release scopes including a re-baseline. | T | S | UC-18 |
 
-### 3.19 Documentation (DOC) — UC-20
+### 5.19 Documentation (DOC) — UC-20
 
 *Group rationale: the user asked for a documentation page in the app that holds these documents.*
 
 | ID | Requirement | Ver. | Pri. | Trace |
 |---|---|---|---|---|
-| DOC-01 | The Documentation page shall show, as tabs, every Markdown document in `docs/`: Requirements, Test plan, Verification plan, UAT plan, Azure DevOps setup, Project plan. | T | M | UC-20 |
+| DOC-01 | The Documentation page shall show, as tabs, every Markdown document in `docs/`: Validation package, Requirements, Traceability matrix, Test plan, Verification plan, UAT plan, Known issues, Software components, Security assessment, DFMEA, Development process, Azure DevOps setup, Project plan. | T | M | UC-20 |
 | DOC-02 | The page shall show the documents bundled with the running build. | I | M | UC-20 |
 | DOC-03 | The page shall render headings, paragraphs, nested lists, tables, rules, inline code, bold, italic and links as formatted text. It shall not inject HTML from the documents. | T, I | M | UC-20 |
 | DOC-04 | A link to another bundled document shall open that document in the page, at the linked section when an anchor is given. A link to a section shall scroll to it. | T, D | M | UC-20 |
@@ -561,8 +628,11 @@ OVR-01 to OVR-08 describe the earlier Overview (Team / Individual switch, "This 
 | DOC-06 | The page shall show an "On this page" list of the document's level-2 sections, linking to each. | D | S | UC-20 |
 | DOC-07 | "Download .md" shall download the shown document under its file name. | D | S | UC-20 |
 | DOC-08 | The page shall remember the selected document in localStorage `demand-planning-docs-tab-v1`. | D | C | UC-20 |
+| DOC-09 | The repository shall hold a **Validation Package** indexed by `docs/VALIDATION-PACKAGE.md`: the requirements at three levels (user, system, detailed), the generated traceability matrix, the test plan, the verification and UAT plans, the known-issues register (known bugs, open issues, accepted residual risks and limitations), the software components (in-house, third-party with versions and licences, platforms, known vulnerabilities), the security assessment (code analysis, penetration test, product security risk assessment, mitigations traced to requirements and test cases), the DFMEA (controls traced to requirements) and the development process mapped to ISO 13485 §7.3 / §4.1.6, IEC 62304 and the FDA CSA guidance. Every package document is bundled into the build and shown on the Documentation page. | I | M | UC-20 |
+| DOC-10 | `node scripts/traceability.mjs` shall generate `docs/TRACEABILITY-MATRIX.md` from the documents — use case → user requirement → system requirement → detailed requirement → test case → UAT day → automated test → software component, with a gap list — and `pnpm test` shall fail when the committed matrix differs from the generated one, a requirement in force has no test case, a test case names an unknown requirement, a UAT day names an unknown or retired test case, a use case has no user requirement, a user requirement no system requirement, a system requirement no detailed requirement, an ID is defined twice, or a source file is not listed as a software component. | T | M | UC-19, UC-20 |
+| DOC-11 | `pnpm test` shall check the Validation Package documents: each has its required sections; finding, risk, mitigation, DFMEA and issue IDs are unique; every requirement, test case, mitigation, DFMEA row, finding, risk or issue ID cited in a package document exists in the document that defines it; the package index lists every package document and the app bundles them. | T | M | UC-20 |
 
-### 3.20 User interface (UI)
+### 5.20 User interface (UI)
 
 | ID | Requirement | Ver. | Pri. | Trace |
 |---|---|---|---|---|
@@ -571,9 +641,9 @@ OVR-01 to OVR-08 describe the earlier Overview (Team / Individual switch, "This 
 | UI-03 | Every icon-only button shall have an accessible label. | I | S | UC-01 |
 | UI-04 | Tab rows shall use `role="tablist"`/`role="tab"` with `aria-selected`, and sortable headings shall carry `aria-sort`. | I | S | UC-08, UC-09 |
 | UI-05 | Every action button shall be clearly visible: raised (shadow, lifting slightly on hover) and coloured by what it does — solid indigo with white text for the main action, white with an indigo outline for secondary actions, a tinted pill for small inline actions, green for Save to Git, red for Delete / Remove — in light and dark theme; disabled buttons shall be flat and grey (not-allowed cursor). Toggle groups and filter chips keep their own look. | D | S | UC-01 |
-| UI-06 | The app shall be named **I&D Quality Demand Planning**: the sidebar shows the mark (three rising bars under a check) with "I&D Quality / Demand Planning", the window and browser tab title and the favicon carry the same name and mark. The desktop installer, its update feed and the Git / SharePoint file kinds keep their former "Demand Planning Hub" names so installed apps and saved data keep working. | T | S | UC-01 |
+| UI-06 | The app shall be named **I&D Quality Demand Planning**: the sidebar shows the mark (a planning calendar with planned rows and a quality shield with a check) with "I&D Quality / Demand Planning", the window and browser tab title and the favicon carry the same name and mark. The desktop installer, its update feed and the Git / SharePoint file kinds keep their former "Demand Planning Hub" names so installed apps and saved data keep working. | T | S | UC-01 |
 
-### 3.21 Build and deployment (CI) — UC-19
+### 5.21 Build and deployment (CI) — UC-19
 
 | ID | Requirement | Ver. | Pri. | Trace |
 |---|---|---|---|---|
@@ -582,8 +652,10 @@ OVR-01 to OVR-08 describe the earlier Overview (Team / Individual switch, "This 
 | CI-03 | A push to main shall publish the installers, their SHA256SUMS files and `latest.json` to the `desktop-latest` prerelease. | I, D | M | UC-19 |
 | CI-04 | A push to main shall run the tests, build the web app, and deploy it to GitHub Pages. | I, D | M | UC-19 |
 | CI-05 | The build shall fail when the package version is not `x.y.z`, or when a release tag does not equal the version. | T | M | UC-19 |
+| CI-06 | An end-to-end suite (`pnpm test:e2e`: Playwright driving Chromium against the built web app served by `vite preview`, with no network — the synthetic sample and fixtures in `e2e/fixtures` as data) shall automate the UAT scenarios listed in SOFTWARE-COMPONENTS.md §1.10, each named after its test case; every pull request to main and every push to main shall run it and fail when a scenario fails. | T | M | UC-19 |
+| CI-07 | CI jobs that run dependency code (install, lint, tests, build, packaging) shall hold a read-only token (`permissions: contents: read`) and shall not persist Git credentials in the checkout (`persist-credentials: false`); only publishing jobs that download already-built artefacts shall hold `contents: write`, and workflow steps shall take their inputs from environment variables, not from `${{ }}` interpolation inside `run:`. | I | M | UC-19 |
 
-### 3.22 QE Mapping (QEM) — UC-23
+### 5.22 QE Mapping (QEM) — UC-23
 
 | ID | Requirement | Ver. | Pri. | Trace |
 |---|---|---|---|---|
@@ -595,7 +667,7 @@ OVR-01 to OVR-08 describe the earlier Overview (Team / Individual switch, "This 
 | QEM-06 | "Group by" (a column) shall show the rows in collapsible groups by that column's value ("(blank)" last), with each group's count; grouping and filters are for the current visit. | T | S | UC-23 |
 | QEM-07 | "Export Excel" shall download every tab with all its columns and rows as .xlsx (header row bold); "Export CSV" the current tab's shown columns and filtered rows. A mapping over 900 KB is refused at Save to Git with a message, as GitHub reads larger files differently. Changes show the unsaved bar (description, Discard, Save to Git); "Reload from Git" asks before discarding them. | T | S | UC-23 |
 
-## 4. Non-functional requirements
+## 6. Non-functional requirements
 
 | ID | Requirement | Ver. | Pri. |
 |---|---|---|---|
@@ -603,11 +675,11 @@ OVR-01 to OVR-08 describe the earlier Overview (Team / Individual switch, "This 
 | NFR-02 | The app shall keep at least 14,000 work items in IndexedDB and reload them. | T | M |
 | NFR-03 | Requests to Azure DevOps from the desktop proxy shall time out after 45 s. Web update checks shall time out after 15 s. | T | S |
 | NFR-04 | Every write to Azure DevOps shall be confirmed by reading the item back. When confirmation is not possible, the app shall say the write could not be confirmed and shall not retry automatically. | T | M |
-| NFR-05 | PAT input fields shall be password fields, and the desktop proxy shall remove the PAT from any Azure DevOps error text it returns. | I, T | M |
+| NFR-05 | PAT input fields shall be password fields, and the desktop proxy shall remove the PAT from any Azure DevOps error text it returns. The redaction shall apply to the PAT as sent (trimmed). | I, T | M |
 | NFR-06 | The desktop window shall open at 1440 × 920 px and shall not be resizable below 1024 × 700 px. | I, D | S |
 | NFR-07 | The source repository shall contain no production data, tokens or employee details. | I | M |
 
-## 5. Interface requirements
+## 7. Interface requirements
 
 | ID | Requirement | Ver. | Pri. |
 |---|---|---|---|
@@ -616,51 +688,10 @@ OVR-01 to OVR-08 describe the earlier Overview (Team / Individual switch, "This 
 | IF-03 | GitHub: the app shall use the repository contents API with a fine-grained token that has Contents: Read and write. | I | M |
 | IF-04 | Microsoft Graph: the app shall use the `/v1.0/` endpoint for the SharePoint site's default document library. | I | M |
 
-## 6. Open issues
+## 8. Open issues
 
-These describe as-built behaviour that is ambiguous, inconsistent, or may not match intent. Each needs a decision from the product owner. None is changed in this baseline.
+The open issues (OI-NN: as-built behaviour that is ambiguous, inconsistent or may not match intent, each needing a decision from the product owner) and the known bugs are kept in one register, [KNOWN-ISSUES.md](KNOWN-ISSUES.md). Requirement rows that have an open issue attached refer to it by ID. None of them is changed silently.
 
-| ID | Observation | Affects |
-|---|---|---|
-| OI-01 | "Extend until" writes no audit entry, and does nothing when the month has no period record yet. | SET-06 |
-| OI-02 | The Settings actuals card for month M governs the Monthly page's actuals for month M−1. A toggle-created period sets the planning and actuals deadlines both to M-05, in UTC (`Z`). The Monthly page's defaults use local time. | MON-07, SET-05 |
-| OI-03 | On the Monthly page an explicit lock always locks, even while an extension is active (`rules.ts` treats an active extension as open). After the deadline, "Unlock" alone does not reopen entry; an extension is also needed. | MON-06, MON-07 |
-| OI-04 | Snapshots exclude capacity settings, baseline rules, release scopes, resource profiles, release source, release plans and read-only sources. | SNP-05 |
-| OI-05 | Invalid capacity input is replaced by defaults silently, and the success message still shows. | SET-03 |
-| OI-06 | Master data has no activate/deactivate control, no duplicate or blank-trim check, and no audit. | SET-10 |
-| OI-07 | The task plan check flags overruns only. The older effort rule (`isVarianceFlagged`) flags \|variance\| > 25% in both directions. | BAS-11 |
-| OI-08 | Stories in undated iterations (e.g. only a PI) are not moved to the current Sprint. Confirm whether they should be. | ATM-08 |
-| OI-09 | "Reset synthetic MVP data" has no confirmation and no audit. In SharePoint mode the reset state is then saved to SharePoint. | SET-12 |
-| OI-10 | Writes to Azure DevOps are blocked in sample mode only on Assigned to Me. Monthly Time Writing saves and Feature creation are not blocked. | ATM-13 |
-| OI-11 | "Load latest" and "Update & load" from Git overwrite unsaved local baseline and resource edits without asking. | GIT-04 |
-| OI-12 | Exact baseline values per stream, and the Vault field/query for document counts, are not yet supplied. | BAS-08, QV-13 |
-| OI-13 | Behaviour against a real Azure DevOps Server (on-prem) has been verified only with synthetic fixtures. | DSK-04, DSK-05 |
-| OI-14 | Backlog (DP, Release Details): *(the board match is back as QV-29)* matching DP releases to their QMS-0025 Time Writing Feature (NAV-23 DP rule, NAV-26 fuzzy match, QV-19…QV-21 Create Feature) and linking DHFI documents and the Pedestal register (NAV-25) were removed from the DP page, which shows only its query (QV-22). To be decided again when needed. DP is now counted from its query by its milestones (QV-24, QV-25). | NAV-23, NAV-25, NAV-26, QV-22 |
+## 9. Traceability
 
-## 7. Traceability summary
-
-| Use case | Requirements |
-|---|---|
-| UC-01 | NAV-01…16, FET-10, FET-12, UI-01…03 |
-| UC-02 | CON-01…26, CON-34, CON-35, CON-39, CON-46, CON-47, NAV-05 |
-| UC-03 | FET-01…17, CON-09 |
-| UC-04 | TWN-01…07, MON-01…17 |
-| UC-05 | TWN-08, MON-18, MON-19 |
-| UC-06 | TWN-09, ATM-01…14, CON-37 |
-| UC-07 | BKL-01…12 |
-| UC-08 | QV-01…15, FET-07, FET-08, FET-18, FET-19, CON-27…33, CON-36 |
-| UC-09 | OVR-01…05, CAP-01…09, CON-38 |
-| UC-10 | OVR-06…09 |
-| UC-11 | BAS-01…11 |
-| UC-12 | GIT-01…12 |
-| UC-13 | SNP-01…08 |
-| UC-14 | SET-01…12, CAP-09 |
-| UC-15 | STO-01…09, SNP-09, NAV-14 |
-| UC-16 | UPD-01…06, NAV-15 |
-| UC-17 | DSK-01…10 |
-| UC-18 | SMP-01…04, FET-14, GIT-09, ATM-13 |
-| UC-19 | CI-01…05, UPD-01 |
-| UC-20 | DOC-01…08 |
-| UC-21 | CON-40, CON-48, CON-49 |
-
-The forward trace, from requirement to test cases, is in [TEST-PLAN.md §7](TEST-PLAN.md#7-requirements-coverage-matrix).
+The complete trace — use case → user requirement → system requirement → detailed requirement → test case → UAT day → software component — is generated from these documents by `node scripts/traceability.mjs` into [TRACEABILITY-MATRIX.md](TRACEABILITY-MATRIX.md), and `pnpm test` fails when the generated matrix is out of date or a requirement is not covered. The forward trace from requirement to test cases is also kept by hand in [TEST-PLAN.md §7](TEST-PLAN.md#7-requirements-coverage-matrix).
