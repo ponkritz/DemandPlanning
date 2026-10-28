@@ -209,7 +209,7 @@ Every cell is a checkbox in Settings → Access; the actions are *Change work it
 
 ### Sharing through Git
 
-A **separate private GitHub repository** (Settings → Storage → Git storage: owner, repository, branch, data file, token) holds:
+A **separate private GitHub repository** (Settings → Storage → Git storage: owner, repository, branch, data file, token — the form starts with the team's repository `ponkritz/DemandPlanningStorage`, branch `main`, so a new user adds only the token) holds:
 
 | File | Content | Written by | Read by |
 |---|---|---|---|
@@ -228,7 +228,7 @@ A **separate private GitHub repository** (Settings → Storage → Git storage: 
 
 ### QE Mapping
 
-**Data & governance → QE Mapping** keeps the QE mapping Excel as a shared table in Git (`qe-mapping.json`). **Upload Excel…** reads an .xlsx (or CSV) as it is — every sheet becomes a tab and its first row the columns, without knowing them in advance; dates come out as YYYY-MM-DD. Then, with a Git token that can save: click a cell to edit it, **＋ Add row**, select rows and **Delete**, **＋ Add column**, and per column (▾ menu) **Rename**, **Move left / right**, **Delete column**. Everyone can search, **Filter by column**, **Group by** a column and hide columns (**Columns (n of m)**, kept in your browser). Changes are a draft until **Save to Git**; **Export Excel** downloads every tab, **Export CSV** the current view. Old .xls files must be saved as .xlsx first; a mapping over 900 KB cannot be saved to Git.
+**Data & governance → QE Mapping** keeps the QE mapping Excel as a shared table in Git (`qe-mapping.json`). The table is compact (tight rows, one-line headings, narrow columns with long text wrapping) so that more columns fit on the screen. **Upload Excel…** reads an .xlsx (or CSV) as it is — every sheet becomes a tab and its first row the columns, without knowing them in advance; dates come out as YYYY-MM-DD. Then, with a Git token that can save: click a cell to edit it, **＋ Add row**, select rows and **Delete**, **＋ Add column**, and per column (▾ menu) **Rename**, **Move left / right**, **Delete column**. Everyone can search, **Filter by column**, **Group by** a column and hide columns (**Columns (n of m)**, kept in your browser). Changes are a draft until **Save to Git**; **Export Excel** downloads every tab, **Export CSV** the current view. Old .xls files must be saved as .xlsx first; a mapping over 900 KB cannot be saved to Git.
 
 ### Release Details and Windchill exports
 

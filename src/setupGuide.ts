@@ -21,7 +21,7 @@ export function setupSteps(facts: SetupFacts): SetupStep[] {
       id: 'git', title: 'Connect the shared Git storage', required: true, tab: 'storage',
       state: facts.gitConnected ? 'done' : 'todo',
       why: 'The team keeps its shared setup in one private GitHub repository: the Azure DevOps connections, Feature setup, holidays and common activities, regions and roles. Connecting it first fills most of the next steps for you.',
-      how: ['Settings → Storage → Git storage.', 'Enter the owner, repository and branch your team uses (ask a colleague or the app owner).', 'Paste a GitHub fine-grained token limited to that repository (Contents: Read, or Read and write to save changes), tick “Remember token in this browser” and press Connect & load.', ...(facts.gitConnected && facts.gitReadOnly ? ['Your token can read but not save: that is enough to use the app.'] : [])],
+      how: ['Settings → Storage → Git storage.', 'The team\'s data repository is already filled in (ponkritz/DemandPlanningStorage, branch main); change it only if your team uses another.', 'Paste a GitHub fine-grained token limited to that repository (Contents: Read, or Read and write to save changes), tick “Remember token in this browser” and press Connect & load.', ...(facts.gitConnected && facts.gitReadOnly ? ['Your token can read but not save: that is enough to use the app.'] : [])],
     },
     {
       id: 'timewriting', title: 'Check the Time Writing connection and your email', required: true, tab: 'connections',

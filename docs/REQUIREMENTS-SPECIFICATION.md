@@ -538,6 +538,7 @@ OVR-01 to OVR-08 describe the earlier Overview (Team / Individual switch, "This 
 | GIT-10 | "Disconnect" shall remove the Git config and token from this browser, leaving app data and the repository unchanged. | T | S | UC-12 |
 | GIT-11 | The app shall map HTTP 401, 403 and 404 to the specific messages listed in the code (`gitStorage.ts`). | T | S | UC-12 |
 | GIT-12 | When Git is connected and a token is available, the app shall load the Git file automatically once at start. | D | S | UC-12 |
+| GIT-13 | The Connect Git storage form shall start with the team's data repository prefilled — owner `ponkritz`, repository `DemandPlanningStorage`, branch `main`, data file `planning-data.json` — so that a user adds only the token; the values stay editable, and a saved connection shows its own values instead. The Get started guide shall say so. | T | M | UC-12 |
 
 ### 5.13 SharePoint and snapshots (SNP) — UC-13
 
@@ -671,6 +672,7 @@ OVR-01 to OVR-08 describe the earlier Overview (Team / Individual switch, "This 
 | QEM-05 | Each column heading shall have a menu: Rename…, Hide, Move left / right, Group by this / Ungroup and Delete column… (with its values, after confirmation); "＋ Add column" adds a named column; names must be unique per tab. Rename, move, add and delete change the shared mapping; hiding is each viewer's own choice, kept in this browser per tab ("Columns (n of m)" lists every column to show or hide; at least one stays shown). | T | M | UC-23 |
 | QEM-06 | "Group by" (a column) shall show the rows in collapsible groups by that column's value ("(blank)" last), with each group's count; grouping and filters are for the current visit. | T | S | UC-23 |
 | QEM-07 | "Export Excel" shall download every tab with all its columns and rows as .xlsx (header row bold); "Export CSV" the current tab's shown columns and filtered rows. A mapping over 900 KB is refused at Save to Git with a message, as GitHub reads larger files differently. Changes show the unsaved bar (description, Discard, Save to Git); "Reload from Git" asks before discarding them. | T | S | UC-23 |
+| QEM-08 | The QE Mapping table shall be compact: tight cell padding and smaller text, headings on one line, columns as narrow as their content with long text wrapping at about 240 px, so that more columns fit on the screen. | D | S | UC-23 |
 
 ## 6. Non-functional requirements
 

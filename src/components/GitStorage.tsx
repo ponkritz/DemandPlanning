@@ -1,14 +1,15 @@
 import { useState } from 'react'
-import { defaultGitPath } from '../gitStorage'
+import { defaultGitPath, defaultGitRepository } from '../gitStorage'
 import type { GitStorage } from '../useGitStorage'
 import { Modal, Notice, Panel, Pill, SettingsSummary, type Tone } from './ui'
 
 const tone: Record<GitStorage['status'], Tone> = { off: 'neutral', loading: 'info', synced: 'open', empty: 'warning', saving: 'info', error: 'danger', conflict: 'danger' }
 const label: Record<GitStorage['status'], string> = { off: 'Not connected', loading: 'Loading', synced: 'Synced', empty: 'File not created', saving: 'Saving', error: 'Error', conflict: 'Conflict' }
 
-// Settings: where the planning data file lives and the token that reads and writes it.
+// Settings: where the planning data file lives and the token that reads and writes it. The form starts with the team's
+// data repository (defaultGitRepository), so a new user only pastes a token.
 export function GitStoragePanel({ git }: { git: GitStorage }) {
-  const [form, setForm] = useState({ owner: git.config?.owner ?? '', repo: git.config?.repo ?? '', branch: git.config?.branch ?? 'main', path: git.config?.path ?? defaultGitPath })
+  const [form, setForm] = useState({ ...defaultGitRepository, ...git.config })
   const [token, setToken] = useState('')
   const [remember, setRemember] = useState(true)
   const [open, setOpen] = useState(false)
@@ -19,8 +20,8 @@ export function GitStoragePanel({ git }: { git: GitStorage }) {
     <div className="button-row"><button type="button" className={git.connected ? 'ghost' : 'primary'} onClick={() => setOpen(true)}>{git.connected ? 'Change connection…' : 'Connect Git storage…'}</button>{git.connected && <><button type="button" className="ghost" disabled={git.status === 'loading' || git.status === 'saving'} onClick={() => void git.load()}>Load latest</button><button type="button" className="ghost" onClick={git.disconnect}>Disconnect</button></>}</div>
     {open && <Modal title={git.connected ? 'Change Git storage' : 'Connect Git storage'} eyebrow="SETTINGS · STORAGE" wide form onClose={() => setOpen(false)}>
       <form className="connection-form" onSubmit={(event) => { event.preventDefault(); void git.connect(form, token, remember).then(() => { setToken(''); setOpen(false) }) }}>
-        <label>Owner (user or organisation)<input required {...field('owner')} placeholder="e.g. my-org" /></label>
-        <label>Repository<input required {...field('repo')} placeholder="e.g. demand-planning-data" /></label>
+        <label>Owner (user or organisation)<input required {...field('owner')} placeholder={defaultGitRepository.owner} /></label>
+        <label>Repository<input required {...field('repo')} placeholder={defaultGitRepository.repo} /></label>
         <label>Branch<input {...field('branch')} placeholder="main" /></label>
         <label>Data file<input {...field('path')} placeholder={defaultGitPath} /></label>
         <label className="wide-field">GitHub token<input type="password" autoComplete="off" required={!git.connected} value={token} onChange={(event) => setToken(event.target.value)} placeholder={git.connected ? 'Saved in this browser — enter a new one to replace it' : 'github_pat_…'} /><small>Fine-grained token limited to this repository: Contents Read (to use the app) or Read and write (to save).</small></label>

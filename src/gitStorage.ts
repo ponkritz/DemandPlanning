@@ -11,6 +11,8 @@ export type StoredCapacity = Omit<CapacitySettings, 'profiles'>
 export interface PlanningData { schema: 1; baselineRules: BaselineRule[]; releaseScopes: ReleaseScope[]; resourceProfiles: Record<string, ResourceProfile>; capacitySettings?: StoredCapacity }
 
 export const defaultGitPath = 'planning-data.json'
+// The team's data repository, prefilled in the Connect Git storage form (GIT-13): a user adds only the token.
+export const defaultGitRepository: GitConfig = { owner: 'ponkritz', repo: 'DemandPlanningStorage', branch: 'main', path: defaultGitPath }
 const configKey = 'demand-planning-git-storage-v1'
 const tokenKey = 'demand-planning-git-token-v1'
 const name = /^[A-Za-z0-9_.-]{1,100}$/

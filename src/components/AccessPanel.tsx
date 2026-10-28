@@ -85,6 +85,5 @@ export function AccessPanel({ access, git, people }: { access: Access; git: GitS
       </form>}
     </>}
     {result && <Notice tone={result.tone}>{result.text}{result.url && <> <a href={result.url} target="_blank" rel="noreferrer">View commit</a></>}</Notice>}
-
   </Panel>
 }
