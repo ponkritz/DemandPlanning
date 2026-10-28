@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { useState } from 'react'
 import { actions, areas, defaultPolicy, isEmail, keepsManager, normalEmail, roles, serializeAccess, type AccessPolicy, type Action, type Area, type Role } from '../access'
 import type { Access } from '../useAccess'
 import type { GitStorage } from '../useGitStorage'
@@ -7,9 +7,10 @@ import { Notice, Panel, Pill } from './ui'
 // Settings → Access: who has which role, and what each role sees and may do. Shown to everyone; changed and saved to
 // Git (access.json) only by a role that may manage access, with a Git token that can write.
 export function AccessPanel({ access, git, people }: { access: Access; git: GitStorage; people: { email: string; name: string }[] }) {
-  const listId = useId()
   const [draft, setDraft] = useState<AccessPolicy | null>(null)
   const [newEmail, setNewEmail] = useState('')
+  // The person picked by name from the QMS-0025 people (their email is stored), or 'other' to type an email.
+  const [pick, setPick] = useState('')
   const [search, setSearch] = useState('')
   const [commit, setCommit] = useState('')
   const [busy, setBusy] = useState(false)
@@ -20,14 +21,17 @@ export function AccessPanel({ access, git, people }: { access: Access; git: GitS
   const change = (update: (policy: AccessPolicy) => void) => { const next = structuredClone(shown ?? defaultPolicy(access.email)); update(next); setDraft(next); setResult(null) }
   const toggle = <T extends string>(list: T[], value: T) => list.includes(value) ? list.filter((entry) => entry !== value) : [...list, value]
   const nameOf = (email: string) => people.find((person) => person.email === email)?.name
-  const members = Object.entries(shown?.members ?? {}).filter(([email]) => !search.trim() || `${email} ${nameOf(email) ?? ''}`.toLowerCase().includes(search.trim().toLowerCase())).sort(([a], [b]) => a.localeCompare(b))
+  // Two people with the same name are told apart by their email.
+  const label = (person: { email: string; name: string }) => people.filter((entry) => entry.name === person.name).length > 1 ? `${person.name} (${person.email})` : person.name
+  const candidates = people.filter((person) => !shown?.members[person.email]).sort((a, b) => a.name.localeCompare(b.name))
+  const members = Object.entries(shown?.members ?? {}).filter(([email]) => !search.trim() || `${email} ${nameOf(email) ?? ''}`.toLowerCase().includes(search.trim().toLowerCase())).sort(([a], [b]) => (nameOf(a) ?? a).localeCompare(nameOf(b) ?? b))
 
   function addMember(event: React.FormEvent) {
     event.preventDefault()
-    const email = normalEmail(newEmail.replace(/^.*<([^>]+)>\s*$/, '$1'))
-    if (!isEmail(email)) { setResult({ tone: 'error', text: 'Enter an email address.' }); return }
+    const email = normalEmail(pick && pick !== 'other' ? pick : newEmail.replace(/^.*<([^>]+)>\s*$/, '$1'))
+    if (!isEmail(email)) { setResult({ tone: 'error', text: people.length ? 'Choose a person, or choose Other and enter an email address.' : 'Enter an email address.' }); return }
     change((policy) => { policy.members[email] = policy.members[email] ?? [policy.defaultRole ?? 'Team Member'] })
-    setNewEmail('')
+    setNewEmail(''); setPick('')
   }
   async function save(event: React.FormEvent) {
     event.preventDefault()
@@ -56,15 +60,16 @@ export function AccessPanel({ access, git, people }: { access: Access; git: GitS
         <div className="query-toolbar">
           <input className="search" aria-label="Search members" placeholder="Search email or name" value={search} onChange={(event) => setSearch(event.target.value)} />
           <form className="inline-form" onSubmit={addMember}>
-            <input type="text" aria-label="Email to add" list={listId} placeholder="name@company.com" value={newEmail} onChange={(event) => setNewEmail(event.target.value)} />
-            <datalist id={listId}>{people.filter((person) => !shown.members[person.email]).map((person) => <option key={person.email} value={person.email}>{person.name}</option>)}</datalist>
-            <button type="submit" className="ghost">Add member</button>
+            {people.length > 0 && <select aria-label="Person to add" value={pick} onChange={(event) => setPick(event.target.value)}><option value="">Choose a person ({candidates.length})…</option>{candidates.map((person) => <option key={person.email} value={person.email}>{label(person)}</option>)}<option value="other">Other (enter an email)…</option></select>}
+            {(!people.length || pick === 'other') && <input type="text" aria-label="Email to add" placeholder="name@company.com" value={newEmail} onChange={(event) => setNewEmail(event.target.value)} />}
+            <button type="submit" className="ghost" disabled={people.length > 0 && !pick}>Add member</button>
           </form>
+          {!people.length && <small className="muted">Load the Time Writing (QMS-0025) data to choose people by name.</small>}
           <label>Everyone else<select aria-label="Default role" value={shown.defaultRole ?? ''} onChange={(event) => change((policy) => { policy.defaultRole = (event.target.value || null) as Role | null })}><option value="">No role (Settings only)</option>{roles.map((role) => <option key={role}>{role}</option>)}</select></label>
         </div>
-        <div className="azure-table"><table className="access-table"><thead><tr><th>Email</th>{roles.map((role) => <th key={role}>{role}</th>)}<th /></tr></thead><tbody>
+        <div className="azure-table"><table className="access-table"><thead><tr><th>Member</th>{roles.map((role) => <th key={role}>{role}</th>)}<th /></tr></thead><tbody>
           {members.map(([email, assigned]) => <tr key={email}>
-            <td><strong>{email}</strong>{nameOf(email) && <small>{nameOf(email)}</small>}</td>
+            <td>{nameOf(email) ? <><strong>{nameOf(email)}</strong><small>{email}</small></> : <strong>{email}</strong>}</td>
             {roles.map((role) => <td key={role}><input type="checkbox" aria-label={`${role} for ${email}`} checked={assigned.includes(role)} onChange={() => change((policy) => { policy.members[email] = toggle(policy.members[email] ?? [], role) })} /></td>)}
             <td><button type="button" className="text-button" onClick={() => change((policy) => { delete policy.members[email] })}>Remove</button></td>
           </tr>)}
