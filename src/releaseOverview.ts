@@ -5,6 +5,7 @@ import { defaultStreams, profileForStream, streamOfProfile, type ReleaseRule } f
 import { releaseRegister, viewMonthOf } from './releaseSource.ts'
 import { viewSource } from './viewSources.ts'
 import { dpMilestoneLabel, dpMonthCounts, type SupportedRelease } from './dpMilestones.ts'
+import { ioccDocumentNames, ioccMonthCounts } from './ioccMilestones.ts'
 
 // Overview "Releases this month": for each read-only view whose documents carry releases in their paths (DP, CP,
 // IOCC, …), the releases with documents approved (else changed) in the month, in the viewer's time zone — the same
@@ -15,7 +16,9 @@ export interface StreamDocument { id: number; title: string; url: string; releas
 // DP counts no documents.
 // supported: DP's Supported Releases (unique releases with a milestone Done in the month), supportedReleases their list,
 // milestones the milestones Done behind them.
-export interface ReleaseStream { id: string; name: string; fetchedAt: string; releases: StreamRelease[]; documents: number; titles: StreamDocument[]; notSetUp?: boolean; supported?: number; supportedReleases?: SupportedRelease[]; milestones?: number }
+// supportedEntries: the Supported Releases of a stream counted like DP (DP, IOCC), each once: key and label.
+export interface SupportedEntry { key: string; label: string }
+export interface ReleaseStream { id: string; name: string; fetchedAt: string; releases: StreamRelease[]; documents: number; titles: StreamDocument[]; notSetUp?: boolean; supported?: number; supportedReleases?: SupportedRelease[]; supportedEntries?: SupportedEntry[]; milestones?: number }
 
 // One view's releases in the month, read with its stream's rule (streams.ts; others use the general path rule).
 function streamOf(state: Pick<AppState, 'azureSources' | 'releaseSource'>, profile: AzureConnectionProfileSummary, releaseConnections: number, month: string, timeZone?: string, rule: ReleaseRule = 'path'): ReleaseStream {
@@ -37,7 +40,19 @@ function dpStream(state: Pick<AppState, 'azureSources' | 'releaseSource'>, profi
   const releases = counts.completed.map(({ name, release, date }) => ({ name, release, documents: 0, approvalDate: date }))
   // One title per supported release, naming the milestones it passed in the month ("SFV · DT Done").
   const titles = counts.supported.map(({ item, name, release, milestones, date }) => ({ id: item.id, title: [name, release].filter(Boolean).join(' ') || item.title, url: item.url, release: `${milestones.map((entry) => dpMilestoneLabel(entry.milestone)).join(' · ')} Done`, approvalDate: date }))
-  return { id: profile.id, name: 'DP', fetchedAt: source?.fetchedAt ?? '', releases, documents: 0, titles, supported: counts.supported.length, supportedReleases: counts.supported, milestones: counts.milestones.length }
+  return { id: profile.id, name: 'DP', fetchedAt: source?.fetchedAt ?? '', releases, documents: 0, titles, supported: counts.supported.length, supportedReleases: counts.supported, supportedEntries: counts.supported.map((entry) => ({ key: entry.key, label: [entry.name, entry.release].filter(Boolean).join(' ') })), milestones: counts.milestones.length }
+}
+
+// IOCC from its own query (ioccMilestones): Completed Releases = Release Notes or Verification Report signed in the
+// month, Supported Releases = Release Plan, Release Notes or Verification Report signed in the month — each release
+// once; the signed documents are its titles.
+function ioccStream(state: Pick<AppState, 'azureSources' | 'releaseSource'>, profile: AzureConnectionProfileSummary, releaseConnections: number, month: string, timeZone?: string): ReleaseStream {
+  const source = viewSource(state, profile.id, profile.role, profile.query, releaseConnections)
+  const counts = ioccMonthCounts(source?.items ?? [], month, timeZone)
+  const label = (entry: { group: string; name: string; release: string }) => `${[entry.name, entry.release].filter(Boolean).join(' ')}${entry.group ? ` (${entry.group})` : ''}`
+  const releases = counts.completed.map((entry) => ({ ...(entry.group ? { type: entry.group } : {}), name: entry.name, release: entry.release, documents: entry.documents.length, approvalDate: entry.date }))
+  const titles = counts.documents.map(({ item, document, date }) => ({ id: item.id, title: item.title, url: item.url, release: `${ioccDocumentNames[document]} signed`, approvalDate: date }))
+  return { id: profile.id, name: 'IOCC', fetchedAt: source?.fetchedAt ?? '', releases, documents: counts.documents.length, titles, supported: counts.supported.length, supportedEntries: counts.supported.map((entry) => ({ key: entry.key, label: label(entry) })) }
 }
 
 // Pulse Check: the default Azure streams in their order (DP, CP, IOCC, Content, Tool Validations), each from the
@@ -47,6 +62,7 @@ export function defaultStreamReleases(state: Pick<AppState, 'azureSources' | 're
   return defaultStreams.filter((stream) => stream.source === 'azure').map((stream) => {
     const profile = profileForStream(stream, profiles)
     if (stream.rule === 'dp' && profile) return { ...dpStream(state, profile, releaseConnections, month, timeZone), name: stream.name }
+    if (stream.rule === 'iocc' && profile) return { ...ioccStream(state, profile, releaseConnections, month, timeZone), name: stream.name }
     return profile ? { ...streamOf(state, profile, releaseConnections, month, timeZone, stream.rule), name: stream.name } : { id: `stream:${stream.name}`, name: stream.name, fetchedAt: '', releases: [], documents: 0, titles: [], notSetUp: true }
   })
 }
@@ -74,7 +90,7 @@ export function streamCounts(state: Pick<AppState, 'azureSources' | 'releaseSour
   return (perMonth[0] ?? defaultStreamReleases(state, profiles, months[0] ?? '', timeZone)).map((stream, index) => {
     const entries = months.map((month, at) => { const found = perMonth[at][index]; return { month, releases: found?.releases.length ?? 0, documents: found?.documents ?? 0, ...(found?.supported != null ? { supported: found.supported } : {}) } })
     // DP: the period's Supported Releases are unique too — a release supported in two months counts once.
-    const supported = stream.supported != null ? { supported: new Set(perMonth.flatMap((streams) => streams[index]?.supportedReleases?.map((entry) => entry.key) ?? [])).size } : {}
+    const supported = stream.supported != null ? { supported: new Set(perMonth.flatMap((streams) => streams[index]?.supportedEntries?.map((entry) => entry.key) ?? [])).size } : {}
     return { id: stream.id, name: stream.name, notSetUp: Boolean(stream.notSetUp), months: entries, releases: entries.reduce((sum, entry) => sum + entry.releases, 0), documents: entries.reduce((sum, entry) => sum + entry.documents, 0), ...supported }
   })
 }

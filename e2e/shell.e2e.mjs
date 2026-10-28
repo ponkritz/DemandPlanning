@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { loadSample, navigate, openPage, startApp, text } from './helpers.mjs'
 
 // Shell, navigation and first-run scenarios of the UAT (TC-NAV-01, TC-NAV-03, TC-NAV-31, TC-NAV-33, TC-UI-01, TC-SMP-01,
-// TC-UPD-02, TC-GIT-06), automated against the built web app.
+// TC-UPD-02, TC-GIT-06, TC-SET-05), automated against the built web app.
 let app
 before(async () => { app = await startApp() })
 after(async () => { await app.stop() })
@@ -118,6 +118,25 @@ test('TC-GIT-06: Connect Git storage starts with the team repository prefilled; 
   assert.equal(await form.getByLabel('Branch', { exact: true }).inputValue(), 'main')
   assert.equal(await form.getByLabel('Data file', { exact: true }).inputValue(), 'planning-data.json')
   assert.equal(await form.getByLabel('GitHub token').inputValue(), '')
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
+test('TC-SET-05: Reports to accepts a manager who is not on the board, shown at the top of the reporting lines', async () => {
+  const { page, context, errors } = await openPage(app)
+  await loadSample(page)
+  await navigate(page, 'Settings')
+  await page.getByRole('tab', { name: 'Resources' }).click()
+  const select = page.getByLabel('Chen Wei reports to')
+  await select.selectOption('__other')
+  await page.getByLabel('Manager of Chen Wei').fill('Maria Lopez')
+  await page.getByRole('button', { name: 'OK' }).click()
+  assert.equal(await page.getByLabel('Chen Wei reports to').inputValue(), 'Maria Lopez')
+  const tree = page.locator('.team-tree')
+  const root = tree.locator(':scope > ul > li', { hasText: 'Maria Lopez' }).first()
+  assert.match(await text(root), /Maria Lopez\s*not on the board\s*Chen Wei/, 'the outside manager is a root with Chen Wei under her')
+  // Offered to everyone else too, under "Not on the board".
+  assert.equal(await page.getByLabel('Diya Sharma reports to').locator('optgroup[label="Not on the board"] option', { hasText: 'Maria Lopez' }).count(), 1)
   assert.deepEqual(errors, [])
   await context.close()
 })

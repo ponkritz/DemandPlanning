@@ -37,6 +37,10 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, load
   const holidays = capacityModel(azure.items, month, capacity).holidays
   const unmapped = resources.filter((person) => !profiles[person.name]?.region).map((person) => person.name)
   const names = resources.map((person) => person.name)
+  // Managers typed in by name because they have no Time Writing Tasks (not on the board): offered to everyone too.
+  const outside = [...new Set(Object.values(profiles).map((profile) => profile.reportsTo).filter((name): name is string => Boolean(name) && !names.includes(name!)))].sort((a, b) => a.localeCompare(b))
+  const [otherFor, setOtherFor] = useState('')
+  const [otherName, setOtherName] = useState('')
   // Everyone with an email in the Time Writing backlog, offered when adding members to access roles.
   const people = [...new Map(azure.items.filter((item) => item.assignedToEmail).map((item) => [item.assignedToEmail!, item.assignedTo])).entries()].map(([email, name]) => ({ email, name })).sort((a, b) => a.name.localeCompare(b.name))
 
@@ -175,7 +179,8 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, load
           <td><strong>{person.name}</strong><small>{person.months} {person.months === 1 ? 'month' : 'months'} · {person.firstMonth === person.lastMonth ? shortMonthName(person.firstMonth) : `${shortMonthName(person.firstMonth)} – ${shortMonthName(person.lastMonth)}`}</small></td>
           <td><select aria-label={`Region for ${person.name}`} value={profile.region ?? ''} onChange={(event) => setProfile(person.name, { region: (event.target.value || undefined) as ResourceProfile['region'] })}><option value="">Not set</option>{regions.map((region) => <option key={region}>{region}</option>)}</select></td>
           <td><select aria-label={`Role for ${person.name}`} value={profile.role ?? ''} onChange={(event) => setProfile(person.name, { role: (event.target.value || undefined) as ResourceProfile['role'] })}><option value="">Not set</option>{resourceRoles.map((role) => <option key={role}>{role}</option>)}</select><label className="check"><input type="checkbox" checked={Boolean(profile.peopleManager)} onChange={(event) => setProfile(person.name, { peopleManager: event.target.checked || undefined })} />People manager</label></td>
-          <td><select aria-label={`${person.name} reports to`} value={profile.reportsTo ?? ''} onChange={(event) => setProfile(person.name, { reportsTo: event.target.value || undefined })}><option value="">—</option>{names.filter((name) => name !== person.name).map((name) => <option key={name}>{name}</option>)}{profile.reportsTo && !names.includes(profile.reportsTo) && <option>{profile.reportsTo}</option>}</select></td>
+          <td>{otherFor === person.name ? <form className="inline-form" onSubmit={(event) => { event.preventDefault(); const name = otherName.trim(); if (name && name !== person.name) setProfile(person.name, { reportsTo: name }); setOtherFor('') }}><input aria-label={`Manager of ${person.name}`} placeholder="Manager's name" value={otherName} autoFocus onChange={(event) => setOtherName(event.target.value)} /><button type="submit" className="ghost">OK</button><button type="button" className="text-button" onClick={() => setOtherFor('')}>Cancel</button></form>
+            : <select aria-label={`${person.name} reports to`} value={profile.reportsTo ?? ''} onChange={(event) => { if (event.target.value === '__other') { setOtherFor(person.name); setOtherName('') } else setProfile(person.name, { reportsTo: event.target.value || undefined }) }}><option value="">—</option>{names.filter((name) => name !== person.name).map((name) => <option key={name}>{name}</option>)}{outside.length > 0 && <optgroup label="Not on the board">{outside.filter((name) => name !== person.name).map((name) => <option key={name}>{name}</option>)}</optgroup>}<option value="__other">Other (type a name)…</option></select>}</td>
           <td><Pill tone={statusTone[person.status]}>{person.status}</Pill></td><td>{formatPercent(person.utilization)}</td><td>{formatHours(person.work)}</td><td>{formatHours(person.absence)}</td>
           <td>{person.streams.slice(0, 2).join(', ') || '—'}{person.streams.length > 2 && <small>+{person.streams.length - 2} more</small>}</td>
         </tr>
@@ -196,10 +201,12 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, load
   </Page>
 }
 
-// Reporting lines as a nested list: people whose manager is not in the Azure list (or who have none) are the roots.
+// Reporting lines as a nested list: people without a manager, and managers typed in who are not in the Azure list
+// (no Time Writing Tasks, marked "not on the board"), are the roots.
 function TeamTree({ names, profiles }: { names: string[]; profiles: Record<string, ResourceProfile> }) {
-  const reports = (manager: string | undefined) => names.filter((name) => manager ? profiles[name]?.reportsTo === manager : !profiles[name]?.reportsTo || !names.includes(profiles[name].reportsTo!))
-  const label = (name: string) => [profiles[name]?.role, profiles[name]?.peopleManager ? 'people manager' : '', profiles[name]?.region].filter(Boolean).join(' · ')
+  const outside = [...new Set(names.map((name) => profiles[name]?.reportsTo).filter((manager): manager is string => Boolean(manager) && !names.includes(manager!)))].sort((a, b) => a.localeCompare(b))
+  const reports = (manager: string | undefined) => manager ? names.filter((name) => profiles[name]?.reportsTo === manager) : [...outside, ...names.filter((name) => !profiles[name]?.reportsTo)]
+  const label = (name: string) => outside.includes(name) ? 'not on the board' : [profiles[name]?.role, profiles[name]?.peopleManager ? 'people manager' : '', profiles[name]?.region].filter(Boolean).join(' · ')
   const branch = (name: string, seen: Set<string>): React.ReactNode => {
     const children = reports(name).filter((child) => !seen.has(child))
     const next = new Set(seen).add(name)

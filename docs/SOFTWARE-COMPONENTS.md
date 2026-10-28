@@ -100,6 +100,7 @@ This document lists every software component of the system: the in-house source 
 | domain | `src/domain.ts` | Core TypeScript types: AppState, activities, efforts, baselines, periods, snapshots, Azure work items, release plans. | — |
 | dpBoardMatch | `src/dpBoardMatch.ts` | Fuzzy match of DP rows to QMS-0025 Features/User Stories by name and version; DP Feature title builder. | QV |
 | dpMilestones | `src/dpMilestones.ts` | DP milestone fields, DDT month, Completed and unique Supported Releases counts per month. | QV, OVR |
+| ioccMilestones | `src/ioccMilestones.ts` | IOCC document type from the Title (Release Plan, Release Notes, Verification Report), the release a document belongs to, and the unique Completed and Supported Releases signed in a month. | QV |
 | dpReleases | `src/dpReleases.ts` | DP releases from Pedestal Release items dated by matching DHFI documents (exact version). | QV |
 | featureSetup | `src/featureSetup.ts` | Per-Epic Feature setup (stories, Time Writing story, task defaults), placeholders, shared/personal layers, parse/serialise. | CON |
 | format | `src/format.ts` | Display formatting: hours, percent, dates in viewer time zone, month names, relative time. | UI |
@@ -241,7 +242,7 @@ The end-to-end suite (`pnpm test:e2e`, after `pnpm build:web`) drives the built 
 | Component | Path | Purpose | Requirement areas |
 |---|---|---|---|
 | helpers | `e2e/helpers.mjs` | Starts `vite preview` on a free port, opens Chromium pages with clean storage, records page errors, shared actions (navigate, load sample). | CI |
-| shell.e2e | `e2e/shell.e2e.mjs` | Sidebar groups and footer, header and month picker, Get started pop-up, synthetic sample, theme toggle, phone width, Force Update dialog, Git storage form defaults (TC-GIT-06, TC-NAV-01, 03, 31, 33, TC-UI-01, TC-SMP-01, TC-UPD-02). | NAV, UI, SMP, UPD |
+| shell.e2e | `e2e/shell.e2e.mjs` | Sidebar groups and footer, header and month picker, Get started pop-up, synthetic sample, theme toggle, phone width, Force Update dialog, Git storage form defaults, manager not on the board (TC-GIT-06, TC-SET-05, TC-NAV-01, 03, 31, 33, TC-UI-01, TC-SMP-01, TC-UPD-02). | NAV, UI, SMP, UPD |
 | documents-and-data.e2e | `e2e/documents-and-data.e2e.mjs` | Documentation tabs, links and download; Windchill export releases from names and from Location with the locations CSV; neutralised CSV; JSON backup without credentials (TC-DOC-01, 02, TC-CON-39, 40, 37, TC-STO-04, TC-INS-01). | DOC, CON, STO, NFR |
 
 ## 2. Third-party components (SOUP)
