@@ -1,3 +1,4 @@
+import { useColumnWidths } from '../components/columnWidths'
 import { useMemo, useRef, useState } from 'react'
 import { EmptyState, Modal, Notice, Page, Panel } from '../components/ui'
 import { downloadCsv, downloadXlsx } from '../download'
@@ -36,6 +37,9 @@ export function QeMappingPage({ git, store }: { git: GitStorage; store: QeMappin
   const upload = useRef<HTMLInputElement>(null)
 
   const editable = git.connected && !git.readOnly && !git.isSample
+  // Column widths dragged on the headings (QEM-09), kept per tab and column in this browser.
+  const widths = useColumnWidths('qe-mapping')
+  const widthKey = (id: string) => `${sheet?.id ?? ''}:${id}`
   const file = draft ?? store.file
   const sheet = file?.sheets.find((entry) => entry.id === sheetId) ?? file?.sheets[0]
   const hidden = useMemo(() => sheet ? hiddenBySheet[sheet.id] ?? [] : [], [sheet, hiddenBySheet])
@@ -88,7 +92,7 @@ export function QeMappingPage({ git, store }: { git: GitStorage; store: QeMappin
     : <span className={editable ? 'qe-cell-editable' : undefined} onClick={() => { if (editable) setEditing({ row: row.id, column: columnId, value: row.cells[columnId] ?? '' }) }} title={editable ? 'Click to edit' : undefined}>{row.cells[columnId] ?? ''}</span>
   const rowLine = (row: QeRow) => <tr key={row.id} className={selected.includes(row.id) ? 'qe-row-selected' : undefined}>
     {editable && <td className="qe-select"><input type="checkbox" aria-label="Select row" checked={selected.includes(row.id)} onChange={(event) => setSelected((current) => event.target.checked ? [...current, row.id] : current.filter((id) => id !== row.id))} /></td>}
-    {columns.map((column) => <td key={column.id}>{cell(row, column.id)}</td>)}
+    {columns.map((column) => <td key={column.id} style={widths.style(widthKey(column.id))}>{cell(row, column.id)}</td>)}
   </tr>
   let shown = 0
   const limited = (list: QeRow[]) => { const take = Math.max(0, Math.min(list.length, limit - shown)); shown += take; return list.slice(0, take) }
@@ -108,6 +112,7 @@ export function QeMappingPage({ git, store }: { git: GitStorage; store: QeMappin
         <label className="inline-select">Group by<select value={groupBy} onChange={(event) => { setGroupBy(event.target.value); setCollapsed([]) }}><option value="">No grouping</option>{sheet.columns.map((column) => <option key={column.id} value={column.id}>{column.name}</option>)}</select></label>
         <button type="button" className="ghost" aria-expanded={picking} onClick={() => setPicking(!picking)}>Columns ({columns.length} of {sheet.columns.length})</button>
         {editable && <><button type="button" className="ghost" onClick={newRow}>＋ Add row</button><button type="button" className="ghost" onClick={() => setDialog({ mode: 'add', name: '' })}>＋ Add column</button>{selected.length > 0 && <button type="button" className="ghost danger-text" onClick={removeRows}>Delete {selected.length} row{selected.length === 1 ? '' : 's'}</button>}</>}
+        {widths.resized && <button type="button" className="ghost" onClick={widths.reset}>Reset widths</button>}
         <span className="muted">{rows.length} of {sheet.rows.length} rows{search || Object.values(filters).some(Boolean) ? ' · filtered' : ''}</span>
       </div>
       {picking && <fieldset className="column-chooser"><legend>Columns — tick the ones to show (your own choice, kept in this browser)</legend>
@@ -115,9 +120,9 @@ export function QeMappingPage({ git, store }: { git: GitStorage; store: QeMappin
         <div className="column-chooser-list">{sheet.columns.map((column) => <label key={column.id} className="check"><input type="checkbox" checked={!hidden.includes(column.id)} disabled={!hidden.includes(column.id) && columns.length < 2} onChange={(event) => setHidden(event.target.checked ? hidden.filter((id) => id !== column.id) : [...hidden, column.id])} />{column.name}</label>)}</div>
       </fieldset>}
       {file.source && <p className="muted qe-source">From “{file.source.fileName}”{file.source.uploadedAt ? `, uploaded ${formatDateTime(file.source.uploadedAt)}` : ''}{store.history ? <> · <a href={store.history} target="_blank" rel="noreferrer">History in GitHub</a></> : null}</p>}
-      <div className="azure-table qe-table"><table>
+      <div className="azure-table qe-table"><table className="resizable">
         <thead><tr>{editable && <th className="qe-select"><input type="checkbox" aria-label="Select all shown rows" checked={rows.length > 0 && rows.every((row) => selected.includes(row.id))} onChange={(event) => setSelected(event.target.checked ? rows.map((row) => row.id) : [])} /></th>}
-          {columns.map((column, index) => <th key={column.id}><div className="qe-head"><span>{column.name}</span><button type="button" className="qe-menu-button" aria-label={`Column menu: ${column.name}`} aria-expanded={menu === column.id} onClick={() => setMenu(menu === column.id ? '' : column.id)}>▾</button></div>
+          {columns.map((column, index) => <th key={column.id} style={widths.style(widthKey(column.id))}><div className="qe-head"><span>{column.name}</span><button type="button" className="qe-menu-button" aria-label={`Column menu: ${column.name}`} aria-expanded={menu === column.id} onClick={() => setMenu(menu === column.id ? '' : column.id)}>▾</button></div>
             {menu === column.id && <div className="qe-menu" role="menu">
               {editable && <button type="button" role="menuitem" onClick={() => { setDialog({ mode: 'rename', id: column.id, name: column.name }); setMenu('') }}>Rename…</button>}
               <button type="button" role="menuitem" disabled={columns.length < 2} onClick={() => { setHidden([...hidden, column.id]); setMenu('') }}>Hide</button>
@@ -125,8 +130,9 @@ export function QeMappingPage({ git, store }: { git: GitStorage; store: QeMappin
               <button type="button" role="menuitem" onClick={() => { setGroupBy(groupBy === column.id ? '' : column.id); setCollapsed([]); setMenu('') }}>{groupBy === column.id ? 'Ungroup' : 'Group by this'}</button>
               {editable && <button type="button" role="menuitem" className="danger-text" onClick={() => removeColumn(column.id)}>Delete column…</button>}
             </div>}
+            {widths.handle(widthKey(column.id), column.name)}
           </th>)}</tr>
-          {showFilters && <tr className="qe-filters">{editable && <th />}{columns.map((column) => <th key={column.id}><input aria-label={`Filter ${column.name}`} placeholder="Filter…" value={filters[column.id] ?? ''} onChange={(event) => { setFilters({ ...filters, [column.id]: event.target.value }); setLimit(pageSize) }} /></th>)}</tr>}
+          {showFilters && <tr className="qe-filters">{editable && <th />}{columns.map((column) => <th key={column.id} style={widths.style(widthKey(column.id))}><input aria-label={`Filter ${column.name}`} placeholder="Filter…" value={filters[column.id] ?? ''} onChange={(event) => { setFilters({ ...filters, [column.id]: event.target.value }); setLimit(pageSize) }} /></th>)}</tr>}
         </thead>
         <tbody>
           {groups ? groups.flatMap((group) => { const open = !collapsed.includes(group.value); return [<tr key={`g:${group.value}`} className="qe-group"><td colSpan={columns.length + (editable ? 1 : 0)}><button type="button" className="text-button" aria-expanded={open} onClick={() => setCollapsed((current) => open ? [...current, group.value] : current.filter((value) => value !== group.value))}>{open ? '▾' : '▸'} {sheet.columns.find((column) => column.id === groupBy)?.name}: {group.value || '(blank)'}</button> <span className="muted">{group.rows.length}</span></td></tr>, ...(open ? limited(group.rows).map(rowLine) : [])] }) : limited(rows).map(rowLine)}

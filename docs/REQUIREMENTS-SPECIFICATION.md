@@ -673,6 +673,7 @@ OVR-01 to OVR-08 describe the earlier Overview (Team / Individual switch, "This 
 | QEM-06 | "Group by" (a column) shall show the rows in collapsible groups by that column's value ("(blank)" last), with each group's count; grouping and filters are for the current visit. | T | S | UC-23 |
 | QEM-07 | "Export Excel" shall download every tab with all its columns and rows as .xlsx (header row bold); "Export CSV" the current tab's shown columns and filtered rows. A mapping over 900 KB is refused at Save to Git with a message, as GitHub reads larger files differently. Changes show the unsaved bar (description, Discard, Save to Git); "Reload from Git" asks before discarding them. | T | S | UC-23 |
 | QEM-08 | The QE Mapping table shall be compact: tight cell padding and smaller text, headings on one line, columns as narrow as their content with long text wrapping at about 240 px, so that more columns fit on the screen. | D | S | UC-23 |
+| QEM-09 | Each QE Mapping column shall be resizable by dragging the right edge of its heading (double-click resets that column); the widths shall be kept per tab and column in this browser, and "Reset widths" shall return every column to its automatic width. | D | S | UC-23 |
 
 ## 6. Non-functional requirements
 

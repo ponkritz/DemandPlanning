@@ -1121,6 +1121,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-QEM-05 Compact columns** — Req QEM-08 — browser check: with a QE Mapping of ten or more columns, the headings stay on one line, short columns are only as wide as their content, a long cell wraps at about 240 px, and the Filter by column row sits right under the headings while scrolling.
 
+**TC-QEM-06 Resizable columns** — Req QEM-09 — browser check: drag the right edge of a QE Mapping heading wider and narrower (the cells and the filter follow; long text wraps inside the new width), reload (the width is kept), switch tab (the other tab keeps its own widths), double-click the edge (that column returns to automatic), resize two columns and press Reset widths (all return to automatic, the button disappears).
+
 ## 7. Requirements coverage matrix
 
 | Requirement | Test cases |
@@ -1296,6 +1298,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | QEM-03…QEM-06 | TC-QEM-02, TC-QEM-04 |
 | QEM-07 | TC-QEM-03, TC-QEM-04 |
 | QEM-08 | TC-QEM-05 |
+| QEM-09 | TC-QEM-06 |
 | NFR-01 | TC-INS-04 |
 | NFR-02 | TC-STO-01 |
 | NFR-03…05 | TC-DSK-02, TC-INS-01 |
@@ -1330,7 +1333,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-20 | TC-DOC-01, TC-DOC-02, TC-DOC-03 |
 | UC-21 | TC-SCR-01 |
 | UC-22 | TC-ACC-01, TC-ACC-02 |
-| UC-23 | TC-QEM-01…05 |
+| UC-23 | TC-QEM-01…06 |
 
 ## 8. Result record
 
