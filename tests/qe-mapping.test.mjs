@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import zlib from 'node:zlib'
 import { readXlsx, writeXlsx, readCsv, excelDate, sheetName } from '../src/xlsx.ts'
-import { addColumn, addRow, deleteColumn, deleteRows, filterRows, fromWorkbook, groupRows, moveColumn, parseQeMapping, renameColumn, serializeQeMapping, setCell, sheetFromRows, tableCsv, qeMappingMaxBytes } from '../src/qeMapping.ts'
+import { addColumn, addRow, deleteColumn, deleteRows, filterRows, fromWorkbook, groupKeys, groupRows, groupTree, moveColumn, parseQeMapping, renameColumn, serializeQeMapping, setCell, sheetFromRows, tableCsv, qeMappingMaxBytes } from '../src/qeMapping.ts'
 
 // A zip with deflated entries, as Excel writes it.
 function deflatedZip(files) {
@@ -96,4 +96,18 @@ test('the Git file: round trip, unknown cells dropped, broken files refused, too
   const big = { ...parsed, sheets: [{ ...parsed.sheets[0], rows: Array.from({ length: 20000 }, (_, i) => ({ id: `r${i}`, cells: { c1: 'x'.repeat(50) } })) }] }
   assert.ok(JSON.stringify(big).length > qeMappingMaxBytes)
   assert.throws(() => serializeQeMapping(big), /too large to save to Git/)
+})
+
+test('nested grouping: groups within groups, keys unique per path, counts per level (QEM-11)', () => {
+  const row = (id, area, owner, status) => ({ id, cells: { c1: area, c2: owner, ...(status ? { c3: status } : {}) } })
+  const rows = [row('r1', 'DP', 'Ana', 'Open'), row('r2', 'DP', 'Ana', 'Done'), row('r3', 'DP', 'Cid', 'Open'), row('r4', 'CP', 'Ana', '')]
+  const tree = groupTree(rows, ['c1', 'c2'])
+  const shape = (groups) => groups.map((group) => [group.value, group.depth, group.rows.length, shape(group.children)])
+  assert.deepEqual(shape(tree), [['CP', 0, 1, [['Ana', 1, 1, []]]], ['DP', 0, 3, [['Ana', 1, 2, []], ['Cid', 1, 1, []]]]])
+  const keys = groupKeys(tree)
+  assert.equal(keys.length, 5, 'two outer groups and three inner ones')
+  assert.equal(new Set(keys).size, keys.length, 'Ana under CP and Ana under DP are different groups')
+  assert.deepEqual(shape(groupTree(rows, ['c1', 'c2', 'c3']))[1][3][0][3].map((group) => group[0]), ['Done', 'Open'])
+  assert.deepEqual(groupTree(rows, []), [], 'no columns: no groups')
+  assert.deepEqual(groupTree(rows, ['c1']).map((group) => group.value), groupRows(rows, 'c1').map((group) => group.value), 'one level is the plain grouping')
 })

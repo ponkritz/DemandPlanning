@@ -79,6 +79,15 @@ export function groupRows(rows: QeRow[], columnId: string) {
   for (const row of rows) { const key = row.cells[columnId] ?? ''; groups.set(key, [...(groups.get(key) ?? []), row]) }
   return [...groups.entries()].sort(([a], [b]) => a === '' ? 1 : b === '' ? -1 : a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })).map(([value, items]) => ({ value, rows: items }))
 }
+// Nested grouping (QEM-11): the rows grouped by the first column, each group by the next, and so on. A group's key is
+// its path of values, unique across levels, so that it can be collapsed on its own.
+export interface QeGroup { key: string; columnId: string; value: string; depth: number; rows: QeRow[]; children: QeGroup[] }
+export function groupTree(rows: QeRow[], columnIds: string[], path: string[] = []): QeGroup[] {
+  const [first, ...rest] = columnIds
+  if (!first) return []
+  return groupRows(rows, first).map(({ value, rows: items }) => ({ key: JSON.stringify([...path, value]), columnId: first, value, depth: path.length, rows: items, children: groupTree(items, rest, [...path, value]) }))
+}
+export const groupKeys = (groups: QeGroup[]): string[] => groups.flatMap((group) => [group.key, ...groupKeys(group.children)])
 export const tableRows = (columns: QeColumn[], rows: QeRow[]) => [columns.map((column) => column.name), ...rows.map((row) => columns.map((column) => row.cells[column.id] ?? ''))]
 export const tableCsv = (columns: QeColumn[], rows: QeRow[]) => tableRows(columns, rows).map((row) => row.map(csvCell).join(',')).join('\r\n')
 
