@@ -19,14 +19,11 @@ export function ioccDocumentOf(title: string | undefined): IoccDocument | undefi
 }
 
 // The release a document belongs to: the Type of Release (Area Path after IOCC), the Title without its version and
-// without the document words, and the version — so a release's plan, notes and report are one release.
-const documentWords = /\b(?:release\s*notes?|notes?|verification(?:\s+summary)?\s*report|release\s*plan|plan)\b/gi
+// without the document words (ioccRelease), and the version — so a release's plan, notes and report are one release.
 export function ioccReleaseOf(item: Pick<AzureWorkItem, 'areaPath' | 'title'>) {
   const found = ioccRelease(item)
   if (!found) return undefined
-  const separator = /\s*[|:_–-]\s*/
-  const name = found.name.replace(documentWords, ' ').replace(new RegExp(`(?:${separator.source}){2,}`, 'g'), ' - ').replace(new RegExp(`^(?:${separator.source})+|(?:${separator.source})+$`, 'g'), '').replace(/\s+/g, ' ').trim() || found.name
-  return { group: found.group ?? '', name, release: found.release, key: `${found.group ?? ''}\u0000${name}\u0000${found.release}`.toLowerCase() }
+  return { group: found.group ?? '', name: found.name, release: found.release, key: `${found.group ?? ''}\u0000${found.name}\u0000${found.release}`.toLowerCase() }
 }
 
 export interface IoccSigned { item: AzureWorkItem; document: IoccDocument; date: string }
