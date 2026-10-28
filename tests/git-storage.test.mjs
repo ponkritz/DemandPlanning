@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { decodeBase64, encodeBase64, GitConflictError, historyUrl, parsePlanning, planningData, readPlanningFile, serializePlanning, validateGitConfig, writePlanningFile, loadGitConfig, saveGitConfig } from '../src/gitStorage.ts'
+import { decodeBase64, encodeBase64, GitConflictError, historyUrl, parsePlanning, planningData, readPlanningFile, serializePlanning, validateGitConfig, defaultGitRepository, writePlanningFile, loadGitConfig, saveGitConfig } from '../src/gitStorage.ts'
 
 const config = { owner: 'acme', repo: 'demand-planning-data', branch: 'main', path: 'planning-data.json' }
 const state = { baselineRules: [{ stream: 'CP', types: {}, items: [{ label: 'Documents', hoursPerUnit: 2, baseUnits: 14, driver: 'assets', unitsPerDriver: 11 }] }], releaseScopes: [{ release: 'CP | Care Pathways | v3.1', stream: 'CP', history: [{ at: '2026-10-01T10:00:00Z', drivers: { assets: 10 }, reason: 'Initial' }] }], resourceProfiles: { 'Zoë Müller': { region: 'Netherlands', role: 'QE' }, 'Arjun Rao': { region: 'India', role: 'Lead', peopleManager: true } } }
@@ -103,4 +103,8 @@ test('capacity settings, holidays and common activities travel in the Git planni
   assert.equal('capacitySettings' in parsePlanning(old), false, 'an older file without capacity settings leaves this browser\'s settings alone')
   assert.notEqual(serializePlanning(planningData({ ...state, capacitySettings })), old, 'a local mapping makes the data differ from an older file, so Save to Git is offered')
   assert.deepEqual(parsePlanning(serializePlanning({ ...data, capacitySettings: { ...capacitySettings, sharedTime: [{ id: 'x', kind: 'party', scope: 'Mars' }] } })).capacitySettings.sharedTime, undefined, 'invalid mappings in the file are dropped')
+})
+
+test('the default data repository is a valid config: ponkritz/DemandPlanningStorage, main, planning-data.json (GIT-13)', () => {
+  assert.deepEqual(validateGitConfig(defaultGitRepository), { owner: 'ponkritz', repo: 'DemandPlanningStorage', branch: 'main', path: 'planning-data.json' })
 })

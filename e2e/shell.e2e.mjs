@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { loadSample, navigate, openPage, startApp, text } from './helpers.mjs'
 
 // Shell, navigation and first-run scenarios of the UAT (TC-NAV-01, TC-NAV-03, TC-NAV-31, TC-NAV-33, TC-UI-01, TC-SMP-01,
-// TC-UPD-02), automated against the built web app.
+// TC-UPD-02, TC-GIT-06), automated against the built web app.
 let app
 before(async () => { app = await startApp() })
 after(async () => { await app.stop() })
@@ -98,6 +98,26 @@ test('TC-UPD-02: Force Update shows the running version, build number and build 
   const body = await text(dialog)
   assert.match(body, /v\d+\.\d+\.\d+/)
   assert.match(body, /Build number \d+/)
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
+test('TC-GIT-06: Connect Git storage starts with the team repository prefilled; only the token is missing', async () => {
+  const { page, context, errors } = await openPage(app, { guide: true })
+  const guide = page.getByRole('dialog').filter({ hasText: 'Get started' })
+  await guide.waitFor()
+  assert.match(await text(guide), /ponkritz\/DemandPlanningStorage/, 'the Git step names the prefilled repository')
+  await guide.getByRole('button', { name: /Don.t show again automatically/ }).click()
+  await navigate(page, 'Settings')
+  await page.getByRole('tab', { name: 'Storage' }).click()
+  await page.getByRole('button', { name: 'Connect Git storage…' }).click()
+  const form = page.getByRole('dialog').filter({ hasText: 'Connect Git storage' })
+  await form.waitFor()
+  assert.equal(await form.getByLabel('Owner (user or organisation)').inputValue(), 'ponkritz')
+  assert.equal(await form.getByLabel('Repository', { exact: true }).inputValue(), 'DemandPlanningStorage')
+  assert.equal(await form.getByLabel('Branch', { exact: true }).inputValue(), 'main')
+  assert.equal(await form.getByLabel('Data file', { exact: true }).inputValue(), 'planning-data.json')
+  assert.equal(await form.getByLabel('GitHub token').inputValue(), '')
   assert.deepEqual(errors, [])
   await context.close()
 })
