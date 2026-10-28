@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { defaultStreams, profileForStream, streamOfProfile, exportForStream, sameStream } from '../src/streams.ts'
 import { dpRelease, ioccRelease, releaseFor, toolRelease } from '../src/releasePath.ts'
+import { ioccDocumentOf, ioccMonthCounts, ioccReleaseOf } from '../src/ioccMilestones.ts'
 import { matchScore, releaseRegister, normalizeReleaseSourceSettings, releaseFeatureTitle } from '../src/releaseSource.ts'
 import { defaultStreamReleases, streamCounts } from '../src/releaseOverview.ts'
 
@@ -54,16 +55,17 @@ test('Pulse Check streams: the five Azure streams in order, not-set-up ones list
   const source = (connectionId, items) => ({ connectionId, name: connectionId, role: 'reference', organization: 'o', project: 'p', query: 'q', fetchedAt: '2026-10-20T00:00:00Z', items })
   // DP counts from its own query's milestone fields (dpMilestones), not from the paths.
   const dpRelease = { ...doc(1, 'DHP\\DoseNav', 'DHP\\2.1.0\\S1'), fields: { PsName: 'DoseNav', Release: '2.1.0', 'Custom.DDTDate': '2026-10-05T00:00:00Z', 'Custom.DDTStatus': 'Done', DRfHDate: '2026-10-02T00:00:00Z', DRfHStatus: 'Done', DRPEDate: '2026-09-01T00:00:00Z', DRPEStatus: 'Done' } }
-  const state = { azureSources: [source('dp', [dpRelease]), source('io', [doc(2, 'DHP\\IOCC\\Core', '', 'Patient Monitor v1.4')])] }
+  const state = { azureSources: [source('dp', [dpRelease]), source('io', [doc(2, 'DHP\\IOCC\\Core', '', 'Patient Monitor v1.4 Release Notes')])] }
   const profiles = [{ id: 'dp', reason: 'DP', role: 'reference' }, { id: 'io', reason: 'IOCC', role: 'reference' }, { id: 'ped', reason: 'Releases (Pedestal)', role: 'release-source' }]
   const streams = defaultStreamReleases(state, profiles, '2026-10', 'UTC')
   assert.deepEqual(streams.map((stream) => [stream.name, Boolean(stream.notSetUp), stream.releases.map((entry) => `${entry.type ? `[${entry.type}] ` : ''}${entry.name} ${entry.release}`)]), [['DP', false, ['DoseNav 2.1.0']], ['CP', true, []], ['IOCC', false, ['[Core] Patient Monitor 1.4']], ['Content', true, []], ['Tool Validations', true, []]])
   assert.deepEqual([streams[0].supported, streams[0].documents, streams[0].titles.map((entry) => entry.release)], [1, 0, ['SFV · DT Done']], 'DP: one release passed SFV and DT in October — one Supported Release')
-  assert.equal(streams[2].supported, undefined, 'other streams keep documents')
+  assert.equal(streams[2].supported, 1, 'IOCC counts like DP (QV-36)')
+  assert.equal(streams[3].supported, undefined, 'other streams keep documents')
   // The Dashboard's delivery table: DP per month and over the period.
   const counts = streamCounts(state, profiles, ['2026-09', '2026-10'], 'UTC')
   assert.deepEqual([counts[0].name, counts[0].months.map((entry) => [entry.month, entry.releases, entry.supported]), counts[0].releases, counts[0].supported], ['DP', [['2026-09', 0, 1], ['2026-10', 1, 1]], 1, 1], 'the same release supported in September and October counts once over the period')
-  assert.equal(counts[2].supported, undefined)
+  assert.equal(counts[3].supported, undefined)
 })
 
 test('Tool Validations: one entry per tool, whatever the number of its documents (QV-34)', () => {
@@ -83,4 +85,26 @@ test('Tool Validations: one entry per tool, whatever the number of its documents
   const streams = defaultStreamReleases(state, [{ id: 'tv', reason: 'Tool Validations', role: 'reference' }], '2026-10', 'UTC')
   const tools = streams.find((stream) => stream.name === 'Tool Validations')
   assert.deepEqual(tools.releases.map((entry) => [`${entry.name} ${entry.release}`.trim(), entry.documents]), [['JIRA Cloud 9.4', 2], ['Minitab', 3]], 'five documents, two tools')
+})
+
+test('IOCC: Completed = Release Notes or Verification Report signed, Supported = also Release Plan; each release once (QV-36)', () => {
+  assert.deepEqual(['IOCC Mobile 2.3.1 Release Notes', 'IOCC Mobile Release 2.3.1 - Notes', 'IOCC Mobile 2.3.1 Verification Report', 'IOCC Mobile 2.3.1 Verification Summary Report', 'IOCC Mobile 2.3.1 Release Plan', 'IOCC Mobile Release 2.3.1 - Plan', 'IOCC Mobile 2.3.1 Test Plan', 'IOCC Mobile 2.3.1 Design Spec'].map(ioccDocumentOf),
+    ['release-notes', 'release-notes', 'verification-report', 'verification-report', 'release-plan', 'release-plan', undefined, undefined])
+  const release = (title) => { const found = ioccReleaseOf(doc(1, 'DHP\\IOCC\\Mobile\\Docs', '', title)); return `${found.group}|${found.name}|${found.release}` }
+  assert.deepEqual(['IOCC Mobile 2.3.1 Release Notes', 'IOCC Mobile Release 2.3.1 - Notes', 'IOCC Mobile 2.3.1 Verification Report', 'IOCC Mobile Release 2.3.1 - Release Plan'].map(release), Array(4).fill('Mobile|IOCC Mobile|2.3.1'), 'notes, report and plan of a release are one release')
+  const items = [
+    doc(1, 'DHP\\IOCC\\Mobile', '', 'IOCC Mobile 2.3.1 Release Notes', '2026-10-03T10:00:00Z'),
+    doc(2, 'DHP\\IOCC\\Mobile', '', 'IOCC Mobile 2.3.1 Verification Report', '2026-10-02T10:00:00Z'),
+    doc(3, 'DHP\\IOCC\\Mobile', '', 'IOCC Mobile 2.4 Release Plan', '2026-10-08T10:00:00Z'),
+    doc(4, 'DHP\\IOCC\\Core', '', 'Core Gateway 5.0 Verification Report', '2026-10-09T10:00:00Z'),
+    doc(5, 'DHP\\IOCC\\Core', '', 'Core Gateway 5.1 Release Plan', '2026-09-20T10:00:00Z'),
+    doc(6, 'DHP\\IOCC\\Core', '', 'Core Gateway 5.0 Test Plan', '2026-10-10T10:00:00Z'),
+    { ...doc(7, 'DHP\\IOCC\\Core', '', 'Core Gateway 6.0 Release Notes'), approvalDate: undefined },
+  ]
+  const october = ioccMonthCounts(items, '2026-10', 'UTC')
+  const names = (list) => list.map((entry) => `${entry.name} ${entry.release} (${entry.group}) ${entry.documents.length}`)
+  assert.deepEqual(names(october.completed), ['IOCC Mobile 2.3.1 (Mobile) 2', 'Core Gateway 5.0 (Core) 1'], 'notes and report of one release count once; a plan, a test plan or an unsigned document never completes')
+  assert.deepEqual(names(october.supported), ['IOCC Mobile 2.3.1 (Mobile) 2', 'IOCC Mobile 2.4 (Mobile) 1', 'Core Gateway 5.0 (Core) 1'], 'supported: the completed releases and the release plans signed in the month')
+  assert.equal(october.documents.length, 4)
+  assert.deepEqual(names(ioccMonthCounts(items, '2026-09', 'UTC').supported), ['Core Gateway 5.1 (Core) 1'])
 })
