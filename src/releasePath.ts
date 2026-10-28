@@ -44,19 +44,23 @@ export function dpRelease(item: Pick<AzureWorkItem, 'areaPath' | 'iterationPath'
   if (!release) for (const part of iteration.slice(1)) { const found = versionPart.exec(part); if (found) release = found[1] }
   return name && release ? { name, release } : releaseOf(item)
 }
-// IOCC: grouped by the Area Path segment right after "IOCC"; the release name is the document Title, with a version in
-// it (e.g. "… 2.3.1") taken as the release number.
+// IOCC: grouped by the Area Path segment right after "IOCC"; the release name is the document Title without the
+// document words (Release Notes, Verification Report, Release Plan, …), with a version in it (e.g. "… 2.3.1") taken as
+// the release number — so the plan, notes and report of one release are one release (QV-36, QV-37).
+const ioccDocumentWords = /\b(?:release\s*notes?|notes?|verification(?:\s+summary)?\s*report|release\s*plan|plan)\b/gi
+const separator = /\s*[|:_–-]\s*/.source
+const withoutDocumentWords = (name: string) => name.replace(ioccDocumentWords, ' ').replace(new RegExp(`(?:${separator}){2,}`, 'g'), ' - ').replace(new RegExp(`^(?:${separator})+|(?:${separator})+$`, 'g'), '').replace(/\s+/g, ' ').trim()
 export function ioccRelease(item: Pick<AzureWorkItem, 'areaPath' | 'title'>): StreamRelease | undefined {
   const area = segments(item.areaPath), at = area.findIndex((part) => part.toLowerCase() === 'iocc')
   const group = at >= 0 ? area[at + 1] : undefined
   const title = (item.title ?? '').trim()
   if (!group || !title) return undefined
   const found = versionPart.exec(title)
-  if (!found) return { group, name: title, release: '' }
+  if (!found) return { group, name: withoutDocumentWords(title) || title, release: '' }
   const index = title.indexOf(found[1], found.index)
   const before = title.slice(0, index).replace(/(?:\bv\.?|\brel(?:ease)?)\s*[-_:.]?\s*$/i, ''), after = title.slice(index + found[1].length)
   const name = `${before} ${after}`.replace(/\s*[|:_–-]\s*$/, '').replace(/^\s*[|:_–-]\s*/, '').replace(/\s+/g, ' ').trim() || title
-  return { group, name, release: found[1] }
+  return { group, name: withoutDocumentWords(name) || name, release: found[1] }
 }
 // Tool Validations: a validation has several documents (plan, protocol, report, …) for the same tool, so the unique
 // list is per tool, not per document. The tool is the Area Path's deepest segment below the project that is neither a

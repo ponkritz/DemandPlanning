@@ -25,7 +25,7 @@ test('default streams in order; connections and exports found by name', () => {
 test('DP: name from the Area Path, number from the Iteration Path; IOCC: group after IOCC, name from the Title', () => {
   assert.deepEqual(dpRelease(doc(1, 'DHP\\DoseNav', 'DHP\\2.1.0\\Sprint 3')), { name: 'DoseNav', release: '2.1.0' })
   assert.deepEqual(dpRelease(doc(1, 'DHP\\DoseNav', 'DHP\\Release 2.1\\Sprint 3')), { name: 'DoseNav', release: '2.1' })
-  assert.deepEqual(ioccRelease(doc(2, 'DHP\\IOCC\\Mobile\\Docs', '', 'IOCC Mobile Release 2.3.1 - Notes')), { group: 'Mobile', name: 'IOCC Mobile - Notes', release: '2.3.1' })
+  assert.deepEqual(ioccRelease(doc(2, 'DHP\\IOCC\\Mobile\\Docs', '', 'IOCC Mobile Release 2.3.1 - Notes')), { group: 'Mobile', name: 'IOCC Mobile', release: '2.3.1' })
   assert.deepEqual(ioccRelease(doc(2, 'DHP\\IOCC\\Core', '', 'Patient Monitor v1.4')), { group: 'Core', name: 'Patient Monitor', release: '1.4' })
   assert.deepEqual(ioccRelease(doc(2, 'DHP\\IOCC\\Core', '', 'Patient Monitor Spring')), { group: 'Core', name: 'Patient Monitor Spring', release: '' })
   assert.equal(ioccRelease(doc(2, 'DHP\\Other', '', 'x 1.0')), undefined, 'outside IOCC')
