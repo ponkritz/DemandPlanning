@@ -751,6 +751,8 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-QV-22 IOCC grouping** — Req QV-37 — L1 `nested-groups.test.mjs` ("nested groups: type, then name, then version; blank last; keys unique per path (QV-37)"), `streams.test.mjs` (the IOCC name without the document words); browser check with the IOCC connection fetched: Release Details → IOCC opens grouped by Type of Release with each group's release count; add then by Name and then by Release (nested, indented); collapse one group, then Collapse all and Expand all; No grouping shows the flat list; a release's notes, report and plan are one row with their documents under it.
 
+**TC-CON-42 Auto-fit tables and Wrap text** — Req QV-38 — E2E `documents-and-data.e2e.mjs` ("TC-CON-42": a Windchill export's Releases table starts one line per cell; dragging the first heading's edge 200px to the right widens that column and the table by about 200px while the other columns keep their width; Wrap text on makes cells wrap (pre-wrap), off back to one line); browser check: the same on Release Details (query table and IOCC releases) and on QE Mapping, the choice remembered per table after a reload.
+
 
 ### 6.9 Dashboard and capacity
 
@@ -1127,7 +1129,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-QEM-04 QE Mapping end to end** — Req QEM-01…QEM-07 — browser check with GitHub mocked (writable token, no qe-mapping.json yet): QE Mapping shows "No QE Mapping yet."; Upload Excel… with a two-sheet workbook (Mapping: Process, QE Owner, Area, Due Date with date cells, 12 rows; Owners: 1 row) → tabs "Mapping 12" and "Owners 1", dates as YYYY-MM-DD; edit a cell to "Dana"; Add row and fill it; select and delete 2 rows → 11; Add column "Status"; rename "QE Owner" to "Owner"; move Status left; hide Due Date → "Columns (4 of 5)"; Group by Area → groups CP 3, DP 3, IOCC 4, (blank) 1; Filter Area "cp" → "3 of 11 rows"; delete the column Owner; Export CSV → the shown columns; Export Excel → both tabs read back; Save to Git → one PUT of qe-mapping.json "Update the QE Mapping (qe-sample.xlsx)" with 11 rows and the new columns; after a reload the mapping comes from Git and the hidden column stays hidden; no page errors. **UAT**
 
-**TC-QEM-05 Compact columns** — Req QEM-08 — browser check: with a QE Mapping of ten or more columns, the headings stay on one line, short columns are only as wide as their content, a long cell wraps at about 240 px, and the Filter by column row sits right under the headings while scrolling.
+**TC-QEM-05 Compact columns** — Req QEM-08 — browser check: with a QE Mapping of ten or more columns, the headings stay on one line, short columns are only as wide as their content, a long cell wraps with Wrap text on, and the Filter by column row sits right under the headings while scrolling.
 
 **TC-QEM-06 Resizable columns** — Req QEM-09 — browser check: drag the right edge of a QE Mapping heading wider and narrower (the cells and the filter follow; long text wraps inside the new width), reload (the width is kept), switch tab (the other tab keeps its own widths), double-click the edge (that column returns to automatic), resize two columns and press Reset widths (all return to automatic, the button disappears).
 
@@ -1258,6 +1260,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | QV-35 | TC-QV-20 |
 | QV-36 | TC-QV-21 |
 | QV-37 | TC-QV-22 |
+| QV-38 | TC-CON-42 |
 | OVR-01…08 | retired (TC-OVR-01…03 retired) |
 | OV-11 | TC-OV-11 |
 | OV-12 | TC-OV-12 |
@@ -1336,7 +1339,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-05 | TC-MON-07 |
 | UC-06 | TC-ATM-01…11, TC-TWN-03, TC-CON-20, TC-CON-33, TC-CON-34 |
 | UC-07 | TC-BKL-01…05, TC-CON-23, TC-CON-25…27, TC-CON-29…32, TC-CON-35 |
-| UC-08 | TC-QV-01…05, TC-FET-07, TC-CON-08, TC-CON-11…16, TC-QV-08, TC-QV-09, TC-QV-10, TC-QV-11, TC-QV-12, TC-QV-13, TC-QV-14, TC-QV-15, TC-QV-16, TC-CON-37, TC-CON-38, TC-CON-39, TC-CON-40, TC-CON-41, TC-QV-18, TC-QV-19, TC-QV-20, TC-QV-21, TC-QV-22 |
+| UC-08 | TC-QV-01…05, TC-FET-07, TC-CON-08, TC-CON-11…16, TC-QV-08, TC-QV-09, TC-QV-10, TC-QV-11, TC-QV-12, TC-QV-13, TC-QV-14, TC-QV-15, TC-QV-16, TC-CON-37, TC-CON-38, TC-CON-39, TC-CON-40, TC-CON-41, TC-QV-18, TC-QV-19, TC-QV-20, TC-QV-21, TC-QV-22, TC-CON-42 |
 | UC-09 | TC-OV-11…14, TC-CAP-01, TC-CAP-02, TC-CAP-03, TC-QV-17, TC-CON-21, TC-QV-10, TC-QV-11, TC-QV-21 |
 | UC-10 | TC-OV-11 (Months, Streams), TC-OV-13 |
 | UC-11 | TC-BAS-01…04 |

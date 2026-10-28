@@ -354,3 +354,10 @@ ol.column-chooser-list{list-style:none;padding:0;margin:8px 0 0}.column-choice{d
 .query-table th.drop-target{outline:2px dashed var(--accent,#5b5bd6);outline-offset:-3px}.query-table th [draggable=true]{cursor:grab}
 .milestone-chip{display:inline-flex;align-items:baseline;gap:4px;margin:0 6px 2px 0;padding:1px 7px;border-radius:999px;background:var(--surface-2,rgba(91,91,214,.08));border:1px solid var(--line);font-weight:600;font-size:12px;white-space:nowrap}.milestone-chip small{font-weight:400;opacity:.75}
 .inline-field{display:inline-flex;align-items:center;gap:6px;font-size:12px}.inline-field select{width:auto}
+/* Tables with draggable columns (QV-38): as wide as their columns (auto fit), never a fixed overall width — widening a
+   column widens the table instead of squeezing the others. "Wrap text" off: every cell on one line; on: long text wraps
+   and the table fits the page. */
+table.resizable,.azure-table table.resizable,.qe-table table.resizable{width:auto;min-width:0}
+table.resizable.no-wrap th,table.resizable.no-wrap td{white-space:nowrap}
+table.resizable.wrap th,table.resizable.wrap td{white-space:pre-wrap;overflow-wrap:break-word;max-width:none}
+.wrap-toggle{white-space:nowrap}

@@ -124,6 +124,7 @@ export function QeMappingPage({ git, store }: { git: GitStorage; store: QeMappin
         {allGroupKeys.length > 1 && <><button type="button" className="ghost" disabled={allGroupKeys.every((key) => collapsed.includes(key))} onClick={() => setCollapsed(allGroupKeys)}>Collapse all</button><button type="button" className="ghost" disabled={!collapsed.length} onClick={() => setCollapsed([])}>Expand all</button></>}
         <button type="button" className="ghost" aria-expanded={picking} onClick={() => setPicking(!picking)}>Columns ({columns.length} of {sheet.columns.length})</button>
         {editable && <><button type="button" className="ghost" onClick={newRow}>＋ Add row</button><button type="button" className="ghost" onClick={() => setDialog({ mode: 'add', name: '' })}>＋ Add column</button>{selected.length > 0 && <button type="button" className="ghost danger-text" onClick={removeRows}>Delete {selected.length} row{selected.length === 1 ? '' : 's'}</button>}</>}
+        {widths.wrapToggle}
         {widths.resized && <button type="button" className="ghost" onClick={widths.reset}>Reset widths</button>}
         <span className="muted">{rows.length} of {sheet.rows.length} rows{search || Object.values(filters).some(Boolean) ? ' · filtered' : ''}</span>
       </div>
@@ -132,7 +133,7 @@ export function QeMappingPage({ git, store }: { git: GitStorage; store: QeMappin
         <div className="column-chooser-list">{sheet.columns.map((column) => <label key={column.id} className="check"><input type="checkbox" checked={!hidden.includes(column.id)} disabled={!hidden.includes(column.id) && columns.length < 2} onChange={(event) => setHidden(event.target.checked ? hidden.filter((id) => id !== column.id) : [...hidden, column.id])} />{column.name}</label>)}</div>
       </fieldset>}
       {file.source && <p className="muted qe-source">From “{file.source.fileName}”{file.source.uploadedAt ? `, uploaded ${formatDateTime(file.source.uploadedAt)}` : ''}{store.history ? <> · <a href={store.history} target="_blank" rel="noreferrer">History in GitHub</a></> : null}</p>}
-      <div className="azure-table qe-table"><table className="resizable">
+      <div className="azure-table qe-table"><table className={widths.tableClass}>
         <thead><tr>{editable && <th className="qe-select"><input type="checkbox" aria-label="Select all shown rows" checked={rows.length > 0 && rows.every((row) => selected.includes(row.id))} onChange={(event) => setSelected(event.target.checked ? rows.map((row) => row.id) : [])} /></th>}
           {columns.map((column, index) => <th key={column.id} style={widths.style(widthKey(column.id))}><div className="qe-head"><span>{column.name}</span><button type="button" className="qe-menu-button" aria-label={`Column menu: ${column.name}`} aria-expanded={menu === column.id} onClick={() => setMenu(menu === column.id ? '' : column.id)}>▾</button></div>
             {menu === column.id && <div className="qe-menu" role="menu">
