@@ -24,6 +24,7 @@ A known bug is behaviour that contradicts a requirement in force, or a defect fo
 | KB-06 | Work-item and Windchill URLs restored from backups or Git are not required to be https before being rendered as links; React and Chromium neutralise `javascript:` and `data:` today (PT-11). | Info | Open — require `https:` in `validAzureWorkItem` and the snapshot parsers | STO-07, CON-70 |
 | KB-07 | PAT redaction in error messages used the PAT as entered rather than the trimmed PAT the request sends (PT-14). | Info | Fixed in the Validation Package pull request | NFR-05 |
 | KB-08 | GitHub Actions are pinned to mutable tags, not commit SHAs (PT-03, risk R-07). | Low | Open — pin to full SHAs with Dependabot updates; scheduled with the daily dependency check | CI-01, CI-07 |
+| KB-09 | The Insights workspace froze the tab on a large board: the person-month model re-scanned every item with the Time Writing title regex per month, ran a second capacity pass for the pack preview, and recomputed everything on every render because the settings object was rebuilt each time (WSP-01, WSP-02). | Medium | Fixed in the Insights workspace performance pull request: month Tasks bucketed once in `personMonths` (same results), the pack utilisation taken from the rows already computed, settings keyed by content on the workspace and the Monthly pack tab; unit test for the equivalence | WSP-01, WSP-02, PCK-04 |
 
 ## 2. Open issues (OI)
 

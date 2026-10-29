@@ -201,3 +201,48 @@ test('Complete children only for a Feature without optional User Stories (the Ti
   assert.equal(hasOptionalStories(items.filter((entry) => entry.id !== 3 && entry.id !== 4 && entry.id !== 5), feature), false, 'no stories at all')
   assert.equal(hasOptionalStories([...onlyTimeWriting, item(20, 'User Story', 'Removed story', { parentId: 2, state: 'Removed' })], feature), false, 'Removed stories do not count')
 })
+
+import { closeFollowUp, closeStates, followUpQuestion } from '../src/myWork.ts'
+import { closeRelated } from '../src/closeChain.ts'
+test('closing a Feature offers its open User Stories; closing the last open User Story offers the Feature (ATM-20)', async () => {
+  const mk = (id, type, state, parentId, extra = {}) => item(id, type, `${type} ${id}`, { state, parentId, ...extra })
+  const items = [
+    mk(1, 'Feature', 'Active'), mk(11, 'User Story', 'Closed', 1), mk(12, 'User Story', 'Active', 1), mk(13, 'User Story', 'New', 1), mk(14, 'User Story', 'Removed', 1), mk(15, 'Task', 'Active', 1),
+    mk(2, 'Feature', 'Active'), mk(21, 'User Story', 'Closed', 2), mk(22, 'User Story', 'Active', 2),
+    mk(3, 'Feature', 'Closed'), mk(31, 'User Story', 'Active', 3),
+    mk(4, 'Feature', 'New'), mk(41, 'User Story', 'Active', 4),
+    mk(5, 'Feature', 'Resolved'), mk(51, 'User Story', 'Active', 5),
+  ]
+  const feature = closeFollowUp(items, items[0])
+  assert.deepEqual([feature.kind, feature.stories.map((story) => story.id)], ['stories', [12, 13]], 'open stories only: Closed, Removed and Tasks left out')
+  assert.deepEqual(closeFollowUp(items, mk(2, 'Feature', 'Active')).stories.map((story) => story.id), [22], 'only the open story of Feature 2')
+  assert.equal(closeFollowUp(items, mk(3, 'Feature', 'Closed')).kind, 'stories', 'a Feature closed with an open story still asks for it')
+  assert.deepEqual(closeFollowUp(items, mk(22, 'User Story', 'Closed', 2)).kind, 'feature', 'the last open story of Feature 2')
+  assert.equal(closeFollowUp(items, mk(12, 'User Story', 'Closed', 1)), null, 'story 13 is still open under Feature 1')
+  assert.equal(closeFollowUp(items, mk(31, 'User Story', 'Closed', 3)), null, 'a Closed Feature is left alone')
+  assert.equal(closeFollowUp(items, mk(15, 'Task', 'Closed', 1)), null, 'Tasks have no follow-up')
+  assert.deepEqual([closeStates({ workItemType: 'User Story', state: 'New' }), closeStates({ workItemType: 'Feature', state: 'Active' }), closeStates({ workItemType: 'Feature', state: 'Resolved' }), closeStates({ workItemType: 'Task', state: 'New' })], [['Active', 'Closed'], ['Closed'], [], ['Closed']], 'the staged order: New → Active → Closed')
+  assert.match(followUpQuestion(feature), /^Feature #1 is Closed\. Also close its 2 open User Stories in Azure DevOps\?\n#12 User Story 12 \(Active\)\n#13 User Story 13 \(New\)$/)
+  assert.match(followUpQuestion(closeFollowUp(items, mk(22, 'User Story', 'Closed', 2))), /^#22 was the last open User Story of Feature #2 “Feature 2” \(Active\)\. Also close the Feature in Azure DevOps\?$/)
+  // The chain: confirmed → each open story in its staged order, read back; declined → nothing written.
+  const writes = []
+  const write = async (_config, _pat, id, update) => { writes.push([id, update.state]); return { ...items.find((entry) => entry.id === id), state: update.state } }
+  const config = { organization: 'o', project: 'p', team: 't' }
+  const done = await closeRelated(config, 'pat', items, { ...items[0], state: 'Closed' }, () => true, write)
+  assert.deepEqual([done.confirmed, done.closed.map((entry) => [entry.id, entry.state]), writes], [true, [[12, 'Closed'], [13, 'Closed']], [[12, 'Closed'], [13, 'Active'], [13, 'Closed']]])
+  writes.length = 0
+  const declined = await closeRelated(config, 'pat', items, { ...items[0], state: 'Closed' }, () => false, write)
+  assert.deepEqual([declined.confirmed, declined.closed, writes], [false, [], []], 'declined: nothing written')
+  const none = await closeRelated(config, 'pat', items, { ...items[1], state: 'Closed' }, () => { throw new Error('must not ask') }, write)
+  assert.equal(none.follow, null, 'no question without a follow-up')
+  // A Feature that cannot be closed from here (Resolved) is reported, not asked for.
+  const resolved = await closeRelated(config, 'pat', items, mk(51, 'User Story', 'Closed', 5), () => { throw new Error('must not ask') }, write)
+  assert.deepEqual([resolved.follow.kind, resolved.confirmed, resolved.skipped], ['feature', false, ['#5 is Resolved and cannot be closed from here']])
+  // A New Feature is set to Active, then Closed.
+  const staged = await closeRelated(config, 'pat', items, mk(41, 'User Story', 'Closed', 4), () => true, write)
+  assert.deepEqual(writes.slice(-2), [[4, 'Active'], [4, 'Closed']]); assert.equal(staged.closed[0].state, 'Closed')
+  // A failed write is reported and does not stop the others.
+  const failing = async (_c, _p, id, update) => { if (id === 12) throw new Error('refused'); return { ...items.find((entry) => entry.id === id), state: update.state } }
+  const partly = await closeRelated(config, 'pat', items, { ...items[0], state: 'Closed' }, () => true, failing)
+  assert.deepEqual([partly.closed.map((entry) => entry.id), partly.failed], [[13], ['#12: refused']])
+})

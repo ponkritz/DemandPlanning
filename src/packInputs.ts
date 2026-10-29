@@ -27,6 +27,16 @@ export function packStreamsOf(state: Pick<AppState, 'azureSources' | 'releaseSou
   ]
 }
 
+// The same utilisation from person-month rows already computed (dashboard.ts personMonths): the people with Tasks in
+// the month, booked hours over available hours; rows carry the model's figures rounded to the cent.
+export function rowsUtilization(rows: { month: string; person: string; actual: number; capacity: number; tasks: number }[], month: string, settings: CapacitySettings): Utilization {
+  const months = new Set(yearMonths(month))
+  const sum = (list: { actual: number; capacity: number }[]) => ratio(list.reduce((total, row) => total + row.actual, 0), list.reduce((total, row) => total + row.capacity, 0))
+  const withTasks = rows.filter((row) => row.tasks > 0 && row.person !== 'Unassigned')
+  const now = withTasks.filter((row) => row.month === month)
+  return { month: sum(now), ytd: sum(withTasks.filter((row) => months.has(row.month))), qeMonth: sum(now.filter((row) => settings.profiles?.[row.person]?.role === 'QE')) }
+}
+
 export function packUtilization(items: AzureWorkItem[], month: string, settings: CapacitySettings): Utilization {
   const people = (at: string) => { try { return capacityModel(items, at, settings).people.filter((person) => person.name !== 'Unassigned' && person.tasks) } catch { return [] } }
   const sum = (list: { work: number; available: number }[]) => ratio(list.reduce((total, person) => total + person.work, 0), list.reduce((total, person) => total + person.available, 0))

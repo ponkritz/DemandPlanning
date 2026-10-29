@@ -42,13 +42,22 @@ export function personMonths(source: AzureWorkItem[], months: string[], today: s
   const byId = new Map(source.map((item) => [item.id, item]))
   const epicOf = (item: AzureWorkItem) => { const seen = new Set([item.id]); let current = item.parentId == null ? undefined : byId.get(item.parentId); while (current && !seen.has(current.id)) { if (current.workItemType === 'Epic') return current; seen.add(current.id); current = current.parentId == null ? undefined : byId.get(current.parentId) } return undefined }
   const chainOf = (item: AzureWorkItem) => { const chain: AzureWorkItem[] = []; const seen = new Set([item.id]); let current = item.parentId == null ? undefined : byId.get(item.parentId); while (current && !seen.has(current.id)) { chain.push(current); seen.add(current.id); current = current.parentId == null ? undefined : byId.get(current.parentId) } return chain }
+  // The month Tasks bucketed once (the Time Writing title regex is costly over a large board); every other item is
+  // kept for each month, so the model and the lines see exactly what they saw before, with no Task of another month.
+  const others: AzureWorkItem[] = [], byMonth = new Map<string, AzureWorkItem[]>()
+  for (const item of source) {
+    if (item.workItemType !== 'Task') { others.push(item); continue }
+    const at = isMonthTask(item) ? timeWritingMonth(item.title) : undefined
+    if (at != null) byMonth.set(at, [...(byMonth.get(at) ?? []), item])
+  }
   const rows: PersonMonth[] = []
   for (const month of months) {
-    const model = capacityModel(source, month, settings)
+    const monthTasks = byMonth.get(month) ?? []
+    const model = capacityModel([...others, ...monthTasks], month, settings)
     // Planned lines and blank actuals per person (month Tasks outside the absence Epic, shared time and NPRA, with an estimate).
     const lines = new Map<string, { planLines: number; blankActuals: number }>()
-    for (const task of source) {
-      if (!isMonthTask(task) || timeWritingMonth(task.title) !== month || task.state.trim().toLowerCase() === 'removed' || !(task.originalEstimate && task.originalEstimate > 0)) continue
+    for (const task of monthTasks) {
+      if (task.state.trim().toLowerCase() === 'removed' || !(task.originalEstimate && task.originalEstimate > 0)) continue
       if (epicOf(task)?.id === settings.absenceEpicId || sharedTimeOf(task, chainOf(task), settings) || isNpraTask(task, chainOf(task))) continue
       const entry = lines.get(task.assignedTo) ?? { planLines: 0, blankActuals: 0 }
       entry.planLines++; if (task.completedWork == null) entry.blankActuals++

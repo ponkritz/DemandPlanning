@@ -16,7 +16,9 @@ import { Notice, Panel } from './ui'
 // Git. Copy a box or a slide as text, or download both slides as .pptx (pptx.ts).
 
 export function MonthlyPackPanel({ month, azure, store, git, pack, windchill }: { month: string; azure: AzureWorkspace; store: PageProps['store']; git: GitStorage; pack: MonthlyPackStore; windchill: WindchillWorkspace }) {
-  const settings = capacityContext(store.state)
+  // Keyed by content: the store rebuilds the settings object on every render, which would redo the capacity model per keystroke.
+  const settingsKey = JSON.stringify([store.state.capacitySettings ?? null, store.state.resourceProfiles ?? null])
+  const settings = useMemo(() => capacityContext(store.state), [settingsKey]) // eslint-disable-line react-hooks/exhaustive-deps
   const [draft, setDraft] = useState<MonthlyPackNotes>(pack.notes)
   const [status, setStatus] = useState<{ tone: 'info' | 'success' | 'error'; text: string; url?: string } | null>(null)
   const [busy, setBusy] = useState(false)
