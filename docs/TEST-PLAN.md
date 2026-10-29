@@ -592,6 +592,8 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-ATM-11 New Feature and Complete children on Assigned to Me** — Req ATM-19, BKL-10 — L1 `my-work.test.mjs` ("Complete children only for a Feature without optional User Stories"); browser check: ＋ New Feature opens the board's "Add Feature under an Epic" editor with the Epic selectable; Complete children shows only on a Feature with no User Story other than its Time Writing story; both are disabled with sample data; after a real create the result shows as a notice and the data refreshes. **UAT**
 
+**TC-ATM-12 Close follow-up: User Stories with the Feature, the Feature with the last User Story** — Req ATM-20 — L1 `my-work.test.mjs` ("closing a Feature offers its open User Stories; closing the last open User Story offers the Feature (ATM-20)": open stories only, the last-story rule, Closed Features and Tasks left alone, the staged states, the question texts; the chain writes each item in order when confirmed, nothing when declined, reports a Resolved Feature and a failed write, sets a New Feature to Active then Closed); browser check (QMS-0025, own test items): Close Feature → the prompt lists its open User Stories → OK closes them and the log says so; close the last open User Story → the prompt offers the Feature → Cancel leaves it open.
+
 **TC-ATM-03 Close an item** — Req ATM-06 — **UAT**
 - Steps:
   1. On a New User Story press Set User Story to Active, then Close User Story; on a New Feature press Set Feature to Active, then Close Feature. A Resolved story or Feature shows "Set to Active first".
@@ -1260,6 +1262,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | ATM-17 | TC-ATM-09 |
 | ATM-18 | TC-ATM-10 |
 | ATM-19 | TC-ATM-11 |
+| ATM-20 | TC-ATM-12 |
 | BKL-01…03, BKL-12 | TC-BKL-01 |
 | BKL-04…09, BKL-11 | TC-BKL-02 |
 | BKL-10 | TC-BKL-03, TC-ATM-11 |

@@ -4,6 +4,7 @@ import { EmptyState, Metric, Metrics, Notice, Page, Pill, TablePanel, type Tone 
 import { currentIndiaMonth, updateAzureWorkItem } from '../azureDevOps'
 import { capacityContext } from '../capacity'
 import { featureChildren, hasOptionalStories, isMine, matchesWork, monthTaskCandidates, nextStateFor, workTypes } from '../myWork'
+import { closeRelated, type FollowUpResult } from '../closeChain'
 import { formatHours } from '../format'
 import type { AzureWorkItem } from '../domain'
 import type { AzureWorkspace } from '../useAzureWorkspace'
@@ -42,13 +43,23 @@ export function MyWorkPage({ azure, store, my, onOpenBulk, assign, featureSetup 
   const candidates = my.known ? monthTaskCandidates(azure.items, my.me, month, absenceEpicId) : []
   const missing = candidates.filter((row) => row.status === 'needs-task' || row.status === 'needs-story')
   const note = (entry: Log) => setLog((current) => [entry, ...current].slice(0, 8))
+  const noteFollowUp = (result: FollowUpResult, apply: (closed: AzureWorkItem[]) => void) => {
+    if (result.closed.length) { apply(result.closed); note({ tone: 'success', text: `Also closed ${result.closed.map((entry) => `#${entry.id}`).join(', ')}.` }) }
+    else if (result.follow && !result.confirmed && !result.skipped.length) note({ tone: 'info', text: result.follow.kind === 'stories' ? 'Its User Stories were left open.' : 'The Feature was left open.' })
+    for (const text of [...result.skipped, ...result.failed]) note({ tone: result.failed.includes(text) ? 'error' : 'info', text })
+  }
 
   async function finish(item: AzureWorkItem, state: string) {
     if (blocked || !config) return
     if (!window.confirm(`${state === 'Active' ? 'Set' : 'Close'} ${item.workItemType} #${item.id} “${item.title}”${state === 'Active' ? ' to Active' : ''}? Its State is set to ${state} in Azure DevOps.`)) return
     setBusy(`state-${item.id}`)
     // After every save the whole backlog is refreshed from Azure (and saved locally), so all pages show current data.
-    try { const updated = await updateAzureWorkItem(config, pat, item.id, { state }); azure.applyWorkItems([updated], 'Close item', `#${item.id} ${item.state} → ${updated.state}`); note({ tone: 'success', text: `#${item.id} is now ${updated.state}. Refreshing data…` }); await azure.refresh() }
+    try {
+      const updated = await updateAzureWorkItem(config, pat, item.id, { state }); azure.applyWorkItems([updated], 'Close item', `#${item.id} ${item.state} → ${updated.state}`); note({ tone: 'success', text: `#${item.id} is now ${updated.state}.` })
+      // Closing a Feature offers to close its open User Stories; closing the last open User Story offers to close the Feature.
+      if (state === 'Closed') noteFollowUp(await closeRelated(config, pat, azure.items, updated, (question) => window.confirm(question)), (closed) => azure.applyWorkItems(closed, 'Close item', closed.map((entry) => `#${entry.id} → ${entry.state}`).join(', ')))
+      note({ tone: 'info', text: 'Refreshing data…' }); await azure.refresh()
+    }
     catch (failure) { note({ tone: 'error', text: `#${item.id}: ${failure instanceof Error ? failure.message : 'update failed'}` }) }
     finally { setBusy('') }
   }

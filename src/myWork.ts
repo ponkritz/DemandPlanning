@@ -134,6 +134,32 @@ export function nextStateFor(item: Pick<AzureWorkItem, 'workItemType' | 'state'>
   return null
 }
 
+// After a close, the follow-up question: closing a Feature offers to close its open User Stories (not Closed, not
+// Removed); closing the last open User Story of a Feature offers to close the Feature too (a Feature already Closed
+// or Removed is left alone). The states to write per item follow the staged rule: New → Active → Closed.
+export type CloseFollowUp = { kind: 'stories'; feature: AzureWorkItem; stories: AzureWorkItem[] } | { kind: 'feature'; feature: AzureWorkItem; story: AzureWorkItem } | null
+export function closeFollowUp(items: AzureWorkItem[], closed: Pick<AzureWorkItem, 'id' | 'workItemType' | 'parentId' | 'organization' | 'project'>): CloseFollowUp {
+  const live = items.filter((item) => !stateIs(item, 'removed') && item.organization === closed.organization && item.project === closed.project)
+  if (closed.workItemType === 'Feature') {
+    const feature = live.find((item) => item.id === closed.id)
+    const stories = live.filter((item) => item.parentId === closed.id && item.workItemType === 'User Story' && !stateIs(item, 'closed')).sort((a, b) => a.id - b.id)
+    return feature && stories.length ? { kind: 'stories', feature, stories } : null
+  }
+  if (closed.workItemType === 'User Story' && closed.parentId != null) {
+    const feature = live.find((item) => item.id === closed.parentId && item.workItemType === 'Feature')
+    const story = live.find((item) => item.id === closed.id)
+    if (!feature || !story || stateIs(feature, 'closed')) return null
+    const others = live.filter((item) => item.parentId === feature.id && item.workItemType === 'User Story' && item.id !== closed.id)
+    return others.every((entry) => stateIs(entry, 'closed')) ? { kind: 'feature', feature, story } : null
+  }
+  return null
+}
+export const closeStates = (item: Pick<AzureWorkItem, 'workItemType' | 'state'>): ('Active' | 'Closed')[] => !(stagedTypes as readonly string[]).includes(item.workItemType) ? ['Closed'] : stateIs(item, 'new') ? ['Active', 'Closed'] : stateIs(item, 'active') ? ['Closed'] : []
+export function followUpQuestion(follow: NonNullable<CloseFollowUp>) {
+  if (follow.kind === 'stories') return `Feature #${follow.feature.id} is Closed. Also close its ${follow.stories.length} open User Stor${follow.stories.length === 1 ? 'y' : 'ies'} in Azure DevOps?\n${follow.stories.map((story) => `#${story.id} ${story.title} (${story.state})`).join('\n')}`
+  return `#${follow.story.id} was the last open User Story of Feature #${follow.feature.id} “${follow.feature.title}” (${follow.feature.state}). Also close the Feature in Azure DevOps?`
+}
+
 // The work under a Feature on Assigned to Me: its direct children (User Stories, Bugs, Tasks; any state but Removed)
 // in ascending ID order, each with its own children the same way. Items of other people are included: the point is
 // to see the whole Feature.

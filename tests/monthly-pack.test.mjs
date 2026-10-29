@@ -63,3 +63,18 @@ test('the .pptx writer: a zip with the presentation parts, one slide per input, 
   assert.ok(content.includes('<a:t>A &amp; B</a:t>') && content.includes('<a:t>Box &lt;1&gt;</a:t>') && content.includes('<a:t>x &quot;y&quot; z</a:t>'), 'XML special characters are escaped')
   assert.ok(content.includes('<p:sldSz cx="12192000" cy="6858000"/>'), '16:9')
 })
+
+import { packUtilization, rowsUtilization } from '../src/packInputs.ts'
+import { sampleDataset, sampleProfiles } from '../src/sampleData.ts'
+import { capacityContext } from '../src/capacity.ts'
+import { personMonths } from '../src/dashboard.ts'
+test('the utilisation from person-month rows equals the capacity model pass used by the pack (PCK-04, WSP-02)', () => {
+  const config = { organization: 'o', project: 'p', team: 't' }
+  const sample = sampleDataset(config, '2026-10')
+  const settings = capacityContext({ resourceProfiles: sampleProfiles })
+  const months = Array.from({ length: 10 }, (_, index) => `2026-${String(index + 1).padStart(2, '0')}`)
+  const rows = personMonths(sample.items, months, '2026-10-29', settings)
+  const fromRows = rowsUtilization(rows, '2026-10', settings), fromModel = packUtilization(sample.items, '2026-10', settings)
+  assert.ok(fromModel.month != null && fromModel.ytd != null && fromModel.qeMonth != null, 'the sample has bookings')
+  for (const key of ['month', 'ytd', 'qeMonth']) assert.ok(Math.abs(fromRows[key] - fromModel[key]) <= 0.1, `${key}: ${fromRows[key]} vs ${fromModel[key]}`)
+})

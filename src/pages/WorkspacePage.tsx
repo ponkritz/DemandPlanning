@@ -9,7 +9,7 @@ import { streamCounts } from '../releaseOverview'
 import { formatHours, monthName, todayIso } from '../format'
 import { previousMonth } from '../pulseCheck'
 import { buildMonthlyPack, capacityLine, monthLabel, noteLabels, sameMonthLastYear, supportedLine, yearMonths, yoyLine, type MonthlyPackNotes } from '../monthlyPack'
-import { packStreamsOf, packUtilization } from '../packInputs'
+import { packStreamsOf, rowsUtilization } from '../packInputs'
 import { useMonthlyPack } from '../useMonthlyPack'
 import { completeness, cumulative, delta, exceptionKinds, exceptionQueue, insightCards, monthUtilization, questions, signedText, timelineHealth, type ExceptionKind, type InsightCard, type ReleaseSnapshot, type TimelineStream } from '../workspace'
 import type { AzureWorkspace } from '../useAzureWorkspace'
@@ -79,8 +79,10 @@ function Card({ card, queued, onQueue, open, setOpen }: { card: InsightCard; que
 }
 
 export function WorkspacePage({ month, azure, store, git, windchill }: { month: string; azure: AzureWorkspace; store: PageProps['store']; git: GitStorage; windchill: WindchillWorkspace }) {
-  const settings = capacityContext(store.state)
-  const bands: Bands = { overloadedAt: settings.overloadedAt, availableBelow: settings.availableBelow }
+  // The settings object is rebuilt from the store on every render; keyed by content so the heavy memos below hold.
+  const settingsKey = JSON.stringify([store.state.capacitySettings ?? null, store.state.resourceProfiles ?? null])
+  const settings = useMemo(() => capacityContext(store.state), [settingsKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  const bands = useMemo((): Bands => ({ overloadedAt: settings.overloadedAt, availableBelow: settings.availableBelow }), [settings])
   const [tab, setTabState] = useState<Tab>(loadTab)
   const setTab = (next: Tab) => { setTabState(next); try { localStorage.setItem(tabKey, next) } catch { /* convenience only */ } }
   const [filter, setFilter] = useState<DashboardFilter>(noFilter)
@@ -90,11 +92,12 @@ export function WorkspacePage({ month, azure, store, git, windchill }: { month: 
   const [status, setStatus] = useState<{ tone: 'info' | 'success' | 'error'; text: string; url?: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const pack = useMonthlyPack(git, month)
-  const today = todayIso()
+  const [today] = useState(todayIso)
   const previous = previousMonth(month), lastYear = sameMonthLastYear(month)
   const year = Number(month.slice(0, 4))
   const trendMonths = useMemo(() => monthRange(month, 12), [month])
   const allMonths = useMemo(() => [...new Set([...trendMonths, previous, lastYear, ...yearMonths(month)])].sort(), [trendMonths, previous, lastYear, month])
+  // One pass of the capacity model per month (dashboard.ts) for everything below: tiles, trend, cards and the pack preview.
   const everyone = useMemo(() => personMonths(azure.items, allMonths, today, settings), [azure.items, allMonths, today, settings])
   const rows = useMemo(() => applyFilter(everyone, filter), [everyone, filter])
   const trendRows = useMemo(() => rows.filter((row) => trendMonths.includes(row.month)), [rows, trendMonths])
@@ -124,7 +127,7 @@ export function WorkspacePage({ month, azure, store, git, windchill }: { month: 
   const hasData = everyone.length > 0 || counts.some((stream) => stream.releases > 0) || baselines.length > 0
 
   // Monthly pack of the header month for the preview and the queue.
-  const packInputs = useMemo(() => ({ streamsOf: (at: string) => packStreamsOf(store.state, azure.connectionProfiles, windchill, at), utilization: packUtilization(azure.items, month, settings) }), [store.state, azure.connectionProfiles, windchill, azure.items, month, settings])
+  const packInputs = useMemo(() => ({ streamsOf: (at: string) => packStreamsOf(store.state, azure.connectionProfiles, windchill, at), utilization: rowsUtilization(everyone, month, settings) }), [store.state, azure.connectionProfiles, windchill, everyone, month, settings])
   const built = useMemo(() => buildMonthlyPack({ month, setup: pack.setup, notes: pack.notes, items: azure.items, ...packInputs }), [month, pack.setup, pack.notes, azure.items, packInputs])
   const queued = queues[month] ?? []
   const setQueue = (next: string[]) => setQueues((current) => { const value = { ...current, [month]: next }; try { localStorage.setItem(queueKey, JSON.stringify(value)) } catch { /* convenience only */ } return value })

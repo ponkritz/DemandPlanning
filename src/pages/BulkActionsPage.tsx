@@ -5,6 +5,7 @@ import { EmptyState, Notice, Page, Panel, Pill } from '../components/ui'
 import { currentIndiaMonth, currentIterationPairs, ensureMonthTask, readAzureIterations, updateAzureWorkItem, type AzureIteration } from '../azureDevOps'
 import { capacityContext } from '../capacity'
 import { assignablePeople, monthTaskCandidates, moveCandidates, nextStateFor, stateChecks, type MoveStates, type StateCheck } from '../myWork'
+import { closeRelated } from '../closeChain'
 import type { AzureWorkItem } from '../domain'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { MyWork } from '../useMyWork'
@@ -57,7 +58,12 @@ export function BulkActionsPage({ azure, store, my, assign }: { azure: AzureWork
   async function applyState(item: AzureWorkItem, state: string) {
     if (blocked || !config || !window.confirm(`Set ${item.workItemType} #${item.id} “${item.title}” to ${state} in Azure DevOps?`)) return
     setBusy(`check-${item.id}`)
-    try { const updated = await updateAzureWorkItem(config, pat, item.id, { state }); azure.applyWorkItems([updated], 'State check', `#${item.id} ${item.state} → ${updated.state}`); note({ tone: 'success', text: `#${item.id} is now ${updated.state}. Refreshing data…` }); await azure.refresh() }
+    try {
+      const updated = await updateAzureWorkItem(config, pat, item.id, { state }); azure.applyWorkItems([updated], 'State check', `#${item.id} ${item.state} → ${updated.state}`); note({ tone: 'success', text: `#${item.id} is now ${updated.state}.` })
+      // Closing the last open User Story offers to close its Feature too (closeChain).
+      if (state === 'Closed') { const result = await closeRelated(config, pat, azure.items, updated, (question) => window.confirm(question)); if (result.closed.length) { azure.applyWorkItems(result.closed, 'State check', result.closed.map((entry) => `#${entry.id} → ${entry.state}`).join(', ')); note({ tone: 'success', text: `Also closed ${result.closed.map((entry) => `#${entry.id}`).join(', ')}.` }) } for (const text of [...result.skipped, ...result.failed]) note({ tone: result.failed.includes(text) ? 'error' : 'info', text }) }
+      note({ tone: 'info', text: 'Refreshing data…' }); await azure.refresh()
+    }
     catch (failure) { note({ tone: 'error', text: `#${item.id}: ${failure instanceof Error ? failure.message : 'update failed'}` }) }
     finally { setBusy('') }
   }
