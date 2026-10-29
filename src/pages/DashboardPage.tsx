@@ -150,7 +150,7 @@ function NoHours({ children, rows, title = 'Nothing planned or recorded for this
 }
 
 // Planned and actual bars per month with the capacity as a dashed line; partial and future months shaded.
-function DemandChart({ rows, months }: { rows: PersonMonth[]; months: string[] }) {
+export function DemandChart({ rows, months }: { rows: PersonMonth[]; months: string[] }) {
   const series = monthSeries(rows, months)
   const max = Math.max(1, ...series.flatMap((point) => [point.plan, point.actual, point.capacity]))
   const width = Math.max(480, months.length * 70), height = 240, top = 16, bottom = 210, slot = width / months.length, bar = Math.min(22, slot / 4)

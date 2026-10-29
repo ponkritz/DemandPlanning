@@ -138,6 +138,18 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
     return writeTextFile(siblingConfig(config, 'qe-mapping.json'), token, text, sha, commitMessage)
   }
+  // The Monthly pack: its shared setup (monthly-pack-setup.json) and a month's text (monthly-pack/<YYYY-MM>.json),
+  // read and saved like the shared Feature setup.
+  const packPath = (name: string) => { if (!/^(?:monthly-pack-setup\.json|monthly-pack\/\d{4}-(?:0[1-9]|1[0-2])\.json)$/.test(name)) throw new Error('Not a Monthly pack file.'); return name }
+  const readMonthlyPack = useCallback(async (name: string) => {
+    if (!config || !token) throw new Error('Connect Git storage first.')
+    return readTextFile(siblingConfig(config, packPath(name)), token)
+  }, [config, token])
+  async function writeMonthlyPack(name: string, text: string, sha: string | null, commitMessage: string) {
+    if (!config || !token) throw new Error('Connect Git storage first.')
+    if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
+    return writeTextFile(siblingConfig(config, packPath(name)), token, text, sha, commitMessage)
+  }
   // A person's own Feature setup (feature-setup/<email>.json): read and saved like the shared one.
   const readPersonalFeatureSetup = useCallback(async (email: string) => {
     if (!config || !token) throw new Error('Connect Git storage first.')
@@ -291,6 +303,6 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     setConfig(null); setToken(''); setSynced(null); setStatus('off'); setMessage('Git storage disconnected in this browser. The data stays in the app and in the repository.'); sha.current = null
   }
 
-  return { config, connected, readOnly, status, message, dirty, commitUrl, history: config ? historyUrl(config) : '', isSample, load: () => load(), connect, save, disconnect, viewsPath: viewsConfig?.path ?? '', viewsHistory: viewsConfig ? historyUrl(viewsConfig) : '', readViews, writeViews, syncViews, pushWindchillAnalysis, accessScope: accessConfig && token ? `${accessConfig.owner}/${accessConfig.repo}@${accessConfig.branch}:${accessConfig.path}` : '', accessPath: accessConfig?.path ?? '', accessHistory: accessConfig ? historyUrl(accessConfig) : '', readAccess, writeAccess, readFeatureSetup, writeFeatureSetup, readPersonalFeatureSetup, writePersonalFeatureSetup, featureSetupHistory: config ? historyUrl(siblingConfig(config, 'feature-setup.json')) : '', readQeMapping, writeQeMapping, qeMappingHistory: config ? historyUrl(siblingConfig(config, 'qe-mapping.json')) : '', removeSnapshots, viewsSync, snapshotNotes, pushSnapshot, pullSnapshot, pullSnapshots, pushWindchill, pullWindchill, pullWindchillOne, snapshotsHistory: config ? historyUrl(siblingConfig(config, snapshotFolder)) : '' }
+  return { config, connected, readOnly, status, message, dirty, commitUrl, history: config ? historyUrl(config) : '', isSample, load: () => load(), connect, save, disconnect, viewsPath: viewsConfig?.path ?? '', viewsHistory: viewsConfig ? historyUrl(viewsConfig) : '', readViews, writeViews, syncViews, pushWindchillAnalysis, accessScope: accessConfig && token ? `${accessConfig.owner}/${accessConfig.repo}@${accessConfig.branch}:${accessConfig.path}` : '', accessPath: accessConfig?.path ?? '', accessHistory: accessConfig ? historyUrl(accessConfig) : '', readAccess, writeAccess, readFeatureSetup, writeFeatureSetup, readPersonalFeatureSetup, writePersonalFeatureSetup, featureSetupHistory: config ? historyUrl(siblingConfig(config, 'feature-setup.json')) : '', readQeMapping, writeQeMapping, readMonthlyPack, writeMonthlyPack, monthlyPackHistory: (name: string) => config ? historyUrl(siblingConfig(config, name)) : '', qeMappingHistory: config ? historyUrl(siblingConfig(config, 'qe-mapping.json')) : '', removeSnapshots, viewsSync, snapshotNotes, pushSnapshot, pullSnapshot, pullSnapshots, pushWindchill, pullWindchill, pullWindchillOne, snapshotsHistory: config ? historyUrl(siblingConfig(config, snapshotFolder)) : '' }
 }
 export type GitStorage = ReturnType<typeof useGitStorage>

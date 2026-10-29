@@ -8,6 +8,7 @@ import { ThemeToggle } from './components/Clock'
 import { DataNotices, DataStatus } from './components/DataStatus'
 import { pages, pageGroups, pageMeta, type Page } from './pages/registry'
 import { DashboardPage } from './pages/DashboardPage'
+import { WorkspacePage } from './pages/WorkspacePage'
 import { MonthlyPage } from './pages/MonthlyPage'
 import { BaselinesPage } from './pages/BaselinesPage'
 import { SnapshotsPage } from './pages/SnapshotsPage'
@@ -31,6 +32,8 @@ import { QeMappingPage } from './pages/QeMappingPage'
 import { useAccess } from './useAccess'
 import { useFeatureSetup } from './useFeatureSetup'
 import { useQeMapping } from './useQeMapping'
+import { useMonthlyPack } from './useMonthlyPack'
+import { previousMonth } from './pulseCheck'
 import type { Area } from './access'
 import { useMyWork } from './useMyWork'
 import { MyWorkPage } from './pages/MyWorkPage'
@@ -129,6 +132,8 @@ export default function App() {
   const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null)
   // The selected month starts on the viewer's current month (their time zone).
   const [month, setMonth] = useState(() => todayIso().slice(0, 7))
+  // The Monthly pack is for the month before the header month (the month presented in the following month's call).
+  const monthlyPack = useMonthlyPack(git, previousMonth(month))
 
   const sampleRequested = useRef(new URLSearchParams(window.location.search).get('sample') === '1')
   useEffect(() => {
@@ -145,7 +150,7 @@ export default function App() {
   const openView = (id: string) => { setViewId(id); saveBacklogTab(id); setPage('board') }
   // Access roles: each menu entry belongs to an area; Settings is always there (each person's own connections and tokens).
   // A page the viewer's roles do not include falls back to the first one they do.
-  const areaOf = (id: Page): Area | null => id === 'admin' ? null : id === 'board' ? (view.onPrem ? 'release' : 'board') : id === 'windchill' ? 'release' : id === 'pulse' || id === 'pireview' ? 'overview' : id
+  const areaOf = (id: Page): Area | null => id === 'admin' ? null : id === 'board' ? (view.onPrem ? 'release' : 'board') : id === 'windchill' ? 'release' : id === 'pulse' || id === 'pireview' || id === 'workspace' ? 'overview' : id
   const allowed = (id: Page) => { const area = areaOf(id); return area == null || access.sees(area) }
   const page = allowed(requested) ? requested : pages.find((entry) => allowed(entry.id))?.id ?? 'admin'
   const meta = pageMeta(page)
@@ -226,7 +231,8 @@ export default function App() {
       {store.cache.status === 'error' && <Notice tone="error"><p>{store.cache.message}</p><div className="button-row"><button className="ghost" onClick={() => exportStateJson(store.state)}>Export JSON backup now</button><button className="primary" onClick={store.retrySave}>Retry browser save</button></div></Notice>}
       {store.connection.mode !== 'sharepoint' && store.connection.status === 'error' && <Notice tone="error">{store.connection.message}</Notice>}
       {page === 'overview' && <DashboardPage month={month} azure={azure} navigate={setPage} store={store} setMonth={setMonth} my={my} />}
-      {page === 'pulse' && <PulseCheckPage month={month} azure={azure} store={store} my={my} navigate={setPage} windchill={windchill} openWindchill={openWindchill} />}
+      {page === 'workspace' && <WorkspacePage month={month} azure={azure} store={store} git={git} windchill={windchill} />}
+      {page === 'pulse' && <PulseCheckPage month={month} azure={azure} store={store} my={my} navigate={setPage} windchill={windchill} openWindchill={openWindchill} git={git} pack={monthlyPack} />}
       {page === 'pireview' && <PiReviewPage />}
       {page === 'qemapping' && <QeMappingPage git={git} store={qeMapping} />}
       {page === 'mywork' && <MyWorkPage azure={azure} store={store} my={my} onOpenBulk={() => setPage('bulk')} assign={assign} featureSetup={featureSetup.setups} />}
@@ -237,7 +243,7 @@ export default function App() {
       {page === 'health' && <BacklogHealthPage azure={azure} store={store} />}
       {page === 'board' && <BoardPage azure={azure} store={store} current={view} month={month} git={git} onOpenConnection={openConnection} assign={assign} featureSetup={featureSetup.setups} />}
       {page === 'snapshots' && <SnapshotsPage {...pageProps} />}
-      {page === 'admin' && <AdminPage {...pageProps} azure={azure} git={git} access={access} featureSetup={featureSetup} loadEverything={loadEverything} onOpenBoard={() => setPage('board')} />}
+      {page === 'admin' && <AdminPage {...pageProps} azure={azure} git={git} access={access} featureSetup={featureSetup} monthlyPack={monthlyPack} loadEverything={loadEverything} onOpenBoard={() => setPage('board')} />}
       {page === 'docs' && <DocsPage />}
     </main>
   </div></HeaderSlot.Provider>

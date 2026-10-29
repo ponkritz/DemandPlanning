@@ -383,6 +383,7 @@ test('release naming and India month rollover implement the final task-title cor
   const pu = releaseHierarchyTitles('Example | Service | v1.0', 'PU', 'October 2026')
   assert.deepEqual(pu.reviews.map((item) => item.milestone), ['SFV', 'DT', 'IQOQ'])
   assert.equal(pu.reviews[0].title, 'SFV : Review of Deliverables (Service 1.0)')
+  assert.equal(pu.review, 'Review of Deliverables - Example | Service | v1.0')
   assert.equal(pu.timeWriting, 'Example | Service | v1.0 - Time Writing')
   assert.equal(pu.task, 'October 2026 | Example | Service | v1.0')
   assert.deepEqual(releaseHierarchyTitles('Example | Service | v1.0', 'Release', 'October 2026').reviews.map((item) => item.milestone), ['PRD', 'SFV', 'DT', 'IQOQ'])
@@ -390,7 +391,7 @@ test('release naming and India month rollover implement the final task-title cor
   assert.equal(currentIndiaMonth(new Date('2026-10-31T18:30:00Z')), 'November 2026')
 })
 
-for (const [kind, milestones, expectedStories] of [['PU', undefined, 4], ['Release', undefined, 5], ['PU', [], 1], ['Release', [], 1], ['Release', ['PRD', 'IQOQ'], 3]]) {
+for (const [kind, milestones, expectedStories] of [['PU', undefined, 5], ['Release', undefined, 6], ['PU', [], 2], ['Release', [], 2], ['Release', ['PRD', 'IQOQ'], 4]]) {
   test(`${kind} with ${milestones === undefined ? 'all' : milestones.length} milestones always creates Time Writing and the month task`, async () => {
     const server = fakeHierarchyServer()
     const result = await createAzureReleaseHierarchy(config, pat, { ...feature, iterationPath: 'Current PI' }, kind, milestones, 'October 2026', server.transport)
@@ -399,6 +400,9 @@ for (const [kind, milestones, expectedStories] of [['PU', undefined, 4], ['Relea
     const timeWriting = stories.find((item) => item.title.endsWith(' - Time Writing'))
     assert.ok(timeWriting)
     assert.equal(timeWriting.parentId, result.feature.id)
+    const review = stories.find((item) => item.title === 'Review of Deliverables - Example | Service | v1.0')
+    assert.ok(review, 'the built-in Review of Deliverables story is always created')
+    assert.equal(review.iterationPath, 'Quality Project\\Current PI', 'in the Sprint chosen (here the Feature iteration)')
     const tasks = result.items.filter((item) => item.workItemType === 'Task')
     assert.equal(tasks.length, 1)
     assert.equal(tasks[0].parentId, timeWriting.id)
@@ -428,9 +432,9 @@ test('partial hierarchy retains known IDs and completion creates only missing ch
   const root = failed.createdItems.find((item) => item.workItemType === 'Feature')
   server.failOn('')
   const result = await completeReleaseHierarchy(config, pat, root.id, 'PU', undefined, 'October 2026', server.transport)
-  assert.equal(result.items.length, 6)
+  assert.equal(result.items.length, 7)
   assert.equal(server.writes.filter((item) => item.fields['System.WorkItemType'] === 'Feature').length, 1)
-  assert.equal(server.writes.length, 6)
+  assert.equal(server.writes.length, 7)
 })
 
 test('desktop child requests permit only User Story/Task and retain hierarchy relation', () => {
@@ -570,7 +574,7 @@ test('a Feature from its Epic setup: chosen stories, Time Writing story, Task de
   const setup = { stories: [{ title: 'US 1 ({service})', description: 'First' }, { title: 'US 3', description: '' }], task: { title: '{month} | {feature}', description: 'Book here', originalEstimate: 6, assignedTo: 'lead@example.test', areaPath: 'Quality Project\\Time', iterationPath: 'Quality Project\\Current PI' } }
   const result = await createFeatureFromSetup(config, pat, { ...feature, iterationPath: 'Current PI' }, setup, 'October 2026', server.transport)
   const stories = result.items.filter((item) => item.workItemType === 'User Story')
-  assert.deepEqual(stories.map((item) => item.title), ['US 1 (Service)', 'US 3', 'Example | Service | v1.0 - Time Writing'])
+  assert.deepEqual(stories.map((item) => item.title), ['US 1 (Service)', 'US 3', 'Review of Deliverables - Example | Service | v1.0', 'Example | Service | v1.0 - Time Writing'], 'the built-in Review of Deliverables story after the optional ones')
   const task = result.items.find((item) => item.workItemType === 'Task')
   assert.deepEqual([task.title, task.originalEstimate, task.areaPath, task.iterationPath, task.assignedToEmail], ['October 2026 | Example | Service | v1.0', 6, 'Quality Project\\Time', 'Quality Project\\Current PI', 'lead@example.test'])
   const created = server.writes.filter((item) => item.fields['System.WorkItemType'] === 'User Story')
@@ -587,7 +591,7 @@ test('Feature setup: the Time Writing User Story is configurable per Epic (title
   const server = fakeHierarchyServer()
   const timeWritingStory = { title: 'Time Writing | {service}', description: 'Hours', assignedTo: 'lead@example.test', areaPath: 'Quality Project\\Time', iterationPath: 'Quality Project\\Current PI\\Sprint 9' }
   const result = await createFeatureFromSetup(config, pat, { ...feature, iterationPath: 'Current PI' }, { stories: [], timeWritingStory, task: { title: '{month} | {feature}', description: '', assignedTo: '', areaPath: '', iterationPath: '' } }, 'October 2026', server.transport)
-  const story = result.items.find((item) => item.workItemType === 'User Story')
+  const story = result.items.find((item) => item.title === 'Time Writing | Service')
   assert.deepEqual([story.title, story.areaPath, story.iterationPath, story.assignedToEmail], ['Time Writing | Service', 'Quality Project\\Time', 'Quality Project\\Current PI\\Sprint 9', 'lead@example.test'])
   const task = result.items.find((item) => item.workItemType === 'Task')
   assert.equal(task.parentId, story.id, 'the month Task goes under the configured story')
@@ -603,6 +607,12 @@ test('the Time Writing story without set paths: the project root iteration (no P
   assert.equal(story.iterationPath, config.project)
   assert.equal(story.areaPath, result.feature.areaPath)
   assert.equal(review.iterationPath, 'Quality Project\\Current PI\\Sprint 4', 'optional stories still go to the chosen Sprint')
+  assert.equal(result.items.find((item) => item.title === 'Review of Deliverables - Example | Service | v1.0').iterationPath, 'Quality Project\\Current PI\\Sprint 4', 'the built-in Review of Deliverables story goes to the chosen Sprint too')
+  // Unticked, the built-in story is not created, on either path.
+  const without = await createFeatureFromSetup(config, pat, { ...feature, title: 'Other | Service | v2.0', iterationPath: 'Current PI' }, { stories: [], reviewStory: false, timeWritingStory: plain, task }, 'October 2026', server.transport)
+  assert.deepEqual(without.items.filter((item) => item.workItemType === 'User Story').map((item) => item.title), ['Other | Service | v2.0 - Time Writing'], 'setup path: only the Time Writing story')
+  const builtin = await createAzureReleaseHierarchy(config, pat, { ...feature, title: 'Third | Service | v3.0', iterationPath: 'Current PI' }, 'PU', [], 'October 2026', server.transport, false)
+  assert.deepEqual(builtin.items.filter((item) => item.workItemType === 'User Story').map((item) => item.title), ['Third | Service | v3.0 - Time Writing'], 'built-in path: only the Time Writing story')
   // A Time Writing story created earlier in a Sprint is used as it is, not refused or duplicated.
   server.records.get(story.id).fields['System.IterationPath'] = 'Quality Project\\Old PI\\Sprint 1'
   const writes = server.writes.length

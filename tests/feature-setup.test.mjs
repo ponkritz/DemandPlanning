@@ -42,6 +42,7 @@ test('built-in stories as a setup give exactly the titles of the built-in creati
     const built = releaseHierarchyTitles('DP | RSGMS | v3.0.0.2', kind, 'October 2026')
     assert.deepEqual(setup.stories.map((story) => fillTitle(story.title, values)), built.reviews.map((review) => review.title))
     assert.equal(fillTitle(setup.timeWritingStory.title, values), built.timeWriting)
+    assert.equal(built.review, 'Review of Deliverables - DP | RSGMS | v3.0.0.2', 'the built-in review story is not part of the editable setup')
     assert.equal(fillTitle(setup.task.title, values), built.task)
     assert.equal(setup.epicId, 13946)
   }

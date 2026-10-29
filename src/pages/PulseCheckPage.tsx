@@ -17,19 +17,22 @@ import { isMine } from '../myWork'
 import { usePersonScope, useTeamFilter } from '../usePersonScope'
 import { EmptyState, Metric, Metrics, Page, Pill, TablePanel } from '../components/ui'
 import type { AzureWorkspace } from '../useAzureWorkspace'
+import type { GitStorage } from '../useGitStorage'
+import type { MonthlyPackStore } from '../useMonthlyPack'
+import { MonthlyPackPanel } from '../components/MonthlyPackPanel'
 import type { MyWork } from '../useMyWork'
 import type { Page as PageId } from './registry'
 import type { PageProps } from './types'
 
-type Tab = 'releases' | 'last' | 'ongoing' | 'current'
-const tabKeys: Tab[] = ['releases', 'last', 'ongoing', 'current']
+type Tab = 'releases' | 'last' | 'ongoing' | 'current' | 'pack'
+const tabKeys: Tab[] = ['releases', 'last', 'ongoing', 'current', 'pack']
 const tabKey = 'demand-planning-pulse-tab-v1'
 const change = (now: number, before: number) => now === before ? <span className="muted">±0</span> : <span className={now > before ? 'positive' : 'negative'}>{now > before ? '+' : '−'}{Math.abs(now - before)}</span>
 
 // Pulse Check: the selected month's approved releases per stream (moved from the Dashboard), and Last month — the month
 // before the selected one: the Dashboard's "This month" picture for it, its releases next to the selected month's, the
 // Features and User Stories created and closed, and its Time Writing gaps.
-export function PulseCheckPage({ month, azure, store, my, navigate, windchill, openWindchill }: { month: string; azure: AzureWorkspace; store: PageProps['store']; my: MyWork; navigate: (page: PageId) => void; windchill: WindchillWorkspace; openWindchill: (id: string) => void }) {
+export function PulseCheckPage({ month, azure, store, my, navigate, windchill, openWindchill, git, pack }: { month: string; azure: AzureWorkspace; store: PageProps['store']; my: MyWork; navigate: (page: PageId) => void; windchill: WindchillWorkspace; openWindchill: (id: string) => void; git: GitStorage; pack: MonthlyPackStore }) {
   const [tab, setTabState] = useState<Tab>(() => { try { const saved = localStorage.getItem(tabKey) as Tab; return tabKeys.includes(saved) ? saved : 'releases' } catch { return 'releases' } })
   const setTab = (next: Tab) => { setTabState(next); try { localStorage.setItem(tabKey, next) } catch { /* convenience only */ } }
   const last = previousMonth(month)
@@ -56,13 +59,14 @@ export function PulseCheckPage({ month, azure, store, my, navigate, windchill, o
       <table><thead><tr><th>Stream</th><th>Rows</th><th>Releases</th><th>Imported</th><th /></tr></thead><tbody>{exports.map(({ stream, view }) => { const source = view ? windchill.sources.find((entry) => entry.viewId === view.id) : undefined; return <tr key={stream.name}><td><strong>{stream.name}</strong>{view?.exportFile && <small>{view.exportFile}</small>}</td><td>{source ? source.rows.length : '—'}</td><td>{source ? (() => { const found = windchillReleases(source.rows, source.columns.length ? source.columns : view?.columns ?? []); return <>{found.releases.length}<small>unique, from document names</small></> })() : '—'}</td><td>{view ? source ? formatDateTime(source.fetchedAt) : 'Not imported yet' : 'No export named like the stream yet'}</td><td><button type="button" className="text-button" onClick={() => openWindchill(view?.id ?? '')}>{view ? 'Open →' : 'Import →'}</button></td></tr> })}</tbody></table>
     </TablePanel>}
   </>
-  const tabLabels: [Tab, string][] = [['releases', `Releases · ${monthName(last)}`], ['last', `Last month · ${monthName(last)}`], ['ongoing', 'Ongoing activities'], ['current', `Current month releases · ${monthName(month)}`]]
+  const tabLabels: [Tab, string][] = [['releases', `Releases · ${monthName(last)}`], ['last', `Last month · ${monthName(last)}`], ['ongoing', 'Ongoing activities'], ['current', `Current month releases · ${monthName(month)}`], ['pack', `Monthly pack · ${monthName(last)}`]]
   return <Page>
     <div className="overview-tabs" role="tablist" aria-label="Pulse Check sections">{tabLabels.map(([key, label]) => <button key={key} type="button" role="tab" aria-selected={tab === key} className={`backlog-tab ${tab === key ? 'backlog-tab-active' : ''}`} onClick={() => setTab(key)}>{label}</button>)}</div>
     {tab === 'releases' && releases(lastStreams, last)}
     {tab === 'last' && <LastMonth month={month} last={last} azure={azure} store={store} my={my} navigate={navigate} current={streams} />}
     {tab === 'ongoing' && <Ongoing azure={azure} month={month} absenceEpicId={capacityContext(store.state).absenceEpicId} />}
     {tab === 'current' && releases(streams, month)}
+    {tab === 'pack' && <MonthlyPackPanel month={last} azure={azure} store={store} git={git} pack={pack} windchill={windchill} />}
   </Page>
 }
 

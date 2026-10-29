@@ -1,11 +1,12 @@
 // Single source for navigation labels, header text and grouping so the sidebar and page header always agree.
-export type Page = 'overview' | 'pulse' | 'pireview' | 'mywork' | 'bulk' | 'monthly' | 'baselines' | 'board' | 'health' | 'windchill' | 'snapshots' | 'qemapping' | 'admin' | 'docs'
+export type Page = 'overview' | 'workspace' | 'pulse' | 'pireview' | 'mywork' | 'bulk' | 'monthly' | 'baselines' | 'board' | 'health' | 'windchill' | 'snapshots' | 'qemapping' | 'admin' | 'docs'
 export type PageGroup = 'Data Insights' | 'My Work' | 'I&D Board' | 'Release Details' | 'Other views' | 'Data & governance'
 
 export interface PageMeta { id: Page; label: string; icon: string; group: PageGroup; detail: string; usesMonth: boolean }
 
 export const pages: PageMeta[] = [
   { id: 'overview', label: 'Dashboard', icon: '▦', group: 'Data Insights', detail: 'Demand, capacity and the decisions ahead: utilization, overload, rebalancing, region and role, trends, people and streams for a period and filters.', usesMonth: false },
+  { id: 'workspace', label: 'Insights workspace', icon: '◍', group: 'Data Insights', detail: 'A separate page after the Overview and AI-insights mock-ups: KPI tiles, trends, the exception queue, timeline health and evidence-based insights that feed the Monthly pack. The Dashboard is unchanged.', usesMonth: true },
   { id: 'pulse', label: 'Pulse Check', icon: '◔', group: 'Data Insights', detail: 'Last month’s releases and analysis, ongoing activities, and the current month’s releases.', usesMonth: true },
   { id: 'pireview', label: 'PI Review', icon: '◈', group: 'Data Insights', detail: 'PI summary for the PI Review (planned).', usesMonth: false },
   { id: 'mywork', label: 'Assigned to Me', icon: '◉', group: 'My Work', detail: 'Your pending Azure DevOps items; finish them with Resolved or Closed.', usesMonth: false },
