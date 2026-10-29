@@ -17,6 +17,9 @@ export interface FeatureSetupFile { schema: 1; kind: 'feature-setup'; epics: Epi
 export const featureSetupFile = 'feature-setup.json'
 export const placeholders = ['feature', 'program', 'service', 'version', 'month'] as const
 export const defaultTask: TaskTemplate = { title: '{month} | {feature}', description: '', assignedTo: '', areaPath: '', iterationPath: '' }
+// The built-in "Review of Deliverables" User Story: always created under a new Feature, in the Sprint chosen in the
+// form (the current Sprint), whatever the Epic's setup; an existing one with the title is reused.
+export const reviewStoryTitle = (featureTitle: string) => `Review of Deliverables - ${featureTitle.trim()}`
 export const defaultTimeWritingStory: TimeWritingStoryTemplate = { title: '{feature} - Time Writing', description: '', assignedTo: '', areaPath: '', iterationPath: '' }
 // The default Feature DoD per release classification (also used by the built-in PU / Full Release creation).
 export function featureDoD(kind: 'PU' | 'Release') {

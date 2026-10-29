@@ -21,7 +21,7 @@ This document holds (1) the **code analysis and penetration test** of the build,
 | A1 Azure DevOps PATs (one per server) | Browser localStorage `demand-planning-azure-connection-profiles-v1` / desktop profile | Read and write access to work items as the user |
 | A2 GitHub fine-grained token | localStorage `demand-planning-git-token-v1` | Read/write of the private data repository (planning data, setup, exports) |
 | A3 Microsoft Entra session (MSAL, sessionStorage) | Browser | Access to the SharePoint site |
-| A4 Planning data, time bookings, release data, QE mapping | IndexedDB; the data repository; SharePoint | Integrity of time writing and planning decisions; confidentiality of names and effort |
+| A4 Planning data, time bookings, release data, QE mapping, Monthly pack text | IndexedDB; the data repository; SharePoint | Integrity of time writing and planning decisions; confidentiality of names and effort |
 | A5 Work items in Azure DevOps Services | dev.azure.com | Unintended writes (the Critical severity of TEST-PLAN.md §5) |
 | A6 The published app and installers | GitHub Pages; `desktop-latest` release | Code execution on every user's machine (supply chain) |
 | A7 The source repository and CI | GitHub | Everything above |
@@ -100,7 +100,9 @@ Each line is a test that passed; together they are the evidence that the securit
 | R-14 | Resource exhaustion by a crafted import or a huge field (Denial of service, the user's own tab) | B1 | 2 | 2 | 4 | SM-20 (ErrorBoundary, size limits) | 4 | PT-05, PT-06 caps |
 | R-15 | Local data loss or corruption that hides a failed save (Repudiation of effort data) | — / A4 | 2 | 4 | 8 | SM-21 | 1 × 4 = 4 | — |
 | R-16 | Roles are enforced in the client only; a user bypasses the menu (Elevation) | — / A4, A5 | 3 | 2 | 6 | SM-22 | 6 | Accepted (LIM-07): the user's own token is the real limit |
+| SM-23 | The Monthly pack text (including the insight lines queued from the Insights workspace, kept in the browser until an explicit Save) is kept only in the private data repository (one file per month, a writable token required, refused in sample mode) and the .pptx is built on the device without a library or a service; nothing is sent elsewhere, and no token or credential is part of the files. | PCK-02, PCK-06, GIT-02 | TC-PCK-01, TC-PCK-04 |
 | R-17 | A known vulnerability in a dependency is shipped (Tampering) | B5 / A6 | 2 | 4 | 8 | SM-17 | 1 × 4 = 4 | — |
+| R-18 | The Monthly pack's narrative (risks, decisions, people's load) leaves the team: in the Git file, the .pptx or the clipboard (Information disclosure) | B4 / A4 | 2 | 3 | 6 | SM-23 | 1 × 3 = 3 | The Insights workspace computes its findings on the device (no language model or service; LIM-09) |
 
 No high residual risk remains. R-06, R-07 and R-08 are medium residual risks that the product owner accepts for this release with the open actions scheduled (they need a code-signing certificate, verified action SHAs and a browser check of the CSP, none of which this pull request can supply); they stay in [KNOWN-ISSUES.md](KNOWN-ISSUES.md) until closed.
 

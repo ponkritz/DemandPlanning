@@ -40,3 +40,7 @@ export function downloadMarkdown(contents: string, filename: string) {
 export function downloadXlsx(contents: Uint8Array, filename: string) {
   saveBlob(contents as BlobPart, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', filename)
 }
+
+export function downloadPptx(contents: Uint8Array, filename: string) {
+  saveBlob(contents as BlobPart, 'application/vnd.openxmlformats-officedocument.presentationml.presentation', filename)
+}

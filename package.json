@@ -22,7 +22,7 @@
     "build:mac": "pnpm build:web && electron-builder --mac dmg --universal"
   },
   "dependencies": {
-    "@azure/msal-browser": "^5.26.0",
+    "@azure/msal-browser": "^5.27.0",
     "read-excel-file": "^9.3.10",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
@@ -34,10 +34,10 @@
     "@vitejs/plugin-react": "^6.1.2",
     "concurrently": "^10.0.6",
     "cross-env": "^10.1.0",
-    "electron": "^44.9.3",
+    "electron": "^44.10.0",
     "electron-builder": "^26.18.0",
     "fake-indexeddb": "^6.2.6",
-    "oxlint": "^1.89.0",
+    "oxlint": "^1.90.0",
     "playwright": "1.56.1",
     "typescript": "~6.0.3",
     "vite": "^8.3.5",
