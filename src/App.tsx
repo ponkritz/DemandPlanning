@@ -14,7 +14,7 @@ import { BaselinesPage } from './pages/BaselinesPage'
 import { SnapshotsPage } from './pages/SnapshotsPage'
 import { AdminPage } from './pages/AdminPage'
 import { settingsTabOnOpen } from './settingsTabs'
-import { defaultStreams, exportForStream, profileForStream } from './streams'
+import { dataSets, defaultStreams, exportForStream, profileForDataSet, profileForStream } from './streams'
 import { connectionPresets } from './connectionPresets'
 import { gitSyncedIds, markViewsSynced, removeDuplicateConnections, serializeViews, viewsFile } from './viewDefinitions'
 import { listAzureConnectionProfiles } from './azureCredentials'
@@ -180,6 +180,8 @@ export default function App() {
     fetched: azure.items.length > 0 && !azure.isSample, sample: azure.isSample,
     region: my.me.name ? capacityContext(store.state).profiles?.[my.me.name]?.region : undefined, canManage: access.can('settings.manage'),
     streams: defaultStreams.filter((stream) => stream.source === 'azure').map((stream) => { const profile = profileForStream(stream, azure.connectionProfiles); return { name: stream.name, connected: Boolean(profile && hasServerPat(serverKey(profile))) } }),
+    // DP's data sets count too: without them the DP releases and dates are incomplete.
+    dataSets: dataSets.map((set) => { const profile = profileForDataSet(set.name, azure.connectionProfiles); return { name: set.name, connected: Boolean(profile && hasServerPat(serverKey(profile))) } }),
   })
   const openSteps = requiredOpen(steps)
   const [guideOpen, setGuideOpen] = useState(false)
@@ -208,7 +210,7 @@ export default function App() {
         ] : group === 'Other views' ? [{ key: group, entries: [
           ...others.azure.filter((entry) => access.sees(entry.onPrem ? 'release' : 'board')).map((entry) => navButton(`view:${entry.id}`, pageMeta('board').icon, entry.name, page === 'board' && view.id === entry.id, () => openView(entry.id))),
           ...(access.sees('release') ? others.windchill.map((entry) => navButton(entry.id, pageMeta('windchill').icon, entry.name, page === 'windchill' && windchillView?.id === entry.id, () => openWindchill(entry.id))) : []),
-        ] }] : [{ key: group, entries: pages.filter((item) => item.group === group).flatMap((item) => item.id === 'board' ? (access.sees('board') ? views.filter((entry) => !entry.readOnly).map((entry) => navButton(`view:${entry.id}`, item.icon, entry.name, page === 'board' && view.id === entry.id, () => openView(entry.id))) : []) : pageButton(item)) }]
+        ] }] : [{ key: group, entries: pages.filter((item) => item.group === group && !item.hidden).flatMap((item) => item.id === 'board' ? (access.sees('board') ? views.filter((entry) => !entry.readOnly).map((entry) => navButton(`view:${entry.id}`, item.icon, entry.name, page === 'board' && view.id === entry.id, () => openView(entry.id))) : []) : pageButton(item)) }]
         const shown = sections.filter((section) => section.entries.length)
         if (!shown.length) return null
         const open = !collapsed.includes(group)

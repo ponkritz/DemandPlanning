@@ -257,7 +257,7 @@ The end-to-end suite (`pnpm test:e2e`, after `pnpm build:web`) drives the built 
 | helpers | `e2e/helpers.mjs` | Starts `vite preview` on a free port, opens Chromium pages with clean storage, records page errors, shared actions (navigate, load sample). | CI |
 | shell.e2e | `e2e/shell.e2e.mjs` | Sidebar groups and footer, header and month picker, Get started pop-up, synthetic sample, theme toggle, phone width, Force Update dialog, Git storage form defaults, manager not on the board (TC-GIT-06, TC-SET-05, TC-NAV-01, 03, 31, 33, TC-UI-01, TC-SMP-01, TC-UPD-02). | NAV, UI, SMP, UPD |
 | documents-and-data.e2e | `e2e/documents-and-data.e2e.mjs` | Documentation tabs, links and download; Windchill export releases from names and from Location with the locations CSV; neutralised CSV; JSON backup without credentials (TC-DOC-01, 02, TC-CON-39, 40, 37, TC-STO-04, TC-INS-01); auto-fit tables and Wrap text (TC-CON-42). | DOC, CON, STO, NFR |
-| workspace.e2e | `e2e/workspace.e2e.mjs` | Insights workspace with the synthetic sample: tiles, queue, timeline, cards, pack queue and the unchanged Dashboard (TC-WSP-06). | CI |
+| workspace.e2e | `e2e/workspace.e2e.mjs` | Insights workspace hidden for now: not in the menu, the Dashboard unchanged (TC-WSP-07; the TC-WSP-06 scenario returns with the page). | CI |
 | monthly-pack.e2e | `e2e/monthly-pack.e2e.mjs` | Monthly pack tab with the synthetic sample, the .pptx download and the setup tab (TC-PCK-04). | CI |
 
 ## 2. Third-party components (SOUP)

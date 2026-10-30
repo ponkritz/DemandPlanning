@@ -29,3 +29,12 @@ test('fully set up: nothing required left; region and streams follow the facts a
   assert.equal(setupSteps({ ...facts, region: undefined, canManage: true }).find((step) => step.id === 'region').tab, 'resources')
   assert.match(setupSteps({ ...facts, streams: streams(2) }).find((step) => step.id === 'streams').why, /2 of 5 ready/)
 })
+
+test('release streams: DP\'s Pedestal and DHFI data sets count, and the missing ones are named', () => {
+  const facts = { ...base, gitConnected: true, timeWriting: true, email: 'ana@example.com', pat: true, fetched: true, region: 'India', streams: streams(5) }
+  const step = (dataSets) => setupSteps({ ...facts, dataSets }).find((entry) => entry.id === 'streams')
+  const missingDhfi = step([{ name: 'Pedestal', connected: true }, { name: 'DHFI', connected: false }])
+  assert.equal(missingDhfi.state, 'todo', 'all five streams ready is not enough without DHFI')
+  assert.match(missingDhfi.why, /6 of 7 ready; missing: DHFI/)
+  assert.equal(step([{ name: 'Pedestal', connected: true }, { name: 'DHFI', connected: true }]).state, 'done')
+})
