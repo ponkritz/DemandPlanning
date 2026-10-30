@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { listJobs, runInBackground, subscribeJobs } from '../backgroundJobs'
+import { useState, useSyncExternalStore } from 'react'
 import { PersonPicker } from '../components/PersonPicker'
 import { AssigneeConfirm } from '../components/AssigneeConfirm'
 import { EmptyState, Notice, Page, Panel, Pill } from '../components/ui'
@@ -28,6 +29,9 @@ function ItemLink({ item }: { item: Pick<AzureWorkItem, 'id' | 'url' | 'workItem
 export function BulkActionsPage({ azure, store, my, assign }: { azure: AzureWorkspace; store: PageProps['store']; my: MyWork; assign: { me: string; canChoose: boolean } }) {
   const [confirmTasks, setConfirmTasks] = useState(false)
   const [busy, setBusy] = useState('')
+  // Move and month-task creation run as background jobs (top bar); their buttons wait while one runs.
+  const jobs = useSyncExternalStore(subscribeJobs, listJobs)
+  const moving = jobs.some((job) => job.key === 'bulk:move' && job.state === 'running'), creatingTasks = jobs.some((job) => job.key === 'bulk:tasks' && job.state === 'running')
   const [log, setLog] = useState<Log[]>([])
   const [pairs, setPairs] = useState<Pair[] | null>(null)
   const [target, setTarget] = useState('')
@@ -86,15 +90,20 @@ export function BulkActionsPage({ azure, store, my, assign }: { azure: AzureWork
     if (blocked || !config || !target) return
     const rows = toMove.filter(({ item }) => !skipMove.has(item.id))
     if (!rows.length || !window.confirm(`Move ${rows.length} item${rows.length === 1 ? '' : 's'} to ${shortPath(target)} in Azure DevOps?`)) return
-    setBusy('move')
-    const updated: AzureWorkItem[] = [], failed: string[] = []
-    for (const { item } of rows) {
-      try { updated.push(await updateAzureWorkItem(config, pat, item.id, { iterationPath: target })) } catch (failure) { failed.push(`#${item.id}: ${failure instanceof Error ? failure.message : 'failed'}`) }
-    }
-    azure.applyWorkItems(updated, 'Move to current sprint', `${updated.length} item(s) moved to ${target}`)
-    note({ tone: failed.length ? 'error' : 'success', text: `${updated.length} moved to ${shortPath(target)}.${failed.length ? ` ${failed.length} failed — ${failed.join(' · ')}` : ''}` })
-    if (updated.length) await azure.refresh()
-    setBusy('')
+    // A background job: the page stays usable; the top bar shows progress and the result.
+    const started = runInBackground('bulk:move', `Move ${rows.length} item${rows.length === 1 ? '' : 's'} to ${shortPath(target)}`, async (progress) => {
+      const updated: AzureWorkItem[] = [], failed: string[] = []
+      for (const [index, { item }] of rows.entries()) {
+        progress(`Moving ${index + 1} of ${rows.length}…`)
+        try { updated.push(await updateAzureWorkItem(config, pat, item.id, { iterationPath: target })) } catch (failure) { failed.push(`#${item.id}: ${failure instanceof Error ? failure.message : 'failed'}`) }
+      }
+      azure.applyWorkItems(updated, 'Move to current sprint', `${updated.length} item(s) moved to ${target}`)
+      const text = `${updated.length} moved to ${shortPath(target)}.${failed.length ? ` ${failed.length} failed — ${failed.join(' · ')}` : ''}`
+      note({ tone: failed.length ? 'error' : 'success', text })
+      if (updated.length) { progress('Refreshing the backlog…'); await azure.refresh() }
+      return { text, failed: failed.length > 0 }
+    })
+    if (!started) note({ tone: 'info', text: 'A move is already running in the background (see the top bar).' })
   }
 
   // The month Tasks go to the person chosen in the confirmation (by default the person whose work is shown).
@@ -103,10 +112,12 @@ export function BulkActionsPage({ azure, store, my, assign }: { azure: AzureWork
     if (blocked || !config) return
     const rows = missing.filter((row) => !skipTask.has(row.feature.id))
     if (!rows.length) return
-    setBusy('tasks')
+    setConfirmTasks(false)
+    const started = runInBackground('bulk:tasks', `Create ${month} Time Writing tasks (${rows.length})`, async (progress) => {
     const changed: AzureWorkItem[] = [], failed: string[] = []
     let created = 0, existed = 0
-    for (const row of rows) {
+    for (const [index, row] of rows.entries()) {
+      progress(`Feature ${index + 1} of ${rows.length}…`)
       try {
         const result = await ensureMonthTask(config, pat, row.feature.id, assignee, month)
         changed.push(result.task, ...(result.storyCreated ? [result.story] : []))
@@ -114,9 +125,12 @@ export function BulkActionsPage({ azure, store, my, assign }: { azure: AzureWork
       } catch (failure) { failed.push(`#${row.feature.id}: ${failure instanceof Error ? failure.message : 'failed'}`) }
     }
     azure.applyWorkItems(changed, 'Create month tasks', `${created} ${month} Time Writing task(s) created, ${existed} already existed`)
-    note({ tone: failed.length ? 'error' : 'success', text: `${created} task${created === 1 ? '' : 's'} created${existed ? `, ${existed} already existed (not duplicated)` : ''}.${failed.length ? ` ${failed.length} failed — ${failed.join(' · ')}` : ''}` })
-    if (changed.length) await azure.refresh()
-    setBusy(''); setConfirmTasks(false)
+    const text = `${created} task${created === 1 ? '' : 's'} created${existed ? `, ${existed} already existed (not duplicated)` : ''}.${failed.length ? ` ${failed.length} failed — ${failed.join(' · ')}` : ''}`
+    note({ tone: failed.length ? 'error' : 'success', text })
+    if (changed.length) { progress('Refreshing the backlog…'); await azure.refresh() }
+    return { text, failed: failed.length > 0 }
+    })
+    if (!started) note({ tone: 'info', text: 'Month tasks are already being created in the background (see the top bar).' })
   }
 
   return <Page>
@@ -136,7 +150,7 @@ export function BulkActionsPage({ azure, store, my, assign }: { azure: AzureWork
                   <div className="view-switch" role="group" aria-label="States to move"><span>States</span><div className="segmented">{([['new', 'New'], ['active', 'Active'], ['both', 'Both']] as const).map(([value, text]) => <button key={value} type="button" aria-pressed={moveStates === value} onClick={() => { setMoveStates(value); setSkipMove(new Set()) }}>{text}</button>)}</div></div>
                   <label>Target<select value={target} onChange={(event) => { setTarget(event.target.value); setSkipMove(new Set()) }}>{pairs.map((pair) => <option key={pair.sprint.path} value={pair.sprint.path}>{pair.pi.name} › {pair.sprint.name} ({pair.sprint.attributes?.startDate?.slice(0, 10)} – {pair.sprint.attributes?.finishDate?.slice(0, 10)})</option>)}</select></label>
                   {toMove.length ? <ul className="pick-list">{toMove.map(({ item }) => <li key={item.id}><label className="check"><input type="checkbox" checked={!skipMove.has(item.id)} onChange={(event) => setSkipMove((current) => { const next = new Set(current); if (event.target.checked) next.delete(item.id); else next.add(item.id); return next })} /><Pill>{item.workItemType}</Pill><ItemLink item={item} /> {item.title}<small>{shortPath(item.iterationPath)}</small></label></li>)}</ul> : <p className="muted">All your pending items are already in this Sprint.</p>}
-                  <div className="button-row"><button type="button" className="primary" disabled={Boolean(blocked) || busy === 'move' || !toMove.some(({ item }) => !skipMove.has(item.id))} onClick={() => void moveAll()}>{busy === 'move' ? 'Moving…' : ((count) => `Move ${count} item${count === 1 ? '' : 's'}`)(toMove.filter(({ item }) => !skipMove.has(item.id)).length)}</button></div>
+                  <div className="button-row"><button type="button" className="primary" disabled={Boolean(blocked) || moving || !toMove.some(({ item }) => !skipMove.has(item.id))} onClick={() => void moveAll()}>{moving ? 'Moving…' : ((count) => `Move ${count} item${count === 1 ? '' : 's'}`)(toMove.filter(({ item }) => !skipMove.has(item.id)).length)}</button></div>
                 </>}
           </Panel>
           <Panel className="action-card" eyebrow="BULK" title={`${month} Time Writing tasks`} info="For each of your pending Features (or Features holding your pending work): adds “<Feature> - Time Writing” if missing and a “<Month> | <Feature>” Task assigned to you. Azure is re-checked first, so nothing is duplicated.">
@@ -145,7 +159,7 @@ export function BulkActionsPage({ azure, store, my, assign }: { azure: AzureWork
               <div className="button-row"><button type="button" className="ghost" disabled={!shownMissing.length || shownMissing.every((row) => !skipTask.has(row.feature.id))} onClick={() => selectShown(true)}>Select all</button><button type="button" className="ghost" disabled={!shownMissing.length || shownMissing.every((row) => skipTask.has(row.feature.id))} onClick={() => selectShown(false)}>Deselect all</button><small className="muted">{missing.filter((row) => !skipTask.has(row.feature.id)).length} of {missing.length} selected</small></div>
             </div>}
             {candidates.length ? shownCandidates.length ? <ul className="pick-list">{shownCandidates.map((row) => <li key={row.feature.id}><label className="check"><input type="checkbox" disabled={row.status === 'exists' || row.status === 'conflict'} checked={(row.status === 'needs-task' || row.status === 'needs-story') && !skipTask.has(row.feature.id)} onChange={(event) => setSkipTask((current) => { const next = new Set(current); if (event.target.checked) next.delete(row.feature.id); else next.add(row.feature.id); return next })} /><Pill tone={statusTone[row.status]}>{statusLabel[row.status]}</Pill><ItemLink item={row.feature} /> {row.feature.title}</label></li>)}</ul> : <p className="muted">{taskFilter === 'with' ? 'No Feature has its task yet.' : 'Every Feature has its task.'}</p> : <p className="muted">No pending Features for you.</p>}
-            <div className="button-row"><button type="button" className="primary" disabled={Boolean(blocked) || busy === 'tasks' || !missing.some((row) => !skipTask.has(row.feature.id))} onClick={() => setConfirmTasks(true)}>{busy === 'tasks' ? 'Creating…' : ((count) => `Create ${count} task${count === 1 ? '' : 's'}`)(missing.filter((row) => !skipTask.has(row.feature.id)).length)}</button></div>
+            <div className="button-row"><button type="button" className="primary" disabled={Boolean(blocked) || creatingTasks || !missing.some((row) => !skipTask.has(row.feature.id))} onClick={() => setConfirmTasks(true)}>{creatingTasks ? 'Creating…' : ((count) => `Create ${count} task${count === 1 ? '' : 's'}`)(missing.filter((row) => !skipTask.has(row.feature.id)).length)}</button></div>
           </Panel>
         </div>
         <Panel className="action-card state-checks" eyebrow="CHECK" title="State checks" info="Your Features and User Stories whose state does not match their children: all User Stories Closed → close the Feature; all Tasks Closed → close the User Story; an Active Feature needs at least one Active User Story. A Feature is closed only from Active.">
@@ -160,7 +174,7 @@ export function BulkActionsPage({ azure, store, my, assign }: { azure: AzureWork
           })}</tbody></table></div> : <EmptyState title="Nothing to fix." detail="Every Feature and User Story matches the state of its children." />}
         </Panel>
       </>}
-    {confirmTasks && <AssigneeConfirm title={`Create ${month} Time Writing tasks`} people={assignablePeople(azure.items)} me={assign.me} initial={shownEmail} canChoose={assign.canChoose} busy={busy === 'tasks'} confirmLabel="Create tasks"
+    {confirmTasks && <AssigneeConfirm title={`Create ${month} Time Writing tasks`} people={assignablePeople(azure.items)} me={assign.me} initial={shownEmail} canChoose={assign.canChoose} busy={creatingTasks} confirmLabel="Create tasks"
       summary={<>Creates the “{month}” Time Writing Task (and the Time Writing User Story where missing) for {missing.filter((row) => !skipTask.has(row.feature.id)).length} Feature(s), assigned to the person below. Existing tasks of that person are re-checked in Azure DevOps and never duplicated.</>}
       onCancel={() => setConfirmTasks(false)} onConfirm={(email) => void createTasks(email)} />}
   </Page>

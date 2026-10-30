@@ -4,6 +4,7 @@ import { completeFeatureFromSetup, createFeatureFromSetup, updateAzureTimeWritin
 import { Modal, Info } from './ui'
 import { PersonPicker } from './PersonPicker'
 import { assignablePeople } from '../myWork'
+import { runInBackground } from '../backgroundJobs'
 import { chooseSetup, defaultDoDFor, fieldKey, fieldLines, fieldPlaceholders, fieldTitle, fieldsFromItems, fieldsFromTitle, fillTitle, missingValues, reviewStoryTitle, setupFor, titleValues, type FeatureSetups } from '../featureSetup'
 
 // The "Add Feature under an Epic" / "Complete Feature children" modal, shared by the QMS-0025 board and Assigned to
@@ -105,11 +106,16 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
     try { if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(assignee)) throw new Error(me ? 'Choose who the Feature and its children are assigned to.' : 'Configure the Feature creator email in Azure DevOps settings before creating a Feature.'); feature = { parentId: parent?.id ?? 0, title: title.trim(), description: needsDoD ? withFeatureDoD(dod, String(data.get('description') ?? ''), releaseClassification, fieldLines(titleFields, fieldValues)) : '', acceptanceCriteria: String(data.get('acceptance') ?? ''), areaPath: String(data.get('areaPath') ?? ''), iterationPath, assignedTo: assignee, storyIterationPath: sprintPath, targetDate: String(data.get('targetDate') ?? ''), taskOriginalEstimate: parseHours(taskOriginalEstimate, 'Original Estimate'), taskCompletedWork: parseHours(taskCompletedWork, 'Completed Work') } }
     catch (failure) { setError(failure instanceof Error ? failure.message : 'Invalid Task effort.'); submitting.current = false; setCreating(false); return }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(assignee)) { setError('Choose who the work is assigned to.'); submitting.current = false; setCreating(false); return }
+    onSavePat?.(token)
+    // The writes run as a background job: the form closes at once and the top bar shows progress and the result.
+    const label = resumeFeature ? `Complete children of #${resumeFeature.id}` : `New Feature “${feature.title}”`
+    const started = runInBackground(`feature:${resumeFeature ? resumeFeature.id : `${parent?.id}:${feature.title.toLowerCase()}`}`, label, async (progress) => {
     try {
-      onSavePat?.(token)
+      progress('Checking the PI / Sprint…')
       const choices = await readAzureIterations(config, token)
       const fresh = [...currentIterationPairs(choices), ...futureIterationPairs(choices)]
       if (!fresh.some((pair) => pair.pi.path === iterationPath && pair.sprint.path === sprintPath)) throw new Error('The selected PI/Sprint is no longer current. Reload the schedule and review it before creating. No write was attempted.')
+      progress('Creating the Feature and its children…')
       let bundle
       if (epicSetup) {
         const children = { stories: epicSetup.stories.filter((_, index) => !skipStories.includes(index)), reviewStory, titleFields: epicSetup.titleFields, ...(titleFields.length ? { fieldValues } : {}), timeWritingStory: epicSetup.timeWritingStory, task: { ...epicSetup.task, ...(feature.taskOriginalEstimate != null ? { originalEstimate: feature.taskOriginalEstimate } : {}) } }
@@ -118,15 +124,22 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
         if (task && feature.taskCompletedWork != null) { const updated = await updateAzureTimeWritingEffort(config, token, task.id, undefined, feature.taskCompletedWork); bundle = { ...bundle, items: bundle.items.map((item) => item.id === task.id ? updated : item) } }
       } else bundle = resumeFeature ? await completeReleaseHierarchy(config, token, resumeFeature.id, releaseKind, milestones, monthLabel, undefined, sprintPath, assignee, reviewStory) : await createAzureReleaseHierarchy(config, token, feature, releaseKind, milestones, monthLabel, undefined, reviewStory)
       onCreated?.(parent ? [parent, ...bundle.items] : bundle.items)
-      onDone({ feature: bundle.feature, items: bundle.items, parent: parent ?? undefined, text: `Hierarchy complete: ${epicSetup ? `${epicSetup.stories.length - skipStories.length} optional` : milestones.length} ${epicSetup ? 'User Stories' : 'milestone stories'}, ${reviewStory ? 'Review of Deliverables story, ' : ''}Time Writing story and ${monthLabel} task verified.` })
+      const doneText = `Hierarchy complete: ${epicSetup ? `${epicSetup.stories.length - skipStories.length} optional` : milestones.length} ${epicSetup ? 'User Stories' : 'milestone stories'}, ${reviewStory ? 'Review of Deliverables story, ' : ''}Time Writing story and ${monthLabel} task verified.`
+      onDone({ feature: bundle.feature, items: bundle.items, parent: parent ?? undefined, text: doneText })
+      return { text: `#${bundle.feature.id} “${bundle.feature.title}”: ${doneText}` }
     } catch (failure) {
       const detail = failure instanceof Error ? failure.message : 'Unable to create the hierarchy.'
       if (failure instanceof HierarchyCreationError && failure.createdItems.length) {
         onCreated?.(parent ? [parent, ...failure.createdItems] : failure.createdItems)
         onPartial(detail, failure.createdItems, parent ?? undefined)
-      } else setError(detail)
+        return { text: `${detail} ${failure.createdItems.length} item(s) were created; Complete Feature children adds the rest.`, failed: true }
+      }
+      return { text: `${detail} Nothing was created.`, failed: true }
     }
-    finally { submitting.current = false; setCreating(false) }
+    })
+    submitting.current = false; setCreating(false)
+    if (!started) { setError('This Feature is already being created in the background (see the top bar).'); return }
+    onClose()
   }
 
   // Azure-like layout: the title on top, a header strip (Assigned to, State, Area, Iteration), the DoD as the body,
