@@ -66,6 +66,8 @@ export default function App() {
     load: async (id) => {
       const result = await git.pullSnapshot(id)
       if (!result) return null
+      // Git's data was fetched with another query than this connection has (an older shared setup): not loaded.
+      if (result.otherQuery) throw new Error(`the data in Git (fetched ${formatDateTime(result.fetchedAt)}) was fetched with another query than this connection has now, so it was not loaded. Fetch with the desktop app, and save the connection setup to Git so everyone fetches with the new query`)
       return result.applied ? `loaded the data saved to Git (fetched ${formatDateTime(result.fetchedAt)})` : `the data here is already the latest in Git (fetched ${formatDateTime(result.fetchedAt)})`
     },
   }

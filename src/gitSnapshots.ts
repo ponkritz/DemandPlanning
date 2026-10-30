@@ -41,10 +41,16 @@ export async function snapshotDigest(source: ViewSnapshot) {
 }
 
 // Applies snapshots from Git to the app data: a view's snapshot is replaced only by a newer fetch.
-export function applySnapshots(sources: ViewSnapshot[] | undefined, files: SnapshotFile[]) {
+// queryOf: the query each connection has here. A snapshot fetched with another query (e.g. by a desktop app that still
+// follows an older shared setup) is never applied: it would bring back the data of the old query whatever the
+// connection now says. Those are listed in otherQuery.
+const sameQuery = (a: string | undefined, b: string | undefined) => (a ?? '').replace(/\s+/g, ' ').trim().toLowerCase() === (b ?? '').replace(/\s+/g, ' ').trim().toLowerCase()
+export function applySnapshots(sources: ViewSnapshot[] | undefined, files: SnapshotFile[], queryOf?: (connectionId: string) => string | undefined) {
   const next = [...(sources ?? [])]
-  const applied: string[] = []
+  const applied: string[] = [], otherQuery: string[] = []
   for (const file of files) {
+    const query = queryOf?.(file.source.connectionId)
+    if (query?.trim() && !sameQuery(query, file.source.query)) { otherQuery.push(file.connection.viewName || file.connection.reason); continue }
     const index = next.findIndex((entry) => entry.connectionId === file.source.connectionId)
     // A snapshot replaces a view's data only when it is newer; one without a readable fetch time never does, and
     // local data without one is replaced.
@@ -54,5 +60,5 @@ export function applySnapshots(sources: ViewSnapshot[] | undefined, files: Snaps
     if (index >= 0) next[index] = entry; else next.push(entry)
     applied.push(file.connection.viewName || file.connection.reason)
   }
-  return { sources: next, applied }
+  return { sources: next, applied, otherQuery }
 }

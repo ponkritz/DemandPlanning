@@ -226,9 +226,10 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     // A file whose connection duplicates one already here (same server, project, role and query) is skipped.
     for (const file of files) if (!loadAzureConnectionProfile(file.connection.id) && !listAzureConnectionProfiles().some((profile) => connectionKey(profile) === connectionKey(file.connection))) { try { saveAzureConnectionProfile({ ...file.connection, token: '' }); added += 1 } catch { failed.push(snapshotFileName(file.connection.id)) } }
     const usable = files.filter((file) => loadAzureConnectionProfile(file.connection.id))
-    const { applied } = applySnapshots(store.state.azureSources, usable)
-    store.update((draft) => { draft.azureSources = applySnapshots(draft.azureSources, usable).sources; return draft })
-    return { files: files.length, applied, added, failed }
+    const queryOf = (id: string) => loadAzureConnectionProfile(id)?.query
+    const { applied, otherQuery } = applySnapshots(store.state.azureSources, usable, queryOf)
+    store.update((draft) => { draft.azureSources = applySnapshots(draft.azureSources, usable, queryOf).sources; return draft })
+    return { files: files.length, applied, added, failed, otherQuery }
   }
 
   // One on-prem view's data from Git (Load from Git, or the fallback when a fetch cannot run): null when Git has
@@ -239,9 +240,11 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     if (!text) return null
     const file = parseSnapshot(text)
     if (file.connection.id !== connectionId) throw new Error(`${snapshotFileName(connectionId)} in Git belongs to another view.`)
-    const applied = applySnapshots(store.state.azureSources, [file]).applied.length > 0
-    if (applied) store.update((draft) => { draft.azureSources = applySnapshots(draft.azureSources, [file]).sources; return draft })
-    return { applied, fetchedAt: file.source.fetchedAt }
+    const queryOf = (id: string) => loadAzureConnectionProfile(id)?.query
+    const result = applySnapshots(store.state.azureSources, [file], queryOf)
+    const applied = result.applied.length > 0
+    if (applied) store.update((draft) => { draft.azureSources = applySnapshots(draft.azureSources, [file], queryOf).sources; return draft })
+    return { applied, fetchedAt: file.source.fetchedAt, otherQuery: result.otherQuery.length > 0 }
   }
 
   // Windchill views: the same, in windchill-data/<view>.json.

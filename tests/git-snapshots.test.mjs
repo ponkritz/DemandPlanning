@@ -55,3 +55,12 @@ test('a snapshot with invalid items or an unreadable fetch time is refused; unre
   assert.deepEqual(applySnapshots([source('garbage', 1)], [file]).sources[0].items.length, 3, 'local data without a readable fetch time is replaced')
   assert.deepEqual(applySnapshots([source('2026-10-21T10:00:00Z', 1)], [{ ...file, source: { ...file.source, fetchedAt: 'garbage' } }]).applied, [], 'a snapshot without a readable fetch time never replaces data')
 })
+
+test('a snapshot fetched with another query than the connection has here is not applied (TC-CON-45)', () => {
+  const file = parseSnapshot(serializeSnapshot(snapshotFile(connection, { ...source('2026-10-22T10:00:00Z', 3), query: 'SELECT [System.Id] FROM WorkItems WHERE old = 1' })))
+  const result = applySnapshots([source('2026-10-20T10:00:00Z', 1)], [file], () => connection.query)
+  assert.deepEqual([result.applied, result.otherQuery, result.sources[0].items.length], [[], ['Digital Platform'], 1], 'the newer old-query data does not replace the data here')
+  const same = applySnapshots([source('2026-10-20T10:00:00Z', 1)], [parseSnapshot(serializeSnapshot(snapshotFile(connection, source('2026-10-22T10:00:00Z', 3))))], () => `  ${connection.query.toUpperCase()} `)
+  assert.equal(same.sources[0].items.length, 3, 'the same query (spaces and letter case aside) is applied')
+  assert.equal(applySnapshots(undefined, [file], () => undefined).sources.length, 1, 'a connection without a query takes the data')
+})
