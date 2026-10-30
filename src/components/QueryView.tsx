@@ -72,3 +72,4 @@ export function QueryView({ name, items, columns, orderBy = [], unresolved = [],
     {shown.length > 500 && <p className="muted">Showing the first 500 of {shown.length} rows; search or filter to narrow, or export CSV for all.</p>}
   </div>
 }
+

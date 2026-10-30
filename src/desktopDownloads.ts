@@ -11,3 +11,4 @@ export function detectOs(userAgent: string): DesktopOs {
   if (/macintosh|mac os x/i.test(userAgent) && !/iphone|ipad/i.test(userAgent)) return 'mac'
   return 'other'
 }
+

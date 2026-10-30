@@ -15,6 +15,6 @@ export function DpBoardCell({ row, match, azure, assign, featureSetup }: { row: 
   if (match.feature || match.story) return <span className="board-match">{match.feature && <Hit hit={match.feature} label="Feature" />}{match.story && <Hit hit={match.story} label="Story" />}</span>
   return <span className="board-match">
     {match.closest ? <small className="muted" title={match.closest.item.title}>closest {match.closest.item.workItemType} {match.closest.item.id} · {match.closest.score}%</small> : <small className="muted">{azure.items.length ? 'no match' : 'board not loaded'}</small>}
-    <ReleaseFeatureButton stream="DP" title={dpFeatureTitle(row)} azure={azure} assign={assign} featureSetup={featureSetup} />
+    <ReleaseFeatureButton stream="DP" title={dpFeatureTitle(row)} items={[row]} azure={azure} assign={assign} featureSetup={featureSetup} />
   </span>
 }

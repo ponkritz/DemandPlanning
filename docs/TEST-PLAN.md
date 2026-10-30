@@ -660,6 +660,14 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-BKL-04 Feature DoD mandatory** — Req BKL-13 — L1 `azure-devops.test.mjs` ("the Feature DoD is mandatory: composed into the Description, and creation is refused without one"), `feature-setup.test.mjs` ("Feature DoD in a setup: kept through save, built-in defaults, and required for new or changed setups"); browser check with Azure DevOps mocked (Time Writing connection with email and PAT, one Epic): Assigned to Me → ＋ New Feature opens "Add Feature under an Epic" with "Feature DoD" = "DT finished. This is a PU release."; clearing it disables "Create Feature and children" with the title "Enter the Feature DoD first"; the release view's Create Feature is disabled until a DoD is typed. **UAT**
 
+**TC-BKL-09 Title fields in New Feature** — Req BKL-18 — L1 `azure-devops.test.mjs` ("a Feature from a setup with title fields: the typed values fill {Field} placeholders, also with a blank field"; "Release Classification: optional …": the field lines follow it), `feature-setup.test.mjs` ("title fields per Epic …": title, Description lines, on-prem values); browser check (QMS-0025, a CP Epic whose setup has Platform, Release Name, Number): New Feature shows the three inputs and the title follows them; Save gives the Description "Platform : …", "Release Name : …", "Number : …" below the Release Classification; Release Details → Create Feature on a CP release fills the fields from its on-prem items.
+
+**TC-CON-43 Title fields in the Feature setup** — Req CON-75 — L1 `feature-setup.test.mjs` ("title fields per Epic: up to five, unique names, saved with the setup …"); browser check with GitHub mocked: Settings → Feature setup → an Epic → ＋ Add title field three times (Platform / Custom.Platform, Release Name, Number), the preview of a story titled "{Platform} review" with the sample "CP 2 | Atlas | 4.1" shows "CP 2 review"; Save to Git writes titleFields; a sixth field cannot be added.
+
+**TC-BKL-08 Release Classification in the Description** — Req BKL-17 — L1 `azure-devops.test.mjs` ("Release Classification: optional, always written below the Feature DoD in the Description"); browser check (QMS-0025, connection with a saved PAT): New Feature shows Release Classification under Planning for an Epic with a setup and one without; choosing Platform Update and saving gives the Feature a Description starting "Feature DoD: …" followed by "Release Classification : Platform Update"; leaving it blank gives "Release Classification :"; the children created are the same either way.
+
+**TC-BKL-07 New Feature form in the Azure DevOps layout** — Req BKL-16 — L1 `npx tsc -b` and `my-work.test.mjs` (the creation paths it calls are unchanged; TC-BKL-02…06 still pass); browser check (QMS-0025, connection with a saved PAT): ＋ New Feature opens “New Feature” with the title on top, the strip shows you, New, the Epic’s Area and the current PI → Sprint already chosen; no PAT field is shown; the DoD is prefilled from the setup; Child work items reads “n will be created or checked” and opens to tick them; Save creates the same hierarchy as before; at phone width the form fits without sideways scrolling.
+
 **TC-BKL-06 Built-in Review of Deliverables story** — Req BKL-15 — L1 `azure-devops.test.mjs` ("… always creates Time Writing and the month task": the story "Review of Deliverables - <Feature>" is created by default for PU and Release with and without milestones, in the Sprint; "partial hierarchy …": completion adds it; "a Feature from its Epic setup …": it follows the optional stories; "the Time Writing story without set paths …": it goes to the chosen Sprint, and unticked it is not created on either path), `feature-setup.test.mjs` ("built-in stories as a setup …": the title is not part of the setup); browser check: New Feature offers it ticked among the optional stories; after creation the Feature has the story in the current Sprint; unticked, the Feature is created without it; Complete children with it ticked on a Feature without it adds it.
 
 **TC-BKL-05 Time Writing story not tied to a Sprint** — Req BKL-14 — L1 `azure-devops.test.mjs` ("… always creates Time Writing and the month task" for PU and Release: review stories in the PI, the Time Writing story at the project root; "new Feature is assigned to the configured creator email, review stories to the Sprint, the Time Writing story and task to the project root"; "the Time Writing story without set paths: the project root iteration (no PI, Sprint or year) and the Feature area; an existing one is reused wherever it is"), `my-work.test.mjs` (a new Time Writing story from Bulk actions at the project root; "move candidates …": Time Writing stories are never moved); browser check: New Feature shows "Time Writing User Story → QMS (not the PI or Sprint)" in Dates and paths. **UAT**
@@ -1216,6 +1224,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CON-72 | TC-CON-40 |
 | CON-73 | TC-CON-41 |
 | CON-74 | TC-ACC-03 |
+| CON-75 | TC-CON-43 |
 | QV-20 | TC-QV-06 |
 | QV-21 | TC-QV-07 |
 | CON-21, CON-22 | TC-CON-08 |
@@ -1269,6 +1278,9 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | BKL-13 | TC-BKL-04 |
 | BKL-14 | TC-BKL-05 |
 | BKL-15 | TC-BKL-06 |
+| BKL-16 | TC-BKL-07 |
+| BKL-17 | TC-BKL-08 |
+| BKL-18 | TC-BKL-09 |
 | QV-01, QV-02 | TC-QV-01 |
 | QV-03, QV-05 | TC-QV-02 |
 | QV-04 | TC-FET-07 |
@@ -1378,8 +1390,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-03 | TC-CON-03, TC-FET-01…06 |
 | UC-04 | TC-TWN-01, TC-TWN-02, TC-MON-01…06 |
 | UC-05 | TC-MON-07 |
-| UC-06 | TC-ATM-01…11, TC-TWN-03, TC-CON-20, TC-CON-33, TC-CON-34 |
-| UC-07 | TC-BKL-01…05, TC-CON-23, TC-CON-25…27, TC-CON-29…32, TC-CON-35 |
+| UC-06 | TC-ATM-01…11, TC-TWN-03, TC-CON-20, TC-CON-33, TC-CON-34, TC-CON-43 |
+| UC-07 | TC-BKL-01…09, TC-CON-23, TC-CON-25…27, TC-CON-29…32, TC-CON-35 |
 | UC-08 | TC-QV-01…05, TC-FET-07, TC-CON-08, TC-CON-11…16, TC-QV-08, TC-QV-09, TC-QV-10, TC-QV-11, TC-QV-12, TC-QV-13, TC-QV-14, TC-QV-15, TC-QV-16, TC-CON-37, TC-CON-38, TC-CON-39, TC-CON-40, TC-CON-41, TC-QV-18, TC-QV-19, TC-QV-20, TC-QV-21, TC-QV-22, TC-CON-42 |
 | UC-09 | TC-OV-11…14, TC-CAP-01, TC-CAP-02, TC-CAP-03, TC-QV-17, TC-CON-21, TC-QV-10, TC-QV-11, TC-QV-21 |
 | UC-10 | TC-OV-11 (Months, Streams), TC-OV-13 |

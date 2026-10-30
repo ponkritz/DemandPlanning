@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
-import { parseAzureProjectUrl, fetchAzureWorkItems, mergeAzureWorkItems, buildWorkItemQuery, createAzureFeature, featurePatch, featureDescription, withFeatureDoD, releaseHierarchyTitles, currentIndiaMonth, createAzureReleaseHierarchy, completeReleaseHierarchy, HierarchyCreationError, readAzureIterations, projectIterationPaths, currentIterationPairs, futureIterationPairs, mapAzureWorkItem, savedBacklogItems, sameAzureScope, updateAzureTimeWritingEffort } from '../src/azureDevOps.ts'
+import { parseAzureProjectUrl, fetchAzureWorkItems, mergeAzureWorkItems, buildWorkItemQuery, createAzureFeature, featurePatch, featureDescription, withFeatureDoD, releaseClassifications, releaseHierarchyTitles, currentIndiaMonth, createAzureReleaseHierarchy, completeReleaseHierarchy, HierarchyCreationError, readAzureIterations, projectIterationPaths, currentIterationPairs, futureIterationPairs, mapAzureWorkItem, savedBacklogItems, sameAzureScope, updateAzureTimeWritingEffort } from '../src/azureDevOps.ts'
 import { buildWorkItemTree } from '../src/azureHierarchy.ts'
 import { loadAzurePat, saveAzurePat, forgetAzurePat, listAzurePatProfiles, loadAzurePatProfile, saveAzurePatProfile, forgetAzurePatProfile, listAzureConnectionProfiles, loadAzureConnectionProfile, saveAzureConnectionProfile, forgetAzureConnectionProfile } from '../src/azureCredentials.ts'
 import { normalizeBacklogColumns, defaultBacklogColumns, plainAzureText, visibleBacklogRows } from '../src/backlogView.ts'
@@ -585,6 +585,16 @@ test('a Feature from its Epic setup: chosen stories, Time Writing story, Task de
   await assert.rejects(completeFeatureFromSetup(config, pat, result.feature.id, { ...setup, stories: [{ title: '{program} only', description: '' }] }, 'October 2026', async (request) => request.operation === 'items' ? { value: [{ id: result.feature.id, fields: { 'System.Title': 'No parts', 'System.WorkItemType': 'Feature', 'System.TeamProject': config.project, 'System.AssignedTo': { uniqueName: 'a@b.co' } } }] } : server.transport(request)), /does not provide/)
 })
 
+test('a Feature from a setup with title fields: the typed values fill {Field} placeholders, also with a blank field', async () => {
+  const server = fakeHierarchyServer()
+  const titleFields = [{ label: 'Platform', source: '' }, { label: 'Release Name', source: '' }, { label: 'Number', source: '' }]
+  const setup = { stories: [{ title: '{Platform} review ({number})', description: '' }], titleFields, fieldValues: ['CP 2', '', '4.1'], task: { title: '{month} | {feature}', description: '', assignedTo: '', areaPath: '', iterationPath: '' } }
+  const result = await createFeatureFromSetup(config, pat, { ...feature, title: 'CP 2 | 4.1', iterationPath: 'Current PI' }, setup, 'October 2026', server.transport)
+  assert.ok(result.items.some((item) => item.title === 'CP 2 review (4.1)'), 'typed values used, though the title has fewer parts')
+  const without = { ...setup, fieldValues: undefined }
+  await completeFeatureFromSetup(config, pat, result.feature.id, without, 'October 2026', server.transport).then(() => assert.fail('expected a refusal'), (failure) => assert.match(failure.message, /Platform \| Release Name \| Number/))
+})
+
 test('Feature setup: the Time Writing User Story is configurable per Epic (title, Description, Assigned to, Area and Iteration Path)', async () => {
   const old = parseFeatureSetup(JSON.stringify({ schema: 1, kind: 'feature-setup', epics: [{ epicId: 1, stories: [] }] }))
   assert.deepEqual(setupFor(old, 1).timeWritingStory, { title: '{feature} - Time Writing', description: '', assignedTo: '', areaPath: '', iterationPath: '' }, 'files without it keep the built-in story')
@@ -649,4 +659,14 @@ test('the Feature DoD is mandatory: composed into the Description, and creation 
   await assert.rejects(createAzureFeature(config, pat, { ...feature, description: 'Release scope only' }, transport), /Feature DoD/)
   await assert.rejects(createAzureFeature(config, pat, { ...feature, description: '<p>Feature DoD: </p>' }, transport), /Feature DoD/)
   assert.equal(requests.length, 0, 'refused before anything is sent')
+})
+
+test('Release Classification: optional, always written below the Feature DoD in the Description', () => {
+  assert.deepEqual([...releaseClassifications], ['Major', 'Minor', 'MLD', 'Platform Update', 'Service Pack'])
+  assert.equal(withFeatureDoD('DT finished', 'Scope: X', 'Major'), 'Feature DoD: DT finished\n\nRelease Classification : Major\n\nScope: X')
+  assert.equal(withFeatureDoD('DT finished', '', 'Service Pack'), 'Feature DoD: DT finished\n\nRelease Classification : Service Pack')
+  assert.equal(withFeatureDoD('DT finished', 'Scope: X', ''), 'Feature DoD: DT finished\n\nRelease Classification :\n\nScope: X', 'left blank, the line is still captured')
+  assert.equal(withFeatureDoD('DT finished', 'Scope: X'), 'Feature DoD: DT finished\n\nScope: X', 'callers without the field are unchanged')
+  assert.throws(() => withFeatureDoD(' ', '', 'Major'), /Feature DoD/)
+  assert.equal(withFeatureDoD('DT finished', 'Scope: X', 'Major', ['Platform : CP 2', 'Number :']), 'Feature DoD: DT finished\n\nRelease Classification : Major\n\nPlatform : CP 2\n\nNumber :\n\nScope: X', 'the Epic setup title fields follow it')
 })

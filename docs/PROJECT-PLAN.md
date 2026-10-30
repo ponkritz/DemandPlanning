@@ -47,3 +47,4 @@ The 3–5 day target is viable for a testable Release 1, not for every productio
 Deferred on request; to be decided again when needed:
 
 - **DP release matching and DHFI linking (Release Details → DP).** The DP page now shows only the DP connection's query with chosen columns (QV-22). Each DP row is matched again to its QMS-0025 Feature / User Story by SourceProgram + Title at 80%, with Create Feature when none matches (QV-29). Linking the DHFI documents and the Pedestal register stays off the page (OI-14). Pulse Check and the Dashboard count DP from its query by its milestones (QV-24, QV-25).
+

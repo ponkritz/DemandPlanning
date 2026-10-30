@@ -1,5 +1,5 @@
 import type { AzureWorkItem } from './domain'
-import { featureDoD, fillTitle, missingValues, reviewStoryTitle, titleValues } from './featureSetup.ts'
+import { featureDoD, fillTitle, missingValues, reviewStoryTitle, titleValues, fieldPlaceholders, type TitleField } from './featureSetup.ts'
 import { planMonthStory, timeWritingMonth } from './azureInsights.ts'
 
 // baseUrl is the organization (https://dev.azure.com/<org>) or, on premises, the Azure DevOps Server collection
@@ -47,10 +47,15 @@ export { featureDoD }
 export const featureDescription = (kind: 'PU' | 'Release') => `Feature DoD: ${featureDoD(kind)}`
 export const missingDoDMessage = 'Enter the Feature DoD (Definition of Done): a Feature is not created without it.'
 // The Description sent for a new Feature: the DoD first ("Feature DoD: " added unless typed), then any other text.
-export function withFeatureDoD(dod: string, description = '') {
+export const releaseClassifications = ['Major', 'Minor', 'MLD', 'Platform Update', 'Service Pack'] as const
+// The New Feature form passes the optional Release Classification ('' when left blank): the line is always written
+// below the Feature DoD, so a blank choice still shows in the Description.
+// lines: the Epic setup's title fields ("Platform : …"), below it.
+export function withFeatureDoD(dod: string, description = '', releaseClassification?: string, lines: string[] = []) {
   const value = dod.trim().replace(/^feature\s+dod\s*:\s*/i, '').trim()
   if (!value) throw new Error(missingDoDMessage)
-  return [`Feature DoD: ${value}`, description.trim()].filter(Boolean).join('\n\n')
+  const classification = releaseClassification === undefined ? '' : `Release Classification : ${releaseClassification.trim()}`.trimEnd()
+  return [`Feature DoD: ${value}`, classification, ...lines.map((line) => line.trim()), description.trim()].filter(Boolean).join('\n\n')
 }
 const hasFeatureDoD = (description: string) => /\bDoD\b\s*:?\s*[^\s:]/i.test(description.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' '))
 
@@ -532,7 +537,7 @@ export async function createAzureReleaseHierarchy(config: AzureConfig, pat: stri
 // "<Feature> - Time Writing"; its Iteration Path, when set, wins over the Sprint chosen in the dialog)
 // and the month Task with the setup's defaults. Titles may carry placeholders ({feature}, {program}, {service},
 // {version}, {month}). Existing children with the same title are reused, so it can also complete a Feature.
-export interface SetupChildren { stories: { title: string; description: string }[]; reviewStory?: boolean; timeWritingStory?: { title: string; description: string; assignedTo: string; areaPath: string; iterationPath: string }; task: { title: string; description: string; originalEstimate?: number; assignedTo: string; areaPath: string; iterationPath: string } }
+export interface SetupChildren { stories: { title: string; description: string }[]; reviewStory?: boolean; titleFields?: TitleField[]; fieldValues?: string[]; timeWritingStory?: { title: string; description: string; assignedTo: string; areaPath: string; iterationPath: string }; task: { title: string; description: string; originalEstimate?: number; assignedTo: string; areaPath: string; iterationPath: string } }
 export async function completeFeatureFromSetup(config: AzureConfig, pat: string, featureId: number, setup: SetupChildren, monthLabel = currentIndiaMonth(), transport: AzureTransport = requestAzure, storyIterationPath?: string, assignee?: string) {
   const items: AzureWorkItem[] = []
   try {
@@ -549,10 +554,12 @@ export async function completeFeatureFromSetup(config: AzureConfig, pat: string,
     const storySetup = setup.timeWritingStory
     const storyOwner = storySetup?.assignedTo.trim() || owner
     if (!isAssignee(storyOwner)) throw new Error('The Time Writing User Story default assignee is not an email.')
-    const values = titleValues(feature.title, monthLabel)
+    // The values typed in the form win; else a title of as many "|" parts as the setup's title fields fills them.
+    const values = { ...titleValues(feature.title, monthLabel, setup.titleFields), ...(setup.titleFields?.length && setup.fieldValues?.length === setup.titleFields.length ? fieldPlaceholders(setup.titleFields, setup.fieldValues) : {}) }
+    const shape = setup.titleFields?.length ? setup.titleFields.map((field) => field.label).join(' | ') : 'Program | Service | vRelease'
     const fill = (template: string, what: string) => {
       const missing = missingValues(template, values)
-      if (missing.length) throw new Error(`${what} uses {${missing.join('}, {')}}, which this Feature title does not provide (use "Program | Service | vRelease"). Nothing more was created.`)
+      if (missing.length) throw new Error(`${what} uses {${missing.join('}, {')}}, which this Feature title does not provide (use "${shape}"). Nothing more was created.`)
       const title = fillTitle(template, values)
       if (!title || title.length > 255) throw new Error(`${what} is empty or longer than 255 characters after filling in the placeholders.`)
       return title
