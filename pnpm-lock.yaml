@@ -24,7 +24,7 @@ importers:
         version: 19.3.1(react@19.3.1)
       read-excel-file:
         specifier: ^9.3.10
-        version: 9.3.13
+        version: 9.3.14
     devDependencies:
       '@types/node':
         specifier: ^24.19.2
@@ -1336,8 +1336,8 @@ packages:
     resolution: {integrity: sha512-BNg9EN3DD3GsDXX7Aa8O4p92sryjkmzYYgmgTAc6CA4uGLEDzFfxOxugu21akOxpcXHiEgsYkC6nPsQvLLLmEg==}
     hasBin: true
 
-  read-excel-file@9.3.13:
-    resolution: {integrity: sha512-dzSGFNBVOk4QkFXE37cREK7DOEVAMNYyXO1QIOoquJ24HhA2hZAZ9WYwf4KddjiV6ZMtsY3OM2JSVLpCg++9jA==}
+  read-excel-file@9.3.14:
+    resolution: {integrity: sha512-rfEpNMthm/REIpSCLnGTrQD5aW+U9rrhFuGYF+XRO8Soz+7b+rAOW1z2vJbNiEINbFPbjRW16vz0KnX41Si9qw==}
     engines: {node: '>=18'}
 
   readable-stream@2.3.8:
@@ -2944,7 +2944,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  read-excel-file@9.3.13:
+  read-excel-file@9.3.14:
     dependencies:
       fflate: 0.8.3
       saxen: 11.2.0

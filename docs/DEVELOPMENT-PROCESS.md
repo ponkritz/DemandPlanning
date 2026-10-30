@@ -67,6 +67,20 @@ Every change — feature, fix, dependency update, document correction — follow
 8. **Merge and release.** Squash-merge to `main`; CI publishes the desktop installers (`desktop-latest`, with SHA-256 sums and `latest.json`) and deploys the web app; the deployment is checked (build number and revision).
 9. **Record.** KNOWN-ISSUES.md entries opened or closed by the change carry the pull request number.
 
+**Agent team.** When the change is built with Claude Code, the steps above are split between seven agents defined in `.claude/agents/`, each owning its documents or code so that no two agents edit the same file:
+
+| Agent | Steps | Owns |
+|---|---|---|
+| `requirement-gathering` (lead) | 1, 5 (README), 6, 9; the hand-off brief and the final checklist | REQUIREMENTS-SPECIFICATION.md, README.md, KNOWN-ISSUES.md |
+| `settings` | 3 for the Settings area | connections, presets, PAT handling, Git setup, access roles, periods, Feature setup, streams |
+| `export` | 3 for exports | CSV, backups, Git / SharePoint snapshots, Windchill exports, Monthly pack .pptx |
+| `test-protocol` | 4 (cases) | TEST-PLAN.md (§6, §7, use cases), UAT-PLAN.md, VERIFICATION-PLAN.md |
+| `automation-testing` | 4 (tests), 6 | tests/*.test.mjs, e2e/*.e2e.mjs, their SOFTWARE-COMPONENTS rows |
+| `dfmea` | 2 (design risk) | DFMEA.md |
+| `security` | 2 (threats), review | SECURITY-ASSESSMENT.md |
+
+The lead starts every change: it writes the requirement rows and a hand-off brief naming the specialists and what each must do, and lists open questions for the user instead of assuming. The main session runs the specialists from the brief (an agent does not start another agent): Settings / Export (or the main session for other code), then Test Protocol and Automation Testing, then DFMEA and Security, and the lead again for the checklist before the pull request. The agents follow CLAUDE.md and the constraints in it; they do not replace the human review of the pull request.
+
 ## 5. Verification strategy
 
 | Level | What | Tooling | Frequency |

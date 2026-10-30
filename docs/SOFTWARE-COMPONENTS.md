@@ -151,6 +151,7 @@ This document lists every software component of the system: the in-house source 
 | Component | Path | Purpose | Requirement areas |
 |---|---|---|---|
 | azureDevOps | `src/azureDevOps.ts` | Azure DevOps REST client: URL normalising, iterations, WIQL fetch, work-item mapping, constrained Feature/Story/Task creation and updates. | CON, FET, ATM, MON, IF |
+| pptxTemplate | `src/pptxTemplate.ts` | Fills the team's PowerPoint template (kept in Storage) with the Monthly pack: Performance Pulse and 2x2 boxes found by label and position, status colours, KPI rows, shrink to fit; checks an uploaded template. | PCK |
 | workItemEdit | `src/workItemEdit.ts` | The fields an edit may change, their checks, the revision-tested JSON patch, rich text as editable text, the Feature DoD split and the edit locks. | BKL |
 | planningLock | `src/planningLock.ts` | The planning / actuals lock rule of a month (deadline, extension, explicit lock) shared by the Monthly page and the Task creation paths, and whether a new month Task is ad-hoc. | MON |
 | backgroundJobs | `src/backgroundJobs.ts` | Background jobs of a page load: runs long Azure DevOps writes off the form, one per key, with progress and the result; nothing stored. | NAV, BKL, ATM, MON |
@@ -213,6 +214,7 @@ This document lists every software component of the system: the in-house source 
 | access.test | `tests/access.test.mjs` | Access policy: no-policy defaults, role union, file round trip, refusing writes for roles without Azure changes. | CON |
 | app-update.test | `tests/app-update.test.mjs` | Build metadata validation, cache-busting URLs, update checks and reload blocking, release version check. | UPD, CI |
 | azure-devops.test | `tests/azure-devops.test.mjs` | PAT persistence/profiles, work-item mapping, tree, backlog view, constrained writes and Feature DoD templates. | CON, FET, ATM, MON |
+| pptx-template.test | `tests/pptx-template.test.mjs` | Filling a synthetic template (labels, KPI rows, status, footer kept, file properties), template checks, shrink to fit, the pack's fill. | PCK |
 | work-item-edit.test | `tests/work-item-edit.test.mjs` | Edit checks and patch, locks, revision conflict, Monthly lock rules on Task hours, Discussion, both transports. | BKL |
 | planning-lock.test | `tests/planning-lock.test.mjs` | Planning / actuals lock rule and the ad-hoc check for a new month Task. | MON |
 | background-jobs.test | `tests/background-jobs.test.mjs` | Background jobs: progress, result, failure, one job per key, Clear finished. | NAV |

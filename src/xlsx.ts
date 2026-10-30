@@ -51,13 +51,17 @@ export async function unzip(bytes: Uint8Array): Promise<Map<string, Uint8Array>>
 const crcTable = (() => { const table = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; table[n] = c >>> 0 } return table })()
 function crc32(data: Uint8Array) { let crc = 0xffffffff; for (const byte of data) crc = crcTable[(crc ^ byte) & 0xff] ^ (crc >>> 8); return (crc ^ 0xffffffff) >>> 0 }
 
-// A zip with stored (uncompressed) entries: valid for Excel and simple to write.
+// A zip with stored (uncompressed) entries: valid for Excel and PowerPoint and simple to write.
 export function zip(files: [string, string][]): Uint8Array {
+  const encoder = new TextEncoder()
+  return zipBytes(files.map(([name, text]) => [name, encoder.encode(text)]))
+}
+export function zipBytes(files: [string, Uint8Array][]): Uint8Array {
   const encoder = new TextEncoder()
   const parts: Uint8Array[] = [], central: Uint8Array[] = []
   let offset = 0
-  for (const [name, text] of files) {
-    const nameBytes = encoder.encode(name), data = encoder.encode(text), crc = crc32(data)
+  for (const [name, data] of files) {
+    const nameBytes = encoder.encode(name), crc = crc32(data)
     const local = new Uint8Array(30 + nameBytes.length), view = new DataView(local.buffer)
     view.setUint32(0, 0x04034b50, true); view.setUint16(4, 20, true); view.setUint16(8, 0, true); view.setUint32(14, crc, true); view.setUint32(18, data.length, true); view.setUint32(22, data.length, true); view.setUint16(26, nameBytes.length, true)
     local.set(nameBytes, 30)
