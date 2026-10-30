@@ -46,6 +46,14 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, mont
   // Everyone with an email in the Time Writing backlog, offered when adding members to access roles.
   const people = [...new Map(azure.items.filter((item) => item.assignedToEmail).map((item) => [item.assignedToEmail!, item.assignedTo])).entries()].map(([email, name]) => ({ email, name })).sort((a, b) => a.name.localeCompare(b.name))
 
+  // The default Joined on (Settings → Resources) of everyone without their own; '' clears it.
+  function setDefaultJoined(value: string) {
+    store.update((draft) => {
+      draft.capacitySettings = normalizeCapacitySettings({ ...normalizeCapacitySettings(draft.capacitySettings), defaultJoinedOn: value })
+      draft.audits.unshift({ id: crypto.randomUUID(), timestamp: new Date().toISOString(), actor: 'u-owner', action: 'Update', entity: 'CapacitySettings', entityId: 'capacity', detail: `Default Joined on = ${value || 'none'}` })
+      return draft
+    })
+  }
   function setProfile(name: string, patch: Partial<ResourceProfile>) {
     store.update((draft) => {
       const now = new Date().toISOString()
@@ -97,8 +105,8 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, mont
     const next = normalizeCapacitySettings({ absenceEpicId: data.get('absenceEpicId'), hoursPerDay: data.get('hoursPerDay'), overloadedAt: data.get('overloadedAt'), availableBelow: data.get('availableBelow'), npraHoursPerMonth: data.get('npraHoursPerMonth') })
     const now = new Date().toISOString()
     store.update((draft) => {
-      // The holiday and activity mappings are kept: this form edits the numbers only.
-      draft.capacitySettings = normalizeCapacitySettings({ ...next, sharedTime: normalizeCapacitySettings(draft.capacitySettings).sharedTime })
+      // The holiday and activity mappings and the default Joined on are kept: this form edits the numbers only.
+      draft.capacitySettings = normalizeCapacitySettings({ ...next, sharedTime: normalizeCapacitySettings(draft.capacitySettings).sharedTime, defaultJoinedOn: normalizeCapacitySettings(draft.capacitySettings).defaultJoinedOn })
       draft.audits.unshift({ id: crypto.randomUUID(), timestamp: now, actor: 'u-owner', action: 'Update', entity: 'CapacitySettings', entityId: 'capacity', detail: `Absence Epic #${next.absenceEpicId}, ${next.hoursPerDay}h/day, overloaded ≥ ${next.overloadedAt}%, capacity < ${next.availableBelow}%, NPRA ${next.npraHoursPerMonth}h/month` })
       return draft
     })
@@ -170,13 +178,14 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, mont
         <div className="control-card"><div><strong>Actuals</strong><p>Deadline: {formatDate(period?.actualsDeadline, `${month}-05 (default)`)}</p></div><Pill tone={period?.actualsLocked ? 'locked' : 'open'}>{period?.actualsLocked ? 'Locked' : 'Open'}</Pill><button className="primary" onClick={() => toggle('actuals')}>{period?.actualsLocked ? 'Unlock' : 'Lock'}</button><label>Extend until<input type="date" onChange={(event) => extend('actuals', event.target.value)} /></label></div>
       </Panel>
     </div>}
-    {tab === 'resources' && <Panel className="admin-section" eyebrow="AZURE DEVOPS" title="Resources" info="People come from Azure (everyone Assigned To a Time Writing Task, absence included); add or remove them in Azure DevOps. Region, role and reporting line are saved with the planning data in Git (see Git storage above). Region decides which regional holidays apply." action={<Pill tone={resources.length ? 'open' : 'neutral'}>{resources.length} {resources.length === 1 ? 'person' : 'people'}</Pill>}>
+    {tab === 'resources' && <Panel className="admin-section" eyebrow="AZURE DEVOPS" title="Resources" info="People come from Azure (everyone Assigned To a Time Writing Task, absence included); add or remove them in Azure DevOps. Region, role and reporting line are saved with the planning data in Git (see Git storage above). Region decides which regional holidays apply. Joined on / Left on (both days worked) limit a person's funded hours to the working days they are employed: a month they join or leave in is prorated, and in a month before joining or after leaving they have no capacity and are not counted." action={<Pill tone={resources.length ? 'open' : 'neutral'}>{resources.length} {resources.length === 1 ? 'person' : 'people'}</Pill>}>
       {resources.length > 0 && <GitSyncBar git={git} />}
       {resources.length > 0 && <Notice tone={unmapped.length ? 'warning' : 'info'}>
         {holidays.length ? `Regional holidays in ${monthName(month)}: ${holidays.map((item) => `${item.region} ${formatHours(item.hours)}h → ${item.people} ${item.people === 1 ? 'person' : 'people'}`).join(' · ')}.` : `No regional holidays in ${monthName(month)}. Add a Feature such as "Public Holidays - India" under absence Epic #${capacity.absenceEpicId} with a "… - Time Writing" story and "<Month YYYY> | <Holiday>" Tasks.`}
         {unmapped.length > 0 && ` No region yet for ${unmapped.join(', ')}; regional holidays are not applied to them.`}
       </Notice>}
-      {resources.length ? <div className="azure-table"><table className="resource-table"><thead><tr><th>Person</th><th>Region</th><th>Role</th><th>Reports to</th><th>Status in {shortMonthName(month)}</th><th>Utilization</th><th>Booked (h)</th><th>Absence (h)</th><th>Main streams</th></tr></thead><tbody>{resources.map((person) => {
+      <label className="default-joined">Default Joined on (everyone without their own date; months before it count no capacity)<span className="button-row"><input type="date" aria-label="Default Joined on" value={capacity.defaultJoinedOn ?? ''} onChange={(event) => setDefaultJoined(event.target.value)} />{capacity.defaultJoinedOn && <button type="button" className="text-button" onClick={() => setDefaultJoined('')}>Clear</button>}</span></label>
+      {resources.length ? <div className="azure-table"><table className="resource-table"><thead><tr><th>Person</th><th>Region</th><th>Role</th><th>Reports to</th><th>Employed</th><th>Status in {shortMonthName(month)}</th><th>Utilization</th><th>Booked (h)</th><th>Absence (h)</th><th>Main streams</th></tr></thead><tbody>{resources.map((person) => {
         const profile = profiles[person.name] ?? {}
         return <tr key={person.name}>
           <td><strong>{person.name}</strong><small>{person.months} {person.months === 1 ? 'month' : 'months'} · {person.firstMonth === person.lastMonth ? shortMonthName(person.firstMonth) : `${shortMonthName(person.firstMonth)} – ${shortMonthName(person.lastMonth)}`}</small></td>
@@ -184,6 +193,7 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, mont
           <td><select aria-label={`Role for ${person.name}`} value={profile.role ?? ''} onChange={(event) => setProfile(person.name, { role: (event.target.value || undefined) as ResourceProfile['role'] })}><option value="">Not set</option>{resourceRoles.map((role) => <option key={role}>{role}</option>)}</select><label className="check"><input type="checkbox" checked={Boolean(profile.peopleManager)} onChange={(event) => setProfile(person.name, { peopleManager: event.target.checked || undefined })} />People manager</label></td>
           <td>{otherFor === person.name ? <form className="inline-form" onSubmit={(event) => { event.preventDefault(); const name = otherName.trim(); if (name && name !== person.name) setProfile(person.name, { reportsTo: name }); setOtherFor('') }}><input aria-label={`Manager of ${person.name}`} placeholder="Manager's name" value={otherName} autoFocus onChange={(event) => setOtherName(event.target.value)} /><button type="submit" className="ghost">OK</button><button type="button" className="text-button" onClick={() => setOtherFor('')}>Cancel</button></form>
             : <select aria-label={`${person.name} reports to`} value={profile.reportsTo ?? ''} onChange={(event) => { if (event.target.value === '__other') { setOtherFor(person.name); setOtherName('') } else setProfile(person.name, { reportsTo: event.target.value || undefined }) }}><option value="">—</option>{names.filter((name) => name !== person.name).map((name) => <option key={name}>{name}</option>)}{outside.length > 0 && <optgroup label="Not on the board">{outside.filter((name) => name !== person.name).map((name) => <option key={name}>{name}</option>)}</optgroup>}<option value="__other">Other (type a name)…</option></select>}</td>
+          <td className="employment-dates"><label>Joined on<input type="date" aria-label={`${person.name} joined on`} value={profile.joinedOn ?? ''} max={profile.leftOn} onChange={(event) => setProfile(person.name, { joinedOn: event.target.value || undefined })} /></label><label>Left on<input type="date" aria-label={`${person.name} left on`} value={profile.leftOn ?? ''} min={profile.joinedOn} onChange={(event) => setProfile(person.name, { leftOn: event.target.value || undefined })} /></label></td>
           <td><Pill tone={statusTone[person.status]}>{person.status}</Pill></td><td>{formatPercent(person.utilization)}</td><td>{formatHours(person.work)}</td><td>{formatHours(person.absence)}</td>
           <td>{person.streams.slice(0, 2).join(', ') || '—'}{person.streams.length > 2 && <small>+{person.streams.length - 2} more</small>}</td>
         </tr>

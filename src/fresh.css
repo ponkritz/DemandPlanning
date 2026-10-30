@@ -415,3 +415,7 @@ table.resizable.wrap th,table.resizable.wrap td{white-space:pre-wrap;overflow-wr
 .jobs-indicator{position:relative}.jobs-button.jobs-running{color:var(--accent,#4f46e5)}.jobs-button.jobs-failed{color:var(--negative,#b42318)}
 .jobs-panel{position:absolute;right:0;top:calc(100% + 6px);z-index:40;width:min(380px,calc(100vw - 32px));max-height:60vh;overflow:auto;background:var(--panel,#fff);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.15);padding:12px;display:grid;gap:8px}
 .jobs-head{display:flex;justify-content:space-between;gap:8px;align-items:baseline}.jobs-panel ul{list-style:none;margin:0;padding:0;display:grid;gap:8px}.job{border-left:3px solid var(--line);padding-left:8px}.job p{margin:2px 0 0;font-size:13px;overflow-wrap:anywhere}.job-running{border-color:var(--accent,#4f46e5)}.job-done{border-color:#2e7d32}.job-error{border-color:var(--negative,#b42318)}
+
+.employment-dates{display:grid;gap:4px;min-width:150px}.employment-dates label{display:grid;gap:2px;font-size:12px}.employment-note{margin:0 0 8px}
+.default-joined{display:grid;gap:4px;margin:0 0 10px;max-width:520px}
+.until-target{display:grid;gap:6px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:0}.until-target legend{font-weight:600;padding:0 4px}

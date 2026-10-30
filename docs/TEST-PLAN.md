@@ -604,6 +604,10 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-ATM-12 Close follow-up: User Stories with the Feature, the Feature with the last User Story** — Req ATM-20 — L1 `my-work.test.mjs` ("closing a Feature offers its open User Stories; closing the last open User Story offers the Feature (ATM-20)": open stories only, the last-story rule, Closed Features and Tasks left alone, the staged states, the question texts; the chain writes each item in order when confirmed, nothing when declined, reports a Resolved Feature and a failed write, sets a New Feature to Active then Closed); browser check (QMS-0025, own test items): Close Feature → the prompt lists its open User Stories → OK closes them and the log says so; close the last open User Story → the prompt offers the Feature → Cancel leaves it open.
 
+**TC-ATM-13 Month Tasks up to the Target date** — Req ATM-21 — L1 `my-work.test.mjs` ("Bulk month Tasks up to the Target date …"); browser check:
+- Steps: Bulk actions → Create month tasks with a Feature whose Target date is in January 2027 (month October 2026); in the confirmation tick it, enter 20 h; Create tasks. Run it again.
+- Expected: Tasks for October, November, December 2026 and January 2027, each with Original Estimate 20 h (October without hours if planning had locked); the result names the later months; the second run creates nothing.
+
 **TC-ATM-03 Close an item** — Req ATM-06 — **UAT**
 - Steps:
   1. On a New User Story press Set User Story to Active, then Close User Story; on a New Feature press Set Feature to Active, then Close Feature. A Resolved story or Feature shows "Set to Active first".
@@ -828,6 +832,12 @@ TC-OVR-01 to TC-OVR-03 tested the earlier Overview and are **retired** with OVR-
 **TC-CAP-02 Holidays and common activities** — Req CAP-04, CAP-05, CAP-10…12 — L1 `capacity.test.mjs` ("holidays and common activities: mapped Epics / Features apply their month Tasks to everyone in scope": PI Planning for everyone lowers each person's available hours and is not their booked work; a region-scoped audit applies to that region only and the nearest mapping wins; a name-based holiday Feature still applies; mapping it explicitly replaces the name rule without counting twice; invalid mappings are dropped); browser check: Settings → Capacity → Holidays and common activities: enter the PI Planning Feature ID, Common activity, Everyone → it is listed with its hours and people for the header month; Pulse Check → Last month shows "… h common activities" per person and a Common activities part of the funded-hours ring; saving the capacity numbers keeps the mapping; Remove restores the Task to its assignee. **UAT**
 
 **TC-CAP-03 NPRA maximum and tracking** — Req CAP-13 — L1 `capacity.test.mjs` ("NPRA: only booked hours are deducted; tracked against the per-person maximum, hours over it flagged": a Task tagged npra and a Task under a Feature tagged "NPRA Hours"; 12 h booked deducts 12 h, 30 h booked deducts 30 h and flags 10 h over the 20 h maximum; NPRA is no stream and not booked work; maximum 0 tracks only; settings without the field take 20 h; normalisation; "NPRA: nobody is charged for NPRA they did not book"), `dashboard.test.mjs` (settings with allowance 0 keep the former numbers); browser check (Pulse Check → Last month with the synthetic sample, whose CP / IOCC / QMS first Features carry "NPRA Hours"): the NPRA metric shows the booked hours and "max 20h per person"; the NPRA table lists each person with booked / planned / maximum / left and "Within 20h" or "n h over the maximum"; "Who has capacity" shows "NPRA nh / 20h" under the person; a person without NPRA Tasks keeps funded − absence as available; Settings → Capacity → Edit shows "NPRA maximum per person per month (h)" and saving 0 removes the flag; no page errors. **UAT**
+
+**TC-CAP-04 Joining and leaving dates** — Req CAP-14 — L1 `capacity.test.mjs` ("joined on / left on: funded hours for the working days employed …"); browser check:
+- Steps: Settings → Resources: set Left on 2026-10-14 for one person and Joined on 2026-11-02 for another; open the Dashboard for October 2026.
+- Expected: the first person has 10 of 22 days, 80 h funded (8 h/day), and the team's funded total drops accordingly; the second is not counted, and the month view lists their October hours to be checked; without dates everyone keeps the full month.
+
+**TC-CAP-05 Default Joined on** — Req CAP-15 — L1 `capacity.test.mjs` ("default Joined on (1 May 2026 unless changed) …"); browser check: Settings → Resources shows Default Joined on 1 May 2026; the Dashboard for April 2026 shows no capacity and lists the April hours to check; May 2026 counts everyone; give one person their own Joined on 2026-01-05 and April shows that person; Clear the default and April counts everyone again; Edit capacity settings… keeps the default.
 
 **TC-CAP-01 Capacity calculation** — Req CAP-01…09, OVR-09 — L1 `capacity.test.mjs`, `monthly-hours.test.mjs`, `azure-insights.test.mjs`. Plus L3 analysis (A) with one person in October 2026:
 - 22 working days × 8 = 176 h funded.
@@ -1190,6 +1200,9 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-PCK-03 The pack: lines, supported counts, YoY, capacity and slide text** — Req PCK-03, PCK-05 — L1 `monthly-pack.test.mjs` ("the pack: releases per line, supported counts, YoY from last year, capacity lines and slide text (PCK-03, PCK-05)": DP this year vs. last year, an Epic-mapped PPU line, the overall change, the capacity, YoY and supported lines, the overload risk line, the copy text of both slides); `monthly-pack.test.mjs` ("the .pptx writer: a zip with the presentation parts, one slide per input, text escaped (PCK-06)").
 
+**TC-PCK-07 Typing stays responsive** — Req PCK-09 — L1 `monthly-pack.test.mjs` ("typing in the pack does not recount the data …"); browser check with the full team data: type a paragraph in Summary and in a KPI value.
+- Expected: the characters appear as they are typed; no month of releases is read again while typing; the generated lines and KPIs follow the typed text.
+
 **TC-PCK-06 The pack in the team's PowerPoint template** — Req PCK-01, PCK-08 — L1 `pptx-template.test.mjs` (all tests, with a synthetic template — the real one is never in this repository); browser check with the team template:
 - Steps: (1) Settings → Monthly pack: Upload template… (the team .pptx), set the Department name, Save to Git. (2) Pulse Check → Monthly pack: choose At Risk, type text in every box and a long Risks list; Download .pptx; open it in PowerPoint. (3) Upload a .txt renamed .pptx.
 - Expected:
@@ -1322,6 +1335,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | ATM-18 | TC-ATM-10 |
 | ATM-19 | TC-ATM-11 |
 | ATM-20 | TC-ATM-12 |
+| ATM-21 | TC-ATM-13 |
 | BKL-01…03, BKL-12 | TC-BKL-01 |
 | BKL-04…09, BKL-11 | TC-BKL-02 |
 | BKL-10 | TC-BKL-03, TC-ATM-11 |
@@ -1363,6 +1377,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | OVR-09, CAP-01…09 | TC-CAP-01 |
 | CAP-04, CAP-05, CAP-10…12 | TC-CAP-02 |
 | CAP-13 | TC-CAP-03 |
+| CAP-14 | TC-CAP-04 |
+| CAP-15 | TC-CAP-05 |
 | BAS-01…04 | TC-BAS-01 |
 | BAS-05…07 | TC-BAS-02 |
 | BAS-08…10 | TC-BAS-03 |
@@ -1421,6 +1437,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | PCK-05 | TC-PCK-03, TC-PCK-04 |
 | PCK-07 | TC-PCK-05 |
 | PCK-08 | TC-PCK-06 |
+| PCK-09 | TC-PCK-07 |
 | NFR-01 | TC-INS-04 |
 | WSP-01 | TC-WSP-05, TC-WSP-06 |
 | WSP-02 | TC-WSP-01, TC-WSP-06 |
@@ -1463,7 +1480,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-21 | TC-SCR-01 |
 | UC-22 | TC-ACC-01, TC-ACC-02 |
 | UC-23 | TC-QEM-01…08 |
-| UC-24 | TC-PCK-01…06 |
+| UC-24 | TC-PCK-01…07 |
 | UC-25 | TC-WSP-01…07 |
 
 ## 8. Result record

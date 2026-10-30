@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { capacityModel, absenceKind, loadStatus, normalizeCapacitySettings, defaultCapacitySettings } from '../src/capacity.ts'
+import { capacityModel, absenceKind, loadStatus, normalizeCapacitySettings, defaultCapacitySettings, employedDays } from '../src/capacity.ts'
 
 const item = (id, extra = {}) => ({ key: `org/project/${id}`, id, title: 'Release - Time Writing', workItemType: 'User Story', state: 'Active', assignedTo: '', areaPath: '', iterationPath: '', tags: '', url: '', organization: 'org', project: 'project', syncedAt: '', ...extra })
 // Two streams (Epics 1 and 2) plus the absence Epic 900 with a per-person PTO / Sick Feature.
@@ -48,7 +48,7 @@ test('status thresholds and settings normalisation', () => {
   assert.equal(loadStatus(null, defaultCapacitySettings), 'No bookings'); assert.equal(loadStatus(100, defaultCapacitySettings), 'Overloaded')
   assert.equal(loadStatus(79.9, defaultCapacitySettings), 'Has capacity'); assert.equal(loadStatus(80, defaultCapacitySettings), 'Balanced')
   assert.deepEqual(normalizeCapacitySettings(undefined), defaultCapacitySettings)
-  assert.deepEqual(normalizeCapacitySettings({ absenceEpicId: '123', hoursPerDay: 7.5, overloadedAt: 110, availableBelow: 70 }), { absenceEpicId: 123, hoursPerDay: 7.5, overloadedAt: 110, availableBelow: 70, npraHoursPerMonth: 20 })
+  assert.deepEqual(normalizeCapacitySettings({ absenceEpicId: '123', hoursPerDay: 7.5, overloadedAt: 110, availableBelow: 70 }), { absenceEpicId: 123, hoursPerDay: 7.5, overloadedAt: 110, availableBelow: 70, npraHoursPerMonth: 20, defaultJoinedOn: '2026-05-01' })
   assert.deepEqual(normalizeCapacitySettings({ overloadedAt: 50, availableBelow: 90 }), defaultCapacitySettings, 'inverted thresholds fall back')
   assert.throws(() => capacityModel([], '2026-13'))
 })
@@ -192,4 +192,32 @@ test('NPRA: nobody is charged for NPRA they did not book', () => {
   const model = capacityModel(backlog, '2026-10', { ...settings, npraHoursPerMonth: 20 })
   for (const person of model.people) { assert.equal(person.npraDeducted, 0, person.name); assert.equal(person.available, person.funded - person.absence - person.reserved) }
   assert.equal(model.totals.npraDeducted, 0)
+})
+
+test('joined on / left on: funded hours for the working days employed; before joining or after leaving, not counted (TC-CAP-04)', () => {
+  assert.equal(employedDays('2026-10'), 22)
+  assert.equal(employedDays('2026-10', { leftOn: '2026-10-14' }), 10, 'Thu 1 – Wed 14 October: the leaving day is worked')
+  assert.equal(employedDays('2026-10', { joinedOn: '2026-10-26' }), 5, 'Mon 26 – Fri 30')
+  assert.equal(employedDays('2026-10', { joinedOn: '2026-10-05', leftOn: '2026-10-09' }), 5)
+  assert.equal(employedDays('2026-10', { leftOn: '2026-09-30' }), 0)
+  assert.deepEqual(normalizeProfiles({ Ana: { joinedOn: '2026-02-30', leftOn: 'soon' }, Ben: { joinedOn: '2026-10-10', leftOn: '2026-10-01' }, Chen: { leftOn: '2026-10-14' } }), { Ben: { joinedOn: '2026-10-10' }, Chen: { leftOn: '2026-10-14' } }, 'invalid dates and a leaving date before the joining date are dropped')
+  const model = capacityModel(backlog, '2026-10', { ...settings, profiles: { Ben: { leftOn: '2026-10-14' }, Ana: { joinedOn: '2026-11-02' } } })
+  assert.deepEqual(model.people.map((person) => [person.name, person.employedDays, person.funded, person.utilization]), [['Ben', 10, 80, 62.5]], 'Ben prorated; Ana joins in November, so not counted in October')
+  assert.equal(model.totals.funded, 80)
+  assert.deepEqual(model.prorated, [{ name: 'Ben', days: 10, funded: 80 }])
+  assert.deepEqual(model.outsideEmployment, [{ name: 'Ana', tasks: 4, hours: 184, joinedOn: '2026-11-02', leftOn: undefined }], 'her October hours are listed to be checked')
+  assert.equal(capacityModel(backlog, '2026-10', settings).totals.funded, 352, 'without dates everyone has the full month')
+})
+
+test('default Joined on (1 May 2026 unless changed): months before it give no capacity; a person’s own date wins; cleared means none (TC-CAP-05)', () => {
+  assert.equal(normalizeCapacitySettings(undefined).defaultJoinedOn, '2026-05-01')
+  assert.equal(normalizeCapacitySettings({ defaultJoinedOn: '' }).defaultJoinedOn, '', 'cleared stays cleared')
+  assert.equal(normalizeCapacitySettings({ defaultJoinedOn: '2026-02-30' }).defaultJoinedOn, '2026-05-01', 'an invalid day falls back')
+  const april = backlog.map((entry) => ({ ...entry, title: entry.title.replace('October 2026', 'April 2026') }))
+  const before = capacityModel(april, '2026-04', settings)
+  assert.deepEqual([before.people.length, before.totals.funded, before.outsideEmployment.map((person) => person.name).sort()], [0, 0, ['Ana', 'Ben']], 'April 2026: before the default joining date, nobody counts')
+  const own = capacityModel(april, '2026-04', { ...settings, profiles: { Ben: { joinedOn: '2026-01-05' } } })
+  assert.deepEqual(own.people.map((person) => [person.name, person.funded]), [['Ben', 176]], 'Ben’s own Joined on wins')
+  assert.equal(capacityModel(april, '2026-04', { ...settings, defaultJoinedOn: '' }).people.length, 2, 'without a default everyone counts')
+  assert.equal(capacityModel(backlog, '2026-10', settings).people.length, 2, 'from May 2026 on, everyone counts')
 })

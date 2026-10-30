@@ -92,3 +92,18 @@ test('every KPI can be overridden for the month; a typed utilisation also replac
   assert.equal(capacityLine(typed), 'Capacity: 90.0% utilization (Oct)')
   assert.match(packSlides(typed)[1].boxes[0].lines[0], /Actual utilization was 90.0% in October 2026/)
 })
+
+test('typing in the pack does not recount the data: releases and Epic counts are kept while only the text changes (TC-PCK-07)', () => {
+  let calls = 0
+  const streamsOf = () => { calls += 1; return [{ name: 'DP', releases: ['DoseNav 2.1'], supported: 1 }] }
+  const inputs = { month: '2026-10', setup: defaultPackSetup, items: [], streamsOf, utilization: { month: 100, ytd: 99, qeMonth: null }, timeZone: 'UTC' }
+  const first = buildMonthlyPack({ ...inputs, notes: emptyNotes('2026-10') })
+  const counted = calls
+  assert.ok(counted >= 10, 'the first build reads this year and last year month by month')
+  const typed = buildMonthlyPack({ ...inputs, notes: { ...emptyNotes('2026-10'), text: { summary: 'Typing…' }, kpiValues: { util: '95%' } } })
+  assert.equal(calls, counted, 'no month is read again while typing')
+  assert.deepEqual([typed.lines, typed.overall], [first.lines, first.overall])
+  assert.deepEqual([typed.kpis[0].value, typed.kpis[0].computed, typed.utilization.ytd], ['95%', '99.0%', 95], 'the typed text and overrides still apply')
+  buildMonthlyPack({ ...inputs, items: [], notes: emptyNotes('2026-10') })
+  assert.ok(calls > counted, 'new data is counted again')
+})

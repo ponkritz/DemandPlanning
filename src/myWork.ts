@@ -179,3 +179,19 @@ export function hasOptionalStories(items: AzureWorkItem[], feature: Pick<AzureWo
   const timeWriting = timeWritingStoryIds(items)
   return stories.some((story) => !timeWriting.has(story.id))
 }
+
+// The month labels after `monthLabel` up to the month of a Feature's Target date ("November 2026", …), at most `max`:
+// the month Tasks Bulk actions can create ahead, up to the Feature's closure. None when the Target date is not later.
+export function monthsUntilTarget(monthLabel: string, targetDate: string | undefined, max = 24): string[] {
+  const from = timeWritingMonth(monthLabel), to = /^\d{4}-\d{2}/.exec(targetDate ?? '')?.[0]
+  if (!from || !to || to <= from) return []
+  const labels: string[] = []
+  const date = new Date(`${from}-01T00:00:00Z`)
+  while (labels.length < max) {
+    date.setUTCMonth(date.getUTCMonth() + 1)
+    const key = date.toISOString().slice(0, 7)
+    if (key > to) break
+    labels.push(date.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }))
+  }
+  return labels
+}

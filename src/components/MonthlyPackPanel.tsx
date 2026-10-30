@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useDeferredValue, useMemo, useState } from 'react'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { GitStorage } from '../useGitStorage'
 import type { MonthlyPackStore } from '../useMonthlyPack'
@@ -32,7 +32,10 @@ export function MonthlyPackPanel({ month, azure, store, git, pack, windchill }: 
 
   const streamsOf = useMemo(() => (at: string): StreamMonth[] => packStreamsOf(store.state, azure.connectionProfiles, windchill, at), [store.state, azure.connectionProfiles, windchill])
   const utilization = useMemo((): Utilization => packUtilization(azure.items, month, settings), [azure.items, month, settings])
-  const built = useMemo(() => buildMonthlyPack({ month, setup: pack.setup, notes: draft, items: azure.items, streamsOf, utilization }), [month, pack.setup, draft, azure.items, streamsOf, utilization])
+  // The boxes follow the keyboard at once; the pack (generated lines, KPIs, slide text) follows the typed text a moment
+  // later, so typing never waits for it (the data part is also kept between keystrokes, monthlyPack.packBase).
+  const typed = useDeferredValue(draft)
+  const built = useMemo(() => buildMonthlyPack({ month, setup: pack.setup, notes: typed, items: azure.items, streamsOf, utilization }), [month, pack.setup, typed, azure.items, streamsOf, utilization])
   const slides = useMemo(() => packSlides(built), [built])
 
   const setText = (key: NoteKey, value: string) => setDraft((current) => ({ ...current, text: { ...current.text, [key]: value } }))
