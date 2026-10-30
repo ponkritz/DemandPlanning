@@ -1,3 +1,5 @@
+import type { AzureWorkItem } from './domain'
+import { fieldOf } from './dpReleases.ts'
 // Per-Epic setup for new Features: which optional User Stories are offered (all ticked by default), the Time Writing
 // User Story (title, Description, Assigned to, Area and Iteration Path) and the defaults of the month Time Writing Task. Kept in the Git data repository as feature-setup.json, shared by everyone. Titles are
 // plain text, optionally with placeholders filled in at creation: {feature} (the whole Feature title), {program},
@@ -10,8 +12,13 @@ export interface StoryTemplate { title: string; description: string }
 export interface TaskTemplate { title: string; description: string; originalEstimate?: number; assignedTo: string; areaPath: string; iterationPath: string }
 // The "Time Writing" User Story that holds the month Task: always created; its title and fields are configurable.
 export interface TimeWritingStoryTemplate { title: string; description: string; assignedTo: string; areaPath: string; iterationPath: string }
+// A part of the Feature title named per Epic (DP: Program, Service, Release; CP: Platform, Release Name, Number; …):
+// the New Feature form asks for each, joins them into the title, writes "<label> : <value>" into the Description and
+// offers {<label>} as a placeholder. source: the on-prem field that fills it from a release (Release Details).
+export interface TitleField { label: string; source: string }
 // featureDoD: the Feature DoD (Definition of Done) a new Feature under the Epic starts with — mandatory in a setup.
-export interface EpicSetup { epicId: number; epicTitle: string; featureDoD: string; stories: StoryTemplate[]; timeWritingStory: TimeWritingStoryTemplate; task: TaskTemplate }
+// titleFields: optional, at most maxTitleFields.
+export interface EpicSetup { epicId: number; epicTitle: string; featureDoD: string; stories: StoryTemplate[]; timeWritingStory: TimeWritingStoryTemplate; task: TaskTemplate; titleFields?: TitleField[] }
 export interface FeatureSetupFile { schema: 1; kind: 'feature-setup'; epics: EpicSetup[] }
 
 export const featureSetupFile = 'feature-setup.json'
@@ -27,19 +34,41 @@ export function featureDoD(kind: 'PU' | 'Release') {
 }
 export const emptySetup = (epicId: number, epicTitle = ''): EpicSetup => ({ epicId, epicTitle, featureDoD: '', stories: [], timeWritingStory: { ...defaultTimeWritingStory }, task: { ...defaultTask } })
 
-// The values of the placeholders for a Feature title and month.
-export function titleValues(featureTitle: string, month: string): Record<(typeof placeholders)[number], string> {
+export const maxTitleFields = 5
+// The placeholder key of a label: letters and digits in lower case ({Release Name} and {releasename} are the same).
+export const fieldKey = (label: string) => label.toLowerCase().replace(/[^a-z0-9]/g, '')
+// The values of the placeholders for a Feature title and month. With title fields, a title of exactly that many
+// "|" parts also fills {<label>} of each (the form passes the typed values with fieldPlaceholders instead).
+export function titleValues(featureTitle: string, month: string, fields: TitleField[] = []): Record<string, string> {
   const parts = featureTitle.split('|').map((part) => part.trim())
   const three = parts.length === 3 && parts.every(Boolean)
-  return { feature: featureTitle.trim(), program: three ? parts[0] : '', service: three ? parts[1] : '', version: three ? parts[2].replace(/^v/i, '') : '', month }
+  const base: Record<string, string> = { feature: featureTitle.trim(), program: three ? parts[0] : '', service: three ? parts[1] : '', version: three ? parts[2].replace(/^v/i, '') : '', month }
+  return fields.length ? { ...base, ...fieldPlaceholders(fields, parts.length === fields.length ? parts : []) } : base
 }
-// Placeholders are replaced (any letter case); other text in braces is kept as typed.
+export function fieldPlaceholders(fields: TitleField[], values: string[]): Record<string, string> {
+  return Object.fromEntries(fields.map((field, index) => [fieldKey(field.label), (values[index] ?? '').trim()]).filter(([key]) => key))
+}
+// The Feature title from the typed parts: the filled ones joined with " | ".
+export const fieldTitle = (values: string[]) => values.map((value) => value.trim()).filter(Boolean).join(' | ')
+// The Description lines, one per field, also for a blank one ("Release Name :").
+export const fieldLines = (fields: TitleField[], values: string[]) => fields.map((field, index) => `${field.label} : ${(values[index] ?? '').trim()}`.trimEnd())
+// The values from on-prem work items (a release's items): per field, the first item with its source field filled.
+export function fieldsFromItems(fields: TitleField[], items: Pick<AzureWorkItem, 'fields'>[]) {
+  return fields.map((field) => field.source ? items.map((item) => fieldOf(item, field.source)?.trim()).find(Boolean) ?? '' : '')
+}
+// The typed parts from a title of exactly as many "|" parts (Release Details' title), else none.
+export function fieldsFromTitle(fields: TitleField[], title: string) {
+  const parts = title.split('|').map((part) => part.trim())
+  return fields.map((_, index) => parts.length === fields.length ? parts[index] : '')
+}
+// Placeholders are replaced (any letter case, spaces ignored); other text in braces is kept as typed.
+const braces = /\{([^{}\n]{1,60})\}/g
 export function fillTitle(template: string, values: Record<string, string>) {
-  return template.replace(/\{(\w+)\}/g, (whole, key: string) => Object.hasOwn(values, key.toLowerCase()) ? values[key.toLowerCase()] : whole).replace(/\s+/g, ' ').trim()
+  return template.replace(braces, (whole, key: string) => Object.hasOwn(values, fieldKey(key)) ? values[fieldKey(key)] : whole).replace(/\s+/g, ' ').trim()
 }
 // Placeholders used by a template that have no value for this Feature (e.g. {service} on a title without "|" parts).
 export function missingValues(template: string, values: Record<string, string>) {
-  return [...template.matchAll(/\{(\w+)\}/g)].map((match) => match[1].toLowerCase()).filter((key) => Object.hasOwn(values, key) && !values[key])
+  return [...template.matchAll(braces)].map((match) => fieldKey(match[1])).filter((key) => Object.hasOwn(values, key) && !values[key])
 }
 
 const text = (value: unknown, max: number) => typeof value === 'string' ? value.trim().slice(0, max) : ''
@@ -53,11 +82,19 @@ function cleanTimeWritingStory(input: Partial<Record<keyof TimeWritingStoryTempl
   const assignedTo = text(input?.assignedTo, 320).toLowerCase()
   return { title: text(input?.title, 255) || defaultTimeWritingStory.title, description: text(input?.description, 100000), assignedTo: isEmail(assignedTo) ? assignedTo : '', areaPath: text(input?.areaPath, 4096), iterationPath: text(input?.iterationPath, 4096) }
 }
+// At most maxTitleFields, labels unique (by placeholder key) and not {feature} or {month}.
+export function cleanTitleFields(input: unknown): TitleField[] {
+  if (!Array.isArray(input)) return []
+  const seen = new Set<string>(['feature', 'month'])
+  return input.map((field: Partial<Record<keyof TitleField, unknown>>) => ({ label: text(field?.label, 60), source: text(field?.source, 255) }))
+    .filter((field) => { const key = fieldKey(field.label); if (!key || seen.has(key)) return false; seen.add(key); return true }).slice(0, maxTitleFields)
+}
 export function cleanSetup(input: Partial<Record<keyof EpicSetup, unknown>>): EpicSetup | null {
   const epicId = Number(input.epicId)
   if (!Number.isSafeInteger(epicId) || epicId < 1) return null
   const stories = Array.isArray(input.stories) ? input.stories.map((story: Partial<Record<keyof StoryTemplate, unknown>>) => ({ title: text(story?.title, 255), description: text(story?.description, 100000) })).filter((story) => story.title) : []
-  return { epicId, epicTitle: text(input.epicTitle, 255), featureDoD: text(input.featureDoD, 100000), stories, timeWritingStory: cleanTimeWritingStory(input.timeWritingStory as Partial<Record<keyof TimeWritingStoryTemplate, unknown>> | undefined), task: cleanTask(input.task as Partial<Record<keyof TaskTemplate, unknown>> | undefined) }
+  const titleFields = cleanTitleFields(input.titleFields)
+  return { epicId, epicTitle: text(input.epicTitle, 255), featureDoD: text(input.featureDoD, 100000), stories, timeWritingStory: cleanTimeWritingStory(input.timeWritingStory as Partial<Record<keyof TimeWritingStoryTemplate, unknown>> | undefined), task: cleanTask(input.task as Partial<Record<keyof TaskTemplate, unknown>> | undefined), ...(titleFields.length ? { titleFields } : {}) }
 }
 
 export function parseFeatureSetup(raw: string): FeatureSetupFile {

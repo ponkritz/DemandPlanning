@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { chooseSetup, emptySetup, personalSetupPath, publishSetup, removeSetup, editSetup, sharedSetupRows, setupsMissingDoD, builtinSetup, parseFeatureSetup, serializeFeatureSetup, featureDoD, defaultDoDFor, fillMissingDoD } from '../src/featureSetup.ts'
+import { chooseSetup, emptySetup, personalSetupPath, publishSetup, removeSetup, editSetup, sharedSetupRows, setupsMissingDoD, builtinSetup, parseFeatureSetup, serializeFeatureSetup, featureDoD, defaultDoDFor, fillMissingDoD, cleanTitleFields, fieldKey, fieldLines, fieldTitle, fieldsFromItems, fieldsFromTitle, fieldPlaceholders, fillTitle, missingValues, titleValues, setupFor } from '../src/featureSetup.ts'
 
 const file = (...epics) => ({ schema: 1, kind: 'feature-setup', epics })
 const withStory = (epicId, title) => ({ ...emptySetup(epicId, `Epic ${epicId}`), stories: [{ title, description: '' }] })
@@ -112,4 +112,24 @@ test('default Feature DoD for setups without one: Full Release with a PRD story,
   assert.deepEqual(filled.epics.map((entry) => entry.featureDoD), [featureDoD('Release'), featureDoD('PU'), 'Own DoD'])
   assert.equal(source.epics[0].featureDoD, '', 'the original is unchanged')
   assert.equal(fillMissingDoD(filled).file, filled, 'nothing missing: the same file')
+})
+
+test('title fields per Epic: up to five, unique names, saved with the setup; title, Description lines, placeholders and on-prem values', () => {
+  const cp = [{ label: 'Platform', source: 'Custom.Platform' }, { label: 'Release Name', source: 'ReleaseName' }, { label: 'Number', source: '' }]
+  assert.deepEqual(cleanTitleFields([...cp, { label: ' platform ', source: '' }, { label: '', source: 'X' }, { label: 'Month', source: '' }, { label: 'A', source: '' }, { label: 'B', source: '' }, { label: 'C', source: '' }]).map((field) => field.label), ['Platform', 'Release Name', 'Number', 'A', 'B'], 'at most five; blank, repeated and built-in names dropped')
+  const saved = parseFeatureSetup(serializeFeatureSetup(file({ ...emptySetup(7, 'CP'), featureDoD: 'DT finished', titleFields: cp })))
+  assert.deepEqual(setupFor(saved, 7).titleFields, cp, 'kept through save')
+  assert.equal(setupFor(parseFeatureSetup(serializeFeatureSetup(file({ ...emptySetup(8), featureDoD: 'x' }))), 8).titleFields, undefined, 'a setup without fields is written as before')
+  assert.equal(fieldKey('Release Name'), 'releasename')
+  assert.equal(fieldTitle(['CP 2', ' Atlas ', '4.1']), 'CP 2 | Atlas | 4.1')
+  assert.equal(fieldTitle(['CP 2', '', '4.1']), 'CP 2 | 4.1', 'a blank field is left out of the title')
+  assert.deepEqual(fieldLines(cp, ['CP 2', '', '4.1']), ['Platform : CP 2', 'Release Name :', 'Number : 4.1'], 'a blank field is still written')
+  const values = { ...titleValues('CP 2 | Atlas | 4.1', 'October 2026', cp) }
+  assert.equal(fillTitle('{Platform} - {Release Name} v{number} ({month})', values), 'CP 2 - Atlas v4.1 (October 2026)')
+  assert.deepEqual(missingValues('{Release Name}', { ...values, ...fieldPlaceholders(cp, ['CP 2', '', '4.1']) }), ['releasename'])
+  assert.equal(fillTitle('{unknown thing} {feature}', values), '{unknown thing} CP 2 | Atlas | 4.1', 'other text in braces is kept')
+  assert.deepEqual(fieldsFromTitle(cp, 'CP 2 | Atlas | 4.1'), ['CP 2', 'Atlas', '4.1'])
+  assert.deepEqual(fieldsFromTitle(cp, 'CP 2 | Atlas'), ['', '', ''], 'another number of parts fills nothing')
+  const items = [{ fields: { 'Custom.Platform': '' } }, { fields: { 'Custom.Platform': 'CP 2', 'Custom.ReleaseName': 'Atlas' } }]
+  assert.deepEqual(fieldsFromItems(cp, items), ['CP 2', 'Atlas', ''], 'first item with the field; a bare name finds Custom.ReleaseName; no source stays blank')
 })
