@@ -4,6 +4,7 @@ import { buildWorkItemTree, type WorkItemNode } from '../azureHierarchy'
 import { addChildWorkItem, type AzureConfig } from '../azureDevOps'
 import { BacklogTable } from './BacklogTable'
 import { FeatureEditor } from './FeatureEditor'
+import { StoryEditor } from './StoryEditor'
 import { AssigneeConfirm } from './AssigneeConfirm'
 import { assignablePeople, hasOptionalStories } from '../myWork'
 import type { FeatureSetups } from '../featureSetup'
@@ -48,9 +49,11 @@ export function AzureWorkItemTree({ items, config, onCreated, savedPat = '', cre
     } else setExpanded((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next })
   }
 
-  // ＋ User Story under a Feature, ＋ Task under a User Story: title, iteration (default the parent's) and who it is for.
+  // ＋ User Story under a Feature opens the New User Story form (StoryEditor); ＋ Task under a User Story: title,
+  // iteration (default the parent's) and who it is for.
+  const [storyOf, setStoryOf] = useState<AzureWorkItem | null>(null)
   const childType = childOf?.workItemType === 'Feature' ? 'User Story' : 'Task'
-  function openChild(item: AzureWorkItem) { setChildOf(item); setChildTitle(''); setChildIteration(item.iterationPath); setChildError('') }
+  function openChild(item: AzureWorkItem) { if (item.workItemType === 'Feature') { setStoryOf(item); setResult(null); return } setChildOf(item); setChildTitle(''); setChildIteration(item.iterationPath); setChildError('') }
   async function addChild(email: string) {
     if (!childOf || childBusy) return
     const token = savedToken
@@ -72,6 +75,8 @@ export function AzureWorkItemTree({ items, config, onCreated, savedPat = '', cre
     {partialError && <div className="notice error" role="alert">{partialError}</div>}
     <BacklogTable key={`${config.organization}/${config.project}/${config.team}`} scope={`${config.organization}/${config.project}/${config.team}`} tree={tree} expanded={expanded} expandAll={expandAll} searching={filtering} onToggle={toggle} onExpand={(value) => { setExpandAll(value); setExpanded(new Set()) }} onNewFeature={readOnly ? undefined : openEditor} onComplete={readOnly ? undefined : openResume} canComplete={(feature) => !hasOptionalStories(scoped, feature)} onAddChild={readOnly ? undefined : openChild} tabs={tabs} />
     {(parent || resumeFeature) && <FeatureEditor mode={resumeFeature ? { resume: resumeFeature } : { parent: parent! }} items={items} config={config} savedPat={savedPat} me={me} canChoose={canChoose} featureSetup={featureSetup} onSavePat={onSavePat} onCreated={onCreated} onClose={closeEditor} onDone={(done) => { setResult(done.feature); setResultText(done.text); setPartialError(''); setParent(null); setResumeFeature(null); setExpanded((current) => new Set([...current, done.feature.key, ...done.items.filter((item) => item.workItemType === 'User Story').map((item) => item.key), ...(done.parent ? [done.parent.key] : [])])) }} onPartial={(text) => { setPartialError(text); setParent(null); setResumeFeature(null) }} />}
+    {storyOf && <StoryEditor feature={storyOf} items={items} config={config} savedPat={savedPat} me={me} canChoose={canChoose} onSavePat={onSavePat} onCreated={(created) => { onCreated?.(created); setExpanded((current) => new Set([...current, created[0].key])) }} onClose={() => setStoryOf(null)}
+      onDone={(done) => { setResult(done.story); setResultText(`User Story ${done.text}`); setPartialError('') }} onFailed={(text) => setPartialError(text)} />}
     {childOf && <AssigneeConfirm title={`Add a ${childType} under #${childOf.id}`} people={people} me={me} initial={childOf.assignedToEmail ?? ''} canChoose={canChoose} busy={childBusy} confirmLabel={`Create ${childType}`}
       summary={<>Creates a {childType} under {childOf.workItemType} #{childOf.id} “{childOf.title}” in {config.organization} / {config.project}, in its Area Path. Project validation runs before saving.</>}
       onCancel={() => setChildOf(null)} onConfirm={(email) => { if (childTitle.trim()) void addChild(email); else setChildError('Enter a title.') }}>

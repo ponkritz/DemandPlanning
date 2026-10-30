@@ -8,12 +8,11 @@ import { formatHours, todayIso } from '../format'
 import type { PageProps } from './types'
 import type { MyWork } from '../useMyWork'
 import { isMine } from '../myWork'
+import { actualsLocked as isActualsLocked, planningLocked as isPlanningLocked } from '../planningLock'
 import { usePersonScope } from '../usePersonScope'
 import { ScopeSwitch } from '../components/ScopeSwitch'
 
 type Edit = { originalEstimate?: string; completedWork?: string }
-const nextMonth = (month: string) => { const date = new Date(`${month}-01T00:00:00Z`); date.setUTCMonth(date.getUTCMonth() + 1); return date.toISOString().slice(0, 7) }
-const locked = (deadline: string | undefined, explicit: boolean | undefined, extension: string | undefined, now: Date) => Boolean(explicit || (deadline && now >= new Date(extension || deadline)))
 const adhoc = (tags: string) => tags.split(';').some(tag => tag.trim().toLowerCase() === 'ad-hoc')
 
 export function MonthlyPage({ azure, month, store, my }: { azure: AzureWorkspace; month: string; store: PageProps['store']; my: MyWork }) {
@@ -29,10 +28,8 @@ export function MonthlyPage({ azure, month, store, my }: { azure: AzureWorkspace
   const allGaps = timeWritingGaps(items, month)
   // For one person, a story counts as theirs when it holds one of their Tasks or is assigned to them.
   const gaps = scope ? { ...allGaps, storiesWithoutTask: allGaps.storiesWithoutTask.filter((story) => isMine(story, scope) || items.some((item) => item.parentId === story.id && item.workItemType === 'Task')) } : allGaps
-  const planningPeriod = store.state.periods.find(item => item.month === month)
-  const actualPeriod = store.state.periods.find(item => item.month === nextMonth(month))
-  const planningLocked = locked(planningPeriod?.planningDeadline ?? `${month}-05T23:59:59`, planningPeriod?.planningLocked, planningPeriod?.planningExtendedUntil, now)
-  const actualsLocked = locked(actualPeriod?.actualsDeadline ?? `${nextMonth(month)}-05T23:59:59`, actualPeriod?.actualsLocked, actualPeriod?.actualsExtendedUntil, now)
+  const planningLocked = isPlanningLocked(store.state.periods, month, now)
+  const actualsLocked = isActualsLocked(store.state.periods, month, now)
   const staged = Object.keys(edits).length
   // The Feature above each month Task, found through its parent links (the story between them can have any name).
   const byId = new Map(azure.items.map((item) => [item.id, item]))

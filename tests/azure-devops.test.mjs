@@ -369,7 +369,7 @@ function fakeHierarchyServer() {
       if (request.validateOnly) return { id: 0, fields: {} }
       const source = request.feature
       assert.match(String(source.assignedTo ?? ''), /@/, 'every created item is assigned')
-      const item = { id: nextId++, fields: { 'System.Title': source.title, 'System.WorkItemType': request.operation === 'create-feature' ? 'Feature' : request.workItemType, 'System.State': 'New', 'System.Parent': source.parentId, 'System.AreaPath': source.areaPath, 'System.IterationPath': source.iterationPath || config.project, 'System.TeamProject': config.project, ...(source.assignedTo ? { 'System.AssignedTo': { id: source.assignedTo, uniqueName: source.assignedTo, displayName: 'Synthetic Creator' } } : {}) } }
+      const item = { id: nextId++, fields: { 'System.Title': source.title, 'System.WorkItemType': request.operation === 'create-feature' ? 'Feature' : request.workItemType, 'System.State': 'New', 'System.Parent': source.parentId, 'System.AreaPath': source.areaPath, 'System.IterationPath': source.iterationPath || config.project, 'System.TeamProject': config.project, ...(source.assignedTo ? { 'System.AssignedTo': { id: source.assignedTo, uniqueName: source.assignedTo, displayName: 'Synthetic Creator' } } : {}), ...(source.adhoc ? { 'System.Tags': 'ad-hoc' } : {}) } }
       records.set(item.id, item); writes.push(item)
       return item
     }
@@ -669,4 +669,23 @@ test('Release Classification: optional, always written below the Feature DoD in 
   assert.equal(withFeatureDoD('DT finished', 'Scope: X'), 'Feature DoD: DT finished\n\nScope: X', 'callers without the field are unchanged')
   assert.throws(() => withFeatureDoD(' ', '', 'Major'), /Feature DoD/)
   assert.equal(withFeatureDoD('DT finished', 'Scope: X', 'Major', ['Platform : CP 2', 'Number :']), 'Feature DoD: DT finished\n\nRelease Classification : Major\n\nPlatform : CP 2\n\nNumber :\n\nScope: X', 'the Epic setup title fields follow it')
+})
+
+test('after the planning lock, a new Time Writing Task (and only the Task) is created with the ad-hoc tag (TC-MON-08)', async () => {
+  const patch = featurePatch(config, { parentId: 1, title: 'Task', description: '', acceptanceCriteria: '', areaPath: 'A', adhoc: true })
+  assert.deepEqual(patch.at(-1), { op: 'add', path: '/fields/System.Tags', value: 'ad-hoc' })
+  assert.ok(!featurePatch(config, { parentId: 1, title: 'Task', description: '', acceptanceCriteria: '', areaPath: 'A' }).some((entry) => entry.path === '/fields/System.Tags'), 'no tag before the lock')
+  const server = fakeHierarchyServer()
+  const result = await createAzureReleaseHierarchy(config, pat, { ...feature, title: 'Late | Service | v1.0', iterationPath: 'Current PI' }, 'PU', [], 'October 2026', server.transport, true, true)
+  const tagged = result.items.filter((item) => item.tags.includes('ad-hoc')).map((item) => item.workItemType)
+  assert.deepEqual(tagged, ['Task'], 'the Feature and the User Stories are not tagged')
+  const setup = { stories: [], timeWritingStory: { title: '{feature} - Time Writing', description: '', assignedTo: '', areaPath: '', iterationPath: '' }, task: { title: '{month} | {feature}', description: '', assignedTo: '', areaPath: '', iterationPath: '' } }
+  const fromSetup = await createFeatureFromSetup(config, pat, { ...feature, title: 'Setup | Service | v2.0', iterationPath: 'Current PI' }, setup, 'October 2026', server.transport, true)
+  assert.deepEqual(fromSetup.items.filter((item) => item.tags.includes('ad-hoc')).map((item) => item.workItemType), ['Task'])
+  // Complete children again: the existing Task is reused as it is (nothing new is created or tagged).
+  const before = server.writes.length
+  await completeFeatureFromSetup(config, pat, fromSetup.feature.id, setup, 'October 2026', server.transport, undefined, undefined, true)
+  assert.equal(server.writes.length, before)
+  const open = await createAzureReleaseHierarchy(config, pat, { ...feature, title: 'Open | Service | v1.0', iterationPath: 'Current PI' }, 'PU', [], 'October 2026', server.transport)
+  assert.ok(open.items.every((item) => !item.tags.includes('ad-hoc')), 'planning open: no tag')
 })

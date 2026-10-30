@@ -557,6 +557,14 @@ Cases marked **UAT** are also run in acceptance testing.
   - Azure adds the tag `ad-hoc`.
   - The row's tag shows "ad-hoc", and its OE input is disabled.
 
+**TC-MON-08 Ad-hoc tag on Tasks created after the lock** — Req MON-20 — L1 `planning-lock.test.mjs` ("planning lock: the 5th by default…", "ad-hoc after the lock…"), `azure-devops.test.mjs` ("after the planning lock, a new Time Writing Task…"), `my-work.test.mjs` ("Bulk month Tasks after the planning lock…"); browser check:
+- Pre: planning of the current month locked (after the 5th, or locked in Settings).
+- Steps: (1) New Feature on an Epic: the Time Writing section says the new Task is tagged `ad-hoc`; Save. (2) Bulk actions → Create month tasks: the confirmation says so; confirm.
+- Expected:
+  - The new month Tasks carry the tag `ad-hoc`; the Feature and User Stories do not; the job result names the tag.
+  - An existing month Task that is reused is not tagged.
+  - With planning open (or extended in Settings), nothing is tagged.
+
 **TC-MON-07 Gaps panel** — Req MON-18
 - Expected (TD-02a, October 2026):
   - (a) S2 is listed as a Time Writing story with no October Task.
@@ -663,6 +671,13 @@ Cases marked **UAT** are also run in acceptance testing.
 **TC-BKL-04 Feature DoD mandatory** — Req BKL-13 — L1 `azure-devops.test.mjs` ("the Feature DoD is mandatory: composed into the Description, and creation is refused without one"), `feature-setup.test.mjs` ("Feature DoD in a setup: kept through save, built-in defaults, and required for new or changed setups"); browser check with Azure DevOps mocked (Time Writing connection with email and PAT, one Epic): Assigned to Me → ＋ New Feature opens "Add Feature under an Epic" with "Feature DoD" = "DT finished. This is a PU release."; clearing it disables "Create Feature and children" with the title "Enter the Feature DoD first"; the release view's Create Feature is disabled until a DoD is typed. **UAT**
 
 **TC-BKL-09 Title fields in New Feature** — Req BKL-18 — L1 `azure-devops.test.mjs` ("a Feature from a setup with title fields: the typed values fill {Field} placeholders, also with a blank field"; "Release Classification: optional …": the field lines follow it), `feature-setup.test.mjs` ("title fields per Epic …": title, Description lines, on-prem values); browser check (QMS-0025, a CP Epic whose setup has Platform, Release Name, Number): New Feature shows the three inputs and the title follows them; Save gives the Description "Platform : …", "Release Name : …", "Number : …" below the Release Classification; Release Details → Create Feature on a CP release fills the fields from its on-prem items; with the fields only in the shared setup and a personal setup of the Epic, the form says so and “Use the shared setup” shows them.
+
+**TC-BKL-10 New User Story under a Feature** — Req BKL-19 — L1 `my-work.test.mjs` ("New User Story under a Feature: the Azure DevOps story fields …"); E2E `backlog.e2e.mjs` ("TC-BKL-10: ＋ User Story on a Feature opens the New User Story form …"); browser check with a test project:
+- Steps: (1) Backlogs → Expand all → ＋ User Story on a Feature. (2) Enter a title, keep the Sprint, set Story Points 3, Priority 2, Risk 2 - Medium, Value area Business; Save. (3) Repeat from Assigned to Me.
+- Expected:
+  - The form shows the Feature as parent, Assigned to, State New, the Feature's Area, PI → Sprint, Description, Acceptance criteria, Planning and Classification; Save stays disabled without a title or Sprint.
+  - The form closes at once; the top bar shows the job; the story appears under the Feature in the Sprint with the values entered, assigned to the person chosen.
+  - A Priority, Risk or Value area outside the lists, or Story Points on a Task, is refused by both transports before anything is sent.
 
 **TC-CON-44 DP and DHFI defaults** — Req CON-76 — L1 `connections.test.mjs` ("pre-filled connections from the shared setup …": DP reads the Release work items of DHP with DDTDate, SourceProgram, PsName and Release; DHFI [Approved] reads the DHP.Vault documents, hidden from the menu); browser check in a fresh browser with only the on-prem PAT: Settings → Azure DevOps → Stream mapping → Set up DP, Pedestal and DHFI from their defaults; Release Details → DP lists Release items for the DDT month; Get started shows the release streams step done.
 
@@ -1269,6 +1284,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | MON-13 | TC-MON-05 |
 | MON-15 | TC-MON-06 |
 | MON-18 | TC-MON-07 |
+| MON-20 | TC-MON-08 |
 | ATM-01…03 | TC-ATM-01 |
 | ATM-04, ATM-05 | TC-ATM-02 |
 | ATM-06 | TC-ATM-03, TC-ATM-08 |
@@ -1289,6 +1305,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | BKL-16 | TC-BKL-07 |
 | BKL-17 | TC-BKL-08 |
 | BKL-18 | TC-BKL-09 |
+| BKL-19 | TC-BKL-10 |
 | QV-01, QV-02 | TC-QV-01 |
 | QV-03, QV-05 | TC-QV-02 |
 | QV-04 | TC-FET-07 |
