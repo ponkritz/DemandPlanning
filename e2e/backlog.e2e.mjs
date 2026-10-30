@@ -31,3 +31,22 @@ test('TC-BKL-10: ＋ User Story on a Feature opens the New User Story form with 
   assert.deepEqual(errors, [])
   await context.close()
 })
+
+test('TC-BKL-11: Edit on a Feature, User Story and Task row opens the Edit form, which reads the item fresh from Azure DevOps first', async () => {
+  const { page, context, errors } = await openPage(app)
+  await loadSample(page)
+  await navigate(page, 'QMS-0025')
+  await page.getByRole('button', { name: 'Expand all backlog items' }).click()
+  for (const type of ['Feature', 'User Story', 'Task']) {
+    const row = page.locator('.backlog-table tbody tr').filter({ has: page.locator('td', { hasText: new RegExp(`^${type}$`) }) }).filter({ has: page.getByRole('button', { name: 'Edit', exact: true }) }).first()
+    await row.getByRole('button', { name: 'Edit', exact: true }).click()
+    const form = page.locator('form.edit-form')
+    await form.waitFor()
+    assert.match(await text(page.locator('.modal').first()), new RegExp(`EDIT · AZURE DEVOPS WRITE ${type} #\\d+`), `${type}: the form names the item`)
+    assert.match(await text(form), /PAT — Work Items: Read & Write/, 'without a token the item is not read, and nothing can be saved')
+    assert.equal(await form.getByRole('button', { name: 'Save' }).isDisabled(), true)
+    await form.getByRole('button', { name: 'Cancel' }).click()
+  }
+  assert.deepEqual(errors, [])
+  await context.close()
+})

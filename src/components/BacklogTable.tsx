@@ -4,7 +4,7 @@ import type { WorkItemNode } from '../azureHierarchy'
 import { backlogColumns, defaultBacklogColumns, normalizeBacklogColumns, plainAzureText, visibleBacklogRows, type BacklogColumn, type BacklogRow } from '../backlogView'
 import { Modal } from './ui'
 
-export function BacklogTable({ tree, expanded, expandAll, searching, scope, onToggle, onExpand, onNewFeature, onComplete, canComplete, onAddChild, tabs }: { canComplete?: (item: AzureWorkItem) => boolean; tree: WorkItemNode[]; expanded: Set<string>; expandAll: boolean; searching: boolean; scope: string; onToggle: (key: string) => void; onExpand: (value: boolean) => void; onNewFeature?: (item: AzureWorkItem) => void; onComplete?: (item: AzureWorkItem) => void; onAddChild?: (item: AzureWorkItem) => void; tabs?: React.ReactNode }) {
+export function BacklogTable({ tree, expanded, expandAll, searching, scope, onToggle, onExpand, onNewFeature, onComplete, canComplete, onAddChild, onEdit, tabs }: { onEdit?: (item: AzureWorkItem) => void; canComplete?: (item: AzureWorkItem) => boolean; tree: WorkItemNode[]; expanded: Set<string>; expandAll: boolean; searching: boolean; scope: string; onToggle: (key: string) => void; onExpand: (value: boolean) => void; onNewFeature?: (item: AzureWorkItem) => void; onComplete?: (item: AzureWorkItem) => void; onAddChild?: (item: AzureWorkItem) => void; tabs?: React.ReactNode }) {
   const preferenceKey = `demand-planning-backlog-columns:${scope.toLowerCase()}`
   const [columns, setColumns] = useState<BacklogColumn[]>(() => { try { const saved = localStorage.getItem(preferenceKey); return saved ? normalizeBacklogColumns(JSON.parse(saved)) : [...defaultBacklogColumns] } catch { return [...defaultBacklogColumns] } })
   const [editing, setEditing] = useState(false)
@@ -46,7 +46,11 @@ export function BacklogTable({ tree, expanded, expandAll, searching, scope, onTo
       case 'targetDate': return item.targetDate?.slice(0, 10) || '—'
       case 'closedDate': return item.closedDate?.slice(0, 10) || '—'
       case 'tags': return item.tags
-      case 'actions': return item.workItemType === 'Epic' && onNewFeature ? <button className="backlog-action" onClick={() => onNewFeature(item)}>＋ Feature</button> : item.workItemType === 'Feature' && (onComplete || onAddChild) ? <span className="button-row nowrap">{onAddChild && <button className="backlog-action" onClick={() => onAddChild(item)}>＋ User Story</button>}{onComplete && (canComplete?.(item) ?? true) && <button className="backlog-action" onClick={() => onComplete(item)}>Complete children</button>}</span> : item.workItemType === 'User Story' && onAddChild ? <button className="backlog-action" onClick={() => onAddChild(item)}>＋ Task</button> : ''
+      case 'actions': {
+        // Edit (Feature, User Story, Task) after the row's add / complete actions.
+        const edit = onEdit && ['Feature', 'User Story', 'Task'].includes(item.workItemType) ? <button className="backlog-action" onClick={() => onEdit(item)}>Edit</button> : null
+        return <span className="button-row nowrap">{item.workItemType === 'Epic' && onNewFeature ? <button className="backlog-action" onClick={() => onNewFeature(item)}>＋ Feature</button> : item.workItemType === 'Feature' && (onComplete || onAddChild) ? <>{onAddChild && <button className="backlog-action" onClick={() => onAddChild(item)}>＋ User Story</button>}{onComplete && (canComplete?.(item) ?? true) && <button className="backlog-action" onClick={() => onComplete(item)}>Complete children</button>}</> : item.workItemType === 'User Story' && onAddChild ? <button className="backlog-action" onClick={() => onAddChild(item)}>＋ Task</button> : null}{edit}</span>
+      }
     }
   }
   return <>

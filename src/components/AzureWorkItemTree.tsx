@@ -5,6 +5,7 @@ import { addChildWorkItem, type AzureConfig } from '../azureDevOps'
 import { BacklogTable } from './BacklogTable'
 import { FeatureEditor } from './FeatureEditor'
 import { StoryEditor } from './StoryEditor'
+import { WorkItemEditor } from './WorkItemEditor'
 import { AssigneeConfirm } from './AssigneeConfirm'
 import { assignablePeople, hasOptionalStories } from '../myWork'
 import type { FeatureSetups } from '../featureSetup'
@@ -52,6 +53,8 @@ export function AzureWorkItemTree({ items, config, onCreated, savedPat = '', cre
   // ＋ User Story under a Feature opens the New User Story form (StoryEditor); ＋ Task under a User Story: title,
   // iteration (default the parent's) and who it is for.
   const [storyOf, setStoryOf] = useState<AzureWorkItem | null>(null)
+  // Edit a Feature, User Story or Task (WorkItemEditor).
+  const [editing, setEditing] = useState<AzureWorkItem | null>(null)
   const childType = childOf?.workItemType === 'Feature' ? 'User Story' : 'Task'
   function openChild(item: AzureWorkItem) { if (item.workItemType === 'Feature') { setStoryOf(item); setResult(null); return } setChildOf(item); setChildTitle(''); setChildIteration(item.iterationPath); setChildError('') }
   async function addChild(email: string) {
@@ -73,8 +76,10 @@ export function AzureWorkItemTree({ items, config, onCreated, savedPat = '', cre
     <p className="muted tree-help">Select multiple states. Default: New + Active. Matching children retain their ancestors as context, even when the parent has another state. All Epics remain available in the New Feature selector.</p>
     {result && <div className="notice success" role="status"><a href={result.url} target="_blank" rel="noreferrer">{result.workItemType} #{result.id}: {result.title}</a> — {resultText}</div>}
     {partialError && <div className="notice error" role="alert">{partialError}</div>}
-    <BacklogTable key={`${config.organization}/${config.project}/${config.team}`} scope={`${config.organization}/${config.project}/${config.team}`} tree={tree} expanded={expanded} expandAll={expandAll} searching={filtering} onToggle={toggle} onExpand={(value) => { setExpandAll(value); setExpanded(new Set()) }} onNewFeature={readOnly ? undefined : openEditor} onComplete={readOnly ? undefined : openResume} canComplete={(feature) => !hasOptionalStories(scoped, feature)} onAddChild={readOnly ? undefined : openChild} tabs={tabs} />
+    <BacklogTable key={`${config.organization}/${config.project}/${config.team}`} scope={`${config.organization}/${config.project}/${config.team}`} tree={tree} expanded={expanded} expandAll={expandAll} searching={filtering} onToggle={toggle} onExpand={(value) => { setExpandAll(value); setExpanded(new Set()) }} onNewFeature={readOnly ? undefined : openEditor} onComplete={readOnly ? undefined : openResume} canComplete={(feature) => !hasOptionalStories(scoped, feature)} onAddChild={readOnly ? undefined : openChild} onEdit={readOnly ? undefined : (item) => { setEditing(item); setResult(null) }} tabs={tabs} />
     {(parent || resumeFeature) && <FeatureEditor mode={resumeFeature ? { resume: resumeFeature } : { parent: parent! }} items={items} config={config} savedPat={savedPat} me={me} canChoose={canChoose} featureSetup={featureSetup} onSavePat={onSavePat} onCreated={onCreated} onClose={closeEditor} onDone={(done) => { setResult(done.feature); setResultText(done.text); setPartialError(''); setParent(null); setResumeFeature(null); setExpanded((current) => new Set([...current, done.feature.key, ...done.items.filter((item) => item.workItemType === 'User Story').map((item) => item.key), ...(done.parent ? [done.parent.key] : [])])) }} onPartial={(text) => { setPartialError(text); setParent(null); setResumeFeature(null) }} />}
+    {editing && <WorkItemEditor item={editing} items={items} config={config} savedPat={savedPat} me={me} canChoose={canChoose} onSavePat={onSavePat} onUpdated={onCreated} onClose={() => setEditing(null)}
+      onDone={(text, item) => { setResult(item); setResultText(text); setPartialError('') }} onFailed={(text) => setPartialError(text)} />}
     {storyOf && <StoryEditor feature={storyOf} items={items} config={config} savedPat={savedPat} me={me} canChoose={canChoose} onSavePat={onSavePat} onCreated={(created) => { onCreated?.(created); setExpanded((current) => new Set([...current, created[0].key])) }} onClose={() => setStoryOf(null)}
       onDone={(done) => { setResult(done.story); setResultText(`User Story ${done.text}`); setPartialError('') }} onFailed={(text) => setPartialError(text)} />}
     {childOf && <AssigneeConfirm title={`Add a ${childType} under #${childOf.id}`} people={people} me={me} initial={childOf.assignedToEmail ?? ''} canChoose={canChoose} busy={childBusy} confirmLabel={`Create ${childType}`}

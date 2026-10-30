@@ -12,6 +12,7 @@ import type { MyWork } from '../useMyWork'
 import type { PageProps } from './types'
 import { FeatureEditor, type FeatureEditorMode } from '../components/FeatureEditor'
 import { StoryEditor } from '../components/StoryEditor'
+import { WorkItemEditor } from '../components/WorkItemEditor'
 import type { FeatureSetups } from '../featureSetup'
 
 type Log = { tone: 'success' | 'error' | 'info'; text: string }
@@ -32,6 +33,8 @@ export function MyWorkPage({ azure, store, my, onOpenBulk, assign, featureSetup 
   const [editor, setEditor] = useState<FeatureEditorMode | null>(null)
   // ＋ User Story under a Feature (the New User Story form).
   const [storyOf, setStoryOf] = useState<AzureWorkItem | null>(null)
+  // Edit a Feature, User Story or Task.
+  const [editing, setEditing] = useState<AzureWorkItem | null>(null)
   const epics = azure.items.filter((item) => item.workItemType === 'Epic' && item.state.trim().toLowerCase() !== 'removed').sort((a, b) => a.id - b.id)
   const meEmail = (assign?.me || azure.creatorEmail).trim().toLowerCase()
   const toggle = (key: string) => setExpanded((current) => current.includes(key) ? current.filter((entry) => entry !== key) : [...current, key])
@@ -97,6 +100,7 @@ export function MyWorkPage({ azure, store, my, onOpenBulk, assign, featureSetup 
             const children = item.workItemType === 'Feature' ? featureChildren(azure.items, item) : []
             const open = expanded.includes(item.key)
             const count = children.length
+            const editButton = (entry: AzureWorkItem) => ['Feature', 'User Story', 'Task'].includes(entry.workItemType) ? <button type="button" className="text-button" disabled={Boolean(blocked)} title={`Edit ${entry.workItemType} #${entry.id}`} onClick={() => setEditing(entry)}>Edit</button> : null
             const action = (entry: AzureWorkItem) => { const next = nextStateFor(entry); return next ? <button type="button" className="ghost" disabled={Boolean(blocked) || busy === `state-${entry.id}`} onClick={() => void finish(entry, next.state)}>{busy === `state-${entry.id}` ? 'Saving…' : next.label}</button> : <small className="muted" title="Only an Active Feature or User Story can be closed">Set to Active first</small> }
             // One level at a time: the Feature opens its direct children; a child with work under it (a User Story's
             // Tasks) has its own ▸, so its Tasks show only when it is opened.
@@ -105,17 +109,19 @@ export function MyWorkPage({ azure, store, my, onOpenBulk, assign, featureSetup 
               <td><Pill tone={stateTone(entry.state)}>{entry.state}</Pill></td>
               <td><small className="plain">{item.title}</small></td>
               <td><small className="plain">{shortPath(entry.iterationPath)}</small></td>
-              <td>{isMine(entry, my.me) && nextStateFor(entry) && /new|active/i.test(entry.state) ? action(entry) : <small className="muted">{isMine(entry, my.me) ? '—' : 'Not mine'}</small>}</td>
+              <td>{isMine(entry, my.me) && nextStateFor(entry) && /new|active/i.test(entry.state) ? action(entry) : <small className="muted">{isMine(entry, my.me) ? '—' : 'Not mine'}</small>}{editButton(entry)}</td>
             </tr>
             return [<tr key={item.key} className={open ? 'work-open' : undefined}>
               <td>{children.length ? <button type="button" className="tree-toggle work-toggle" aria-expanded={open} aria-label={`${open ? 'Collapse' : 'Expand'} Feature #${item.id}: ${count} child items`} title={`${count} ${count === 1 ? 'item' : 'items'} directly under this Feature`} onClick={() => toggle(item.key)}>{open ? '▾' : '▸'}</button> : item.workItemType === 'Feature' ? <span className="work-toggle work-toggle-empty" title="No User Stories or Tasks under this Feature" aria-hidden="true">·</span> : null}<span className={`type-dot type-${item.workItemType.replace(/\s/g, '').toLowerCase()}`} aria-hidden="true" /><a href={item.url} target="_blank" rel="noreferrer">#{item.id}</a> <strong className="inline">{item.title}</strong><small>{item.workItemType}{children.length ? ` · ${count} ${count === 1 ? 'item' : 'items'}` : ''}</small></td>
               <td><Pill tone={stateTone(item.state)}>{item.state}</Pill></td>
               <td>{feature && feature.id !== item.id ? <small className="plain">{feature.title}</small> : '—'}</td>
               <td><small className="plain">{shortPath(item.iterationPath)}</small></td>
-              <td>{action(item)}{item.workItemType === 'Feature' && !hasOptionalStories(azure.items, item) && <button type="button" className="text-button" disabled={Boolean(blocked)} title="Add the missing User Stories and this month's Time Writing task under this Feature" onClick={() => setEditor({ resume: item })}>Complete children</button>}{item.workItemType === 'Feature' && <button type="button" className="text-button" disabled={Boolean(blocked)} title="Create a User Story under this Feature" onClick={() => setStoryOf(item)}>＋ User Story</button>}</td>
+              <td>{action(item)}{item.workItemType === 'Feature' && !hasOptionalStories(azure.items, item) && <button type="button" className="text-button" disabled={Boolean(blocked)} title="Add the missing User Stories and this month's Time Writing task under this Feature" onClick={() => setEditor({ resume: item })}>Complete children</button>}{editButton(item)}{item.workItemType === 'Feature' && <button type="button" className="text-button" disabled={Boolean(blocked)} title="Create a User Story under this Feature" onClick={() => setStoryOf(item)}>＋ User Story</button>}</td>
             </tr>, ...(open ? children.flatMap((child) => [childRow(child.item, 1, child.children), ...(expanded.includes(child.item.key) ? child.children.map((grandchild) => childRow(grandchild, 2)) : [])]) : [])]
           })}</tbody></table>}
         </TablePanel>
+        {editing && config && <WorkItemEditor item={editing} items={azure.items} config={config} savedPat={pat} me={meEmail} canChoose={Boolean(assign?.canChoose)} onSavePat={azure.rememberPat} onUpdated={azure.featureCreated} onClose={() => setEditing(null)}
+          onDone={(text) => { note({ tone: 'success', text }); void azure.refresh() }} onFailed={(text) => note({ tone: 'error', text })} />}
         {storyOf && config && <StoryEditor feature={storyOf} items={azure.items} config={config} savedPat={pat} me={meEmail} canChoose={Boolean(assign?.canChoose)} onSavePat={azure.rememberPat} onCreated={azure.featureCreated} onClose={() => setStoryOf(null)}
           onDone={(done) => { note({ tone: 'success', text: `User Story #${done.story.id} “${done.story.title}” ${done.text}` }); void azure.refresh() }} onFailed={(text) => note({ tone: 'error', text })} />}
         {editor && config && <FeatureEditor mode={editor} items={azure.items} config={config} savedPat={pat} me={meEmail} canChoose={Boolean(assign?.canChoose)} featureSetup={featureSetup} onSavePat={azure.rememberPat} onCreated={azure.featureCreated} onClose={() => setEditor(null)}

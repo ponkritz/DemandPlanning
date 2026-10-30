@@ -21,3 +21,4 @@ export const setPlanningPeriods = (next: PeriodControl[]) => { periods = next }
 export const planningLockedNow = (month: string, now = new Date()) => planningLocked(periods, month, now)
 // A month Task title's month ("October 2026") is locked for planning now: a new Task for it is tagged ad-hoc.
 export const adhocAfterLock = (monthLabel: string, now = new Date()) => { const month = timeWritingMonth(monthLabel); return Boolean(month && planningLockedNow(month, now)) }
+export const actualsLockedNow = (month: string, now = new Date()) => actualsLocked(periods, month, now)
