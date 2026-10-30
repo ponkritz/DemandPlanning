@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useSyncExternalStore } from 'react'
+import { isRunning, runInBackground, subscribeJobs } from '../backgroundJobs'
 import { Metric, Metrics, Notice, Page, Pill, TablePanel } from '../components/ui'
 import { GapsPanel } from '../components/GapsPanel'
 import type { AzureWorkspace } from '../useAzureWorkspace'
@@ -19,7 +20,7 @@ export function MonthlyPage({ azure, month, store, my }: { azure: AzureWorkspace
   const [today] = useState(todayIso)
   const [now] = useState(() => new Date())
   const [edits, setEdits] = useState<Record<number, Edit>>({})
-  const [saving, setSaving] = useState(false)
+  const saving = useSyncExternalStore(subscribeJobs, () => isRunning('monthly:save'))
   // Individual (default: me) shows only that person's Tasks; Team shows everyone's.
   const personScope = usePersonScope('demand-planning-monthly-view-v1', 'individual', my)
   const { scope } = personScope
@@ -48,18 +49,31 @@ export function MonthlyPage({ azure, month, store, my }: { azure: AzureWorkspace
       if ((planChanged && (planningLocked || isAdhoc)) || (actualChanged && actualsLocked)) { azure.setError('A staged change is in a locked field. Unlock the period in Settings before saving.'); return }
       for (const item of [planChanged ? edit.originalEstimate : undefined, actualChanged ? edit.completedWork : undefined]) if (item != null && (!item.trim() || !Number.isFinite(Number(item)) || Number(item) < 0)) { azure.setError('Original Estimate and Completed Work must be non-negative numbers.'); return }
     }
-    setSaving(true)
-    try {
-      for (const task of changed) {
-        const edit = edits[task.id], isAdhoc = adhoc(task.tags)
-        const planChanged = edit.originalEstimate != null && edit.originalEstimate !== (task.originalEstimate == null ? '' : String(task.originalEstimate))
-        const actualChanged = edit.completedWork != null && edit.completedWork !== (task.completedWork == null ? '' : String(task.completedWork))
-        await azure.saveTimeWritingEffort(task.id, planChanged ? Number(edit.originalEstimate) : undefined, actualChanged ? Number(edit.completedWork) : undefined, planningLocked && !isAdhoc && task.originalEstimate == null && actualChanged)
+    // A background job: the page stays usable; each saved Task leaves the staged edits, a failed one stays staged.
+    const staged = edits
+    const started = runInBackground('monthly:save', `Save ${changed.length} Time Writing Task${changed.length === 1 ? '' : 's'}`, async (progress) => {
+      let saved = 0
+      try {
+        for (const [index, task] of changed.entries()) {
+          progress(`Saving ${index + 1} of ${changed.length}…`)
+          const edit = staged[task.id], isAdhoc = adhoc(task.tags)
+          const planChanged = edit.originalEstimate != null && edit.originalEstimate !== (task.originalEstimate == null ? '' : String(task.originalEstimate))
+          const actualChanged = edit.completedWork != null && edit.completedWork !== (task.completedWork == null ? '' : String(task.completedWork))
+          await azure.saveTimeWritingEffort(task.id, planChanged ? Number(edit.originalEstimate) : undefined, actualChanged ? Number(edit.completedWork) : undefined, planningLocked && !isAdhoc && task.originalEstimate == null && actualChanged)
+          saved += 1
+          setEdits((current) => { const next = { ...current }; if (next[task.id] === edit) delete next[task.id]; return next })
+        }
+        // Save and refresh: re-read the whole backlog from Azure and save it locally.
+        progress('Refreshing the backlog…')
+        await azure.refresh()
+        return { text: `${saved} Task${saved === 1 ? '' : 's'} saved.` }
+      } catch (failure) {
+        const detail = failure instanceof Error ? failure.message : 'Unable to save staged Azure fields.'
+        azure.setError(detail)
+        return { text: `${saved} of ${changed.length} saved; ${detail} The rest stay staged.`, failed: true }
       }
-      setEdits({})
-      // Save and refresh: re-read the whole backlog from Azure and save it locally.
-      await azure.refresh()
-    } catch (failure) { azure.setError(failure instanceof Error ? failure.message : 'Unable to save staged Azure fields.') } finally { setSaving(false) }
+    })
+    if (!started) azure.setError('A save is already running in the background (see the top bar).')
   }
   return <Page>
     <ScopeSwitch scope={personScope} label="Time writing for" />

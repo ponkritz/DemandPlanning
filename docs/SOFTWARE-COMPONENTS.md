@@ -61,6 +61,7 @@ This document lists every software component of the system: the in-house source 
 | DpMonthCounts | `src/components/DpMonthCounts.tsx` | Table of a month's DP Supported Releases with milestones passed (DT, SFV, PRD, RPE) and dates. | QV, OVR |
 | ErrorBoundary | `src/components/ErrorBoundary.tsx` | Catches render errors in a view and shows what failed with a way back instead of a blank app. | UI |
 | FeatureEditor | `src/components/FeatureEditor.tsx` | Modal to add a Feature under an Epic or complete a Feature's children, shared by Backlogs and Assigned to Me. | ATM, CON |
+| JobsIndicator | `src/components/JobsIndicator.tsx` | Top-bar list of the background jobs: running count, results, Clear finished; asks before leaving the page while one runs. | NAV |
 | MonthlyPackPanel | `src/components/MonthlyPackPanel.tsx` | Pulse Check → Monthly pack: the two slides as boxes with generated lines and the month's text, Save to Git, copy, Download .pptx. | PCK |
 | MonthlyPackSetupPanel | `src/components/MonthlyPackSetupPanel.tsx` | Settings → Monthly pack: slide lines (streams, Epics) and KPI rows (Epic, metric), saved to Git. | PCK |
 | FeatureSetupPanel | `src/components/FeatureSetupPanel.tsx` | Settings → Feature setup: per-Epic optional stories, Time Writing story and month Task defaults, shared and personal layers. | CON |
@@ -148,6 +149,7 @@ This document lists every software component of the system: the in-house source 
 | Component | Path | Purpose | Requirement areas |
 |---|---|---|---|
 | azureDevOps | `src/azureDevOps.ts` | Azure DevOps REST client: URL normalising, iterations, WIQL fetch, work-item mapping, constrained Feature/Story/Task creation and updates. | CON, FET, ATM, MON, IF |
+| backgroundJobs | `src/backgroundJobs.ts` | Background jobs of a page load: runs long Azure DevOps writes off the form, one per key, with progress and the result; nothing stored. | NAV, BKL, ATM, MON |
 | azureCredentials | `src/azureCredentials.ts` | Browser-local PATs per server and connection profiles (role, view name, show in menu); never in app data. | CON |
 | connectionPresets | `src/connectionPresets.ts` | Pre-filled team connection presets and dismissed-preset storage. | CON |
 | releaseSource | `src/releaseSource.ts` | Read-only release source: paged WIQL queries, approval month, completed releases, fuzzy Feature name matching. | QV |
@@ -207,6 +209,7 @@ This document lists every software component of the system: the in-house source 
 | access.test | `tests/access.test.mjs` | Access policy: no-policy defaults, role union, file round trip, refusing writes for roles without Azure changes. | CON |
 | app-update.test | `tests/app-update.test.mjs` | Build metadata validation, cache-busting URLs, update checks and reload blocking, release version check. | UPD, CI |
 | azure-devops.test | `tests/azure-devops.test.mjs` | PAT persistence/profiles, work-item mapping, tree, backlog view, constrained writes and Feature DoD templates. | CON, FET, ATM, MON |
+| background-jobs.test | `tests/background-jobs.test.mjs` | Background jobs: progress, result, failure, one job per key, Clear finished. | NAV |
 | azure-insights.test | `tests/azure-insights.test.mjs` | Month Task plan/actual mapping, Time Writing stories, NPRA reporting and utilization. | MON, TWN, CAP |
 | backlog-health.test | `tests/backlog-health.test.mjs` | Backlog Health lists, columns, plain-text descriptions and CSV. | CON |
 | baseline.test | `tests/baseline.test.mjs` | Baseline formula, caps, normalisation, release rows and sample scopes. | BAS, SMP |
