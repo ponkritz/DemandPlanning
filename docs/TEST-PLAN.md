@@ -675,9 +675,15 @@ Cases marked **UAT** are also run in acceptance testing.
 **TC-BKL-10 New User Story under a Feature** — Req BKL-19 — L1 `my-work.test.mjs` ("New User Story under a Feature: the Azure DevOps story fields …"); E2E `backlog.e2e.mjs` ("TC-BKL-10: ＋ User Story on a Feature opens the New User Story form …"); browser check with a test project:
 - Steps: (1) Backlogs → Expand all → ＋ User Story on a Feature. (2) Enter a title, keep the Sprint, set Story Points 3, Priority 2, Risk 2 - Medium, Value area Business; Save. (3) Repeat from Assigned to Me.
 - Expected:
-  - The form shows the Feature as parent, Assigned to, State New, the Feature's Area, PI → Sprint, Description, Acceptance criteria, Planning and Classification; Save stays disabled without a title or Sprint.
+  - The form shows the title, Under Feature (the row's Feature), Assigned to, Sprint, Story Points, Priority, Description, Acceptance criteria and "More fields" (Risk, Value area); no Area or State; Save stays disabled without a title or Sprint.
+  - The story's Area Path is the Feature's.
   - The form closes at once; the top bar shows the job; the story appears under the Feature in the Sprint with the values entered, assigned to the person chosen.
   - A Priority, Risk or Value area outside the lists, or Story Points on a Task, is refused by both transports before anything is sent.
+
+**TC-CON-45 Git view data with another query is not applied** — Req CON-77 — L1 `git-snapshots.test.mjs` ("a snapshot fetched with another query than the connection has here is not applied"); browser check:
+- Pre: Git storage connected; the DP connection's query changed here; Git holds DP data fetched with the old query.
+- Steps: reload the web app; open DP; Load from Git.
+- Expected: the DP data here is not replaced by the old-query data; Load from Git says the data in Git was fetched with another query and that the setup should be saved to Git.
 
 **TC-CON-44 DP and DHFI defaults** — Req CON-76 — L1 `connections.test.mjs` ("pre-filled connections from the shared setup …": DP reads the Release work items of DHP with DDTDate, SourceProgram, PsName and Release; DHFI [Approved] reads the DHP.Vault documents, hidden from the menu); browser check in a fresh browser with only the on-prem PAT: Settings → Azure DevOps → Stream mapping → Set up DP, Pedestal and DHFI from their defaults; Release Details → DP lists Release items for the DDT month; Get started shows the release streams step done.
 
@@ -1248,6 +1254,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CON-74 | TC-ACC-03 |
 | CON-75 | TC-CON-43 |
 | CON-76 | TC-CON-44 |
+| CON-77 | TC-CON-45 |
 | QV-20 | TC-QV-06 |
 | QV-21 | TC-QV-07 |
 | CON-21, CON-22 | TC-CON-08 |

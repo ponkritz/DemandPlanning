@@ -6,9 +6,10 @@ import { PersonPicker } from './PersonPicker'
 import { assignablePeople } from '../myWork'
 import { runInBackground } from '../backgroundJobs'
 
-// ＋ User Story under a Feature, laid out like New Feature (Backlogs and Assigned to Me): the parent Feature (can be
-// changed) and the title on top, a strip with Assigned to, State, Area and PI → Sprint, then Description and Acceptance
-// criteria, with Planning (Story Points, Priority, Risk) and Classification (Value area) beside them, as in Azure DevOps. Save runs as a background job: the form closes and the top bar shows the result.
+// ＋ User Story under a Feature (Backlogs and Assigned to Me), kept minimal: the title, the Feature it goes under (can
+// be changed), one row with Assigned to, Sprint, Story Points and Priority, then Description and Acceptance criteria;
+// Risk and Value area are folded under "More fields" (defaults: not set, Business). State is New and the Area Path is
+// always the Feature's (createUserStory re-reads it): neither is shown or editable. Save runs as a background job: the form closes and the top bar shows the result.
 export interface StoryEditorResult { story: AzureWorkItem; feature: AzureWorkItem; text: string }
 export function StoryEditor({ feature: initial, items, config, savedPat = '', me, canChoose, onSavePat, onCreated, onDone, onFailed, onClose }: { feature: AzureWorkItem; items: AzureWorkItem[]; config: AzureConfig; savedPat?: string; me: string; canChoose: boolean; onSavePat?: (pat: string) => void; onCreated?: (items: AzureWorkItem[]) => void; onDone: (result: StoryEditorResult) => void; onFailed?: (text: string) => void; onClose: () => void }) {
   const people = useMemo(() => assignablePeople(items), [items])
@@ -32,7 +33,7 @@ export function StoryEditor({ feature: initial, items, config, savedPat = '', me
   const [iterationChoices, setIterationChoices] = useState<AzureIteration[]>([])
   const [iterationLoading, setIterationLoading] = useState(false)
   const [pat, setPat] = useState(savedPat)
-  const [showPat, setShowPat] = useState(!savedPat)
+  const showPat = !savedPat
   const [error, setError] = useState('')
   const submitting = useRef(false)
   const pairs = currentIterationPairs(iterationChoices), futurePairs = futureIterationPairs(iterationChoices)
@@ -87,39 +88,25 @@ export function StoryEditor({ feature: initial, items, config, savedPat = '', me
     onClose()
   }
 
-  return <Modal title="New User Story" eyebrow="AZURE DEVOPS WRITE" onClose={onClose}><form onSubmit={save} className="nf-form">
-    <div className="nf-head">
-      <span className="nf-type nf-type-story">USER STORY</span>
-      <div className="nf-headmain">
-        <div className="nf-top nf-top-one">
-          <label>Parent Feature<select value={feature.key} onChange={(event) => setFeature(features.find((item) => item.key === event.target.value) ?? feature)}>{features.map((item) => <option value={item.key} key={item.key}>#{item.id} · {item.title}</option>)}</select></label>
-        </div>
-        <input className="nf-title" aria-label="User Story title" required maxLength={255} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="User Story title" autoFocus />
-      </div>
-    </div>
-    <div className="nf-strip">
+  return <Modal title="New User Story" eyebrow="AZURE DEVOPS WRITE" onClose={onClose}><form onSubmit={save} className="nf-form story-form">
+    <input className="nf-title" aria-label="User Story title" required maxLength={255} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="User Story title" autoFocus />
+    <label className="story-parent">Under Feature<select value={feature.key} onChange={(event) => setFeature(features.find((item) => item.key === event.target.value) ?? feature)}>{features.map((item) => <option value={item.key} key={item.key}>#{item.id} · {item.title}</option>)}</select></label>
+    <div className="story-row">
       <label>Assigned to{canChoose ? <PersonPicker label="Assigned to" value={assigneeName} people={people.filter((person) => person.email !== me).map((person) => person.name)} onChange={setAssigneeName} meLabel={me ? `Me (${me})` : 'Choose a person…'} /> : <span className="nf-value" title={me}>{me || 'Set your work email in Settings'}</span>}</label>
-      <label>State<span className="nf-value">New</span></label>
-      <label>Area<span className="nf-value" title={feature.areaPath}>{feature.areaPath.split('\\').pop()}</span></label>
-      <label>Iteration (PI → Sprint)<select aria-label="PI / Sprint schedule" required value={sprintPath} onChange={(event) => setSprintPath(event.target.value)} disabled={iterationLoading}><option value="">{iterationLoading ? 'Loading the schedule…' : pairs.length + futurePairs.length ? 'Select a PI → Sprint' : 'Load the schedule ↻'}</option>{pairs.length > 0 && <optgroup label="Current">{pairs.map((pair) => <option key={pair.sprint.path} value={pair.sprint.path}>{pairLabel(pair)}</option>)}</optgroup>}{futurePairs.length > 0 && <optgroup label="Future">{futurePairs.map((pair) => <option key={pair.sprint.path} value={pair.sprint.path}>{pairLabel(pair)}</option>)}</optgroup>}</select>
-        <button type="button" className="text-button" onClick={() => void loadIterations()} disabled={iterationLoading || !(pat || savedPat)} title="Reload the current and future PI / Sprint schedule">↻ Reload</button></label>
+      <label>Sprint<select aria-label="PI / Sprint schedule" required value={sprintPath} onChange={(event) => setSprintPath(event.target.value)} disabled={iterationLoading}><option value="">{iterationLoading ? 'Loading…' : pairs.length + futurePairs.length ? 'Select a Sprint' : 'Load the schedule ↻'}</option>{pairs.length > 0 && <optgroup label="Current">{pairs.map((pair) => <option key={pair.sprint.path} value={pair.sprint.path}>{pairLabel(pair)}</option>)}</optgroup>}{futurePairs.length > 0 && <optgroup label="Future">{futurePairs.map((pair) => <option key={pair.sprint.path} value={pair.sprint.path}>{pairLabel(pair)}</option>)}</optgroup>}</select>
+        {!iterationLoading && !sprintPath && <button type="button" className="text-button" onClick={() => void loadIterations()} disabled={!(pat || savedPat)} title="Reload the current and future PI / Sprint schedule">↻ Reload</button>}</label>
+      <label>Story Points<input type="number" min="0" max="1000" step="any" value={storyPoints} onChange={(event) => setStoryPoints(event.target.value)} placeholder="—" /></label>
+      <label>Priority<select value={priority} onChange={(event) => setPriority(Number(event.target.value))}>{storyPriorities.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
     </div>
-    <div className="nf-body">
-      <div className="nf-main">
-        <label>Description<textarea maxLength={100000} rows={4} value={description} onChange={(event) => setDescription(event.target.value)} /></label>
-        <label>Acceptance criteria<textarea maxLength={100000} rows={3} value={acceptance} onChange={(event) => setAcceptance(event.target.value)} /></label>
-      </div>
-      <div className="nf-side">
-        <h4>Planning</h4>
-        <label>Story Points<input type="number" min="0" max="1000" step="any" value={storyPoints} onChange={(event) => setStoryPoints(event.target.value)} placeholder="Optional" /></label>
-        <label>Priority<select value={priority} onChange={(event) => setPriority(Number(event.target.value))}>{storyPriorities.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
+    <label>Description<textarea maxLength={100000} rows={3} value={description} onChange={(event) => setDescription(event.target.value)} /></label>
+    <label>Acceptance criteria<textarea maxLength={100000} rows={2} value={acceptance} onChange={(event) => setAcceptance(event.target.value)} /></label>
+    <details className="nf-more"><summary>More fields (Risk {risk || 'not set'} · Value area {valueArea})</summary>
+      <div className="story-row">
         <label>Risk<select value={risk} onChange={(event) => setRisk(event.target.value)}><option value="">(not set)</option>{storyRisks.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
-        <h4>Classification</h4>
         <label>Value area<select value={valueArea} onChange={(event) => setValueArea(event.target.value)}>{storyValueAreas.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
       </div>
-    </div>
-    {showPat ? <label>PAT — Work Items: Read &amp; Write<input type="password" required autoComplete="off" value={pat} onChange={(event) => { setPat(event.target.value); setIterationChoices([]); setSprintPath('') }} /><small>Saved in this browser only. Enter it, then ↻ Reload the schedule.</small></label>
-      : <p className="muted nf-pat">Using your saved Azure DevOps token. <button type="button" className="text-button" onClick={() => setShowPat(true)}>Use another token</button></p>}
+    </details>
+    {showPat && <label>PAT — Work Items: Read &amp; Write<input type="password" required autoComplete="off" value={pat} onChange={(event) => { setPat(event.target.value); setIterationChoices([]); setSprintPath('') }} /><small>Saved in this browser only. Enter it, then ↻ Reload.</small></label>}
     {error && <div className="notice error" role="alert">{error}</div>}
     <div className="modal-actions"><button type="button" className="ghost" onClick={onClose}>Cancel</button><button className="primary" disabled={iterationLoading || !title.trim() || !sprintPath}>Save</button></div>
   </form></Modal>
