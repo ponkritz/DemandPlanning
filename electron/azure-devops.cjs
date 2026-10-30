@@ -59,6 +59,15 @@ function azureFeatureRequest(input) {
   if (feature.targetDate && !/^\d{4}-\d{2}-\d{2}$/.test(feature.targetDate)) throw new Error('Invalid target date.')
   if (feature.iterationPath != null && (typeof feature.iterationPath !== 'string' || feature.iterationPath.length > 4096)) throw new Error('Invalid iteration path.')
   for (const field of ['taskOriginalEstimate', 'taskCompletedWork']) if (feature[field] != null && (!Number.isFinite(feature[field]) || feature[field] < 0 || feature[field] > 1000000)) throw new Error('Invalid Task effort.')
+  // The only tag a new work item can carry: 'ad-hoc' on a Time Writing Task created after planning has locked.
+  if (feature.adhoc != null && (feature.adhoc !== true || type !== 'Task')) throw new Error('Only a new Task can be tagged ad-hoc. Nothing was created.')
+  // A new User Story's Planning / Classification fields: fixed values only, on a new User Story only.
+  const storyFields = ['storyPoints', 'priority', 'risk', 'valueArea'].filter((field) => feature[field] != null)
+  if (storyFields.length && (type !== 'User Story' || input.operation !== 'create-child')) throw new Error('Story Points, Priority, Risk and Value area are set on a new User Story only. Nothing was created.')
+  if (feature.storyPoints != null && (typeof feature.storyPoints !== 'number' || !Number.isFinite(feature.storyPoints) || feature.storyPoints < 0 || feature.storyPoints > 1000)) throw new Error('Story Points must be a number from 0 to 1,000. Nothing was created.')
+  if (feature.priority != null && ![1, 2, 3, 4].includes(feature.priority)) throw new Error('Priority must be 1, 2, 3 or 4. Nothing was created.')
+  if (feature.risk != null && !['1 - High', '2 - Medium', '3 - Low'].includes(feature.risk)) throw new Error('Risk must be 1 - High, 2 - Medium or 3 - Low. Nothing was created.')
+  if (feature.valueArea != null && !['Business', 'Architectural'].includes(feature.valueArea)) throw new Error('Value area must be Business or Architectural. Nothing was created.')
   const htmlText = (value) => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('\n', '<br>')
   const base = projectBase(input)
   const patch = [
@@ -71,6 +80,11 @@ function azureFeatureRequest(input) {
   if (feature.iterationPath) patch.push({ op: 'add', path: '/fields/System.IterationPath', value: feature.iterationPath })
   if (feature.assignedTo?.trim()) patch.push({ op: 'add', path: '/fields/System.AssignedTo', value: feature.assignedTo.trim() })
   if (feature.targetDate) patch.push({ op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.TargetDate', value: `${feature.targetDate}T00:00:00Z` })
+  if (feature.adhoc === true) patch.push({ op: 'add', path: '/fields/System.Tags', value: 'ad-hoc' })
+  if (feature.storyPoints != null) patch.push({ op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.StoryPoints', value: feature.storyPoints })
+  if (feature.priority != null) patch.push({ op: 'add', path: '/fields/Microsoft.VSTS.Common.Priority', value: feature.priority })
+  if (feature.risk != null) patch.push({ op: 'add', path: '/fields/Microsoft.VSTS.Common.Risk', value: feature.risk })
+  if (feature.valueArea != null) patch.push({ op: 'add', path: '/fields/Microsoft.VSTS.Common.ValueArea', value: feature.valueArea })
   return { url: `${base}/_apis/wit/workitems/$${encodeURIComponent(type)}?api-version=${apiVersion(input)}&validateOnly=${input.validateOnly}`, options: {
     method: 'POST', redirect: 'error', headers: { ...connection.options.headers, 'Content-Type': 'application/json-patch+json' }, body: JSON.stringify(patch),
   } }

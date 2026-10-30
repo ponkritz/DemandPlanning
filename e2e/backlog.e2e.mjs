@@ -1,0 +1,35 @@
+import test, { after, before } from 'node:test'
+import assert from 'node:assert/strict'
+import { loadSample, navigate, openPage, startApp, text } from './helpers.mjs'
+
+// New User Story under a Feature (BKL-19, TC-BKL-10): the form opens from a Feature row of the Backlogs, laid out like
+// New Feature with the Azure DevOps User Story fields. Nothing is written: the sample has no Azure DevOps connection.
+let app
+before(async () => { app = await startApp() })
+after(async () => { await app.stop() })
+
+test('TC-BKL-10: ＋ User Story on a Feature opens the New User Story form with the Feature as parent and the story fields', async () => {
+  const { page, context, errors } = await openPage(app)
+  await loadSample(page)
+  await navigate(page, 'QMS-0025')
+  await page.getByRole('button', { name: 'Expand all backlog items' }).click()
+  const row = page.locator('.backlog-table tr', { has: page.getByRole('button', { name: '＋ User Story' }) }).first()
+  const featureId = /#?(\d+)/.exec(await text(row))?.[1]
+  await row.getByRole('button', { name: '＋ User Story' }).click()
+  const form = page.locator('form.nf-form')
+  await form.waitFor()
+  const content = await text(form)
+  assert.match(content, /USER STORY/)
+  assert.match(content, /Parent Feature/)
+  assert.match(content, /Assigned to.*State.*New.*Area.*Iteration \(PI → Sprint\)/)
+  assert.match(content, /Description.*Acceptance criteria/)
+  assert.match(content, /Planning.*Story Points.*Priority.*Risk.*Classification.*Value area/i)
+  assert.ok((await form.getByLabel('Parent Feature').locator('option:checked').innerText()).includes(`#${featureId}`), 'the Feature the row belongs to is the parent')
+  assert.equal(await form.getByLabel('Priority').inputValue(), '2', 'Azure’s default Priority')
+  assert.equal(await form.getByLabel('Value area').inputValue(), 'Business', 'Azure’s default Value area')
+  assert.equal(await form.getByRole('button', { name: 'Save' }).isDisabled(), true, 'no title and no Sprint yet: nothing can be saved')
+  await form.getByRole('button', { name: 'Cancel' }).click()
+  assert.equal(await page.locator('form.nf-form').count(), 0)
+  assert.deepEqual(errors, [])
+  await context.close()
+})

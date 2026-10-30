@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { isMine, isPending, matchesWork, myPendingWork, monthTaskCandidates, moveCandidates, assignablePeople } from '../src/myWork.ts'
-import { ensureMonthTask, updateAzureWorkItem, workItemUpdatePatch, addChildWorkItem, requestAzure } from '../src/azureDevOps.ts'
+import { ensureMonthTask, updateAzureWorkItem, workItemUpdatePatch, addChildWorkItem, requestAzure, createUserStory } from '../src/azureDevOps.ts'
 import { createRequire } from 'node:module'
 
 const base = { organization: 'org', project: 'Quality', state: 'Active', assignedTo: '', areaPath: 'Quality\\A', iterationPath: 'Quality\\PI 2026.4\\Sprint 1', tags: '', url: '', syncedAt: '' }
@@ -68,7 +68,7 @@ function fakeAzure(world) {
     if (request.operation === 'create-child') {
       if (request.validateOnly) return {}
       const id = ++next, f = request.feature
-      world.set(id, raw(id, { 'System.WorkItemType': request.workItemType, 'System.Title': f.title, 'System.Parent': f.parentId, 'System.AreaPath': f.areaPath, 'System.IterationPath': f.iterationPath, ...(f.assignedTo ? { 'System.AssignedTo': { displayName: 'Ana Costa', uniqueName: f.assignedTo } } : {}) }))
+      world.set(id, raw(id, { 'System.WorkItemType': request.workItemType, 'System.Title': f.title, 'System.Parent': f.parentId, 'System.AreaPath': f.areaPath, 'System.IterationPath': f.iterationPath, ...(f.assignedTo ? { 'System.AssignedTo': { displayName: 'Ana Costa', uniqueName: f.assignedTo } } : {}), ...(f.adhoc ? { 'System.Tags': 'ad-hoc' } : {}), ...(f.storyPoints != null ? { 'Microsoft.VSTS.Scheduling.StoryPoints': f.storyPoints } : {}), ...(f.priority != null ? { 'Microsoft.VSTS.Common.Priority': f.priority } : {}), ...(f.risk != null ? { 'Microsoft.VSTS.Common.Risk': f.risk } : {}), ...(f.valueArea != null ? { 'Microsoft.VSTS.Common.ValueArea': f.valueArea } : {}) }))
       return { id }
     }
     if (request.operation === 'update-work-item') { const entry = world.get(request.workItemId); if (request.state) entry.fields['System.State'] = request.state; if (request.iterationPath) entry.fields['System.IterationPath'] = request.iterationPath; return {} }
@@ -141,6 +141,27 @@ test('new work items are never unassigned: month story and task, Add child, and 
   const { azureFeatureRequest } = createRequire(import.meta.url)('../electron/azure-devops.cjs')
   assert.throws(() => azureFeatureRequest({ ...config, pat: 'p', operation: 'create-child', workItemType: 'Task', validateOnly: true, feature: { parentId: 2, title: 't', description: '', acceptanceCriteria: '', areaPath: 'A' } }), /assigned to someone/)
   assert.doesNotThrow(() => azureFeatureRequest({ ...config, pat: 'p', operation: 'create-child', workItemType: 'Task', validateOnly: true, feature: { parentId: 2, title: 't', description: '', acceptanceCriteria: '', areaPath: 'A', assignedTo: 'ana@x.com' } }))
+})
+
+test('Bulk month Tasks after the planning lock: a new Task is tagged ad-hoc, the story is not; both transports allow only that tag on a Task (TC-MON-08)', async () => {
+  const config = { organization: 'org', project: 'Quality', team: 'T' }
+  const world = new Map([[2, raw(2, { 'System.WorkItemType': 'Feature', 'System.Title': 'CP | Care Pathways | v3.1' })]])
+  const { transport, calls } = fakeAzure(world)
+  const late = await ensureMonthTask(config, 'pat', 2, 'ana@x.com', 'October 2026', transport, true)
+  assert.deepEqual([late.task.tags, late.story.tags], ['ad-hoc', ''])
+  assert.deepEqual(calls.filter((call) => call.operation === 'create-child').map((call) => [call.workItemType, call.feature.adhoc]), [['User Story', undefined], ['User Story', undefined], ['Task', true], ['Task', true]])
+  const again = await ensureMonthTask(config, 'pat', 2, 'ana@x.com', 'October 2026', transport, true)
+  assert.equal(again.status, 'exists', 'an existing Task is reused, not re-created')
+  const { azureFeatureRequest } = createRequire(import.meta.url)('../electron/azure-devops.cjs')
+  const request = (workItemType, adhoc) => ({ ...config, pat: 'p', operation: 'create-child', workItemType, validateOnly: true, feature: { parentId: 2, title: 't', description: '', acceptanceCriteria: '', areaPath: 'A', assignedTo: 'ana@x.com', adhoc } })
+  assert.deepEqual(JSON.parse(azureFeatureRequest(request('Task', true)).options.body).at(-1), { op: 'add', path: '/fields/System.Tags', value: 'ad-hoc' })
+  assert.throws(() => azureFeatureRequest(request('User Story', true)), /Only a new Task/)
+  assert.throws(() => azureFeatureRequest(request('Task', 'x; secret')), /Only a new Task/, 'never an arbitrary tag')
+  globalThis.window = {}
+  try {
+    await assert.rejects(requestAzure(request('User Story', true)), /Only a new Task/)
+    await assert.rejects(requestAzure(request('Task', 'other')), /Only a new Task/)
+  } finally { delete globalThis.window }
 })
 
 test('people to assign to: everyone with an email, by name; a shared name shows the email', () => {
@@ -245,4 +266,32 @@ test('closing a Feature offers its open User Stories; closing the last open User
   const failing = async (_c, _p, id, update) => { if (id === 12) throw new Error('refused'); return { ...items.find((entry) => entry.id === id), state: update.state } }
   const partly = await closeRelated(config, 'pat', items, { ...items[0], state: 'Closed' }, () => true, failing)
   assert.deepEqual([partly.closed.map((entry) => entry.id), partly.failed], [[13], ['#12: refused']])
+})
+
+test('New User Story under a Feature: the Azure DevOps story fields, the Feature\'s Area, the Sprint chosen; only fixed values on a new story (TC-BKL-10)', async () => {
+  const config = { organization: 'org', project: 'Quality', team: 'T' }
+  const world = new Map([[2, raw(2, { 'System.WorkItemType': 'Feature', 'System.Title': 'CP | Care Pathways | v3.1', 'System.AreaPath': 'Quality\\QMS-0025' })], [3, raw(3, { 'System.WorkItemType': 'Epic', 'System.Title': 'Epic' })]])
+  const { transport, calls } = fakeAzure(world)
+  const input = { parentId: 2, title: ' Verify the release ', description: 'Why', acceptanceCriteria: 'Done when', iterationPath: 'Quality\\PI 26.4\\Sprint 2', assignedTo: 'Ana@X.com', storyPoints: 3, priority: 2, risk: '2 - Medium', valueArea: 'Business' }
+  const story = await createUserStory(config, 'pat', input, transport)
+  assert.deepEqual([story.workItemType, story.title, story.parentId, story.areaPath, story.iterationPath, story.assignedToEmail, story.storyPoints], ['User Story', 'Verify the release', 2, 'Quality\\QMS-0025', 'Quality\\PI 26.4\\Sprint 2', 'ana@x.com', 3])
+  const created = calls.filter((call) => call.operation === 'create-child')
+  assert.deepEqual(created.map((call) => call.validateOnly), [true, false], 'validated before it is saved')
+  assert.deepEqual([created[1].feature.description, created[1].feature.acceptanceCriteria, created[1].feature.priority, created[1].feature.risk, created[1].feature.valueArea], ['Why', 'Done when', 2, '2 - Medium', 'Business'])
+  await assert.rejects(createUserStory(config, 'pat', { ...input, parentId: 3 }, transport), /not an accessible Feature/)
+  await assert.rejects(createUserStory(config, 'pat', { ...input, priority: 7 }, transport), /Priority must be/)
+  await assert.rejects(createUserStory(config, 'pat', { ...input, storyPoints: -1 }, transport), /Story Points/)
+  await assert.rejects(createUserStory(config, 'pat', { ...input, iterationPath: ' ' }, transport), /PI → Sprint/)
+  const { azureFeatureRequest } = createRequire(import.meta.url)('../electron/azure-devops.cjs')
+  const request = (workItemType, extra) => ({ ...config, pat: 'p', operation: 'create-child', workItemType, validateOnly: true, feature: { parentId: 2, title: 't', description: '', acceptanceCriteria: '', areaPath: 'A', assignedTo: 'ana@x.com', ...extra } })
+  const body = JSON.parse(azureFeatureRequest(request('User Story', { storyPoints: 5, priority: 1, risk: '1 - High', valueArea: 'Architectural' })).options.body)
+  assert.deepEqual(body.slice(-4).map((entry) => [entry.path, entry.value]), [['/fields/Microsoft.VSTS.Scheduling.StoryPoints', 5], ['/fields/Microsoft.VSTS.Common.Priority', 1], ['/fields/Microsoft.VSTS.Common.Risk', '1 - High'], ['/fields/Microsoft.VSTS.Common.ValueArea', 'Architectural']])
+  assert.throws(() => azureFeatureRequest(request('Task', { priority: 1 })), /new User Story only/)
+  assert.throws(() => azureFeatureRequest(request('User Story', { valueArea: 'Anything' })), /Value area/)
+  assert.throws(() => azureFeatureRequest(request('User Story', { risk: 'x' })), /Risk/)
+  globalThis.window = {}
+  try {
+    await assert.rejects(requestAzure(request('Task', { storyPoints: 1 })), /new User Story only/)
+    await assert.rejects(requestAzure(request('User Story', { priority: 9 })), /Priority/)
+  } finally { delete globalThis.window }
 })

@@ -5,6 +5,7 @@ import { Modal, Info } from './ui'
 import { PersonPicker } from './PersonPicker'
 import { assignablePeople } from '../myWork'
 import { runInBackground } from '../backgroundJobs'
+import { adhocAfterLock } from '../planningLock'
 import { chooseSetup, defaultDoDFor, fieldKey, fieldLines, fieldPlaceholders, fieldTitle, fieldsFromItems, fieldsFromTitle, fillTitle, missingValues, reviewStoryTitle, setupFor, titleValues, type FeatureSetups } from '../featureSetup'
 
 // The "Add Feature under an Epic" / "Complete Feature children" modal, shared by the QMS-0025 board and Assigned to
@@ -49,6 +50,8 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
   const selectablePairs = [...pairs, ...futurePairs]
   const availableMilestones = ['PRD', 'SFV', 'DT', 'IQOQ']
   const monthLabel = currentIndiaMonth()
+  // Planning of the month has locked (Settings → periods): the new Time Writing Task is tagged ad-hoc.
+  const lateTask = adhocAfterLock(monthLabel)
   // The Epic's own setup (Settings → Feature setup), if any: its optional User Stories replace the PU / Full Release
   // milestones (all ticked by default) and its Task defaults apply.
   // My own setup of the Epic first, else the shared one; the switch below picks the shared one instead.
@@ -116,15 +119,17 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
       const fresh = [...currentIterationPairs(choices), ...futureIterationPairs(choices)]
       if (!fresh.some((pair) => pair.pi.path === iterationPath && pair.sprint.path === sprintPath)) throw new Error('The selected PI/Sprint is no longer current. Reload the schedule and review it before creating. No write was attempted.')
       progress('Creating the Feature and its children…')
+      // Checked again at Save: the lock may have passed while the form was open.
+      const adhoc = adhocAfterLock(monthLabel)
       let bundle
       if (epicSetup) {
         const children = { stories: epicSetup.stories.filter((_, index) => !skipStories.includes(index)), reviewStory, titleFields: epicSetup.titleFields, ...(titleFields.length ? { fieldValues } : {}), timeWritingStory: epicSetup.timeWritingStory, task: { ...epicSetup.task, ...(feature.taskOriginalEstimate != null ? { originalEstimate: feature.taskOriginalEstimate } : {}) } }
-        bundle = resumeFeature ? await completeFeatureFromSetup(config, token, resumeFeature.id, children, monthLabel, undefined, sprintPath, assignee) : await createFeatureFromSetup(config, token, feature, children, monthLabel)
+        bundle = resumeFeature ? await completeFeatureFromSetup(config, token, resumeFeature.id, children, monthLabel, undefined, sprintPath, assignee, adhoc) : await createFeatureFromSetup(config, token, feature, children, monthLabel, undefined, adhoc)
         const task = bundle.items.find((item) => item.workItemType === 'Task')
         if (task && feature.taskCompletedWork != null) { const updated = await updateAzureTimeWritingEffort(config, token, task.id, undefined, feature.taskCompletedWork); bundle = { ...bundle, items: bundle.items.map((item) => item.id === task.id ? updated : item) } }
-      } else bundle = resumeFeature ? await completeReleaseHierarchy(config, token, resumeFeature.id, releaseKind, milestones, monthLabel, undefined, sprintPath, assignee, reviewStory) : await createAzureReleaseHierarchy(config, token, feature, releaseKind, milestones, monthLabel, undefined, reviewStory)
+      } else bundle = resumeFeature ? await completeReleaseHierarchy(config, token, resumeFeature.id, releaseKind, milestones, monthLabel, undefined, sprintPath, assignee, reviewStory, adhoc) : await createAzureReleaseHierarchy(config, token, feature, releaseKind, milestones, monthLabel, undefined, reviewStory, adhoc)
       onCreated?.(parent ? [parent, ...bundle.items] : bundle.items)
-      const doneText = `Hierarchy complete: ${epicSetup ? `${epicSetup.stories.length - skipStories.length} optional` : milestones.length} ${epicSetup ? 'User Stories' : 'milestone stories'}, ${reviewStory ? 'Review of Deliverables story, ' : ''}Time Writing story and ${monthLabel} task verified.`
+      const doneText = `Hierarchy complete: ${epicSetup ? `${epicSetup.stories.length - skipStories.length} optional` : milestones.length} ${epicSetup ? 'User Stories' : 'milestone stories'}, ${reviewStory ? 'Review of Deliverables story, ' : ''}Time Writing story and ${monthLabel} task verified${adhoc ? ' (a new Task is tagged ad-hoc: planning is locked)' : ''}.`
       onDone({ feature: bundle.feature, items: bundle.items, parent: parent ?? undefined, text: doneText })
       return { text: `#${bundle.feature.id} “${bundle.feature.title}”: ${doneText}` }
     } catch (failure) {
@@ -181,6 +186,7 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
           <h4>Planning</h4>
           {parent && <label>Target date<input name="targetDate" type="date" disabled={creating} /></label>}
           {parent && <><h4>Time Writing ({monthLabel})</h4>
+            {lateTask && <p className="muted adhoc-note">Planning for {monthLabel} is locked: the new Task is tagged <code>ad-hoc</code>.</p>}
             <label>Original Estimate (h)<input type="number" min="0" max="1000000" step="0.25" value={taskOriginalEstimate} onChange={(event) => setTaskOriginalEstimate(event.target.value)} disabled={creating} placeholder={epicSetup?.task.originalEstimate != null ? `${epicSetup.task.originalEstimate} (setup)` : 'Optional'} /></label>
             <label>Completed Work (h)<input type="number" min="0" max="1000000" step="0.25" value={taskCompletedWork} onChange={(event) => setTaskCompletedWork(event.target.value)} disabled={creating} placeholder="Optional" /></label></>}
         </div>

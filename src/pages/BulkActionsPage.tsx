@@ -5,6 +5,7 @@ import { AssigneeConfirm } from '../components/AssigneeConfirm'
 import { EmptyState, Notice, Page, Panel, Pill } from '../components/ui'
 import { currentIndiaMonth, currentIterationPairs, ensureMonthTask, readAzureIterations, updateAzureWorkItem, type AzureIteration } from '../azureDevOps'
 import { capacityContext } from '../capacity'
+import { adhocAfterLock } from '../planningLock'
 import { assignablePeople, monthTaskCandidates, moveCandidates, nextStateFor, stateChecks, type MoveStates, type StateCheck } from '../myWork'
 import { closeRelated } from '../closeChain'
 import type { AzureWorkItem } from '../domain'
@@ -116,16 +117,18 @@ export function BulkActionsPage({ azure, store, my, assign }: { azure: AzureWork
     const started = runInBackground('bulk:tasks', `Create ${month} Time Writing tasks (${rows.length})`, async (progress) => {
     const changed: AzureWorkItem[] = [], failed: string[] = []
     let created = 0, existed = 0
+    // Planning of the month has locked: the new Tasks are tagged ad-hoc (existing ones are left as they are).
+    const adhoc = adhocAfterLock(month)
     for (const [index, row] of rows.entries()) {
       progress(`Feature ${index + 1} of ${rows.length}…`)
       try {
-        const result = await ensureMonthTask(config, pat, row.feature.id, assignee, month)
+        const result = await ensureMonthTask(config, pat, row.feature.id, assignee, month, undefined, adhoc)
         changed.push(result.task, ...(result.storyCreated ? [result.story] : []))
         if (result.status === 'created') created += 1; else existed += 1
       } catch (failure) { failed.push(`#${row.feature.id}: ${failure instanceof Error ? failure.message : 'failed'}`) }
     }
     azure.applyWorkItems(changed, 'Create month tasks', `${created} ${month} Time Writing task(s) created, ${existed} already existed`)
-    const text = `${created} task${created === 1 ? '' : 's'} created${existed ? `, ${existed} already existed (not duplicated)` : ''}.${failed.length ? ` ${failed.length} failed — ${failed.join(' · ')}` : ''}`
+    const text = `${created} task${created === 1 ? '' : 's'} created${created && adhoc ? ' (tagged ad-hoc: planning is locked)' : ''}${existed ? `, ${existed} already existed (not duplicated)` : ''}.${failed.length ? ` ${failed.length} failed — ${failed.join(' · ')}` : ''}`
     note({ tone: failed.length ? 'error' : 'success', text })
     if (changed.length) { progress('Refreshing the backlog…'); await azure.refresh() }
     return { text, failed: failed.length > 0 }
@@ -175,7 +178,7 @@ export function BulkActionsPage({ azure, store, my, assign }: { azure: AzureWork
         </Panel>
       </>}
     {confirmTasks && <AssigneeConfirm title={`Create ${month} Time Writing tasks`} people={assignablePeople(azure.items)} me={assign.me} initial={shownEmail} canChoose={assign.canChoose} busy={creatingTasks} confirmLabel="Create tasks"
-      summary={<>Creates the “{month}” Time Writing Task (and the Time Writing User Story where missing) for {missing.filter((row) => !skipTask.has(row.feature.id)).length} Feature(s), assigned to the person below. Existing tasks of that person are re-checked in Azure DevOps and never duplicated.</>}
+      summary={<>Creates the “{month}” Time Writing Task (and the Time Writing User Story where missing) for {missing.filter((row) => !skipTask.has(row.feature.id)).length} Feature(s), assigned to the person below. Existing tasks of that person are re-checked in Azure DevOps and never duplicated.{adhocAfterLock(month) && <> Planning for {month} is locked: new Tasks are tagged <code>ad-hoc</code>.</>}</>}
       onCancel={() => setConfirmTasks(false)} onConfirm={(email) => void createTasks(email)} />}
   </Page>
 }
