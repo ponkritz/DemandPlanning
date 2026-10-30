@@ -3,10 +3,10 @@ import { useState, useSyncExternalStore } from 'react'
 import { PersonPicker } from '../components/PersonPicker'
 import { AssigneeConfirm } from '../components/AssigneeConfirm'
 import { EmptyState, Notice, Page, Panel, Pill } from '../components/ui'
-import { currentIndiaMonth, currentIterationPairs, ensureMonthTask, readAzureIterations, updateAzureWorkItem, type AzureIteration } from '../azureDevOps'
+import { currentIndiaMonth, currentIterationPairs, ensureMonthTask, readAzureIterations, updateAzureTimeWritingEffort, updateAzureWorkItem, type AzureIteration } from '../azureDevOps'
 import { capacityContext } from '../capacity'
 import { adhocAfterLock } from '../planningLock'
-import { assignablePeople, monthTaskCandidates, moveCandidates, nextStateFor, stateChecks, type MoveStates, type StateCheck } from '../myWork'
+import { assignablePeople, monthTaskCandidates, monthsUntilTarget, moveCandidates, nextStateFor, stateChecks, type MoveStates, type StateCheck } from '../myWork'
 import { closeRelated } from '../closeChain'
 import type { AzureWorkItem } from '../domain'
 import type { AzureWorkspace } from '../useAzureWorkspace'
@@ -39,6 +39,10 @@ export function BulkActionsPage({ azure, store, my, assign }: { azure: AzureWork
   const [skipMove, setSkipMove] = useState<Set<number>>(new Set())
   const [iterations, setIterations] = useState<AzureIteration[]>([])
   const [skipTask, setSkipTask] = useState<Set<number>>(new Set())
+  // Features with a later Target date whose month Tasks are also created up to the Target month (asked per Feature in
+  // the confirmation, off by default), and the Original Estimate per new month Task (blank: none).
+  const [untilTarget, setUntilTarget] = useState<Set<number>>(new Set())
+  const [hoursPerMonth, setHoursPerMonth] = useState('')
   const [moveStates, setMoveStates] = useState<MoveStates>('both')
   // The month-tasks list: show Features with a task, without one, or both; Select all / Deselect all act on the shown rows that can be created.
   const [taskFilter, setTaskFilter] = useState<'both' | 'with' | 'without'>('both')
@@ -113,22 +117,33 @@ export function BulkActionsPage({ azure, store, my, assign }: { azure: AzureWork
     if (blocked || !config) return
     const rows = missing.filter((row) => !skipTask.has(row.feature.id))
     if (!rows.length) return
+    const hours = hoursPerMonth.trim() ? Number(hoursPerMonth) : undefined
+    if (hours != null && (!Number.isFinite(hours) || hours < 0 || hours > 1000)) { note({ tone: 'error', text: 'Hours per month must be a number from 0 to 1,000.' }); return }
     setConfirmTasks(false)
     const started = runInBackground('bulk:tasks', `Create ${month} Time Writing tasks (${rows.length})`, async (progress) => {
     const changed: AzureWorkItem[] = [], failed: string[] = []
     let created = 0, existed = 0
     // Planning of the month has locked: the new Tasks are tagged ad-hoc (existing ones are left as they are).
     const adhoc = adhocAfterLock(month)
+    let ahead = 0
     for (const [index, row] of rows.entries()) {
       progress(`Feature ${index + 1} of ${rows.length}…`)
-      try {
-        const result = await ensureMonthTask(config, pat, row.feature.id, assignee, month, undefined, adhoc)
-        changed.push(result.task, ...(result.storyCreated ? [result.story] : []))
-        if (result.status === 'created') created += 1; else existed += 1
-      } catch (failure) { failed.push(`#${row.feature.id}: ${failure instanceof Error ? failure.message : 'failed'}`) }
+      // This month, then — when ticked — each later month up to the Feature's Target date. A new Task gets the hours
+      // per month as its Original Estimate (not this month's when planning has locked: that Task is ad-hoc).
+      const months = [month, ...(untilTarget.has(row.feature.id) ? monthsUntilTarget(month, row.feature.targetDate) : [])]
+      for (const [at, label] of months.entries()) {
+        try {
+          if (at > 0) progress(`Feature ${index + 1} of ${rows.length}: ${label}…`)
+          const result = await ensureMonthTask(config, pat, row.feature.id, assignee, label, undefined, at === 0 && adhoc)
+          let task = result.task
+          if (result.status === 'created' && hours != null && !(at === 0 && adhoc)) task = await updateAzureTimeWritingEffort(config, pat, task.id, hours, undefined)
+          changed.push(task, ...(result.storyCreated ? [result.story] : []))
+          if (result.status === 'created') { created += 1; if (at > 0) ahead += 1 } else existed += 1
+        } catch (failure) { failed.push(`#${row.feature.id} ${label}: ${failure instanceof Error ? failure.message : 'failed'}`); break }
+      }
     }
     azure.applyWorkItems(changed, 'Create month tasks', `${created} ${month} Time Writing task(s) created, ${existed} already existed`)
-    const text = `${created} task${created === 1 ? '' : 's'} created${created && adhoc ? ' (tagged ad-hoc: planning is locked)' : ''}${existed ? `, ${existed} already existed (not duplicated)` : ''}.${failed.length ? ` ${failed.length} failed — ${failed.join(' · ')}` : ''}`
+    const text = `${created} task${created === 1 ? '' : 's'} created${ahead ? ` (${ahead} for later months up to the Target dates)` : ''}${hours != null && created ? `, ${hours}h Original Estimate each` : ''}${created && adhoc ? ' (this month’s tagged ad-hoc: planning is locked)' : ''}${existed ? `, ${existed} already existed (not duplicated)` : ''}.${failed.length ? ` ${failed.length} failed — ${failed.join(' · ')}` : ''}`
     note({ tone: failed.length ? 'error' : 'success', text })
     if (changed.length) { progress('Refreshing the backlog…'); await azure.refresh() }
     return { text, failed: failed.length > 0 }
@@ -179,6 +194,18 @@ export function BulkActionsPage({ azure, store, my, assign }: { azure: AzureWork
       </>}
     {confirmTasks && <AssigneeConfirm title={`Create ${month} Time Writing tasks`} people={assignablePeople(azure.items)} me={assign.me} initial={shownEmail} canChoose={assign.canChoose} busy={creatingTasks} confirmLabel="Create tasks"
       summary={<>Creates the “{month}” Time Writing Task (and the Time Writing User Story where missing) for {missing.filter((row) => !skipTask.has(row.feature.id)).length} Feature(s), assigned to the person below. Existing tasks of that person are re-checked in Azure DevOps and never duplicated.{adhocAfterLock(month) && <> Planning for {month} is locked: new Tasks are tagged <code>ad-hoc</code>.</>}</>}
-      onCancel={() => setConfirmTasks(false)} onConfirm={(email) => void createTasks(email)} />}
+      onCancel={() => setConfirmTasks(false)} onConfirm={(email) => void createTasks(email)}>
+      {(() => {
+        // Features with a Target date after this month: also create the month Tasks up to it?
+        const later = missing.filter((row) => !skipTask.has(row.feature.id)).map((row) => ({ row, months: monthsUntilTarget(month, row.feature.targetDate) })).filter((entry) => entry.months.length)
+        return <>
+          {later.length > 0 && <fieldset className="until-target"><legend>These Features have a Target date after {month}. Also create their month Tasks up to the Target month?</legend>
+            <div className="button-row"><button type="button" className="text-button" onClick={() => setUntilTarget(new Set(later.map((entry) => entry.row.feature.id)))}>Tick all</button><button type="button" className="text-button" onClick={() => setUntilTarget(new Set())}>Untick all</button></div>
+            {later.map(({ row, months }) => <label key={row.feature.id} className="check"><input type="checkbox" checked={untilTarget.has(row.feature.id)} onChange={(event) => setUntilTarget((current) => { const next = new Set(current); if (event.target.checked) next.add(row.feature.id); else next.delete(row.feature.id); return next })} />#{row.feature.id} {row.feature.title} — up to {months.at(-1)} ({months.length} more month{months.length === 1 ? '' : 's'})</label>)}
+          </fieldset>}
+          <label>Original Estimate per new month Task (h, optional)<input type="number" min="0" max="1000" step="0.5" value={hoursPerMonth} onChange={(event) => setHoursPerMonth(event.target.value)} placeholder="e.g. 20" /></label>
+        </>
+      })()}
+    </AssigneeConfirm>}
   </Page>
 }

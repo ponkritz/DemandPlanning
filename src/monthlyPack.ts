@@ -114,18 +114,22 @@ export interface PackLineResult { id: string; label: string; releases: string[];
 export interface MonthlyPack { month: string; lines: PackLineResult[]; overall: { supported: number; ytd: number; lastYtd: number; change: number | null }; utilization: Utilization; kpis: { id: string; label: string; value: string; manual: boolean; computed: string; overridden: boolean }[]; notes: MonthlyPackNotes }
 
 const change = (now: number, before: number) => before > 0 ? Math.round((now - before) / before * 1000) / 10 : null
-export function buildMonthlyPack(input: PackInputs): MonthlyPack {
-  const { month, setup, notes, items, streamsOf, timeZone } = input
-  // Every KPI can be overridden for the month: a value typed for a calculated KPI wins over the calculation. A typed
-  // utilisation ("87%", "87.5") also replaces the calculated one in the generated lines (Summary, Capacity, Risks).
-  const typedOf = (row: KpiRow) => notes.kpiValues[row.id]?.trim() || undefined
-  const percent = (text: string | undefined) => { const match = text ? /^\s*(-?\d+(?:\.\d+)?)\s*%?\s*$/.exec(text) : null; return match ? Number(match[1]) : undefined }
-  const typedUtil = (metric: KpiMetric) => percent(setup.kpis.map((row) => row.metric === metric ? typedOf(row) : undefined).find(Boolean))
-  const utilization: Utilization = { ...input.utilization, ...(typedUtil('utilization-month') != null ? { month: typedUtil('utilization-month')! } : {}), ...(typedUtil('utilization-ytd') != null ? { ytd: typedUtil('utilization-ytd')! } : {}) }
+// The part of the pack that comes from the data (releases per line per month, YoY, the calculated KPIs) is the same
+// while only the typed text changes, so it is kept for the last inputs: typing in a box does not recount 24 months of
+// releases and the Epic trees on every keystroke.
+interface PackBase { lines: PackLineResult[]; overall: MonthlyPack['overall']; computed: Map<string, string> }
+const recentBase: { input: Omit<PackInputs, 'notes'>; base: PackBase }[] = []
+function packBase(input: Omit<PackInputs, 'notes'>): PackBase {
+  const hit = recentBase.find(({ input: seen }) => seen.month === input.month && seen.setup === input.setup && seen.items === input.items && seen.streamsOf === input.streamsOf && seen.timeZone === input.timeZone
+    && seen.utilization.month === input.utilization.month && seen.utilization.ytd === input.utilization.ytd && seen.utilization.qeMonth === input.utilization.qeMonth)
+  if (hit) return hit.base
+  const { month, setup, items, streamsOf, timeZone } = input
   const cache = new Map<string, StreamMonth[]>()
   const monthStreams = (at: string) => { if (!cache.has(at)) cache.set(at, streamsOf(at)); return cache.get(at)! }
-  // Epic-mapped lines count the Features closed in the month under those Epics, like a release each.
-  const epicLine = (line: PackLine, at: string) => line.epicIds.length ? epicDescendants(items, line.epicIds).filter((item) => item.workItemType === 'Feature' && closedMonthOf(item, timeZone) === at) : []
+  // Epic-mapped lines count the Features closed in the month under those Epics, like a release each; the Features
+  // under a line's Epics are found once, then counted per month.
+  const closedFeatures = new Map(setup.lines.map((line) => [line.id, line.epicIds.length ? epicDescendants(items, line.epicIds).filter((item) => item.workItemType === 'Feature').map((item) => ({ item, closed: closedMonthOf(item, timeZone) })) : []]))
+  const epicLine = (line: PackLine, at: string) => (closedFeatures.get(line.id) ?? []).filter((entry) => entry.closed === at).map((entry) => entry.item)
   const supportedOf = (line: PackLine, at: string) => monthStreams(at).filter((stream) => line.streams.includes(stream.name)).reduce((sum, stream) => sum + stream.supported, 0) + epicLine(line, at).length
   const thisYear = yearMonths(month), lastYear = yearMonths(sameMonthLastYear(month))
   const lines = setup.lines.map((line) => {
@@ -135,10 +139,24 @@ export function buildMonthlyPack(input: PackInputs): MonthlyPack {
   })
   const overall = { supported: lines.reduce((sum, line) => sum + line.supported, 0), ytd: lines.reduce((sum, line) => sum + line.ytd, 0), lastYtd: lines.reduce((sum, line) => sum + line.lastYtd, 0), change: null as number | null }
   overall.change = change(overall.ytd, overall.lastYtd)
+  const computed = new Map(setup.kpis.filter((row) => !isManualKpi(row)).map((row) => [row.id, kpiValue(row, items, month, input.utilization, undefined, timeZone)]))
+  const base = { lines, overall, computed }
+  recentBase.unshift({ input, base }); recentBase.splice(4)
+  return base
+}
+const isManualKpi = (row: KpiRow) => row.metric === 'manual' || (row.metric !== 'utilization-month' && row.metric !== 'utilization-ytd' && !row.epicId)
+export function buildMonthlyPack(input: PackInputs): MonthlyPack {
+  const { month, setup, notes } = input
+  const { lines, overall, computed } = packBase(input)
+  // Every KPI can be overridden for the month: a value typed for a calculated KPI wins over the calculation. A typed
+  // utilisation ("87%", "87.5") also replaces the calculated one in the generated lines (Summary, Capacity, Risks).
+  const typedOf = (row: KpiRow) => notes.kpiValues[row.id]?.trim() || undefined
+  const percent = (text: string | undefined) => { const match = text ? /^\s*(-?\d+(?:\.\d+)?)\s*%?\s*$/.exec(text) : null; return match ? Number(match[1]) : undefined }
+  const typedUtil = (metric: KpiMetric) => percent(setup.kpis.map((row) => row.metric === metric ? typedOf(row) : undefined).find(Boolean))
+  const utilization: Utilization = { ...input.utilization, ...(typedUtil('utilization-month') != null ? { month: typedUtil('utilization-month')! } : {}), ...(typedUtil('utilization-ytd') != null ? { ytd: typedUtil('utilization-ytd')! } : {}) }
   const kpis = setup.kpis.map((row) => {
-    const manual = row.metric === 'manual' || (row.metric !== 'utilization-month' && row.metric !== 'utilization-ytd' && !row.epicId)
-    const computed = manual ? '' : kpiValue(row, items, month, input.utilization, undefined, timeZone), typed = typedOf(row)
-    return { id: row.id, label: row.label, value: typed ?? computed, manual, computed, overridden: !manual && typed != null }
+    const manual = isManualKpi(row), computedValue = computed.get(row.id) ?? '', typed = typedOf(row)
+    return { id: row.id, label: row.label, value: typed ?? computedValue, manual, computed: computedValue, overridden: !manual && typed != null }
   })
   return { month, lines, overall, utilization, kpis, notes }
 }

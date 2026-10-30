@@ -295,3 +295,20 @@ test('New User Story under a Feature: the Azure DevOps story fields, the Feature
     await assert.rejects(requestAzure(request('User Story', { priority: 9 })), /Priority/)
   } finally { delete globalThis.window }
 })
+
+test('Bulk month Tasks up to the Target date: the months after this one up to the Feature’s Target month (TC-ATM-13)', async () => {
+  const { monthsUntilTarget } = await import('../src/myWork.ts')
+  assert.deepEqual(monthsUntilTarget('October 2026', '2027-01-15T00:00:00Z'), ['November 2026', 'December 2026', 'January 2027'])
+  assert.deepEqual(monthsUntilTarget('October 2026', '2026-10-30'), [], 'Target this month: nothing more')
+  assert.deepEqual(monthsUntilTarget('October 2026', '2026-08-01'), [], 'Target already past')
+  assert.deepEqual(monthsUntilTarget('October 2026', undefined), [], 'no Target date')
+  assert.equal(monthsUntilTarget('October 2026', '2035-01-01').length, 24, 'at most 24 months')
+  // Each later month goes through ensureMonthTask with its own label: a new Task, never a duplicate.
+  const config = { organization: 'org', project: 'Quality', team: 'T' }
+  const world = new Map([[2, raw(2, { 'System.WorkItemType': 'Feature', 'System.Title': 'CP | Care Pathways | v3.1' })]])
+  const { transport } = fakeAzure(world)
+  const titles = []
+  for (const label of ['October 2026', ...monthsUntilTarget('October 2026', '2026-12-10')]) titles.push((await ensureMonthTask(config, 'pat', 2, 'ana@x.com', label, transport)).task.title)
+  assert.deepEqual(titles, ['October 2026 | CP | Care Pathways | v3.1', 'November 2026 | CP | Care Pathways | v3.1', 'December 2026 | CP | Care Pathways | v3.1'])
+  assert.equal((await ensureMonthTask(config, 'pat', 2, 'ana@x.com', 'November 2026', transport)).status, 'exists', 'running again creates nothing')
+})
