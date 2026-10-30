@@ -1,6 +1,7 @@
 import type { AzureWorkItem } from './domain'
 import { featureDoD, fillTitle, missingValues, reviewStoryTitle, titleValues, fieldPlaceholders, type TitleField } from './featureSetup.ts'
 import { planMonthStory, timeWritingMonth } from './azureInsights.ts'
+import { editLocks, editPatch, editProblem, editableText, isAdhocTask, withAdhocTag, type WorkItemEdit } from './workItemEdit.ts'
 
 // baseUrl is the organization (https://dev.azure.com/<org>) or, on premises, the Azure DevOps Server collection
 // (e.g. https://tfs.example.com/tfs/DefaultCollection). Omitted means Azure DevOps Services for organization.
@@ -26,7 +27,7 @@ export const projectApiBase = (config: Pick<AzureConfig, 'organization' | 'proje
 // Azure DevOps Services accepts 7.1; older Azure DevOps Server versions need a lower version (e.g. 6.0 or 5.0).
 export const apiVersionOf = (config: Pick<AzureConfig, 'apiVersion'>) => config.apiVersion && /^\d{1,2}\.\d(-preview(\.\d)?)?$/.test(config.apiVersion) ? config.apiVersion : '7.1'
 export interface AzureRequest extends AzureConfig {
-  operation: 'backlog-epics' | 'areas' | 'iterations' | 'iteration-tree' | 'fields' | 'query' | 'items' | 'create-feature' | 'create-child' | 'update-time-writing-effort' | 'update-work-item'
+  operation: 'backlog-epics' | 'areas' | 'iterations' | 'iteration-tree' | 'fields' | 'query' | 'items' | 'create-feature' | 'create-child' | 'update-time-writing-effort' | 'update-work-item' | 'edit-work-item' | 'comments' | 'add-comment'
   pat: string
   query?: string
   ids?: number[]
@@ -41,6 +42,11 @@ export interface AzureRequest extends AzureConfig {
   tags?: string
   state?: string
   iterationPath?: string
+  // edit-work-item: the fields to change and the revision they were read at (WorkItemEdit, workItemEdit.ts).
+  edit?: WorkItemEdit
+  rev?: number
+  // add-comment: the comment as plain text.
+  comment?: string
 }
 export interface FeatureInput { parentId: number; title: string; description: string; acceptanceCriteria: string; areaPath?: string; iterationPath?: string; assignedTo?: string; targetDate?: string; assignToCreator?: boolean; storyIterationPath?: string; taskOriginalEstimate?: number; taskCompletedWork?: number }
 // The Feature DoD (Definition of Done) is mandatory. It opens the Feature's Description as "Feature DoD: …", where
@@ -133,7 +139,7 @@ export function futureIterationPairs(iterations: AzureIteration[], date = new Da
 
 export interface AzureBacklogScope extends AzureConfig { itemKeys: string[]; areaPaths: string[]; fetchedAt: string; sample?: boolean }
 export interface AzureFetchResult { items: AzureWorkItem[]; areaPaths: string[]; asOf: string; scope: AzureBacklogScope }
-interface RawItem { id: number; fields: Record<string, unknown>; relations?: { rel: string; url: string }[] }
+interface RawItem { id: number; rev?: number; fields: Record<string, unknown>; relations?: { rel: string; url: string }[] }
 interface TeamAreas { field: { referenceName: string }; values: { value: string; includeChildren: boolean }[] }
 type AzureTransport = (request: AzureRequest) => Promise<unknown>
 
@@ -679,6 +685,101 @@ export async function updateAzureWorkItem(config: AzureConfig, pat: string, work
   return item
 }
 
+const conflictMessage = (id: number) => `#${id} was changed in Azure DevOps since you opened it. Nothing was saved: open it again to see the changes, then edit.`
+// Work-item Discussion: read the comments and add one (Azure DevOps work-item Comments API, a preview API on
+// dev.azure.com). The comment is sent as text: line breaks become <br>, no markup is taken from the user.
+export const commentsApiVersion = '7.1-preview.4'
+async function requestComments(request: AzureRequest) {
+  const adding = request.operation === 'add-comment'
+  const url = `${projectApiBase(request)}/_apis/wit/workItems/${request.workItemId}/comments?api-version=${commentsApiVersion}${adding ? '' : '&order=desc&$top=200'}`
+  let response: Response
+  try {
+    response = await fetch(url, { method: adding ? 'POST' : 'GET', redirect: 'error', credentials: 'omit', signal: AbortSignal.timeout(45000),
+      headers: { Authorization: `Basic ${btoa(`:${request.pat}`)}`, 'Content-Type': 'application/json', Accept: 'application/json' },
+      ...(adding ? { body: JSON.stringify({ text: htmlText(request.comment!) }) } : {}) })
+  } catch { throw new Error(adding ? `The comment on #${request.workItemId} could not be confirmed. Check the Discussion in Azure DevOps before retrying.` : 'Azure DevOps could not be reached. Check your network/VPN.') }
+  if (response.status === 401) throw new Error('The PAT was rejected or has expired. Check your PAT.')
+  if (response.status === 403) throw new Error(`Access denied. Check project access and PAT Work Items (${adding ? 'Read & Write' : 'Read'}) scope.`)
+  if (!response.ok) { const detail = await response.json().catch(() => ({})) as { message?: string }; throw new Error(`Azure DevOps ${adding ? 'did not add the comment' : 'did not return the Discussion'} (${response.status})${detail.message ? `: ${detail.message.replaceAll(request.pat.trim(), '[redacted]').slice(0, 600)}` : '.'}`) }
+  if (!(response.headers.get('content-type') ?? '').includes('application/json')) throw new Error('Azure DevOps returned a sign-in page. Check the PAT and organization access.')
+  return response.json()
+}
+
+// Edit an existing Feature, User Story or Task (the Edit form). The item is re-read first: a revision other than the
+// one the form was opened at means it changed in Azure DevOps meanwhile, and nothing is sent. Locks: Type, Parent and
+// Area Path are never written; the Time Writing story and a month Task keep their iteration; a month Task keeps the
+// month in its title; a Feature keeps its DoD; Story fields only on a User Story, Target date only on a Feature,
+// hours only on a Task. A month Task's hours follow Monthly Time Writing: Original Estimate is locked once planning
+// has locked (or when tagged ad-hoc), Completed Work once actuals have locked, and Completed Work entered after the
+// planning lock on a Task without an estimate tags it ad-hoc. The patch tests the revision, then the item is read back.
+export interface EditLockRules { planningLocked: (month: string) => boolean; actualsLocked: (month: string) => boolean }
+export async function editWorkItem(config: AzureConfig, pat: string, workItemId: number, rev: number, change: WorkItemEdit, rules: EditLockRules, transport: AzureTransport = requestAzure): Promise<AzureWorkItem> {
+  if (!pat.trim()) throw new Error('Enter a Work Items (Read & Write) PAT.')
+  const problem = editProblem(change)
+  if (problem) throw new Error(problem)
+  if (change.tags != null) throw new Error('Tags are not edited here.')
+  const source = await transport({ ...config, pat, operation: 'items', ids: [workItemId] }) as { value?: RawItem[] }
+  const raw = source.value?.find((item) => item.id === workItemId)
+  const type = String(raw?.fields['System.WorkItemType'] ?? '')
+  if (!raw || !['Feature', 'User Story', 'Task'].includes(type)) throw new Error(`#${workItemId} is not an accessible Feature, User Story or Task.`)
+  if (raw.rev !== rev) throw new Error(conflictMessage(workItemId))
+  const item = mapAzureWorkItem(raw, config)
+  const locks = editLocks(item)
+  if (change.iterationPath != null && locks.iterationLocked && change.iterationPath.trim() !== item.iterationPath) throw new Error(`The ${locks.monthTask ? 'month Task' : 'Time Writing story'} stays at ${item.iterationPath}; its iteration is not changed.`)
+  if (change.title != null && locks.monthTask && timeWritingMonth(change.title) !== locks.monthTask) throw new Error('A month Task keeps its month in the title (e.g. “October 2026 | …”).')
+  if (change.description != null && type === 'Feature' && !hasFeatureDoD(change.description)) throw new Error(missingDoDMessage)
+  if ((change.storyPoints != null || change.priority != null || change.risk != null || change.valueArea != null) && type !== 'User Story') throw new Error('Story Points, Priority, Risk and Value area are edited on a User Story only.')
+  if (change.targetDate != null && type !== 'Feature') throw new Error('Target date is edited on a Feature only.')
+  if ((change.originalEstimate != null || change.completedWork != null) && type !== 'Task') throw new Error('Original Estimate and Completed Work are edited on a Task only.')
+  const planChanged = change.originalEstimate != null && change.originalEstimate !== item.originalEstimate
+  const actualChanged = change.completedWork != null && change.completedWork !== item.completedWork
+  let tags: string | undefined
+  if (locks.monthTask) {
+    const adhoc = isAdhocTask(item.tags)
+    if (planChanged && (rules.planningLocked(locks.monthTask) || adhoc)) throw new Error(`Original Estimate of a ${adhoc ? 'Task tagged ad-hoc' : 'month Task'} is locked${adhoc ? '' : ' (planning has locked for the month)'}. Unlock the period in Settings to change it.`)
+    if (actualChanged && rules.actualsLocked(locks.monthTask)) throw new Error('Completed Work is locked (actuals have locked for the month). Unlock the period in Settings to change it.')
+    if (actualChanged && rules.planningLocked(locks.monthTask) && !adhoc && item.originalEstimate == null) tags = withAdhocTag(item.tags)
+  }
+  await transport({ ...config, pat, operation: 'edit-work-item', workItemId, rev, edit: { ...change, ...(tags ? { tags } : {}) } })
+  const read = await transport({ ...config, pat, operation: 'items', ids: [workItemId] }) as { value?: RawItem[] }
+  const after = read.value?.find((entry) => entry.id === workItemId)
+  if (!after) throw new Error(`#${workItemId} was saved but could not be read back. Check it in Azure DevOps.`)
+  const updated = mapAzureWorkItem(after, config)
+  const same = (a: string | undefined, b: string | undefined) => (a ?? '').trim().toLowerCase() === (b ?? '').trim().toLowerCase()
+  const mismatch = (change.title != null && updated.title.trim() !== change.title.trim()) || (change.iterationPath != null && !same(updated.iterationPath, change.iterationPath)) || (change.state != null && !same(updated.state, change.state))
+    || (change.assignedTo != null && !same(updated.assignedToEmail, change.assignedTo)) || (change.storyPoints != null && updated.storyPoints !== change.storyPoints)
+    || (change.originalEstimate != null && updated.originalEstimate !== change.originalEstimate) || (change.completedWork != null && updated.completedWork !== change.completedWork)
+    || updated.areaPath !== item.areaPath || updated.parentId !== item.parentId || updated.workItemType !== item.workItemType
+  if (mismatch) throw new Error(`#${workItemId} was saved but Azure DevOps reports other values. Check it in Azure DevOps.`)
+  return updated
+}
+// The work item as the Edit form opens it: its fields now, with the revision to send back.
+export async function readWorkItemForEdit(config: AzureConfig, pat: string, workItemId: number, transport: AzureTransport = requestAzure) {
+  const source = await transport({ ...config, pat, operation: 'items', ids: [workItemId] }) as { value?: RawItem[] }
+  const raw = source.value?.find((item) => item.id === workItemId)
+  if (!raw || !Number.isSafeInteger(raw.rev)) throw new Error(`#${workItemId} could not be read from Azure DevOps.`)
+  const text = (name: string) => typeof raw.fields[name] === 'string' ? raw.fields[name] as string : ''
+  const number = (name: string) => typeof raw.fields[name] === 'number' ? raw.fields[name] as number : undefined
+  return { item: mapAzureWorkItem(raw, config), rev: raw.rev!, description: editableText(text('System.Description')), acceptanceCriteria: editableText(text('Microsoft.VSTS.Common.AcceptanceCriteria')),
+    priority: number('Microsoft.VSTS.Common.Priority'), risk: text('Microsoft.VSTS.Common.Risk'), valueArea: text('Microsoft.VSTS.Common.ValueArea') }
+}
+export interface WorkItemComment { id: number; text: string; author: string; date: string }
+export async function readComments(config: AzureConfig, pat: string, workItemId: number, transport: AzureTransport = requestAzure): Promise<WorkItemComment[]> {
+  const page = await transport({ ...config, pat, operation: 'comments', workItemId }) as { comments?: { id?: unknown; text?: unknown; createdBy?: unknown; createdDate?: unknown; isDeleted?: unknown }[] }
+  if (!Array.isArray(page.comments)) throw new Error('Azure DevOps did not return the Discussion.')
+  return page.comments.filter((comment) => comment.isDeleted !== true && typeof comment.id === 'number')
+    .map((comment) => ({ id: comment.id as number, text: editableText(typeof comment.text === 'string' ? comment.text : ''), author: identityName(comment.createdBy) || 'Unknown', date: typeof comment.createdDate === 'string' ? comment.createdDate : '' }))
+    .sort((a, b) => b.date.localeCompare(a.date))
+}
+export async function addComment(config: AzureConfig, pat: string, workItemId: number, text: string, transport: AzureTransport = requestAzure): Promise<WorkItemComment> {
+  if (!pat.trim()) throw new Error('Enter a Work Items (Read & Write) PAT.')
+  const comment = text.trim()
+  if (!comment || comment.length > 100_000) throw new Error('Enter a comment (at most 100,000 characters).')
+  const response = await transport({ ...config, pat, operation: 'add-comment', workItemId, comment }) as { id?: unknown; text?: unknown; createdBy?: unknown; createdDate?: unknown }
+  if (typeof response.id !== 'number') throw new Error(`The comment on #${workItemId} could not be confirmed. Check the Discussion in Azure DevOps before retrying.`)
+  return { id: response.id, text: editableText(typeof response.text === 'string' ? response.text : ''), author: identityName(response.createdBy) || 'You', date: typeof response.createdDate === 'string' ? response.createdDate : new Date().toISOString() }
+}
+
 // api-version negotiation: an explicit version is used as is; otherwise 7.1, then 6.0 and 5.0 for older Azure DevOps
 // Server releases. The version that worked is remembered per collection for the rest of the session.
 const detectedVersions = new Map<string, string>()
@@ -692,7 +793,7 @@ export const isApiVersionError = (text: string) => /api[- ]?version|version of t
 // Set by the app from the viewer's access roles; while it returns false, nothing is changed in Azure DevOps.
 let writesAllowed: () => boolean = () => true
 export function guardAzureWrites(check: () => boolean) { writesAllowed = check }
-export const changesAzure = (operation: AzureRequest['operation']) => operation === 'create-feature' || operation === 'create-child' || operation === 'update-time-writing-effort' || operation === 'update-work-item'
+export const changesAzure = (operation: AzureRequest['operation']) => operation === 'create-feature' || operation === 'create-child' || operation === 'update-time-writing-effort' || operation === 'update-work-item' || operation === 'edit-work-item' || operation === 'add-comment'
 
 // Writes go to Azure DevOps Services (dev.azure.com) only: on-premises servers are read-only, whatever the connection's
 // role. Checked here and again in the desktop proxy.
@@ -706,14 +807,18 @@ export async function requestAzure(request: AzureRequest): Promise<unknown> {
   const storyProblem = storyFieldsProblem(request.feature, request.operation === 'create-child' && request.workItemType === 'User Story')
   if (storyProblem) throw new Error(`${storyProblem} Nothing was created.`)
   if (request.feature?.adhoc != null && (request.feature.adhoc !== true || request.operation !== 'create-child' || request.workItemType !== 'Task')) throw new Error('Only a new Task can be tagged ad-hoc. Nothing was created.')
+  if (request.operation === 'edit-work-item') { const problem = !Number.isSafeInteger(request.workItemId) || request.workItemId! < 1 || !Number.isSafeInteger(request.rev) || request.rev! < 1 ? 'Invalid work item or revision.' : editProblem(request.edit ?? {}); if (problem) throw new Error(`${problem} Nothing was changed.`) }
+  if ((request.operation === 'comments' || request.operation === 'add-comment') && (!Number.isSafeInteger(request.workItemId) || request.workItemId! < 1)) throw new Error('Invalid work item.')
+  if (request.operation === 'add-comment' && (typeof request.comment !== 'string' || !request.comment.trim() || request.comment.length > 100_000)) throw new Error('Enter a comment (at most 100,000 characters). Nothing was added.')
   if (window.azureDevOps) return window.azureDevOps.request(request)
+  if (request.operation === 'comments' || request.operation === 'add-comment') return requestComments(request)
   const base = projectApiBase(request)
-  const updating = request.operation === 'update-time-writing-effort' || request.operation === 'update-work-item'
+  const updating = request.operation === 'update-time-writing-effort' || request.operation === 'update-work-item' || request.operation === 'edit-work-item'
   const writing = request.operation === 'create-feature' || request.operation === 'create-child' || updating
   const readingMetadata = request.operation === 'backlog-epics' || request.operation === 'areas' || request.operation === 'iterations' || request.operation === 'iteration-tree' || request.operation === 'fields'
   const create = request.operation === 'create-feature' || request.operation === 'create-child'
   const endpoint = updating ? `_apis/wit/workitems/${request.workItemId}` : create ? `_apis/wit/workitems/$${request.operation === 'create-feature' ? 'Feature' : encodeURIComponent(request.workItemType!)}` : request.operation === 'backlog-epics' ? `${encodeURIComponent(request.team)}/_apis/work/backlogs/Microsoft.EpicCategory/workItems` : request.operation === 'iteration-tree' ? '_apis/wit/classificationnodes/iterations' : request.operation === 'fields' ? '_apis/wit/fields' : readingMetadata ? `${encodeURIComponent(request.team)}/_apis/work/teamsettings/${request.operation === 'areas' ? 'teamfieldvalues' : 'iterations'}` : request.operation === 'query' ? '_apis/wit/wiql' : '_apis/wit/workitemsbatch'
-  const body = request.operation === 'update-work-item' ? workItemUpdatePatch(request) : request.operation === 'update-time-writing-effort' ? [{ ...(request.planHours == null ? {} : { op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.OriginalEstimate', value: request.planHours }) }, { ...(request.actualHours == null ? {} : { op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.CompletedWork', value: request.actualHours }) }, ...(request.tags ? [{ op: 'add', path: '/fields/System.Tags', value: request.tags }] : [])].filter(patch => 'op' in patch) : create ? featurePatch(request, request.feature!) : request.operation === 'query' ? { query: request.query } : { ids: request.ids, errorPolicy: 'Fail', $expand: 'Relations' }
+  const body = request.operation === 'edit-work-item' ? editPatch(request.edit!, request.rev!) : request.operation === 'update-work-item' ? workItemUpdatePatch(request) : request.operation === 'update-time-writing-effort' ? [{ ...(request.planHours == null ? {} : { op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.OriginalEstimate', value: request.planHours }) }, { ...(request.actualHours == null ? {} : { op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.CompletedWork', value: request.actualHours }) }, ...(request.tags ? [{ op: 'add', path: '/fields/System.Tags', value: request.tags }] : [])].filter(patch => 'op' in patch) : create ? featurePatch(request, request.feature!) : request.operation === 'query' ? { query: request.query } : { ids: request.ids, errorPolicy: 'Fail', $expand: 'Relations' }
   const versions = versionsToTry(request)
   let response: Response | undefined
   for (const [attempt, version] of versions.entries()) {
@@ -741,6 +846,7 @@ export async function requestAzure(request: AzureRequest): Promise<unknown> {
   if (!response) throw new Error('Azure DevOps could not be reached.')
   if (response.status === 401) throw new Error('The PAT was rejected or has expired. Check your PAT.')
   if (response.status === 403) throw new Error(`Access denied. Check project access and PAT Work Items (${writing ? 'Read & Write' : 'Read'}) scope.`)
+  if (request.operation === 'edit-work-item' && (response.status === 412 || response.status === 409)) throw new Error(conflictMessage(request.workItemId!))
   if (writing && (response.status === 400 || response.status === 422)) {
     const detail = await response.json().catch(() => ({})) as { message?: string }
     throw new Error(`Azure DevOps rejected the work item: ${(detail.message ?? 'Check required fields and project rules.').replaceAll(request.pat.trim(), '[redacted]').slice(0, 1200)}`)

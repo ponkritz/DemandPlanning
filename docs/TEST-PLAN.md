@@ -680,6 +680,14 @@ Cases marked **UAT** are also run in acceptance testing.
   - The form closes at once; the top bar shows the job; the story appears under the Feature in the Sprint with the values entered, assigned to the person chosen.
   - A Priority, Risk or Value area outside the lists, or Story Points on a Task, is refused by both transports before anything is sent.
 
+**TC-BKL-11 Edit a Feature, User Story or Task, with the Discussion** — Req BKL-20 — L1 `work-item-edit.test.mjs` (all tests); E2E `backlog.e2e.mjs` ("TC-BKL-11: Edit on a Feature, User Story and Task row opens the Edit form …"); browser check with a test project:
+- Steps: (1) Backlogs → Edit on a User Story: change the title, Sprint, Story Points and Acceptance criteria; add a comment; Save. (2) Edit the same story in Azure DevOps, then Save again from a form opened before that change. (3) Edit a Feature: move it to another PI and tick "Also move its open User Stories". (4) Edit a month Task after the planning lock: enter Completed Work.
+- Expected:
+  - (1) Only the changed fields change in Azure DevOps; the Area Path and parent stay; the comment shows in the Discussion.
+  - (2) Nothing is saved: "changed in Azure DevOps since you opened it".
+  - (3) The Feature and its open User Stories move; the Time Writing story does not.
+  - (4) Original Estimate is locked; the Task is tagged ad-hoc when it had no estimate; the iteration and the month in the title cannot change.
+
 **TC-CON-45 Git view data with another query is not applied** — Req CON-77 — L1 `git-snapshots.test.mjs` ("a snapshot fetched with another query than the connection has here is not applied"); browser check:
 - Pre: Git storage connected; the DP connection's query changed here; Git holds DP data fetched with the old query.
 - Steps: reload the web app; open DP; Load from Git.
@@ -1313,6 +1321,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | BKL-17 | TC-BKL-08 |
 | BKL-18 | TC-BKL-09 |
 | BKL-19 | TC-BKL-10 |
+| BKL-20 | TC-BKL-11 |
 | QV-01, QV-02 | TC-QV-01 |
 | QV-03, QV-05 | TC-QV-02 |
 | QV-04 | TC-FET-07 |

@@ -11,7 +11,7 @@ function collectionBase(input) {
 }
 const projectBase = (input) => `${collectionBase(input)}/${encodeURIComponent(input.project)}`
 // Writes go to Azure DevOps Services (dev.azure.com) only: on-premises servers are read-only, whatever the connection's role.
-const writeOperations = ['create-feature', 'create-child', 'update-time-writing-effort', 'update-work-item']
+const writeOperations = ['create-feature', 'create-child', 'update-time-writing-effort', 'update-work-item', 'edit-work-item', 'add-comment']
 function assertWritableBase(input) {
   if (!writeOperations.includes(input?.operation)) return
   if (new URL(collectionBase(input)).hostname !== 'dev.azure.com') throw new Error('Changes are written to Azure DevOps Services (dev.azure.com) only; on-premises servers are read-only. Nothing was changed.')
@@ -125,6 +125,65 @@ function azureWorkItemUpdateRequest(input) {
   } }
 }
 
+// Edit form: only these fields, with the same checks as src/workItemEdit.ts (editProblem / editPatch). The patch starts
+// with a test of the revision, so Azure DevOps refuses it when the item changed since the form read it.
+const htmlText = (value) => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('\n', '<br>')
+function azureEditRequest(input) {
+  if (!input || input.operation !== 'edit-work-item') throw new Error('Invalid work-item edit.')
+  const connection = azureReadRequest({ ...input, operation: 'areas' })
+  if (!Number.isSafeInteger(input.workItemId) || input.workItemId < 1 || !Number.isSafeInteger(input.rev) || input.rev < 1) throw new Error('Invalid work item or revision.')
+  const edit = input.edit
+  if (!edit || typeof edit !== 'object') throw new Error('Nothing to change.')
+  const allowed = ['title', 'description', 'acceptanceCriteria', 'assignedTo', 'iterationPath', 'state', 'storyPoints', 'priority', 'risk', 'valueArea', 'targetDate', 'originalEstimate', 'completedWork', 'tags']
+  const keys = Object.keys(edit).filter((key) => edit[key] !== undefined && edit[key] !== null)
+  if (!keys.length || keys.some((key) => !allowed.includes(key))) throw new Error('Only the listed fields can be changed.')
+  const text = (value, max) => typeof value === 'string' && value.length <= max
+  if (edit.title != null && (!text(edit.title, 300) || !edit.title.trim() || edit.title.trim().length > 255)) throw new Error('Enter a title of 1–255 characters.')
+  for (const field of ['description', 'acceptanceCriteria']) if (edit[field] != null && !text(edit[field], 100000)) throw new Error('The text is too long.')
+  if (edit.assignedTo != null && (!text(edit.assignedTo, 320) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(edit.assignedTo.trim()))) throw new Error('Assigned to must be an email.')
+  if (edit.iterationPath != null && (!text(edit.iterationPath, 4096) || !edit.iterationPath.trim() || /\p{Cc}/u.test(edit.iterationPath))) throw new Error('Invalid iteration path.')
+  if (edit.state != null && (!text(edit.state, 64) || !/^[\p{L}\p{N} _-]+$/u.test(edit.state))) throw new Error('Invalid state.')
+  if (edit.storyPoints != null && (typeof edit.storyPoints !== 'number' || !Number.isFinite(edit.storyPoints) || edit.storyPoints < 0 || edit.storyPoints > 1000)) throw new Error('Story Points must be a number from 0 to 1,000.')
+  if (edit.priority != null && ![1, 2, 3, 4].includes(edit.priority)) throw new Error('Priority must be 1, 2, 3 or 4.')
+  if (edit.risk != null && !['', '1 - High', '2 - Medium', '3 - Low'].includes(edit.risk)) throw new Error('Risk must be 1 - High, 2 - Medium or 3 - Low.')
+  if (edit.valueArea != null && !['Business', 'Architectural'].includes(edit.valueArea)) throw new Error('Value area must be Business or Architectural.')
+  if (edit.targetDate != null && edit.targetDate !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(edit.targetDate)) throw new Error('Invalid target date.')
+  for (const field of ['originalEstimate', 'completedWork']) if (edit[field] != null && (typeof edit[field] !== 'number' || !Number.isFinite(edit[field]) || edit[field] < 0 || edit[field] > 1000000)) throw new Error('Invalid Original Estimate or Completed Work.')
+  if (edit.tags != null && !text(edit.tags, 100000)) throw new Error('Invalid tags.')
+  const patch = [{ op: 'test', path: '/rev', value: input.rev }]
+  const set = (field, value) => patch.push({ op: 'add', path: `/fields/${field}`, value })
+  if (edit.title != null) set('System.Title', edit.title.trim())
+  if (edit.description != null) set('System.Description', htmlText(edit.description))
+  if (edit.acceptanceCriteria != null) set('Microsoft.VSTS.Common.AcceptanceCriteria', htmlText(edit.acceptanceCriteria))
+  if (edit.assignedTo != null) set('System.AssignedTo', edit.assignedTo.trim().toLowerCase())
+  if (edit.iterationPath != null) set('System.IterationPath', edit.iterationPath.trim())
+  if (edit.state != null) set('System.State', edit.state.trim())
+  if (edit.storyPoints != null) set('Microsoft.VSTS.Scheduling.StoryPoints', edit.storyPoints)
+  if (edit.priority != null) set('Microsoft.VSTS.Common.Priority', edit.priority)
+  if (edit.risk != null) { if (edit.risk) set('Microsoft.VSTS.Common.Risk', edit.risk); else patch.push({ op: 'remove', path: '/fields/Microsoft.VSTS.Common.Risk' }) }
+  if (edit.valueArea != null) set('Microsoft.VSTS.Common.ValueArea', edit.valueArea)
+  if (edit.targetDate != null) { if (edit.targetDate) set('Microsoft.VSTS.Scheduling.TargetDate', `${edit.targetDate}T00:00:00Z`); else patch.push({ op: 'remove', path: '/fields/Microsoft.VSTS.Scheduling.TargetDate' }) }
+  if (edit.originalEstimate != null) set('Microsoft.VSTS.Scheduling.OriginalEstimate', edit.originalEstimate)
+  if (edit.completedWork != null) set('Microsoft.VSTS.Scheduling.CompletedWork', edit.completedWork)
+  if (edit.tags != null) set('System.Tags', edit.tags)
+  return { url: `${projectBase(input)}/_apis/wit/workitems/${input.workItemId}?api-version=${apiVersion(input)}`, options: {
+    method: 'PATCH', redirect: 'error', headers: { ...connection.options.headers, 'Content-Type': 'application/json-patch+json' }, body: JSON.stringify(patch),
+  } }
+}
+// Discussion: read the comments of a work item, or add one (plain text; line breaks become <br>). The Comments API is a
+// preview API with its own fixed version; it is not negotiated.
+const commentsApiVersion = '7.1-preview.4'
+function azureCommentsRequest(input) {
+  if (!input || !['comments', 'add-comment'].includes(input.operation)) throw new Error('Invalid Discussion request.')
+  const connection = azureReadRequest({ ...input, operation: 'areas' })
+  if (!Number.isSafeInteger(input.workItemId) || input.workItemId < 1) throw new Error('Invalid work item.')
+  const adding = input.operation === 'add-comment'
+  if (adding && (typeof input.comment !== 'string' || !input.comment.trim() || input.comment.length > 100000)) throw new Error('Enter a comment (at most 100,000 characters).')
+  return { url: `${projectBase(input)}/_apis/wit/workItems/${input.workItemId}/comments?api-version=${commentsApiVersion}${adding ? '' : '&order=desc&$top=200'}`, fixedVersion: true, options: {
+    method: adding ? 'POST' : 'GET', redirect: 'error', headers: { ...connection.options.headers, 'Content-Type': 'application/json' }, body: adding ? JSON.stringify({ text: htmlText(input.comment.trim()) }) : undefined,
+  } }
+}
+
 // api-version negotiation: explicit version as is; otherwise 7.1, then 6.0 and 5.0 for older Azure DevOps Server.
 const detectedVersions = new Map()
 const isApiVersionError = (text) => /api[- ]?version|version of the api|VssVersionOutOfRange|out of range/i.test(text) && /version/i.test(text)
@@ -133,16 +192,16 @@ const isApiVersionError = (text) => /api[- ]?version|version of the api|VssVersi
 // proxy), which on-prem servers with a company certificate need; tests pass a stub. Redirects are never followed.
 async function requestAzureDevOps(input, fetchImpl = fetch) {
   const creating = input?.operation === 'create-feature' || input?.operation === 'create-child'
-  const updating = input?.operation === 'update-time-writing-effort' || input?.operation === 'update-work-item'
+  const updating = input?.operation === 'update-time-writing-effort' || input?.operation === 'update-work-item' || input?.operation === 'edit-work-item' || input?.operation === 'add-comment'
   const writing = creating || updating
   if (writing) assertWritableBase(input)
-  const request = creating ? azureFeatureRequest(input) : input?.operation === 'update-time-writing-effort' ? azureTimeWritingEffortRequest(input) : input?.operation === 'update-work-item' ? azureWorkItemUpdateRequest(input) : azureReadRequest(input)
+  const request = creating ? azureFeatureRequest(input) : input?.operation === 'update-time-writing-effort' ? azureTimeWritingEffortRequest(input) : input?.operation === 'update-work-item' ? azureWorkItemUpdateRequest(input) : input?.operation === 'edit-work-item' ? azureEditRequest(input) : input?.operation === 'comments' || input?.operation === 'add-comment' ? azureCommentsRequest(input) : azureReadRequest(input)
   const collection = projectBase(input).split('/').slice(0, -1).join('/').toLowerCase()
   const explicit = typeof input.apiVersion === 'string' && apiVersion(input) === input.apiVersion
-  const versions = explicit ? [input.apiVersion] : detectedVersions.has(collection) ? [detectedVersions.get(collection)] : ['7.1', '6.0', '5.0']
+  const versions = request.fixedVersion ? [commentsApiVersion] : explicit ? [input.apiVersion] : detectedVersions.has(collection) ? [detectedVersions.get(collection)] : ['7.1', '6.0', '5.0']
   let response
   for (const [attempt, version] of versions.entries()) {
-    const url = request.url.replace(/api-version=[^&]*/, `api-version=${version}`)
+    const url = request.fixedVersion ? request.url : request.url.replace(/api-version=[^&]*/, `api-version=${version}`)
     try { response = await fetchImpl(url, { ...request.options, redirect: 'manual', signal: AbortSignal.timeout(45000) }) }
     catch (error) {
       const detail = String(error?.cause?.code ?? error?.code ?? error?.message ?? '')
@@ -158,6 +217,7 @@ async function requestAzureDevOps(input, fetchImpl = fetch) {
   }
   if (response.status >= 300 && response.status < 400) throw new Error('Azure DevOps redirected the request (usually to a sign-in page). Check the PAT and that PATs are enabled on this server.')
   if (response.status === 401) throw new Error('PAT rejected or expired. Check Work Items (Read) access.')
+  if (input.operation === 'edit-work-item' && (response.status === 412 || response.status === 409)) throw new Error(`#${input.workItemId} was changed in Azure DevOps since you opened it. Nothing was saved: open it again to see the changes, then edit.`)
   if (response.status === 403) throw new Error(`Access denied by Azure DevOps. Check Work Items (${writing ? 'Read & Write' : 'Read'}) scope and project permissions.`)
   if (writing && (response.status === 400 || response.status === 422)) {
     const detail = await response.json().catch(() => ({}))
@@ -173,4 +233,4 @@ async function requestAzureDevOps(input, fetchImpl = fetch) {
   return response.json()
 }
 
-module.exports = { assertWritableBase, azureReadRequest, azureFeatureRequest, azureTimeWritingEffortRequest, azureWorkItemUpdateRequest, requestAzureDevOps }
+module.exports = { assertWritableBase, azureReadRequest, azureFeatureRequest, azureTimeWritingEffortRequest, azureWorkItemUpdateRequest, azureEditRequest, azureCommentsRequest, requestAzureDevOps }

@@ -300,6 +300,15 @@ Connection settings can store several named ADS configurations. Each configurati
 
 **New User Story.** **＋ User Story** on a Feature row (Backlogs, and Assigned to Me) opens a short form: the title; the Feature it goes under (it can be changed); one row with Assigned to, Sprint, Story Points and Priority (default 2); Description and Acceptance criteria; Risk and Value area (default Business) under **More fields**. The story always takes the Feature's Area Path and starts as New; neither is shown. Save closes the form and creates the story in the background (the top bar shows the result); the story is read back and checked. ＋ Task on a User Story keeps the short form (title, Iteration Path, assignee).
 
+**Edit.** **Edit** on a Feature, User Story or Task row (Backlogs, and Assigned to Me) reads the item fresh from Azure DevOps and opens a short form:
+- **What you can change:** title, Assigned to, State, Iteration (a Feature: a PI; a story or Task: a Sprint), Description and Acceptance criteria.
+- **Per type:** Feature DoD (required) and Target date on a Feature; Story Points, Priority, Risk and Value area on a story; Original Estimate and Completed Work on a Task, with the Monthly Time Writing locks and ad-hoc rule.
+- **Discussion:** the comments and a box to add one.
+- **Locked:** Type, Parent and Area Path never change. The Time Writing story and month Tasks stay at the project root, and a month Task keeps its month in the title.
+- **Save:** only what you changed is sent, in the background. If someone changed the item in Azure DevOps after you opened it, nothing is saved and you are asked to reopen it.
+- **Moving a Feature to another PI:** the form offers to move its open User Stories to a Sprint of that PI.
+- **Formatting:** a changed Description or Acceptance criteria is saved as plain text.
+
 **Column Options** supports visibility, ordering, reset, cancel and apply. Title is required to retain hierarchy controls. Preferences are saved separately in the browser per organization/project/team and do not modify Azure DevOps or central app state. Default columns: Order, ID, Work Item Type, Title, Description, State, Story Points and Actions. Additional columns: Assigned To, Iteration Path, Area Path, Target Date, Closed Date and Tags. Description is displayed as plain text, never injected HTML. Refresh old snapshots once to populate the newly mapped Description and Story Points fields. Empty numeric values are not replaced with invented estimates. The table has a sticky header, horizontal scrolling and 200-row pagination of expanded rows to bound large-list rendering. Backlog levels promote Features, User Stories or Tasks to the top level without changing their source relationships.
 
 Order is a displayed root-row number, not a write to Azure backlog priority.
