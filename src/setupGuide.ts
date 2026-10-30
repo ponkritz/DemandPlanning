@@ -9,13 +9,17 @@ export interface SetupFacts {
   fetched: boolean; sample: boolean
   region?: string; canManage: boolean
   streams: { name: string; connected: boolean }[]
+  // DP's background data sets (Pedestal releases, DHFI documents): the DP views are incomplete without them.
+  dataSets?: { name: string; connected: boolean }[]
 }
 export type StepState = 'done' | 'todo' | 'blocked'
 export interface SetupStep { id: string; title: string; why: string; how: string[]; state: StepState; required: boolean; tab?: SettingsTab; action?: 'fetch' }
 
 export function setupSteps(facts: SetupFacts): SetupStep[] {
   const azureReady = facts.timeWriting && Boolean(facts.email) && facts.pat
-  const connected = facts.streams.filter((stream) => stream.connected).length
+  const views = [...facts.streams, ...(facts.dataSets ?? [])]
+  const connected = views.filter((stream) => stream.connected).length
+  const missing = views.filter((stream) => !stream.connected).map((stream) => stream.name)
   return [
     {
       id: 'git', title: 'Connect the shared Git storage', required: true, tab: 'storage',
@@ -49,9 +53,9 @@ export function setupSteps(facts: SetupFacts): SetupStep[] {
     },
     {
       id: 'streams', title: 'Release streams (on-premises server)', required: false, tab: 'connections',
-      state: facts.streams.length && connected === facts.streams.length ? 'done' : facts.pat ? 'todo' : 'blocked',
-      why: `Release Details, Pulse Check and the Dashboard’s delivery counts read the DP, CP, IOCC, Content and Tool Validations views from the on-premises Azure DevOps Server (${connected} of ${facts.streams.length} ready). Only needed if you look at releases.`,
-      how: ['Settings → Azure DevOps → the on-premises server → paste a PAT created on that server (Work Items: Read). The stream connections come from Git.'],
+      state: views.length && connected === views.length ? 'done' : facts.pat ? 'todo' : 'blocked',
+      why: `Release Details, Pulse Check and the Dashboard’s delivery counts read the DP, CP, IOCC, Content and Tool Validations views from the on-premises Azure DevOps Server; DP also needs its Pedestal releases and DHFI documents (${connected} of ${views.length} ready${missing.length ? `; missing: ${missing.join(', ')}` : ''}). Only needed if you look at releases.`,
+      how: ['Settings → Azure DevOps → the on-premises server → paste a PAT created on that server (Work Items: Read). The stream connections come from Git.', 'Settings → Azure DevOps → Stream mapping: set up any row still marked missing (DP, Pedestal, DHFI) from its pre-filled default.'],
     },
   ]
 }

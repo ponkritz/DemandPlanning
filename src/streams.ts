@@ -49,7 +49,7 @@ export function exportForStream<T extends { name: string; exportFile?: string }>
 export interface DataSetDef { name: string; aliases: string[]; presetKey?: string; presetId?: string }
 export const dataSets: DataSetDef[] = [
   { name: 'Pedestal', aliases: ['pedestal', 'pedastal'], presetKey: 'dhp-on-prem', presetId: 'd382a4ad433a4f09b102f2f3e0e5a870' },
-  { name: 'DHFI', aliases: ['dhfi'] },
+  { name: 'DHFI', aliases: ['dhfi'], presetKey: 'dhfi-approved', presetId: 'f4de17f3cc0ad4d5d0d23493ab5900e5' },
 ]
 export const dataSetNamed = (name: string) => dataSets.find((set) => set.name.toLowerCase() === name.toLowerCase())
 export function namesDataSet(name: string | undefined, set: DataSetDef) { const words = tokens(name); return set.aliases.some((alias) => words.includes(alias)) }
