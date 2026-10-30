@@ -124,6 +124,22 @@ export async function writeTextFile(config: GitConfig, token: string, text: stri
   return { sha: body.content.sha, commitUrl: body.commit?.html_url ?? historyUrl(config) }
 }
 
+// A binary file (the Monthly pack's PowerPoint template): written as base64 like a text file, read raw as bytes.
+export function bytesToBase64(bytes: Uint8Array) { let binary = ''; for (let at = 0; at < bytes.length; at += 0x8000) binary += String.fromCharCode(...bytes.subarray(at, at + 0x8000)); return btoa(binary) }
+export async function writeBinaryFile(config: GitConfig, token: string, bytes: Uint8Array, sha: string | null, message: string, fetchImpl: Fetch = fetch): Promise<{ sha: string; commitUrl: string }> {
+  const response = await fetchImpl(fileUrl(config), { method: 'PUT', headers: { ...headers(token), 'Content-Type': 'application/json' }, body: JSON.stringify({ message: message.trim() || `Update ${config.path}`, content: bytesToBase64(bytes), branch: config.branch, ...(sha ? { sha } : {}) }) })
+  if (!response.ok) throw await failure(response, config, `save ${config.path}`)
+  const body = (await response.json()) as { content?: { sha?: string }; commit?: { html_url?: string } }
+  if (typeof body.content?.sha !== 'string') throw new Error(`GitHub saved ${config.path} but returned no version id.`)
+  return { sha: body.content.sha, commitUrl: body.commit?.html_url ?? historyUrl(config) }
+}
+export async function readBinaryFile(config: GitConfig, token: string, fetchImpl: Fetch = fetch): Promise<Uint8Array | null> {
+  const response = await fetchImpl(`${fileUrl(config)}?ref=${encodeURIComponent(config.branch)}`, { headers: { ...headers(token), Accept: 'application/vnd.github.raw+json' }, cache: 'no-store' })
+  if (response.status === 404) return null
+  if (!response.ok) throw await failure(response, config, `read ${config.path}`)
+  return new Uint8Array(await response.arrayBuffer())
+}
+
 // Deletes a file as one commit; false when it does not exist. The version id is read first, so the delete is of the
 // file as it is now.
 export async function deleteFile(config: GitConfig, token: string, message: string, fetchImpl: Fetch = fetch): Promise<boolean> {

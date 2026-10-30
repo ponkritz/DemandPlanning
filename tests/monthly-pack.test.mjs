@@ -78,3 +78,17 @@ test('the utilisation from person-month rows equals the capacity model pass used
   assert.ok(fromModel.month != null && fromModel.ytd != null && fromModel.qeMonth != null, 'the sample has bookings')
   for (const key of ['month', 'ytd', 'qeMonth']) assert.ok(Math.abs(fromRows[key] - fromModel[key]) <= 0.1, `${key}: ${fromRows[key]} vs ${fromModel[key]}`)
 })
+
+test('every KPI can be overridden for the month; a typed utilisation also replaces it in the generated lines (TC-PCK-05)', () => {
+  const setup = { ...defaultPackSetup, kpis: [...defaultPackSetup.kpis, { id: 'util-month', label: 'Utilization (month)', metric: 'utilization-month' }, { id: 'open', label: 'Open', epicId: 1, metric: 'open' }] }
+  const inputs = { month: '2026-10', setup, items: [], streamsOf: () => [], utilization: { month: 107.5, ytd: 104.1, qeMonth: null }, timeZone: 'UTC' }
+  const calculated = buildMonthlyPack({ ...inputs, notes: emptyNotes('2026-10') })
+  const util = (pack, id) => pack.kpis.find((row) => row.id === id)
+  assert.deepEqual([util(calculated, 'util').value, util(calculated, 'util').overridden, util(calculated, 'util-month').value], ['104.1%', false, '107.5%'])
+  const typed = buildMonthlyPack({ ...inputs, notes: { ...emptyNotes('2026-10'), kpiValues: { util: '95%', 'util-month': ' 90 ', open: '12' } } })
+  assert.deepEqual([util(typed, 'util').value, util(typed, 'util').computed, util(typed, 'util').overridden], ['95%', '104.1%', true], 'Utilization (YTD) overridden, the calculated value kept for reference')
+  assert.deepEqual([util(typed, 'open').value, util(typed, 'open').overridden], ['12', true], 'an Epic KPI too')
+  assert.deepEqual([typed.utilization.month, typed.utilization.ytd], [90, 95])
+  assert.equal(capacityLine(typed), 'Capacity: 90.0% utilization (Oct)')
+  assert.match(packSlides(typed)[1].boxes[0].lines[0], /Actual utilization was 90.0% in October 2026/)
+})

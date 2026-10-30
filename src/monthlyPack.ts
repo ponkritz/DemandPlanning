@@ -1,3 +1,4 @@
+import type { PulseFill } from './pptxTemplate.ts'
 import type { AzureWorkItem } from './domain'
 import { approvalMonthOf } from './releaseSource.ts'
 
@@ -16,7 +17,8 @@ export const kpiMetrics: Record<KpiMetric, string> = {
 }
 export interface PackLine { id: string; label: string; streams: string[]; epicIds: number[] }
 export interface KpiRow { id: string; label: string; epicId?: number; metric: KpiMetric }
-export interface MonthlyPackSetup { schema: 1; lines: PackLine[]; kpis: KpiRow[] }
+// department: the name before "| Performance Pulse update" in the title of the exported template (PCK-08).
+export interface MonthlyPackSetup { schema: 1; lines: PackLine[]; kpis: KpiRow[]; department?: string }
 // The slide text typed per month; blank until typed (suggestions are a later step).
 export const noteKeys = ['summary', 'overallStatus', 'keyTakeaways', 'nextSteps', 'decisionRequired', 'risks', 'mitigation', 'leadershipSupport', 'observations', 'focusAreas', 'supportRequested'] as const
 export type NoteKey = typeof noteKeys[number]
@@ -57,7 +59,8 @@ export function parsePackSetup(input: string): MonthlyPackSetup {
   if (!value || typeof value !== 'object' || value.schema !== 1) throw new Error('monthly-pack-setup.json is not a schema 1 file.')
   const lines = (Array.isArray(value.lines) ? value.lines : []).map((line, index) => ({ id: idOf(line?.id, `line-${index + 1}`), label: text(line?.label, 80).trim() || `Line ${index + 1}`, streams: names(line?.streams), epicIds: ids(line?.epicIds) }))
   const kpis = (Array.isArray(value.kpis) ? value.kpis : []).map((row, index) => ({ id: idOf(row?.id, `kpi-${index + 1}`), label: text(row?.label, 80).trim() || `KPI ${index + 1}`, ...(Number.isInteger(row?.epicId) && row!.epicId! > 0 ? { epicId: row!.epicId } : {}), metric: (row?.metric && row.metric in kpiMetrics ? row.metric : 'manual') as KpiMetric }))
-  return { schema: 1, lines: unique(lines), kpis: unique(kpis) }
+  const department = text((value as { department?: unknown }).department, 80).trim()
+  return { schema: 1, lines: unique(lines), kpis: unique(kpis), ...(department ? { department } : {}) }
 }
 const unique = <T extends { id: string }>(list: T[]) => { const seen = new Set<string>(); return list.filter((entry) => !seen.has(entry.id) && seen.add(entry.id)) }
 export const serializePackSetup = (setup: MonthlyPackSetup) => `${JSON.stringify(setup, null, 2)}\n`
@@ -108,11 +111,17 @@ export function kpiValue(row: KpiRow, items: AzureWorkItem[], month: string, uti
 export interface StreamMonth { name: string; releases: string[]; supported: number }
 export interface PackInputs { month: string; setup: MonthlyPackSetup; notes: MonthlyPackNotes; items: AzureWorkItem[]; streamsOf: (month: string) => StreamMonth[]; utilization: Utilization; timeZone?: string }
 export interface PackLineResult { id: string; label: string; releases: string[]; supported: number; ytd: number; lastYtd: number; change: number | null }
-export interface MonthlyPack { month: string; lines: PackLineResult[]; overall: { supported: number; ytd: number; lastYtd: number; change: number | null }; utilization: Utilization; kpis: { id: string; label: string; value: string; manual: boolean }[]; notes: MonthlyPackNotes }
+export interface MonthlyPack { month: string; lines: PackLineResult[]; overall: { supported: number; ytd: number; lastYtd: number; change: number | null }; utilization: Utilization; kpis: { id: string; label: string; value: string; manual: boolean; computed: string; overridden: boolean }[]; notes: MonthlyPackNotes }
 
 const change = (now: number, before: number) => before > 0 ? Math.round((now - before) / before * 1000) / 10 : null
 export function buildMonthlyPack(input: PackInputs): MonthlyPack {
-  const { month, setup, notes, items, streamsOf, utilization, timeZone } = input
+  const { month, setup, notes, items, streamsOf, timeZone } = input
+  // Every KPI can be overridden for the month: a value typed for a calculated KPI wins over the calculation. A typed
+  // utilisation ("87%", "87.5") also replaces the calculated one in the generated lines (Summary, Capacity, Risks).
+  const typedOf = (row: KpiRow) => notes.kpiValues[row.id]?.trim() || undefined
+  const percent = (text: string | undefined) => { const match = text ? /^\s*(-?\d+(?:\.\d+)?)\s*%?\s*$/.exec(text) : null; return match ? Number(match[1]) : undefined }
+  const typedUtil = (metric: KpiMetric) => percent(setup.kpis.map((row) => row.metric === metric ? typedOf(row) : undefined).find(Boolean))
+  const utilization: Utilization = { ...input.utilization, ...(typedUtil('utilization-month') != null ? { month: typedUtil('utilization-month')! } : {}), ...(typedUtil('utilization-ytd') != null ? { ytd: typedUtil('utilization-ytd')! } : {}) }
   const cache = new Map<string, StreamMonth[]>()
   const monthStreams = (at: string) => { if (!cache.has(at)) cache.set(at, streamsOf(at)); return cache.get(at)! }
   // Epic-mapped lines count the Features closed in the month under those Epics, like a release each.
@@ -126,7 +135,11 @@ export function buildMonthlyPack(input: PackInputs): MonthlyPack {
   })
   const overall = { supported: lines.reduce((sum, line) => sum + line.supported, 0), ytd: lines.reduce((sum, line) => sum + line.ytd, 0), lastYtd: lines.reduce((sum, line) => sum + line.lastYtd, 0), change: null as number | null }
   overall.change = change(overall.ytd, overall.lastYtd)
-  const kpis = setup.kpis.map((row) => ({ id: row.id, label: row.label, value: kpiValue(row, items, month, utilization, notes.kpiValues[row.id], timeZone), manual: row.metric === 'manual' || (row.metric !== 'utilization-month' && row.metric !== 'utilization-ytd' && !row.epicId) }))
+  const kpis = setup.kpis.map((row) => {
+    const manual = row.metric === 'manual' || (row.metric !== 'utilization-month' && row.metric !== 'utilization-ytd' && !row.epicId)
+    const computed = manual ? '' : kpiValue(row, items, month, input.utilization, undefined, timeZone), typed = typedOf(row)
+    return { id: row.id, label: row.label, value: typed ?? computed, manual, computed, overridden: !manual && typed != null }
+  })
   return { month, lines, overall, utilization, kpis, notes }
 }
 
@@ -175,5 +188,17 @@ export function packSlides(pack: MonthlyPack): Slide[] {
       box('kpi', 'KPI Pulse', pack.kpis.map((row) => `${row.label}: ${row.value || '—'}`)),
     ] },
   ]
+}
+// What the exported template is filled with (pptxTemplate.ts): the Performance Pulse boxes and the 2x2 boxes, as the
+// pack shows them. The overall status is the first line typed for it (On Track when blank).
+export function packFill(pack: MonthlyPack, department = ''): PulseFill {
+  const [grid, pulse] = packSlides(pack)
+  const lines = (slide: Slide, key: string) => slide.boxes.find((box) => box.key === key)?.lines ?? []
+  return {
+    department, monthLine: pulse.subtitle, summary: lines(pulse, 'summary'), status: lines(pulse, 'status')[0] ?? 'On Track',
+    takeaways: lines(pulse, 'takeaways'), nextSteps: lines(pulse, 'next'), decision: lines(pulse, 'decision'), risks: lines(pulse, 'risks'), mitigation: lines(pulse, 'mitigation'), leadership: lines(pulse, 'leadership'),
+    kpis: pack.kpis.map((row) => ({ label: row.label, value: row.value || '—' })),
+    twoByTwo: { deliverables: lines(grid, 'deliverables'), observations: lines(grid, 'observations'), focus: lines(grid, 'focus'), support: lines(grid, 'support') },
+  }
 }
 export const slideText = (slide: Slide) => [`${slide.title} — ${slide.subtitle}`, ...slide.boxes.flatMap((box) => ['', box.title, ...box.lines.map((line) => `• ${line}`)])].join('\n')

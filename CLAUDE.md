@@ -33,3 +33,13 @@ pnpm test:e2e   # after build:web, when the UI changed
 - PATs stay in browser / desktop local storage; never in Git, backups or SharePoint. One PAT per server.
 - Writes go to dev.azure.com only; on-premises servers are read-only (web app and desktop proxy).
 - The desktop updater downloads only from the fixed `desktop-latest` release and verifies SHA-256.
+
+## Agent team
+
+Seven Claude Code agents in `.claude/agents/` share the work of a change (see `docs/DEVELOPMENT-PROCESS.md` §4):
+`requirement-gathering` (lead: requirement rows, README, KNOWN-ISSUES, hand-off brief, final checklist), `settings`
+(the app's Settings area), `export` (CSV, backups, Git / SharePoint snapshots, Monthly pack .pptx), `test-protocol`
+(TEST-PLAN, UAT-PLAN, VERIFICATION-PLAN), `automation-testing` (unit and E2E tests, running the checks), `dfmea`
+(DFMEA.md) and `security` (review and SECURITY-ASSESSMENT.md). Start every change with `requirement-gathering`; run the
+specialists its brief names (agents do not start other agents); finish with the lead's checklist. Open questions go to
+the user before any specialist starts.

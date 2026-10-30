@@ -1,13 +1,15 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { AzureWorkItem } from '../domain'
 import type { GitStorage } from '../useGitStorage'
 import type { MonthlyPackStore } from '../useMonthlyPack'
 import { kpiMetrics, type KpiMetric, type KpiRow, type MonthlyPackSetup, type PackLine } from '../monthlyPack'
 import { defaultStreams } from '../streams'
 import { Notice, Panel } from './ui'
+import { checkTemplate, maxTemplateBytes } from '../pptxTemplate'
 
 // Settings → Monthly pack: which streams and Epics feed each slide line, and which Epic (with which metric) each KPI
-// row reads. Shared in Git as monthly-pack-setup.json.
+// row reads. Shared in Git as monthly-pack-setup.json. Also the department name of the exported title and the team's
+// PowerPoint template (PCK-08), kept only in Storage as monthly-pack-template.pptx — never in the app's source.
 const streamNames = defaultStreams.map((stream) => stream.name)
 const newId = (prefix: string, taken: string[]) => { let index = taken.length + 1; while (taken.includes(`${prefix}-${index}`)) index += 1; return `${prefix}-${index}` }
 
@@ -24,6 +26,37 @@ export function MonthlyPackSetupPanel({ pack, git, items }: { pack: MonthlyPackS
   const setKpi = (id: string, patch: Partial<KpiRow>) => setDraft((current) => ({ ...current, kpis: current.kpis.map((row) => row.id === id ? { ...row, ...patch } : row) }))
   const move = <T extends { id: string }>(list: T[], id: string, by: number) => { const at = list.findIndex((entry) => entry.id === id), to = at + by; if (at < 0 || to < 0 || to >= list.length) return list; const next = [...list]; const [entry] = next.splice(at, 1); next.splice(to, 0, entry); return next }
   const epicName = (id: number) => { const epic = epics.find((entry) => entry.id === id); return epic ? `#${epic.id} ${epic.title}` : `#${id}` }
+  // The PowerPoint template in Storage: whether there is one (and its size), upload a new one, or remove it.
+  const [template, setTemplate] = useState<{ state: 'unknown' | 'none' | 'present'; size?: number }>({ state: 'unknown' })
+  const { connected, readPackTemplate } = git
+  useEffect(() => {
+    if (!connected) return
+    let live = true
+    readPackTemplate().then((bytes) => { if (live) setTemplate(bytes ? { state: 'present', size: bytes.length } : { state: 'none' }) }).catch(() => { if (live) setTemplate({ state: 'unknown' }) })
+    return () => { live = false }
+  }, [connected, readPackTemplate])
+  async function uploadTemplate(file: File | undefined) {
+    if (!file) return
+    setBusy(true); setStatus({ tone: 'info', text: 'Checking the template…' })
+    try {
+      if (file.size > maxTemplateBytes) throw new Error(`The template is larger than ${maxTemplateBytes / 1024 / 1024} MB.`)
+      const bytes = new Uint8Array(await file.arrayBuffer())
+      const check = await checkTemplate(bytes)
+      if (check.problems.length) throw new Error(check.problems.join(' '))
+      setStatus({ tone: 'info', text: 'Saving the template to Storage…' })
+      const result = await git.writePackTemplate(bytes, 'Monthly pack template')
+      setTemplate({ state: 'present', size: bytes.length })
+      setStatus({ tone: check.warnings.length ? 'error' : 'success', text: `Template saved to Storage.${check.warnings.length ? ` ${check.warnings.join(' ')} Those boxes stay as in the template.` : ''}`, url: result?.commitUrl })
+    } catch (failure) { setStatus({ tone: 'error', text: failure instanceof Error ? failure.message : String(failure) }) }
+    finally { setBusy(false) }
+  }
+  async function removeTemplate() {
+    if (!window.confirm('Remove the PowerPoint template from Storage? The export then uses the plain layout.')) return
+    setBusy(true)
+    try { await git.writePackTemplate(null, 'Remove Monthly pack template'); setTemplate({ state: 'none' }); setStatus({ tone: 'success', text: 'Template removed; the export uses the plain layout.' }) }
+    catch (failure) { setStatus({ tone: 'error', text: failure instanceof Error ? failure.message : String(failure) }) }
+    finally { setBusy(false) }
+  }
   async function save() {
     setBusy(true); setStatus({ tone: 'info', text: 'Saving to Git…' })
     try { const result = await pack.saveSetup(draft, 'Monthly pack setup'); setStatus({ tone: 'success', text: 'Saved to Git.', url: result.commitUrl }) }
@@ -36,6 +69,14 @@ export function MonthlyPackSetupPanel({ pack, git, items }: { pack: MonthlyPackS
     {!editable && <p className="muted">{git.connected ? 'View only: your Git token can read but not save.' : 'Connect Git storage to change the setup.'}</p>}
     {status && <Notice tone={status.tone === 'error' ? 'warning' : 'info'}><span role="status">{status.text}</span>{status.url && <> <a href={status.url} target="_blank" rel="noreferrer">View commit</a></>}</Notice>}
     <fieldset className="plain-fieldset" disabled={!editable || busy}>
+      <h3>PowerPoint template</h3>
+      <p className="muted">The .pptx the export fills: page 1 the Performance Pulse (Summary), page 2 the 2x2, with the template's own design. It is kept only in Storage ({git.config ? `${git.config.owner}/${git.config.repo}` : 'the data repository'}), never in the app. {template.state === 'present' ? `In Storage (${Math.round((template.size ?? 0) / 1024)} KB).` : template.state === 'none' ? 'None yet: the export uses the plain layout.' : ''}</p>
+      <div className="button-row">
+        <label className="ghost file-button">{template.state === 'present' ? 'Replace template…' : 'Upload template…'}<input type="file" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation" hidden onChange={(event) => { void uploadTemplate(event.target.files?.[0]); event.target.value = '' }} /></label>
+        {template.state === 'present' && <button type="button" className="text-button" onClick={() => void removeTemplate()}>Remove template</button>}
+        {git.packTemplateHistory && template.state === 'present' && <a className="text-button" href={git.packTemplateHistory} target="_blank" rel="noreferrer">History</a>}
+      </div>
+      <label className="pack-department">Department name (title: “… | Performance Pulse update”)<input value={draft.department ?? ''} maxLength={80} placeholder="e.g. I&D Quality" onChange={(event) => setDraft((current) => ({ ...current, department: event.target.value }))} /></label>
       <h3>Slide lines</h3>
       <div className="azure-table"><table className="pack-setup"><thead><tr><th>Line</th><th>Streams</th><th>Epics (Features closed in the month)</th><th /></tr></thead><tbody>
         {draft.lines.map((line) => <tr key={line.id}>
