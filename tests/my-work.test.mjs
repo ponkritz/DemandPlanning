@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { isMine, isPending, matchesWork, myPendingWork, monthTaskCandidates, moveCandidates, assignablePeople } from '../src/myWork.ts'
+import { isMine, isPending, matchesWork, mentions, myPendingWork, monthTaskCandidates, moveCandidates, assignablePeople } from '../src/myWork.ts'
 import { ensureMonthTask, updateAzureWorkItem, workItemUpdatePatch, addChildWorkItem, requestAzure, createUserStory } from '../src/azureDevOps.ts'
 import { createRequire } from 'node:module'
 
@@ -36,6 +36,24 @@ test('month-task candidates: my pending Features or Features holding my pending 
   const done = monthTaskCandidates([...items, item(11, 'Task', 'October 2026 | CP | Care Pathways | v3.1', { parentId: 3, ...ana })], me, 'October 2026', 37778)
   assert.equal(done.find((row) => row.feature.id === 2).status, 'exists')
   assert.equal(monthTaskCandidates([...items, item(12, 'User Story', 'CP | Care Pathways | v3.1 - Time Writing', { parentId: 2 })], me, 'October 2026', 37778).find((row) => row.feature.id === 2).status, 'conflict')
+})
+
+test('shared activities: a Feature owned by someone else is offered when I had a month Task under it or its Description @mentions me (TC-ATM-14)', () => {
+  const shared = [
+    ...items,
+    item(20, 'Feature', 'IOCC | Lab Suite | v1.0', { parentId: 1, ...ben }), item(21, 'User Story', 'IOCC | Lab Suite | v1.0 - Time Writing', { parentId: 20, ...ben }),
+    item(22, 'Task', 'September 2026 | IOCC | Lab Suite | v1.0', { parentId: 21, ...ana, state: 'Closed' }),
+    item(23, 'Feature', 'CT | Scanner | v2', { parentId: 1, ...ben, description: '<div>Contributors: <a href="#" data-vss-mention="version:2.0,abc">@Ana Costa</a></div>' }),
+    item(24, 'Feature', 'CT | Scanner | v3', { parentId: 1, ...ben, description: '<div>@Ana Costanza reviews</div>' }),
+    item(25, 'Feature', 'CT | Scanner | v1', { parentId: 1, ...ben, state: 'Closed', description: '@Ana Costa' }),
+    item(26, 'Feature', 'Ana Costa - Absence 2', { parentId: 37778, ...ben, description: '@Ana Costa' }),
+  ]
+  const rows = monthTaskCandidates(shared, me, 'October 2026', 37778)
+  assert.deepEqual(rows.map((row) => [row.feature.id, row.status, row.shared?.reason ?? '']), [[2, 'needs-task', ''], [23, 'needs-story', 'mention'], [6, 'needs-story', ''], [20, 'needs-task', 'earlier-task']], 'another name starting the same, a closed Feature and the absence Epic are not offered')
+  assert.equal(rows.find((row) => row.feature.id === 20).shared.owner, 'Ben Okafor')
+  assert.equal(rows.find((row) => row.feature.id === 20).storyTitle, 'IOCC | Lab Suite | v1.0 - Time Writing', 'my Task goes under the existing Time Writing story')
+  assert.equal(mentions('<p>Thanks&nbsp;@ana costa.</p>', me), true, 'letter case and entities')
+  assert.equal(mentions('@Ana Costa', { email: 'ana@x.com' }), false, 'no name, no mention')
 })
 
 test('move candidates: only my pending User Stories in a past Sprint; current, future and undated left alone', () => {

@@ -1,9 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { defaultStreams, profileForStream, streamOfProfile, exportForStream, sameStream } from '../src/streams.ts'
-import { dpRelease, ioccRelease, releaseFor, toolRelease } from '../src/releasePath.ts'
+import { assetRelease, dpRelease, ioccRelease, releaseFor, toolRelease } from '../src/releasePath.ts'
 import { ioccDocumentOf, ioccMonthCounts, ioccReleaseOf } from '../src/ioccMilestones.ts'
-import { matchScore, releaseRegister, normalizeReleaseSourceSettings, releaseFeatureTitle } from '../src/releaseSource.ts'
+import { matchScore, releaseRegister, normalizeReleaseSourceSettings, releaseFeatureTitle, releaseOnlyTitle } from '../src/releaseSource.ts'
 import { defaultStreamReleases, streamCounts } from '../src/releaseOverview.ts'
 
 const doc = (id, areaPath, iterationPath, title = `Doc ${id}`, approvalDate = '2026-10-05T10:00:00Z') => ({ key: `o/p/${id}`, id, title, workItemType: 'Document', state: 'Approved', assignedTo: '', areaPath, iterationPath, tags: '', url: '', organization: 'o', project: 'p', syncedAt: '', approvalDate })
@@ -107,4 +107,31 @@ test('IOCC: Completed = Release Notes or Verification Report signed, Supported =
   assert.deepEqual(names(october.supported), ['IOCC Mobile 2.3.1 (Mobile) 2', 'IOCC Mobile 2.4 (Mobile) 1', 'Core Gateway 5.0 (Core) 1'], 'supported: the completed releases and the release plans signed in the month')
   assert.equal(october.documents.length, 4)
   assert.deepEqual(names(ioccMonthCounts(items, '2026-09', 'UTC').supported), ['Core Gateway 5.1 (Core) 1'])
+})
+
+test('CP: the release from the asset Title "[Release name] [Release No] [Asset name]", each release once; fuzzy QMS-0025 match (TC-QV-24)', () => {
+  const asset = (title, areaPath = 'DHP\\CP', iterationPath = 'DHP') => { const found = assetRelease(doc(9, areaPath, iterationPath, title)); return found ? `${found.name}|${found.release}` : undefined }
+  assert.equal(asset('Care Pathways 3.1 Test Report'), 'Care Pathways|3.1')
+  assert.equal(asset('Care Pathways v3.1 - SRS'), 'Care Pathways|3.1', 'v in front; any delimiter')
+  assert.equal(asset('CareLink_R3.2_Risk Analysis'), 'CareLink|3.2', 'R in front, underscores')
+  assert.equal(asset('Patient Hub Rel 4.0: Release Notes'), 'Patient Hub|4.0')
+  assert.equal(asset('Eclipse v5 Labeling'), 'Eclipse|5', 'a whole number counts when written with v / R / Rel')
+  assert.equal(asset('Server 3.1 Test'), 'Server|3.1', 'a name ending in r keeps it')
+  assert.equal(asset('Quality Manual'), undefined, 'no version and no release path: no release')
+  assert.equal(asset('Quality Manual', 'DHP\\Care Pathways', 'DHP\\Release 3.1'), 'Care Pathways|3.1', 'no version in the Title: the path rule')
+  assert.equal(releaseFor(doc(9, 'DHP', 'DHP', 'Care Pathways 3.1 Test Report'), 'asset').name, 'Care Pathways')
+  const cp = defaultStreams.find((stream) => stream.name === 'CP')
+  assert.deepEqual([cp.rule, cp.fuzzy], ['asset', true])
+  // Three assets of 3.1 (3.1.0 is the same release) and one of 3.2: two releases; 3.1 matched to its Feature, 3.2 not.
+  const items = [doc(1, 'DHP', 'DHP', 'Care Pathways 3.1 Test Report'), doc(2, 'DHP', 'DHP', 'Care Pathways 3.1.0 SRS'), doc(3, 'DHP', 'DHP', 'Care Pathways v3.1 Risk Analysis'), doc(4, 'DHP', 'DHP', 'Care Pathways 3.2 Test Plan')]
+  const register = releaseRegister(items, [feature(70, 'CP | Care Pathways | v3.1')], { rule: cp.rule, fuzzy: cp.fuzzy, threshold: 80 })
+  assert.deepEqual(register.map((entry) => [entry.name, entry.release, entry.documents, entry.features.map((item) => item.id)]), [['Care Pathways', '3.2', 1, []], ['Care Pathways', '3.1', 3, [70]]])
+  assert.equal(releaseOnlyTitle('Care Pathways', '3.2'), 'Care Pathways | v3.2', 'CP Create Feature title: the release name and number only')
+  assert.equal(releaseOnlyTitle('Care Pathways', ''), 'Care Pathways')
+  const created = releaseRegister(items, [feature(71, releaseOnlyTitle('Care Pathways', '3.2'))], { rule: cp.rule, fuzzy: cp.fuzzy, threshold: 80 })
+  assert.deepEqual(created.find((entry) => entry.release === '3.2').features.map((item) => item.id), [71], 'a Feature created with that title is found')
+  // Pulse Check: CP's releases of the month, read from the asset Titles.
+  const state = { azureSources: [{ connectionId: 'cp', name: 'cp', role: 'reference', organization: 'o', project: 'p', query: 'q', fetchedAt: '2026-10-20T00:00:00Z', items }] }
+  const streams = defaultStreamReleases(state, [{ id: 'cp', reason: 'CP', role: 'reference' }], '2026-10', 'UTC')
+  assert.deepEqual(streams.find((stream) => stream.name === 'CP').releases.map((entry) => [`${entry.name} ${entry.release}`, entry.documents]), [['Care Pathways 3.2', 1], ['Care Pathways 3.1', 3]])
 })

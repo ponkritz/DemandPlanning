@@ -608,6 +608,10 @@ Cases marked **UAT** are also run in acceptance testing.
 - Steps: Bulk actions → Create month tasks with a Feature whose Target date is in January 2027 (month October 2026); in the confirmation tick it, enter 20 h; Create tasks. Run it again.
 - Expected: Tasks for October, November, December 2026 and January 2027, each with Original Estimate 20 h (October without hours if planning had locked); the result names the later months; the second run creates nothing.
 
+**TC-ATM-14 Shared activities: month Tasks on Features owned by someone else** — Req ATM-22 — L1 `my-work.test.mjs` ("shared activities: a Feature owned by someone else is offered when I had a month Task under it or its Description @mentions me (TC-ATM-14)"); browser check:
+- Steps: as Person 2, with a pending Feature assigned to Person 1 whose Description @mentions Person 2, and another where Person 2 had last month's Task; open Assigned to Me, then Bulk actions → Create month tasks.
+- Expected: Assigned to Me shows the notice naming both Features; Bulk actions lists them with "Shared · owner Person 1", ticked; Create tasks adds Person 2's month Task under each Feature's Time Writing story.
+
 **TC-ATM-03 Close an item** — Req ATM-06 — **UAT**
 - Steps:
   1. On a New User Story press Set User Story to Active, then Close User Story; on a New Feature press Set Feature to Active, then Close Feature. A Resolved story or Feature shows "Set to Active first".
@@ -774,7 +778,7 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-QV-13 View notes behind Info** — Req QV-28 — browser check with Azure DevOps mocked (DP view, October, a Git save note): no info banners above the counts; the ⓘ Info next to "DP" lists "Month filter: by DDT Date in your time zone." and the legend "DT = Design Transfer (DDT) · SFV = … · PRD = … · RPE = …"; a fetch error still shows as a banner; no page errors.
 
-**TC-QV-14 DP rows matched to the QMS-0025 board** — Req QV-29 — L1 `dp-board-match.test.mjs` ("DP row → QMS-0025: SourceProgram + Title, or Title alone when the board title has no SourceProgram"; "name and version must both match: another version or none on the board stays below 80%"; "no match at 80%: the closest item is kept as a hint; nothing in common is no match"; "a new Feature title maps back when it holds the Title; the service part drops the version"); browser check with Azure DevOps mocked (QMS-0025 board with a Feature and a User Story naming one DP row's Title, one DP row without a match): the matched row shows "Feature id n%" and "Story id n%" as links; the other shows "no match" and Create Feature, whose opens the default Create Feature form (TC-QV-16); the CSV holds the "QMS-0025 match" column; no page errors. **UAT**
+**TC-QV-14 DP rows matched to the QMS-0025 board** — Req QV-29 — L1 `dp-board-match.test.mjs` ("DP row → QMS-0025: SourceProgram + Title, or Title alone when the board title has no SourceProgram"; "name and version must both match: another version or none on the board stays below 80%"; "no match at 80%: the closest item is kept as a hint; nothing in common is no match"; "a new Feature title maps back when it holds the Title; the service part drops the version"; "a Title unlike the PsName: the search combines PsName and Release, so the Feature Create Feature made is found"); browser check with Azure DevOps mocked (QMS-0025 board with a Feature and a User Story naming one DP row's Title, one DP row without a match): the matched row shows "Feature id n%" and "Story id n%" as links; the other shows "no match" and Create Feature, whose opens the default Create Feature form (TC-QV-16); the CSV holds the "QMS-0025 match" column; no page errors. **UAT**
 
 **TC-QV-15 Rearrange the DP columns** — Req QV-30 — L1 `query-view.test.mjs` ("column order: saved order first, new query columns keep their place; move by drag or one step"); browser check with Azure DevOps mocked (DP view): dragging the Title heading onto the first heading makes Title the first column; dragging "QMS-0025 match" onto the second heading puts it second with its cells; Columns → "Move ID right" moves ID one step; the order is kept after a reload; "Query order" restores the query's order with QMS-0025 match last; no page errors.
 
@@ -799,6 +803,10 @@ Cases marked **UAT** are also run in acceptance testing.
 **TC-QV-21 IOCC Completed and Supported Releases** — Req QV-36 — L1 `streams.test.mjs` ("IOCC: Completed = Release Notes or Verification Report signed, Supported = also Release Plan; each release once (QV-36)"; "Pulse Check streams: the five Azure streams in order …"); browser check with the IOCC connection fetched: Pulse Check → Current month releases shows IOCC's quadrant as completed / supported, the Releases line lists each completed release once with its Type of Release, and the Supported summary lists the supported releases (release plans included); the Dashboard delivery table shows the same counts.
 
 **TC-QV-22 IOCC grouping** — Req QV-37 — L1 `nested-groups.test.mjs` ("nested groups: type, then name, then version; blank last; keys unique per path (QV-37)"), `streams.test.mjs` (the IOCC name without the document words); browser check with the IOCC connection fetched: Release Details → IOCC opens grouped by Type of Release with each group's release count; add then by Name and then by Release (nested, indented); collapse one group, then Collapse all and Expand all; No grouping shows the flat list; a release's notes, report and plan are one row with their documents under it.
+
+**TC-QV-23 Windchill releases matched to the QMS-0025 board** — Req QV-39 — L1 `dp-board-match.test.mjs` ("Windchill release (S&S IT) → QMS-0025: the same search with the release name and number; Create Feature title (TC-QV-23)"); browser check with the QMS-0025 board loaded (one Feature "Remote Diagnostics v1.6") and an S&S IT export holding Remote Diagnostics 1.6 and another release: the first row shows "Feature id n%" as a link; the other shows "no match" or the closest item and Create Feature, which opens the default New Feature form titled "S&S IT | name | vrelease"; sorting by the column and the releases CSV carry the match; no page errors. **UAT**
+
+**TC-QV-24 CP releases from the asset Titles** — Req QV-40 — L1 `streams.test.mjs` ("CP: the release from the asset Title "[Release name] [Release No] [Asset name]", each release once; fuzzy QMS-0025 match (TC-QV-24)"); browser check with a CP query holding three assets of one release ("Care Pathways 3.1 Test Report", "Care Pathways 3.1.0 SRS", "Care Pathways v3.1 Risk Analysis") and one of another (3.2), and a QMS-0025 Feature "CP | Care Pathways | v3.1": Release Details → CP lists two releases (3 and 1 assets), 3.1 with its Feature and %, 3.2 with Create Feature opening the New Feature form titled "Care Pathways | v3.2" (release name and number only) under the CP Epic, and found after it is created; Pulse Check's Releases and Supported summary show "CP [2]"; no page errors. **UAT**
 
 **TC-CON-42 Auto-fit tables and Wrap text** — Req QV-38 — E2E `documents-and-data.e2e.mjs` ("TC-CON-42": a Windchill export's Releases table starts one line per cell; dragging the first heading's edge 200px to the right widens that column and the table by about 200px while the other columns keep their width; Wrap text on makes cells wrap (pre-wrap), off back to one line); browser check: the same on Release Details (query table and IOCC releases) and on QE Mapping, the choice remembered per table after a reload.
 
@@ -1336,6 +1344,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | ATM-19 | TC-ATM-11 |
 | ATM-20 | TC-ATM-12 |
 | ATM-21 | TC-ATM-13 |
+| ATM-22 | TC-ATM-14 |
 | BKL-01…03, BKL-12 | TC-BKL-01 |
 | BKL-04…09, BKL-11 | TC-BKL-02 |
 | BKL-10 | TC-BKL-03, TC-ATM-11 |
@@ -1368,6 +1377,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | QV-35 | TC-QV-20 |
 | QV-36 | TC-QV-21 |
 | QV-37 | TC-QV-22 |
+| QV-39 | TC-QV-23 |
+| QV-40 | TC-QV-24 |
 | QV-38 | TC-CON-42 |
 | OVR-01…08 | retired (TC-OVR-01…03 retired) |
 | OV-11 | TC-OV-11 |
@@ -1458,7 +1469,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | Use case | Test cases |
 |---|---|
 | UC-01 | TC-NAV-01…06, TC-NAV-33, TC-UI-01, TC-UI-02, TC-UI-03, TC-CON-36, TC-CON-38 |
-| UC-02 | TC-CON-01…07, TC-CON-17…19, TC-CON-44, TC-CON-28, TC-NAV-02, TC-NAV-34, TC-QV-14, TC-QV-16 |
+| UC-02 | TC-CON-01…07, TC-CON-17…19, TC-CON-44, TC-CON-28, TC-NAV-02, TC-NAV-34, TC-QV-14, TC-QV-16, TC-QV-23, TC-QV-24 |
 | UC-03 | TC-CON-03, TC-FET-01…06 |
 | UC-04 | TC-TWN-01, TC-TWN-02, TC-MON-01…06 |
 | UC-05 | TC-MON-07 |

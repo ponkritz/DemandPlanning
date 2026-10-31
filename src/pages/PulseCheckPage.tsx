@@ -46,8 +46,9 @@ export function PulseCheckPage({ month, azure, store, my, navigate, windchill, o
   // page: Releases shows last month, Current month releases the header month), in the default stream order.
   const supportedLines = (shown: ReleaseStream[], at: string): SupportedLine[] => [
     ...shown.filter((stream) => stream.supportedEntries).map((stream) => ({ name: stream.name, releases: stream.supportedEntries!.map((entry) => entry.label) })),
-    // Tool Validations: the unique tools with a document in the tab's month (validated or supported), one entry per tool.
-    ...shown.filter((stream) => defaultStreams.find((def) => def.name === stream.name)?.rule === 'tool').map((stream) => ({ name: stream.name, releases: stream.releases.map((entry) => [entry.name, entry.release].filter(Boolean).join(' ')) })),
+    // Tool Validations: the unique tools with a document in the tab's month (validated or supported), one entry per tool;
+    // CP: the unique releases with an asset in the tab's month, read from the asset Titles.
+    ...shown.filter((stream) => { const rule = defaultStreams.find((def) => def.name === stream.name)?.rule; return rule === 'tool' || rule === 'asset' }).map((stream) => ({ name: stream.name, releases: stream.releases.map((entry) => [entry.name, entry.release].filter(Boolean).join(' ')) })),
     ...exports.map(({ stream, view }) => { const source = view ? windchill.sources.find((entry) => entry.viewId === view.id) : undefined; return { name: stream.name, releases: source ? windchillSupported(source.rows, source.columns.length ? source.columns : view?.columns ?? [], at) : [] } }),
   ]
   const releases = (shown: ReleaseStream[], at: string) => <>

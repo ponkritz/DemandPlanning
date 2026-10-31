@@ -154,6 +154,8 @@ export function tracksRelease(title: string, name: string, release: string) {
   return [...title.matchAll(versionToken)].some((match) => normalizeVersion(match[2]) === wanted)
 }
 // The Feature title the app creates for a release, in the exact form tracksRelease maps back.
+// CP's Create Feature title holds only the release name and number: "Care Pathways | v3.2" (QV-40).
+export const releaseOnlyTitle = (name: string, release: string) => release.trim() ? `${name.trim()} | v${release.trim()}` : name.trim()
 export const releaseFeatureTitle = (stream: string, name: string, release: string) => release.trim() ? `${stream.trim()} | ${name.trim()} | v${release.trim()}` : `${stream.trim()} | ${name.trim()}`
 
 // Fuzzy match of a QMS-0025 Feature title to a release, 0–100. Name score: 1 when the name is found whole in the title

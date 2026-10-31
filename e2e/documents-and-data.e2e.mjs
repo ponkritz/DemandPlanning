@@ -4,7 +4,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { fixture, navigate, openPage, startApp, text } from './helpers.mjs'
 
 // Documentation, Windchill export and data-safety scenarios of the UAT (TC-DOC-01, TC-DOC-02, TC-CON-39, TC-CON-37,
-// TC-STO-04, TC-INS-01), automated against the built web app.
+// TC-STO-04, TC-INS-01, TC-QV-23), automated against the built web app.
 let app
 before(async () => { app = await startApp() })
 after(async () => { await app.stop() })
@@ -142,7 +142,30 @@ test('TC-CON-41: the export page follows the header month, sorts by any column a
   assert.deepEqual((await names())[0], 'Service1_rel1_Service2_rel2', 'Z→A')
   await releases.getByRole('button', { name: /^Latest Last Modified/ }).click()
   assert.deepEqual((await names())[0], 'Service1_rel1_Service2_rel2', 'newest first again (2026-10-06)')
-  assert.equal(await releases.locator('th [role=separator]').count(), 4, 'every heading has a resize handle')
+  assert.equal(await releases.locator('th [role=separator]').count(), 5, 'every heading (QMS-0025 match included) has a resize handle')
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
+test('TC-QV-23: the export\'s releases have a QMS-0025 match column with Create Feature, sortable, as on the DP table', async () => {
+  const { page, context, errors } = await openPage(app)
+  await navigate(page, 'Import Windchill export')
+  await page.locator('input[type=file]').first().setInputFiles(fixture('windchill-export.csv'))
+  const releases = page.locator('.panel').filter({ has: page.locator('h2, h3', { hasText: /^Releases/ }) }).first()
+  await releases.waitFor()
+  await releases.getByLabel('Show').selectOption('all')
+  assert.equal(await releases.getByRole('button', { name: /^QMS-0025 match/ }).count(), 1, 'the column heading sorts')
+  const rows = releases.locator('table').first().locator('tbody > tr')
+  assert.equal(await rows.count(), 5)
+  // Without the QMS-0025 board loaded there is nothing to match: each row says so and offers Create Feature, disabled
+  // with the reason (no Time Writing connection, or no Epic loaded to put the Feature under).
+  assert.equal(await releases.locator('.board-match', { hasText: 'board not loaded' }).count(), 5)
+  const create = releases.getByRole('button', { name: 'Create Feature' })
+  assert.equal(await create.count(), 5)
+  assert.equal(await create.first().isDisabled(), true)
+  assert.match(await releases.locator('.board-match small.muted').nth(1).innerText(), /Connect the QMS-0025 Time Writing connection first|Load the QMS-0025 board first/)
+  await releases.getByRole('button', { name: /^QMS-0025 match/ }).click()
+  assert.equal(await rows.count(), 5, 'sorting by the match keeps every release')
   assert.deepEqual(errors, [])
   await context.close()
 })

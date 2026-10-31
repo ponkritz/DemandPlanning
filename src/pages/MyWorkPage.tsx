@@ -48,6 +48,7 @@ export function MyWorkPage({ azure, store, my, onOpenBulk, assign, featureSetup 
   const counts = Object.fromEntries(workTypes.map((type) => [type, pending.filter(({ item }) => item.workItemType === type).length])) as Record<string, number>
   const candidates = my.known ? monthTaskCandidates(azure.items, my.me, month, absenceEpicId) : []
   const missing = candidates.filter((row) => row.status === 'needs-task' || row.status === 'needs-story')
+  const sharedMissing = missing.filter((row) => row.shared)
   const note = (entry: Log) => setLog((current) => [entry, ...current].slice(0, 8))
   const noteFollowUp = (result: FollowUpResult, apply: (closed: AzureWorkItem[]) => void) => {
     if (result.closed.length) { apply(result.closed); note({ tone: 'success', text: `Also closed ${result.closed.map((entry) => `#${entry.id}`).join(', ')}.` }) }
@@ -83,6 +84,7 @@ export function MyWorkPage({ azure, store, my, onOpenBulk, assign, featureSetup 
           <Metric label="Tasks" value={counts.Task ?? 0} hint="Including Time Writing tasks" />
           <Metric label={`${month} tasks missing`} value={missing.length} hint={<>{candidates.length - missing.length} of {candidates.length} Features covered · <button type="button" className="text-button" onClick={onOpenBulk}>Bulk actions →</button></>} tone={missing.length ? 'negative' : undefined} />
         </Metrics>
+        {sharedMissing.length > 0 && <Notice tone="info">You work on {sharedMissing.length} shared Feature{sharedMissing.length === 1 ? '' : 's'} owned by someone else without your {month} task: {sharedMissing.map((row) => `${row.feature.id} (owner ${row.shared!.owner})`).join(', ')}. <button type="button" className="text-button" onClick={onOpenBulk}>Add in Bulk actions →</button></Notice>}
         {blocked && <Notice tone="warning">{blocked}</Notice>}
         {log.map((entry, index) => <Notice key={index} tone={entry.tone}>{entry.text}</Notice>)}
         <TablePanel title="Pending work" info={<ul>
