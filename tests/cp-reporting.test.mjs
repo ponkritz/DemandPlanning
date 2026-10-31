@@ -110,3 +110,18 @@ test('CP Create Feature title: the release name and number only, found again by 
   const match = boardMatch({ names: ['Cupid', 'Release 26.6 ClinicalPlatform'], versions: ['26.6'], created: releaseOnlyTitle('Cupid', '26.6') }, board)
   assert.deepEqual([match.feature.item.id, match.feature.score], [1, 100], 'the created Feature is found; the 25.9 one is another release')
 })
+
+test('the CP menu entry: its tree-query connection, listed even when hidden from the menu (TC-QV-25)', async () => {
+  const { defaultStreams, profileForStream, profilesForStream } = await import('../src/streams.ts')
+  const { backlogViews, otherMenuViews } = await import('../src/backlogViews.ts')
+  const cp = defaultStreams.find((stream) => stream.rule === 'cp')
+  const releases = { id: 'cpr', reason: 'CP Releases', role: 'reference', query: "SELECT [System.Id] FROM WorkItems WHERE [System.WorkItemType] = 'Release'", showInMenu: true }
+  const tree = { id: 'cpt', reason: 'CP_Release_Folder', viewName: 'CP [Release Folder]', role: 'reference', query: "SELECT [System.Id] FROM WorkItemLinks WHERE [Source].[System.Id] > 0 MODE (Recursive)", showInMenu: false }
+  const profiles = [releases, tree, { id: 'tw', reason: 'QMS-0025', role: 'time-tracking' }]
+  assert.equal(profileForStream(cp, profiles).id, 'cpt', 'the tree query, not the first CP connection')
+  assert.deepEqual(profilesForStream(cp, profiles).map((profile) => profile.id), ['cpr', 'cpt'])
+  const views = backlogViews(profiles, 'tw')
+  assert.ok(views.some((view) => view.id === 'cpt'), 'the CP tree is listed although Show in menu is off')
+  assert.deepEqual(otherMenuViews(views, profiles, []).azure.map((view) => view.id), ['cpr'], 'the names connection stays under Other views (it is shown in the menu)')
+  assert.equal(profileForStream(cp, [releases]).id, 'cpr', 'without a tree query, the first CP connection')
+})

@@ -61,8 +61,9 @@ function ioccStream(state: Pick<AppState, 'azureSources' | 'releaseSource'>, pro
 // shared containers apart. Another CP connection (e.g. "CP Releases") gives the release names.
 export function cpReportFor(state: Pick<AppState, 'azureSources' | 'releaseSource'>, profiles: AzureConnectionProfileSummary[], month: string, timeZone?: string) {
   const stream = defaultStreams.find((entry) => entry.rule === 'cp')!
-  const [tree, ...others] = profilesForStream(stream, profiles)
+  const tree = profileForStream(stream, profiles)
   if (!tree) return undefined
+  const others = profilesForStream(stream, profiles).filter((profile) => profile.id !== tree.id)
   const releaseConnections = profiles.filter((profile) => profile.role === 'release-source').length
   const source = viewSource(state, tree.id, tree.role, tree.query, releaseConnections)
   const enrichment = others.map((profile) => viewSource(state, profile.id, profile.role, profile.query, releaseConnections)).find((entry) => entry && entry !== source)

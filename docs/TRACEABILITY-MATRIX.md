@@ -357,7 +357,7 @@ Ver. = verification method (T test, D demonstration, I inspection, A analysis); 
 | QV-38 | SR-08 | UR-06 | T | S | TC-CON-42 | — | — | — |
 | QV-39 | SR-08 | UR-06 | T | M | TC-QV-23 | 11 | `dp-board-match.test.mjs` | — |
 | QV-40 *(retired)* | SR-08 | UR-06 | T | M | TC-QV-24 | — | `streams.test.mjs` | — |
-| QV-41 | SR-08 | UR-06 | T | M | TC-QV-25 | 11 | `cp-reporting.test.mjs` | — |
+| QV-41 | SR-08 | UR-06 | T | M | TC-QV-25 | 11 | `cp-reporting.test.mjs` | KB-17 |
 | QV-42 | SR-08 | UR-06 | T | M | TC-QV-25 | 11 | `cp-reporting.test.mjs` | — |
 | QV-43 | SR-08 | UR-06 | T | M | TC-QV-25 | 11 | `cp-reporting.test.mjs` | — |
 | QV-44 | SR-08 | UR-06 | T | M | TC-QV-25 | 11 | `cp-reporting.test.mjs` | — |
