@@ -210,6 +210,11 @@ test('desktop bridge constrains credentials to Azure DevOps and rejects writes a
   assert.throws(() => azureReadRequest({ ...config, pat, operation: 'delete' }))
   assert.throws(() => azureReadRequest({ ...config, pat, operation: 'items', ids: Array(201).fill(1) }))
   assert.throws(() => azureReadRequest({ ...config, pat, operation: 'query', query: 'DELETE FROM WorkItems' }))
+  // Tree and direct-links queries (TC-CON-46): read-only WorkItemLinks, up to 20,000 links in one call; ASOF refused.
+  const links = azureReadRequest({ ...config, pat, operation: 'query', query: "SELECT [System.Id] FROM WorkItemLinks WHERE [Source].[System.Id] > 0 MODE (Recursive)" })
+  assert.match(links.url, /_apis\/wit\/wiql\?api-version=7\.1&\$top=20000$/)
+  assert.match(azureReadRequest({ ...config, pat, operation: 'query', query: 'SELECT [System.Id] FROM WorkItems WHERE [System.Id] > 0' }).url, /\$top=1000$/)
+  assert.throws(() => azureReadRequest({ ...config, pat, operation: 'query', query: "SELECT [System.Id] FROM WorkItemLinks WHERE [Source].[System.Id] > 0 ASOF '2026-01-01' MODE (Recursive)" }), /Invalid read query/)
 })
 
 const feature = { parentId: 10, title: 'Example | Service | v1.0', description: 'Feature DoD: Example <text>\nNext line', acceptanceCriteria: 'Meets example criteria', assignedTo: 'example@example.invalid', targetDate: '2026-10-30' }

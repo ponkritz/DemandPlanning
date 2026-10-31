@@ -43,12 +43,13 @@ export interface QueryLayout { columns: string[]; orderBy: QueryOrder[]; unresol
 export function queryLayout(wiql?: string, names: Record<string, string> = {}): QueryLayout {
   const text = (wiql ?? '').replace(invisible, '').replace(/\s+/g, ' ').trim()
   const resolve = fieldResolver(names)
-  const select = /^SELECT\s+(.+?)\s+FROM\s+WorkItems\b/i.exec(text)?.[1] ?? ''
+  const select = /^SELECT\s+(.+?)\s+FROM\s+WorkItem(?:s|Links)\b/i.exec(text)?.[1] ?? ''
   const entries = splitList(select)
   const unresolved = entries.filter((part) => !resolve(part)).map(entryText)
   const selected = [...new Set(entries.map(resolve).filter((ref): ref is string => Boolean(ref)))]
   const columns = selected.length > 1 || (selected.length === 1 && selected[0] !== 'System.Id') ? selected : defaultViewColumns
-  const order = /\sORDER\s+BY\s+(.+)$/i.exec(text)?.[1] ?? ''
+  // A tree / links query ends with MODE (…) after its ORDER BY.
+  const order = /\sORDER\s+BY\s+(.+?)(?:\s+MODE\s*\([^)]*\))?$/i.exec(text)?.[1] ?? ''
   const orderBy = splitList(order).flatMap((part) => { const ref = resolve(part); return ref ? [{ ref, desc: /\bDESC$/i.test(part) }] : [] })
   return { columns, orderBy, unresolved }
 }

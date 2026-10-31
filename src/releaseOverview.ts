@@ -1,7 +1,8 @@
 import type { AppState } from './domain'
 import type { AzureConnectionProfileSummary } from './azureCredentials.ts'
 import { releaseFor, releaseOf } from './releasePath.ts'
-import { defaultStreams, profileForStream, streamOfProfile, type ReleaseRule } from './streams.ts'
+import { defaultStreams, profileForStream, profilesForStream, streamOfProfile, type ReleaseRule } from './streams.ts'
+import { cpMonthReport, cpNameIndex, cpSignatures } from './cpReporting.ts'
 import { releaseRegister, viewMonthOf } from './releaseSource.ts'
 import { viewSource } from './viewSources.ts'
 import { dpMilestoneLabel, dpMonthCounts, type SupportedRelease } from './dpMilestones.ts'
@@ -55,6 +56,32 @@ function ioccStream(state: Pick<AppState, 'azureSources' | 'releaseSource'>, pro
   return { id: profile.id, name: 'IOCC', fetchedAt: source?.fetchedAt ?? '', releases, documents: counts.documents.length, titles, supported: counts.supported.length, supportedEntries: counts.supported.map((entry) => ({ key: entry.key, label: label(entry) })) }
 }
 
+// CP from its release-folder tree (cpReporting): Completed Releases = main Release Notes signed by QA/QE in the month,
+// Supported Releases = any QA/QE-signed document under the release in the month — each Release container once,
+// shared containers apart. Another CP connection (e.g. "CP Releases") gives the release names.
+export function cpReportFor(state: Pick<AppState, 'azureSources' | 'releaseSource'>, profiles: AzureConnectionProfileSummary[], month: string, timeZone?: string) {
+  const stream = defaultStreams.find((entry) => entry.rule === 'cp')!
+  const [tree, ...others] = profilesForStream(stream, profiles)
+  if (!tree) return undefined
+  const releaseConnections = profiles.filter((profile) => profile.role === 'release-source').length
+  const source = viewSource(state, tree.id, tree.role, tree.query, releaseConnections)
+  const enrichment = others.map((profile) => viewSource(state, profile.id, profile.role, profile.query, releaseConnections)).find((entry) => entry && entry !== source)
+  const report = cpMonthReport(cpSignatures(source?.items ?? [], source && 'columns' in source ? source.columns : undefined, undefined, timeZone), month, enrichment ? cpNameIndex(enrichment.items, 'columns' in enrichment ? enrichment.columns : undefined) : undefined)
+  return { profile: tree, source, enrichment, report }
+}
+function cpStream(state: Pick<AppState, 'azureSources' | 'releaseSource'>, profiles: AzureConnectionProfileSummary[], month: string, timeZone?: string): ReleaseStream {
+  const found = cpReportFor(state, profiles, month, timeZone)!
+  const { report } = found
+  const label = (row: (typeof report.rows)[number]) => row.name.displayLabel
+  return {
+    id: found.profile.id, name: 'CP', fetchedAt: found.source?.fetchedAt ?? '',
+    releases: report.rows.filter((row) => row.completed).map((row) => ({ name: label(row), release: '', documents: row.signedDocuments, ...(row.releaseNotesDate ? { approvalDate: row.releaseNotesDate } : {}) })),
+    documents: report.signedDocuments,
+    titles: report.rows.map((row) => ({ id: row.container.id, title: label(row), url: row.container.url, release: `${row.completed ? 'Completed · ' : ''}${row.signedDocuments} QA/QE-signed document${row.signedDocuments === 1 ? '' : 's'}`, ...(row.signatures[0] ? { approvalDate: row.signatures.map((entry) => entry.date).sort()[0] } : {}) })),
+    supported: report.supported, supportedEntries: report.rows.map((row) => ({ key: String(row.container.id), label: label(row) })),
+  }
+}
+
 // Pulse Check: the default Azure streams in their order (DP, CP, IOCC, Content, Tool Validations), each from the
 // connection named like it, also before it is fetched; a stream without a connection is listed as not set up.
 export function defaultStreamReleases(state: Pick<AppState, 'azureSources' | 'releaseSource'>, profiles: AzureConnectionProfileSummary[], month: string, timeZone?: string): ReleaseStream[] {
@@ -63,6 +90,7 @@ export function defaultStreamReleases(state: Pick<AppState, 'azureSources' | 're
     const profile = profileForStream(stream, profiles)
     if (stream.rule === 'dp' && profile) return { ...dpStream(state, profile, releaseConnections, month, timeZone), name: stream.name }
     if (stream.rule === 'iocc' && profile) return { ...ioccStream(state, profile, releaseConnections, month, timeZone), name: stream.name }
+    if (stream.rule === 'cp' && profile) return cpStream(state, profiles, month, timeZone)
     return profile ? { ...streamOf(state, profile, releaseConnections, month, timeZone, stream.rule), name: stream.name } : { id: `stream:${stream.name}`, name: stream.name, fetchedAt: '', releases: [], documents: 0, titles: [], notSetUp: true }
   })
 }

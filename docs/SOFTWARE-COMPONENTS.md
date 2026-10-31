@@ -29,7 +29,7 @@ This document lists every software component of the system: the in-house source 
 | AdminPage | `src/pages/AdminPage.tsx` | Settings page: tabs for Azure DevOps connections, Git and SharePoint storage, Access, Feature setup, capacity/absence, periods, resources, master data and audit. | SET, CON, GIT, SNP, CAP |
 | BacklogHealthPage | `src/pages/BacklogHealthPage.tsx` | Backlog Health: open work in ended Sprints, Features without DoD and unassigned work, with person filter, chosen columns, sorting and CSV. | CON |
 | BaselinesPage | `src/pages/BaselinesPage.tsx` | Baselines: estimation rules editor, release baselines vs booked hours, and the monthly Time Writing task plan check. | BAS, GIT |
-| BoardPage | `src/pages/BoardPage.tsx` | Backlogs / Release Details: editable Time Writing tree, read-only query views, release views and the DP table with DDT month filter and board match. | CON, FET, QV, ATM |
+| BoardPage | `src/pages/BoardPage.tsx` | Backlogs / Release Details: editable Time Writing tree, read-only query views, release views, the CP release report and the DP table with DDT month filter and board match. | CON, FET, QV, ATM |
 | BulkActionsPage | `src/pages/BulkActionsPage.tsx` | Bulk actions: move my User Stories from past Sprints to the current PI + Sprint, state checks, and create this month's Time Writing story and task. | ATM, CON |
 | DashboardPage | `src/pages/DashboardPage.tsx` | Dashboard: demand vs capacity for a period and filters — utilization, overload, rebalancing, trends, Epic mix, insights and releases. | OVR, CAP |
 | DocsPage | `src/pages/DocsPage.tsx` | Documentation page: reads the bundled project documents in-app, remembers the chosen one, keeps document and anchor links in the page. | DOC |
@@ -57,6 +57,7 @@ This document lists every software component of the system: the in-house source 
 | Clock | `src/components/Clock.tsx` | Header clock in the viewer's time zone and the theme toggle button. | NAV, UI |
 | DataStatus | `src/components/DataStatus.tsx` | Header data-status chip with Refresh, and the data notices shown once under the header. | FET, NAV |
 | DesktopDownload | `src/components/DesktopDownload.tsx` | Sidebar entry and dialog to download the desktop app; hidden inside the desktop app. | DSK |
+| CpReportView | `src/components/CpReportView.tsx` | Release Details → CP: Supported / Completed counts, the month's releases with names, evidence, QMS-0025 match and Create Feature, shared activity, data issues and the evidence CSV. | QV |
 | DpBoardColumn | `src/components/DpBoardColumn.tsx` | DP table and Windchill releases cell showing the matching QMS-0025 Feature/User Story, or Create Feature when nothing matches. | QV |
 | DpMonthCounts | `src/components/DpMonthCounts.tsx` | Table of a month's DP Supported Releases with milestones passed (DT, SFV, PRD, RPE) and dates. | QV, OVR |
 | ErrorBoundary | `src/components/ErrorBoundary.tsx` | Catches render errors in a view and shows what failed with a way back instead of a blank app. | UI |
@@ -104,6 +105,7 @@ This document lists every software component of the system: the in-house source 
 | csv | `src/csv.ts` | CSV cell escaping with spreadsheet-formula injection guard. | CON |
 | dashboard | `src/dashboard.ts` | Person-month records (plan, actual, capacity) with filters, periods, totals, overload, concentration and rebalancing. | OVR, CAP |
 | domain | `src/domain.ts` | Core TypeScript types: AppState, activities, efforts, baselines, periods, snapshots, Azure work items, release plans. | — |
+| cpReporting | `src/cpReporting.ts` | CP release reporting: Release containers of the release-folder tree, QA/QE signatures from the approver slots, monthly Supported / Completed, shared containers, data issues and release names from CP_Releases. | QV |
 | dpBoardMatch | `src/dpBoardMatch.ts` | Fuzzy match of DP rows and Windchill (S&S IT) releases to QMS-0025 Features/User Stories by name and version; DP and Windchill Feature title builders. | QV |
 | dpMilestones | `src/dpMilestones.ts` | DP milestone fields, DDT month, Completed and unique Supported Releases counts per month. | QV, OVR |
 | ioccMilestones | `src/ioccMilestones.ts` | IOCC document type from the Title (Release Plan, Release Notes, Verification Report), the release a document belongs to, and the unique Completed and Supported Releases signed in a month. | QV |
@@ -119,9 +121,9 @@ This document lists every software component of the system: the in-house source 
 | myWork | `src/myWork.ts` | "Me" matching, pending work, month-task and move candidates, state checks and next states, Feature children. | ATM |
 | pulseCheck | `src/pulseCheck.ts` | Pulse Check: previous month, release comparison, work flow opened/closed and ongoing work. | OVR |
 | qeMapping | `src/qeMapping.ts` | QE Mapping table model: sheets with stable column/row ids, edits, filter, group, CSV, Git file parse/serialise. | QEM |
-| queryView | `src/queryView.ts` | Query-view layout from WIQL SELECT/ORDER BY, field resolution, cell formatting, sorting, summary, CSV, column order. | QV |
-| releaseOverview | `src/releaseOverview.ts` | Releases with documents approved in the month per stream, with counts and totals. | OVR |
-| releasePath | `src/releasePath.ts` | Reads release name and number from Area/Iteration Paths; DP, IOCC, Tool Validations (one entry per tool) and CP (release from the asset Title) stream rules. | QV |
+| queryView | `src/queryView.ts` | Query-view layout from WIQL SELECT/ORDER BY (flat and tree / links queries), field resolution, cell formatting, sorting, summary, CSV, column order. | QV |
+| releaseOverview | `src/releaseOverview.ts` | Releases with documents approved in the month per stream (CP from QA/QE signatures, cpReporting), with counts and totals. | OVR, QV |
+| releasePath | `src/releasePath.ts` | Reads release name and number from Area/Iteration Paths; DP, IOCC and Tool Validations (one entry per tool) stream rules. | QV |
 | rules | `src/rules.ts` | Period lock rules, demand classification, baseline lookup, variance flag and capacity utilization. | SET, BAS |
 | setupGuide | `src/setupGuide.ts` | "Get started" setup steps with live status and required-step logic. | NAV |
 | streams | `src/streams.ts` | Release stream definitions and data sets, name matching and connection/export lookup per stream. | QV, OVR |
@@ -157,7 +159,7 @@ This document lists every software component of the system: the in-house source 
 | backgroundJobs | `src/backgroundJobs.ts` | Background jobs of a page load: runs long Azure DevOps writes off the form, one per key, with progress and the result; nothing stored. | NAV, BKL, ATM, MON |
 | azureCredentials | `src/azureCredentials.ts` | Browser-local PATs per server and connection profiles (role, view name, show in menu); never in app data. | CON |
 | connectionPresets | `src/connectionPresets.ts` | Pre-filled team connection presets and dismissed-preset storage. | CON |
-| releaseSource | `src/releaseSource.ts` | Read-only release source: paged WIQL queries, approval month, completed releases, fuzzy Feature name matching. | QV |
+| releaseSource | `src/releaseSource.ts` | Read-only release source: paged flat WIQL queries and tree / direct-links (WorkItemLinks) queries, approval month, completed releases, fuzzy Feature name matching. | QV |
 | windchill | `src/windchill.ts` | Windchill host/service path settings, normalisation and browser storage. | CON |
 | windchillBridge | `src/windchillBridge.ts` | Bookmarklet bridge to run Windchill searches in a signed-in Windchill tab and return verified results. | CON |
 | windchillBrowser | `src/windchillBrowser.ts` | Windchill test and query from the browser with its own sign-in (CORS, read-only GETs). | CON |
@@ -228,6 +230,7 @@ This document lists every software component of the system: the in-house source 
 | workspace.test | `tests/workspace.test.mjs` | KPI helpers, data completeness, exception queue, timeline health and insight cards. | WSP |
 | dashboard.test | `tests/dashboard.test.mjs` | Periods, person-month records, overload, concentration, rebalancing and bands. | OVR |
 | desktop-update.test | `tests/desktop-update.test.mjs` | Desktop update manifest, build comparison, verified download and per-platform manifest merge. | DSK, CI |
+| cp-reporting.test | `tests/cp-reporting.test.mjs` | CP release reporting: containers, signatures, slots, months, Supported / Completed, shared work, data issues, names and the Create Feature title. | QV |
 | dp-board-match.test | `tests/dp-board-match.test.mjs` | DP row and Windchill release to QMS-0025 matching thresholds and Create Feature titles. | QV |
 | dp-milestones.test | `tests/dp-milestones.test.mjs` | DP Completed/Supported Release counts, DDT month and milestone names. | QV |
 | dp-releases.test | `tests/dp-releases.test.mjs` | Pedestal fields and titles, DHFI matching and dating, DP releases and fuzzy match. | QV |
@@ -245,10 +248,10 @@ This document lists every software component of the system: the in-house source 
 | qe-mapping.test | `tests/qe-mapping.test.mjs` | xlsx/CSV read/write and QE Mapping editing and Git file handling. | QEM |
 | query-view.test | `tests/query-view.test.mjs` | Query layout, field resolution, sorting, summary, CSV and column order. | QV |
 | release-overview.test | `tests/release-overview.test.mjs` | Releases per stream approved in the month for Overview and Pulse Check. | OVR |
-| release-source.test | `tests/release-source.test.mjs` | Release-source WIQL paging, path parsing, register and approval dates. | QV |
+| release-source.test | `tests/release-source.test.mjs` | Release-source WIQL paging, tree / links queries, path parsing, register and approval dates. | QV, CON |
 | sample-data.test | `tests/sample-data.test.mjs` | Synthetic sample is deterministic and exercises every model. | SMP |
 | setup-guide.test | `tests/setup-guide.test.mjs` | Get started step statuses for new, partly and fully set-up users. | NAV |
-| streams.test | `tests/streams.test.mjs` | Stream definitions, DP/IOCC/Tool Validations/CP rules, fuzzy Feature match and Pulse Check streams. | QV, OVR |
+| streams.test | `tests/streams.test.mjs` | Stream definitions, DP/IOCC/Tool Validations rules, fuzzy Feature match and Pulse Check streams. | QV, OVR |
 | theme.test | `tests/theme.test.mjs` | Theme preference parsing/cycling/`?theme=` and relative freshness labels. | UI |
 | view-definitions.test | `tests/view-definitions.test.mjs` | Views file in Git, restore PAT rules, Git setup sync and Time Writing promotion. | CON, GIT |
 | view-sources.test | `tests/view-sources.test.mjs` | Each view shows its own fetch; legacy shared snapshot rule. | QV, FET |

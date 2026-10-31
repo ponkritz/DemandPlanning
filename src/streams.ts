@@ -6,14 +6,14 @@ import type { AzureConnectionProfileSummary } from './azureCredentials.ts'
 // with its own rule (see releasePath): DP — release name from the Area Path, number from the Iteration Path; IOCC —
 // grouped by the Area Path segment after "IOCC", release name from the document Title; Tool Validations — one entry
 // per tool (the tool's Area Path folder, else the Title before its version or document word), whatever the number of
-// its documents; CP — the asset Title "[Release name] [Release No] [Asset name]", each release once whatever the number
-// of its assets; the others keep the general path rule. DP, CP and IOCC releases are matched to QMS-0025 Features by a
+// its documents; CP — Release containers of the release-folder tree query, Supported / Completed from QA/QE signatures
+// (cpReporting); the others keep the general path rule. DP and IOCC releases are matched to QMS-0025 Features by a
 // fuzzy match with a percentage.
-export type ReleaseRule = 'path' | 'dp' | 'iocc' | 'tool' | 'asset'
+export type ReleaseRule = 'path' | 'dp' | 'iocc' | 'tool' | 'cp'
 export interface StreamDef { name: string; source: 'azure' | 'windchill'; rule: ReleaseRule; fuzzy: boolean }
 export const defaultStreams: StreamDef[] = [
   { name: 'DP', source: 'azure', rule: 'dp', fuzzy: true },
-  { name: 'CP', source: 'azure', rule: 'asset', fuzzy: true },
+  { name: 'CP', source: 'azure', rule: 'cp', fuzzy: true },
   { name: 'IOCC', source: 'azure', rule: 'iocc', fuzzy: true },
   { name: 'Content', source: 'azure', rule: 'path', fuzzy: false },
   { name: 'Tool Validations', source: 'azure', rule: 'tool', fuzzy: false },
@@ -37,6 +37,12 @@ export const streamNamed = (name: string | undefined) => defaultStreams.find((st
 export function profileForStream(stream: StreamDef, profiles: AzureConnectionProfileSummary[]) {
   if (stream.source !== 'azure') return undefined
   return profiles.find((profile) => profile.role !== 'time-tracking' && (namesStream(profile.viewName, stream.name) || namesStream(profile.reason, stream.name)))
+}
+// Every connection of an Azure stream, in the connections' order: CP's first is its release-folder tree, the others
+// (e.g. "CP Releases") can enrich the release names (cpReporting).
+export function profilesForStream<P extends AzureConnectionProfileSummary>(stream: StreamDef, profiles: P[]): P[] {
+  if (stream.source !== 'azure') return []
+  return profiles.filter((profile) => profile.role !== 'time-tracking' && (namesStream(profile.viewName, stream.name) || namesStream(profile.reason, stream.name)))
 }
 // The stream a connection belongs to, if any.
 export const streamOfProfile = (profile: Pick<AzureConnectionProfileSummary, 'viewName' | 'reason' | 'role'>) => profile.role === 'time-tracking' ? undefined : defaultStreams.find((stream) => stream.source === 'azure' && (namesStream(profile.viewName, stream.name) || namesStream(profile.reason, stream.name)))

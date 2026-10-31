@@ -13,6 +13,7 @@ import components from '../../docs/SOFTWARE-COMPONENTS.md?raw'
 import security from '../../docs/SECURITY-ASSESSMENT.md?raw'
 import dfmea from '../../docs/DFMEA.md?raw'
 import process from '../../docs/DEVELOPMENT-PROCESS.md?raw'
+import cpReporting from '../../docs/CP_Release_Reporting_Implementation.md?raw'
 
 export interface ProjectDoc { file: string; label: string; source: string }
 export const projectDocs: ProjectDoc[] = [
@@ -29,4 +30,5 @@ export const projectDocs: ProjectDoc[] = [
   { file: 'DFMEA.md', label: 'DFMEA', source: dfmea },
   { file: 'DEVELOPMENT-PROCESS.md', label: 'Development process', source: process },
   { file: 'PROJECT-PLAN.md', label: 'Project plan', source: projectPlan },
+  { file: 'CP_Release_Reporting_Implementation.md', label: 'CP release reporting brief', source: cpReporting },
 ]
