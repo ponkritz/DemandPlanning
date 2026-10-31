@@ -6,7 +6,7 @@ import { defaultStreams, exportForStream, profileForStream } from './streams.ts'
 // Connections kept for backend purposes (Show in menu off) are fetched and used but not listed.
 // onPrem: an on-prem server (Azure DevOps Server) connection; these views are listed under Release Details.
 export interface BacklogView { id: string; name: string; readOnly: boolean; role: AzureConnectionProfileSummary['role']; onPrem: boolean }
-type ViewProfile = Pick<AzureConnectionProfileSummary, 'id' | 'reason' | 'role' | 'viewName' | 'showInMenu'> & { baseUrl?: string }
+type ViewProfile = Pick<AzureConnectionProfileSummary, 'id' | 'reason' | 'role' | 'viewName' | 'showInMenu' | 'query'> & { baseUrl?: string }
 
 const activeTimeWriting = (profiles: ViewProfile[], activeId: string) => profiles.find((profile) => profile.id === activeId && profile.role === 'time-tracking') ?? profiles.find((profile) => profile.role === 'time-tracking')
 
@@ -20,10 +20,12 @@ export function timeWritingView(profiles: ViewProfile[], activeId: string): Back
 
 export function backlogViews(profiles: ViewProfile[], activeId: string): BacklogView[] {
   const timeWriting = activeTimeWriting(profiles, activeId)
+  const streamIds = new Set(defaultStreams.map((stream) => profileForStream(stream, profiles as AzureConnectionProfileSummary[])?.id).filter(Boolean))
   return [
     // Without any Time Writing connection (sample data, first start) the backlog is still listed, as QMS-0025.
     ...(!timeWriting || showsInMenu(timeWriting) ? [timeWritingView(profiles, activeId)] : []),
-    ...profiles.filter((profile) => profile.role !== 'time-tracking' && showsInMenu(profile)).map((profile) => ({ id: profile.id, name: viewNameOf(profile), readOnly: true, role: profile.role, onPrem: Boolean(profile.baseUrl) })),
+    // A default stream's connection (DP, CP, …) is always listed: Release Details shows it whatever its Show in menu says.
+    ...profiles.filter((profile) => profile.role !== 'time-tracking' && (showsInMenu(profile) || streamIds.has(profile.id))).map((profile) => ({ id: profile.id, name: viewNameOf(profile), readOnly: true, role: profile.role, onPrem: Boolean(profile.baseUrl) })),
   ]
 }
 

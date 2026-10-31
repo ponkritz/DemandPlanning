@@ -34,12 +34,13 @@ export function namesStream(name: string | undefined, stream: string) {
 export const streamNamed = (name: string | undefined) => defaultStreams.find((stream) => sameStream(stream.name, name))
 
 // The connection of an Azure stream: a non-Time-Writing connection whose view name (or name) is the stream's name.
-export function profileForStream(stream: StreamDef, profiles: AzureConnectionProfileSummary[]) {
-  if (stream.source !== 'azure') return undefined
-  return profiles.find((profile) => profile.role !== 'time-tracking' && (namesStream(profile.viewName, stream.name) || namesStream(profile.reason, stream.name)))
+// CP's is its release-folder tree: the CP connection with a tree / links query (FROM WorkItemLinks), else the first one.
+export function profileForStream<P extends AzureConnectionProfileSummary>(stream: StreamDef, profiles: P[]): P | undefined {
+  const all = profilesForStream(stream, profiles)
+  return stream.rule === 'cp' ? all.find((profile) => /\bFROM\s+WorkItemLinks\b/i.test(profile.query ?? '')) ?? all[0] : all[0]
 }
-// Every connection of an Azure stream, in the connections' order: CP's first is its release-folder tree, the others
-// (e.g. "CP Releases") can enrich the release names (cpReporting).
+// Every connection of an Azure stream, in the connections' order; CP's others (e.g. "CP Releases") can enrich the
+// release names (cpReporting).
 export function profilesForStream<P extends AzureConnectionProfileSummary>(stream: StreamDef, profiles: P[]): P[] {
   if (stream.source !== 'azure') return []
   return profiles.filter((profile) => profile.role !== 'time-tracking' && (namesStream(profile.viewName, stream.name) || namesStream(profile.reason, stream.name)))
