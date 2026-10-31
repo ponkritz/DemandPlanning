@@ -86,6 +86,21 @@ export function toolRelease(item: Pick<AzureWorkItem, 'areaPath' | 'iterationPat
   const name = title.replace(documentWord, '').replace(/\s*[|:_–-]\s*$/, '').trim() || title
   return { name, release }
 }
-export function releaseFor(item: Pick<AzureWorkItem, 'areaPath' | 'iterationPath' | 'title'>, rule: 'path' | 'dp' | 'iocc' | 'tool' = 'path'): StreamRelease | undefined {
-  return rule === 'dp' ? dpRelease(item) : rule === 'iocc' ? ioccRelease(item) : rule === 'tool' ? toolRelease(item) : releaseOf(item)
+// CP: each asset's Title is "[Release name] [Release No] [Asset name]" (any delimiters), so the release is the Title
+// before its first version — "3.1", "v3.1", "R3.2", "Rel 4.0", or a whole number written with v / R / Rel ("v5") —
+// and the number is that version; the asset name after it is dropped, so a release's assets are one release. A Title
+// without a version falls back to the general path rule.
+const prefixedNumber = /(?:^|[^a-z\d.])(?:v\.?|r|rel(?:ease)?)\s*[-_:.]?\s*(\d+)(?![\d.]*\d)/i
+export function assetRelease(item: Pick<AzureWorkItem, 'areaPath' | 'iterationPath' | 'title'>): StreamRelease | undefined {
+  const title = (item.title ?? '').replace(/\s+/g, ' ').trim()
+  const found = versionPart.exec(title) ?? prefixedNumber.exec(title)
+  if (found) {
+    const index = title.indexOf(found[1], found.index)
+    const name = title.slice(0, index).replace(/(^|[\s_|:–-])(?:v\.?|r|rel(?:ease)?)\s*[-_:.]?\s*$/i, '$1').replace(/\s*[|:_–-]\s*$/, '').trim()
+    if (name) return { name, release: found[1] }
+  }
+  return releaseOf(item)
+}
+export function releaseFor(item: Pick<AzureWorkItem, 'areaPath' | 'iterationPath' | 'title'>, rule: 'path' | 'dp' | 'iocc' | 'tool' | 'asset' = 'path'): StreamRelease | undefined {
+  return rule === 'dp' ? dpRelease(item) : rule === 'iocc' ? ioccRelease(item) : rule === 'tool' ? toolRelease(item) : rule === 'asset' ? assetRelease(item) : releaseOf(item)
 }

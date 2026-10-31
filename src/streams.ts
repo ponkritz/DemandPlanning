@@ -6,12 +6,14 @@ import type { AzureConnectionProfileSummary } from './azureCredentials.ts'
 // with its own rule (see releasePath): DP — release name from the Area Path, number from the Iteration Path; IOCC —
 // grouped by the Area Path segment after "IOCC", release name from the document Title; Tool Validations — one entry
 // per tool (the tool's Area Path folder, else the Title before its version or document word), whatever the number of
-// its documents; the others keep the general path rule. DP and IOCC releases are matched to QMS-0025 Features by a fuzzy match with a percentage.
-export type ReleaseRule = 'path' | 'dp' | 'iocc' | 'tool'
+// its documents; CP — the asset Title "[Release name] [Release No] [Asset name]", each release once whatever the number
+// of its assets; the others keep the general path rule. DP, CP and IOCC releases are matched to QMS-0025 Features by a
+// fuzzy match with a percentage.
+export type ReleaseRule = 'path' | 'dp' | 'iocc' | 'tool' | 'asset'
 export interface StreamDef { name: string; source: 'azure' | 'windchill'; rule: ReleaseRule; fuzzy: boolean }
 export const defaultStreams: StreamDef[] = [
   { name: 'DP', source: 'azure', rule: 'dp', fuzzy: true },
-  { name: 'CP', source: 'azure', rule: 'path', fuzzy: false },
+  { name: 'CP', source: 'azure', rule: 'asset', fuzzy: true },
   { name: 'IOCC', source: 'azure', rule: 'iocc', fuzzy: true },
   { name: 'Content', source: 'azure', rule: 'path', fuzzy: false },
   { name: 'Tool Validations', source: 'azure', rule: 'tool', fuzzy: false },

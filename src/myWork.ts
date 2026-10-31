@@ -46,7 +46,20 @@ export function matchesWork(row: { item: AzureWorkItem; feature?: AzureWorkItem;
 
 // Features that need my month Time Writing task: pending, outside the absence Epic, and either assigned to me or
 // holding a pending item of mine. Status comes from the cached backlog; creation re-checks Azure before writing.
-export interface MonthTaskCandidate { feature: AzureWorkItem; storyTitle: string; taskTitle: string; status: 'exists' | 'needs-task' | 'needs-story' | 'conflict' }
+// Shared activities: a pending Feature owned by someone else is also mine to write time on when I had a month Task
+// under it (any month) or its Description @mentions me (my name, letter case ignored).
+export interface MonthTaskCandidate { feature: AzureWorkItem; storyTitle: string; taskTitle: string; status: 'exists' | 'needs-task' | 'needs-story' | 'conflict'; shared?: { owner: string; reason: 'earlier-task' | 'mention' } }
+const entities: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', '#39': "'" }
+// The Description as plain text: tags dropped, the common entities decoded, spaces collapsed.
+const plainText = (html: string) => html.replace(/<[^>]*>/g, ' ').replace(/&(amp|lt|gt|quot|apos|nbsp|#39);/g, (_, name: string) => entities[name]).replace(/\s+/g, ' ')
+// Azure DevOps writes an @mention as a link "@Display Name"; a typed "@Display Name" counts the same.
+export function mentions(description: string | undefined, me: Me) {
+  const name = me.name?.trim().toLowerCase()
+  if (!description || !name) return false
+  const text = plainText(description).toLowerCase(), wanted = `@${name}`
+  for (let at = text.indexOf(wanted); at >= 0; at = text.indexOf(wanted, at + 1)) if (!/[\p{L}\p{N}]/u.test(text[at + wanted.length] ?? '')) return true
+  return false
+}
 export function monthTaskCandidates(items: AzureWorkItem[], me: Me, monthLabel: string, absenceEpicId?: number): MonthTaskCandidate[] {
   const chainOf = ancestry(items)
   const inAbsence = (item: AzureWorkItem) => absenceEpicId != null && chainOf(item).some((entry) => entry.workItemType === 'Epic' && entry.id === absenceEpicId)
@@ -57,13 +70,22 @@ export function monthTaskCandidates(items: AzureWorkItem[], me: Me, monthLabel: 
     if (item.workItemType === 'Feature') featureIds.add(item.id)
     else { const feature = chainOf(item).find((entry) => entry.workItemType === 'Feature'); if (feature && isPending(feature)) featureIds.add(feature.id) }
   }
+  const shared = new Map<number, 'earlier-task' | 'mention'>()
+  for (const item of items) {
+    if (item.workItemType !== 'Task' || !isMine(item, me) || !timeWritingMonth(item.title)) continue
+    const feature = chainOf(item).find((entry) => entry.workItemType === 'Feature')
+    if (feature && !featureIds.has(feature.id) && isPending(feature) && !inAbsence(feature)) shared.set(feature.id, 'earlier-task')
+  }
+  for (const feature of items) if (feature.workItemType === 'Feature' && !featureIds.has(feature.id) && !shared.has(feature.id) && isPending(feature) && !inAbsence(feature) && mentions(feature.description, me)) shared.set(feature.id, 'mention')
+  for (const id of shared.keys()) featureIds.add(id)
   const childrenOf = (id: number) => items.filter((item) => item.parentId === id)
   return items.filter((item) => featureIds.has(item.id)).sort((a, b) => a.title.localeCompare(b.title)).map((feature) => {
     const storyTitle = `${feature.title.trim()} - Time Writing`, taskTitle = `${monthLabel} | ${feature.title.trim()}`
     const children = childrenOf(feature.id)
     const plan = planMonthStory(children.filter((item) => item.workItemType === 'User Story').map((story) => ({ story, tasks: childrenOf(story.id) })), children.filter((item) => item.workItemType === 'Task'), month, storyTitle, (task) => isMine(task, me))
     const status = plan.status === 'exists' ? 'exists' as const : plan.status === 'use' ? 'needs-task' as const : plan.status === 'create' ? 'needs-story' as const : 'conflict' as const
-    return { feature, storyTitle: plan.status === 'use' ? plan.story.title : storyTitle, taskTitle, status }
+    const reason = shared.get(feature.id)
+    return { feature, storyTitle: plan.status === 'use' ? plan.story.title : storyTitle, taskTitle, status, ...(reason ? { shared: { owner: feature.assignedTo.trim() || 'nobody', reason } } : {}) }
   })
 }
 
