@@ -701,6 +701,8 @@ Cases marked **UAT** are also run in acceptance testing.
 - Steps: reload the web app; open DP; Load from Git.
 - Expected: the DP data here is not replaced by the old-query data; Load from Git says the data in Git was fetched with another query and that the setup should be saved to Git.
 
+**TC-CON-46 Tree and direct-links queries** — Req CON-78 — L1 `release-source.test.mjs` ("tree and direct-links queries (FROM WorkItemLinks … MODE): every item on either end of a link, each once (TC-CON-46)"), `azure-devops.test.mjs` ("desktop bridge constrains credentials to Azure DevOps and rejects writes and oversized batches" — the WorkItemLinks lines); browser check with the desktop app: paste a tree query (Releases with their child Documents, MODE (Recursive)) into a CP connection, save, fetch: no "flat work-item query" error; the view lists the Releases and their Documents with the query's columns; a query with ASOF is refused on save.
+
 **TC-CON-44 DP and DHFI defaults** — Req CON-76 — L1 `connections.test.mjs` ("pre-filled connections from the shared setup …": DP reads the Release work items of DHP with DDTDate, SourceProgram, PsName and Release; DHFI [Approved] reads the DHP.Vault documents, hidden from the menu); browser check in a fresh browser with only the on-prem PAT: Settings → Azure DevOps → Stream mapping → Set up DP, Pedestal and DHFI from their defaults; Release Details → DP lists Release items for the DDT month; Get started shows the release streams step done.
 
 **TC-CON-43 Title fields in the Feature setup** — Req CON-75 — L1 `feature-setup.test.mjs` ("title fields per Epic: up to five, unique names, saved with the setup …"); browser check with GitHub mocked: Settings → Feature setup → an Epic → ＋ Add title field three times (Platform / Custom.Platform, Release Name, Number), the preview of a story titled "{Platform} review" with the sample "CP 2 | Atlas | 4.1" shows "CP 2 review"; Save to Git writes titleFields; a sixth field cannot be added.
@@ -806,7 +808,9 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-QV-23 Windchill releases matched to the QMS-0025 board** — Req QV-39 — L1 `dp-board-match.test.mjs` ("Windchill release (S&S IT) → QMS-0025: the same search with the release name and number; Create Feature title (TC-QV-23)"); browser check with the QMS-0025 board loaded (one Feature "Remote Diagnostics v1.6") and an S&S IT export holding Remote Diagnostics 1.6 and another release: the first row shows "Feature id n%" as a link; the other shows "no match" or the closest item and Create Feature, which opens the default New Feature form titled "S&S IT | name | vrelease"; sorting by the column and the releases CSV carry the match; no page errors. **UAT**
 
-**TC-QV-24 CP releases from the asset Titles** — Req QV-40 — L1 `streams.test.mjs` ("CP: the release from the asset Title "[Release name] [Release No] [Asset name]", each release once; fuzzy QMS-0025 match (TC-QV-24)"); browser check with a CP query holding three assets of one release ("Care Pathways 3.1 Test Report", "Care Pathways 3.1.0 SRS", "Care Pathways v3.1 Risk Analysis") and one of another (3.2), and a QMS-0025 Feature "CP | Care Pathways | v3.1": Release Details → CP lists two releases (3 and 1 assets), 3.1 with its Feature and %, 3.2 with Create Feature opening the New Feature form titled "Care Pathways | v3.2" (release name and number only) under the CP Epic, and found after it is created; Pulse Check's Releases and Supported summary show "CP [2]"; no page errors. **UAT**
+**TC-QV-24 CP releases from the asset Titles** — *(Retired — see TC-QV-25)* Req QV-40 — L1 `streams.test.mjs` ("CP: the release from the asset Title "[Release name] [Release No] [Asset name]", each release once; fuzzy QMS-0025 match (TC-QV-24)"); browser check with a CP query holding three assets of one release in both namings ("Care Pathways 3.1 Test Report", "Care Pathways 3.1.0 SRS", "Risk Analysis v3.1 (Care Pathways)") and one of another (3.2), and a QMS-0025 Feature "CP | Care Pathways | v3.1": Release Details → CP lists two releases (3 and 1 assets), 3.1 with its Feature and %, 3.2 with Create Feature opening the New Feature form titled "Care Pathways | v3.2" (release name and number only) under the CP Epic, and found after it is created; Pulse Check's Releases and Supported summary show "CP [2]"; no page errors. **UAT**
+
+**TC-QV-25 CP release reporting from QA/QE signatures** — Req QV-41…QV-45 — L1 `cp-reporting.test.mjs` ("CP release reporting: Supported and Completed per Release container from QA/QE signatures (TC-QV-25)"; "CP release reporting: slots, roles, dates and month boundaries (TC-QV-25)"; "CP release names: version from the title, Content from the CP_Releases data set, never deciding the count (TC-QV-25)"; "CP Create Feature title: the release name and number only, found again by the board match (TC-QV-25)"); browser check in the desktop app with the CP connection holding the CP_Release_Folder tree query and a second CP connection with CP_Releases, month October 2026: Release Details → CP shows Supported, Completed and signed-document counts; a release with twelve asset folders is one row; a release whose main Release Notes is signed in October is Completed, one with only an asset's Release Notes is not; Clinical Platform Global is under Shared activity; names read "Setebos 26.2" or show their status; a row opens its signatures; Export evidence CSV downloads the month's signatures; Pulse Check's CP quadrant and Supported summary match; no page errors. **UAT**
 
 **TC-CON-42 Auto-fit tables and Wrap text** — Req QV-38 — E2E `documents-and-data.e2e.mjs` ("TC-CON-42": a Windchill export's Releases table starts one line per cell; dragging the first heading's edge 200px to the right widens that column and the table by about 200px while the other columns keep their width; Wrap text on makes cells wrap (pre-wrap), off back to one line); browser check: the same on Release Details (query table and IOCC releases) and on QE Mapping, the choice remembered per table after a reload.
 
@@ -1295,6 +1299,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CON-75 | TC-CON-43 |
 | CON-76 | TC-CON-44 |
 | CON-77 | TC-CON-45 |
+| CON-78 | TC-CON-46 |
 | QV-20 | TC-QV-06 |
 | QV-21 | TC-QV-07 |
 | CON-21, CON-22 | TC-CON-08 |
@@ -1379,6 +1384,11 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | QV-37 | TC-QV-22 |
 | QV-39 | TC-QV-23 |
 | QV-40 | TC-QV-24 |
+| QV-41 | TC-QV-25 |
+| QV-42 | TC-QV-25 |
+| QV-43 | TC-QV-25 |
+| QV-44 | TC-QV-25 |
+| QV-45 | TC-QV-25 |
 | QV-38 | TC-CON-42 |
 | OVR-01…08 | retired (TC-OVR-01…03 retired) |
 | OV-11 | TC-OV-11 |
@@ -1469,7 +1479,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | Use case | Test cases |
 |---|---|
 | UC-01 | TC-NAV-01…06, TC-NAV-33, TC-UI-01, TC-UI-02, TC-UI-03, TC-CON-36, TC-CON-38 |
-| UC-02 | TC-CON-01…07, TC-CON-17…19, TC-CON-44, TC-CON-28, TC-NAV-02, TC-NAV-34, TC-QV-14, TC-QV-16, TC-QV-23, TC-QV-24 |
+| UC-02 | TC-CON-01…07, TC-CON-17…19, TC-CON-44, TC-CON-28, TC-NAV-02, TC-NAV-34, TC-QV-14, TC-QV-16, TC-QV-23, TC-QV-24, TC-CON-46, TC-QV-25 |
 | UC-03 | TC-CON-03, TC-FET-01…06 |
 | UC-04 | TC-TWN-01, TC-TWN-02, TC-MON-01…06 |
 | UC-05 | TC-MON-07 |

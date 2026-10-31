@@ -823,7 +823,7 @@ export async function requestAzure(request: AzureRequest): Promise<unknown> {
   let response: Response | undefined
   for (const [attempt, version] of versions.entries()) {
     try {
-      const url = `${base}/${endpoint}?api-version=${version}${request.operation === 'query' ? '&$top=1000' : ''}${request.operation === 'iteration-tree' ? '&$depth=10' : ''}${create ? `&validateOnly=${request.validateOnly === true}` : ''}`
+      const url = `${base}/${endpoint}?api-version=${version}${request.operation === 'query' ? `&$top=${/\bFROM\s+WorkItemLinks\b/i.test(request.query ?? '') ? 20000 : 1000}` : ''}${request.operation === 'iteration-tree' ? '&$depth=10' : ''}${create ? `&validateOnly=${request.validateOnly === true}` : ''}`
       response = await fetch(url, {
         method: readingMetadata ? 'GET' : updating ? 'PATCH' : 'POST', redirect: 'error', credentials: 'omit',
         headers: { Authorization: `Basic ${btoa(`:${request.pat}`)}`, 'Content-Type': writing ? 'application/json-patch+json' : 'application/json', Accept: 'application/json' },

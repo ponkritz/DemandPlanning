@@ -3,7 +3,7 @@ import { fetchAzureWorkItems, isCloudBase, mapAzureWorkItem, mergeAzureWorkItems
 import type { PageProps } from './pages/types'
 import type { AzureWorkItem } from './domain'
 import { loadAzurePat, saveAzurePat, forgetAzurePat, listAzureConnectionProfiles, loadAzureConnectionProfile, saveAzureConnectionProfile, forgetAzureConnectionProfile, composeAzureUrl, collectionUrlFrom, type AzureConnectionProfile, type AzureConnectionProfileSummary, type AzureConnectionRole, loadServerPat, serverKey } from './azureCredentials'
-import { approvalDateFrom, defaultReleaseQuery, fetchReleaseSource, normalizeReleaseSourceSettings, projectQuery, releaseQueryWhere, runWorkItemQuery, withAncestors } from './releaseSource'
+import { approvalDateFrom, checkWorkItemQuery, defaultReleaseQuery, fetchReleaseSource, normalizeReleaseSourceSettings, projectQuery, runWorkItemQuery, withAncestors } from './releaseSource'
 import { sampleDataset, sampleProfiles, sampleReleaseScopes } from './sampleData'
 import { indiaMonth } from './azureInsights'
 import { columnName, pickFields, queryLayout } from './queryView'
@@ -206,7 +206,7 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
     const token = input.pat.trim() || (serverPat ? '' : existing?.token ?? '')
     if (!token && !serverPat) throw new Error('Enter the PAT for this server (it is then used by every connection on it).')
     const query = input.query.trim()
-    if (query) releaseQueryWhere(query)
+    if (query) checkWorkItemQuery(query)
     if (input.role === 'time-tracking' && !input.team.trim() && !query) throw new Error('A Time Writing connection needs a team (its Epic backlog is read) or a query.')
     if (input.role === 'time-tracking' && !isCloudBase(base)) throw new Error('Time Writing (read & write) works on Azure DevOps Services (dev.azure.com) only; on-premises servers are read-only. Choose another role for this server.')
     if (input.role === 'backlog-view' && !input.team.trim() && !query) throw new Error('A backlog view needs a team (its Epic backlog is shown) or a query.')

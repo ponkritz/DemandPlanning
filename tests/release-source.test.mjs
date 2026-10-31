@@ -10,7 +10,7 @@ test('a pasted saved query is reduced to its WHERE clause and paged by ID', () =
   const where = releaseQueryWhere("SELECT [System.Id], [System.Title]\nFROM WorkItems\nWHERE [System.TeamProject] = @project AND [System.State] = 'Approved'\nORDER BY [System.ChangedDate] DESC")
   assert.equal(where, "[System.TeamProject] = @project AND [System.State] = 'Approved'")
   assert.match(pagedReleaseQuery(where, 0), /^SELECT \[System\.Id\] FROM WorkItems WHERE \(.*\) AND \[System\.Id\] > 0 ORDER BY \[System\.Id\] ASC$/)
-  assert.throws(() => releaseQueryWhere('SELECT [System.Id] FROM WorkItemLinks WHERE 1=1'), /flat work-item query/)
+  assert.throws(() => releaseQueryWhere('SELECT [System.Id] FROM WorkItemLinks WHERE 1=1'), /FROM WorkItems WHERE … \(flat list\)/, 'a tree / links query has its own path')
   assert.throws(() => releaseQueryWhere("SELECT [System.Id] FROM WorkItems WHERE [System.Id] > 0 ASOF '2026-01-01'"), /ASOF/)
 })
 test('fetchReleaseSource pages the query, reads items in batches and keeps the query text', async () => {
@@ -156,4 +156,29 @@ test('Create Feature title from a release: "Stream | Name | vRelease", mapping b
   assert.equal(releaseFeatureTitle('DP', 'RSGMS', '3.0.0.2'), 'DP | RSGMS | v3.0.0.2')
   assert.equal(tracksRelease(releaseFeatureTitle('DP', 'RSGMS', '3.0.0.2'), 'RSGMS', '3.0.0.2'), true, 'still maps back to the release')
   assert.equal(releaseFeatureTitle('DP', 'RSGMS', ''), 'DP | RSGMS', 'no version, no v')
+})
+
+test('tree and direct-links queries (FROM WorkItemLinks … MODE): every item on either end of a link, each once (TC-CON-46)', async () => {
+  const { isLinkQuery, linkQueryText, checkWorkItemQuery, runWorkItemQuery } = await import('../src/releaseSource.ts')
+  const { queryLayout } = await import('../src/queryView.ts')
+  const tree = "SELECT [System.Id], [System.Title], [System.State]\nFROM WorkItemLinks\nWHERE ([Source].[System.TeamProject] = @project AND [Source].[System.WorkItemType] = 'Release')\n AND ([System.Links.LinkType] = 'System.LinkTypes.Hierarchy-Forward')\n AND ([Target].[System.WorkItemType] = 'Document')\nORDER BY [System.Id]\nMODE (Recursive)"
+  assert.ok(isLinkQuery(tree)); assert.ok(!isLinkQuery("SELECT [System.Id] FROM WorkItems WHERE [System.State] = 'Approved'"))
+  assert.match(linkQueryText(tree), /^SELECT \[System\.Id\] FROM WorkItemLinks WHERE \(\[Source\].*MODE \(Recursive\)$/, 'sent as written, with SELECT [System.Id]')
+  assert.doesNotThrow(() => checkWorkItemQuery(tree))
+  assert.doesNotThrow(() => checkWorkItemQuery("SELECT [System.Id] FROM WorkItemLinks WHERE [Source].[System.Id] > 0 MODE (MustContain)"), 'a direct-links query')
+  assert.throws(() => checkWorkItemQuery("SELECT [System.Id] FROM WorkItemLinks WHERE [Source].[System.Id] > 0 ASOF '2026-01-01' MODE (Recursive)"), /ASOF/)
+  assert.throws(() => checkWorkItemQuery("SELECT [System.Id] FROM WorkItemLinks WHERE [Source].[System.Id] > 0 MODE (Drop)"), /MODE/)
+  assert.throws(() => checkWorkItemQuery('SELECT [System.Id] FROM Teams WHERE 1=1'), /FROM WorkItemLinks/)
+  assert.deepEqual(queryLayout(tree), { columns: ['System.Id', 'System.Title', 'System.State'], orderBy: [{ ref: 'System.Id', desc: false }], unresolved: [] }, 'columns and order read from a tree query; MODE is not part of the order')
+  const calls = []
+  const transport = async (request) => {
+    calls.push(request)
+    if (request.operation === 'query') return { workItemRelations: [{ rel: null, source: null, target: { id: 5 } }, { rel: 'System.LinkTypes.Hierarchy-Forward', source: { id: 5 }, target: { id: 7 } }, { rel: 'System.LinkTypes.Hierarchy-Forward', source: { id: 5 }, target: { id: 6 } }, { rel: null, source: null, target: { id: 9 } }] }
+    return { value: request.ids.map((id) => ({ id, fields: { 'System.Title': `Item ${id}`, 'System.WorkItemType': id === 5 || id === 9 ? 'Release' : 'Document', 'System.State': 'Approved' } })) }
+  }
+  const items = await runWorkItemQuery({ organization: 'o', project: 'p' }, 'pat', tree, transport)
+  assert.deepEqual(items.map((item) => [item.id, item.workItemType]), [[5, 'Release'], [7, 'Document'], [6, 'Document'], [9, 'Release']], 'parents before their children, each once')
+  assert.equal(calls.filter((call) => call.operation === 'query').length, 1, 'one WIQL call: no ID paging for links')
+  await assert.rejects(runWorkItemQuery({ organization: 'o', project: 'p' }, 'pat', tree, async () => ({ workItems: [] })), /no link list/)
+  await assert.rejects(runWorkItemQuery({ organization: 'o', project: 'p' }, 'pat', tree, async () => ({ workItemRelations: Array.from({ length: 20000 }, (_, index) => ({ source: null, target: { id: index + 1 } })) })), /Narrow the query/)
 })

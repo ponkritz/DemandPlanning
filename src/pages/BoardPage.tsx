@@ -6,6 +6,8 @@ import { QueryView } from '../components/QueryView'
 import { ReleaseView } from '../components/ReleaseView'
 import { DpMonthCounts } from '../components/DpMonthCounts'
 import { useDpBoardColumn } from '../useDpBoardColumn'
+import { CpReportView } from '../components/CpReportView'
+import { cpReportFor } from '../releaseOverview'
 import type { AzureWorkItem } from '../domain'
 import { ddtMonthOf, dpMilestoneNames, dpMilestones } from '../dpMilestones'
 import { formatDate, formatDateTime, monthName } from '../format'
@@ -68,7 +70,10 @@ function ReadOnlyView({ id, name, role, azure, store, month, gitNote, onOpenConn
   // Month filter (header month picker): items approved in the month, else changed in it; "All months" turns it off.
   // DP: the month is the DDT Date's (dpMilestones); other views: Author Approval Date, else Changed Date.
   const isDp = stream?.rule === 'dp'
-  const items = source ? allMonths ? source.items : source.items.filter((item) => (isDp ? ddtMonthOf(item) : viewMonthOf(item)) === month) : noItems
+  // CP: its release-folder tree (the first CP connection) is read whole and reported by QA/QE signature month (cpReporting).
+  const cp = stream?.rule === 'cp' ? cpReportFor(store.state, listAzureConnectionProfiles(), month) : undefined
+  const isCp = Boolean(cp && cp.profile.id === id)
+  const items = source ? allMonths || isCp ? source.items : source.items.filter((item) => (isDp ? ddtMonthOf(item) : viewMonthOf(item)) === month) : noItems
   // DP rows matched to the QMS-0025 board (Feature / User Story by SourceProgram + Title), with Create Feature.
   const boardColumn = useDpBoardColumn(isDp ? items : noItems, azure, threshold, assign, featureSetup)
   // Items without an approval date fall back to their Changed Date for the month filter; say how many.
@@ -78,7 +83,8 @@ function ReadOnlyView({ id, name, role, azure, store, month, gitNote, onOpenConn
   // Information about the view sits behind the ⓘ next to its name, not as banners; only errors and warnings stay on the page.
   const notes = [
     source && isDp ? `Month filter: by DDT Date in your time zone.${undated > 0 ? ` ${undated} of ${source.items.length} releases have no DDT Date and show only with “All months”.` : ''}` : '',
-    source && !isDp && undated > 0 ? `Month filter: by Author Approval Date in your time zone. ${undated} of ${source.items.length} items have no approval date${role === 'release-source' ? '' : ' in the query’s columns'}, so their Changed Date is used.` : '',
+    source && isCp ? `CP: the whole release-folder tree is read; the month is the QA/QE signature date in your time zone (header month). ${cp!.enrichment ? 'Release names come from the other CP connection.' : 'Add a second CP connection (e.g. “CP Releases”, with Release and Content) for the release names.'}` : '',
+    source && !isDp && !isCp && undated > 0 ? `Month filter: by Author Approval Date in your time zone. ${undated} of ${source.items.length} items have no approval date${role === 'release-source' ? '' : ' in the query’s columns'}, so their Changed Date is used.` : '',
     isDp ? dpMilestones.map(([milestone]) => `${dpMilestoneNames[milestone].short} = ${dpMilestoneNames[milestone].long} (${milestone})`).join(' · ') : '',
     status?.state === 'ok' && status.message.includes('Git') ? status.message : '',
     !azure.isSample && gitNote && gitNote.tone !== 'error' ? gitNote.text : '',
@@ -90,7 +96,7 @@ function ReadOnlyView({ id, name, role, azure, store, month, gitNote, onOpenConn
       {!azure.isSample && gitNote?.tone === 'error' && <div className="notice error" role="alert">{gitNote.text}</div>}
       {stale && !busy && <div className="notice warning" role="status">The saved data was fetched with different columns than the connection's query now has. Refresh from Azure to load every column's values.</div>}
       {source && config && !items.length && source.items.length ? isDp ? <><DpMonthCounts items={source.items} month={month} /><EmptyState title={`No release has its DDT Date in ${monthName(month)}.`} detail="Pick another month in the header, or tick “All months”. The counts above still include milestones Done in the month." /></> : <EmptyState title={`No items in ${monthName(month)}.`} detail={`${source.items.length} items have an approval date (else a changed date) in other months. Pick another month in the header, or tick “All months”.`} />
-        : source && config ? isDp ? <><DpMonthCounts items={source.items} month={month} /><QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} queryOnly choose extra={boardColumn} /></> : role === 'release-source' || stream ? <ReleaseView name={name} items={items} backlog={azure.items} azure={azure} assign={assign} featureSetup={featureSetup} rule={stream?.rule} fuzzy={stream?.fuzzy} threshold={threshold} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} /> : <QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} />
+        : source && config ? isDp ? <><DpMonthCounts items={source.items} month={month} /><QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} queryOnly choose extra={boardColumn} /></> : isCp && cp ? <><CpReportView report={cp.report} azure={azure} assign={assign} featureSetup={featureSetup} threshold={threshold} enrichment={Boolean(cp.enrichment)} /><QueryView name={name} items={source.items} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} /></> : role === 'release-source' || stream ? <ReleaseView name={name} items={items} backlog={azure.items} azure={azure} assign={assign} featureSetup={featureSetup} rule={stream?.rule} fuzzy={stream?.fuzzy} threshold={threshold} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} /> : <QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} />
         : <><EmptyState title={config ? `“${name}” has not been fetched yet.` : `The connection for “${name}” is not saved in this browser.`} detail={config ? 'Fetch it read-only; nothing is written to Azure DevOps. Its items stay on this page and are not counted in Overview, Monthly Time Writing or Assigned to Me.' : 'Add it again in Settings → Azure DevOps.'} /></>}
     </Panel>
   </Page>

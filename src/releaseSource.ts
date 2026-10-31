@@ -23,12 +23,29 @@ export function normalizeReleaseSourceSettings(value: unknown): ReleaseSourceSet
   return { ...(approvalDateField ? { approvalDateField } : {}), ...(Number.isInteger(threshold) && threshold >= 1 && threshold <= 100 ? { matchThreshold: threshold } : {}) }
 }
 
-// Accept a flat work-item query as pasted from Azure DevOps. Only its WHERE clause is kept so paging
-// and the read-only guard in the Electron proxy ("SELECT [System.Id] FROM WorkItems WHERE …") stay in force.
+// Accept a work-item query as pasted from Azure DevOps (Edit query → WIQL): a flat list (FROM WorkItems), or a tree or
+// direct-links query (FROM WorkItemLinks … MODE (…)). A flat query keeps only its WHERE clause so paging and the
+// read-only guard in the Electron proxy ("SELECT [System.Id] FROM WorkItems|WorkItemLinks WHERE …") stay in force; a
+// tree / link query is sent as written, with SELECT [System.Id], and every work item on either end of its links is read.
+const linkQuery = /^SELECT\s+.+?\s+FROM\s+WorkItemLinks\s+WHERE\s+(.+)$/i
+export const isLinkQuery = (wiql: string) => linkQuery.test(wiql.replace(/\s+/g, ' ').trim())
+export function linkQueryText(wiql: string) {
+  const text = wiql.replace(/\s+/g, ' ').trim()
+  const match = linkQuery.exec(text)
+  if (!match) throw new Error('Paste a tree or links query: SELECT … FROM WorkItemLinks WHERE … MODE (…).')
+  const rest = match[1].trim()
+  if (/\bASOF\b/i.test(rest)) throw new Error('Historical (ASOF) queries are not supported.')
+  const mode = /\bMODE\s*\(\s*([a-z, ]+)\)\s*$/i.exec(rest)?.[1]
+  if (mode && !mode.split(',').every((part) => /^(?:MustContain|MayContain|DoesNotContain|Recursive|ReturnMatchingChildren)$/i.test(part.trim()))) throw new Error('Unsupported MODE in the tree or links query.')
+  if (rest.length > 50000) throw new Error('The query is too long.')
+  return `SELECT [System.Id] FROM WorkItemLinks WHERE ${rest}`
+}
+// Checks a pasted query of either kind (on saving a connection).
+export function checkWorkItemQuery(wiql: string) { if (isLinkQuery(wiql)) linkQueryText(wiql); else releaseQueryWhere(wiql) }
 export function releaseQueryWhere(wiql: string) {
   const text = wiql.replace(/\s+/g, ' ').trim()
   const match = /^SELECT\s+.+?\s+FROM\s+WorkItems\s+WHERE\s+(.+?)(?:\s+ORDER\s+BY\s+.+)?$/i.exec(text)
-  if (!match) throw new Error('Paste a flat work-item query: SELECT … FROM WorkItems WHERE … (tree and link queries are not supported).')
+  if (!match) throw new Error('Paste a work-item query: SELECT … FROM WorkItems WHERE … (flat list) or SELECT … FROM WorkItemLinks WHERE … MODE (…) (tree or direct links).')
   const where = match[1].trim()
   if (/\bASOF\b|\bMODE\s*\(/i.test(where)) throw new Error('Historical (ASOF) and link-mode queries are not supported.')
   if (where.length > 50000) throw new Error('The query is too long.')
@@ -46,16 +63,29 @@ export function approvalDateFrom(fields: Record<string, unknown>, settings: Rele
   return undefined
 }
 
-// Runs a flat WIQL query read-only: ids are paged by [System.Id] and read in batches of 200.
+// Runs a WIQL query read-only: a flat query's ids are paged by [System.Id]; a tree / links query's are taken from its
+// links; the items are read in batches of 200.
+export const linkQueryLimit = 20000
 export const defaultReleaseQuery = "SELECT [System.Id], [System.Title], [System.AreaPath], [System.State]\nFROM WorkItems\nWHERE [System.TeamProject] = @project AND [System.State] = 'Approved'\nORDER BY [System.Id]"
 export const projectQuery = "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project AND [System.State] <> 'Removed'"
 export async function runWorkItemQuery(config: AzureConfig, pat: string, wiql: string, transport: Transport = requestAzure, map: (item: { id: number; fields: Record<string, unknown>; relations?: { rel: string; url: string }[] }) => AzureWorkItem = (item) => mapAzureWorkItem(item, config), limit = 20000): Promise<AzureWorkItem[]> {
   if (!config.organization || !config.project) throw new Error('The connection needs an organization and a project.')
   if (!pat.trim()) throw new Error('The connection needs a PAT with Work Items (Read).')
-  const where = releaseQueryWhere(wiql)
   // The proxy requires a team on every read request; query and batch endpoints are project-scoped and ignore it.
   const scoped = { ...config, team: config.team || config.project }
   const request = (operation: AzureRequest['operation'], extra: Partial<AzureRequest> = {}) => transport({ ...scoped, pat: pat.trim(), operation, ...extra })
+  if (isLinkQuery(wiql)) {
+    // Tree / direct links: one WIQL call (Azure DevOps returns at most 20,000 links); the work items on either end of
+    // every link, each once in the order met (parents before their children), are then read in batches.
+    const result = await request('query', { query: linkQueryText(wiql) }) as { workItemRelations?: { source?: { id: number } | null; target?: { id: number } | null }[] }
+    if (!Array.isArray(result.workItemRelations)) throw new Error('The tree or links query returned no link list. Check the query in Azure DevOps.')
+    if (result.workItemRelations.length >= linkQueryLimit) throw new Error(`The query returned ${linkQueryLimit.toLocaleString()} links or more. Narrow the query.`)
+    const ids = [...new Set(result.workItemRelations.flatMap((link) => [link.source?.id, link.target?.id]).filter((id): id is number => id != null))]
+    if (ids.some((id) => !Number.isSafeInteger(id) || id < 1)) throw new Error('Unexpected tree or links query response. Nothing was saved.')
+    if (ids.length > limit) throw new Error(`The query returned more than ${limit.toLocaleString()} items. Narrow the query.`)
+    return ids.length ? readWorkItems(request, ids, map) : []
+  }
+  const where = releaseQueryWhere(wiql)
   const items: AzureWorkItem[] = []
   let afterId = 0
   while (true) {
