@@ -1,0 +1,54 @@
+SELECT
+    [System.Id],
+    [System.Title],
+    [System.WorkItemType],
+    [System.AssignedTo],
+    [Type],
+    [System.State],
+    [System.AttachedFileCount],
+    [Author Function],
+    [System.Parent],
+    [System.AreaPath],
+    [System.IterationPath],
+    [Author Approval Date],
+    [ApproverName1], [ApproverFunction1], [ApproverApprovalDate1],
+    [ApproverName2], [ApproverFunction2], [ApproverApprovalDate2],
+    [ApproverName3], [ApproverFunction3], [ApproverApprovalDate3],
+    [ApproverName4], [ApproverFunction4], [ApproverApprovalDate4],
+    [ApproverName5], [ApproverFunction5], [ApproverApprovalDate5],
+    [ApproverName6], [ApproverFunction6], [ApproverApprovalDate6],
+    [ApproverName7], [ApproverFunction7], [ApproverApprovalDate7],
+    [ApproverName8], [ApproverFunction8], [ApproverApprovalDate8],
+    [ApproverName9], [ApproverFunction9], [ApproverApprovalDate9],
+    [ApproverName10], [ApproverFunction10], [ApproverApprovalDate10],
+    [ApproverName11], [ApproverFunction11], [ApproverApprovalDate11],
+    [ApproverName12], [ApproverFunction12], [ApproverApprovalDate12],
+    [ApproverName13], [ApproverFunction13], [ApproverApprovalDate13],
+    [ApproverName14], [ApproverFunction14], [ApproverApprovalDate14],
+    [ApproverName15], [ApproverFunction15], [ApproverApprovalDate15],
+    [ApproverName16], [ApproverFunction16], [ApproverApprovalDate16],
+    [ApproverName17], [ApproverFunction17], [ApproverApprovalDate17],
+    [ApproverName18], [ApproverFunction18], [ApproverApprovalDate18],
+    [ApproverName19], [ApproverFunction19], [ApproverApprovalDate19],
+    [ApproverName20], [ApproverFunction20], [ApproverApprovalDate20]
+FROM WorkItemLinks
+WHERE
+    (
+        [Source].[System.TeamProject] = @project
+        AND [Source].[System.WorkItemType] = 'Release'
+        AND
+        (
+            [Source].[System.AreaPath]
+                UNDER 'DHP.Vault\Dev\clinical platforms'
+            OR [Source].[System.AreaPath]
+                UNDER 'DHP.Vault\Dev\ClinicalPlatform'
+            OR [Source].[System.AreaPath]
+                UNDER 'DHP.Vault\DevX\ClinicalPlatform'
+            OR [Source].[System.AreaPath]
+                UNDER 'DHP.Vault\xDev\ClinicalPlatform'
+        )
+    )
+    AND [System.Links.LinkType] =
+        'System.LinkTypes.Hierarchy-Forward'
+    AND [Target].[System.TeamProject] = @project
+MODE (Recursive)
