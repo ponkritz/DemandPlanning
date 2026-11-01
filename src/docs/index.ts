@@ -10,6 +10,7 @@ import validationPackage from '../../docs/VALIDATION-PACKAGE.md?raw'
 import traceability from '../../docs/TRACEABILITY-MATRIX.md?raw'
 import knownIssues from '../../docs/KNOWN-ISSUES.md?raw'
 import components from '../../docs/SOFTWARE-COMPONENTS.md?raw'
+import swbom from '../../docs/SWBOM.md?raw'
 import security from '../../docs/SECURITY-ASSESSMENT.md?raw'
 import dfmea from '../../docs/DFMEA.md?raw'
 import process from '../../docs/DEVELOPMENT-PROCESS.md?raw'
@@ -26,6 +27,7 @@ export const projectDocs: ProjectDoc[] = [
   { file: 'azure-devops-connection.md', label: 'Azure DevOps setup', source: azureSetup },
   { file: 'KNOWN-ISSUES.md', label: 'Known issues', source: knownIssues },
   { file: 'SOFTWARE-COMPONENTS.md', label: 'Software components', source: components },
+  { file: 'SWBOM.md', label: 'SWBOM', source: swbom },
   { file: 'SECURITY-ASSESSMENT.md', label: 'Security assessment', source: security },
   { file: 'DFMEA.md', label: 'DFMEA', source: dfmea },
   { file: 'DEVELOPMENT-PROCESS.md', label: 'Development process', source: process },
