@@ -360,7 +360,7 @@ Ver. = verification method (T test, D demonstration, I inspection, A analysis); 
 | QV-41 | SR-08 | UR-06 | T | M | TC-QV-25 | 11 | `cp-reporting.test.mjs` | KB-17 |
 | QV-42 | SR-08 | UR-06 | T | M | TC-QV-25 | 11 | `cp-reporting.test.mjs` | — |
 | QV-43 | SR-08 | UR-06 | T | M | TC-QV-25 | 11 | `cp-reporting.test.mjs` | — |
-| QV-44 | SR-08 | UR-06 | T | M | TC-QV-25 | 11 | `cp-reporting.test.mjs` | — |
+| QV-44 | SR-08 | UR-06 | T | M | TC-QV-25 | 11 | `cp-reporting.test.mjs` | KB-18 |
 | QV-45 | SR-08 | UR-06 | T | M | TC-QV-25 | 11 | `cp-reporting.test.mjs` | — |
 | OVR-01 *(retired)* | SR-09 | UR-07 | D | M | TC-OVR-01 | — | — | — |
 | OVR-02 *(retired)* | SR-09 | UR-07 | T | M | TC-OVR-01 | — | — | — |

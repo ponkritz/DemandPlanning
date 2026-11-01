@@ -125,3 +125,24 @@ test('the CP menu entry: its tree-query connection, listed even when hidden from
   assert.deepEqual(otherMenuViews(views, profiles, []).azure.map((view) => view.id), ['cpr'], 'the names connection stays under Other views (it is shown in the menu)')
   assert.equal(profileForStream(cp, [releases]).id, 'cpr', 'without a tree query, the first CP connection')
 })
+
+test('CP names: the connection with Content is used, a Release with text around the version is read, and a missing version says why (TC-QV-25)', async () => {
+  const { cpReportFor } = await import('../src/releaseOverview.ts')
+  const tree = [item(1, undefined, 'Release', 'Release 26.2 ClinicalPlatform'), item(2, 1, 'Folder', 'Plans'), doc(3, 2, 'Plan', '2026-10-05T08:00:00Z'), item(4, undefined, 'Release', 'Release 26.5 ClinicalPlatform'), item(5, 4, 'Folder', 'Plans'), doc(6, 5, 'Plan', '2026-10-06T08:00:00Z')]
+  const source = (connectionId, items, columns) => ({ connectionId, name: connectionId, role: 'reference', organization: 'o', project: 'p', query: 'q', fetchedAt: '2026-10-20T00:00:00Z', items, columns })
+  // An older CP documents connection (no Content) comes before the CP Releases one: the names come from CP Releases.
+  const old = [item(50, undefined, 'Document', 'Care Pathways 3.1 Test Report')]
+  const releases = [{ ...item(60, undefined, 'Release', 'CP release'), fields: { 'Custom.Release': 'v26.2.0.0 (asset A)', 'Custom.Content': 'Setebos' } }]
+  const state = { azureSources: [source('old', old, [{ ref: 'System.Title', name: 'Title' }]), source('tree', tree, columns), source('rel', releases, [{ ref: 'Custom.Release', name: 'Release' }, { ref: 'Custom.Content', name: 'Content' }])] }
+  const profiles = [{ id: 'old', reason: 'Clinical_Completed', viewName: 'CP [Completed Releases]', role: 'release-source' }, { id: 'tree', reason: 'CP_Release_Folder', viewName: 'CP [Release Folder]', role: 'reference', query: 'SELECT [System.Id] FROM WorkItemLinks WHERE [Source].[System.Id] > 0 MODE (Recursive)' }, { id: 'rel', reason: 'CP Releases', role: 'reference' }]
+  const found = cpReportFor(state, profiles, '2026-10', 'UTC')
+  assert.equal(found.enrichmentName, 'CP Releases')
+  const labels = Object.fromEntries(found.report.rows.map((row) => [row.container.id, [row.name.displayLabel, row.name.nameStatus]]))
+  assert.deepEqual(labels[1], ['Setebos 26.2', 'resolved_from_content'], '"v26.2.0.0 (asset A)" is read as 26.2.0.0')
+  assert.deepEqual(labels[4], ['Release 26.5 ClinicalPlatform', 'name_unavailable'])
+  assert.match(found.report.rows.find((row) => row.container.id === 4).name.warnings[0], /No CP release record with Release 26\.5\.0\.0 \(1 records read, 1 with Content\)/)
+  assert.deepEqual(found.report.names, { records: 1, withContent: 1, versions: 1, unreadable: 0 })
+  // A names connection without any Content says so.
+  const blank = cpReportFor({ azureSources: [source('tree', tree, columns), source('rel', [{ ...releases[0], fields: { 'Custom.Release': '26.2.0.0' } }], [{ ref: 'Custom.Release', name: 'Release' }])] }, profiles.slice(1), '2026-10', 'UTC')
+  assert.ok(blank.report.issues.some((issue) => /none with a Content value/.test(issue.text)))
+})
