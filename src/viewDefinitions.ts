@@ -1,4 +1,5 @@
-import { forgetAzureConnectionProfile, listAzureConnectionProfiles, loadAzureConnectionProfile, saveAzureConnectionProfile, serverKey, type AzureConnectionProfileSummary } from './azureCredentials.ts'
+import { forgetAzureConnectionProfile, listAzureConnectionProfiles, loadAzureConnectionProfile, saveAzureConnectionProfile, serverKey, viewsBaselineKey, type AzureConnectionProfileSummary } from './azureCredentials.ts'
+import { dataSetOfProfile, streamOfProfile } from './streams.ts'
 export { serverKey }
 
 export { clean as cleanView }
@@ -58,7 +59,18 @@ export function restoreViews(views: AzureConnectionProfileSummary[], pat: string
 // (Git storage connected) connections missing here are added, and those not changed here since the last sync follow
 // Git; connections changed here are kept as they are. A connection that came from Git, was removed there and was not
 // changed here is removed here too (never when the file lists no connections). The PAT handling is as for a restore.
-const baselineKey = 'demand-planning-views-git-baseline-v1'
+const baselineKey = viewsBaselineKey
+// A stream connection an admin changed here but could not save to Git: kept here (not replaced by Git) until it is saved.
+const pendingKey = 'demand-planning-views-pending-share-v1'
+const readPending = (storage: Pick<Storage, 'getItem'>) => { try { const raw = JSON.parse(storage.getItem(pendingKey) ?? '[]') as unknown; return new Set(Array.isArray(raw) ? raw.filter((id): id is string => typeof id === 'string') : []) } catch { return new Set<string>() } }
+export function markPendingShare(ids: string[], pending: boolean, storage: Pick<Storage, 'getItem' | 'setItem'> = localStorage) {
+  const next = readPending(storage)
+  for (const id of ids) { if (pending) next.add(id); else next.delete(id) }
+  try { storage.setItem(pendingKey, JSON.stringify([...next])) } catch { /* compared again next time */ }
+}
+// The stream mapping (DP, CP, IOCC, Content, Tool Validations and DP's data sets) set by an admin in Git is enforced:
+// a user's own change to one of these connections is replaced by Git at the next sync. Time Writing stays personal.
+const enforced = (view: AzureConnectionProfileSummary) => view.role !== 'time-tracking' && Boolean(streamOfProfile(view) || dataSetOfProfile(view))
 const fingerprint = (view: AzureConnectionProfileSummary) => JSON.stringify(clean(view))
 function readBaseline(storage: Pick<Storage, 'getItem'>): Record<string, string> {
   try { const raw = JSON.parse(storage.getItem(baselineKey) ?? '{}') as unknown; return raw && typeof raw === 'object' ? raw as Record<string, string> : {} } catch { return {} }
@@ -67,17 +79,20 @@ function readBaseline(storage: Pick<Storage, 'getItem'>): Record<string, string>
 export function markViewsSynced(views: AzureConnectionProfileSummary[], storage: Pick<Storage, 'getItem' | 'setItem'> = localStorage) {
   try { storage.setItem(baselineKey, JSON.stringify({ ...readBaseline(storage), ...Object.fromEntries(views.map((view) => [view.id, fingerprint(view)])) })) } catch { /* next sync compares again */ }
 }
-export interface SyncResult { added: string[]; updated: string[]; kept: string[]; noPat: string[]; removed: string[]; removedIds: string[] }
+export interface SyncResult { added: string[]; updated: string[]; kept: string[]; noPat: string[]; removed: string[]; removedIds: string[]; enforced: string[] }
 export function syncViewsFromGit(views: AzureConnectionProfileSummary[], storage: Pick<Storage, 'getItem' | 'setItem'> = localStorage): SyncResult {
-  const result: SyncResult = { added: [], updated: [], kept: [], noPat: [], removed: [], removedIds: [] }
-  const baseline = readBaseline(storage)
+  const result: SyncResult = { added: [], updated: [], kept: [], noPat: [], removed: [], removedIds: [], enforced: [] }
+  const baseline = readBaseline(storage), pending = readPending(storage)
   const follow: AzureConnectionProfileSummary[] = [], synced: AzureConnectionProfileSummary[] = []
   for (const view of views) {
     const local = listAzureConnectionProfiles(storage).find((entry) => entry.id === view.id)
     // A view in Git that duplicates another connection here (same server, project, role and query) is not added again.
     if (!local && view.role !== 'time-tracking' && listAzureConnectionProfiles(storage).some((entry) => connectionKey(entry) === connectionKey(view))) { result.kept.push(view.viewName || view.reason); continue }
     if (local && fingerprint(local) === fingerprint(view)) { synced.push(view); continue }
-    if (local && baseline[view.id] !== fingerprint(local)) { result.kept.push(view.viewName || view.reason); continue }
+    if (local && baseline[view.id] !== fingerprint(local)) {
+      if (enforced(view) && !pending.has(view.id)) { result.enforced.push(view.viewName || view.reason); follow.push(view); continue }
+      result.kept.push(view.viewName || view.reason); continue
+    }
     follow.push(view)
   }
   const restored = restoreViews(follow, '', storage)

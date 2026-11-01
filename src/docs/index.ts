@@ -15,10 +15,13 @@ import security from '../../docs/SECURITY-ASSESSMENT.md?raw'
 import dfmea from '../../docs/DFMEA.md?raw'
 import process from '../../docs/DEVELOPMENT-PROCESS.md?raw'
 import cpReporting from '../../docs/CP_Release_Reporting_Implementation.md?raw'
+import releaseNotes from '../../docs/RELEASE-NOTES.md?raw'
+import configuration from '../../docs/CONFIGURATION-MANAGEMENT.md?raw'
 
 export interface ProjectDoc { file: string; label: string; source: string }
 export const projectDocs: ProjectDoc[] = [
   { file: 'VALIDATION-PACKAGE.md', label: 'Validation package', source: validationPackage },
+  { file: 'RELEASE-NOTES.md', label: 'Release notes', source: releaseNotes },
   { file: 'REQUIREMENTS-SPECIFICATION.md', label: 'Requirements', source: requirements },
   { file: 'TRACEABILITY-MATRIX.md', label: 'Traceability matrix', source: traceability },
   { file: 'TEST-PLAN.md', label: 'Test plan', source: testPlan },
@@ -31,6 +34,7 @@ export const projectDocs: ProjectDoc[] = [
   { file: 'SECURITY-ASSESSMENT.md', label: 'Security assessment', source: security },
   { file: 'DFMEA.md', label: 'DFMEA', source: dfmea },
   { file: 'DEVELOPMENT-PROCESS.md', label: 'Development process', source: process },
+  { file: 'CONFIGURATION-MANAGEMENT.md', label: 'Configuration management', source: configuration },
   { file: 'PROJECT-PLAN.md', label: 'Project plan', source: projectPlan },
   { file: 'CP_Release_Reporting_Implementation.md', label: 'CP release reporting brief', source: cpReporting },
 ]

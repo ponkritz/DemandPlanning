@@ -36,7 +36,8 @@ export const streamNamed = (name: string | undefined) => defaultStreams.find((st
 // The connection of an Azure stream: a non-Time-Writing connection whose view name (or name) is the stream's name.
 // CP's is its release-folder tree: the CP connection with a tree / links query (FROM WorkItemLinks), else the first one.
 export function profileForStream<P extends AzureConnectionProfileSummary>(stream: StreamDef, profiles: P[]): P | undefined {
-  const all = profilesForStream(stream, profiles)
+  // The shared setup's connection (from Git) comes before one set up only here, so the admin's mapping is used.
+  const found = profilesForStream(stream, profiles), all = [...found.filter((profile) => profile.shared), ...found.filter((profile) => !profile.shared)]
   return stream.rule === 'cp' ? all.find((profile) => /\bFROM\s+WorkItemLinks\b/i.test(profile.query ?? '')) ?? all[0] : all[0]
 }
 // Every connection of an Azure stream, in the connections' order; CP's others (e.g. "CP Releases") can enrich the

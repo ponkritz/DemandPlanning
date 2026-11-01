@@ -110,8 +110,10 @@ The risk management file consists of DFMEA.md (design failure modes with severit
 
 ## 8. Configuration management
 
+The full plan is [CONFIGURATION-MANAGEMENT.md](CONFIGURATION-MANAGEMENT.md); the version history is [RELEASE-NOTES.md](RELEASE-NOTES.md). In short:
+
 - **Source:** GitHub repository, `main` protected by the CI checks; changes by pull request only.
-- **Identification:** semantic version `x.y.z` in `package.json` (checked by `scripts/verify-version.mjs`), CI build number and Git revision in `build-info.json`, in the app footer and in the Force Update dialog; `latest.json` carries the build number per platform.
+- **Identification:** semantic version `x.y.z` in `package.json`, bumped by every merged change with its release-notes entry (CI-09; checked by `scripts/verify-version.mjs` and `tests/release-notes.test.mjs`), CI build number and Git revision in `build-info.json`, in the app footer and in the Force Update dialog; `latest.json` carries the build number per platform.
 - **Dependencies:** `pnpm-lock.yaml` pins every package; CI installs with `--frozen-lockfile`; updates come through the daily check as pull requests.
 - **Releases:** `desktop-latest` (installers, SHA256SUMS, `latest.json`) and tagged releases `vX.Y.Z`; GitHub Pages for the web app.
 - **Documents:** in `docs/`, versioned with the code, bundled into the build, shown on the Documentation page; the traceability matrix is generated and checked.
