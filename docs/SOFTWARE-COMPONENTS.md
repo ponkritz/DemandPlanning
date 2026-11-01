@@ -201,6 +201,7 @@ This document lists every software component of the system: the in-house source 
 |---|---|---|---|
 | desktop-manifest | `scripts/desktop-manifest.cjs` | Merges one platform's installer into latest.json on the desktop-latest release with per-platform build numbers. | CI, DSK |
 | traceability | `scripts/traceability.mjs` | Generates docs/TRACEABILITY-MATRIX.md from the documents and checks the trace (`--check`). | DOC, CI |
+| swbom | `scripts/swbom.mjs` | Generates the Software Bill of Materials (docs/SWBOM.md, docs/swbom.cdx.json) from pnpm-lock.yaml and checks it (`--check`). | CI |
 | verify-version | `scripts/verify-version.mjs` | Checks package.json version is x.y.z and matches a vX.Y.Z release tag. | CI |
 | vite.config | `vite.config.ts` | Vite build: React plugin, version check, build metadata (__APP_BUILD__, build-info.json, meta tag). | CI, UPD |
 | index | `index.html` | HTML entry page with favicon, title and root element loading src/main.tsx. | — |
@@ -212,6 +213,7 @@ This document lists every software component of the system: the in-house source 
 | Component | Path | Purpose | Requirement areas |
 |---|---|---|---|
 | traceability.test | `tests/traceability.test.mjs` | Validation Package consistency: requirement levels, test-case and UAT traces, component list, current matrix. | DOC, CI |
+| swbom.test | `tests/swbom.test.mjs` | The SWBOM lists exactly the lockfile's components with scope, licence and hash; lockfile key parsing. | CI |
 | validation-package.test | `tests/validation-package.test.mjs` | Validation Package documents: required sections, unique IDs, mitigations and DFMEA controls traced to existing requirements. | DOC |
 | access.test | `tests/access.test.mjs` | Access policy: no-policy defaults, role union, file round trip, refusing writes for roles without Azure changes. | CON |
 | app-update.test | `tests/app-update.test.mjs` | Build metadata validation, cache-busting URLs, update checks and reload blocking, release version check. | UPD, CI |
@@ -277,18 +279,18 @@ The end-to-end suite (`pnpm test:e2e`, after `pnpm build:web`) drives the built 
 
 ## 2. Third-party components (SOUP)
 
-Direct dependencies from `package.json`, with the exact version resolved by `pnpm-lock.yaml` (the lockfile pins every transitive package too: 367 unique packages in all, listed by `pnpm list --depth Infinity`). **Runtime** components ship inside the web bundle or the desktop app; **build** components run only on the developer's machine and in CI. Versions are updated by the daily vulnerability check (§4) within their semver ranges; a major update is a reviewed change.
+Direct dependencies from `package.json`, with the exact version resolved by `pnpm-lock.yaml` (the lockfile pins every transitive package too, each listed with licence, hash and scope in the generated [SWBOM.md](SWBOM.md), listed by `pnpm list --depth Infinity`). **Runtime** components ship inside the web bundle or the desktop app; **build** components run only on the developer's machine and in CI. Versions are updated by the daily vulnerability check (§4) within their semver ranges; a major update is a reviewed change.
 
 | Component | Version | Licence | Use | Purpose in this system | Failure effect if it misbehaves |
 |---|---|---|---|---|---|
 | react | 19.3.1 | MIT | runtime | UI rendering library. | The app does not render; caught by the ErrorBoundary and by every L3 test. |
 | react-dom | 19.3.1 | MIT | runtime | React DOM renderer. | As react. |
-| @azure/msal-browser | 5.26.0 | MIT | runtime (SharePoint only) | Microsoft Entra ID sign-in for the optional SharePoint storage (SNP). | SharePoint sign-in fails; local and Git storage are unaffected. |
-| electron | 44.9.3 | MIT | runtime (desktop) | Desktop shell: Chromium and Node.js runtime, IPC, window. Bundles its own Chromium and Node versions. | Desktop app fails to start or a sandbox weakness; web app unaffected. |
+| @azure/msal-browser | 5.27.0 | MIT | runtime (SharePoint only) | Microsoft Entra ID sign-in for the optional SharePoint storage (SNP). | SharePoint sign-in fails; local and Git storage are unaffected. |
+| electron | 44.10.0 | MIT | runtime (desktop) | Desktop shell: Chromium and Node.js runtime, IPC, window. Bundles its own Chromium and Node versions. | Desktop app fails to start or a sandbox weakness; web app unaffected. |
 | vite | 8.3.5 | MIT | build | Bundler and dev server; emits `build-info.json`. | Build fails in CI (no release). |
 | @vitejs/plugin-react | 6.1.2 | MIT | build | React fast-refresh and JSX transform for Vite. | Build fails in CI. |
 | typescript | 6.0.3 | Apache-2.0 | build | Type checking (`tsc -b`). | Type errors go unnoticed; lint and tests still run. |
-| oxlint | 1.89.0 | MIT | build | Static analysis (`pnpm lint`). | Lint findings go unnoticed. |
+| oxlint | 1.90.0 | MIT | build | Static analysis (`pnpm lint`). | Lint findings go unnoticed. |
 | electron-builder | 26.18.0 | MIT | build | Packages the NSIS installer and the macOS disk image. | No installer is produced; CI fails. |
 | playwright | 1.56.1 | Apache-2.0 | test | Drives Chromium for the end-to-end suite (`pnpm test:e2e`); the browser is installed by `playwright install chromium`. | End-to-end tests cannot run; unit tests and the build are unaffected. |
 | fake-indexeddb | 6.2.7 | Apache-2.0 | test | IndexedDB in Node for the storage tests. | Storage tests cannot run. |
@@ -324,5 +326,5 @@ Advisories found later are listed here with the GHSA / CVE identifier that `pnpm
 **Component-level security notes** (not advisories, from the assessment):
 
 - Electron 44.10.0 bundles its own Chromium and Node.js; the main window runs with context isolation, sandbox and no Node integration (DSK-02). Updating Electron is the way to take Chromium security fixes; the daily check updates it within the 44.x range, a major update is a reviewed change.
-- @azure/msal-browser 5.26.0 keeps the Entra session in `sessionStorage`; the requested Graph scope is broader than needed (SECURITY-ASSESSMENT.md PT-13).
+- @azure/msal-browser 5.27.0 keeps the Entra session in `sessionStorage`; the requested Graph scope is broader than needed (SECURITY-ASSESSMENT.md PT-13).
 - react / react-dom 19.3.1 neutralise `javascript:` URLs in `href` and escape text content; the app uses no `dangerouslySetInnerHTML`.

@@ -1186,6 +1186,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
   - Every `actions/checkout` step sets `persist-credentials: false`.
   - The jobs that write to releases (`publish-tagged-release`, `publish-windows`, `publish-macos`) only download artefacts and run `gh release`; their `run:` steps read `$TAG`, `$REPO` and similar environment variables, never `${{ }}` inside the script.
 
+**TC-CI-04 Software Bill of Materials** — Req CI-08 — L1 `swbom.test.mjs` ("the SWBOM lists exactly the components of pnpm-lock.yaml, with scope and licence (TC-CI-04)"; "lockfile keys: scoped names and peer suffixes (TC-CI-04)"); inspection: after a dependency change, `pnpm swbom` rewrites `docs/SWBOM.md` and `docs/swbom.cdx.json`; without it `pnpm test` fails; the Documentation page has a SWBOM tab listing the shipped components (react, react-dom, @azure/msal-browser and their dependencies, Electron) with licences.
+
 ### 6.21 QE Mapping
 
 **TC-QEM-01 Read an Excel as it is** — Req QEM-02 — L1 `qe-mapping.test.mjs` ("reads an Excel workbook as it is: every sheet, shared / rich / inline strings, dates, numbers, booleans, formulas"; "reads CSV with commas, semicolons or tabs, quotes and line breaks in fields"; "a sheet becomes a table as it is: header from the first non-empty row, names made unique, empty rows and columns dropped").
@@ -1443,6 +1445,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CI-05 | TC-UPD-01 |
 | CI-06 | TC-CI-02 |
 | CI-07 | TC-CI-03 |
+| CI-08 | TC-CI-04 |
 | QEM-01 | TC-QEM-03, TC-QEM-04 |
 | QEM-02 | TC-QEM-01, TC-QEM-04 |
 | QEM-03…QEM-06 | TC-QEM-02, TC-QEM-04 |

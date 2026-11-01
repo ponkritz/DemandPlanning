@@ -661,7 +661,7 @@ OVR-01 to OVR-08 describe the earlier Overview (Team / Individual switch, "This 
 
 | ID | Requirement | Ver. | Pri. | Trace |
 |---|---|---|---|---|
-| DOC-01 | The Documentation page shall show, as tabs, every Markdown document in `docs/`: Validation package, Requirements, Traceability matrix, Test plan, Verification plan, UAT plan, Known issues, Software components, Security assessment, DFMEA, Development process, Azure DevOps setup, Project plan, CP release reporting brief. | T | M | UC-20 |
+| DOC-01 | The Documentation page shall show, as tabs, every Markdown document in `docs/`: Validation package, Requirements, Traceability matrix, Test plan, Verification plan, UAT plan, Known issues, Software components, Security assessment, DFMEA, Development process, Azure DevOps setup, Project plan, CP release reporting brief, SWBOM. | T | M | UC-20 |
 | DOC-02 | The page shall show the documents bundled with the running build. | I | M | UC-20 |
 | DOC-03 | The page shall render headings, paragraphs, nested lists, tables, rules, inline code, bold, italic and links as formatted text. It shall not inject HTML from the documents. | T, I | M | UC-20 |
 | DOC-04 | A link to another bundled document shall open that document in the page, at the linked section when an anchor is given. A link to a section shall scroll to it. | T, D | M | UC-20 |
@@ -695,6 +695,7 @@ OVR-01 to OVR-08 describe the earlier Overview (Team / Individual switch, "This 
 | CI-05 | The build shall fail when the package version is not `x.y.z`, or when a release tag does not equal the version. | T | M | UC-19 |
 | CI-06 | An end-to-end suite (`pnpm test:e2e`: Playwright driving Chromium against the built web app served by `vite preview`, with no network — the synthetic sample and fixtures in `e2e/fixtures` as data) shall automate the UAT scenarios listed in SOFTWARE-COMPONENTS.md §1.10, each named after its test case; every pull request to main and every push to main shall run it and fail when a scenario fails. | T | M | UC-19 |
 | CI-07 | CI jobs that run dependency code (install, lint, tests, build, packaging) shall hold a read-only token (`permissions: contents: read`) and shall not persist Git credentials in the checkout (`persist-credentials: false`); only publishing jobs that download already-built artefacts shall hold `contents: write`, and workflow steps shall take their inputs from environment variables, not from `${{ }}` interpolation inside `run:`. | I | M | UC-19 |
+| CI-08 | The repository shall keep a **Software Bill of Materials (SWBOM)** of every third-party component, generated from `pnpm-lock.yaml` by `pnpm swbom` (`scripts/swbom.mjs`) and never edited by hand: `docs/SWBOM.md` (on the Documentation page) and `docs/swbom.cdx.json` (CycloneDX 1.5 JSON). Each component has its exact version, licence, SHA-512 integrity hash (from the lockfile), whether package.json names it directly, and its scope — *runtime* (a dependency of package.json or anything it pulls in: shipped in the web and desktop app), *desktop runtime* (Electron) or *build / test* (not shipped). `pnpm test` shall fail when the SWBOM does not list exactly the lockfile's components and the product version; the daily package update regenerates it. | T | M | UC-20 |
 
 ### 5.22 QE Mapping (QEM) — UC-23
 

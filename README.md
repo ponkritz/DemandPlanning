@@ -38,6 +38,8 @@ Implemented in the MVP UI:
 
 ## Documentation
 
+**SWBOM.** `docs/SWBOM.md` (and `docs/swbom.cdx.json`, CycloneDX 1.5) is the Software Bill of Materials: every third-party component with its version, licence, integrity hash and whether it ships (runtime) or only builds and tests the app. Regenerate it with `pnpm swbom` after any dependency change; `pnpm test` fails when it is out of date.
+
 The same documents are in the app under **Data & governance → Documentation**, bundled with each build (so the app shows the Validation Package of its own build): tabs per document, an "On this page" list, in-app links between documents, and Download .md.
 
 - [Validation package](docs/VALIDATION-PACKAGE.md): the index of the validation file — what the software must do, how it was built, verified and validated, its risks and controls — with the approval table. Its documents are kept consistent by the test suite (`pnpm test` fails when the traceability matrix is stale, a requirement has no test case, or a cited ID does not exist).
