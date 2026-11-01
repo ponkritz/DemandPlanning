@@ -130,7 +130,9 @@ export function cpNameIndex(releases: AzureWorkItem[] | undefined, columns: Fiel
   const field = fieldReader(columns)
   const index = new Map<string, NameEntry>(), exceptions: number[] = []
   for (const row of releases) {
-    const key = cpVersionKey(field(row, 'Release'), zeroPad)
+    // The Release field as written ("26.2.0.0"), else the first version in it ("v26.2 (Setebos)" → 26.2).
+    const written = field(row, 'Release')
+    const key = cpVersionKey(written, zeroPad) ?? cpVersionKey(/\d+(?:\.\d+){1,3}/.exec(written ?? '')?.[0], zeroPad)
     if (!key) { exceptions.push(row.id); continue }
     const entry = index.get(key) ?? { ids: [] as number[], blank: 0, names: new Map<string, { name: string; ids: number[] }>() }
     entry.ids.push(row.id)
@@ -139,7 +141,8 @@ export function cpNameIndex(releases: AzureWorkItem[] | undefined, columns: Fiel
     else { const normal = content.toLowerCase(); const found = entry.names.get(normal) ?? { name: content, ids: [] }; found.ids.push(row.id); entry.names.set(normal, found) }
     index.set(key, entry)
   }
-  return { index, exceptions }
+  const withContent = releases.filter((row) => field(row, 'Content')).length
+  return { index, exceptions, records: releases.length, withContent, versions: [...index.values()].filter((entry) => entry.names.size).length }
 }
 // A candidate only from an explicit title shape: "Release <version> <Name> … Clinical Platform", <Name> a capitalised word.
 const titleCandidate = (title: string) => /^\s*(?:Release\s+)?\d+(?:\.\d+){1,3}\s+([A-Z][a-z]{2,})\b(?=.*Clinical\s*Platform)/.exec(title)?.[1]
@@ -151,7 +154,7 @@ export function cpReleaseName(container: Pick<CpContainer, 'id' | 'title'>, name
   if (!rawVersion || !normalizedVersion) return { ...base, displayLabel: container.title, nameStatus: 'version_unavailable', warnings: ['The container title has no release version this report can read.'] }
   if (!names) return candidate('enrichment_not_supplied')
   const entry = names.index.get(normalizedVersion)
-  if (!entry || !entry.names.size) return candidate('name_unavailable', entry ? [`${entry.blank} CP release record${entry.blank === 1 ? '' : 's'} for ${rawVersion} without Content.`] : [])
+  if (!entry || !entry.names.size) return candidate('name_unavailable', entry ? [`${entry.blank} CP release record${entry.blank === 1 ? '' : 's'} for ${rawVersion} without Content.`] : [`No CP release record with Release ${normalizedVersion} (${names.records} records read, ${names.withContent} with Content).`])
   const candidates = [...entry.names.values()]
   if (candidates.length > 1) return { ...base, displayLabel: container.title, nameStatus: 'conflicting_names', supportingCPReleaseIds: entry.ids, candidateNames: candidates, warnings: [`Different names for ${rawVersion}: ${candidates.map((found) => found.name).join(', ')}.`] }
   const [only] = candidates
@@ -165,6 +168,7 @@ export interface CpReleaseRow { container: CpContainer; name: CpName; supported:
 export function cpMonthReport(tree: ReturnType<typeof cpSignatures>, month: string, names?: ReturnType<typeof cpNameIndex>, settings: CpReportingSettings = defaultCpReportingSettings) {
   const inMonth = tree.signatures.filter((entry) => entry.month === month)
   const issues = [...tree.issues]
+  if (names && !names.withContent) issues.push({ kind: 'name-conflict', ids: [], text: `The names connection has ${names.records} records but none with a Content value: check that its query returns the Content field.` })
   const rows: CpReleaseRow[] = []
   for (const releaseId of [...new Set(inMonth.map((entry) => entry.releaseId))]) {
     const container = tree.containers.get(releaseId)!
@@ -181,6 +185,6 @@ export function cpMonthReport(tree: ReturnType<typeof cpSignatures>, month: stri
   }
   rows.sort((a, b) => Number(b.completed) - Number(a.completed) || b.signedDocuments - a.signedDocuments || b.container.id - a.container.id)
   const counted = rows.filter((row) => !row.container.excluded), shared = rows.filter((row) => row.container.excluded)
-  return { month, rows: counted, shared, supported: counted.length, completed: counted.filter((row) => row.completed).length, signedDocuments: new Set(counted.flatMap((row) => row.signatures.map((entry) => entry.documentId))).size, issues }
+  return { month, rows: counted, shared, ...(names ? { names: { records: names.records, withContent: names.withContent, versions: names.versions, unreadable: names.exceptions.length } } : {}), supported: counted.length, completed: counted.filter((row) => row.completed).length, signedDocuments: new Set(counted.flatMap((row) => row.signatures.map((entry) => entry.documentId))).size, issues }
 }
 export type CpMonthReport = ReturnType<typeof cpMonthReport>

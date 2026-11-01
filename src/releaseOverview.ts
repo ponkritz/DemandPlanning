@@ -2,7 +2,7 @@ import type { AppState } from './domain'
 import type { AzureConnectionProfileSummary } from './azureCredentials.ts'
 import { releaseFor, releaseOf } from './releasePath.ts'
 import { defaultStreams, profileForStream, profilesForStream, streamOfProfile, type ReleaseRule } from './streams.ts'
-import { cpMonthReport, cpNameIndex, cpSignatures } from './cpReporting.ts'
+import { cpMonthReport, cpNameIndex, cpSignatures, fieldReader } from './cpReporting.ts'
 import { releaseRegister, viewMonthOf } from './releaseSource.ts'
 import { viewSource } from './viewSources.ts'
 import { dpMilestoneLabel, dpMonthCounts, type SupportedRelease } from './dpMilestones.ts'
@@ -66,9 +66,13 @@ export function cpReportFor(state: Pick<AppState, 'azureSources' | 'releaseSourc
   const others = profilesForStream(stream, profiles).filter((profile) => profile.id !== tree.id)
   const releaseConnections = profiles.filter((profile) => profile.role === 'release-source').length
   const source = viewSource(state, tree.id, tree.role, tree.query, releaseConnections)
-  const enrichment = others.map((profile) => viewSource(state, profile.id, profile.role, profile.query, releaseConnections)).find((entry) => entry && entry !== source)
+  // Names: the other CP connection whose rows carry Content (the CP_Releases query), else one with a Release field.
+  const candidates = others.flatMap((profile) => { const found = viewSource(state, profile.id, profile.role, profile.query, releaseConnections); return found && found !== source ? [{ profile, found, field: fieldReader('columns' in found ? found.columns : undefined) }] : [] })
+  const withField = (name: string) => candidates.map((entry) => ({ ...entry, count: entry.found.items.filter((item) => entry.field(item, name)).length })).filter((entry) => entry.count > 0).sort((a, b) => b.count - a.count)[0]
+  const chosen = withField('Content') ?? withField('Release')
+  const enrichment = chosen?.found, enrichmentName = chosen ? chosen.profile.viewName || chosen.profile.reason : undefined
   const report = cpMonthReport(cpSignatures(source?.items ?? [], source && 'columns' in source ? source.columns : undefined, undefined, timeZone), month, enrichment ? cpNameIndex(enrichment.items, 'columns' in enrichment ? enrichment.columns : undefined) : undefined)
-  return { profile: tree, source, enrichment, report }
+  return { profile: tree, source, enrichment, enrichmentName, report }
 }
 function cpStream(state: Pick<AppState, 'azureSources' | 'releaseSource'>, profiles: AzureConnectionProfileSummary[], month: string, timeZone?: string): ReleaseStream {
   const found = cpReportFor(state, profiles, month, timeZone)!
