@@ -47,7 +47,7 @@ This document lists every software component of the system: the in-house source 
 |---|---|---|---|
 | AccessPanel | `src/components/AccessPanel.tsx` | Settings → Access: shows roles and per-role rights; editable and saved to Git (access.json) only by a role that may manage access. | CON |
 | AssigneeConfirm | `src/components/AssigneeConfirm.tsx` | Confirmation before creating work items: what is created and to whom it is assigned; never blank. | CON, ATM |
-| AzureConnections | `src/components/AzureConnections.tsx` | Settings → Azure DevOps connection setup: servers, presets, add/clone/edit connections, PATs, stream mapping and duplicate clean-up. | CON |
+| AzureConnections | `src/components/AzureConnections.tsx` | Settings → Azure DevOps connection setup: servers, presets, add/clone/edit connections, PATs, stream mapping (admins: saved to Git on every change, Save stream mapping to Git) and duplicate clean-up. | CON |
 | AzureViewsGit | `src/components/AzureViewsGit.tsx` | Settings panel to save Azure DevOps connection definitions to Git and restore them elsewhere, never writing PATs. | CON, GIT |
 | AzureWorkItemTree | `src/components/AzureWorkItemTree.tsx` | Expandable Epic → Feature → Story → Task tree with Feature creation and child completion; read-only for other connections. | CON, ATM |
 | BacklogTable | `src/components/BacklogTable.tsx` | Paged backlog table of the work-item tree with level filter and per-browser column chooser. | CON |
@@ -143,7 +143,7 @@ This document lists every software component of the system: the in-house source 
 | gitSnapshots | `src/gitSnapshots.ts` | On-prem read-only view fetches saved to Git (azure-data/) without PATs; parse, digest, apply. | GIT, FET |
 | sharepoint | `src/sharepoint.ts` | SharePoint client via MSAL and Microsoft Graph for remote app state. | SNP |
 | cloudSnapshots | `src/cloudSnapshots.ts` | Frozen whitelisted snapshot files uploaded to SharePoint with read-back verification; listing history. | SNP |
-| viewDefinitions | `src/viewDefinitions.ts` | Azure connection definitions file in Git: serialise/parse, restore with PAT rules, sync, duplicates. | CON, GIT |
+| viewDefinitions | `src/viewDefinitions.ts` | Azure connection definitions file in Git: serialise/parse, restore with PAT rules, sync (the stream mapping enforced), pending admin changes, duplicates. | CON, GIT |
 | download | `src/download.ts` | File downloads: effort CSV, state JSON backup, CSV, Markdown, XLSX and PPTX. | STO, CON, PCK |
 | seed | `src/seed.ts` | Initial synthetic AppState (people, activities, efforts, baselines, periods). | SMP |
 | sampleData | `src/sampleData.ts` | Deterministic synthetic Azure-shaped dataset, profiles and release scopes for sample mode. | SMP |
@@ -157,7 +157,7 @@ This document lists every software component of the system: the in-house source 
 | workItemEdit | `src/workItemEdit.ts` | The fields an edit may change, their checks, the revision-tested JSON patch, rich text as editable text, the Feature DoD split and the edit locks. | BKL |
 | planningLock | `src/planningLock.ts` | The planning / actuals lock rule of a month (deadline, extension, explicit lock) shared by the Monthly page and the Task creation paths, and whether a new month Task is ad-hoc. | MON |
 | backgroundJobs | `src/backgroundJobs.ts` | Background jobs of a page load: runs long Azure DevOps writes off the form, one per key, with progress and the result; nothing stored. | NAV, BKL, ATM, MON |
-| azureCredentials | `src/azureCredentials.ts` | Browser-local PATs per server and connection profiles (role, view name, show in menu); never in app data. | CON |
+| azureCredentials | `src/azureCredentials.ts` | Browser-local PATs per server and connection profiles (role, view name, show in menu, shared from Git); never in app data. | CON |
 | connectionPresets | `src/connectionPresets.ts` | Pre-filled team connection presets and dismissed-preset storage. | CON |
 | releaseSource | `src/releaseSource.ts` | Read-only release source: paged flat WIQL queries and tree / direct-links (WorkItemLinks) queries, approval month, completed releases, fuzzy Feature name matching. | QV |
 | windchill | `src/windchill.ts` | Windchill host/service path settings, normalisation and browser storage. | CON |
@@ -214,6 +214,7 @@ This document lists every software component of the system: the in-house source 
 |---|---|---|---|
 | traceability.test | `tests/traceability.test.mjs` | Validation Package consistency: requirement levels, test-case and UAT traces, component list, current matrix. | DOC, CI |
 | swbom.test | `tests/swbom.test.mjs` | The SWBOM lists exactly the lockfile's components with scope, licence and hash; lockfile key parsing. | CI |
+| release-notes.test | `tests/release-notes.test.mjs` | The newest release-notes version is the package version; versions unique, descending, each with an entry. | CI |
 | validation-package.test | `tests/validation-package.test.mjs` | Validation Package documents: required sections, unique IDs, mitigations and DFMEA controls traced to existing requirements. | DOC |
 | access.test | `tests/access.test.mjs` | Access policy: no-policy defaults, role union, file round trip, refusing writes for roles without Azure changes. | CON |
 | app-update.test | `tests/app-update.test.mjs` | Build metadata validation, cache-busting URLs, update checks and reload blocking, release version check. | UPD, CI |
@@ -255,7 +256,7 @@ This document lists every software component of the system: the in-house source 
 | setup-guide.test | `tests/setup-guide.test.mjs` | Get started step statuses for new, partly and fully set-up users. | NAV |
 | streams.test | `tests/streams.test.mjs` | Stream definitions, DP/IOCC/Tool Validations rules, fuzzy Feature match and Pulse Check streams. | QV, OVR |
 | theme.test | `tests/theme.test.mjs` | Theme preference parsing/cycling/`?theme=` and relative freshness labels. | UI |
-| view-definitions.test | `tests/view-definitions.test.mjs` | Views file in Git, restore PAT rules, Git setup sync and Time Writing promotion. | CON, GIT |
+| view-definitions.test | `tests/view-definitions.test.mjs` | Views file in Git, restore PAT rules, Git setup sync (stream mapping enforced), pending admin changes and Time Writing promotion. | CON, GIT |
 | view-sources.test | `tests/view-sources.test.mjs` | Each view shows its own fetch; legacy shared snapshot rule. | QV, FET |
 | windchill-bridge.test | `tests/windchill-bridge.test.mjs` | Windchill bookmarklet and result verification. | CON |
 | windchill-browser.test | `tests/windchill-browser.test.mjs` | Windchill test and search from the web app with browser sign-in. | CON |

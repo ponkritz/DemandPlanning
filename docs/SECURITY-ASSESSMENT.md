@@ -133,7 +133,7 @@ Each mitigation is implemented by the named requirements and verified by the nam
 | SM-19 | SharePoint uses delegated Microsoft Graph v1.0 with MSAL (sessionStorage), etag-checked writes and a size limit; SharePoint is optional. | IF-04, SNP-01, SNP-03, SNP-07 | TC-SNP-01, TC-INS-04 |
 | SM-20 | A rendering error is contained by the ErrorBoundary with a way back; imports and snapshots have size limits (200 MB backups, 100 MB inflate, 1000 rows shown). | CON-70, STO-07, QV-10 | TC-CON-38, TC-STO-03, TC-QV-05 |
 | SM-21 | Saves are automatic and failures are shown with an immediate backup offer; restore is validated and confirmed; unsaved work blocks a reload. | STO-01, STO-03, STO-04, STO-08, UPD-03 | TC-STO-01, TC-STO-02, TC-STO-04, TC-UPD-02 |
-| SM-22 | Roles decide what the app shows and offers; the policy is kept in Git and applied per email; the user's own tokens remain the real limit (documented). | CON-41, CON-42, CON-43, CON-51 | TC-ACC-01, TC-ACC-02, TC-CON-24 |
+| SM-22 | Roles decide what the app shows and offers; the policy is kept in Git and applied per email; the user's own tokens remain the real limit (documented). The stream mapping in the shared setup is applied over local changes at start (CON-79) — like every shared file, only as trustworthy as the write access to the data repository. | CON-41, CON-42, CON-43, CON-51, CON-79 | TC-ACC-01, TC-ACC-02, TC-CON-24, TC-CON-47 |
 
 ## 5. Re-assessment
 

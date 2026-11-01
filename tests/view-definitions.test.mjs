@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { saveAzureConnectionProfile, loadAzureConnectionProfile, listAzureConnectionProfiles } from '../src/azureCredentials.ts'
 import { saveServerPat, loadServerPat } from '../src/azureCredentials.ts'
 import { gitSyncedIds, duplicateOf } from '../src/viewDefinitions.ts'
-import { viewsFile, serializeViews, parseViews, restoreViews, serverKey, syncViewsFromGit, markViewsSynced, promoteToTimeWriting } from '../src/viewDefinitions.ts'
+import { viewsFile, serializeViews, parseViews, restoreViews, serverKey, syncViewsFromGit, markViewsSynced, markPendingShare, promoteToTimeWriting } from '../src/viewDefinitions.ts'
 import { siblingConfig, readTextFile, writeTextFile } from '../src/gitStorage.ts'
 
 const memory = () => { const data = new Map(); return { getItem: (key) => data.get(key) ?? null, setItem: (key, value) => data.set(key, String(value)), removeItem: (key) => data.delete(key) } }
@@ -56,33 +56,51 @@ test('views file sits next to the data file and is committed with the loaded ver
   assert.match(calls[1][1], /contents\/team\/azure-views\.json$/); assert.equal(calls[1][2], 'old')
 })
 
-test('Git connection setup is the default: added and followed, unless changed here; PATs kept', () => {
+test('Git connection setup is the default: added and followed; the stream mapping is enforced, other views kept when changed here; PATs kept (TC-CON-47)', async () => {
   const storage = memory()
   const cp = { ...dp, id: 'cp', reason: 'CP', viewName: 'CP', query: 'SELECT 1' }
   saveAzureConnectionProfile({ ...dp, token: 'my-pat' }, storage)
   // First start: dp is the same as in Git; cp is new and gets the PAT of the same server.
-  assert.deepEqual(syncViewsFromGit([dp, cp], storage), { added: ['CP'], updated: [], kept: [], noPat: [], removed: [], removedIds: [] })
+  assert.deepEqual(syncViewsFromGit([dp, cp], storage), { added: ['CP'], updated: [], kept: [], noPat: [], removed: [], removedIds: [], enforced: [] })
   assert.equal(loadAzureConnectionProfile('cp', storage).token, 'my-pat')
   // Git changes cp's query; it was not changed here, so it follows Git (PAT kept).
   const cp2 = { ...cp, query: 'SELECT 2' }
-  assert.deepEqual(syncViewsFromGit([dp, cp2], storage), { added: [], updated: ['CP'], kept: [], noPat: [], removed: [], removedIds: [] })
+  assert.deepEqual(syncViewsFromGit([dp, cp2], storage), { added: [], updated: ['CP'], kept: [], noPat: [], removed: [], removedIds: [], enforced: [] })
   assert.equal(loadAzureConnectionProfile('cp', storage).query, 'SELECT 2')
   assert.equal(loadAzureConnectionProfile('cp', storage).token, 'my-pat')
-  // The user changes cp here; a later Git change does not overwrite it.
+  // The user changes cp (a stream connection) here; the admin's stream mapping in Git is enforced at the next sync (CON-79).
   saveAzureConnectionProfile({ ...loadAzureConnectionProfile('cp', storage), query: 'SELECT mine' }, storage)
-  assert.deepEqual(syncViewsFromGit([dp, { ...cp, query: 'SELECT 3' }], storage), { added: [], updated: [], kept: ['CP'], noPat: [], removed: [], removedIds: [] })
-  assert.equal(loadAzureConnectionProfile('cp', storage).query, 'SELECT mine')
+  assert.deepEqual(syncViewsFromGit([dp, { ...cp, query: 'SELECT 3' }], storage), { added: [], updated: ['CP'], kept: [], noPat: [], removed: [], removedIds: [], enforced: ['CP'] })
+  assert.equal(loadAzureConnectionProfile('cp', storage).query, 'SELECT 3')
+  assert.equal(loadAzureConnectionProfile('cp', storage).token, 'my-pat', 'the PAT stays')
+  // An admin's change that could not be saved to Git yet is kept until it is.
+  saveAzureConnectionProfile({ ...loadAzureConnectionProfile('cp', storage), query: 'SELECT admin' }, storage)
+  markPendingShare(['cp'], true, storage)
+  assert.deepEqual(syncViewsFromGit([dp, { ...cp, query: 'SELECT 3' }], storage).kept, ['CP'])
+  assert.equal(loadAzureConnectionProfile('cp', storage).query, 'SELECT admin')
+  markPendingShare(['cp'], false, storage)
+  saveAzureConnectionProfile({ ...loadAzureConnectionProfile('cp', storage), query: 'SELECT 3' }, storage)
+  markViewsSynced([dp, { ...cp, query: 'SELECT 3' }], storage)
   // After Restore from Git (or saving to Git) the connection follows Git again.
   restoreViews([{ ...cp, query: 'SELECT 3' }], '', storage); markViewsSynced([{ ...cp, query: 'SELECT 3' }], storage)
   assert.deepEqual(syncViewsFromGit([dp, { ...cp, query: 'SELECT 4' }], storage).updated, ['CP'])
-  // A connection set up here before (never synced) and different from Git is kept; one not in Git is untouched.
+  // Set up here before (never synced) and different from Git: a stream connection (DP) follows Git; any other view
+  // is kept; one not in Git is untouched.
   const other = memory()
+  const pedestalHistory = { id: 'ph', url: 'https://ads.corp.example/tfs/Coll/DHP', baseUrl: 'https://ads.corp.example/tfs', reason: 'Release history', role: 'reference', query: 'SELECT 9' }
   saveAzureConnectionProfile({ ...dp, query: 'SELECT local', token: 'x' }, other)
+  saveAzureConnectionProfile({ ...pedestalHistory, query: 'SELECT mine', token: 'x' }, other)
   saveAzureConnectionProfile({ id: 'own', url: 'https://dev.azure.com/o/P', reason: 'Own', token: 'y' }, other)
-  assert.deepEqual(syncViewsFromGit([dp], other), { added: [], updated: [], kept: ['Digital Platform'], noPat: [], removed: [], removedIds: [] })
+  assert.deepEqual(syncViewsFromGit([dp, pedestalHistory], other), { added: [], updated: ['Digital Platform'], kept: ['Release history'], noPat: [], removed: [], removedIds: [], enforced: ['Digital Platform'] })
+  assert.equal(loadAzureConnectionProfile('dp', other).query, dp.query)
   assert.ok(loadAzureConnectionProfile('own', other))
+  // The shared connection of a stream is the one Release Details uses, before one set up only here.
+  const { defaultStreams, profileForStream } = await import('../src/streams.ts')
+  saveAzureConnectionProfile({ id: 'mydp', url: dp.url, baseUrl: dp.baseUrl, reason: 'DP mine', role: 'release-source', token: 'x' }, other)
+  const ordered = [listAzureConnectionProfiles(other).find((profile) => profile.id === 'mydp'), ...listAzureConnectionProfiles(other).filter((profile) => profile.id !== 'mydp')]
+  assert.equal(profileForStream(defaultStreams.find((stream) => stream.name === 'DP'), ordered).id, 'dp', 'the connection from Git wins over one set up here')
   // A user without any connection gets them all, view only until a PAT is added.
-  assert.deepEqual(syncViewsFromGit([dp, cp], memory()), { added: ['Digital Platform', 'CP'], updated: [], kept: [], noPat: ['Digital Platform', 'CP'], removed: [], removedIds: [] })
+  assert.deepEqual(syncViewsFromGit([dp, cp], memory()), { added: ['Digital Platform', 'CP'], updated: [], kept: [], noPat: ['Digital Platform', 'CP'], removed: [], removedIds: [], enforced: [] })
 })
 
 test('Git setup: a connection removed in Git is removed here unless changed here; an empty file removes nothing', () => {

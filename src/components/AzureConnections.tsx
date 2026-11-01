@@ -12,7 +12,7 @@ import { timeWritingView } from '../backlogViews'
 import { viewSource } from '../viewSources'
 import type { PageProps } from '../pages/types'
 import type { GitStorage } from '../useGitStorage'
-import { markViewsSynced, serializeViews, viewsFile } from '../viewDefinitions'
+import { markPendingShare, markViewsSynced, serializeViews, viewsFile } from '../viewDefinitions'
 
 const roleLabel: Record<AzureConnectionRole, string> = { 'time-tracking': 'Time Writing (read & write)', 'release-source': 'Releases · DHFI (read only)', documents: 'Documents · Vault (read only)', reference: 'Reference (read only)', 'backlog-view': 'Backlog view (read only)' }
 const roleUse: Record<AzureConnectionRole, string> = {
@@ -80,13 +80,16 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
   function setUpStream(preset: Omit<ConnectionInput, 'pat'>) {
     setFormError('')
     if (!presetHasPat(preset) || preset.role === 'time-tracking') { setForm({ ...preset, pat: '' }); return }
-    try { const id = azure.saveConnection({ ...preset, pat: '' }); void azure.fetchConnection(id) } catch (failure) { setForm({ ...preset, pat: '' }); setFormError(failure instanceof Error ? failure.message : 'Unable to save the connection.') }
+    try { const id = azure.saveConnection({ ...preset, pat: '' }); void azure.fetchConnection(id); void shareMapping(preset.viewName || preset.name, id) } catch (failure) { setForm({ ...preset, pat: '' }); setFormError(failure instanceof Error ? failure.message : 'Unable to save the connection.') }
   }
-  // Admins: a changed stream mapping goes to the shared setup in Git right away.
-  async function shareMapping(name: string) {
-    if (!canManage || !git?.connected || git.readOnly || azure.isSample) return
-    try { const list = listAzureConnectionProfiles(); await git.writeViews(serializeViews(viewsFile(list)), `Stream mapping: ${name}`); markViewsSynced(list); setCleanup({ tone: 'success', text: `“${name}” saved to the shared setup in Git.` }) }
-    catch (failure) { setCleanup({ tone: 'warning', text: `“${name}” saved here, but not to Git: ${failure instanceof Error ? failure.message : String(failure)}` }) }
+  // Admins: every change to the stream mapping is written to the shared setup in Git right away (overwriting what Git
+  // has), and Git's stream mapping is enforced on every other user at their next start. A change that cannot be saved
+  // to Git is kept here until it is (Save stream mapping to Git), so the next sync does not undo it.
+  async function shareMapping(name: string, id?: string) {
+    if (!canManage || azure.isSample) return
+    if (!git?.connected || git.readOnly) { if (id) markPendingShare([id], true); setCleanup({ tone: 'warning', text: `“${name}” saved here only: ${!git?.connected ? 'connect Git storage' : 'your Git token is read-only'} to share the stream mapping with everyone.` }); return }
+    try { const list = listAzureConnectionProfiles(); await git.writeViews(serializeViews(viewsFile(list)), `Stream mapping: ${name}`); markViewsSynced(list); markPendingShare(list.map((profile) => profile.id), false); setCleanup({ tone: 'success', text: `“${name}” saved to the shared setup in Git; it applies to every user at their next start.` }) }
+    catch (failure) { if (id) markPendingShare([id], true); setCleanup({ tone: 'warning', text: `“${name}” saved here, but not to Git: ${failure instanceof Error ? failure.message : String(failure)}. Use “Save stream mapping to Git” to retry.` }) }
   }
 
   const formFrom = (profile: AzureConnectionProfileSummary): ConnectionInput => {
@@ -110,7 +113,7 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
     try { id = azure.saveConnection(form); setForm(null); setFormError('') } catch (failure) { setFormError(failure instanceof Error ? failure.message : 'Unable to save the connection.'); return }
     void azure.fetchConnection(id)
     const saved = listAzureConnectionProfiles().find((profile) => profile.id === id)
-    if (saved && (saved.role === 'time-tracking' || streamOfProfile(saved) || dataSetOfProfile(saved))) void shareMapping(viewNameOf(saved))
+    if (saved && (saved.role === 'time-tracking' || streamOfProfile(saved) || dataSetOfProfile(saved))) void shareMapping(viewNameOf(saved), saved.id)
   }
   const lastFetch = (profile: AzureConnectionProfileSummary) => {
     if (profile.role === 'time-tracking') return profile.id === activeConnectionProfileId && azure.saved.length ? `${azure.saved.length} saved work items` : ''
@@ -209,8 +212,9 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
       </form></Modal>}
     </Panel>
     <Panel className="connection-panel" eyebrow="STEP 2" title="Stream mapping" info={<ul><li>Which server, project and query feed each stream. Time Writing (QMS-0025) is the team's backlog; DP, CP, IOCC, Content and Tool Validations are queries on the on-prem DHP.Vault project; S&amp;S IT comes from the Windchill export named like it (ECP will follow). Pedestal (the DHP release register) and DHFI are DP's two data sets: with both mapped, DP lists every Pedestal Release, dated by the DHFI documents whose Title names it.</li><li>Release rules: DP — name from the Area Path, number from the Iteration Path. IOCC — Type of Release from the Area Path segment after “IOCC”, name from the Title. Others — a “Release x.y.z” path segment. DP and IOCC are matched to QMS-0025 Features fuzzily; the best Feature counts at the threshold.</li><li>The mapping is shared with everyone through Git (azure-views.json); roles with “Manage shared settings” change it. Everyone else only enters their PAT per server.</li></ul>}
-      action={<div className="button-row">{mapping.some((row) => !row.profile && row.preset && !row.timeWriting && presetHasPat(row.preset)) && <button type="button" className="primary" onClick={() => { for (const row of mapping) if (!row.profile && row.preset && !row.timeWriting && presetHasPat(row.preset)) setUpStream(row.preset) }}>Set up all with saved PATs</button>}<label className="inline-select">Fuzzy match threshold<input type="number" min={1} max={100} step={1} value={threshold} disabled={!canManage} aria-label="Fuzzy match threshold (%)" onChange={(event) => { const value = Math.round(Number(event.target.value)); if (value >= 1 && value <= 100) store.update((draft) => { draft.releaseSourceSettings = { ...normalizeReleaseSourceSettings(draft.releaseSourceSettings), matchThreshold: value }; return draft }) }} />%</label></div>}>
-      {!canManage && <Notice tone="info">The stream mapping is managed by roles with “Manage shared settings” and comes from Git. Enter your PAT per server above.</Notice>}
+      action={<div className="button-row">{canManage && git?.connected && !git.readOnly && !azure.isSample && <button type="button" className="ghost" title="Write this browser's stream mapping to the shared setup in Git now; every other user gets it at their next start" onClick={() => void shareMapping('stream mapping')}>Save stream mapping to Git</button>}{mapping.some((row) => !row.profile && row.preset && !row.timeWriting && presetHasPat(row.preset)) && <button type="button" className="primary" onClick={() => { for (const row of mapping) if (!row.profile && row.preset && !row.timeWriting && presetHasPat(row.preset)) setUpStream(row.preset) }}>Set up all with saved PATs</button>}<label className="inline-select">Fuzzy match threshold<input type="number" min={1} max={100} step={1} value={threshold} disabled={!canManage} aria-label="Fuzzy match threshold (%)" onChange={(event) => { const value = Math.round(Number(event.target.value)); if (value >= 1 && value <= 100) store.update((draft) => { draft.releaseSourceSettings = { ...normalizeReleaseSourceSettings(draft.releaseSourceSettings), matchThreshold: value }; return draft }) }} />%</label></div>}>
+      {!canManage && <Notice tone="info">The stream mapping (servers, projects and queries of DP, CP, IOCC, Content, Tool Validations and DP's data sets) is set by roles with “Manage shared settings” and comes from Git: changes made here are replaced by the shared mapping at the next start. Enter your PAT per server above.</Notice>}
+      {canManage && <Notice tone="info">Changes you make to the stream mapping are saved to the shared setup in Git right away and replace every other user's mapping at their next start.</Notice>}
       <div className="azure-table"><table><thead><tr><th>Stream</th><th>Server · project</th><th>Query</th><th>Rule</th><th>Status</th><th /></tr></thead><tbody>
         {mapping.map((row) => { const [tone, label] = row.profile ? statusTone(row.profile) : ['warning' as Tone, row.windchill ? 'Windchill export' : 'Not mapped']; const status = row.profile ? connectionStatus[row.profile.id] : undefined; return <tr key={row.name}>
           <td><strong>{row.name}</strong>{row.profile && <small>{viewNameOf(row.profile)}</small>}{row.timeWriting && row.profile && !row.profile.creatorEmail && <small className="warning-text">Work email missing: Edit to add it</small>}</td>

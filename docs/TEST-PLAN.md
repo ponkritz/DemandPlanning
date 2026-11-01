@@ -4,7 +4,7 @@
 |---|---|
 | Document | TP-DPH-001 |
 | Tests | [REQUIREMENTS-SPECIFICATION.md](REQUIREMENTS-SPECIFICATION.md) (SRS-DPH-001) |
-| Product version | v1.2.2; record the build number under test in every result |
+| Product version | The version in `package.json` (newest entry of RELEASE-NOTES.md); record the version and build number under test in every result |
 | Status | For review |
 
 ## 1. Purpose and scope
@@ -163,7 +163,7 @@ Cases marked **UAT** are also run in acceptance testing.
   1. Read the sidebar footer.
   2. Make a change, such as saving capacity settings.
 - Expected:
-  - The footer shows "v1.2.2", "Build {n} · ID {id}", and the build time.
+  - The footer shows "v{version of package.json}", "Build {n} · ID {id}", and the build time.
   - The storage label changes to "◌ Saving locally" and then to "○ Local IndexedDB".
 
 **TC-NAV-06 Modal above content** — Req NAV-16 — **UAT**
@@ -703,6 +703,8 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-CON-46 Tree and direct-links queries** — Req CON-78 — L1 `release-source.test.mjs` ("tree and direct-links queries (FROM WorkItemLinks … MODE): every item on either end of a link, each once (TC-CON-46)"), `azure-devops.test.mjs` ("desktop bridge constrains credentials to Azure DevOps and rejects writes and oversized batches" — the WorkItemLinks lines); browser check with the desktop app: paste a tree query (Releases with their child Documents, MODE (Recursive)) into a CP connection, save, fetch: no "flat work-item query" error; the view lists the Releases and their Documents with the query's columns; a query with ASOF is refused on save.
 
+**TC-CON-47 Admin stream mapping enforced through Git** — Req CON-79 — L1 `view-definitions.test.mjs` ("Git connection setup is the default: added and followed; the stream mapping is enforced, other views kept when changed here; PATs kept (TC-CON-47)"); browser check with two browsers and Git storage connected: as an admin (Manage shared settings), change the CP query in Settings → Azure DevOps → Stream mapping and Save — the notice says it was saved to Git and the commit "Stream mapping: CP" is in the data repository; as another user, change the CP query locally, reload: the admin's query is back and the start message names CP as applied from the admin's mapping; the user's own extra "CP …" connection is not the one Release Details → CP opens; as the admin with a read-only token, a change says "saved here only" and survives a reload; Save stream mapping to Git writes it once the token can write.
+
 **TC-CON-44 DP and DHFI defaults** — Req CON-76 — L1 `connections.test.mjs` ("pre-filled connections from the shared setup …": DP reads the Release work items of DHP with DDTDate, SourceProgram, PsName and Release; DHFI [Approved] reads the DHP.Vault documents, hidden from the menu); browser check in a fresh browser with only the on-prem PAT: Settings → Azure DevOps → Stream mapping → Set up DP, Pedestal and DHFI from their defaults; Release Details → DP lists Release items for the DDT month; Get started shows the release streams step done.
 
 **TC-CON-43 Title fields in the Feature setup** — Req CON-75 — L1 `feature-setup.test.mjs` ("title fields per Epic: up to five, unique names, saved with the setup …"); browser check with GitHub mocked: Settings → Feature setup → an Epic → ＋ Add title field three times (Platform / Custom.Platform, Release Name, Number), the preview of a story titled "{Platform} review" with the sample "CP 2 | Atlas | 4.1" shows "CP 2 review"; Save to Git writes titleFields; a sixth field cannot be added.
@@ -1188,6 +1190,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-CI-04 Software Bill of Materials** — Req CI-08 — L1 `swbom.test.mjs` ("the SWBOM lists exactly the components of pnpm-lock.yaml, with scope and licence (TC-CI-04)"; "lockfile keys: scoped names and peer suffixes (TC-CI-04)"); inspection: after a dependency change, `pnpm swbom` rewrites `docs/SWBOM.md` and `docs/swbom.cdx.json`; without it `pnpm test` fails; the Documentation page has a SWBOM tab listing the shipped components (react, react-dom, @azure/msal-browser and their dependencies, Electron) with licences.
 
+**TC-CI-05 Version bump and release notes** — Req CI-09 — L1 `release-notes.test.mjs` ("release notes: the newest version is the package version; versions unique, descending, each with an entry (TC-CI-05)"; "release-notes headings are read exactly (TC-CI-05)"); inspection: a pull request that changes `package.json` without a release-notes entry for the new version (or adds an entry without the bump) fails `pnpm test`; after the merge the commit is tagged `vX.Y.Z` and the tag build passes the version check (CI-05); the Documentation page has the Release notes and Configuration management tabs; the app footer shows the new version.
+
 ### 6.21 QE Mapping
 
 **TC-QEM-01 Read an Excel as it is** — Req QEM-02 — L1 `qe-mapping.test.mjs` ("reads an Excel workbook as it is: every sheet, shared / rich / inline strings, dates, numbers, booleans, formulas"; "reads CSV with commas, semicolons or tabs, quotes and line breaks in fields"; "a sheet becomes a table as it is: header from the first non-empty row, names made unique, empty rows and columns dropped").
@@ -1302,6 +1306,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CON-76 | TC-CON-44 |
 | CON-77 | TC-CON-45 |
 | CON-78 | TC-CON-46 |
+| CON-79 | TC-CON-47 |
 | QV-20 | TC-QV-06 |
 | QV-21 | TC-QV-07 |
 | CON-21, CON-22 | TC-CON-08 |
@@ -1446,6 +1451,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CI-06 | TC-CI-02 |
 | CI-07 | TC-CI-03 |
 | CI-08 | TC-CI-04 |
+| CI-09 | TC-CI-05 |
 | QEM-01 | TC-QEM-03, TC-QEM-04 |
 | QEM-02 | TC-QEM-01, TC-QEM-04 |
 | QEM-03…QEM-06 | TC-QEM-02, TC-QEM-04 |
@@ -1482,7 +1488,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | Use case | Test cases |
 |---|---|
 | UC-01 | TC-NAV-01…06, TC-NAV-33, TC-UI-01, TC-UI-02, TC-UI-03, TC-CON-36, TC-CON-38 |
-| UC-02 | TC-CON-01…07, TC-CON-17…19, TC-CON-44, TC-CON-28, TC-NAV-02, TC-NAV-34, TC-QV-14, TC-QV-16, TC-QV-23, TC-QV-24, TC-CON-46, TC-QV-25 |
+| UC-02 | TC-CON-01…07, TC-CON-17…19, TC-CON-44, TC-CON-28, TC-NAV-02, TC-NAV-34, TC-QV-14, TC-QV-16, TC-QV-23, TC-QV-24, TC-CON-46, TC-QV-25, TC-CON-47 |
 | UC-03 | TC-CON-03, TC-FET-01…06 |
 | UC-04 | TC-TWN-01, TC-TWN-02, TC-MON-01…06 |
 | UC-05 | TC-MON-07 |

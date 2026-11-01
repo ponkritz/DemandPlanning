@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | VP-DPH-001 |
-| Product | I&D Quality Demand Planning, v1.2.2 (build number and revision in the app footer and in `build-info.json`) |
+| Product | I&D Quality Demand Planning, the version in `package.json` and the newest entry of [RELEASE-NOTES.md](RELEASE-NOTES.md) (build number and revision in the app footer and in `build-info.json`) |
 | Purpose | The validation file of the software: the documents that show what it must do, how it was built, how it was verified and validated, what its risks are and how they are controlled |
 | Standards | ISO 13485:2016 §4.1.6 and §7.3; IEC 62304 (life-cycle process, Class A assumed); FDA guidance on Computer Software Assurance (CSA) — see [DEVELOPMENT-PROCESS.md](DEVELOPMENT-PROCESS.md) §1 for the classification and its caveats |
 | Status | For approval (§5) |
@@ -21,13 +21,15 @@ Every document of the package lives in `docs/`, is versioned with the code, is b
 | 5 | [UAT-PLAN.md](UAT-PLAN.md) | — | Acceptance testing by the intended users: participants, the eleven-day sequence of UAT cases, entry and exit criteria, feedback record | ISO 13485 §7.3.7; CSA (unscripted and scripted testing) |
 | 6 | [SOFTWARE-COMPONENTS.md](SOFTWARE-COMPONENTS.md) | SC-DPH-001 | Every software component: in-house items by layer, third-party components (SOUP) with version, licence and failure effect, platforms, and the known vulnerabilities of the components with their handling | IEC 62304 §5.3, §5.3.3, §8.1.2 |
 | 6a | [SWBOM.md](SWBOM.md) and `swbom.cdx.json` | generated | Software Bill of Materials: every third-party component from the lockfile with version, licence, integrity hash and scope (shipped or build / test only), also as CycloneDX 1.5 JSON | IEC 62304 §5.3.3, §8.1.2 (SOUP identification); FDA cybersecurity SBOM |
+| 6b | [RELEASE-NOTES.md](RELEASE-NOTES.md) | — | Version history: every version (newest first) with its date and changes, requirement IDs and pull requests | ISO 13485 §7.3.9 (design changes); IEC 62304 §5.8.3–5.8.4 (released versions, known residual anomalies via KNOWN-ISSUES.md) |
+| 10a | [CONFIGURATION-MANAGEMENT.md](CONFIGURATION-MANAGEMENT.md) | CM-DPH-001 | Configuration items, identification (version, build, tag), baselines, change control, build and release, status accounting, audits, shared team configuration | IEC 62304 §8; ISO 13485 §4.2.4, §4.2.5, §7.3.9 |
 | 7 | [KNOWN-ISSUES.md](KNOWN-ISSUES.md) | KI-DPH-001 | Known bugs (KB), open issues needing a decision (OI) and accepted limitations (LIM), with severity, status and affected requirements | ISO 13485 §8.3, §8.5.2; IEC 62304 §9 |
 | 8 | [SECURITY-ASSESSMENT.md](SECURITY-ASSESSMENT.md) | SA-DPH-001 | Code analysis and penetration test of the build (findings and confirmed controls); product security risk assessment (threats, likelihood, impact, residual risk); mitigations traced to requirements and tests | ISO 14971 vocabulary; IEC 62304 §7 |
 | 9 | [DFMEA.md](DFMEA.md) | DFMEA-DPH-001 | Design failure mode and effects analysis per function, with S/O/D ratings, design controls traced to requirements, residual ratings and open actions | ISO 13485 §7.3.3(c), §7.1; IEC 62304 §7 |
 | 10 | [DEVELOPMENT-PROCESS.md](DEVELOPMENT-PROCESS.md) | SDP-DPH-001 | The development life cycle mapped to ISO 13485 §7.3, IEC 62304 and FDA CSA; the change procedure; verification strategy; configuration management; problem resolution; gaps | ISO 13485 §7.3.2; IEC 62304 §5.1 |
 | 11 | [PROJECT-PLAN.md](PROJECT-PLAN.md) | — | Objective, phases, dependencies, project risks, operating ownership, backlog | ISO 13485 §7.3.2 |
 | 12 | [azure-devops-connection.md](azure-devops-connection.md) | — | Set-up guide for the Azure DevOps connections | User documentation |
-| 13 | [README.md](https://github.com/neurolooom-eng/Test2/blob/main/README.md) (repository root) | — | User-facing description of every feature, storage model and roles | User documentation |
+| 13 | [README.md](https://github.com/ponkritz/DemandPlanning/blob/main/README.md) (repository root) | — | User-facing description of every feature, storage model and roles | User documentation |
 
 ## 2. How the package is kept valid
 
