@@ -788,7 +788,7 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-QV-16 Create Feature from Release Details opens the default form** — Req QV-31, CON-56 — L1 `dp-board-match.test.mjs` ("Create Feature from a DP row: Program (SourceProgram, else DP) | PsName | vRelease, falling back to the Title"), `release-source.test.mjs` ("Create Feature title from a release: \"Stream | Name | vRelease\", mapping back to the release"); browser check with Azure DevOps mocked (QMS-0025 board with Epic #700 "DP"; DP row #502 SourceProgram DHP, PsName DoseNav, Release 2.1, no match): Create Feature opens "Add Feature under an Epic" with Parent Epic "#700 · DP" and the title "DHP | DoseNav | v2.1"; without a Time Writing connection the button is disabled and says so; no page errors. **UAT**
 
-**TC-QV-17 Supported Releases section in Pulse Check** — Req QV-32, QV-24, QV-25 — L1 `dp-milestones.test.mjs` (the two unique-release tests), `streams.test.mjs` ("Pulse Check streams: …"); browser check with Azure DevOps mocked (the TC-QV-10 data): Pulse Check → Current month releases (October) shows "Supported Releases · DP · October 2026" with "3 releases · 4 milestones", #501 RSGMS 3.0.0.2 once with SFV and DT chips and "Completed (DT)"; the Releases tab (September) shows #504 with DT; no page errors.
+**TC-QV-17 Supported Releases section in Pulse Check** — Req QV-32, QV-24, QV-25 — L1 `dp-milestones.test.mjs` (the two unique-release tests), `streams.test.mjs` ("Pulse Check streams: …"); E2E `documents-and-data.e2e.mjs` ("TC-QV-17: Pulse Check folds the DP Supported Releases list; Show list opens it and the choice is remembered"); browser check with Azure DevOps mocked (the TC-QV-10 data): Pulse Check → Current month releases (October) shows "Supported Releases · DP · October 2026" with "3 releases · 4 milestones" and no list until **Show list**; opened, #501 RSGMS 3.0.0.2 once with SFV and DT chips and "Completed (DT)"; the Releases tab (September) shows #504 with DT; no page errors.
 
 **TC-QV-18 Supported summary next to Releases, with S&S IT** — Req QV-33 — **UAT** — L1 `windchill-releases.test.mjs` ("Pulse Check Supported line: the export's releases with the latest date in the month, \"name number\", newest first (QV-33)"); E2E `documents-and-data.e2e.mjs` ("TC-QV-18": an S&S IT export imported, Pulse Check → Releases with the header month 2026-11 (the tab shows the month before) shows "SUPPORTED · October 2026 · 4 supported releases" with "S&S IT [4] : …", and for 2026-09 "S&S IT [1] : CareLink 3.2").
 - Steps:
@@ -1186,11 +1186,13 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 - Expected:
   - The top-level `permissions` is `contents: read`; the jobs that run `pnpm install`, `pnpm lint`, `pnpm test`, `pnpm build:web`, `pnpm test:e2e` or electron-builder have no `contents: write`.
   - Every `actions/checkout` step sets `persist-credentials: false`.
-  - The jobs that write to releases (`publish-tagged-release`, `publish-windows`, `publish-macos`) only download artefacts and run `gh release`; their `run:` steps read `$TAG`, `$REPO` and similar environment variables, never `${{ }}` inside the script.
+  - The jobs that write to releases (`publish-tagged-release`, `publish-windows`, `publish-macos`) only download artefacts and run `gh release` (with the repository's own scripts `desktop-manifest.cjs` and `release-entry.mjs`, which use no dependencies); their `run:` steps read `$TAG`, `$REPO` and similar environment variables, never `${{ }}` inside the script.
 
 **TC-CI-04 Software Bill of Materials** — Req CI-08 — L1 `swbom.test.mjs` ("the SWBOM lists exactly the components of pnpm-lock.yaml, with scope and licence (TC-CI-04)"; "lockfile keys: scoped names and peer suffixes (TC-CI-04)"); inspection: after a dependency change, `pnpm swbom` rewrites `docs/SWBOM.md` and `docs/swbom.cdx.json`; without it `pnpm test` fails; the Documentation page has a SWBOM tab listing the shipped components (react, react-dom, @azure/msal-browser and their dependencies, Electron) with licences.
 
-**TC-CI-05 Version bump and release notes** — Req CI-09 — L1 `release-notes.test.mjs` ("release notes: the newest version is the package version; versions unique, descending, each with an entry (TC-CI-05)"; "release-notes headings are read exactly (TC-CI-05)"); inspection: a pull request that changes `package.json` without a release-notes entry for the new version (or adds an entry without the bump) fails `pnpm test`; after the merge the commit is tagged `vX.Y.Z` and the tag build passes the version check (CI-05); the Documentation page has the Release notes and Configuration management tabs; the app footer shows the new version.
+**TC-CI-05 Version bump and release notes** — Req CI-09 — L1 `release-notes.test.mjs` ("release notes: the newest version is the package version; versions unique, descending, each with an entry (TC-CI-05)"; "release-notes headings are read exactly (TC-CI-05)"); inspection: a pull request that changes `package.json` without a release-notes entry for the new version (or adds an entry without the bump) fails `pnpm test`; after the merge CI tags the commit `vX.Y.Z` (TC-CI-06); the Documentation page has the Release notes and Configuration management tabs; the app footer shows the new version.
+
+**TC-CI-06 Automatic version tag and release** — Req CI-10 — L1 `release-notes.test.mjs` ("the versioned release takes its notes from the release-notes entry of its version (TC-CI-06)"; "CI tags every version on main and publishes its release; nobody tags by hand (TC-CI-06)"); inspection after a merge that bumps the version: the run's job *Tag and publish versioned release* is green, the repository has the tag `vX.Y.Z` on the merge commit, and the GitHub release `Demand Planning Hub vX.Y.Z` has `Demand-Planning-Hub-Setup.exe`, `Demand-Planning-Hub-mac.dmg`, `SHA256SUMS.txt`, `SHA256SUMS-mac.txt` and the version's release-notes entry; a merge without a bump logs "already exists" and changes nothing; `desktop-latest` and `latest.json` are unchanged by this job.
 
 ### 6.21 QE Mapping
 
@@ -1452,6 +1454,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CI-07 | TC-CI-03 |
 | CI-08 | TC-CI-04 |
 | CI-09 | TC-CI-05 |
+| CI-10 | TC-CI-06 |
 | QEM-01 | TC-QEM-03, TC-QEM-04 |
 | QEM-02 | TC-QEM-01, TC-QEM-04 |
 | QEM-03…QEM-06 | TC-QEM-02, TC-QEM-04 |

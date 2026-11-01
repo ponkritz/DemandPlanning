@@ -26,7 +26,7 @@ Not configuration items: local `node_modules`, `dist/` and `release/` build fold
   - **minor**: a new or changed feature, report or rule;
   - **patch**: a fix, a dependency update, or documentation only.
 - **Build number**: the CI build of a merge to `main`; with the Git **revision** it is in `build-info.json`, the app (Force Update dialog) and `latest.json` per platform.
-- **Tag** `vX.Y.Z` on the merge commit of each version (§5); a tag build checks that the tag equals the version (CI-05).
+- **Tag** `vX.Y.Z` on the merge commit of each version, created by CI (§5, CI-10); a tag pushed by hand must equal the version (CI-05).
 - **Documents** carry a document ID (see [VALIDATION-PACKAGE.md](VALIDATION-PACKAGE.md)); their revision is the version they ship with.
 
 ## 3. Baselines
@@ -41,14 +41,14 @@ Every change is a pull request to `main`:
 2. In the same pull request: the code, the tests, the documents (requirements, test plan, UAT, README, known issues, DFMEA, security assessment, software components, regenerated traceability matrix and SWBOM as they apply), **the version bump** (§2) and **the release-notes entry** for the new version.
 3. Before pushing: `npx tsc -b`, `pnpm lint`, `pnpm test` (includes the traceability, SWBOM and release-notes checks), `pnpm build:web`, `pnpm test:e2e` when the UI changed.
 4. CI runs on the pull request (Windows packaging, unit tests, E2E); the pull request is merged (squash) only when CI is green, with the expected head revision.
-5. After the merge: CI builds and publishes the version (§5); the merge commit is tagged `vX.Y.Z`.
+5. After the merge: CI builds and publishes the version, tags the merge commit `vX.Y.Z` and publishes its release (§5). Nobody tags by hand.
 
 Emergency fixes follow the same steps; there is no path to `main` that skips CI.
 
 ## 5. Build and release
 
 - **Every merge to `main`** builds and tests the app, deploys the web app to GitHub Pages, and publishes the installers with `SHA256SUMS` and `latest.json` to the `desktop-latest` release; the desktop updater downloads only from there and verifies the SHA-256 (DSK-07…09).
-- **The tag `vX.Y.Z`** pushed on that merge commit runs the same build and publishes a tagged GitHub release of the version.
+- **The tagged release:** when the Windows, macOS and end-to-end jobs of that merge pass, the job *Tag and publish versioned release* tags the merge commit `vX.Y.Z` (the version in `package.json`) and publishes the GitHub release of the version with both installers, their SHA256SUMS files and the version's entry from RELEASE-NOTES.md (`scripts/release-entry.mjs`) (CI-10). It runs no dependency code (CI-07). When that release already exists (the version was not bumped) it changes nothing. A run cancelled by a later merge leaves its version untagged: re-run that workflow run (LIM-13). A tag pushed by hand runs the same job.
 - **Rollback:** revert the change by a new pull request (with its own patch version and release-notes entry); a published version is never replaced in place. The web app follows `main`; desktop users update to the newest `desktop-latest` build.
 
 ## 6. Status accounting
@@ -67,6 +67,7 @@ Emergency fixes follow the same steps; there is no path to `main` that skips CI.
 Automatic, on every pull request and merge (`pnpm test`, CI):
 
 - `scripts/verify-version.mjs`: the version is `x.y.z`; a tag equals the version.
+- `tests/release-notes.test.mjs` (TC-CI-06): the release job runs on main after the Windows, macOS and end-to-end jobs, takes its notes from the version's entry and leaves an existing release alone.
 - `tests/release-notes.test.mjs`: the newest version in RELEASE-NOTES.md is the version in `package.json`, versions are unique and in descending order, and every version has an entry.
 - `scripts/traceability.mjs --check`: the traceability matrix is current and complete.
 - `scripts/swbom.mjs --check` (in `tests/swbom.test.mjs`): the SWBOM lists exactly the lockfile's components.

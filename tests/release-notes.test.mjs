@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { releaseEntry } from '../scripts/release-entry.mjs'
 
 const read = (file) => readFileSync(new URL(`../${file}`, import.meta.url), 'utf8')
 // "## v1.3.0 — 2026-11-01" headings, newest first.
@@ -28,4 +29,27 @@ test('release-notes headings are read exactly (TC-CI-05)', () => {
   const sample = '# Release notes\n\n## v2.0.0 — 2026-12-01\n\n- A\n\n## v1.10.1 — 2026-11-02\n\n- B\n\n## Before v1.3.0 — summary\n'
   assert.deepEqual(releaseHeadings(sample).map((release) => [release.version, release.date]), [['2.0.0', '2026-12-01'], ['1.10.1', '2026-11-02']])
   assert.ok(newer([1, 10, 1], [1, 9, 9]) > 0, '1.10.1 is newer than 1.9.9 (numbers, not text)')
+})
+
+test('the versioned release takes its notes from the release-notes entry of its version (TC-CI-06)', () => {
+  const sample = '# Release notes\n\nIntro.\n\n## v1.4.0 — 2026-11-02\n\n**Added**\n- Tagging (CI-10).\n\n## v1.3.0 — 2026-11-01\n\n- Notes (CI-09).\n\n## Before v1.3.0 — summary\n\n- Old.\n'
+  assert.equal(releaseEntry(sample, '1.4.0'), '**Added**\n- Tagging (CI-10).')
+  assert.equal(releaseEntry(sample, '1.3.0'), '- Notes (CI-09).')
+  assert.equal(releaseEntry(sample, '1.3'), undefined, 'a partial version does not match')
+  assert.equal(releaseEntry(sample, '1.2.2'), undefined, 'a version without its own entry has none')
+  const { version } = JSON.parse(read('package.json'))
+  assert.match(releaseEntry(read('docs/RELEASE-NOTES.md'), version) ?? '', /^- \S/m, `the entry of v${version} is published with its release`)
+})
+
+test('CI tags every version after the enabled release checks; nobody tags by hand (TC-CI-06)', () => {
+  const workflow = read('.github/workflows/build-and-deploy.yml')
+  const job = workflow.slice(workflow.indexOf('  publish-tagged-release:'), workflow.indexOf('\n  end-to-end:'))
+  assert.match(job, /if: github\.ref == 'refs\/heads\/main' \|\| startsWith\(github\.ref, 'refs\/tags\/v'\)/, 'runs on main and on a pushed tag')
+  assert.match(job, /needs: \[validate-and-package, end-to-end\]/, 'only after the enabled Windows and end-to-end checks pass')
+  assert.match(job, /gh release view "\$tag"[^\n]*\n[^\n]*exit 0/, 'an existing release is left alone')
+  assert.match(job, /node scripts\/release-entry\.mjs "\$version" > release-notes\.md/, 'notes from RELEASE-NOTES.md')
+  assert.match(job, /--target "\$GITHUB_SHA"/, 'the tag is the commit that was built')
+  assert.match(job, /release\/\*\.exe/, 'the Windows installer is attached')
+  assert.doesNotMatch(job, /pnpm (install|test|build)/, 'the job that can write releases runs no dependency code (CI-07)')
+  assert.doesNotMatch(job.split('run: |')[1] ?? '', /\$\{\{/, 'the script reads environment variables, not expressions (CI-07)')
 })

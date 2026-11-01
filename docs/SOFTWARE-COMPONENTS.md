@@ -202,6 +202,7 @@ This document lists every software component of the system: the in-house source 
 | desktop-manifest | `scripts/desktop-manifest.cjs` | Merges one platform's installer into latest.json on the desktop-latest release with per-platform build numbers. | CI, DSK |
 | traceability | `scripts/traceability.mjs` | Generates docs/TRACEABILITY-MATRIX.md from the documents and checks the trace (`--check`). | DOC, CI |
 | swbom | `scripts/swbom.mjs` | Generates the Software Bill of Materials (docs/SWBOM.md, docs/swbom.cdx.json) from pnpm-lock.yaml and checks it (`--check`). | CI |
+| release-entry | `scripts/release-entry.mjs` | Prints one version's RELEASE-NOTES.md entry, the notes of that version's tagged GitHub release. | CI |
 | verify-version | `scripts/verify-version.mjs` | Checks package.json version is x.y.z and matches a vX.Y.Z release tag. | CI |
 | vite.config | `vite.config.ts` | Vite build: React plugin, version check, build metadata (__APP_BUILD__, build-info.json, meta tag). | CI, UPD |
 | index | `index.html` | HTML entry page with favicon, title and root element loading src/main.tsx. | — |
@@ -214,7 +215,7 @@ This document lists every software component of the system: the in-house source 
 |---|---|---|---|
 | traceability.test | `tests/traceability.test.mjs` | Validation Package consistency: requirement levels, test-case and UAT traces, component list, current matrix. | DOC, CI |
 | swbom.test | `tests/swbom.test.mjs` | The SWBOM lists exactly the lockfile's components with scope, licence and hash; lockfile key parsing. | CI |
-| release-notes.test | `tests/release-notes.test.mjs` | The newest release-notes version is the package version; versions unique, descending, each with an entry. | CI |
+| release-notes.test | `tests/release-notes.test.mjs` | The newest release-notes version is the package version; versions unique, descending, each with an entry; the release job tags each version and takes its notes from its entry. | CI |
 | validation-package.test | `tests/validation-package.test.mjs` | Validation Package documents: required sections, unique IDs, mitigations and DFMEA controls traced to existing requirements. | DOC |
 | access.test | `tests/access.test.mjs` | Access policy: no-policy defaults, role union, file round trip, refusing writes for roles without Azure changes. | CON |
 | app-update.test | `tests/app-update.test.mjs` | Build metadata validation, cache-busting URLs, update checks and reload blocking, release version check. | UPD, CI |
@@ -273,7 +274,7 @@ The end-to-end suite (`pnpm test:e2e`, after `pnpm build:web`) drives the built 
 |---|---|---|---|
 | helpers | `e2e/helpers.mjs` | Starts `vite preview` on a free port, opens Chromium pages with clean storage, records page errors, shared actions (navigate, load sample). | CI |
 | shell.e2e | `e2e/shell.e2e.mjs` | Sidebar groups and footer, header and month picker, Get started pop-up, synthetic sample, theme toggle, phone width, Force Update dialog, Git storage form defaults, manager not on the board (TC-GIT-06, TC-SET-05, TC-NAV-01, 03, 31, 33, TC-UI-01, TC-SMP-01, TC-UPD-02). | NAV, UI, SMP, UPD |
-| documents-and-data.e2e | `e2e/documents-and-data.e2e.mjs` | Documentation tabs, links and download; Windchill export releases from names and from Location with the locations CSV; neutralised CSV; JSON backup without credentials (TC-DOC-01, 02, TC-CON-39, 40, 37, TC-STO-04, TC-INS-01); Windchill releases' QMS-0025 match column (TC-QV-23); auto-fit tables and Wrap text (TC-CON-42). | DOC, CON, STO, NFR, QV |
+| documents-and-data.e2e | `e2e/documents-and-data.e2e.mjs` | Documentation tabs, links and download; Windchill export releases from names and from Location with the locations CSV; neutralised CSV; JSON backup without credentials (TC-DOC-01, 02, TC-CON-39, 40, 37, TC-STO-04, TC-INS-01); Windchill releases' QMS-0025 match column (TC-QV-23); auto-fit tables and Wrap text (TC-CON-42); the DP Supported Releases list in Pulse Check folded until Show list (TC-QV-17). | DOC, CON, STO, NFR, QV |
 | backlog.e2e | `e2e/backlog.e2e.mjs` | New User Story form from a Feature row of the Backlogs (TC-BKL-10); the Edit form from Feature, User Story and Task rows (TC-BKL-11). | CI, BKL |
 | workspace.e2e | `e2e/workspace.e2e.mjs` | Insights workspace hidden for now: not in the menu, the Dashboard unchanged (TC-WSP-07; the TC-WSP-06 scenario returns with the page). | CI |
 | monthly-pack.e2e | `e2e/monthly-pack.e2e.mjs` | Monthly pack tab with the synthetic sample, the .pptx download and the setup tab (TC-PCK-04). | CI |

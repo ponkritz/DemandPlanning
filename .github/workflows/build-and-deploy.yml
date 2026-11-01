@@ -24,6 +24,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -75,23 +77,101 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish tagged GitHub release
-        if: startsWith(github.ref, 'refs/tags/v')
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: >-
-          gh release create $env:GITHUB_REF_NAME
-          release/*.exe release/*.blockmap release/SHA256SUMS.txt
-          --repo $env:GITHUB_REPOSITORY
-          --title "Demand Planning Hub $env:GITHUB_REF_NAME"
-          --generate-notes
-        
+    # The job runs dependency code (install, lint, tests, build): it holds a read-only token (PT-02). Publishing is a
+    # separate job below that only downloads the built artifact.
+    permissions:
+      contents: read
+
+  # CI-10: every push to main that passes the Windows, macOS and end-to-end jobs tags its commit vX.Y.Z (the
+  # package.json version) and publishes that version's GitHub release with both installers and its release-notes
+  # entry; nobody tags by hand. A tag pushed by hand runs the same job. When the release already exists (the version
+  # was not bumped, or the tag build that GITHUB_TOKEN tags do not start anyway) it does nothing.
+  publish-tagged-release:
+    name: Tag and publish versioned release
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    # macOS packaging is intentionally disabled for this Windows/web release stream.
+    needs: [validate-and-package, end-to-end]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
+    concurrency:
+      group: versioned-release-publish
+      cancel-in-progress: false
 
-  # macOS packaging is intentionally disabled for this Windows/web release stream.
-  # Web deployment and the Windows installer remain independent of it.
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Download Windows installer
+        uses: actions/download-artifact@v4
+        with:
+          name: demand-planning-windows-${{ github.sha }}
+          path: release
+
+      - name: Tag the commit and publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          tag="v$version"
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "$GITHUB_REF_NAME" != "$tag" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not equal the package version $tag."; exit 1
+          fi
+          if gh release view "$tag" --repo "$REPO" > /dev/null 2>&1; then
+            echo "::notice::Release $tag already exists; nothing to publish (was the version bumped?)."; exit 0
+          fi
+          node scripts/release-entry.mjs "$version" > release-notes.md
+          ls -la release
+          gh release create "$tag" \
+            release/*.exe release/*.blockmap release/SHA256SUMS.txt \
+            --repo "$REPO" --target "$GITHUB_SHA" \
+            --title "Demand Planning Hub $tag" --notes-file release-notes.md
+          echo "::notice::Tagged $GITHUB_SHA as $tag and published its release."
+
+  end-to-end:
+    name: End-to-end tests
+    # Pinned: `ubuntu-latest` moved to Ubuntu 26.04, for which Playwright 1.56 has no Chromium build.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+          run_install: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium for Playwright
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Build web application
+        run: pnpm build:web
+
+      - name: Run end-to-end tests
+        run: pnpm test:e2e
+
+  # macOS runners often queue for a long time, so the disk image is built only for main (and tags or manual runs),
+  # not for pull requests, and is published on its own: Web and Windows never wait for it.
   package-macos:
     name: Package macOS application
     if: ${{ false }}
@@ -101,6 +181,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -159,6 +241,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Download installer
         uses: actions/download-artifact@v4
@@ -184,6 +268,7 @@ jobs:
           node scripts/desktop-manifest.cjs win32 installers/Demand-Planning-Hub-Setup.exe current/latest.json installers/latest.json
           gh release upload desktop-latest installers/Demand-Planning-Hub-Setup.exe installers/SHA256SUMS.txt installers/latest.json --repo "$REPO" --clobber
 
+  # Disabled together with package-macos; Windows and browser builds remain independent.
   publish-macos:
     name: Publish macOS installer
     if: ${{ false }}
@@ -200,6 +285,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Download installer
         uses: actions/download-artifact@v4
@@ -234,6 +321,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4

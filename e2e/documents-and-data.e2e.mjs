@@ -193,6 +193,30 @@ test('TC-QV-18: Pulse Check shows the Supported summary next to Releases, with t
   await context.close()
 })
 
+test('TC-QV-17: Pulse Check folds the DP Supported Releases list; Show list opens it and the choice is remembered', async () => {
+  const { page, context, errors } = await openPage(app, { init: () => {
+    localStorage.setItem('demand-planning-azure-connection-profiles-v1', JSON.stringify([{ id: 'dp', url: 'https://azure.example.com/tfs/Collection/DP', baseUrl: 'https://azure.example.com/tfs', reason: 'DP', viewName: 'DP', role: 'release-source', query: 'SELECT [System.Id] FROM WorkItems', showInMenu: true, token: 'e2e-dp-token-0123456789' }]))
+  } })
+  await navigate(page, 'Pulse Check')
+  await page.getByRole('tab', { name: /^Current month releases/ }).click()
+  const panel = page.locator('.panel').filter({ has: page.locator('h2, h3', { hasText: /^Supported Releases · DP/ }) }).first()
+  await panel.waitFor()
+  const toggle = panel.getByRole('button', { name: 'Show list' })
+  assert.equal(await toggle.getAttribute('aria-expanded'), 'false', 'folded by default')
+  assert.equal(await panel.locator('.empty-state, table').count(), 0, 'no list and no message while folded')
+  assert.match(await text(panel), /0 releases · 0 milestones/, 'the count stays visible')
+  await toggle.click()
+  assert.match(await text(panel), /The DP view has not been fetched yet/)
+  assert.equal(await panel.getByRole('button', { name: 'Hide list' }).getAttribute('aria-expanded'), 'true')
+  await page.reload()
+  await page.locator('.sidebar nav').waitFor()
+  await navigate(page, 'Pulse Check')
+  await page.getByRole('tab', { name: /^Current month releases/ }).click()
+  await page.locator('.panel').filter({ has: page.locator('h2, h3', { hasText: /^Supported Releases · DP/ }) }).first().getByRole('button', { name: 'Hide list' }).waitFor() // remembered for this viewer
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
 test('TC-CON-42: tables fit their columns — widening a column widens the table — and Wrap text wraps long cells', async () => {
   const { page, context, errors } = await openPage(app, { width: 1300 })
   await navigate(page, 'Import Windchill export')
