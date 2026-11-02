@@ -6,7 +6,16 @@ import { csvCell } from './csv.ts'
 export type WindchillOp = 'eq' | 'ne' | 'startswith' | 'contains' | 'gt' | 'ge' | 'lt' | 'le'
 export interface WindchillFilter { field: string; op: WindchillOp; value: string }
 // exportFile: an imported Windchill export (Release Details) rather than a search; its columns are the file's.
-export interface WindchillView { id: string; name: string; entitySet: string; filters: WindchillFilter[]; columns: string[]; showInMenu: boolean; exportFile?: string }
+// logic / projectLevel (CON-87): how an export is read — 'ecp' reads projects "<number> <name>" from the Location folder at
+// projectLevel (2 = second, 3 = third…); 'standard' the S&S IT release rules. Unset: from the export's name (ECP / QRE).
+export type WindchillLogic = 'standard' | 'ecp'
+export const projectLevels = [2, 3, 4, 5, 6] as const
+export interface WindchillView { id: string; name: string; entitySet: string; filters: WindchillFilter[]; columns: string[]; showInMenu: boolean; exportFile?: string; logic?: WindchillLogic; projectLevel?: number }
+// Only the known values are kept: a setup read from this browser or from Git that is anything else is dropped.
+export function cleanSetup<T extends { logic?: unknown; projectLevel?: unknown }>(view: T): T {
+  const { logic, projectLevel, ...rest } = view
+  return { ...rest, ...(logic === 'ecp' || logic === 'standard' ? { logic } : {}), ...(typeof projectLevel === 'number' && (projectLevels as readonly number[]).includes(projectLevel) ? { projectLevel } : {}) } as T
+}
 export const windchillOps: { op: WindchillOp; label: string }[] = [
   { op: 'eq', label: 'equals' }, { op: 'ne', label: 'is not' }, { op: 'startswith', label: 'starts with' }, { op: 'contains', label: 'contains' },
   { op: 'gt', label: 'after / greater than' }, { op: 'ge', label: 'on or after / at least' }, { op: 'lt', label: 'before / less than' }, { op: 'le', label: 'on or before / at most' },
@@ -93,7 +102,7 @@ export const windchillCsv = (columns: string[], rows: Record<string, unknown>[])
 
 const validStored = (value: unknown): value is WindchillView => Boolean(value && typeof value === 'object' && typeof (value as WindchillView).id === 'string' && /^[\w-]{1,80}$/.test((value as WindchillView).id) && typeof (value as WindchillView).name === 'string' && typeof (value as WindchillView).entitySet === 'string' && Array.isArray((value as WindchillView).filters) && Array.isArray((value as WindchillView).columns))
 export function loadWindchillViews(storage: Pick<Storage, 'getItem'> = localStorage): WindchillView[] {
-  try { const raw = JSON.parse(storage.getItem(storageKey) ?? '[]'); return Array.isArray(raw) ? raw.filter(validStored).map((view) => ({ ...view, showInMenu: view.showInMenu !== false })) : [] } catch { return [] }
+  try { const raw = JSON.parse(storage.getItem(storageKey) ?? '[]'); return Array.isArray(raw) ? raw.filter(validStored).map((view) => cleanSetup({ ...view, showInMenu: view.showInMenu !== false })) : [] } catch { return [] }
 }
 export function saveWindchillViews(views: WindchillView[], storage: Pick<Storage, 'setItem'> = localStorage) { storage.setItem(storageKey, JSON.stringify(views)) }
 export const isWindchillView = validStored

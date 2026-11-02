@@ -4,6 +4,9 @@ Version history of the I&D Quality Demand Planning app, newest first. Every merg
 
 ## v1.5.1 — 2026-11-02
 
+**Imported upstream**
+- Synced Test2 revision caf75cb: multiple configurable ECP exports, QE Mapping add-row dialog with resource selection, consolidation/raw-data tabs and compact Release Details actions. Destination table controls, styling, version and release settings are preserved.
+
 **Fixed**
 - Table controls follow the app's existing theme, button shapes, spacing and menu styling. Resize guides appear on hover or focus; density stays consistent with existing tables.
 

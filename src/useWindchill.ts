@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { loadWindchillSettings, windchillServiceUrl } from './windchill'
-import { buildWindchillQuery, loadWindchillViews, parseWindchillPage, windchillSearchUrl, saveWindchillViews, validateWindchillView, type WindchillView } from './windchillViews'
+import { buildWindchillQuery, cleanSetup, loadWindchillViews, parseWindchillPage, windchillSearchUrl, saveWindchillViews, validateWindchillView, type WindchillLogic, type WindchillView } from './windchillViews'
 import type { WindchillSource } from './windchillSnapshots'
 import { queryWindchillInBrowser } from './windchillBrowser'
 import { bridgeKey, parseBridgeResults } from './windchillBridge'
@@ -74,15 +74,27 @@ export function useWindchill(store: PageProps['store'], git: GitStorage) {
   }
   // A Windchill export (CSV) under Release Details: a new export, or a newer file for an existing one. Throws when the
   // file is not an export; returns the export's id.
-  function importExport(text: string, fileName: string, name: string, id?: string) {
+  function importExport(text: string, fileName: string, name: string, id?: string, setup?: { logic: WindchillLogic; projectLevel?: number }) {
     const { columns, rows } = parseWindchillExport(text)
     const existing = id ? views.find((entry) => entry.id === id) : undefined
     const title = name.trim() || existing?.name || fileName.replace(/\.[^.]+$/, '') || 'Windchill export'
-    const view: WindchillView = { ...(existing ?? { id: crypto.randomUUID().replaceAll('-', ''), entitySet: '', filters: [], showInMenu: true }), name: title, columns, exportFile: fileName }
+    // A new export takes the chosen setup (Standard / ECP and its project folder, CON-87); a newer file keeps its export's.
+    const view: WindchillView = cleanSetup({ ...(existing ?? { id: crypto.randomUUID().replaceAll('-', ''), entitySet: '', filters: [], showInMenu: true, ...(setup ? { logic: setup.logic, ...(setup.logic === 'ecp' ? { projectLevel: setup.projectLevel ?? 2 } : {}) } : {}) }), name: title, columns, exportFile: fileName })
     const next = [...views.filter((entry) => entry.id !== view.id), view]
     saveWindchillViews(next); setViews(next)
     saveResults(view, `file:${fileName}`, rows, `${rows.length} result${rows.length === 1 ? '' : 's'} imported from ${fileName}.`)
     return view.id
+  }
+  // How an export is read (CON-87): Standard or ECP, and the ECP project folder; saved here and, with Git, with its results.
+  function setSetup(id: string, setup: { logic: WindchillLogic; projectLevel?: number }) {
+    const existing = views.find((entry) => entry.id === id)
+    if (!existing) return
+    const rest: WindchillView = { ...existing }; delete rest.logic; delete rest.projectLevel
+    const view: WindchillView = cleanSetup({ ...rest, logic: setup.logic, ...(setup.logic === 'ecp' ? { projectLevel: setup.projectLevel ?? 2 } : {}) })
+    const next = views.map((entry) => entry.id === id ? view : entry)
+    saveWindchillViews(next); setViews(next)
+    const source = sources.find((entry) => entry.viewId === id)
+    if (source && git.connected) void git.pushWindchill(view, source)
   }
   // Fetch via a Windchill tab: opens the service in a tab this app can answer (no "noopener"); the bookmark there asks
   // for the searches and sends the results back. Only the Windchill origin, that tab and the request's code count.
@@ -130,6 +142,6 @@ export function useWindchill(store: PageProps['store'], git: GitStorage) {
     window.addEventListener('message', receive)
     return () => window.removeEventListener('message', receive)
   })
-  return { views, sources, status, desktop, fetchViaTab, importExport, reload: () => setViews(loadWindchillViews()), saveView, removeView, fetchView, searchUrl, importView }
+  return { views, sources, status, desktop, fetchViaTab, importExport, setSetup, reload: () => setViews(loadWindchillViews()), saveView, removeView, fetchView, searchUrl, importView }
 }
 export type WindchillWorkspace = ReturnType<typeof useWindchill>

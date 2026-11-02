@@ -39,6 +39,8 @@ export function fromWorkbook(sheets: WorkbookSheet[], fileName: string, uploaded
 
 // ---- editing (each returns a new sheet) ----
 export const setCell = (sheet: QeSheet, rowId: string, columnId: string, value: string): QeSheet => ({ ...sheet, rows: sheet.rows.map((row) => row.id !== rowId ? row : { ...row, cells: value === '' ? Object.fromEntries(Object.entries(row.cells).filter(([key]) => key !== columnId)) : { ...row.cells, [columnId]: value } }) })
+// The column holding the QE's name (QEM-12), picked from the Resources list: "QE Name", "QE", "QE name (primary)"…
+export const qeNameColumn = (sheet: QeSheet) => sheet.columns.find((column) => /^\s*qe\b.*\bname\b|^\s*qe\s*$/i.test(column.name)) ?? sheet.columns.find((column) => /\bqe\b/i.test(column.name) && /name|person|owner|resource/i.test(column.name))
 export function addRow(sheet: QeSheet, cells: Record<string, string> = {}): { sheet: QeSheet; id: string } {
   const id = nextId('r', sheet.rows.map((row) => row.id))
   return { sheet: { ...sheet, rows: [{ id, cells }, ...sheet.rows] }, id }
