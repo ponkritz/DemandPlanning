@@ -10,7 +10,9 @@ export { clean as cleanView }
 // organisation or server.
 export interface ViewsFile { schema: 1; kind: 'azure-devops-views'; views: AzureConnectionProfileSummary[] }
 const kind = 'azure-devops-views'
-const keys = ['id', 'reason', 'viewName', 'role', 'showInMenu', 'url', 'baseUrl', 'apiVersion', 'creatorEmail', 'query'] as const
+// The work email (creatorEmail) is personal — it names who "me" is (access role, My Work, the creator of new Features) —
+// so it is never written to Git and an email found in the file is ignored (CON-80).
+const keys = ['id', 'reason', 'viewName', 'role', 'showInMenu', 'url', 'baseUrl', 'apiVersion', 'query'] as const
 
 // Same field order every time, so the file only changes when a connection does.
 function clean(view: AzureConnectionProfileSummary): AzureConnectionProfileSummary {
@@ -50,7 +52,9 @@ export function restoreViews(views: AzureConnectionProfileSummary[], pat: string
     // Without a PAT the connection is still restored, to show the data saved to Git; fetching needs a PAT.
     if (!token) result.noPat.push(name)
     const existed = Boolean(loadAzureConnectionProfile(view.id, storage))
-    try { saveAzureConnectionProfile({ ...view, token }, storage); (existed ? result.updated : result.added).push(name) } catch { result.skipped.push(name) }
+    // The user's own email on this connection is kept; Git never sets one (CON-80).
+    const email = loadAzureConnectionProfile(view.id, storage)?.creatorEmail?.trim()
+    try { saveAzureConnectionProfile({ ...view, token, ...(email ? { creatorEmail: email } : {}) }, storage); (existed ? result.updated : result.added).push(name) } catch { result.skipped.push(name) }
   }
   return result
 }
@@ -79,9 +83,32 @@ function readBaseline(storage: Pick<Storage, 'getItem'>): Record<string, string>
 export function markViewsSynced(views: AzureConnectionProfileSummary[], storage: Pick<Storage, 'getItem' | 'setItem'> = localStorage) {
   try { storage.setItem(baselineKey, JSON.stringify({ ...readBaseline(storage), ...Object.fromEntries(views.map((view) => [view.id, fingerprint(view)])) })) } catch { /* next sync compares again */ }
 }
-export interface SyncResult { added: string[]; updated: string[]; kept: string[]; noPat: string[]; removed: string[]; removedIds: string[]; enforced: string[] }
-export function syncViewsFromGit(views: AzureConnectionProfileSummary[], storage: Pick<Storage, 'getItem' | 'setItem'> = localStorage): SyncResult {
-  const result: SyncResult = { added: [], updated: [], kept: [], noPat: [], removed: [], removedIds: [], enforced: [] }
+export interface SyncResult { added: string[]; updated: string[]; kept: string[]; noPat: string[]; removed: string[]; removedIds: string[]; enforced: string[]; emailCleared: boolean }
+
+// The emails an older shared file in Git still carries (before CON-80 every connection's email was written to it).
+export function sharedEmails(text: string): string[] {
+  try { const file = JSON.parse(text) as Partial<ViewsFile>; return [...new Set((Array.isArray(file?.views) ? file.views : []).map((view) => typeof view?.creatorEmail === 'string' ? view.creatorEmail.trim().toLowerCase() : '').filter(Boolean))] } catch { return [] }
+}
+// Once per browser (CON-80): a Time Writing connection that came from Git with an email taken from the shared file
+// (another person's, usually the admin's) loses it, so the app asks this user for their own work email.
+const emailFixKey = 'demand-planning-shared-email-cleared-v1'
+export function clearSharedEmail(emails: string[], storage: Pick<Storage, 'getItem' | 'setItem'> = localStorage): boolean {
+  try { if (storage.getItem(emailFixKey)) return false } catch { return false }
+  const fromGit = new Set(Object.keys(readBaseline(storage)))
+  let cleared = false
+  if (emails.length) for (const profile of listAzureConnectionProfiles(storage)) {
+    if (profile.role !== 'time-tracking' || !fromGit.has(profile.id) || !emails.includes(profile.creatorEmail?.trim().toLowerCase() ?? '')) continue
+    const full = loadAzureConnectionProfile(profile.id, storage)
+    if (!full) continue
+    const { creatorEmail: _shared, ...rest } = full
+    try { saveAzureConnectionProfile(rest, storage); cleared = true } catch { /* left as it is */ }
+  }
+  try { storage.setItem(emailFixKey, new Date().toISOString()) } catch { /* tried again next start */ }
+  return cleared
+}
+export function syncViewsFromGit(views: AzureConnectionProfileSummary[], storage: Pick<Storage, 'getItem' | 'setItem'> = localStorage, fileEmails: string[] = []): SyncResult {
+  const result: SyncResult = { added: [], updated: [], kept: [], noPat: [], removed: [], removedIds: [], enforced: [], emailCleared: false }
+  result.emailCleared = clearSharedEmail(fileEmails, storage)
   const baseline = readBaseline(storage), pending = readPending(storage)
   const follow: AzureConnectionProfileSummary[] = [], synced: AzureConnectionProfileSummary[] = []
   for (const view of views) {

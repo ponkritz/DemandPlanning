@@ -8,7 +8,7 @@ import { applyWindchillSnapshots, parseWindchillSnapshot, windchillDigest, windc
 import { loadWindchillViews, saveWindchillViews, type WindchillView } from './windchillViews'
 import { windchillAnalysisFolder } from './windchillReleases'
 import { loadAzureConnectionProfile, saveAzureConnectionProfile, type AzureConnectionProfileSummary, listAzureConnectionProfiles } from './azureCredentials'
-import { parseViews, syncViewsFromGit, connectionKey } from './viewDefinitions'
+import { parseViews, sharedEmails, syncViewsFromGit, connectionKey } from './viewDefinitions'
 import { personalSetupPath } from './featureSetup'
 
 export type GitStatus = 'off' | 'loading' | 'synced' | 'empty' | 'saving' | 'error' | 'conflict'
@@ -97,11 +97,11 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
   async function syncViews() {
     const file = await readViews()
     if (file.text == null) return null
-    const result = syncViewsFromGit(parseViews(file.text))
+    const result = syncViewsFromGit(parseViews(file.text), localStorage, sharedEmails(file.text))
     // A connection removed in Git goes with its data here, as a connection removed in Settings does.
     if (result.removedIds.length) store.update((draft) => { if (draft.azureSources?.some((source) => result.removedIds.includes(source.connectionId))) draft.azureSources = draft.azureSources.filter((source) => !result.removedIds.includes(source.connectionId)); return draft })
     const parts = [result.added.length && `${result.added.length} added (${result.added.join(', ')})`, result.updated.length && `${result.updated.length} updated (${result.updated.join(', ')})`, result.enforced.length && `stream mapping set by your admin applied: ${result.enforced.join(', ')}`, result.kept.length && `kept as changed here: ${result.kept.join(', ')}`, result.removed.length && `${result.removed.length} removed as in Git (${result.removed.join(', ')})`].filter(Boolean)
-    setViewsSync(parts.length ? `Connections from Git: ${parts.join('; ')}.${result.noPat.length ? ` No PAT here yet for ${result.noPat.join(', ')}: they show the data saved to Git; add a PAT in Settings to fetch.` : ''}` : 'Connections are the same as in Git.')
+    setViewsSync((result.emailCleared ? 'Your Time Writing connection had another person\'s email from the shared setup; it was removed — enter your own work email in Settings → Azure DevOps. ' : '') + (parts.length ? `Connections from Git: ${parts.join('; ')}.${result.noPat.length ? ` No PAT here yet for ${result.noPat.join(', ')}: they show the data saved to Git; add a PAT in Settings to fetch.` : ''}` : 'Connections are the same as in Git.'))
     return result
   }
   async function writeViews(text: string, commitMessage: string) {

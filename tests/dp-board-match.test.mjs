@@ -80,3 +80,23 @@ test('Windchill release (S&S IT) → QMS-0025: the same search with the release 
   assert.deepEqual([none.feature, none.story], [undefined, undefined])
   assert.match(boardMatchText(none), /^No match/)
 })
+
+test('IOCC, Content and Tool Validations releases → QMS-0025: the same search, Create Feature when nothing matches (TC-QV-26)', async () => {
+  const { releaseBoardMatch } = await import('../src/dpBoardMatch.ts')
+  const { releaseFeatureTitle } = await import('../src/releaseSource.ts')
+  const board = (id, workItemType, title) => ({ key: `b/${id}`, id, title, workItemType, state: 'Active', url: `https://x/${id}` })
+  const candidates = dpBoardCandidates([board(60, 'Feature', 'IOCC | Lab Connect | v2.4'), board(61, 'User Story', 'Lab Connect 2.4 release notes'), board(62, 'Feature', 'Tool Validations | Polarion | v22.1'), board(63, 'Feature', 'IOCC | Lab Connect | v2.5')])
+  // IOCC: a release with its Type of Release; the Feature carries the stream, the name and the number.
+  const iocc = { group: 'Minor', name: 'Lab Connect', release: '2.4' }
+  const match = releaseBoardMatch(iocc, 'IOCC', releaseFeatureTitle('IOCC', 'Minor Lab Connect', '2.4'), candidates)
+  assert.deepEqual([match.feature?.item.id, match.story?.item.id], [60, 61], 'name and number; v2.5 is another release')
+  // Tool Validations: one release per tool.
+  assert.equal(releaseBoardMatch({ name: 'Polarion', release: '22.1' }, 'Tool Validations', releaseFeatureTitle('Tool Validations', 'Polarion', '22.1'), candidates).feature?.item.id, 62)
+  // The title Create Feature gives is found at 100% once the Feature exists.
+  const created = releaseFeatureTitle('Content', 'Help Center', '7.0')
+  assert.equal(releaseBoardMatch({ name: 'Help Center', release: '7.0' }, 'Content', created, dpBoardCandidates([board(64, 'Feature', created)])).feature?.score, 100)
+  // Nothing on the board: no Feature, no Story — the cell offers Create Feature.
+  const none = releaseBoardMatch({ name: 'Unknown Tool', release: '1.0' }, 'Tool Validations', releaseFeatureTitle('Tool Validations', 'Unknown Tool', '1.0'), candidates)
+  assert.deepEqual([none.feature, none.story], [undefined, undefined])
+  assert.match(boardMatchText(none), /^No match/)
+})

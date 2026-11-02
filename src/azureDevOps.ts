@@ -246,6 +246,16 @@ export function savedBacklogItems(items: AzureWorkItem[], scope: AzureBacklogSco
 // Display name of an identity field (an object with displayName, or plain text).
 const identityName = (value: unknown) => typeof value === 'string' ? value : value && typeof value === 'object' && 'displayName' in value ? String((value as { displayName: unknown }).displayName) : ''
 
+// Predecessor / Successor links (CON-81): Azure DevOps returns them with every work item read ($expand Relations) as the
+// Dependency link type — Successor = System.LinkTypes.Dependency-Forward, Predecessor = …-Reverse. Kept as fields of
+// their own, "123, 456", so a query view can show, sort, search and export them like any column.
+export const successorRef = 'Links.Successor', predecessorRef = 'Links.Predecessor'
+const linkedIds = (item: Pick<RawItem, 'relations'>, rel: string) => [...new Set((item.relations ?? []).filter((link) => link.rel === rel).map((link) => Number(/\/workItems\/(\d+)\/?$/i.exec(link.url)?.[1])).filter((id) => Number.isSafeInteger(id) && id > 0))].sort((a, b) => a - b)
+export function dependencyFields(item: Pick<RawItem, 'relations'>): Record<string, string> {
+  const successors = linkedIds(item, 'System.LinkTypes.Dependency-Forward'), predecessors = linkedIds(item, 'System.LinkTypes.Dependency-Reverse')
+  return { ...(successors.length ? { [successorRef]: successors.join(', ') } : {}), ...(predecessors.length ? { [predecessorRef]: predecessors.join(', ') } : {}) }
+}
+
 export function mapAzureWorkItem(item: RawItem, config: AzureConfig): AzureWorkItem {
   const fields = item.fields
   const text = (name: string) => typeof fields[name] === 'string' ? fields[name] as string : ''

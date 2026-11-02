@@ -17,11 +17,11 @@ import { listAzureConnectionProfiles } from '../azureCredentials'
 import { connectionConfig, type AzureWorkspace } from '../useAzureWorkspace'
 import { loadAzureConnectionProfile } from '../azureCredentials'
 import type { BacklogView } from '../backlogViews'
-import type { AzureConfig } from '../azureDevOps'
+import { predecessorRef, successorRef, type AzureConfig } from '../azureDevOps'
 import type { PageProps } from './types'
 import type { GitStorage } from '../useGitStorage'
 import { columnName, queryLayout, type QueryColumn, type QueryOrder } from '../queryView'
-import { defaultMatchThreshold, streamOfProfile } from '../streams'
+import { dataSetOfProfile, defaultMatchThreshold, streamOfProfile } from '../streams'
 import { normalizeReleaseSourceSettings } from '../releaseSource'
 
 // One page for all configured Azure DevOps views (each its own entry in the sidebar): the Time Writing backlog
@@ -66,6 +66,11 @@ function ReadOnlyView({ id, name, role, azure, store, month, gitNote, onOpenConn
   const current = profile?.query ? queryLayout(profile.query) : null
   const stale = Boolean(source && current && (!source.columns?.length || source.query.trim() !== profile!.query!.trim()))
   const columns: QueryColumn[] | undefined = stale && current ? current.columns.map((ref) => ({ ref, name: columnName(ref) })) : source?.columns
+  // CON-81: a view of its own (not a stream or a stream's data set) shows the Successor and Predecessor IDs read from
+  // the work items' Dependency links, as two more columns, when any item has them.
+  const ownView = Boolean(profile && !stream && !dataSetOfProfile({ id: profile.id, viewName: profile.viewName, reason: profile.reason, role }))
+  const linkColumns = ownView && columns ? ([[successorRef, 'Successor ID'], [predecessorRef, 'Predecessor ID']] as const).filter(([ref]) => source?.items.some((item) => item.fields?.[ref])).map(([ref, name]) => ({ ref, name })) : []
+  const viewColumns = linkColumns.length && columns ? [...columns.filter((column) => !linkColumns.some((link) => link.ref === column.ref)), ...linkColumns] : columns
   const orderBy: QueryOrder[] | undefined = stale && current ? current.orderBy : source?.orderBy
   // Month filter (header month picker): items approved in the month, else changed in it; "All months" turns it off.
   // DP: the month is the DDT Date's (dpMilestones); other views: Author Approval Date, else Changed Date.
@@ -96,7 +101,7 @@ function ReadOnlyView({ id, name, role, azure, store, month, gitNote, onOpenConn
       {!azure.isSample && gitNote?.tone === 'error' && <div className="notice error" role="alert">{gitNote.text}</div>}
       {stale && !busy && <div className="notice warning" role="status">The saved data was fetched with different columns than the connection's query now has. Refresh from Azure to load every column's values.</div>}
       {source && config && !items.length && source.items.length ? isDp ? <><DpMonthCounts items={source.items} month={month} /><EmptyState title={`No release has its DDT Date in ${monthName(month)}.`} detail="Pick another month in the header, or tick “All months”. The counts above still include milestones Done in the month." /></> : <EmptyState title={`No items in ${monthName(month)}.`} detail={`${source.items.length} items have an approval date (else a changed date) in other months. Pick another month in the header, or tick “All months”.`} />
-        : source && config ? isDp ? <><DpMonthCounts items={source.items} month={month} /><QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} queryOnly choose extra={boardColumn} /></> : isCp && cp ? <><CpReportView report={cp.report} azure={azure} assign={assign} featureSetup={featureSetup} threshold={threshold} enrichment={cp.enrichmentName} /><QueryView name={name} items={source.items} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} /></> : role === 'release-source' || stream ? <ReleaseView name={name} items={items} backlog={azure.items} azure={azure} assign={assign} featureSetup={featureSetup} rule={stream?.rule} fuzzy={stream?.fuzzy} threshold={threshold} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} /> : <QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} />
+        : source && config ? isDp ? <><DpMonthCounts items={source.items} month={month} /><QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} queryOnly choose extra={boardColumn} /></> : isCp && cp ? <><CpReportView report={cp.report} azure={azure} assign={assign} featureSetup={featureSetup} threshold={threshold} enrichment={cp.enrichmentName} /><QueryView name={name} items={source.items} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} /></> : role === 'release-source' || stream ? <ReleaseView name={name} items={items} backlog={azure.items} azure={azure} assign={assign} featureSetup={featureSetup} rule={stream?.rule} fuzzy={stream?.fuzzy} threshold={threshold} columns={viewColumns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} /> : <QueryView name={name} items={items} columns={viewColumns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} />
         : <><EmptyState title={config ? `“${name}” has not been fetched yet.` : `The connection for “${name}” is not saved in this browser.`} detail={config ? 'Fetch it read-only; nothing is written to Azure DevOps. Its items stay on this page and are not counted in Overview, Monthly Time Writing or Assigned to Me.' : 'Add it again in Settings → Azure DevOps.'} /></>}
     </Panel>
   </Page>

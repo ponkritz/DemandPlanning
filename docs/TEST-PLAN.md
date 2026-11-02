@@ -705,6 +705,10 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-CON-47 Admin stream mapping enforced through Git** — Req CON-79 — L1 `view-definitions.test.mjs` ("Git connection setup is the default: added and followed; the stream mapping is enforced, other views kept when changed here; PATs kept (TC-CON-47)"); browser check with two browsers and Git storage connected: as an admin (Manage shared settings), change the CP query in Settings → Azure DevOps → Stream mapping and Save — the notice says it was saved to Git and the commit "Stream mapping: CP" is in the data repository; as another user, change the CP query locally, reload: the admin's query is back and the start message names CP as applied from the admin's mapping; the user's own extra "CP …" connection is not the one Release Details → CP opens; as the admin with a read-only token, a change says "saved here only" and survives a reload; Save stream mapping to Git writes it once the token can write.
 
+**TC-CON-48 Work email never shared through Git** — Req CON-80 — L1 `view-definitions.test.mjs` ("the work email is personal: never written to Git, ignored in the file, kept here; an inherited one is cleared once (TC-CON-48)"); browser check: as an admin with a Time Writing email, Save connections to Git — `azure-views.json` has no `creatorEmail`; as a new user (empty browser, Git storage connected to a file that still has the admin's email) — after the start sync, Settings → Azure DevOps shows the Time Writing connection with **Work email missing**, the access role is the default one, and after entering their own email and restarting it stays; a user who had already received the admin's email sees the start message asking for their own email once, and their email entered afterwards is kept; no page errors.
+
+**TC-CON-49 Successor and Predecessor IDs of a view of its own** — Req CON-81 — L1 `azure-devops.test.mjs` ("Predecessor and Successor IDs come from the Dependency links of each work item (TC-CON-49)"); browser check (desktop app, on-prem): add a connection with its own name (not a stream name) and a query returning items that have Successor / Predecessor links, fetch — the query view ends with **Successor ID** and **Predecessor ID**, listing each linked ID once ("501, 502"), sortable, found by search and present in the CSV; an item without links shows them empty; the DP / IOCC stream views show no such columns; after Save data to Git the web app shows the same columns.
+
 **TC-CON-44 DP and DHFI defaults** — Req CON-76 — L1 `connections.test.mjs` ("pre-filled connections from the shared setup …": DP reads the Release work items of DHP with DDTDate, SourceProgram, PsName and Release; DHFI [Approved] reads the DHP.Vault documents, hidden from the menu); browser check in a fresh browser with only the on-prem PAT: Settings → Azure DevOps → Stream mapping → Set up DP, Pedestal and DHFI from their defaults; Release Details → DP lists Release items for the DDT month; Get started shows the release streams step done.
 
 **TC-CON-43 Title fields in the Feature setup** — Req CON-75 — L1 `feature-setup.test.mjs` ("title fields per Epic: up to five, unique names, saved with the setup …"); browser check with GitHub mocked: Settings → Feature setup → an Epic → ＋ Add title field three times (Platform / Custom.Platform, Release Name, Number), the preview of a story titled "{Platform} review" with the sample "CP 2 | Atlas | 4.1" shows "CP 2 review"; Save to Git writes titleFields; a sixth field cannot be added.
@@ -809,6 +813,8 @@ Cases marked **UAT** are also run in acceptance testing.
 **TC-QV-22 IOCC grouping** — Req QV-37 — L1 `nested-groups.test.mjs` ("nested groups: type, then name, then version; blank last; keys unique per path (QV-37)"), `streams.test.mjs` (the IOCC name without the document words); browser check with the IOCC connection fetched: Release Details → IOCC opens grouped by Type of Release with each group's release count; add then by Name and then by Release (nested, indented); collapse one group, then Collapse all and Expand all; No grouping shows the flat list; a release's notes, report and plan are one row with their documents under it.
 
 **TC-QV-23 Windchill releases matched to the QMS-0025 board** — Req QV-39 — L1 `dp-board-match.test.mjs` ("Windchill release (S&S IT) → QMS-0025: the same search with the release name and number; Create Feature title (TC-QV-23)"); browser check with the QMS-0025 board loaded (one Feature "Remote Diagnostics v1.6") and an S&S IT export holding Remote Diagnostics 1.6 and another release: the first row shows "Feature id n%" as a link; the other shows "no match" or the closest item and Create Feature, which opens the default New Feature form titled "S&S IT | name | vrelease"; sorting by the column and the releases CSV carry the match; no page errors. **UAT**
+
+**TC-QV-26 Create Feature on every stream's releases** — Req QV-46, QV-31 — L1 `dp-board-match.test.mjs` ("IOCC, Content and Tool Validations releases → QMS-0025: the same search, Create Feature when nothing matches (TC-QV-26)"); browser check with the QMS-0025 board loaded and an IOCC and a Tool Validations view fetched: each release table ends with **QMS-0025 match**; a release whose Feature is on the board shows "Feature id n%" (and "Story id n%"); a release without one shows the closest item or "no match" and **Create Feature**, which opens the New Feature form titled "IOCC \| {Type of Release} {name} \| v{release}" (Tool Validations: "Tool Validations \| {tool} \| v{release}") under the Epic named like the stream; the Time Writing Feature column has no button; without the board loaded the cell reads "board not loaded" and Create Feature stays offered (disabled with its reason when it cannot open); no page errors.
 
 **TC-QV-24 CP releases from the asset Titles** — *(Retired — see TC-QV-25)* Req QV-40 — L1 `streams.test.mjs` ("CP: the release from the asset Title "[Release name] [Release No] [Asset name]", each release once; fuzzy QMS-0025 match (TC-QV-24)"); browser check with a CP query holding three assets of one release in both namings ("Care Pathways 3.1 Test Report", "Care Pathways 3.1.0 SRS", "Risk Analysis v3.1 (Care Pathways)") and one of another (3.2), and a QMS-0025 Feature "CP | Care Pathways | v3.1": Release Details → CP lists two releases (3 and 1 assets), 3.1 with its Feature and %, 3.2 with Create Feature opening the New Feature form titled "Care Pathways | v3.2" (release name and number only) under the CP Epic, and found after it is created; Pulse Check's Releases and Supported summary show "CP [2]"; no page errors. **UAT**
 
@@ -1309,6 +1315,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CON-77 | TC-CON-45 |
 | CON-78 | TC-CON-46 |
 | CON-79 | TC-CON-47 |
+| CON-80 | TC-CON-48 |
+| CON-81 | TC-CON-49 |
 | QV-20 | TC-QV-06 |
 | QV-21 | TC-QV-07 |
 | CON-21, CON-22 | TC-CON-08 |
@@ -1398,6 +1406,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | QV-43 | TC-QV-25 |
 | QV-44 | TC-QV-25 |
 | QV-45 | TC-QV-25 |
+| QV-46 | TC-QV-26 |
 | QV-38 | TC-CON-42 |
 | OVR-01…08 | retired (TC-OVR-01…03 retired) |
 | OV-11 | TC-OV-11 |

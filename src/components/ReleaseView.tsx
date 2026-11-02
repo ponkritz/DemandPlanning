@@ -9,7 +9,8 @@ import { QueryView } from './QueryView'
 import { EmptyState, Pill, TablePanel } from './ui'
 import type { QueryColumn, QueryOrder } from '../queryView'
 import { useColumnWidths } from './columnWidths'
-import { ReleaseFeatureButton } from './ReleaseFeatureEditor'
+import { BoardMatchCell } from './DpBoardColumn'
+import { dpBoardCandidates, releaseBoardMatch, type BoardMatch } from '../dpBoardMatch'
 import { nestGroups, nestedKeys, type GroupLevel, type NestedGroup } from '../nestedGroups'
 
 // IOCC: nested grouping of its releases (QV-37), by Type of Release, then name, then version.
@@ -43,15 +44,22 @@ function ReleaseTable({ name, title = 'Releases', detail, register, azure, assig
   const regroup = (next: string[]) => { setGroupBy(next); setCollapsed([]) }
   // IOCC: the Area Path segment after IOCC is the Type of Release, in its own column.
   const grouped = typed || register.some((release) => release.group)
-  const headings = [...(grouped ? ['Type of Release'] : []), 'Name', 'Release', 'Approved', 'Documents', 'Time Writing Feature', 'Planned (h)', 'Booked (h)']
+  const headings = [...(grouped ? ['Type of Release'] : []), 'Name', 'Release', 'Approved', 'Documents', 'Time Writing Feature', 'Planned (h)', 'Booked (h)', ...(azure ? ['QMS-0025 match'] : [])]
+  // QV-46: the QMS-0025 match of every release, searched as on the DP table and the Windchill releases (boardMatch):
+  // the release name (and, for IOCC, Type of Release + name) with its number, the stream as the program; a board title
+  // equal to the Create Feature title is 100%. No match: the closest item and Create Feature, on every such release.
+  const boardItems = azure?.items
+  const candidates = useMemo(() => boardItems ? dpBoardCandidates(boardItems) : [], [boardItems])
+  const matches = useMemo(() => new Map<string, BoardMatch>(azure ? register.map((release) => [release.key, releaseBoardMatch(release, name, featureTitle(release), candidates, threshold)]) : []), [azure, register, name, candidates, threshold, featureTitle])
   const releaseRows = (release: ReleaseEntry): ReactNode[] => [
           <tr key={release.key}>
             {grouped && <td>{release.group || '—'}</td>}
             <td><button type="button" className="text-button" aria-expanded={open === release.key} onClick={() => setOpen(open === release.key ? '' : release.key)}>{open === release.key ? '▾' : '▸'} {release.name}</button></td>
             <td>{release.release || '—'}</td><td>{release.approvalDate ? formatDate(release.approvalDate) : '—'}</td><td>{release.documents}</td>
-            <td>{release.match && release.match.score >= 50 && <Pill tone={release.match.score >= threshold ? 'open' : 'warning'}>{release.match.score}% match</Pill>}{release.features.length ? release.features.map((feature) => <a key={feature.id} className="feature-link" href={feature.url} target="_blank" rel="noreferrer">#{feature.id} {feature.title}</a>) : release.match && release.match.score >= 50 ? <><small className="muted">Closest: <a href={release.match.feature.url} target="_blank" rel="noreferrer">#{release.match.feature.id} {release.match.feature.title}</a> — below {threshold}%</small>{azure && <ReleaseFeatureButton stream={name} title={featureTitle(release)} items={release.items} azure={azure} assign={assign} featureSetup={featureSetup} />}</> : release.tracked ? <Pill tone="info">Named by {release.trackedBy.length} item{release.trackedBy.length === 1 ? '' : 's'}, no Feature</Pill> : <><Pill tone="warning">Not tracked</Pill>{azure && <ReleaseFeatureButton stream={name} title={featureTitle(release)} items={release.items} azure={azure} assign={assign} featureSetup={featureSetup} />}</>}</td>
+            <td>{release.match && release.match.score >= 50 && <Pill tone={release.match.score >= threshold ? 'open' : 'warning'}>{release.match.score}% match</Pill>}{release.features.length ? release.features.map((feature) => <a key={feature.id} className="feature-link" href={feature.url} target="_blank" rel="noreferrer">#{feature.id} {feature.title}</a>) : release.match && release.match.score >= 50 ? <><small className="muted">Closest: <a href={release.match.feature.url} target="_blank" rel="noreferrer">#{release.match.feature.id} {release.match.feature.title}</a> — below {threshold}%</small></> : release.tracked ? <Pill tone="info">Named by {release.trackedBy.length} item{release.trackedBy.length === 1 ? '' : 's'}, no Feature</Pill> : <><Pill tone="warning">Not tracked</Pill></>}</td>
             <td>{release.hourTasks ? formatHours(release.planned) : '—'}</td>
             <td>{release.hourTasks ? <>{formatHours(release.booked)}{release.planned > 0 && release.booked > release.planned && <small className="negative">+{formatHours(release.booked - release.planned)} over plan</small>}</> : '—'}<small>{release.hourTasks ? `${release.hourTasks} task${release.hourTasks === 1 ? '' : 's'}` : ''}</small></td>
+            {azure && <td><BoardMatchCell match={matches.get(release.key) ?? {}} azure={azure} stream={name} title={featureTitle(release)} items={release.items} assign={assign} featureSetup={featureSetup} /></td>}
           </tr>,
           ...(open === release.key ? [<tr key={`${release.key}/docs`} className="release-docs"><td colSpan={headings.length}><ul>{release.items.map((item) => <li key={item.key}><a href={item.url} target="_blank" rel="noreferrer">#{item.id} {item.title}</a><small> · {item.state}{item.approvalDate ? ` · approved ${formatDate(item.approvalDate)}` : ''}</small></li>)}</ul></td></tr>] : []),
   ]

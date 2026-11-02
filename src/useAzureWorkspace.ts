@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { fetchAzureWorkItems, isCloudBase, mapAzureWorkItem, mergeAzureWorkItems, parseAzureProjectUrl, readFieldNames, savedBacklogItems, sameAzureScope, updateAzureTimeWritingEffort, type AzureFetchResult, type AzureConfig } from './azureDevOps'
+import { dependencyFields, fetchAzureWorkItems, isCloudBase, mapAzureWorkItem, mergeAzureWorkItems, parseAzureProjectUrl, readFieldNames, savedBacklogItems, sameAzureScope, updateAzureTimeWritingEffort, type AzureFetchResult, type AzureConfig } from './azureDevOps'
 import type { PageProps } from './pages/types'
 import type { AzureWorkItem } from './domain'
 import { loadAzurePat, saveAzurePat, forgetAzurePat, listAzureConnectionProfiles, loadAzureConnectionProfile, saveAzureConnectionProfile, forgetAzureConnectionProfile, composeAzureUrl, collectionUrlFrom, type AzureConnectionProfile, type AzureConnectionProfileSummary, type AzureConnectionRole, loadServerPat, serverKey } from './azureCredentials'
@@ -25,7 +25,7 @@ async function viewLayout(config: AzureConfig, pat: string, query: string) {
   return { columns: columns.map((ref) => ({ ref, name: columnName(ref, names) })), orderBy, ...(unresolved.length ? { unresolved } : {}) }
 }
 const withQueryFields = (config: AzureConfig, refs: string[]) =>
-  (item: { id: number; fields: Record<string, unknown>; relations?: { rel: string; url: string }[] }) => { const mapped = { ...mapAzureWorkItem(item, config), fields: pickFields(item.fields, refs) }; const approvalDate = approvalDateFrom(item.fields); return approvalDate ? { ...mapped, approvalDate } : mapped }
+  (item: { id: number; fields: Record<string, unknown>; relations?: { rel: string; url: string }[] }) => { const mapped = { ...mapAzureWorkItem(item, config), fields: { ...pickFields(item.fields, refs), ...dependencyFields(item) } }; const approvalDate = approvalDateFrom(item.fields); return approvalDate ? { ...mapped, approvalDate } : mapped }
 const refsOf = (layout: { columns: { ref: string }[] }) => layout.columns.map((column) => column.ref)
 
 export interface ConnectionStatus { state: 'busy' | 'ok' | 'error'; message: string; at?: string }
