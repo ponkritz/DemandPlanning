@@ -725,7 +725,9 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-CON-52 BRITE placeholder** — Req CON-84 — inspection: Release Details shows BRITE at its root; it opens "BRITE is not set up yet."; Pulse Check and the Monthly pack have no BRITE line.
 
-**TC-CON-53 Import a stream's export from its menu entry** — Req CON-85 — E2E `documents-and-data.e2e.mjs` ("TC-CON-53: \"＋ ECP\" imports the export as the ECP page whatever the file is called, read by project"); browser check: with no ECP export, click "＋ ECP" — the import shows "Import the ECP export" with Name "ECP"; choose a CSV called anything (e.g. "Search Results.csv") — the ECP page opens with its projects, the menu shows ECP (no ＋), and Pulse Check lists ECP.
+**TC-CON-53 Import a stream's export from its menu entry** — Req CON-85 — E2E `documents-and-data.e2e.mjs` ("TC-CON-53 / TC-CON-54: \"＋ ECP\" imports the export as the ECP page whatever the file is called, read by project, with Project No / Project Name columns"); browser check: with no ECP export, click "＋ ECP" — the import shows "Import the ECP export" with Name "ECP"; choose a CSV called anything (e.g. "Search Results.csv") — the ECP page opens with its projects, the menu shows ECP (no ＋), and Pulse Check lists ECP.
+
+**TC-CON-54 ECP columns Project No and Project Name** — Req CON-86 — E2E `documents-and-data.e2e.mjs` ("TC-CON-53 / TC-CON-54: \"＋ ECP\" imports the export as the ECP page whatever the file is called, read by project, with Project No / Project Name columns"); browser check: Release Details → Windchill exports → ECP — the table's columns read Project Name and Project No (and Download CSV has the same headers); S&S IT still reads Release name and Release.
 
 **TC-CON-44 DP and DHFI defaults** — Req CON-76 — L1 `connections.test.mjs` ("pre-filled connections from the shared setup …": DP reads the Release work items of DHP with DDTDate, SourceProgram, PsName and Release; DHFI [Approved] reads the DHP.Vault documents, hidden from the menu); browser check in a fresh browser with only the on-prem PAT: Settings → Azure DevOps → Stream mapping → Set up DP, Pedestal and DHFI from their defaults; Release Details → DP lists Release items for the DDT month; Get started shows the release streams step done.
 
@@ -1343,6 +1345,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CON-83 | TC-CON-51 |
 | CON-84 | TC-CON-52 |
 | CON-85 | TC-CON-53 |
+| CON-86 | TC-CON-54 |
 | QV-20 | TC-QV-06 |
 | QV-21 | TC-QV-07 |
 | CON-21, CON-22 | TC-CON-08 |

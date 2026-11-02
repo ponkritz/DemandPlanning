@@ -5,6 +5,11 @@ Version history of the I&D Quality Demand Planning app, newest first. Every merg
 ## v1.4.1 — 2026-11-02
 
 **Changed**
+- ECP's release table and its CSV name the columns **Project No** and **Project Name** instead of Release and Release name (CON-86, TC-CON-54).
+
+### Imported upstream v1.14.0 — 2026-11-02
+
+**Changed**
 - **QRE is renamed ECP** (menu, Pulse Check, Monthly pack, Create Feature "ECP | …"); an export imported earlier as "QRE" shows as ECP (CON-83, CON-85).
 - ECP reads a Location as "Parent folder/Project number Project name/Phase/…": the release is the **second folder**, shown as "<number> <name>" (e.g. "123456 Patient Monitor"), with every document under it; a leading "/" does not count, and a number that is not "PJ-…" is kept as written, never "v<number>" (CON-83, TC-CON-51).
 

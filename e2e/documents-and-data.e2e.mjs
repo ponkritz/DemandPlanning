@@ -170,7 +170,7 @@ test('TC-QV-23: the export\'s releases have a QMS-0025 match column with Create 
   await context.close()
 })
 
-test('TC-CON-53: "＋ ECP" imports the export as the ECP page whatever the file is called, read by project', async () => {
+test('TC-CON-53 / TC-CON-54: "＋ ECP" imports the export as the ECP page whatever the file is called, read by project, with Project No / Project Name columns', async () => {
   const { page, context, errors } = await openPage(app)
   await page.locator('nav button', { hasText: /^＋\s*ECP$/ }).click()
   assert.equal(await page.getByLabel(/^Name/).first().inputValue(), 'ECP', 'the import is named after the stream')
@@ -180,6 +180,10 @@ test('TC-CON-53: "＋ ECP" imports the export as the ECP page whatever the file 
   await releases.getByLabel('Show').selectOption('all')
   const body = await text(releases)
   assert.match(body, /123456/)
+  // TC-CON-54: an ECP release is a project, so its columns read Project No and Project Name.
+  const headers = (await releases.locator('thead th').allTextContents()).map((header) => header.trim().toLowerCase())
+  assert.ok(headers.some((header) => header.startsWith('project name')) && headers.some((header) => header.startsWith('project no')), `project columns: ${headers.join(', ')}`)
+  assert.ok(!headers.some((header) => header === 'release' || header === 'release name'), `no Release columns on ECP: ${headers.join(' | ')}`)
   assert.match(body, /Lab Automation/)
   assert.equal(await page.locator('nav button', { hasText: /^＋\s*ECP$/ }).count(), 0, 'ECP is no longer "not imported"')
   assert.equal(await page.locator('nav button', { hasText: /^\S*\s*ECP$/ }).count(), 1, 'ECP opens the export')
