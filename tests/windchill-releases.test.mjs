@@ -196,3 +196,36 @@ test('ECP: each release is the second Location folder, "<project number> <projec
   assert.equal(windchillFeatureTitle('ECP', result.releases[1]), 'ECP | Lab Automation')
   assert.equal(windchillFeatureTitle('ECP', result.releases[2]), 'ECP | PJ-0099 Scanner Service')
 })
+
+test('ECP setups: several ECP exports, each with its own name and project folder (2nd, 3rd…), listed on their own (TC-CON-55)', async () => {
+  const { projectFromLocation, windchillReleases, windchillSupported } = await import('../src/windchillReleases.ts')
+  const { windchillOptionsForView, windchillStreamExports, isEcpExport } = await import('../src/streams.ts')
+  const { cleanSetup, loadWindchillViews } = await import('../src/windchillViews.ts')
+  assert.deepEqual([projectFromLocation('Root/Programs/123456 Patient Monitor/Phase 2/Reports', 3).release, projectFromLocation('Root/Programs/123456 Patient Monitor/Phase 2/Reports', 3).name], ['123456', 'Patient Monitor'], 'type 2: project details in the 3rd folder')
+  assert.equal(projectFromLocation('Root/Programs/123456 Patient Monitor/Phase', 3).folder, 'Root/Programs/123456 Patient Monitor')
+  assert.equal(projectFromLocation('Root/Programs', 3), undefined, 'no 3rd folder, no project')
+  const type1 = { id: 'a', name: 'ECP - Type 1', exportFile: 'a.csv', columns: [], logic: 'ecp', projectLevel: 2 }
+  const type2 = { id: 'b', name: 'ECP - Type 2', exportFile: 'b.csv', columns: [], logic: 'ecp', projectLevel: 3 }
+  const sns = { id: 'c', name: 'S&S IT', exportFile: 'c.csv', columns: [] }
+  const legacy = { id: 'd', name: 'QRE', exportFile: 'd.csv', columns: [] }
+  const plain = { id: 'e', name: 'Search Results', exportFile: 'e.csv', columns: [] }
+  assert.deepEqual(windchillOptionsForView(type2), { project: true, projectLevel: 3 })
+  assert.deepEqual(windchillOptionsForView(legacy), { project: true, projectLevel: 2 }, 'an export named QRE / ECP without a setup: ECP at the 2nd folder')
+  assert.deepEqual(windchillOptionsForView({ ...legacy, logic: 'standard' }), {}, 'a setup chosen as Standard wins over the name')
+  assert.equal(isEcpExport(plain), false)
+  assert.deepEqual(windchillStreamExports([type1, sns, type2, legacy, plain]).map((entry) => [entry.stream.name, entry.name, entry.view?.id]), [['S&S IT', 'S&S IT', 'c'], ['ECP', 'ECP - Type 1', 'a'], ['ECP', 'ECP - Type 2', 'b'], ['ECP', 'QRE', 'd']], 'S&S IT, then every ECP export on its own; other exports are not streams')
+  assert.deepEqual(windchillStreamExports([sns]).map((entry) => [entry.name, entry.view?.id]), [['S&S IT', 'c'], ['ECP', undefined]], 'no ECP export yet: one empty ECP entry')
+  assert.deepEqual(cleanSetup({ id: 'x', logic: 'evil', projectLevel: 99 }), { id: 'x' }, 'unknown setup values are dropped')
+  assert.deepEqual(cleanSetup({ id: 'x', logic: 'ecp', projectLevel: 3 }), { id: 'x', logic: 'ecp', projectLevel: 3 })
+  const store = new Map([['demand-planning-windchill-views-v1', JSON.stringify([{ ...type2, entitySet: '', filters: [], showInMenu: true, projectLevel: '3; drop' }])]])
+  assert.equal(loadWindchillViews({ getItem: (key) => store.get(key) ?? null })[0].projectLevel, undefined, 'a stored level that is not a known number is dropped')
+  const rows = [
+    { Name: 'A.docx', Location: 'Root/Programs/123456 Patient Monitor/Phase 1', 'Last Modified': '2026-10-03' },
+    { Name: 'B.docx', Location: 'Root/Programs/123456 Patient Monitor/Phase 2/Reports', 'Last Modified': '2026-10-09' },
+    { Name: 'C.docx', Location: 'Root/Programs/777 Scanner/Phase 1', 'Last Modified': '2026-09-01' },
+  ]
+  const columns = ['Name', 'Location', 'Last Modified']
+  assert.deepEqual(windchillReleases(rows, columns, windchillOptionsForView(type2)).releases.map((entry) => [entry.release, entry.name, entry.documents.length]), [['123456', 'Patient Monitor', 2], ['777', 'Scanner', 1]])
+  assert.deepEqual(windchillSupported(rows, columns, '2026-10', windchillOptionsForView(type2)), ['123456 Patient Monitor'])
+  assert.deepEqual(windchillReleases(rows, columns, windchillOptionsForView(type1)).releases.map((entry) => entry.name), ['Programs'], 'the same rows read at the 2nd folder give the parent folder: the setup matters')
+})

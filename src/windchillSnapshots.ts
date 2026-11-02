@@ -1,5 +1,5 @@
 import type { AppState } from './domain'
-import { isWindchillView, type WindchillView } from './windchillViews.ts'
+import { cleanSetup, isWindchillView, type WindchillView } from './windchillViews.ts'
 
 // A Windchill view's last results saved to the Git data repository (windchill-data/<view>.json, next to the planning
 // data) by the desktop app, so the web app — which cannot reach Windchill — can show them. Holds the view (its search)
@@ -20,6 +20,7 @@ export function parseWindchillSnapshot(text: string): WindchillSnapshotFile {
   if (!file || file.schema !== 1 || file.kind !== kind || !isWindchillView(file.view) || !file.source || file.source.viewId !== file.view.id || !Array.isArray(file.source.rows) || typeof file.source.fetchedAt !== 'string') throw new Error('A file in windchill-data is not a Windchill view snapshot.')
   // Rows that are not plain objects (PT-07) would throw in windchillCell for everyone who loads the file: drop them.
   file.source.rows = file.source.rows.filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === 'object' && !Array.isArray(row))
+  file.view = cleanSetup(file.view)
   return file as WindchillSnapshotFile
 }
 // Newer results replace older ones, per view.

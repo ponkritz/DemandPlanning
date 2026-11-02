@@ -419,3 +419,19 @@ table.resizable.wrap th,table.resizable.wrap td{white-space:pre-wrap;overflow-wr
 .employment-dates{display:grid;gap:4px;min-width:150px}.employment-dates label{display:grid;gap:2px;font-size:12px}.employment-note{margin:0 0 8px}
 .default-joined{display:grid;gap:4px;margin:0 0 10px;max-width:520px}
 .until-target{display:grid;gap:6px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:0}.until-target legend{font-weight:600;padding:0 4px}
+/* Compact page actions (QV-48): small icon buttons and a "⋯" menu instead of a row of full buttons. */
+.view-actions{position:relative;display:inline-flex;align-items:center;gap:4px}
+.act-button{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:30px;height:30px;padding:0 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--text);font-size:14px;font-weight:600;cursor:pointer;line-height:1}
+.act-button:hover:not(:disabled){background:var(--accent-soft);color:var(--accent-text)}
+.act-button:disabled{opacity:.6;cursor:progress}
+.act-button.act-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.act-button.act-primary:hover:not(:disabled){filter:brightness(1.08);background:var(--accent);color:#fff}
+.act-button small{font-size:11.5px;font-weight:600}
+.view-actions-menu{position:absolute;z-index:8;top:calc(100% + 4px);right:0;display:grid;min-width:200px;padding:6px;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--btn-shadow-hover)}
+.view-actions-menu button,.view-actions-menu label{display:block;border:0;background:transparent;text-align:left;padding:7px 10px;border-radius:7px;font-size:12.5px;font-weight:600;color:var(--text);cursor:pointer;width:100%}
+.view-actions-menu button:hover:not(:disabled),.view-actions-menu label:hover{background:var(--accent-soft)}
+.view-actions-menu button:disabled{color:var(--text-3);cursor:not-allowed}
+.view-actions-menu .danger-text{color:var(--danger-text)}
+.view-actions-menu label input[type=file]{display:none}
+.view-source-bar .check{font-size:12.5px}
+.act-button input[type=file]{display:none}

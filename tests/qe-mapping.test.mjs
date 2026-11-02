@@ -111,3 +111,16 @@ test('nested grouping: groups within groups, keys unique per path, counts per le
   assert.deepEqual(groupTree(rows, []), [], 'no columns: no groups')
   assert.deepEqual(groupTree(rows, ['c1']).map((group) => group.value), groupRows(rows, 'c1').map((group) => group.value), 'one level is the plain grouping')
 })
+
+test('add a row: the QE Name column is found for the Resources list, the row comes first with its values (TC-QEM-09)', async () => {
+  const { qeNameColumn, addRow } = await import('../src/qeMapping.ts')
+  const sheet = (names) => ({ id: 's', name: 'Map', columns: names.map((name, index) => ({ id: `c${index}`, name })), rows: [{ id: 'r1', cells: { c0: 'old' } }] })
+  assert.equal(qeNameColumn(sheet(['Product', 'QE Name', 'Backup']))?.name, 'QE Name')
+  assert.equal(qeNameColumn(sheet(['Product', 'qe name (primary)']))?.name, 'qe name (primary)')
+  assert.equal(qeNameColumn(sheet(['Product', 'QE']))?.name, 'QE')
+  assert.equal(qeNameColumn(sheet(['Product', 'Responsible QE person']))?.name, 'Responsible QE person')
+  assert.equal(qeNameColumn(sheet(['Product', 'QE Status'])), undefined, 'a QE column that is not a person is not mapped')
+  assert.equal(qeNameColumn(sheet(['Product', 'Owner'])), undefined)
+  const added = addRow(sheet(['Product', 'QE Name']), { c0: 'CP', c1: 'Ana Costa' })
+  assert.deepEqual(added.sheet.rows.map((row) => row.cells), [{ c0: 'CP', c1: 'Ana Costa' }, { c0: 'old' }], 'the new row first, with the values entered')
+})

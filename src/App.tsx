@@ -1,5 +1,5 @@
 import { BrandMark } from './components/BrandMark'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import './fresh.css'
 import { useAppStore } from './store'
@@ -16,7 +16,7 @@ import { SnapshotsPage } from './pages/SnapshotsPage'
 import { AdminPage } from './pages/AdminPage'
 import { readSettingsTab, saveSettingsSection, saveSettingsTab, settingsLabel, settingsPagesFor, type SettingsTab } from './settingsTabs'
 import { normalizeReleaseSourceSettings } from './releaseSource'
-import { dataSets, defaultMatchThreshold, defaultStreams, exportForStream, profileForDataSet, profileForStream } from './streams'
+import { dataSets, defaultMatchThreshold, defaultStreams, profileForDataSet, profileForStream, windchillStreamExports } from './streams'
 import { connectionPresets } from './connectionPresets'
 import { gitSyncedIds, markViewsSynced, removeDuplicateConnections, serializeViews, viewsFile } from './viewDefinitions'
 import { listAzureConnectionProfiles } from './azureCredentials'
@@ -51,7 +51,7 @@ import { formatDateTime, todayIso } from './format'
 import { HeaderSlot } from './headerSlot'
 import { SetupGuide } from './components/SetupGuide'
 import { guideKey, requiredOpen, setupSteps } from './setupGuide'
-import { capacityContext } from './capacity'
+import { azureResources, capacityContext } from './capacity'
 import { hasServerPat, serverKey } from './azureCredentials'
 
 export default function App() {
@@ -168,6 +168,9 @@ export default function App() {
   const windchillView = windchillViews.find((entry) => entry.id === windchillId)
   // "＋ ECP" / "＋ S&S IT" (not imported yet) open the import named after that stream, so the export lands on it (CON-85).
   const [windchillFor, setWindchillFor] = useState('')
+  // QE Mapping (QEM-12): the QE Name of a new row is picked from the Resources list (Settings → Resources): everyone with
+  // Time Writing Tasks, and the people with a resource profile.
+  const qeResources = useMemo(() => page !== 'qemapping' ? [] : (() => { const capacity = capacityContext(store.state); return [...new Set([...azureResources(azure.items, month, capacity).map((person) => person.name), ...Object.keys(capacity.profiles ?? {})])].filter(Boolean).sort((a, b) => a.localeCompare(b)) })(), [page, azure.items, month, store.state])
   const openWindchill = (id: string, stream = '') => { setWindchillId(id); setWindchillFor(id ? '' : stream); setPage('windchill') }
   // Views shown in the menu that are not the Time Writing backlog nor a default stream: listed under "Other views".
   const others = otherMenuViews(views, azure.connectionProfiles, windchillViews)
@@ -223,7 +226,9 @@ export default function App() {
           // BRITE (CON-84): planned, at the root of Release Details until its exports and rules are known.
           { key: 'release:root', entries: access.sees('release') ? [navButton('brite', pageMeta('brite').icon, 'BRITE', page === 'brite', () => setPage('brite'))] : [] },
           { key: 'release:ads', label: 'Azure DevOps Server', entries: access.sees('release') ? defaultStreams.filter((stream) => stream.source === 'azure').map((stream) => { const profile = profileForStream(stream, azure.connectionProfiles), entry = profile && views.find((item) => item.id === profile.id); return entry ? navButton(`view:${entry.id}`, pageMeta('board').icon, stream.name, page === 'board' && view.id === entry.id, () => openView(entry.id)) : <button key={`stream:${stream.name}`} className="nav-missing" title={`Not set up: add a connection named “${stream.name}”`} onClick={openConnection}><span className="nav-icon">＋</span>{stream.name}</button> }) : [] },
-          { key: 'release:windchill', label: 'Windchill exports', entries: access.sees('release') ? [...defaultStreams.filter((stream) => stream.source === 'windchill').map((stream) => { const entry = exportForStream(stream, windchillViews); return entry ? navButton(entry.id, windchillMeta.icon, stream.name, page === 'windchill' && windchillView?.id === entry.id, () => openWindchill(entry.id)) : <button key={`stream:${stream.name}`} className="nav-missing" title={`Not imported yet: import a Windchill export named “${stream.name}”`} onClick={() => openWindchill('', stream.name)}><span className="nav-icon">＋</span>{stream.name}</button> }), ...(access.can('windchill.import') ? [navButton('windchill', '＋', windchillMeta.label, page === 'windchill' && !windchillView, () => openWindchill(''))] : [])] : [] },
+          { key: 'release:windchill', label: 'Windchill exports', entries: access.sees('release') ? [...windchillStreamExports(windchillViews).flatMap(({ stream, name, view: entry }, index, all) => [entry ? navButton(entry.id, windchillMeta.icon, name, page === 'windchill' && windchillView?.id === entry.id, () => openWindchill(entry.id)) : <button key={`stream:${stream.name}`} className="nav-missing" title={`Not imported yet: import the ${stream.name} export`} onClick={() => openWindchill('', stream.name)}><span className="nav-icon">＋</span>{stream.name}</button>,
+            // Several ECP exports (CON-87): after the last one, "＋ ECP export" adds another with its own name and setup.
+            ...(entry && stream.project && all[index + 1]?.stream !== stream ? [<button key={`stream:${stream.name}:add`} className="nav-missing" title={`Import another ${stream.name} export (its own name and project folder)`} onClick={() => openWindchill('', stream.name)}><span className="nav-icon">＋</span>{stream.name} export</button>] : [])]), ...(access.can('windchill.import') ? [navButton('windchill', '＋', windchillMeta.label, page === 'windchill' && !windchillView, () => openWindchill(''))] : [])] : [] },
         ] : group === 'Other views' ? [{ key: group, entries: [
           ...others.azure.filter((entry) => access.sees(entry.onPrem ? 'release' : 'board')).map((entry) => navButton(`view:${entry.id}`, pageMeta('board').icon, entry.name, page === 'board' && view.id === entry.id, () => openView(entry.id))),
           ...(access.sees('release') ? others.windchill.map((entry) => navButton(entry.id, pageMeta('windchill').icon, entry.name, page === 'windchill' && windchillView?.id === entry.id, () => openWindchill(entry.id))) : []),
@@ -254,12 +259,12 @@ export default function App() {
       {page === 'pulse' && <PulseCheckPage month={month} azure={azure} store={store} my={my} navigate={setPage} windchill={windchill} openWindchill={openWindchill} git={git} pack={monthlyPack} />}
       {page === 'pireview' && <PiReviewPage />}
       {page === 'brite' && <BritePage />}
-      {page === 'qemapping' && <QeMappingPage git={git} store={qeMapping} />}
+      {page === 'qemapping' && <QeMappingPage git={git} store={qeMapping} resources={qeResources} />}
       {page === 'mywork' && <MyWorkPage azure={azure} store={store} my={my} onOpenBulk={() => setPage('bulk')} assign={assign} featureSetup={featureSetup.setups} />}
       {page === 'bulk' && <BulkActionsPage azure={azure} store={store} my={my} assign={assign} />}
       {page === 'monthly' && <MonthlyPage azure={azure} month={month} store={store} my={my} />}
       {page === 'baselines' && <BaselinesPage azure={azure} month={month} store={store} git={git} onOpenSettings={() => openSettings('storage', 'git')} canEdit={access.can('baselines.edit')} />}
-      {page === 'windchill' && (windchillView ? <WindchillPage view={windchillView} windchill={windchill} git={git} gitNote={git.snapshotNotes[`wc:${windchillView.id}`]} month={month} board={{ azure, stream: defaultStreams.find((stream) => stream.source === 'windchill' && exportForStream(stream, windchillViews)?.id === windchillView.id)?.name ?? windchillView.name, threshold: normalizeReleaseSourceSettings(store.state.releaseSourceSettings).matchThreshold ?? defaultMatchThreshold, assign, featureSetup: featureSetup.setups }} /> : access.can('windchill.import') ? <WindchillExportImport key={windchillFor} stream={windchillFor} windchill={windchill} git={git} onImported={(id) => openWindchill(id)} /> : <Notice tone="info">Your role does not include importing Windchill exports. Open an export from the menu; an Admin can change this in Settings → Access.</Notice>)}
+      {page === 'windchill' && (windchillView ? <WindchillPage view={windchillView} windchill={windchill} git={git} gitNote={git.snapshotNotes[`wc:${windchillView.id}`]} month={month} board={{ azure, stream: windchillStreamExports(windchillViews).find((entry) => entry.view?.id === windchillView.id)?.stream.name ?? windchillView.name, threshold: normalizeReleaseSourceSettings(store.state.releaseSourceSettings).matchThreshold ?? defaultMatchThreshold, assign, featureSetup: featureSetup.setups }} /> : access.can('windchill.import') ? <WindchillExportImport key={windchillFor} stream={windchillFor} windchill={windchill} git={git} onImported={(id) => openWindchill(id)} /> : <Notice tone="info">Your role does not include importing Windchill exports. Open an export from the menu; an Admin can change this in Settings → Access.</Notice>)}
       {page === 'health' && <BacklogHealthPage azure={azure} store={store} />}
       {page === 'board' && <BoardPage azure={azure} store={store} current={view} month={month} git={git} onOpenConnection={openConnection} assign={assign} featureSetup={featureSetup.setups} />}
       {page === 'snapshots' && <SnapshotsPage {...pageProps} />}

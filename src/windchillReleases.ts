@@ -95,12 +95,13 @@ const projectParts = (folder: string) => {
   const [first = '', ...rest] = folder.split(/\s+/)
   return /\d/.test(first) ? { name: rest.join(' ').replace(/^[\s_:.-]+/, '').trim(), release: first.replace(/[\s_:.-]+$/, '') } : { name: folder, release: '' }
 }
-export function projectFromLocation(location: string): LocationRelease | undefined {
+export function projectFromLocation(location: string, level = 2): LocationRelease | undefined {
   const segments = location.split('/').map((segment) => segment.trim()).filter(Boolean)
-  const folder = segments[1] ?? ''
+  const at = Number.isInteger(level) && level >= 1 ? level : 2
+  const folder = segments[at - 1] ?? ''
   if (!folder) return undefined
   const { name, release } = projectParts(folder)
-  return { name, release, folder: `${location.trim().startsWith('/') ? '/' : ''}${segments.slice(0, 2).join('/')}`, clubbed: false, parts: [{ name, release, raw: folder }], project: true }
+  return { name, release, folder: `${location.trim().startsWith('/') ? '/' : ''}${segments.slice(0, at).join('/')}`, clubbed: false, parts: [{ name, release, raw: folder }], project: true }
 }
 // Without a Location, a document named "PJ-<number> <name> …" still names its project (CON-83).
 const projectFromName = (text: string): LocationRelease | undefined => project.test(text.trim()) ? projectFromLocation(`-/${text.trim()}`) : undefined
@@ -145,7 +146,8 @@ export function parseExportDate(text: string): number | undefined {
   return undefined
 }
 
-export interface ReleaseOptions { source?: ReleaseSource | 'auto'; nameColumn?: string; locationColumn?: string; project?: boolean }
+// project: ECP logic (CON-83); projectLevel: the Location folder holding "<project number> <project name>" (2 = second, CON-87).
+export interface ReleaseOptions { source?: ReleaseSource | 'auto'; nameColumn?: string; locationColumn?: string; project?: boolean; projectLevel?: number }
 // Unique releases of an export. Source 'location' reads the Location column, 'name' the document names, 'auto' (the
 // default) Location when the export has such a column, else the names. A document counts once per release it names.
 export function windchillReleases(rows: Record<string, unknown>[], columns: string[], options: ReleaseOptions | string = {}) {
@@ -163,7 +165,7 @@ export function windchillReleases(rows: Record<string, unknown>[], columns: stri
     // A clubbed name or folder is one release (oneRelease), kept as written and counted once.
     const parsed = releasesFromDocumentName(text)
     const release = chosen.project
-      ? ((entry) => entry && { ...entry, document: text, key: entry.release.toLowerCase() })(folder ? projectFromLocation(folder) : projectFromName(text))
+      ? ((entry) => entry && { ...entry, document: text, key: entry.release.toLowerCase() })(folder ? projectFromLocation(folder, chosen.projectLevel) : projectFromName(text))
       : source === 'location'
       ? (([entry]) => entry && { ...entry, document: text, key: entry.release.toLowerCase() })(releasesFromLocation(folder))
       : (() => { const one = oneRelease(parsed, parsed[0]?.span ?? ''); return one && { ...one, document: parsed[0]?.document ?? '', key: one.clubbed ? one.release.toLowerCase() : normalizeVersion(one.release) } })()

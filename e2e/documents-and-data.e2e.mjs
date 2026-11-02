@@ -84,7 +84,7 @@ test('TC-DOC-02: a link to another document opens it at the linked section, and 
   await context.close()
 })
 
-test('TC-CON-39 / TC-CON-37: a Windchill export lists its unique releases, clubbed names included, and exports a neutralised CSV', async () => {
+test('TC-CON-39 / TC-CON-37 / TC-QV-27: a Windchill export lists its unique releases, clubbed names included, its raw rows on their own tab, and exports a neutralised CSV', async () => {
   const { page, context, errors } = await openPage(app)
   await navigate(page, 'Import Windchill export')
   await page.locator('input[type=file]').first().setInputFiles(fixture('windchill-export.csv'))
@@ -101,6 +101,10 @@ test('TC-CON-39 / TC-CON-37: a Windchill export lists its unique releases, clubb
   // CON-69: a cell that a spreadsheet would read as a formula is prefixed so that it stays text.
   await page.locator('input[type=file]').first().setInputFiles(fixture('windchill-formula.csv'))
   await page.locator('.notice, .panel', { hasText: /windchill-formula/ }).first().waitFor().catch(() => {})
+  // VIEW-01: the imported rows are on the "Raw data" tab, not below the releases.
+  assert.equal(await page.locator('.query-view').count(), 0, 'the raw rows are not shown on the Releases tab')
+  await page.getByRole('tab', { name: /^Raw data/ }).click()
+  await page.locator('.query-view').waitFor()
   const [exported] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: /^Export CSV/ }).first().click()])
   const content = readFileSync(await exported.path(), 'utf8')
   assert.ok(content.includes("'=HYPERLINK") || content.includes('"\'=HYPERLINK'), `formula cell is neutralised: ${content.split('\n')[1]}`)
@@ -224,6 +228,37 @@ test('TC-CON-53 / TC-CON-54: "＋ ECP" imports the export as the ECP page whatev
   assert.match(body, /Lab Automation/)
   assert.equal(await page.locator('nav button', { hasText: /^＋\s*ECP$/ }).count(), 0, 'ECP is no longer "not imported"')
   assert.equal(await page.locator('nav button', { hasText: /^\S*\s*ECP$/ }).count(), 1, 'ECP opens the export')
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
+test('TC-CON-55 / TC-QV-28: an ECP setup named "ECP - Type 2" reads projects from the 3rd Location folder, is listed on its own, with compact page actions', async () => {
+  const { page, context, errors } = await openPage(app)
+  await page.locator('nav button', { hasText: /^＋\s*ECP$/ }).click()
+  assert.equal(await page.getByLabel('Logic').inputValue(), 'ecp', 'opened from ＋ ECP: the ECP setup')
+  await page.getByLabel('Project details at').selectOption('3')
+  await page.getByLabel(/^Name/).first().fill('ECP - Type 2')
+  await page.locator('input[type=file]').first().setInputFiles(fixture('windchill-ecp-type2.csv'))
+  const releases = page.locator('.panel').filter({ has: page.locator('h2, h3', { hasText: /^Releases/ }) }).first()
+  await releases.waitFor()
+  await releases.getByLabel('Show').selectOption('all')
+  let body = await text(releases)
+  assert.match(body, /Patient Monitor/)
+  assert.match(body, /Scanner/)
+  assert.equal(await page.locator('nav button', { hasText: /ECP - Type 2$/ }).count(), 1, 'the export has its own menu entry')
+  assert.equal(await page.locator('nav button', { hasText: /ECP export$/ }).count(), 1, '＋ ECP export adds another')
+  // TC-QV-28: the page's actions are compact — a small import button and a ⋯ menu with the rest.
+  assert.equal(await page.getByRole('button', { name: 'Remove' }).count(), 0, 'no full-size Remove button')
+  assert.equal(await page.locator('.view-actions label[title="Import newer export"]').count(), 1, 'Import newer export is a small button with its name as tooltip')
+  await page.getByRole('button', { name: 'More actions: ECP - Type 2' }).click()
+  assert.equal(await page.getByRole('menuitem', { name: 'Remove this export…' }).count(), 1, 'Remove is in the ⋯ menu')
+  await page.keyboard.press('Escape')
+  assert.equal(await page.getByRole('menu').count(), 0, 'Escape closes the menu')
+  // The setup can be changed on the export's page: the 2nd folder gives the parent folder instead.
+  await releases.getByLabel('Project details at').selectOption('2')
+  body = await text(releases)
+  assert.match(body, /Programs/)
+  assert.doesNotMatch(body, /Patient Monitor ▸/)
   assert.deepEqual(errors, [])
   await context.close()
 })

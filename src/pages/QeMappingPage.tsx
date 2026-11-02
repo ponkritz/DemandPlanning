@@ -3,7 +3,7 @@ import { useColumnWidths } from '../components/columnWidths'
 import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { EmptyState, Modal, Notice, Page, Panel } from '../components/ui'
 import { downloadCsv, downloadXlsx } from '../download'
-import { addColumn, addRow, deleteColumn, deleteRows, filterRows, fromWorkbook, groupKeys, groupTree, moveColumn, renameColumn, replaceSheet, setCell, tableCsv, tableRows, type QeMappingFile, type QeGroup, type QeRow, type QeSheet } from '../qeMapping'
+import { addColumn, addRow, qeNameColumn, deleteColumn, deleteRows, filterRows, fromWorkbook, groupKeys, groupTree, moveColumn, renameColumn, replaceSheet, setCell, tableCsv, tableRows, type QeMappingFile, type QeGroup, type QeRow, type QeSheet } from '../qeMapping'
 import type { QeMappingStore } from '../useQeMapping'
 import type { GitStorage } from '../useGitStorage'
 import { readCsv, readXlsx, writeXlsx } from '../xlsx'
@@ -18,7 +18,7 @@ function loadHidden(): Record<string, string[]> { try { const value = JSON.parse
 const pageSize = 300
 const maxLevels = 4
 
-export function QeMappingPage({ git, store }: { git: GitStorage; store: QeMappingStore }) {
+export function QeMappingPage({ git, store, resources = [] }: { git: GitStorage; store: QeMappingStore; resources?: string[] }) {
   const [draft, setDraft] = useState<QeMappingFile | null>(null)
   const [sheetId, setSheetId] = useState('')
   const [search, setSearch] = useState('')
@@ -30,6 +30,8 @@ export function QeMappingPage({ git, store }: { git: GitStorage; store: QeMappin
   const [selected, setSelected] = useState<string[]>([])
   const [editing, setEditing] = useState<{ row: string; column: string; value: string } | null>(null)
   const [dialog, setDialog] = useState<{ mode: 'add' | 'rename'; id?: string; name: string; error?: string } | null>(null)
+  // ＋ Add row (QEM-12): a pop-up with one field per column; Save adds the row and saves the QE Mapping to Git at once.
+  const [rowDialog, setRowDialog] = useState<{ cells: Record<string, string>; error?: string; busy?: boolean } | null>(null)
   const [menu, setMenu] = useState('')
   const [picking, setPicking] = useState(false)
   const [hiddenBySheet, setHiddenBySheet] = useState(loadHidden)
@@ -88,12 +90,33 @@ export function QeMappingPage({ git, store }: { git: GitStorage; store: QeMappin
   }
   const removeColumn = (id: string) => { const column = sheet?.columns.find((entry) => entry.id === id); if (!column || !window.confirm(`Delete the column “${column.name}” and its values in every row? Saved for everyone with Save to Git.`)) return; change((entry) => deleteColumn(entry, id)); if (groupBy.includes(id)) regroup(groupBy.filter((entry) => entry !== id)); setMenu('') }
   const removeRows = () => { if (!selected.length || !window.confirm(`Delete ${selected.length} row${selected.length === 1 ? '' : 's'}? Saved for everyone with Save to Git.`)) return; change((entry) => deleteRows(entry, selected)); setSelected([]) }
-  // A new row comes first; the search and filters are cleared so it is in view.
-  const newRow = () => { change((entry) => addRow(entry).sheet); setSearch(''); setFilters({}) }
+  const newRow = () => setRowDialog({ cells: {} })
+  const qeColumn = sheet ? qeNameColumn(sheet) : undefined
+  // The new row comes first; it and any unsaved change are saved to Git together. The search and filters are cleared so it is in view.
+  async function saveRow(event: React.FormEvent) {
+    event.preventDefault()
+    if (!rowDialog || !file || !sheet) return
+    const cells = Object.fromEntries(Object.entries(rowDialog.cells).map(([id, value]) => [id, value.trim()]).filter(([, value]) => value))
+    if (!Object.keys(cells).length) { setRowDialog({ ...rowDialog, error: 'Fill in at least one field.' }); return }
+    const next = replaceSheet(file, addRow(sheet, cells).sheet)
+    setRowDialog({ ...rowDialog, busy: true, error: undefined })
+    try {
+      const saved = await store.save(next, `QE Mapping: add a row to ${sheet.name}${qeColumn && cells[qeColumn.id] ? ` (${cells[qeColumn.id]})` : ''}`)
+      setDraft(null); setRowDialog(null); setSearch(''); setFilters({})
+      setResult({ tone: 'success', text: 'Row added and the QE Mapping saved to Git.', url: saved.commitUrl })
+    } catch (failure) {
+      // Not saved: the row is kept as an unsaved change, so it can be saved with Save to Git later.
+      setDraft(next); setRowDialog(null); setSearch(''); setFilters({})
+      setResult({ tone: 'error', text: `The row was added but not saved to Git: ${failure instanceof Error ? failure.message : String(failure)} Use Save to Git to try again.` })
+    }
+  }
   const exportCsv = () => sheet && downloadCsv(tableCsv(columns, rows), `${(sheet.name || 'qe-mapping').replace(/[^\w-]+/g, '-')}.csv`)
   const exportXlsx = () => file && downloadXlsx(writeXlsx(file.sheets.map((entry) => ({ name: entry.name, rows: tableRows(entry.columns, entry.rows) }))), `${(file.source?.fileName.replace(/\.\w+$/, '') || 'qe-mapping')}.xlsx`)
 
-  const cell = (row: QeRow, columnId: string) => editable && editing?.row === row.id && editing.column === columnId
+  // The QE Name column is edited with the Resources list too (QEM-12); a value outside the list is kept as an option.
+  const cell = (row: QeRow, columnId: string) => editable && editing?.row === row.id && editing.column === columnId && columnId === qeColumn?.id
+    ? <select autoFocus aria-label="Edit cell" value={editing.value} onChange={(event) => setEditing({ ...editing, value: event.target.value })} onBlur={commitEdit} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commitEdit() } if (event.key === 'Escape') setEditing(null) }}><option value="">—</option>{[...new Set([...(editing.value && !resources.includes(editing.value) ? [editing.value] : []), ...resources])].map((person) => <option key={person} value={person}>{person}</option>)}</select>
+    : editable && editing?.row === row.id && editing.column === columnId
     ? <input autoFocus aria-label="Edit cell" value={editing.value} onChange={(event) => setEditing({ ...editing, value: event.target.value })} onBlur={commitEdit} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commitEdit() } if (event.key === 'Escape') setEditing(null) }} />
     : <span className={editable ? 'qe-cell-editable' : undefined} onClick={() => { if (editable) setEditing({ row: row.id, column: columnId, value: row.cells[columnId] ?? '' }) }} title={editable ? 'Click to edit' : undefined}>{row.cells[columnId] ?? ''}</span>
   const rowLine = (row: QeRow) => <tr key={row.id} className={selected.includes(row.id) ? 'qe-row-selected' : undefined}>
@@ -162,6 +185,19 @@ export function QeMappingPage({ git, store }: { git: GitStorage; store: QeMappin
         <button className="primary" disabled={busy}>{busy ? 'Saving…' : 'Save to Git'}</button>
       </form>}
     </Panel>}
+    {rowDialog && sheet && <Modal title="Add a row" eyebrow={`QE MAPPING · ${sheet.name}`} form onClose={() => { if (!rowDialog.busy) setRowDialog(null) }}>
+      <form onSubmit={(event) => void saveRow(event)} className="qe-row-form">
+        {sheet.columns.map((column, index) => <label key={column.id}>{column.name}
+          {column.id === qeColumn?.id
+            ? <select autoFocus={index === 0} aria-label={column.name} value={rowDialog.cells[column.id] ?? ''} onChange={(event) => setRowDialog({ ...rowDialog, cells: { ...rowDialog.cells, [column.id]: event.target.value }, error: undefined })}><option value="">— Choose from Resources —</option>{resources.map((person) => <option key={person} value={person}>{person}</option>)}</select>
+            : <input autoFocus={index === 0} value={rowDialog.cells[column.id] ?? ''} maxLength={2000} onChange={(event) => setRowDialog({ ...rowDialog, cells: { ...rowDialog.cells, [column.id]: event.target.value }, error: undefined })} />}
+        </label>)}
+        {qeColumn && !resources.length && <Notice tone="warning">The Resources list is empty: fetch the Time Writing work items (or add people under Settings → Resources) to choose the {qeColumn.name}.</Notice>}
+        {draft && <p className="muted">Your other unsaved changes to the QE Mapping are saved to Git with this row.</p>}
+        {rowDialog.error && <Notice tone="error">{rowDialog.error}</Notice>}
+        <div className="modal-actions"><button type="button" className="ghost" disabled={rowDialog.busy} onClick={() => setRowDialog(null)}>Cancel</button><button className="primary" disabled={rowDialog.busy}>{rowDialog.busy ? 'Saving to Git…' : 'Save'}</button></div>
+      </form>
+    </Modal>}
     {dialog && <Modal title={dialog.mode === 'add' ? 'Add a column' : 'Rename the column'} eyebrow={`QE MAPPING · ${sheet?.name ?? ''}`} form onClose={() => setDialog(null)}>
       <form onSubmit={submitDialog}>
         <label>Column name<input autoFocus required maxLength={120} value={dialog.name} onChange={(event) => setDialog({ ...dialog, name: event.target.value, error: undefined })} /></label>

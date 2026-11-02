@@ -11,7 +11,10 @@ import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { FeatureSetups } from '../featureSetup'
 import { boardMatchText, dpBoardCandidates, type BoardMatch, windchillBoardMatch, windchillFeatureTitle } from '../dpBoardMatch'
 import { BoardMatchCell } from './DpBoardColumn'
-import { windchillOptionsFor } from '../streams'
+import { windchillOptionsForView } from '../streams'
+import { projectLevels, type WindchillLogic } from '../windchillViews'
+
+const ordinal = (level: number) => `${level}${level === 2 ? 'nd' : level === 3 ? 'rd' : 'th'}`
 
 // A Windchill export's unique releases (windchillReleases): from the Location column (folder path) when the export
 // has one — the preferred source, its folder names follow a few fixed shapes — else from the document names; the
@@ -26,7 +29,8 @@ export interface ReleaseBoard { azure: AzureWorkspace; stream: string; threshold
 type SortKey = 'name' | 'release' | 'documents' | 'locations' | 'latest' | 'match'
 const sortValue = (entry: WindchillRelease, key: SortKey, matches: Map<string, BoardMatch>) => key === 'match' ? matches.get(entry.key)?.feature?.score ?? matches.get(entry.key)?.story?.score ?? -1 : key === 'name' ? entry.name : key === 'release' ? entry.release : key === 'documents' ? entry.documents.length : key === 'locations' ? entry.locations.length : entry.latestAt ?? -Infinity
 
-export function WindchillReleasesPanel({ view, rows, columns, git, month, board }: { view: { id: string; name: string }; rows: Record<string, unknown>[]; columns: string[]; git?: GitStorage; month?: string; board?: ReleaseBoard }) {
+// onSetup: changes how the export is read — Standard or ECP logic and the ECP project folder (CON-87).
+export function WindchillReleasesPanel({ view, rows, columns, git, month, board, onSetup }: { view: { id: string; name: string; logic?: WindchillLogic; projectLevel?: number }; rows: Record<string, unknown>[]; columns: string[]; git?: GitStorage; month?: string; board?: ReleaseBoard; onSetup?: (setup: { logic: WindchillLogic; projectLevel?: number }) => void }) {
   const [source, setSource] = useState<ReleaseSource | 'auto'>('auto')
   const [nameColumn, setNameColumn] = useState('')
   const [locationColumn, setLocationColumn] = useState('')
@@ -36,9 +40,9 @@ export function WindchillReleasesPanel({ view, rows, columns, git, month, board 
   const [scope, setScope] = useState<'month' | 'all'>('month')
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: 'latest', desc: true })
   const widths = useColumnWidths(`windchill-releases:${view.id}`)
-  const result = useMemo(() => windchillReleases(rows, columns, { source, nameColumn: nameColumn || undefined, locationColumn: locationColumn || undefined, ...windchillOptionsFor(board?.stream || view.name) }), [rows, columns, source, nameColumn, locationColumn, board?.stream, view.name])
+  const result = useMemo(() => windchillReleases(rows, columns, { source, nameColumn: nameColumn || undefined, locationColumn: locationColumn || undefined, ...windchillOptionsForView(view) }), [rows, columns, source, nameColumn, locationColumn, view])
   // ECP (CON-86): a release is a project, so its columns read "Project No" and "Project Name".
-  const isProject = Boolean(windchillOptionsFor(board?.stream || view.name).project)
+  const isProject = Boolean(windchillOptionsForView(view).project)
   const labels = isProject ? { name: 'Project Name', release: 'Project No' } : { name: 'Release name', release: 'Release' }
   const fileName = view.name.replace(/[^\w-]+/g, '-')
   const boardItems = board?.azure.items, stream = board?.stream ?? '', threshold = board?.threshold
@@ -77,6 +81,8 @@ export function WindchillReleasesPanel({ view, rows, columns, git, month, board 
       {month && <label className="inline-field">Show<select value={scope} onChange={(event) => setScope(event.target.value as 'month' | 'all')}><option value="month">Latest in {monthName(month)} (header month)</option><option value="all">All months</option></select></label>}
 
       {widths.resized && <button type="button" className="ghost" onClick={widths.reset}>Reset widths</button>}
+      {onSetup && <label className="inline-field">Logic<select aria-label="Logic" value={isProject ? 'ecp' : 'standard'} onChange={(event) => onSetup({ logic: event.target.value as WindchillLogic, ...(view.projectLevel ? { projectLevel: view.projectLevel } : {}) })}><option value="standard">Standard (releases)</option><option value="ecp">ECP (projects)</option></select></label>}
+      {onSetup && isProject && <label className="inline-field">Project details at<select aria-label="Project details at" value={view.projectLevel ?? 2} onChange={(event) => onSetup({ logic: 'ecp', projectLevel: Number(event.target.value) })}>{projectLevels.map((level) => <option key={level} value={level}>{ordinal(level)} folder</option>)}</select></label>}
       <label className="inline-field">Read from<select value={source} onChange={(event) => setSource(event.target.value as ReleaseSource | 'auto')}><option value="auto">Automatic ({result.locationColumn ? 'Location' : 'Document name'})</option><option value="location" disabled={!result.locationColumn && !columns.length}>Location</option><option value="name">Document name</option></select></label>
       {fromLocation ? <label className="inline-field">Location column<select value={locationColumn || result.locationColumn || ''} onChange={(event) => setLocationColumn(event.target.value)}>{columns.map((entry) => <option key={entry} value={entry}>{entry}</option>)}</select></label>
         : <label className="inline-field">Name column<select value={nameColumn || result.nameColumn} onChange={(event) => setNameColumn(event.target.value)}>{columns.map((entry) => <option key={entry} value={entry}>{entry}</option>)}</select></label>}

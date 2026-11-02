@@ -73,5 +73,20 @@ export function profileForDataSet(name: string, profiles: AzureConnectionProfile
 }
 export const dataSetOfProfile = (profile: Pick<AzureConnectionProfileSummary, 'id' | 'viewName' | 'reason' | 'role'>) => profile.role === 'time-tracking' ? undefined : dataSets.find((set) => profile.id === set.presetId || namesDataSet(profile.viewName, set) || namesDataSet(profile.reason, set))
 
-// How a Windchill export is read (CON-83): QRE by project, the others by release (S&S IT's rules).
+// How a Windchill export is read (CON-83, CON-87): an export set up with the ECP logic (or, without a setup, one named
+// ECP / QRE) by project at its project folder (2nd by default); the others by release (S&S IT's rules).
+type SetupView = { name: string; exportFile?: string; logic?: 'standard' | 'ecp'; projectLevel?: number }
+const ecpStream = () => defaultStreams.find((stream) => stream.project)
+export const isEcpExport = (view: SetupView) => view.logic === 'ecp' || (view.logic === undefined && Boolean(ecpStream()) && [ecpStream()!.name, ...(ecpStream()!.aliases ?? [])].some((known) => namesStream(view.name, known)))
 export const windchillOptionsFor = (name: string): { project?: boolean } => defaultStreams.some((stream) => stream.source === 'windchill' && stream.project && [stream.name, ...(stream.aliases ?? [])].some((known) => namesStream(name, known))) ? { project: true } : {}
+export const windchillOptionsForView = (view: SetupView): { project?: boolean; projectLevel?: number } => isEcpExport(view) ? { project: true, projectLevel: view.projectLevel ?? 2 } : {}
+// The Windchill exports of the default streams, each on its own (CON-87): S&S IT's one export, then every ECP export
+// under its own name ("ECP - Type 1", "ECP - Type 2"), or one empty ECP entry while there is none. stream is the default
+// stream ("ECP"), name the label of the entry.
+export function windchillStreamExports<T extends SetupView & { id: string }>(views: T[]): { stream: StreamDef; name: string; view?: T }[] {
+  return defaultStreams.filter((stream) => stream.source === 'windchill').flatMap((stream) => {
+    if (!stream.project) { const view = views.find((entry) => entry.exportFile && !isEcpExport(entry) && namesStream(entry.name, stream.name)); return [{ stream, name: stream.name, view }] }
+    const ecp = views.filter((entry) => entry.exportFile && isEcpExport(entry))
+    return ecp.length ? ecp.map((view) => ({ stream, name: view.name, view })) : [{ stream, name: stream.name }]
+  })
+}
