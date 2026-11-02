@@ -1,3 +1,4 @@
+import { DataTable } from './DataTable'
 import { useMemo, useState, type ReactNode } from 'react'
 import type { AzureWorkItem } from '../domain'
 import { releaseFeatureTitle, releaseRegister, type ReleaseEntry } from '../releaseSource'
@@ -72,14 +73,14 @@ function ReleaseTable({ name, title = 'Releases', detail, register, azure, assig
   const toolbar = register.length > 0 ? <div className="button-row">
     {typed && [...groupBy, ''].slice(0, releaseLevels.length).map((value, level) => <label key={level} className="inline-select">{level ? 'then by' : 'Group by'}<select aria-label={level ? `Group level ${level + 1}` : 'Group releases by'} value={value} onChange={(event) => regroup(event.target.value ? [...groupBy.slice(0, level), event.target.value] : groupBy.slice(0, level))}><option value="">{level ? '—' : 'No grouping'}</option>{releaseLevels.filter((entry) => entry.id === value || !groupBy.slice(0, level).includes(entry.id)).map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</select></label>)}
     {typed && groupKeys.length > 1 && <><button type="button" className="ghost" disabled={groupKeys.every((key) => collapsed.includes(key))} onClick={() => setCollapsed(groupKeys)}>Collapse all</button><button type="button" className="ghost" disabled={!collapsed.length} onClick={() => setCollapsed([])}>Expand all</button></>}
-    {widths.wrapToggle}
+
     {widths.resized && <button type="button" className="ghost" onClick={widths.reset}>Reset widths</button>}
     {action}
   </div> : action
   return <TablePanel title={title} detail={detail} info={info} action={toolbar}>
-      {register.length ? <table className={`release-register ${widths.tableClass}`}><thead><tr>{headings.map((heading) => <th key={heading} style={widths.style(heading)}>{heading}{widths.handle(heading)}</th>)}</tr></thead><tbody>
+      {register.length ? <DataTable tableId="ReleaseView-1" className={`release-register ${widths.tableClass}`}><thead><tr>{headings.map((heading) => <th key={heading} style={widths.style(heading)}>{heading}{widths.handle(heading)}</th>)}</tr></thead><tbody>
         {groups ? groupLines(groups) : register.flatMap(releaseRows)}
-      </tbody></table> : empty ?? <EmptyState title="No releases." />}
+      </tbody></DataTable> : empty ?? <EmptyState title="No releases." />}
     </TablePanel>
 }
 

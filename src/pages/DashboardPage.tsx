@@ -1,3 +1,4 @@
+import { DataTable } from '../components/DataTable'
 import { useState, type ReactNode } from 'react'
 import { EmptyState, Info, Metric, Metrics, Notice, Page, Panel, Pill, TablePanel } from '../components/ui'
 import { EpicMixChart, ParetoChart } from '../components/WorkloadCharts'
@@ -67,7 +68,7 @@ function useMore<T>(items: T[], limit: number) {
 }
 function MoreTable<T>({ items, limit = 8, render, head }: { items: T[]; limit?: number; render: (item: T) => ReactNode; head: ReactNode }) {
   const { shown, button } = useMore(items, limit)
-  return <><div className="azure-table"><table><thead>{head}</thead><tbody>{shown.map(render)}</tbody></table></div>{button}</>
+  return <><div className="azure-table"><DataTable tableId="DashboardPage-1"><thead>{head}</thead><tbody>{shown.map(render)}</tbody></DataTable></div>{button}</>
 }
 
 export function DashboardPage({ month, azure, store, my }: { month: string; azure: AzureWorkspace; navigate: (page: PageId) => void; store: PageProps['store']; setMonth?: (month: string) => void; my: MyWork }) {
@@ -174,9 +175,9 @@ export function DemandChart({ rows, months }: { rows: PersonMonth[]; months: str
 
 function GroupTable({ rows, by, label, bands, extra }: { rows: PersonMonth[]; by: (row: PersonMonth) => string; label: string; bands: Bands; extra?: boolean }) {
   const groups = groupBy(rows, by).sort((a, b) => (b.planUtil ?? 0) - (a.planUtil ?? 0))
-  return <div className="azure-table"><table><thead><tr><th>{label}</th>{extra && <th>Region · role</th>}<th>People</th><th>Capacity h</th>{extra && <th>Absence h</th>}<th>Plan h</th><th>Actual h</th><th>Planned utilization</th><th>Actual utilization</th><th>Actual − plan h</th><th>Capacity − plan h</th></tr></thead><tbody>
+  return <div className="azure-table"><DataTable tableId="DashboardPage-2"><thead><tr><th>{label}</th>{extra && <th>Region · role</th>}<th>People</th><th>Capacity h</th>{extra && <th>Absence h</th>}<th>Plan h</th><th>Actual h</th><th>Planned utilization</th><th>Actual utilization</th><th>Actual − plan h</th><th>Capacity − plan h</th></tr></thead><tbody>
     {groups.map((group) => <tr key={group.name}><td><strong>{group.name}</strong></td>{extra && <td>{[group.rows[0]?.region, group.rows[0]?.role].filter(Boolean).join(' · ') || '—'}</td>}<td>{group.people}</td><td>{h(group.capacity)}</td>{extra && <td>{h(group.absence)}</td>}<td>{h(group.plan)}</td><td>{h(group.actual)}</td><td><Util value={group.planUtil} bands={bands} /></td><td><Util value={group.actualUtil} bands={bands} /></td><td>{signed(Math.round((group.actual - group.plan) * 100) / 100)}</td><td>{signed(group.gap)}</td></tr>)}
-  </tbody></table></div>
+  </tbody></DataTable></div>
 }
 
 function SummaryTab({ rows, months, bands }: { rows: PersonMonth[]; months: string[]; bands: Bands }) {
@@ -220,9 +221,9 @@ function SummaryTab({ rows, months, bands }: { rows: PersonMonth[]; months: stri
       </div>
     </Section>
     <TablePanel title="Planning horizon & recording coverage" info="Months of the period with data. Lines with plan > 0 = month Tasks with an Original Estimate; of these, blank actual = no Completed Work entered (a numeric 0 counts as entered). A thin plan in a future month is a reason to validate demand." count={`${withData.length} of ${months.length} month${months.length === 1 ? '' : 's'}`}>
-      {withData.length ? <table><thead><tr><th>Month</th><th>Plan h</th><th>Actual h</th><th>Capacity h</th><th>Planned utilization</th><th>Actual utilization</th><th>Lines with plan &gt; 0</th><th>Of these: blank actual</th><th>Absence h</th></tr></thead><tbody>
+      {withData.length ? <DataTable tableId="DashboardPage-3"><thead><tr><th>Month</th><th>Plan h</th><th>Actual h</th><th>Capacity h</th><th>Planned utilization</th><th>Actual utilization</th><th>Lines with plan &gt; 0</th><th>Of these: blank actual</th><th>Absence h</th></tr></thead><tbody>
         {withData.map((point) => <tr key={point.month}><td><strong>{monthName(point.month)}</strong>{point.status && <small>{statusLabel[point.status]}</small>}</td><td>{h(point.plan)}</td><td>{h(point.actual)}</td><td>{h(point.capacity)}</td><td><Util value={point.planUtil} bands={bands} /></td><td><Util value={point.actualUtil} bands={bands} /></td><td>{point.planLines}</td><td>{point.blankActuals}</td><td>{h(point.absence)}</td></tr>)}
-      </tbody></table> : <p className="muted">No month of the period has data.</p>}
+      </tbody></DataTable> : <p className="muted">No month of the period has data.</p>}
       {withData.length < months.length && <small className="muted">{months.length - withData.length} month{months.length - withData.length === 1 ? '' : 's'} without data hidden.</small>}
     </TablePanel>
   </NoHours>
@@ -241,7 +242,7 @@ type Measure = 'actual' | 'plan'
 // A person × month (or group × month) grid of utilization in the Settings bands; a month with Tasks but 0 recorded
 // hours is "0 recorded" (grey), not spare capacity; the tooltip names the hours, capacity and absence.
 function Heatmap({ title, info, lines, months, measure, bands }: { title: string; info: string; lines: { name: string; detail?: string; rows: PersonMonth[] }[]; months: string[]; measure: Measure; bands: Bands }) {
-  return <TablePanel title={title} info={info}><div className="azure-table"><table className="dash-heat"><thead><tr><th>Person / group</th>{months.map((month) => <th key={month}>{short(month)}</th>)}</tr></thead><tbody>
+  return <TablePanel title={title} info={info}><div className="azure-table"><DataTable tableId="DashboardPage-4" className="dash-heat"><thead><tr><th>Person / group</th>{months.map((month) => <th key={month}>{short(month)}</th>)}</tr></thead><tbody>
     {lines.map((line) => <tr key={line.name}><td><strong>{line.name}</strong>{line.detail && <small>{line.detail}</small>}</td>{months.map((month) => {
       const entries = line.rows.filter((row) => row.month === month); const t = totals(entries)
       const hours = measure === 'actual' ? t.actual : t.plan, util = measure === 'actual' ? t.actualUtil : t.planUtil
@@ -251,7 +252,7 @@ function Heatmap({ title, info, lines, months, measure, bands }: { title: string
       const reserved = entries.reduce((sum, row) => sum + row.reserved, 0)
       const tip = entries.length ? `${formatHours(hours)}h ${measure === 'actual' ? 'recorded' : 'planned'} / ${formatHours(t.capacity)}h capacity${t.absence ? ` · ${formatHours(t.absence)}h absence` : ''}${reserved ? ` · ${formatHours(reserved)}h common activities` : ''}` : 'No entry'
       return <td key={month} className={zero ? 'heat-zero' : band ? `heat-${band}` : 'heat-none'} title={tip}>{!tracked ? <span className="muted">No entry</span> : zero ? <span className="muted">0 {measure === 'actual' ? 'recorded' : 'planned'}</span> : <Util value={util} bands={bands} />}</td> })}</tr>)}
-  </tbody></table></div></TablePanel>
+  </tbody></DataTable></div></TablePanel>
 }
 
 function MeasureSwitch({ value, onChange }: { value: Measure; onChange: (value: Measure) => void }) {
@@ -277,7 +278,7 @@ function MonthsTab({ rows, months, bands }: { rows: PersonMonth[]; months: strin
 function ChangeTable({ title, rows, previous, current, dimension, label }: { title: string; rows: PersonMonth[]; previous: string; current: string; dimension: Dimension; label: string }) {
   const lines = change(rows, previous, current, dimension)
   return <TablePanel title={title} info="Recorded hours in both months under the same filters. Missing entries mean nothing was recorded, not zero effort." empty={lines.length ? undefined : 'Nothing recorded in either month.'}>
-    {lines.length > 0 && <table><thead><tr><th>{label}</th><th>{short(previous)} h</th><th>{short(current)} h</th><th>Change h</th><th>Change %</th></tr></thead><tbody>{lines.map((line) => <tr key={line.name}><td>{line.name}</td><td>{h(line.previous)}</td><td>{h(line.current)}</td><td>{line.change == null ? <span className="muted">No comparable entries</span> : signed(line.change)}</td><td>{line.percent == null ? '—' : signed(line.percent, '%')}</td></tr>)}</tbody></table>}
+    {lines.length > 0 && <DataTable tableId="DashboardPage-5"><thead><tr><th>{label}</th><th>{short(previous)} h</th><th>{short(current)} h</th><th>Change h</th><th>Change %</th></tr></thead><tbody>{lines.map((line) => <tr key={line.name}><td>{line.name}</td><td>{h(line.previous)}</td><td>{h(line.current)}</td><td>{line.change == null ? <span className="muted">No comparable entries</span> : signed(line.change)}</td><td>{line.percent == null ? '—' : signed(line.percent, '%')}</td></tr>)}</tbody></DataTable>}
   </TablePanel>
 }
 
@@ -317,9 +318,9 @@ function PeopleTab({ rows, months, bands }: { rows: PersonMonth[]; months: strin
   const groups = groupBy(rows, by).sort((a, b) => (b.planUtil ?? 0) - (a.planUtil ?? 0))
   return <NoHours rows={rows}>
     <Section eyebrow="WHO" title={`Workload by ${label.toLowerCase()}`} info={`Over the period, highest planned utilization first: capacity (net of absence), planned and recorded hours, utilization in the Settings bands, and the differences actual − plan and capacity − plan. ⚠ = overloaded on recorded hours in 3 or more consecutive elapsed months. Roles and regions come from Settings → Resources; people without one are grouped as "No role" / "No region".`} action={<div className="chip-row" role="group" aria-label="Group by">{(['person', 'role', 'region'] as const).map((entry) => <button key={entry} type="button" className={`chip ${grouping === entry ? 'chip-on' : ''}`} aria-pressed={grouping === entry} onClick={() => setGrouping(entry)}>{entry === 'person' ? 'People' : entry === 'role' ? 'Roles' : 'Regions'}</button>)}</div>}>
-      {grouping === 'person' ? <div className="azure-table"><table><thead><tr><th>Person</th><th>Region · role</th><th>Capacity h</th><th>Absence h</th><th>Plan h</th><th>Actual h</th><th>Planned utilization</th><th>Actual utilization</th><th>Actual − plan h</th></tr></thead><tbody>
+      {grouping === 'person' ? <div className="azure-table"><DataTable tableId="DashboardPage-6"><thead><tr><th>Person</th><th>Region · role</th><th>Capacity h</th><th>Absence h</th><th>Plan h</th><th>Actual h</th><th>Planned utilization</th><th>Actual utilization</th><th>Actual − plan h</th></tr></thead><tbody>
         {groups.map((person) => <tr key={person.name}><td><strong>{person.name}{persistent.has(person.name) && <span className="negative" title="Persistent overload on recorded hours"> ⚠</span>}</strong></td><td>{[person.rows[0]?.region, person.rows[0]?.role].filter(Boolean).join(' · ') || '—'}</td><td>{h(person.capacity)}</td><td>{h(person.absence)}</td><td>{h(person.plan)}</td><td>{h(person.actual)}</td><td><Util value={person.planUtil} bands={bands} /></td><td><Util value={person.actualUtil} bands={bands} /></td><td>{signed(Math.round((person.actual - person.plan) * 100) / 100)}</td></tr>)}
-      </tbody></table></div> : <>
+      </tbody></DataTable></div> : <>
         <Bars groups={groups} bands={bands} />
         <GroupTable rows={rows} by={by} label={label} bands={bands} />
       </>}
@@ -344,17 +345,17 @@ function StreamsTab({ rows, months, items, settings, streamFiltered }: { rows: P
   const levelToggle = (value: 'feature' | 'epic', onChange: (value: 'feature' | 'epic') => void) => <div className="chip-row" role="group" aria-label="Group by">{(['feature', 'epic'] as const).map((level) => <button key={level} type="button" className={`chip ${value === level ? 'chip-on' : ''}`} aria-pressed={value === level} onClick={() => onChange(level)}>{level === 'feature' ? 'By Feature' : 'By Epic'}</button>)}</div>
   return <NoHours rows={rows}>
     <TablePanel title="Where planned demand sits" info="Planned and recorded hours per stream (the Epic above the Time Writing Task); share = share of the planned hours. Absence is excluded." count={`${streams.length} streams`} empty={streams.length ? undefined : 'No hours in this selection.'}>
-      {streams.length > 0 && <table><thead><tr><th>Stream (Epic)</th><th>Plan h</th><th>Actual h</th><th>Actual − plan h</th><th>Share of plan</th><th>People</th><th>Plan vs recorded</th></tr></thead><tbody>
+      {streams.length > 0 && <DataTable tableId="DashboardPage-7"><thead><tr><th>Stream (Epic)</th><th>Plan h</th><th>Actual h</th><th>Actual − plan h</th><th>Share of plan</th><th>People</th><th>Plan vs recorded</th></tr></thead><tbody>
         {streams.map((stream) => <tr key={stream.key}><td><strong>{stream.title}</strong></td><td>{h(stream.plan)}</td><td>{h(stream.actual)}</td><td>{signed(Math.round((stream.actual - stream.plan) * 100) / 100)}</td><td>{stream.share == null ? '—' : `${stream.share.toFixed(1)}%`}</td><td title={stream.people.join(', ')}>{stream.people.length}</td><td className="dash-pair"><i className="dash-plan" style={{ width: `${stream.plan / max * 100}%` }} /><i className="dash-actual" style={{ width: `${stream.actual / max * 100}%` }} /></td></tr>)}
-      </tbody></table>}
+      </tbody></DataTable>}
     </TablePanel>
     <TablePanel title="Who works on each stream" info="People per stream with their planned and recorded hours on it, largest plan first; the three largest are shown, the rest open per stream.">
-      <table><thead><tr><th>Stream (Epic)</th><th>Person</th><th>Plan h</th><th>Actual h</th></tr></thead><tbody>
+      <DataTable tableId="DashboardPage-8"><thead><tr><th>Stream (Epic)</th><th>Person</th><th>Plan h</th><th>Actual h</th></tr></thead><tbody>
         {assignments.flatMap(({ stream, people }) => { const open = openStreams.includes(stream.key); const shown = open ? people : people.slice(0, 3); return [
           ...shown.map((person, index) => <tr key={`${stream.key}-${person.name}`}><td>{index === 0 ? <strong>{stream.title}</strong> : ''}</td><td>{person.name}</td><td>{h(person.plan)}</td><td>{h(person.actual)}</td></tr>),
           ...(people.length > 3 ? [<tr key={`${stream.key}-more`}><td /><td colSpan={3}><button type="button" className="text-button" onClick={() => setOpenStreams(open ? openStreams.filter((key) => key !== stream.key) : [...openStreams, stream.key])}>{open ? 'Show fewer' : `Show all (+${people.length - 3} more)`}</button></td></tr>] : []),
         ] })}
-      </tbody></table>
+      </tbody></DataTable>
     </TablePanel>
     {streamFiltered && <Notice tone="info">The stream filter does not apply to the charts below: they show every Epic for the selected people.</Notice>}
     {trend.some((point) => point.actual != null) ? <>
@@ -401,9 +402,9 @@ function InsightsTab({ rows, months, today, bands, delivery }: { rows: PersonMon
         <Card label="Recording" value={pctText(health.overall.recording)} tone={health.overall.recording == null ? undefined : health.overall.recording >= 75 ? 'ok' : health.overall.recording >= 50 ? 'warning' : 'danger'} hint="Planned Tasks with an actual (elapsed months)" />
         <Card label="Resilience" value={pctText(health.overall.resilience)} tone={health.overall.resilience == null ? undefined : health.overall.resilience >= 75 ? 'ok' : health.overall.resilience >= 50 ? 'warning' : 'danger'} hint="Streams not resting on one person" />
       </div>
-      {health.byMonth.some((entry) => entry.score != null) && <div className="azure-table"><table className="dash-heat"><thead><tr><th>Component</th>{months.map((month) => <th key={month}>{short(month)}</th>)}</tr></thead><tbody>
+      {health.byMonth.some((entry) => entry.score != null) && <div className="azure-table"><DataTable tableId="DashboardPage-9" className="dash-heat"><thead><tr><th>Component</th>{months.map((month) => <th key={month}>{short(month)}</th>)}</tr></thead><tbody>
         {([['Score', 'score'], ['Balance', 'balance'], ['Recording', 'recording'], ['Resilience', 'resilience']] as const).map(([label, key]) => <tr key={key}><td><strong>{label}</strong></td>{health.byMonth.map((entry) => <td key={entry.month} className={scoreClass(entry[key])}>{pctText(entry[key])}</td>)}</tr>)}
-      </tbody></table></div>}
+      </tbody></DataTable></div>}
     </Section>
     <Section eyebrow="DELIVERY" title="Releases and documents per stream" info="How many releases each stream completed per month of the period, and how many approved documents those releases carry — the same counts as Pulse Check. DP counts from its own query: Completed Releases (DT, Design Transfer: DDT Done in the month) as its releases and Supported Releases (DT, SFV = Start of Verification / Hardening, PRD = PRD Milestone and RPE = Release Planning Event, Done in the month — each release once) in place of documents. A stream marked not set up has no connection yet (Settings → Azure DevOps → Stream mapping). The Dashboard filters do not apply here: these are team-wide counts.">
       <div className="dash-cards dash-cards-4">
@@ -412,9 +413,9 @@ function InsightsTab({ rows, months, today, bands, delivery }: { rows: PersonMon
         <Card label="Busiest stream" value={[...delivery].sort((a, b) => b.releases - a.releases)[0]?.releases ? [...delivery].sort((a, b) => b.releases - a.releases)[0].name : '—'} hint="Most releases in the period" />
         <Card label="Not set up" value={delivery.filter((stream) => stream.notSetUp).length} tone={delivery.some((stream) => stream.notSetUp) ? 'warning' : undefined} hint="Streams without a connection" />
       </div>
-      <div className="azure-table"><table className="dash-heat"><thead><tr><th>Stream</th>{months.map((month) => <th key={month}>{short(month)}</th>)}<th>Releases</th><th>Documents</th></tr></thead><tbody>
+      <div className="azure-table"><DataTable tableId="DashboardPage-10" className="dash-heat"><thead><tr><th>Stream</th>{months.map((month) => <th key={month}>{short(month)}</th>)}<th>Releases</th><th>Documents</th></tr></thead><tbody>
         {delivery.map((stream) => <tr key={stream.id}><td><strong>{stream.name}</strong>{stream.notSetUp && <small>Not set up</small>}</td>{stream.months.map((entry) => <td key={entry.month}>{stream.notSetUp ? <span className="muted">—</span> : <>{entry.releases}<small className="muted"> · {entry.supported != null ? `${entry.supported} supported` : `${entry.documents} docs`}</small></>}</td>)}<td><strong>{stream.notSetUp ? '—' : stream.releases}</strong></td><td>{stream.notSetUp ? '—' : stream.supported != null ? `${stream.supported} supported` : stream.documents}</td></tr>)}
-      </tbody></table></div>
+      </tbody></DataTable></div>
     </Section>
     <Section eyebrow="FORECAST" title={`Where ${monthName(current)} is heading`} info={`Run rate: the hours recorded so far, divided by the share of the month's weekdays already gone (today included), project each person's month-end total. On track = within ±10% of the plan; behind / more than planned beyond that; heading over capacity = the projection reaches ${bands.overloadedAt}% of net capacity. Holidays and absence are already netted out of capacity. For a past month the projection equals the recorded hours.`}>
       <div className="dash-cards dash-cards-4">
@@ -423,9 +424,9 @@ function InsightsTab({ rows, months, today, bands, delivery }: { rows: PersonMon
         <Card label="Needs attention" value={attention.length} tone={attention.length ? 'danger' : undefined} hint={`${forecast.counts.behind} behind plan · ${forecast.counts['over-capacity']} heading over capacity`} />
         <Card label="On track" value={`${forecast.counts['on-track']} / ${forecast.people.length}`} hint={`${forecast.counts.ahead} more than planned · ${forecast.counts['no-data']} nothing recorded yet`} />
       </div>
-      {forecast.people.length ? <><div className="azure-table"><table><thead><tr><th>Person</th><th>Plan h</th><th>Recorded h</th><th>Projected h</th><th>vs plan</th><th>Capacity h</th><th>Status</th></tr></thead><tbody>
+      {forecast.people.length ? <><div className="azure-table"><DataTable tableId="DashboardPage-11"><thead><tr><th>Person</th><th>Plan h</th><th>Recorded h</th><th>Projected h</th><th>vs plan</th><th>Capacity h</th><th>Status</th></tr></thead><tbody>
         {forecastRows.shown.map((entry) => <tr key={entry.person}><td><strong>{entry.person}</strong>{entry.role && <small>{entry.role}</small>}</td><td>{h(entry.plan)}</td><td>{h(entry.actual)}</td><td>{h(entry.projected)}</td><td>{signed(entry.vsPlan)}</td><td>{h(entry.capacity)}</td><td><Pill tone={forecastTone[entry.status]}>{forecastLabel[entry.status]}</Pill></td></tr>)}
-      </tbody></table></div>{forecastRows.button}</> : <EmptyState title={`No rows for ${monthName(current)}.`} />}
+      </tbody></DataTable></div>{forecastRows.button}</> : <EmptyState title={`No rows for ${monthName(current)}.`} />}
     </Section>
     <Section eyebrow="PLAN ACCURACY" title="How well do plans predict the hours?" info="Elapsed months only. Error = Σ|actual − plan| ÷ Σplan per person: how far the recorded hours land from the plan, whichever direction. Bias = (Σactual − Σplan) ÷ Σplan: negative means less recorded than planned (time not written, or plans too generous), positive means over-runs. Reliable at an error of 15% or less; under-records at a bias of −20% or lower; over-runs at +20% or higher; uneven otherwise.">
       <div className="dash-cards dash-cards-4">
@@ -435,18 +436,18 @@ function InsightsTab({ rows, months, today, bands, delivery }: { rows: PersonMon
         <Card label="Under-recording" value={accuracy.people.filter((entry) => entry.verdict === 'under-records').length} tone={accuracy.people.some((entry) => entry.verdict === 'under-records') ? 'warning' : undefined} hint="Bias ≤ −20%: time not written or plans too generous" />
       </div>
       {accuracy.people.length ? <div className="dash-grid-2">
-        <div><div className="azure-table"><table><thead><tr><th>Person</th><th>Months</th><th>Plan h</th><th>Actual h</th><th>Error</th><th>Bias</th><th>Verdict</th></tr></thead><tbody>
+        <div><div className="azure-table"><DataTable tableId="DashboardPage-12"><thead><tr><th>Person</th><th>Months</th><th>Plan h</th><th>Actual h</th><th>Error</th><th>Bias</th><th>Verdict</th></tr></thead><tbody>
           {accuracyRows.shown.map((entry) => <tr key={entry.person}><td><strong>{entry.person}</strong>{entry.role && <small>{entry.role}</small>}</td><td>{entry.months}</td><td>{h(entry.plan)}</td><td>{h(entry.actual)}</td><td>{pctText(entry.error)}</td><td>{signedPct(entry.bias)}</td><td><Pill tone={verdictTone[entry.verdict]}>{verdictLabel[entry.verdict]}</Pill></td></tr>)}
-        </tbody></table></div>{accuracyRows.button}</div>
-        <div className="azure-table"><table><thead><tr><th>Month</th><th>Plan h</th><th>Actual h</th><th>Error</th><th>Bias</th></tr></thead><tbody>
+        </tbody></DataTable></div>{accuracyRows.button}</div>
+        <div className="azure-table"><DataTable tableId="DashboardPage-13"><thead><tr><th>Month</th><th>Plan h</th><th>Actual h</th><th>Error</th><th>Bias</th></tr></thead><tbody>
           {accuracy.byMonth.map((entry) => <tr key={entry.month}><td><strong>{short(entry.month)}</strong></td><td>{h(entry.plan)}</td><td>{h(entry.actual)}</td><td>{pctText(entry.error)}</td><td>{signedPct(entry.bias)}</td></tr>)}
-        </tbody></table></div>
+        </tbody></DataTable></div>
       </div> : <EmptyState title="No elapsed months with a plan in the selection." detail="Plan accuracy needs at least one month that has ended." />}
     </Section>
     <Section eyebrow="MOMENTUM" title="Which streams gain or lose effort?" info={`Average recorded hours per month over the latest up to 3 elapsed months (${momentum.recentMonths.map(short).join(', ') || 'none'}) against the up to 3 before them (${momentum.earlierMonths.map(short).join(', ') || 'none'}), with each stream's share of all recorded hours in both windows. Rising / falling at a change of 20% or more and at least 8 hours; new = hours only in the recent window; gone = hours only before (a finished Epic looks like this).`}>
-      {momentum.streams.length ? <div className="azure-table"><table><thead><tr><th>Stream (Epic)</th><th>Recent h / month</th><th>Earlier h / month</th><th>Change</th><th>Share now</th><th>Share before</th><th>People</th><th>Trend</th></tr></thead><tbody>
+      {momentum.streams.length ? <div className="azure-table"><DataTable tableId="DashboardPage-14"><thead><tr><th>Stream (Epic)</th><th>Recent h / month</th><th>Earlier h / month</th><th>Change</th><th>Share now</th><th>Share before</th><th>People</th><th>Trend</th></tr></thead><tbody>
         {momentum.streams.map((entry) => <tr key={entry.key}><td><strong>{entry.title}</strong></td><td>{h(entry.recent)}</td><td>{momentum.earlierMonths.length ? h(entry.earlier) : '—'}</td><td>{signedPct(entry.change)}</td><td>{pctText(entry.shareRecent)}</td><td>{pctText(entry.shareEarlier)}</td><td>{entry.people}</td><td><Pill tone={trendTone[entry.trend]}>{trendLabel[entry.trend]}</Pill></td></tr>)}
-      </tbody></table></div> : <EmptyState title="No elapsed months with recorded hours in the selection." />}
+      </tbody></DataTable></div> : <EmptyState title="No elapsed months with recorded hours in the selection." />}
       {momentum.recentMonths.length > 0 && !momentum.earlierMonths.length && <p className="muted">Only {momentum.recentMonths.length} elapsed month{momentum.recentMonths.length === 1 ? '' : 's'} in the period: widen it to see a trend.</p>}
     </Section>
     <Section eyebrow="RESILIENCE" title="Where does the team depend on one person?" info="Elapsed months. A stream rests on one person when that person recorded 80% or more of its hours: a single point of failure if they are away. A specialist put 90% or more of their recorded hours into one stream: little room to move them. Both are facts to weigh, not faults.">
@@ -455,18 +456,18 @@ function InsightsTab({ rows, months, today, bands, delivery }: { rows: PersonMon
         <Card label="Specialists" value={strength.specialists} hint={`of ${strength.people.length} people with recorded hours`} />
       </div>
       <div className="dash-grid-2">
-        <div><h3>Streams and their main contributor</h3>{strength.streams.length ? <><div className="azure-table"><table><thead><tr><th>Stream</th><th>Hours</th><th>People</th><th>Main contributor</th><th>Share</th></tr></thead><tbody>
+        <div><h3>Streams and their main contributor</h3>{strength.streams.length ? <><div className="azure-table"><DataTable tableId="DashboardPage-15"><thead><tr><th>Stream</th><th>Hours</th><th>People</th><th>Main contributor</th><th>Share</th></tr></thead><tbody>
           {streamRows.shown.map((entry) => <tr key={entry.key}><td><strong>{entry.title}</strong></td><td>{h(entry.actual)}</td><td>{entry.people}</td><td>{entry.top}</td><td>{entry.singlePoint ? <Pill tone="warning">{entry.topShare}%</Pill> : `${entry.topShare}%`}</td></tr>)}
-        </tbody></table></div>{streamRows.button}</> : <EmptyState title="No recorded hours in elapsed months." />}</div>
-        <div><h3>People and their main stream</h3>{strength.people.length ? <><div className="azure-table"><table><thead><tr><th>Person</th><th>Hours</th><th>Streams</th><th>Main stream</th><th>Share</th></tr></thead><tbody>
+        </tbody></DataTable></div>{streamRows.button}</> : <EmptyState title="No recorded hours in elapsed months." />}</div>
+        <div><h3>People and their main stream</h3>{strength.people.length ? <><div className="azure-table"><DataTable tableId="DashboardPage-16"><thead><tr><th>Person</th><th>Hours</th><th>Streams</th><th>Main stream</th><th>Share</th></tr></thead><tbody>
           {personRows.shown.map((entry) => <tr key={entry.person}><td><strong>{entry.person}</strong>{entry.role && <small>{entry.role}</small>}</td><td>{h(entry.actual)}</td><td>{entry.streams}</td><td>{entry.main}</td><td>{entry.specialist ? <Pill tone="warning">{entry.mainShare}%</Pill> : `${entry.mainShare}%`}</td></tr>)}
-        </tbody></table></div>{personRows.button}</> : <EmptyState title="No recorded hours in elapsed months." />}</div>
+        </tbody></DataTable></div>{personRows.button}</> : <EmptyState title="No recorded hours in elapsed months." />}</div>
       </div>
     </Section>
     <Section eyebrow="UNUSUAL MONTHS" title="Which months stand out for a person?" info="Elapsed months. A person's recorded hours in a month that differ from the median of their other elapsed months by 50% or more and by at least 8 hours; at least 3 elapsed months with data are needed. A spike or a drop is a question to ask, not a verdict: leave, a release push or hours written late all look like this.">
-      {unusual.length ? <><div className="azure-table"><table><thead><tr><th>Person</th><th>Month</th><th>Recorded h</th><th>Typical h</th><th>Change</th><th></th></tr></thead><tbody>
+      {unusual.length ? <><div className="azure-table"><DataTable tableId="DashboardPage-17"><thead><tr><th>Person</th><th>Month</th><th>Recorded h</th><th>Typical h</th><th>Change</th><th></th></tr></thead><tbody>
         {unusualRows.shown.map((entry) => <tr key={`${entry.person}-${entry.month}`}><td><strong>{entry.person}</strong></td><td>{short(entry.month)}</td><td>{h(entry.actual)}</td><td>{h(entry.typical)}</td><td>{signedPct(entry.change)}</td><td><Pill tone={entry.kind === 'spike' ? 'info' : 'warning'}>{entry.kind === 'spike' ? 'Spike' : 'Drop'}</Pill></td></tr>)}
-      </tbody></table></div>{unusualRows.button}</> : <EmptyState title="No unusual months." detail="Nothing differs from a person's typical month by 50% or more — or fewer than 3 elapsed months with data." />}
+      </tbody></DataTable></div>{unusualRows.button}</> : <EmptyState title="No unusual months." detail="Nothing differs from a person's typical month by 50% or more — or fewer than 3 elapsed months with data." />}
     </Section>
   </NoHours>
 }

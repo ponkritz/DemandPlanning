@@ -91,6 +91,8 @@ This document lists every software component of the system: the in-house source 
 | WindchillViews | `src/components/WindchillViews.tsx` | Windchill views settings, the Windchill export page and import of results saved or copied from the browser. | CON |
 | WorkloadCharts | `src/components/WorkloadCharts.tsx` | SVG charts: utilization, Epic mix, Epic bullet, Pareto, utilization heatmap and donut. | OVR |
 | columnWidths | `src/components/columnWidths.tsx` | `useColumnWidths` hook: draggable table column widths kept per table in this browser. | UI |
+| DataTable | `src/components/DataTable.tsx` | Shared table presentation: resizable columns, column visibility and drag or keyboard ordering, wrap, density and displayed-row CSV/Excel exports. Local preferences per table and schema. | UI |
+| DataTable styles | `src/components/DataTable.css` | Shared table toolbar, density, wrap, resize handles and scroll layout. | UI |
 | ui | `src/components/ui.tsx` | Shared UI primitives: Page, Panel, TablePanel, Metrics, Pill, Notice, EmptyState, Modal, Info, SettingsSummary. | UI |
 
 ### 1.3 Domain logic and calculations

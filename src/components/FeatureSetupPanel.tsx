@@ -1,3 +1,4 @@
+import { DataTable } from './DataTable'
 import { useState } from 'react'
 import type { AzureWorkItem } from '../domain'
 import { maxTitleFields, builtinMilestones, builtinSetup, copySetup, defaultTimeWritingStory, emptySetup, fillTitle, missingValues, placeholders, removeSetup, editSetup, setupFor, setupsMissingDoD, defaultDoDFor, fillMissingDoD, missingDoD, sharedSetupRows, titleValues, type EpicSetup, type FeatureSetupFile } from '../featureSetup'
@@ -125,7 +126,7 @@ export function FeatureSetupPanel({ setup, git, items }: { setup: FeatureSetup; 
       <summary><strong>All shared setups</strong> <span className="muted">({sharedRows.length} Epic{sharedRows.length === 1 ? '' : 's'}{git.connected ? '' : ', as last loaded in this browser'})</span></summary>
       {sharedRows.length > 0 && !sharedEditable && <p className="muted">{git.connected ? git.readOnly ? 'View only: your Git token can read but not save.' : 'Synthetic sample data is loaded: editing is disabled.' : 'Connect Git storage (Storage tab) to edit them here.'}</p>}
       {sharedEditable && missingCount > 0 && <div className="setup-fill-dod"><span className="warning-text">{missingCount} shared setup{missingCount === 1 ? ' has' : 's have'} no Feature DoD.</span><button type="button" className="ghost" disabled={busy} onClick={fillAll}>Fill missing DoDs with the default</button><small className="muted">Full Release DoD for setups with a PRD story, PU DoD otherwise; review, then Save to Git.</small></div>}
-      {sharedRows.length ? <div className="azure-table"><table className="setup-all-table"><thead><tr><th>Epic</th><th>Feature DoD</th><th>Optional User Stories</th><th>Time Writing story</th><th>Month Task</th><th /></tr></thead><tbody>
+      {sharedRows.length ? <div className="azure-table"><DataTable tableId="FeatureSetupPanel-1" className="setup-all-table"><thead><tr><th>Epic</th><th>Feature DoD</th><th>Optional User Stories</th><th>Time Writing story</th><th>Month Task</th><th /></tr></thead><tbody>
         {sharedRows.map((row) => { const title = epics.find((item) => item.id === row.epicId)?.title || row.epicTitle, on = sharedEditable && listEditing.includes(row.epicId), changed = Boolean(listDraft) && listChanged(row.epicId); return <tr key={row.epicId} className={on ? 'setup-all-editing' : undefined}>
           <td><strong>#{row.epicId}</strong>{title && <small>{title}</small>}{changed && <small className="warning-text">Changed · not yet in Git</small>}{row.mineInstead && <small className="warning-text">Your own setup replaces it for you</small>}</td>
           {on ? <>
@@ -150,7 +151,7 @@ export function FeatureSetupPanel({ setup, git, items }: { setup: FeatureSetup; 
             <td><div className="button-row setup-all-actions">{sharedEditable && <button type="button" className="primary" disabled={busy} onClick={() => startRow(row.epicId)}>Edit</button>}<button type="button" className="ghost" title="Open the full editor of this setup: also the Descriptions, Assigned to and Area / Iteration Paths of the stories and the Task" onClick={() => openShared(row.epicId)}>{sharedEditable ? 'All fields…' : 'Open'}</button>{sharedEditable && <button type="button" className="text-button danger-text" disabled={busy} onClick={() => removeRow(row.epicId)}>Delete</button>}</div></td>
           </>}
         </tr> })}
-      </tbody></table></div> : <p className="muted">{git.connected && !setup.loaded ? 'Loading from Git…' : 'No shared setup yet: every Epic uses the built-in milestones unless someone has a setup of their own.'}</p>}
+      </tbody></DataTable></div> : <p className="muted">{git.connected && !setup.loaded ? 'Loading from Git…' : 'No shared setup yet: every Epic uses the built-in milestones unless someone has a setup of their own.'}</p>}
       {sharedEditable && listDraft && <form className="git-bar git-bar-dirty" onSubmit={saveList}>
         <span><strong>Unsaved shared Feature setup</strong> — not yet in Git</span>
         <input aria-label="Change description" value={listCommit} onChange={(event) => setListCommit(event.target.value)} placeholder="Describe the change" />

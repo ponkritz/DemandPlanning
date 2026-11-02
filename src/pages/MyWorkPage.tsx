@@ -1,3 +1,4 @@
+import { DataTable } from '../components/DataTable'
 import { useState } from 'react'
 import { PersonPicker } from '../components/PersonPicker'
 import { addMonthTask } from '../monthTaskAction'
@@ -99,7 +100,7 @@ export function MyWorkPage({ azure, store, my, onOpenBulk, assign, featureSetup 
           action={<div className="chip-row"><button type="button" className="primary" disabled={Boolean(blocked) || !epics.length} title={epics.length ? 'Create a Feature under an Epic with its User Stories and Time Writing task' : 'No Epic in the Time Writing backlog yet'} onClick={() => setEditor({ parent: epics[0] })}>＋ New Feature</button>{['All', ...workTypes, 'Other'].map((type) => <button type="button" key={type} className={`chip ${!searching && typeFilter === type ? 'chip-on' : ''}`} onClick={() => { setTypeFilter(type); setSearch('') }}>{type}{type !== 'All' && type !== 'Other' ? ` ${counts[type] ?? 0}` : ''}</button>)}</div>}
           empty={shown.length ? undefined : searching ? `Nothing matches “${search.trim()}” in any type.` : pending.length ? 'Nothing of this type.' : 'No pending work assigned to you.'}>
           <div className="query-toolbar my-work-search"><input type="search" className="search" aria-label="Search all assigned work" placeholder="Search all types (ID, title, state, Feature, path…)" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setSearch('') }} />{searching && <span className="muted">{shown.length} of {pending.length} match, all types</span>}</div>
-          {shown.length > 0 && <table className="work-table"><thead><tr><th>Item</th><th>State</th><th>Feature</th><th>Iteration</th><th>Action</th></tr></thead><tbody>{shown.flatMap(({ item, feature }) => {
+          {shown.length > 0 && <DataTable tableId="MyWorkPage-1" className="work-table"><thead><tr><th>Item</th><th>State</th><th>Feature</th><th>Iteration</th><th>Action</th></tr></thead><tbody>{shown.flatMap(({ item, feature }) => {
             const children = item.workItemType === 'Feature' ? featureChildren(azure.items, item) : []
             const open = expanded.includes(item.key)
             const count = children.length
@@ -123,7 +124,7 @@ export function MyWorkPage({ azure, store, my, onOpenBulk, assign, featureSetup 
               <td><small className="plain">{shortPath(item.iterationPath)}</small></td>
               <td>{action(item)}{item.workItemType === 'Feature' && !hasOptionalStories(azure.items, item) && <button type="button" className="text-button" disabled={Boolean(blocked)} title="Add the missing User Stories and this month's Time Writing task under this Feature" onClick={() => setEditor({ resume: item })}>Complete children</button>}{editButton(item)}{monthButton(item)}{item.workItemType === 'Feature' && <button type="button" className="text-button" disabled={Boolean(blocked)} title="Create a User Story under this Feature" onClick={() => setStoryOf(item)}>＋ User Story</button>}</td>
             </tr>, ...(open ? children.flatMap((child) => [childRow(child.item, 1, child.children), ...(expanded.includes(child.item.key) ? child.children.map((grandchild) => childRow(grandchild, 2)) : [])]) : [])]
-          })}</tbody></table>}
+          })}</tbody></DataTable>}
         </TablePanel>
         {editing && config && <WorkItemEditor item={editing} items={azure.items} config={config} savedPat={pat} me={meEmail} canChoose={Boolean(assign?.canChoose)} onSavePat={azure.rememberPat} onUpdated={azure.featureCreated} onClose={() => setEditing(null)}
           onDone={(text) => { note({ tone: 'success', text }); void azure.refresh() }} onFailed={(text) => note({ tone: 'error', text })} />}

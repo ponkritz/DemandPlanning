@@ -1,3 +1,4 @@
+import { DataTable } from './DataTable'
 import { useState } from 'react'
 import { actions, areas, defaultPolicy, isEmail, keepsManager, normalEmail, roles, serializeAccess, type AccessPolicy, type Action, type Area, type Role } from '../access'
 import type { Access } from '../useAccess'
@@ -67,20 +68,20 @@ export function AccessPanel({ access, git, people }: { access: Access; git: GitS
           {!people.length && <small className="muted">Load the Time Writing (QMS-0025) data to choose people by name.</small>}
           <label>Everyone else<select aria-label="Default role" value={shown.defaultRole ?? ''} onChange={(event) => change((policy) => { policy.defaultRole = (event.target.value || null) as Role | null })}><option value="">No role (Settings only)</option>{roles.map((role) => <option key={role}>{role}</option>)}</select></label>
         </div>
-        <div className="azure-table"><table className="access-table"><thead><tr><th>Member</th>{roles.map((role) => <th key={role}>{role}</th>)}<th /></tr></thead><tbody>
+        <div className="azure-table"><DataTable tableId="AccessPanel-1" className="access-table"><thead><tr><th>Member</th>{roles.map((role) => <th key={role}>{role}</th>)}<th /></tr></thead><tbody>
           {members.map(([email, assigned]) => <tr key={email}>
             <td>{nameOf(email) ? <><strong>{nameOf(email)}</strong><small>{email}</small></> : <strong>{email}</strong>}</td>
             {roles.map((role) => <td key={role}><input type="checkbox" aria-label={`${role} for ${email}`} checked={assigned.includes(role)} onChange={() => change((policy) => { policy.members[email] = toggle(policy.members[email] ?? [], role) })} /></td>)}
             <td><button type="button" className="text-button" onClick={() => change((policy) => { delete policy.members[email] })}>Remove</button></td>
           </tr>)}
           {!members.length && <tr><td colSpan={roles.length + 2} className="muted">{search ? 'No member matches.' : 'No members yet: everyone has the default role.'}</td></tr>}
-        </tbody></table></div>
+        </tbody></DataTable></div>
         <h3>What each role sees and may do</h3>
-        <div className="azure-table"><table className="access-table"><thead><tr><th>Menu area / action</th>{roles.map((role) => <th key={role}>{role}</th>)}</tr></thead><tbody>
+        <div className="azure-table"><DataTable tableId="AccessPanel-2" className="access-table"><thead><tr><th>Menu area / action</th>{roles.map((role) => <th key={role}>{role}</th>)}</tr></thead><tbody>
           {areas.map((area) => <tr key={area.key}><td>{area.label}</td>{roles.map((role) => <td key={role}><input type="checkbox" aria-label={`${role} sees ${area.label}`} checked={shown.roles[role].areas.includes(area.key)} onChange={() => change((policy) => { policy.roles[role].areas = toggle<Area>(policy.roles[role].areas, area.key) })} /></td>)}</tr>)}
           <tr><td colSpan={roles.length + 1}><small className="muted">Settings is always there, for each person’s own connections and tokens.</small></td></tr>
           {actions.map((action) => <tr key={action.key}><td>{action.label}</td>{roles.map((role) => <td key={role}><input type="checkbox" aria-label={`${role} may ${action.label}`} checked={shown.roles[role].actions.includes(action.key)} onChange={() => change((policy) => { policy.roles[role].actions = toggle<Action>(policy.roles[role].actions, action.key) })} /></td>)}</tr>)}
-        </tbody></table></div>
+        </tbody></DataTable></div>
       </fieldset>
       {editable && dirty && <form className="git-bar git-bar-dirty" onSubmit={save}>
         <span><strong>Unsaved access changes</strong> — not yet in Git</span>

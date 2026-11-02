@@ -1,3 +1,4 @@
+import { DataTable } from '../components/DataTable'
 import { useMemo, useState, type ReactNode } from 'react'
 import { EmptyState, Notice, Page, Panel, Pill, TablePanel } from '../components/ui'
 import { MultiSelect } from '../components/MultiSelect'
@@ -74,7 +75,7 @@ function Card({ card, queued, onQueue, open, setOpen }: { card: InsightCard; que
       {card.evidence.rows.length > 0 && <button type="button" className="text-button" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? 'Hide evidence' : `Source evidence (${card.evidence.rows.length})`}</button>}
       <button type="button" className="ghost" disabled={!card.packLine || queued} onClick={onQueue}>{queued ? 'In the queue' : 'Add to monthly pack'}</button>
     </div>
-    {open && card.evidence.rows.length > 0 && <div className="azure-table"><table><thead><tr>{card.evidence.columns.map((column) => <th key={column}>{column}</th>)}</tr></thead><tbody>{card.evidence.rows.map((row, index) => <tr key={index}>{row.map((cell, at) => <td key={at}>{cell}</td>)}</tr>)}</tbody></table></div>}
+    {open && card.evidence.rows.length > 0 && <div className="azure-table"><DataTable tableId="WorkspacePage-1"><thead><tr>{card.evidence.columns.map((column) => <th key={column}>{column}</th>)}</tr></thead><tbody>{card.evidence.rows.map((row, index) => <tr key={index}>{row.map((cell, at) => <td key={at}>{cell}</td>)}</tr>)}</tbody></DataTable></div>}
   </article>
 }
 
@@ -173,16 +174,16 @@ export function WorkspacePage({ month, azure, store, git, windchill }: { month: 
         <TablePanel className="wsp-queue" title={`Exception queue (${shownQueue.length})`} info={<><p><strong>Over 25% baseline</strong>: booked hours above the release's current baseline (Baselines page) by more than 25%; high at 50%. <strong>Missing baseline</strong>: an open release under a stream with an estimation rule but no scope. <strong>Capacity risk</strong>: a person planned at or above {bands.overloadedAt}% of capacity in {monthName(month)}; high at {bands.overloadedAt + 20}%. High first, then by impact.</p></>}
           action={<div className="chip-row" role="group" aria-label="Exception kind"><button type="button" className={`chip ${kind === 'all' ? 'chip-on' : ''}`} aria-pressed={kind === 'all'} onClick={() => setKind('all')}>All <b>{queue.length}</b></button>{kindCounts(queue).map(([key, count]) => <button key={key} type="button" className={`chip ${kind === key ? 'chip-on' : ''}`} aria-pressed={kind === key} onClick={() => setKind(key)}>{exceptionKinds[key]} <b>{count}</b></button>)}</div>}>
           <div id="wsp-queue" />
-          {shownQueue.length ? <table><thead><tr><th>#</th><th>Item</th><th>Stream</th><th>Region</th><th>Issue</th><th>Impact</th><th>Severity</th><th>Owner</th><th>Target date</th></tr></thead><tbody>
+          {shownQueue.length ? <DataTable tableId="WorkspacePage-2"><thead><tr><th>#</th><th>Item</th><th>Stream</th><th>Region</th><th>Issue</th><th>Impact</th><th>Severity</th><th>Owner</th><th>Target date</th></tr></thead><tbody>
             {shownQueue.map((row, index) => <tr key={row.key}><td>{index + 1}</td><td>{row.url ? <a href={row.url} target="_blank" rel="noreferrer">{row.title}</a> : row.title}</td><td>{row.stream}</td><td>{row.region || '—'}</td><td><Pill tone={row.kind === 'over-baseline' ? 'danger' : row.kind === 'capacity-risk' ? 'warning' : 'info'}>{exceptionKinds[row.kind]}</Pill></td><td>{row.impact}</td><td><Pill tone={row.severity === 'high' ? 'danger' : 'warning'}>{row.severity === 'high' ? 'High' : 'Medium'}</Pill></td><td>{row.owner || '—'}</td><td>{row.targetDate ? row.targetDate.slice(0, 10) : '—'}</td></tr>)}
-          </tbody></table> : <p className="muted">No exceptions of this kind.</p>}
+          </tbody></DataTable> : <p className="muted">No exceptions of this kind.</p>}
         </TablePanel>
         <TablePanel className="wsp-timeline" title={`Timeline health · ${timeline.totals.planned} Features due by ${timeline.to}`} info={<p>Features (not Removed) with a Target Date from the first day of this month to six months ahead, per Epic. <strong>Completed</strong> = finished state; <strong>Overdue</strong> = open with the date gone; <strong>At risk</strong> = open and due within 30 days; the rest are <strong>Planned</strong>. Features without a Target Date are not on the timeline.</p>}>
           <div id="wsp-timeline" />
           <div className="dash-cards dash-cards-4"><Tile label="Planned" value={timeline.totals.planned} /><Tile label="Completed" value={timeline.totals.completed} tone="ok" /><Tile label="At risk" value={timeline.totals.atRisk} tone={timeline.totals.atRisk ? 'warning' : undefined} /><Tile label="Overdue" value={timeline.totals.overdue} tone={timeline.totals.overdue ? 'danger' : undefined} /></div>
-          {timeline.streams.length ? <table><thead><tr><th>Stream</th><th>Features</th><th>Progress</th><th>Completed</th><th>At risk</th><th>Overdue</th></tr></thead><tbody>
+          {timeline.streams.length ? <DataTable tableId="WorkspacePage-3"><thead><tr><th>Stream</th><th>Features</th><th>Progress</th><th>Completed</th><th>At risk</th><th>Overdue</th></tr></thead><tbody>
             {timeline.streams.map((stream) => <tr key={stream.name}><td><strong>{stream.name}</strong></td><td>{stream.planned}</td><td className="wsp-stack-cell"><Stacked stream={stream} /></td><td>{stream.completed}</td><td>{stream.atRisk}</td><td>{stream.overdue}</td></tr>)}
-          </tbody></table> : <p className="muted">No Feature carries a Target Date in the window.</p>}
+          </tbody></DataTable> : <p className="muted">No Feature carries a Target Date in the window.</p>}
           <div className="legend wsp-legend"><span><i className="dash-dot wsp-stack-completed" />Completed</span><span><i className="dash-dot wsp-stack-risk" />At risk</span><span><i className="dash-dot wsp-stack-overdue" />Overdue</span><span><i className="dash-dot wsp-stack-planned" />Planned</span></div>
         </TablePanel>
       </>}
