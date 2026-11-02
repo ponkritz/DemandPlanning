@@ -4,6 +4,12 @@
 
 Windows desktop MVP for demand planning, effort tracking, capacity, release milestones, governance and monthly reporting.
 
+## Table defaults
+
+Data tables share a compact toolbar. Use **Columns** to select columns and drag their entries to rearrange them; the arrow buttons offer the same control with a keyboard. Drag a heading's right edge to resize it, use the focused resize handle's arrow keys, or double-click it to restore automatic width. **Wrap text** and **Compact / Comfortable** control readability. **Reset view** restores the default layout. Preferences are personal to the browser and table.
+
+**CSV** and **Excel** export the displayed rows in the selected column order, including current input values. These exports reflect what is on screen, including any row limit; use a page's existing full-data export for the entire filtered data set. Password inputs are redacted. Exports do not save pending edits to Azure or Git.
+
 ## Current baseline
 
 The repository contains a working React/TypeScript application with an Electron desktop shell. It starts with synthetic local data and includes an opt-in Microsoft sign-in adapter for centrally stored SharePoint data.

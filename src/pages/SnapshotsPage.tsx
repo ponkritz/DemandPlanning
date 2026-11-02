@@ -1,3 +1,4 @@
+import { DataTable } from '../components/DataTable'
 import { useEffect, useState } from 'react'
 import { EmptyState, Notice, Page, Panel, Pill, TablePanel } from '../components/ui'
 import { exportEffortCsv, exportStateJson } from '../download'
@@ -64,7 +65,7 @@ export function SnapshotsPage({ store, month }: PageProps) {
       {restoreMessage && <Notice>{restoreMessage}</Notice>}
     </Panel>
     <TablePanel title="SharePoint snapshot history" detail={connected ? `${files.length} shared snapshot files` : 'Sign in to SharePoint to load shared history.'} action={<button className="ghost" disabled={!connected || busy} onClick={() => void refreshHistory()}>Refresh history</button>} empty={files.length ? undefined : connected ? 'No snapshot files in the shared folder yet.' : 'Connect to SharePoint to load shared history.'}>
-      <table><thead><tr><th>Snapshot file</th><th>Created</th><th>Storage</th></tr></thead><tbody>{files.map(file => <tr key={file.id}><td>{file.webUrl?.startsWith('https://') ? <a href={file.webUrl} target="_blank" rel="noreferrer">{file.name}</a> : file.name}</td><td>{formatDateTime(file.createdDateTime, 'Confirmed this session')}</td><td>SharePoint</td></tr>)}</tbody></table>
+      <DataTable tableId="SnapshotsPage-1"><thead><tr><th>Snapshot file</th><th>Created</th><th>Storage</th></tr></thead><tbody>{files.map(file => <tr key={file.id}><td>{file.webUrl?.startsWith('https://') ? <a href={file.webUrl} target="_blank" rel="noreferrer">{file.name}</a> : file.name}</td><td>{formatDateTime(file.createdDateTime, 'Confirmed this session')}</td><td>SharePoint</td></tr>)}</tbody></DataTable>
     </TablePanel>
     {store.state.snapshots.length > 0 && <Panel title="Legacy snapshot records" info="These older records have not been verified as SharePoint files. They are retained in app data; nothing was converted or deleted automatically.">{store.state.snapshots.map(item => <p key={item.id}>{item.title} · {item.createdAt} · Legacy / unverified</p>)}</Panel>}
     {!store.state.snapshots.length && !files.length && !connected && <EmptyState title="No snapshots yet." detail="Connect to SharePoint to save LTE or PI Review snapshots." />}

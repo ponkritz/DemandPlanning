@@ -1,0 +1,20 @@
+.dt-shell { width: 100%; min-width: 0; }
+.dt-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:10px; padding:8px 0; font-size:12px; }
+.dt-toolbar button,.dt-toolbar select,.dt-toolbar summary { font:inherit; padding:5px 8px; cursor:pointer; }
+.dt-toolbar label { display:flex; align-items:center; gap:5px; }
+.dt-toolbar input[type=checkbox] { width:auto; }
+.dt-toolbar details { position:relative; }
+.dt-columns { position:absolute; top:100%; left:0; z-index:40; min-width:320px; max-height:400px; overflow:auto; padding:12px; border:1px solid var(--border, #ccd5df); background:var(--surface, Canvas); color:var(--text, CanvasText); box-shadow:0 8px 24px #0002; }
+.dt-columns > div { display:flex; align-items:center; gap:8px; padding:5px 0; }
+.dt-columns label { flex:1; }
+.dt-scroll { overflow:auto; max-width:100%; }
+.dt-shell .dt-table { width:max-content; min-width:100%; table-layout:auto; }
+.dt-shell .dt-table th { position:relative; padding-right:20px; }
+.dt-shell.dt-compact .dt-table :is(th,td) { padding-top:5px; padding-bottom:5px; }
+.dt-shell.dt-comfortable .dt-table :is(th,td) { padding-top:13px; padding-bottom:13px; }
+.dt-shell.dt-nowrap .dt-table :is(th,td) { white-space:nowrap; }
+.dt-shell.dt-wrap .dt-table :is(th,td) { white-space:pre-wrap; overflow-wrap:anywhere; }
+.dt-shell.dt-wrap .dt-table { width:100%; }
+.dt-shell .dt-table .col-resize { display:none; }
+.dt-resize { position:absolute; top:0; bottom:0; right:0; width:8px; padding:0!important; border:0; border-right:2px solid var(--border, #ccd5df); background:transparent; cursor:col-resize!important; touch-action:none; }
+.dt-resize:focus-visible { outline:2px solid Highlight; }

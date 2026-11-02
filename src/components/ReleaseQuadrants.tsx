@@ -1,3 +1,4 @@
+import { DataTable } from './DataTable'
 import { formatDate, formatDateTime, monthName } from '../format'
 import type { ReleaseStream } from '../releaseOverview'
 import { Panel } from './ui'
@@ -29,7 +30,7 @@ export function ReleaseQuadrants({ streams, month, supported = [] }: { streams: 
         {stream.titles.length ? <ul className="quadrant-titles">{stream.titles.map((doc) => <li key={`${doc.id}:${doc.release}`}><a href={doc.url} target="_blank" rel="noreferrer">{doc.title}</a><small>{doc.release}{doc.approvalDate ? ` · ${formatDate(doc.approvalDate)}` : ''}</small></li>)}</ul> : <p className="muted">{stream.supported != null ? `No DT, SFV, PRD or RPE Done in ${monthName(month)}.` : `No documents approved in ${monthName(month)}.`}</p>}
       </Panel>)}
       <Panel className="release-quadrant release-quadrant-total" eyebrow="ALL STREAMS" title={`${releases} release${releases === 1 ? '' : 's'} · ${documents} document${documents === 1 ? '' : 's'}`} detail={`${monthName(month)}, per stream.`}>
-        <table><thead><tr><th>Stream</th><th>Releases</th><th>Documents</th></tr></thead><tbody>{streams.map((stream) => <tr key={stream.id}><td>{stream.name}</td><td>{stream.releases.length}{stream.supported != null && <small> completed</small>}</td><td>{stream.supported != null ? <>{stream.supported}<small> supported</small></> : stream.documents}</td></tr>)}<tr className="matrix-total"><td>Total</td><td>{releases}</td><td>{documents}</td></tr></tbody></table>
+        <DataTable tableId="ReleaseQuadrants-1"><thead><tr><th>Stream</th><th>Releases</th><th>Documents</th></tr></thead><tbody>{streams.map((stream) => <tr key={stream.id}><td>{stream.name}</td><td>{stream.releases.length}{stream.supported != null && <small> completed</small>}</td><td>{stream.supported != null ? <>{stream.supported}<small> supported</small></> : stream.documents}</td></tr>)}<tr className="matrix-total"><td>Total</td><td>{releases}</td><td>{documents}</td></tr></tbody></DataTable>
       </Panel>
     </section>
   </>

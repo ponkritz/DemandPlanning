@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
 
 const root = new URL('../', import.meta.url)
-export const fixture = (name) => new URL(`fixtures/${name}`, import.meta.url).pathname
+export const fixture = (name) => fileURLToPath(new URL(`fixtures/${name}`, import.meta.url))
 
 const freePort = () => new Promise((resolve, reject) => {
   const server = createServer()

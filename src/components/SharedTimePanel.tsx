@@ -1,3 +1,4 @@
+import { DataTable } from './DataTable'
 import { useState } from 'react'
 import type { AzureWorkItem } from '../domain'
 import { capacityModel, regions, type CapacitySettings, type SharedTimeKind, type SharedTimeRule, type SharedTimeScope } from '../capacity'
@@ -58,7 +59,7 @@ export function SharedTimePanel({ settings, items, month, onSave }: { settings: 
       </form>
       {error && <Notice tone="error">{error}</Notice>}
     </Modal>}
-    {rules.length || automatic.length ? <div className="azure-table"><table><thead><tr><th>Epic / Feature</th><th>Counts as</th><th>Applies to</th><th>{monthName(month)}</th><th /></tr></thead><tbody>
+    {rules.length || automatic.length ? <div className="azure-table"><DataTable tableId="SharedTimePanel-1"><thead><tr><th>Epic / Feature</th><th>Counts as</th><th>Applies to</th><th>{monthName(month)}</th><th /></tr></thead><tbody>
       {rules.map((rule) => { const item = byId.get(rule.id), now = effect.get(rule.id); return <tr key={rule.id}>
         <td>{item ? <a href={item.url} target="_blank" rel="noreferrer">#{rule.id}</a> : `#${rule.id}`} <strong className="inline">{rule.label || item?.title || 'Not in the fetched data'}</strong>{item && <small>{item.workItemType}{rule.label ? ` · ${item.title}` : ''}</small>}</td>
         <td><Pill tone={rule.kind === 'holiday' ? 'info' : 'warning'}>{rule.kind === 'holiday' ? 'Holidays' : 'Common activity'}</Pill></td>
@@ -71,6 +72,6 @@ export function SharedTimePanel({ settings, items, month, onSave }: { settings: 
         <td><Pill tone="info">Holidays</Pill></td><td>{scopeLabel(entry.scope)}</td>
         <td>{formatHours(entry.hours)}h each<small>{entry.tasks} Task{entry.tasks === 1 ? '' : 's'} · {entry.people} {entry.people === 1 ? 'person' : 'people'}</small></td><td />
       </tr>)}
-    </tbody></table></div> : <p className="muted">Nothing mapped yet. Map, for example, the Feature holding “{monthName(month)} | PI Planning” as a common activity for everyone.</p>}
+    </tbody></DataTable></div> : <p className="muted">Nothing mapped yet. Map, for example, the Feature holding “{monthName(month)} | PI Planning” as a common activity for everyone.</p>}
   </Panel>
 }

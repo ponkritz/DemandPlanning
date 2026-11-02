@@ -1,3 +1,4 @@
+import { DataTable } from './DataTable'
 import { useMemo } from 'react'
 import type { AzureWorkItem } from '../domain'
 import { dpMilestoneNames, dpMilestones, dpMonthCounts, type SupportedRelease } from '../dpMilestones'
@@ -7,11 +8,11 @@ import { Metric, Metrics } from './ui'
 // The Supported Releases of a month as a table: each release once, with the milestones it passed in the month
 // (DT, SFV, PRD, RPE) and their dates. Used on the DP page ("What was counted") and in Pulse Check.
 export function SupportedReleasesTable({ releases }: { releases: SupportedRelease[] }) {
-  return <div className="azure-table"><table><thead><tr><th>Release</th><th>Milestones Done in the month</th><th>Latest</th><th>ID</th><th>Title</th></tr></thead><tbody>
+  return <div className="azure-table"><DataTable tableId="DpMonthCounts-1"><thead><tr><th>Release</th><th>Milestones Done in the month</th><th>Latest</th><th>ID</th><th>Title</th></tr></thead><tbody>
     {releases.map((entry) => <tr key={entry.key}><td><strong>{[entry.name, entry.release].filter(Boolean).join(' ') || '—'}</strong>{entry.milestones.some((milestone) => milestone.milestone === 'DDT') && <small>Completed (DT)</small>}</td>
       <td>{entry.milestones.map((milestone) => <span key={milestone.milestone} className="milestone-chip" title={`${dpMilestoneNames[milestone.milestone].long} (${milestone.milestone}) · ${formatDate(milestone.date)}`}>{dpMilestoneNames[milestone.milestone].short} <small>{formatDate(milestone.date)}</small></span>)}</td>
       <td>{formatDate(entry.date)}</td><td><a href={entry.item.url} target="_blank" rel="noreferrer">{entry.item.id}</a></td><td>{entry.item.title}</td></tr>)}
-  </tbody></table></div>
+  </tbody></DataTable></div>
 }
 
 // DP page: the month's two counts from the DP query (dpMilestones) and, folded, the supported releases behind them.
