@@ -2,7 +2,7 @@ import type { AppState, AzureWorkItem } from './domain.ts'
 import type { AzureConnectionProfileSummary } from './azureCredentials.ts'
 import type { StreamMonth, Utilization } from './monthlyPack.ts'
 import { defaultStreamReleases } from './releaseOverview.ts'
-import { defaultStreams, exportForStream } from './streams.ts'
+import { defaultStreams, exportForStream, windchillOptionsFor } from './streams.ts'
 import { windchillSupported } from './windchillReleases.ts'
 import { capacityModel, type CapacitySettings } from './capacity.ts'
 import { yearMonths } from './monthlyPack.ts'
@@ -21,7 +21,7 @@ export function packStreamsOf(state: Pick<AppState, 'azureSources' | 'releaseSou
     ...defaultStreams.filter((stream) => stream.source === 'windchill').map((stream) => {
       const view = exportForStream(stream, windchill.views)
       const source = view ? windchill.sources.find((entry) => entry.viewId === view.id) : undefined
-      const releases = source ? windchillSupported(source.rows, source.columns.length ? source.columns : view?.columns ?? [], at) : []
+      const releases = source ? windchillSupported(source.rows, source.columns.length ? source.columns : view?.columns ?? [], at, windchillOptionsFor(stream.name)) : []
       return { name: stream.name, releases, supported: releases.length }
     }),
   ]

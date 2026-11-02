@@ -144,7 +144,7 @@ test('TC-SET-06: each Settings page is its own menu entry; its sections show one
   await navigate(page, /Azure DevOps$/)
   assert.equal(await text(page.locator('header.topbar h1')), 'Azure DevOps', 'the header names the Settings page')
   const sections = page.getByRole('tablist', { name: 'Sections' })
-  assert.deepEqual((await sections.getByRole('tab').allInnerTexts()).map((label) => label.trim()), ['Servers and PATs', 'Stream mapping', 'Other views', 'Synthetic sample'])
+  assert.deepEqual((await sections.getByRole('tab').allInnerTexts()).map((label) => label.trim()), ['Your work email', 'Servers and PATs', 'Stream mapping', 'Other views', 'Synthetic sample'])
   await sections.getByRole('tab', { name: 'Stream mapping' }).click()
   await page.locator('.panel', { has: page.locator('h2, h3', { hasText: /^Stream mapping/ }) }).first().waitFor()
   assert.equal(await page.locator('.panel', { has: page.locator('h2, h3', { hasText: /^Servers and PATs/ }) }).count(), 0, 'one section at a time')

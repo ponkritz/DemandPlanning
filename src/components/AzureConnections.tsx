@@ -28,7 +28,7 @@ const empty = (role: AzureConnectionRole = 'time-tracking'): ConnectionInput => 
 // Azure DevOps connection setup, shown as the first section of Settings.
 // section: the one part to show (SET-14: Servers and PATs, Stream mapping, Other views, Read-only sources, Synthetic
 // sample); without it, every part.
-export function AzureConnections({ azure, store, git, onOpenBoard, canManage = true, section }: { azure: AzureWorkspace; store: PageProps['store']; git?: GitStorage; onOpenBoard: () => void; canManage?: boolean; section?: 'servers' | 'mapping' | 'views' | 'sources' | 'sample' }) {
+export function AzureConnections({ azure, store, git, onOpenBoard, canManage = true, section }: { azure: AzureWorkspace; store: PageProps['store']; git?: GitStorage; onOpenBoard: () => void; canManage?: boolean; section?: 'email' | 'servers' | 'mapping' | 'views' | 'sources' | 'sample' }) {
   const show = (part: string) => !section || section === part
   const threshold = normalizeReleaseSourceSettings(store.state.releaseSourceSettings).matchThreshold ?? defaultMatchThreshold
   const { connectionProfiles, connectionStatus, activeConnectionProfileId, busy } = azure
@@ -180,6 +180,7 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
 
   return <section id="settings-connections" className="settings-section">
     <div className="settings-section-heading"><div><p className="eyebrow">SETTINGS</p><h2>Azure DevOps <Info>Each connection is one set: base URL (Azure DevOps Services or an on-prem Azure DevOps Server collection), project, PAT and an optional query, plus what its data is used for. Add as many as you need; Fetch all reads every connection read-only, one after another. PATs stay in this browser and are excluded from backups, SharePoint and Git.</Info></h2></div><button className="primary" onClick={onOpenBoard}>Open {timeWritingView(connectionProfiles, activeConnectionProfileId).name} →</button></div>
+    {show('email') && <WorkEmailPanel email={azure.creatorEmail} onSave={azure.setCreatorEmail} />}
     {show('servers') && <Panel className="connection-panel" eyebrow="STEP 1" title="Servers and PATs" action={<button type="button" className="ghost" onClick={() => setNewServer({ serverUrl: '', organization: '', pat: '' })}>＋ Add server</button>} info={<ul><li>One PAT per server: an on-prem collection (e.g. tfsapac04 · DHPCollection, for DHP.Vault and DHP) or a cloud organization (dev.azure.com/ALMP-ORG-MSTP01). Every connection on the server uses it, so it is entered once.</li><li>PATs stay in this browser or desktop app only; they are never saved to Git, backups or SharePoint, and each user enters their own.</li></ul>}>
       <div className="azure-table"><table><thead><tr><th>Server</th><th>Projects</th><th>Used by</th><th>PAT</th><th /></tr></thead><tbody>
         {servers.map((server) => <tr key={server.key}>
@@ -220,7 +221,7 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
       {canManage && <Notice tone="info">Changes you make to the stream mapping are saved to the shared setup in Git right away and replace every other user's mapping at their next start.</Notice>}
       <div className="azure-table"><table><thead><tr><th>Stream</th><th>Server · project</th><th>Query</th><th>Rule</th><th>Status</th><th /></tr></thead><tbody>
         {mapping.map((row) => { const [tone, label] = row.profile ? statusTone(row.profile) : ['warning' as Tone, row.windchill ? 'Windchill export' : 'Not mapped']; const status = row.profile ? connectionStatus[row.profile.id] : undefined; return <tr key={row.name}>
-          <td><strong>{row.name}</strong>{row.profile && <small>{viewNameOf(row.profile)}</small>}{row.timeWriting && row.profile && !row.profile.creatorEmail && <small className="warning-text">Work email missing: Edit to add it</small>}</td>
+          <td><strong>{row.name}</strong>{row.profile && <small>{viewNameOf(row.profile)}</small>}{row.timeWriting && row.profile && !azure.creatorEmail && <small className="warning-text">Work email missing: set it under Your work email</small>}</td>
           <td>{row.windchill ? <small className="plain">Windchill export “{row.name}”</small> : row.where ? <small className="plain">{row.where}</small> : <span className="muted">—</span>}</td>
           <td>{row.windchill ? '—' : row.query ? <span className="query-chip" title={row.query}>Query</span> : row.timeWriting ? <small>Team Epic backlog</small> : <span className="muted">—</span>}</td>
           <td><small className="plain">{row.rule}</small></td>
@@ -269,7 +270,7 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
           {(form.role === 'time-tracking' || form.role === 'backlog-view') && <label>Team{form.query.trim() ? ' (optional with a query)' : ''}<input value={form.team} onChange={(event) => setForm({ ...form, team: event.target.value })} placeholder="Team whose Epic backlog is read" /></label>}
           <label>API version (optional)<input value={form.apiVersion} onChange={(event) => setForm({ ...form, apiVersion: event.target.value })} placeholder="Automatic" /><small>Leave empty to detect it: 7.1, then 6.0 and 5.0 for older Azure DevOps Server.</small></label>
           <label>PAT for this server<input type="password" autoComplete="off" required={!formServerPat && (form.id ? !loadAzureConnectionProfile(form.id)?.token : !(form.cloneOf && loadAzureConnectionProfile(form.cloneOf)?.token))} value={form.pat} onChange={(event) => setForm({ ...form, pat: event.target.value })} placeholder={form.role === 'time-tracking' ? 'Work Items (Read & Write)' : 'Work Items (Read)'} /><small>{formServerPat ? 'Leave empty: the saved server PAT is used. ' : form.id ? 'Leave empty to keep the saved one. ' : clonedFrom ? `Leave empty to use the PAT of “${clonedFrom}”. ` : ''}One PAT per server: it is used by every connection on the same server.</small></label>
-          {form.role === 'time-tracking' && <label>Your work email (required)<input type="email" required autoComplete="email" value={form.creatorEmail} onChange={(event) => setForm({ ...form, creatorEmail: event.target.value })} placeholder="name@company.com" /><small>As Azure DevOps shows it for you: finds your work (Assigned to me) and is assigned to the Features you create.</small></label>}
+          {form.role === 'time-tracking' && <p className="muted">Your work email is set on its own under Settings → Azure DevOps → <strong>Your work email</strong>{azure.creatorEmail ? <> (now {azure.creatorEmail})</> : ' — not set yet'}.</p>}
           <label className="query-field">Query (optional, WIQL)<textarea rows={4} spellCheck={false} value={form.query} onChange={(event) => setForm({ ...form, query: event.target.value })} placeholder={queryPlaceholder[form.role]} /><small>A flat query: SELECT … FROM WorkItems WHERE …. Only the WHERE clause is used; results are read in pages. {form.role === 'time-tracking' || form.role === 'backlog-view' ? '' : 'Empty uses the default shown.'}</small></label>
         </div>
         <Notice>{roleUse[form.role]}</Notice>
@@ -287,4 +288,19 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
       <div className="button-row"><button type="button" className="ghost" disabled={busy} onClick={() => { if (azure.saved.length && !azure.isSample && !window.confirm('Replace the saved Azure cache with a synthetic sample dataset? Export a JSON backup first if you need the current data.')) return; azure.loadSampleData() }}>Load synthetic sample dataset</button></div>
     </Panel>}
   </section>
+}
+
+// Your work email (CON-82): its own setting on this computer, not part of a connection or the shared setup in Git.
+function WorkEmailPanel({ email, onSave }: { email: string; onSave: (email: string) => string }) {
+  const [value, setValue] = useState(email)
+  const [note, setNote] = useState<{ tone: 'success' | 'error'; text: string } | null>(null)
+  const save = (event: React.FormEvent) => {
+    event.preventDefault()
+    try { const saved = onSave(value); setValue(saved); setNote({ tone: 'success', text: saved ? `Saved: ${saved}. It stays on this computer through updates and Git syncs.` : 'Removed.' }) } catch (failure) { setNote({ tone: 'error', text: failure instanceof Error ? failure.message : String(failure) }) }
+  }
+  return <Panel className="connection-panel" eyebrow="YOU" title="Your work email" info="The email Azure DevOps shows for you. It tells the app who you are: your access role, Assigned to Me, the Time Writing prompts and who new Features are assigned to. It is kept on this computer only — never in a connection, the stream mapping or the shared setup in Git — so updates, Force Update and Git syncs do not change it.">
+    {!email && <Notice tone="warning">Not set yet: enter your work email so the app knows which work is yours.</Notice>}
+    <form className="inline-form" onSubmit={save}><label>Work email<input type="email" autoComplete="email" required value={value} onChange={(event) => setValue(event.target.value)} placeholder="name@company.com" /></label><button type="submit" className="primary" disabled={value.trim().toLowerCase() === email}>Save</button></form>
+    {note && <Notice tone={note.tone}>{note.text}</Notice>}
+  </Panel>
 }

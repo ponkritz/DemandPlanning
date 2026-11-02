@@ -221,3 +221,21 @@ test('default Joined on (1 May 2026 unless changed): months before it give no ca
   assert.equal(capacityModel(april, '2026-04', { ...settings, defaultJoinedOn: '' }).people.length, 2, 'without a default everyone counts')
   assert.equal(capacityModel(backlog, '2026-10', settings).people.length, 2, 'from May 2026 on, everyone counts')
 })
+
+test('Team Holidays and Training (same Epic ID): training is NPRA, PTO / Sick / Unplanned stay absence; the Epic title is not read (TC-CAP-06)', () => {
+  const epic = [item(900, { workItemType: 'Epic', title: 'Team Holidays and Training' })]
+  const rows = [
+    ...backlog.filter((entry) => entry.id !== 900), ...epic,
+    // Each person's Training - Time Writing story under a Training Feature of the Epic.
+    item(60, { workItemType: 'Feature', parentId: 900, title: 'Training' }), item(61, { parentId: 60, title: 'Training - Time Writing', assignedTo: 'Ben' }),
+    item(62, { workItemType: 'Task', parentId: 61, title: 'October 2026 | Training', assignedTo: 'Ben', originalEstimate: 6, completedWork: 4 }),
+    item(63, { workItemType: 'Task', parentId: 41, title: 'October 2026 | Ana - Unplanned leave', assignedTo: 'Ana', completedWork: 8 }),
+  ]
+  const model = capacityModel(rows, '2026-10', { ...settings, npraHoursPerMonth: 20 })
+  const ana = model.people.find((person) => person.name === 'Ana'), ben = model.people.find((person) => person.name === 'Ben')
+  assert.equal(ben.npra, 4, 'training hours are NPRA')
+  assert.equal(ben.absence, 0, 'training is not absence')
+  assert.equal(ana.absence, 32, 'PTO 16 + Sick 8 + Unplanned 8 stay absence')
+  assert.deepEqual([ana.absenceByKind.PTO, ana.absenceByKind['Sick Leave'], ana.absenceByKind['Unplanned Leave'], ana.absenceByKind['Other absence']], [16, 8, 8, 0], '"Training" in the Epic title does not change the kinds')
+  assert.ok(!model.streams.some((stream) => stream.title === 'Team Holidays and Training'), 'training is not a stream either')
+})

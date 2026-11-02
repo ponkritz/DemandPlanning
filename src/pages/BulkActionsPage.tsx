@@ -3,10 +3,10 @@ import { useState, useSyncExternalStore } from 'react'
 import { PersonPicker } from '../components/PersonPicker'
 import { AssigneeConfirm } from '../components/AssigneeConfirm'
 import { EmptyState, Notice, Page, Panel, Pill } from '../components/ui'
-import { currentIndiaMonth, currentIterationPairs, ensureMonthTask, readAzureIterations, updateAzureTimeWritingEffort, updateAzureWorkItem, type AzureIteration } from '../azureDevOps'
+import { currentIndiaMonth, currentIterationPairs, ensureMonthTask, ensureStoryMonthTask, readAzureIterations, updateAzureTimeWritingEffort, updateAzureWorkItem, type AzureIteration } from '../azureDevOps'
 import { capacityContext } from '../capacity'
 import { adhocAfterLock } from '../planningLock'
-import { assignablePeople, monthTaskCandidates, monthsUntilTarget, moveCandidates, nextStateFor, stateChecks, type MoveStates, type StateCheck } from '../myWork'
+import { assignablePeople, leaveTaskCandidates, monthTaskCandidates, monthsUntilTarget, moveCandidates, nextStateFor, stateChecks, type MoveStates, type StateCheck } from '../myWork'
 import { closeRelated } from '../closeChain'
 import type { AzureWorkItem } from '../domain'
 import type { AzureWorkspace } from '../useAzureWorkspace'
@@ -39,6 +39,7 @@ export function BulkActionsPage({ azure, store, my, assign }: { azure: AzureWork
   const [skipMove, setSkipMove] = useState<Set<number>>(new Set())
   const [iterations, setIterations] = useState<AzureIteration[]>([])
   const [skipTask, setSkipTask] = useState<Set<number>>(new Set())
+  const [leaveOn, setLeaveOn] = useState<Set<number>>(new Set())
   // Features with a later Target date whose month Tasks are also created up to the Target month (asked per Feature in
   // the confirmation, off by default), and the Original Estimate per new month Task (blank: none).
   const [untilTarget, setUntilTarget] = useState<Set<number>>(new Set())
@@ -54,6 +55,12 @@ export function BulkActionsPage({ azure, store, my, assign }: { azure: AzureWork
   const toMove = (target ? moveCandidates(azure.items, my.me, target, iterations, absenceEpicId, undefined, moveStates) : []).toSorted((a, b) => a.item.id - b.item.id)
   const candidates = (my.known ? monthTaskCandidates(azure.items, my.me, month, absenceEpicId) : []).toSorted((a, b) => a.feature.id - b.feature.id)
   const missing = candidates.filter((row) => row.status === 'needs-task' || row.status === 'needs-story')
+  // Leave (ATM-24): my PTO / Sick / Unplanned Features, apart and unticked — tick only the leave of this month.
+  // ATM-26: one row per leave story of mine (PTO, Sick Leave…), keyed by the story; the Task goes under that story.
+  const leaveRows = (my.known ? leaveTaskCandidates(azure.items, my.me, month, absenceEpicId) : []).toSorted((a, b) => a.feature.id - b.feature.id)
+  const leaveKey = (row: { feature: AzureWorkItem; story?: AzureWorkItem }) => row.story?.id ?? row.feature.id
+  const leaveMissing = leaveRows.filter((row) => row.status === 'needs-task' || row.status === 'needs-story')
+  const selectedRows = [...missing.filter((row) => !skipTask.has(row.feature.id)), ...leaveMissing.filter((row) => leaveOn.has(leaveKey(row)))]
   const shownCandidates = candidates.filter((row) => taskFilter === 'both' || (taskFilter === 'with') === (row.status === 'exists'))
   const shownMissing = shownCandidates.filter((row) => row.status === 'needs-task' || row.status === 'needs-story')
   const selectShown = (on: boolean) => setSkipTask((current) => { const next = new Set(current); for (const row of shownMissing) { if (on) next.delete(row.feature.id); else next.add(row.feature.id) } return next })
@@ -115,7 +122,7 @@ export function BulkActionsPage({ azure, store, my, assign }: { azure: AzureWork
   const shownEmail = my.me.email ?? (my.me.name ? azure.items.find((item) => item.assignedTo === my.me.name && item.assignedToEmail)?.assignedToEmail : undefined) ?? ''
   async function createTasks(assignee: string) {
     if (blocked || !config) return
-    const rows = missing.filter((row) => !skipTask.has(row.feature.id))
+    const rows = selectedRows
     if (!rows.length) return
     const hours = hoursPerMonth.trim() ? Number(hoursPerMonth) : undefined
     if (hours != null && (!Number.isFinite(hours) || hours < 0 || hours > 1000)) { note({ tone: 'error', text: 'Hours per month must be a number from 0 to 1,000.' }); return }
@@ -130,16 +137,16 @@ export function BulkActionsPage({ azure, store, my, assign }: { azure: AzureWork
       progress(`Feature ${index + 1} of ${rows.length}…`)
       // This month, then — when ticked — each later month up to the Feature's Target date. A new Task gets the hours
       // per month as its Original Estimate (not this month's when planning has locked: that Task is ad-hoc).
-      const months = [month, ...(untilTarget.has(row.feature.id) ? monthsUntilTarget(month, row.feature.targetDate) : [])]
+      const months = [month, ...(!row.leave && untilTarget.has(row.feature.id) ? monthsUntilTarget(month, row.feature.targetDate) : [])]
       for (const [at, label] of months.entries()) {
         try {
           if (at > 0) progress(`Feature ${index + 1} of ${rows.length}: ${label}…`)
-          const result = await ensureMonthTask(config, pat, row.feature.id, assignee, label, undefined, at === 0 && adhoc)
+          const result = row.story ? await ensureStoryMonthTask(config, pat, row.story.id, assignee, label, undefined, at === 0 && adhoc) : await ensureMonthTask(config, pat, row.feature.id, assignee, label, undefined, at === 0 && adhoc)
           let task = result.task
           if (result.status === 'created' && hours != null && !(at === 0 && adhoc)) task = await updateAzureTimeWritingEffort(config, pat, task.id, hours, undefined)
           changed.push(task, ...(result.storyCreated ? [result.story] : []))
           if (result.status === 'created') { created += 1; if (at > 0) ahead += 1 } else existed += 1
-        } catch (failure) { failed.push(`#${row.feature.id} ${label}: ${failure instanceof Error ? failure.message : 'failed'}`); break }
+        } catch (failure) { failed.push(`#${row.story?.id ?? row.feature.id} ${label}: ${failure instanceof Error ? failure.message : 'failed'}`); break }
       }
     }
     azure.applyWorkItems(changed, 'Create month tasks', `${created} ${month} Time Writing task(s) created, ${existed} already existed`)
@@ -177,7 +184,8 @@ export function BulkActionsPage({ azure, store, my, assign }: { azure: AzureWork
               <div className="button-row"><button type="button" className="ghost" disabled={!shownMissing.length || shownMissing.every((row) => !skipTask.has(row.feature.id))} onClick={() => selectShown(true)}>Select all</button><button type="button" className="ghost" disabled={!shownMissing.length || shownMissing.every((row) => skipTask.has(row.feature.id))} onClick={() => selectShown(false)}>Deselect all</button><small className="muted">{missing.filter((row) => !skipTask.has(row.feature.id)).length} of {missing.length} selected</small></div>
             </div>}
             {candidates.length ? shownCandidates.length ? <ul className="pick-list">{shownCandidates.map((row) => <li key={row.feature.id}><label className="check"><input type="checkbox" disabled={row.status === 'exists' || row.status === 'conflict'} checked={(row.status === 'needs-task' || row.status === 'needs-story') && !skipTask.has(row.feature.id)} onChange={(event) => setSkipTask((current) => { const next = new Set(current); if (event.target.checked) next.delete(row.feature.id); else next.add(row.feature.id); return next })} /><Pill tone={statusTone[row.status]}>{statusLabel[row.status]}</Pill>{row.shared && <span className="pill pill-info" title={row.shared.reason === 'mention' ? 'Its Description @mentions you' : 'You had a month Task under it'}>Shared · owner {row.shared.owner}</span>}<ItemLink item={row.feature} /> {row.feature.title}</label></li>)}</ul> : <p className="muted">{taskFilter === 'with' ? 'No Feature has its task yet.' : 'Every Feature has its task.'}</p> : <p className="muted">No pending Features for you.</p>}
-            <div className="button-row"><button type="button" className="primary" disabled={Boolean(blocked) || creatingTasks || !missing.some((row) => !skipTask.has(row.feature.id))} onClick={() => setConfirmTasks(true)}>{creatingTasks ? 'Creating…' : ((count) => `Create ${count} task${count === 1 ? '' : 's'}`)(missing.filter((row) => !skipTask.has(row.feature.id)).length)}</button></div>
+            {leaveRows.length > 0 && <div className="leave-picks"><h4>Leave <small className="muted">— tick only the leave you take in {month}; not counted as missing</small></h4><ul className="pick-list">{leaveRows.map((row) => <li key={leaveKey(row)}><label className="check"><input type="checkbox" disabled={row.status === 'exists' || row.status === 'conflict'} checked={(row.status === 'needs-task' || row.status === 'needs-story') && leaveOn.has(leaveKey(row))} onChange={(event) => setLeaveOn((current) => { const next = new Set(current); if (event.target.checked) next.add(leaveKey(row)); else next.delete(leaveKey(row)); return next })} /><Pill tone={statusTone[row.status]}>{statusLabel[row.status]}</Pill><span className="pill pill-info">Leave</span><ItemLink item={row.feature} /> {row.feature.title}{row.story && <> › <ItemLink item={row.story} /> {row.story.title}</>}</label></li>)}</ul></div>}
+            <div className="button-row"><button type="button" className="primary" disabled={Boolean(blocked) || creatingTasks || !selectedRows.length} onClick={() => setConfirmTasks(true)}>{creatingTasks ? 'Creating…' : ((count) => `Create ${count} task${count === 1 ? '' : 's'}`)(selectedRows.length)}</button></div>
           </Panel>
         </div>
         <Panel className="action-card state-checks" eyebrow="CHECK" title="State checks" info="Your Features and User Stories whose state does not match their children: all User Stories Closed → close the Feature; all Tasks Closed → close the User Story; an Active Feature needs at least one Active User Story. A Feature is closed only from Active.">
@@ -193,11 +201,11 @@ export function BulkActionsPage({ azure, store, my, assign }: { azure: AzureWork
         </Panel>
       </>}
     {confirmTasks && <AssigneeConfirm title={`Create ${month} Time Writing tasks`} people={assignablePeople(azure.items)} me={assign.me} initial={shownEmail} canChoose={assign.canChoose} busy={creatingTasks} confirmLabel="Create tasks"
-      summary={<>Creates the “{month}” Time Writing Task (and the Time Writing User Story where missing) for {missing.filter((row) => !skipTask.has(row.feature.id)).length} Feature(s), assigned to the person below. Existing tasks of that person are re-checked in Azure DevOps and never duplicated.{adhocAfterLock(month) && <> Planning for {month} is locked: new Tasks are tagged <code>ad-hoc</code>.</>}</>}
+      summary={<>Creates the “{month}” Time Writing Task (and the Time Writing User Story where missing) for {selectedRows.length} Feature(s), assigned to the person below. Existing tasks of that person are re-checked in Azure DevOps and never duplicated.{adhocAfterLock(month) && <> Planning for {month} is locked: new Tasks are tagged <code>ad-hoc</code>.</>}</>}
       onCancel={() => setConfirmTasks(false)} onConfirm={(email) => void createTasks(email)}>
       {(() => {
         // Features with a Target date after this month: also create the month Tasks up to it?
-        const later = missing.filter((row) => !skipTask.has(row.feature.id)).map((row) => ({ row, months: monthsUntilTarget(month, row.feature.targetDate) })).filter((entry) => entry.months.length)
+        const later = selectedRows.filter((row) => !row.leave).map((row) => ({ row, months: monthsUntilTarget(month, row.feature.targetDate) })).filter((entry) => entry.months.length)
         return <>
           {later.length > 0 && <fieldset className="until-target"><legend>These Features have a Target date after {month}. Also create their month Tasks up to the Target month?</legend>
             <div className="button-row"><button type="button" className="text-button" onClick={() => setUntilTarget(new Set(later.map((entry) => entry.row.feature.id)))}>Tick all</button><button type="button" className="text-button" onClick={() => setUntilTarget(new Set())}>Untick all</button></div>

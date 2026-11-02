@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { initialWorkEmail, saveWorkEmail } from './workEmail'
 import { dependencyFields, fetchAzureWorkItems, isCloudBase, mapAzureWorkItem, mergeAzureWorkItems, parseAzureProjectUrl, readFieldNames, savedBacklogItems, sameAzureScope, updateAzureTimeWritingEffort, type AzureFetchResult, type AzureConfig } from './azureDevOps'
 import type { PageProps } from './pages/types'
 import type { AzureWorkItem } from './domain'
@@ -44,7 +45,9 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
   const [connectionProfiles, setConnectionProfiles] = useState<AzureConnectionProfileSummary[]>(() => listAzureConnectionProfiles())
   const [activeConnectionProfileId, setActiveConnectionProfileId] = useState(() => listAzureConnectionProfiles()[0]?.id ?? '')
   const [pat, setPat] = useState(() => { const first = listAzureConnectionProfiles()[0]?.id; return first ? loadAzureConnectionProfile(first)?.token ?? '' : loadAzurePat(defaultConfig) })
-  const [creatorEmail, setCreatorEmail] = useState(() => { const first = listAzureConnectionProfiles()[0]?.id; return first ? loadAzureConnectionProfile(first)?.creatorEmail ?? '' : '' })
+  // Your work email is a setting of its own (CON-82), never taken from whichever connection happens to be first.
+  const [creatorEmail, setWorkEmailState] = useState(() => initialWorkEmail())
+  const setCreatorEmail = (email: string) => { const value = saveWorkEmail(email); setWorkEmailState(value); return value }
   const [role, setRole] = useState<AzureConnectionRole>(() => listAzureConnectionProfiles()[0]?.role ?? 'time-tracking')
   const [connectionStatus, setConnectionStatus] = useState<Record<string, ConnectionStatus>>({})
   const [server, setServer] = useState<Pick<AzureConfig, 'baseUrl' | 'apiVersion'>>(() => { const first = listAzureConnectionProfiles()[0]; return first ? { baseUrl: first.baseUrl, apiVersion: first.apiVersion } : {} })
@@ -99,7 +102,7 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
       let tokenWarning = ''
       try {
         const reason = connectionProfiles.find((profile) => profile.id === activeConnectionProfileId)?.reason
-        if (activeConnectionProfileId && reason) saveAzureConnectionProfile({ ...loadAzureConnectionProfile(activeConnectionProfileId), id: activeConnectionProfileId, url: projectUrl, reason, creatorEmail, role, token: pat, ...server })
+        if (activeConnectionProfileId && reason) saveAzureConnectionProfile({ ...loadAzureConnectionProfile(activeConnectionProfileId), id: activeConnectionProfileId, url: projectUrl, reason, role, token: pat, ...server })
         else saveAzurePat(parsed, pat)
       } catch { tokenWarning = ' PAT could not be saved in this browser; the current-session token was used for fetching.' }
       const result = await fetchAzureWorkItems({ ...parsed, team: parsed.team || team.trim() }, pat)
@@ -115,7 +118,7 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
     setPat(value.trim()); setError('')
     try {
       const reason = connectionProfiles.find((profile) => profile.id === activeConnectionProfileId)?.reason
-      if (activeConnectionProfileId && reason) saveAzureConnectionProfile({ ...loadAzureConnectionProfile(activeConnectionProfileId), id: activeConnectionProfileId, url: projectUrl, reason, creatorEmail, role, token: value, ...server })
+      if (activeConnectionProfileId && reason) saveAzureConnectionProfile({ ...loadAzureConnectionProfile(activeConnectionProfileId), id: activeConnectionProfileId, url: projectUrl, reason, role, token: value, ...server })
       else saveAzurePat(config, value)
       setMessage(activeConnectionProfileId ? `Azure DevOps configuration “${reason}” updated on this browser.` : 'PAT saved on this browser for this organization and project.')
     }
@@ -130,7 +133,7 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
   function selectConnectionProfile(id: string) {
     const profile = id ? loadAzureConnectionProfile(id) : null
     if (!profile) { setActiveConnectionProfileId(''); setError(''); return }
-    setProjectUrl(profile.url); setPreview(null); setActiveConnectionProfileId(id); setPat(profile.token); setCreatorEmail(profile.creatorEmail?.trim() ?? ''); setRole(profile.role ?? 'time-tracking'); setError('')
+    setProjectUrl(profile.url); setPreview(null); setActiveConnectionProfileId(id); setPat(profile.token); setRole(profile.role ?? 'time-tracking'); setError('')
     setServer({ baseUrl: profile.baseUrl, apiVersion: profile.apiVersion })
     try { setTeam(connectionConfig(profile).team) } catch { /* saved profile validation already prevents this */ }
   }
@@ -210,9 +213,10 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
     if (input.role === 'time-tracking' && !input.team.trim() && !query) throw new Error('A Time Writing connection needs a team (its Epic backlog is read) or a query.')
     if (input.role === 'time-tracking' && !isCloudBase(base)) throw new Error('Time Writing (read & write) works on Azure DevOps Services (dev.azure.com) only; on-premises servers are read-only. Choose another role for this server.')
     if (input.role === 'backlog-view' && !input.team.trim() && !query) throw new Error('A backlog view needs a team (its Epic backlog is shown) or a query.')
-    const email = input.creatorEmail.trim().toLowerCase()
-    if (input.role === 'time-tracking' && !email) throw new Error('Enter your work email: the Time Writing connection uses it to find your work and to assign the Features you create.')
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('Enter a valid work email, e.g. name@company.com.')
+    // The work email is its own setting (CON-82); a connection keeps whatever it had, and an email typed with an older
+    // form still becomes the setting when none is set yet.
+    const email = existing?.creatorEmail?.trim().toLowerCase() ?? ''
+    if (input.creatorEmail.trim() && !creatorEmail) setCreatorEmail(input.creatorEmail)
     const id = input.id || crypto.randomUUID().replaceAll('-', '')
     // The same server, project, role and query as a saved connection: nothing is fetched, listed or matched twice.
     const twin = duplicateOf({ id, url, role: input.role, ...(query ? { query } : {}), ...(isCloudBase(base) ? {} : { baseUrl: base }) }, listAzureConnectionProfiles())

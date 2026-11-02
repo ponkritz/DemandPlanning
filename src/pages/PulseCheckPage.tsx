@@ -7,7 +7,7 @@ import { GapsPanel } from '../components/GapsPanel'
 import { ScopeSwitch } from '../components/ScopeSwitch'
 import { TeamFilterBar } from '../components/TeamFilterBar'
 import { defaultStreamReleases, type ReleaseStream } from '../releaseOverview'
-import { defaultStreams, exportForStream } from '../streams'
+import { defaultStreams, exportForStream, windchillOptionsFor } from '../streams'
 import { formatDate, formatDateTime, formatHours, monthName, todayIso } from '../format'
 import type { WindchillWorkspace } from '../useWindchill'
 import { ongoingWork, previousMonth, releaseComparison, workFlow } from '../pulseCheck'
@@ -53,7 +53,7 @@ export function PulseCheckPage({ month, azure, store, my, navigate, windchill, o
     ...shown.filter((stream) => stream.supportedEntries).map((stream) => ({ name: stream.name, releases: stream.supportedEntries!.map((entry) => entry.label) })),
     // Tool Validations: the unique tools with a document in the tab's month (validated or supported), one entry per tool.
     ...shown.filter((stream) => { const rule = defaultStreams.find((def) => def.name === stream.name)?.rule; return rule === 'tool' }).map((stream) => ({ name: stream.name, releases: stream.releases.map((entry) => [entry.name, entry.release].filter(Boolean).join(' ')) })),
-    ...exports.map(({ stream, view }) => { const source = view ? windchill.sources.find((entry) => entry.viewId === view.id) : undefined; return { name: stream.name, releases: source ? windchillSupported(source.rows, source.columns.length ? source.columns : view?.columns ?? [], at) : [] } }),
+    ...exports.map(({ stream, view }) => { const source = view ? windchill.sources.find((entry) => entry.viewId === view.id) : undefined; return { name: stream.name, releases: source ? windchillSupported(source.rows, source.columns.length ? source.columns : view?.columns ?? [], at, windchillOptionsFor(stream.name)) : [] } }),
   ]
   const releases = (shown: ReleaseStream[], at: string) => <>
     {shown.length ? <ReleaseQuadrants streams={shown} month={at} supported={supportedLines(shown, at)} /> : <><EmptyState title="No Azure DevOps Server views under Release Details." detail="Add an on-prem connection shown in the menu (Settings → Azure DevOps); fetch it in the desktop app or load its data from Git." />{supportedLines(shown, at).some((line) => line.releases.length) && <SupportedSummary lines={supportedLines(shown, at)} month={at} />}</>}
@@ -61,7 +61,7 @@ export function PulseCheckPage({ month, azure, store, my, navigate, windchill, o
       {dpList && stream.supportedReleases!.length > 0 && <SupportedReleasesTable releases={stream.supportedReleases!} />}
     </TablePanel>)}
     {exports.length > 0 && <TablePanel title="Windchill exports" info={<p>The Windchill streams (S&amp;S IT; ECP later): the export named like the stream, rows as last imported, and the unique releases read from the document names (release name, release number, then the document name). Open one for the release list, its columns, search and filters.</p>} count={`${exports.length} stream${exports.length === 1 ? '' : 's'}`}>
-      <table><thead><tr><th>Stream</th><th>Rows</th><th>Releases</th><th>Imported</th><th /></tr></thead><tbody>{exports.map(({ stream, view }) => { const source = view ? windchill.sources.find((entry) => entry.viewId === view.id) : undefined; return <tr key={stream.name}><td><strong>{stream.name}</strong>{view?.exportFile && <small>{view.exportFile}</small>}</td><td>{source ? source.rows.length : '—'}</td><td>{source ? (() => { const found = windchillReleases(source.rows, source.columns.length ? source.columns : view?.columns ?? []); return <>{found.releases.length}<small>unique, from document names</small></> })() : '—'}</td><td>{view ? source ? formatDateTime(source.fetchedAt) : 'Not imported yet' : 'No export named like the stream yet'}</td><td><button type="button" className="text-button" onClick={() => openWindchill(view?.id ?? '')}>{view ? 'Open →' : 'Import →'}</button></td></tr> })}</tbody></table>
+      <table><thead><tr><th>Stream</th><th>Rows</th><th>Releases</th><th>Imported</th><th /></tr></thead><tbody>{exports.map(({ stream, view }) => { const source = view ? windchill.sources.find((entry) => entry.viewId === view.id) : undefined; return <tr key={stream.name}><td><strong>{stream.name}</strong>{view?.exportFile && <small>{view.exportFile}</small>}</td><td>{source ? source.rows.length : '—'}</td><td>{source ? (() => { const found = windchillReleases(source.rows, source.columns.length ? source.columns : view?.columns ?? [], windchillOptionsFor(stream.name)); return <>{found.releases.length}<small>unique, from document names</small></> })() : '—'}</td><td>{view ? source ? formatDateTime(source.fetchedAt) : 'Not imported yet' : 'No export named like the stream yet'}</td><td><button type="button" className="text-button" onClick={() => openWindchill(view?.id ?? '')}>{view ? 'Open →' : 'Import →'}</button></td></tr> })}</tbody></table>
     </TablePanel>}
   </>
   const tabLabels: [Tab, string][] = [['releases', `Releases · ${monthName(last)}`], ['last', `Last month · ${monthName(last)}`], ['ongoing', 'Ongoing activities'], ['current', `Current month releases · ${monthName(month)}`], ['pack', `Monthly pack · ${monthName(last)}`]]

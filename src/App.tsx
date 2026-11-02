@@ -30,6 +30,7 @@ import { WindchillExportImport, WindchillPage } from './components/WindchillView
 import { BacklogHealthPage } from './pages/BacklogHealthPage'
 import { PulseCheckPage } from './pages/PulseCheckPage'
 import { PiReviewPage } from './pages/PiReviewPage'
+import { BritePage } from './pages/BritePage'
 import { QeMappingPage } from './pages/QeMappingPage'
 import { useAccess } from './useAccess'
 import { useFeatureSetup } from './useFeatureSetup'
@@ -157,7 +158,7 @@ export default function App() {
   const openView = (id: string) => { setViewId(id); saveBacklogTab(id); setPage('board') }
   // Access roles: each menu entry belongs to an area; Settings is always there (each person's own connections and tokens).
   // A page the viewer's roles do not include falls back to the first one they do.
-  const areaOf = (id: Page): Area | null => id === 'admin' ? null : id === 'board' ? (view.onPrem ? 'release' : 'board') : id === 'windchill' ? 'release' : id === 'pulse' || id === 'pireview' || id === 'workspace' ? 'overview' : id
+  const areaOf = (id: Page): Area | null => id === 'admin' ? null : id === 'board' ? (view.onPrem ? 'release' : 'board') : id === 'windchill' || id === 'brite' ? 'release' : id === 'pulse' || id === 'pireview' || id === 'workspace' ? 'overview' : id
   const allowed = (id: Page) => { const area = areaOf(id); return area == null || access.sees(area) }
   const page = allowed(requested) ? requested : pages.find((entry) => allowed(entry.id))?.id ?? 'admin'
   const meta = pageMeta(page)
@@ -217,6 +218,8 @@ export default function App() {
         // Windchill streams (S&S IT; ECP later), each in a fixed order. Other connections and exports go under "Other views".
         const sections: { key: string; label?: string; entries: React.ReactNode[] }[] = group === 'Release Details' ? [
           // The default streams in order; one without a connection (shown in the menu) leads to Settings to set it up.
+          // BRITE (CON-84): planned, at the root of Release Details until its exports and rules are known.
+          { key: 'release:root', entries: access.sees('release') ? [navButton('brite', pageMeta('brite').icon, 'BRITE', page === 'brite', () => setPage('brite'))] : [] },
           { key: 'release:ads', label: 'Azure DevOps Server', entries: access.sees('release') ? defaultStreams.filter((stream) => stream.source === 'azure').map((stream) => { const profile = profileForStream(stream, azure.connectionProfiles), entry = profile && views.find((item) => item.id === profile.id); return entry ? navButton(`view:${entry.id}`, pageMeta('board').icon, stream.name, page === 'board' && view.id === entry.id, () => openView(entry.id)) : <button key={`stream:${stream.name}`} className="nav-missing" title={`Not set up: add a connection named “${stream.name}”`} onClick={openConnection}><span className="nav-icon">＋</span>{stream.name}</button> }) : [] },
           { key: 'release:windchill', label: 'Windchill exports', entries: access.sees('release') ? [...defaultStreams.filter((stream) => stream.source === 'windchill').map((stream) => { const entry = exportForStream(stream, windchillViews); return entry ? navButton(entry.id, windchillMeta.icon, stream.name, page === 'windchill' && windchillView?.id === entry.id, () => openWindchill(entry.id)) : <button key={`stream:${stream.name}`} className="nav-missing" title={`Not imported yet: import a Windchill export named “${stream.name}”`} onClick={() => openWindchill('')}><span className="nav-icon">＋</span>{stream.name}</button> }), ...(access.can('windchill.import') ? [navButton('windchill', '＋', windchillMeta.label, page === 'windchill' && !windchillView, () => openWindchill(''))] : [])] : [] },
         ] : group === 'Other views' ? [{ key: group, entries: [
@@ -248,6 +251,7 @@ export default function App() {
       {page === 'workspace' && <WorkspacePage month={month} azure={azure} store={store} git={git} windchill={windchill} />}
       {page === 'pulse' && <PulseCheckPage month={month} azure={azure} store={store} my={my} navigate={setPage} windchill={windchill} openWindchill={openWindchill} git={git} pack={monthlyPack} />}
       {page === 'pireview' && <PiReviewPage />}
+      {page === 'brite' && <BritePage />}
       {page === 'qemapping' && <QeMappingPage git={git} store={qeMapping} />}
       {page === 'mywork' && <MyWorkPage azure={azure} store={store} my={my} onOpenBulk={() => setPage('bulk')} assign={assign} featureSetup={featureSetup.setups} />}
       {page === 'bulk' && <BulkActionsPage azure={azure} store={store} my={my} assign={assign} />}

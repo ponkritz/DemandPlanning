@@ -41,7 +41,7 @@ test('the versioned release takes its notes from the release-notes entry of its 
   assert.match(releaseEntry(read('docs/RELEASE-NOTES.md'), version) ?? '', /^- \S/m, `the entry of v${version} is published with its release`)
 })
 
-test('CI tags every version after the enabled release checks; nobody tags by hand (TC-CI-06)', () => {
+test('CI tags every version on main and publishes its release; nobody tags by hand (TC-CI-06)', () => {
   const workflow = read('.github/workflows/build-and-deploy.yml')
   const job = workflow.slice(workflow.indexOf('  publish-tagged-release:'), workflow.indexOf('\n  end-to-end:'))
   assert.match(job, /if: github\.ref == 'refs\/heads\/main' \|\| startsWith\(github\.ref, 'refs\/tags\/v'\)/, 'runs on main and on a pushed tag')

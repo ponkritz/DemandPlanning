@@ -22,6 +22,9 @@ export function timeWritingMonth(title: string): string | undefined {
   return trailNumber ? `${trailNumber[1]}-${trailNumber[2].padStart(2, '0')}` : undefined
 }
 // A User Story that names "Time Writing" anywhere in its title (e.g. "<Feature> - Time Writing", "Time Writing - DP").
+// Training under the Team Holidays and Training Epic (formerly Absence; same ID, CAP-16): a month Task whose own title, or
+// its Story's / Feature's, says "training" is training, not leave. The Epic's own title is not read (it says Training).
+export const isTrainingWork = (item: { title: string; workItemType: string }, chain: { title: string; workItemType: string }[] = []) => [item, ...chain].some((entry) => entry.workItemType !== 'Epic' && /\btrainings?\b/i.test(entry.title))
 export const isTimeWritingStory = (item: { workItemType: string; title: string }) => item.workItemType === 'User Story' && /\btime[\s_-]*writ(?:ing|ting)\b/i.test(item.title)
 // Time Writing is recognised from the Task, not from its story: a Task whose title starts or ends with a month and year counts
 // for that month wherever it sits, and its Feature and Epic come from the parent chain. Story titles are free text.
@@ -36,7 +39,8 @@ export function timeWritingStoryIds(items: Pick<AzureWorkItem, 'id' | 'workItemT
 }
 
 // Where a person's month Task goes under a Feature: an existing Task of theirs for that month (any title or delimiter)
-// is reused; otherwise the story titled exactly "<Feature> - Time Writing", else the story already holding their month
+// is reused; otherwise their own Time Writing story under the Feature (ATM-23), else the story titled exactly
+// "<Feature> - Time Writing", else the story already holding their month
 // Tasks, else the Feature's only Time Writing story; with none a story is created, and an unclear choice is a conflict.
 export interface StoryChildren<T> { story: T; tasks: T[] }
 export type MonthStoryPlan<T> = { status: 'exists'; task: T; story?: T } | { status: 'use'; story: T } | { status: 'create' } | { status: 'conflict'; stories: T[] }
@@ -47,14 +51,22 @@ export function planMonthStory<T extends Pick<AzureWorkItem, 'id' | 'workItemTyp
   for (const entry of open) { const task = entry.tasks.find(item => own(item) && timeWritingMonth(item.title) === month); if (task) return { status: 'exists', task, story: entry.story } }
   const direct = featureTasks.find(item => own(item) && timeWritingMonth(item.title) === month)
   if (direct) return { status: 'exists', task: direct }
+  // A Feature shared by two people (ATM-23): my own Time Writing story under it takes my month Task, never another
+  // person's; two of mine are a conflict.
+  const ownStories = open.filter(entry => mine(entry.story))
+  if (ownStories.length === 1) return { status: 'use', story: ownStories[0].story }
+  if (ownStories.length > 1) return { status: 'conflict', stories: ownStories.map(entry => entry.story) }
+  // ATM-25: several Time Writing stories and none of them mine (a shared leave Feature where everyone keeps their own
+  // story): my own story under the Feature, whatever its title, else a new one of mine — never "choose" among others'.
+  const mineOrNew = (): MonthStoryPlan<T> => { const myAny = stories.filter(entry => live(entry.story) && mine(entry.story)); return myAny.length === 1 ? { status: 'use', story: myAny[0].story } : myAny.length > 1 ? { status: 'conflict', stories: myAny.map(entry => entry.story) } : { status: 'create' } }
   const exact = open.filter(entry => entry.story.title.trim().toLowerCase() === storyTitle.toLowerCase())
-  if (exact.length > 1) return { status: 'conflict', stories: exact.map(entry => entry.story) }
+  if (exact.length > 1) return mineOrNew()
   if (exact.length) return { status: 'use', story: exact[0].story }
   const withMine = open.filter(entry => entry.tasks.some(own))
   if (withMine.length === 1) return { status: 'use', story: withMine[0].story }
   if (withMine.length > 1) return { status: 'conflict', stories: withMine.map(entry => entry.story) }
   if (open.length === 1) return { status: 'use', story: open[0].story }
-  return open.length ? { status: 'conflict', stories: open.map(entry => entry.story) } : { status: 'create' }
+  return open.length ? mineOrNew() : { status: 'create' }
 }
 export function indiaMonth(date?: string) {
   if (!date || !Number.isFinite(Date.parse(date))) return undefined

@@ -29,7 +29,7 @@ Every document of the package lives in `docs/`, is versioned with the code, is b
 | 10 | [DEVELOPMENT-PROCESS.md](DEVELOPMENT-PROCESS.md) | SDP-DPH-001 | The development life cycle mapped to ISO 13485 §7.3, IEC 62304 and FDA CSA; the change procedure; verification strategy; configuration management; problem resolution; gaps | ISO 13485 §7.3.2; IEC 62304 §5.1 |
 | 11 | [PROJECT-PLAN.md](PROJECT-PLAN.md) | — | Objective, phases, dependencies, project risks, operating ownership, backlog | ISO 13485 §7.3.2 |
 | 12 | [azure-devops-connection.md](azure-devops-connection.md) | — | Set-up guide for the Azure DevOps connections | User documentation |
-| 13 | [README.md](https://github.com/ponkritz/DemandPlanning/blob/main/README.md) (repository root) | — | User-facing description of every feature, storage model and roles | User documentation |
+| 13 | [README.md](https://github.com/neurolooom-eng/Test2/blob/main/README.md) (repository root) | — | User-facing description of every feature, storage model and roles | User documentation |
 
 ## 2. How the package is kept valid
 

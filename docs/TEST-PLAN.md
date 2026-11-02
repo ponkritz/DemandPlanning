@@ -612,6 +612,14 @@ Cases marked **UAT** are also run in acceptance testing.
 - Steps: as Person 2, with a pending Feature assigned to Person 1 whose Description @mentions Person 2, and another where Person 2 had last month's Task; open Assigned to Me, then Bulk actions → Create month tasks.
 - Expected: Assigned to Me shows the notice naming both Features; Bulk actions lists them with "Shared · owner Person 1", ticked; Create tasks adds Person 2's month Task under each Feature's Time Writing story.
 
+**TC-ATM-15 Features from my User Stories; my own story on a shared Feature** — Req ATM-23 — L1 `my-work.test.mjs` ("a Feature shared by two people: each one's own User Story brings the Feature up for their month Task (TC-ATM-15)"; "month-task candidates: …" for two stories of the same title), `monthly-hours.test.mjs` ("Month task placement: …"); browser check with the QMS-0025 board: a Feature owned by a colleague where you have a User Story (open or Closed) is listed in Bulk actions → Create month tasks and counted on Assigned to Me; with your own Time Writing story under it, the confirmation names that story; after creating, the Task is under your story in Azure DevOps, not under the colleague's; a Feature where your only story is Removed, or that is Closed, is not listed.
+
+**TC-ATM-16 Leave in Bulk actions** — Req ATM-24 — L1 `my-work.test.mjs` ("leave in Bulk actions: my PTO / Sick / Unplanned Features under the Epic, apart from work; training and others not (TC-ATM-16)"); browser check: Bulk actions → Create month tasks shows a Leave list with your PTO / Sick / Unplanned Features, unticked; the work count and Assigned to Me's "tasks missing" do not include them; ticking one adds it to Create n tasks and creates its month Task.
+
+**TC-ATM-17 Others' stories never block my month Task** — Req ATM-25 — L1 `my-work.test.mjs` ("a shared leave Feature where everyone keeps a story of the same title: mine is used, or a new one of mine — never \"Choose story\" (TC-ATM-17)"), `monthly-hours.test.mjs` ("Month task placement: …"); browser check: on a shared PTO Feature with colleagues' "PTO - Time Writing" stories, Bulk actions → Leave shows "Story + task missing" (no story of yours) or "Task missing" (your own story), never "Choose story"; creating puts the Task under your story.
+
+**TC-ATM-18 One leave row per leave story** — Req ATM-26 — L1 `my-work.test.mjs` ("a leave Feature with one story per leave type lists one row per story of mine, never \"Choose story\" (TC-ATM-18)", "ensureStoryMonthTask creates the month Task under the given story once, then reuses it (TC-ATM-18)"); browser check: with a leave Feature "#<id> <your name>" holding your stories PTO and Sick Leave, Bulk actions → Leave shows "<your name> › PTO" and "<your name> › Sick Leave" as separate rows, never "Choose story"; ticking PTO and creating puts "<Month> | PTO" under the PTO story; running again creates nothing.
+
 **TC-ATM-03 Close an item** — Req ATM-06 — **UAT**
 - Steps:
   1. On a New User Story press Set User Story to Active, then Close User Story; on a New Feature press Set Feature to Active, then Close Feature. A Resolved story or Feature shows "Set to Active first".
@@ -696,6 +704,8 @@ Cases marked **UAT** are also run in acceptance testing.
   - (3) The Feature and its open User Stories move; the Time Writing story does not.
   - (4) Original Estimate is locked; the Task is tagged ad-hoc when it had no estimate; the iteration and the month in the title cannot change.
 
+**TC-BKL-12 Backlog filtered to me; ＋ Time Writing Task** — Req BKL-21, BKL-22 — E2E `backlog.e2e.mjs` ("TC-BKL-12: QMS-0025 opens filtered to the person browsing; clearing the filter shows everyone; rows offer ＋ Time Writing Task"); L1 `my-work.test.mjs` ("QMS-0025 shows mine by default: my items with everything above and below; featureOf finds the Feature of a Story (TC-BKL-12)"); browser check with the QMS-0025 board and your work email: the backlog shows your items with their Epic / Feature above and the work below; Assigned to me ✕ clears to everyone and a restart filters again; ＋ Time Writing Task on a Feature (and on a Story) creates this month's Task for you under your own Time Writing story, or reports that it exists; the same button on Assigned to Me rows.
+
 **TC-CON-45 Git view data with another query is not applied** — Req CON-77 — L1 `git-snapshots.test.mjs` ("a snapshot fetched with another query than the connection has here is not applied"); browser check:
 - Pre: Git storage connected; the DP connection's query changed here; Git holds DP data fetched with the old query.
 - Steps: reload the web app; open DP; Load from Git.
@@ -708,6 +718,12 @@ Cases marked **UAT** are also run in acceptance testing.
 **TC-CON-48 Work email never shared through Git** — Req CON-80 — L1 `view-definitions.test.mjs` ("the work email is personal: never written to Git, ignored in the file, kept here; an inherited one is cleared once (TC-CON-48)"); browser check: as an admin with a Time Writing email, Save connections to Git — `azure-views.json` has no `creatorEmail`; as a new user (empty browser, Git storage connected to a file that still has the admin's email) — after the start sync, Settings → Azure DevOps shows the Time Writing connection with **Work email missing**, the access role is the default one, and after entering their own email and restarting it stays; a user who had already received the admin's email sees the start message asking for their own email once, and their email entered afterwards is kept; no page errors.
 
 **TC-CON-49 Successor and Predecessor IDs of a view of its own** — Req CON-81 — L1 `azure-devops.test.mjs` ("Predecessor and Successor IDs come from the Dependency links of each work item (TC-CON-49)"); browser check (desktop app, on-prem): add a connection with its own name (not a stream name) and a query returning items that have Successor / Predecessor links, fetch — the query view ends with **Successor ID** and **Predecessor ID**, listing each linked ID once ("501, 502"), sortable, found by search and present in the CSV; an item without links shows them empty; the DP / IOCC stream views show no such columns; after Save data to Git the web app shows the same columns.
+
+**TC-CON-50 Work email as its own setting** — Req CON-82 — L1 `work-email.test.mjs` ("your work email is its own setting: saved and read, never taken from the first connection or changed by a Git sync (TC-CON-50)"; "first start: the email on the Time Writing connection becomes the setting only after the shared-email clean-up ran (TC-CON-50)"); E2E `shell.e2e.mjs` (TC-SET-06: *Your work email* is the first section of Azure DevOps); browser check (desktop app): enter the email under Settings → Azure DevOps → Your work email, Force Update and restart — the email is still there, Assigned to Me shows your work and the access role is yours; edit and save the Time Writing connection (no email field) — the email is unchanged; Get started points to Your work email while it is empty.
+
+**TC-CON-51 QRE projects from Windchill** — Req CON-83 — L1 `windchill-releases.test.mjs` ("QRE: each release is a project \"PJ-<number> <name>\" from the Location folder at index 2 (TC-CON-51)"), `streams.test.mjs` ("default streams in order; connections and exports found by name"); browser check: import a Windchill export named "QRE" — Release Details → Windchill exports → QRE lists each PJ project once with its documents and latest date, the month filter follows the header month, Pulse Check → Supported shows "QRE [n] : PJ-1234 Name, …", and Create Feature proposes "QRE | PJ-1234 Name".
+
+**TC-CON-52 BRITE placeholder** — Req CON-84 — inspection: Release Details shows BRITE at its root; it opens "BRITE is not set up yet."; Pulse Check and the Monthly pack have no BRITE line.
 
 **TC-CON-44 DP and DHFI defaults** — Req CON-76 — L1 `connections.test.mjs` ("pre-filled connections from the shared setup …": DP reads the Release work items of DHP with DDTDate, SourceProgram, PsName and Release; DHFI [Approved] reads the DHP.Vault documents, hidden from the menu); browser check in a fresh browser with only the on-prem PAT: Settings → Azure DevOps → Stream mapping → Set up DP, Pedestal and DHFI from their defaults; Release Details → DP lists Release items for the DDT month; Get started shows the release streams step done.
 
@@ -858,6 +874,8 @@ TC-OVR-01 to TC-OVR-03 tested the earlier Overview and are **retired** with OVR-
 - Expected: the first person has 10 of 22 days, 80 h funded (8 h/day), and the team's funded total drops accordingly; the second is not counted, and the month view lists their October hours to be checked; without dates everyone keeps the full month.
 
 **TC-CAP-05 Default Joined on** — Req CAP-15 — L1 `capacity.test.mjs` ("default Joined on (1 May 2026 unless changed) …"); browser check: Settings → Resources shows Default Joined on 1 May 2026; the Dashboard for April 2026 shows no capacity and lists the April hours to check; May 2026 counts everyone; give one person their own Joined on 2026-01-05 and April shows that person; Clear the default and April counts everyone again; Edit capacity settings… keeps the default.
+
+**TC-CAP-06 Team Holidays and Training** — Req CAP-16 — L1 `capacity.test.mjs` ("Team Holidays and Training (same Epic ID): training is NPRA, PTO / Sick / Unplanned stay absence; the Epic title is not read (TC-CAP-06)"), `my-work.test.mjs` ("Team Holidays and Training: my Training story gets its month Task; leave there is still left out (TC-CAP-06)"); browser check with the QMS-0025 board: Pulse Check → Last month — a person's Training month Task hours appear in the NPRA table and the NPRA total, not in absence; PTO / Sick / Unplanned stay in the absence split; Bulk actions → Create month tasks lists the Training Feature for your own Training story and no leave Feature; Settings → Capacity & periods names the Epic "Team Holidays and Training".
 
 **TC-CAP-01 Capacity calculation** — Req CAP-01…09, OVR-09 — L1 `capacity.test.mjs`, `monthly-hours.test.mjs`, `azure-insights.test.mjs`. Plus L3 analysis (A) with one person in October 2026:
 - 22 working days × 8 = 176 h funded.
@@ -1319,6 +1337,9 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CON-79 | TC-CON-47 |
 | CON-80 | TC-CON-48 |
 | CON-81 | TC-CON-49 |
+| CON-82 | TC-CON-50 |
+| CON-83 | TC-CON-51 |
+| CON-84 | TC-CON-52 |
 | QV-20 | TC-QV-06 |
 | QV-21 | TC-QV-07 |
 | CON-21, CON-22 | TC-CON-08 |
@@ -1369,6 +1390,10 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | ATM-20 | TC-ATM-12 |
 | ATM-21 | TC-ATM-13 |
 | ATM-22 | TC-ATM-14 |
+| ATM-23 | TC-ATM-15 |
+| ATM-24 | TC-ATM-16 |
+| ATM-25 | TC-ATM-17 |
+| ATM-26 | TC-ATM-18 |
 | BKL-01…03, BKL-12 | TC-BKL-01 |
 | BKL-04…09, BKL-11 | TC-BKL-02 |
 | BKL-10 | TC-BKL-03, TC-ATM-11 |
@@ -1380,6 +1405,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | BKL-18 | TC-BKL-09 |
 | BKL-19 | TC-BKL-10 |
 | BKL-20 | TC-BKL-11 |
+| BKL-21 | TC-BKL-12 |
+| BKL-22 | TC-BKL-12 |
 | QV-01, QV-02 | TC-QV-01 |
 | QV-03, QV-05 | TC-QV-02 |
 | QV-04 | TC-FET-07 |
@@ -1420,6 +1447,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CAP-13 | TC-CAP-03 |
 | CAP-14 | TC-CAP-04 |
 | CAP-15 | TC-CAP-05 |
+| CAP-16 | TC-CAP-06 |
 | BAS-01…04 | TC-BAS-01 |
 | BAS-05…07 | TC-BAS-02 |
 | BAS-08…10 | TC-BAS-03 |
