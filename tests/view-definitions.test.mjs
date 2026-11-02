@@ -61,16 +61,16 @@ test('Git connection setup is the default: added and followed; the stream mappin
   const cp = { ...dp, id: 'cp', reason: 'CP', viewName: 'CP', query: 'SELECT 1' }
   saveAzureConnectionProfile({ ...dp, token: 'my-pat' }, storage)
   // First start: dp is the same as in Git; cp is new and gets the PAT of the same server.
-  assert.deepEqual(syncViewsFromGit([dp, cp], storage), { added: ['CP'], updated: [], kept: [], noPat: [], removed: [], removedIds: [], enforced: [] })
+  assert.deepEqual(syncViewsFromGit([dp, cp], storage), { added: ['CP'], updated: [], kept: [], noPat: [], removed: [], removedIds: [], enforced: [], emailCleared: false })
   assert.equal(loadAzureConnectionProfile('cp', storage).token, 'my-pat')
   // Git changes cp's query; it was not changed here, so it follows Git (PAT kept).
   const cp2 = { ...cp, query: 'SELECT 2' }
-  assert.deepEqual(syncViewsFromGit([dp, cp2], storage), { added: [], updated: ['CP'], kept: [], noPat: [], removed: [], removedIds: [], enforced: [] })
+  assert.deepEqual(syncViewsFromGit([dp, cp2], storage), { added: [], updated: ['CP'], kept: [], noPat: [], removed: [], removedIds: [], enforced: [], emailCleared: false })
   assert.equal(loadAzureConnectionProfile('cp', storage).query, 'SELECT 2')
   assert.equal(loadAzureConnectionProfile('cp', storage).token, 'my-pat')
   // The user changes cp (a stream connection) here; the admin's stream mapping in Git is enforced at the next sync (CON-79).
   saveAzureConnectionProfile({ ...loadAzureConnectionProfile('cp', storage), query: 'SELECT mine' }, storage)
-  assert.deepEqual(syncViewsFromGit([dp, { ...cp, query: 'SELECT 3' }], storage), { added: [], updated: ['CP'], kept: [], noPat: [], removed: [], removedIds: [], enforced: ['CP'] })
+  assert.deepEqual(syncViewsFromGit([dp, { ...cp, query: 'SELECT 3' }], storage), { added: [], updated: ['CP'], kept: [], noPat: [], removed: [], removedIds: [], enforced: ['CP'], emailCleared: false })
   assert.equal(loadAzureConnectionProfile('cp', storage).query, 'SELECT 3')
   assert.equal(loadAzureConnectionProfile('cp', storage).token, 'my-pat', 'the PAT stays')
   // An admin's change that could not be saved to Git yet is kept until it is.
@@ -91,7 +91,7 @@ test('Git connection setup is the default: added and followed; the stream mappin
   saveAzureConnectionProfile({ ...dp, query: 'SELECT local', token: 'x' }, other)
   saveAzureConnectionProfile({ ...pedestalHistory, query: 'SELECT mine', token: 'x' }, other)
   saveAzureConnectionProfile({ id: 'own', url: 'https://dev.azure.com/o/P', reason: 'Own', token: 'y' }, other)
-  assert.deepEqual(syncViewsFromGit([dp, pedestalHistory], other), { added: [], updated: ['Digital Platform'], kept: ['Release history'], noPat: [], removed: [], removedIds: [], enforced: ['Digital Platform'] })
+  assert.deepEqual(syncViewsFromGit([dp, pedestalHistory], other), { added: [], updated: ['Digital Platform'], kept: ['Release history'], noPat: [], removed: [], removedIds: [], enforced: ['Digital Platform'], emailCleared: false })
   assert.equal(loadAzureConnectionProfile('dp', other).query, dp.query)
   assert.ok(loadAzureConnectionProfile('own', other))
   // The shared connection of a stream is the one Release Details uses, before one set up only here.
@@ -100,7 +100,7 @@ test('Git connection setup is the default: added and followed; the stream mappin
   const ordered = [listAzureConnectionProfiles(other).find((profile) => profile.id === 'mydp'), ...listAzureConnectionProfiles(other).filter((profile) => profile.id !== 'mydp')]
   assert.equal(profileForStream(defaultStreams.find((stream) => stream.name === 'DP'), ordered).id, 'dp', 'the connection from Git wins over one set up here')
   // A user without any connection gets them all, view only until a PAT is added.
-  assert.deepEqual(syncViewsFromGit([dp, cp], memory()), { added: ['Digital Platform', 'CP'], updated: [], kept: [], noPat: ['Digital Platform', 'CP'], removed: [], removedIds: [], enforced: [] })
+  assert.deepEqual(syncViewsFromGit([dp, cp], memory()), { added: ['Digital Platform', 'CP'], updated: [], kept: [], noPat: ['Digital Platform', 'CP'], removed: [], removedIds: [], enforced: [], emailCleared: false })
 })
 
 test('Git setup: a connection removed in Git is removed here unless changed here; an empty file removes nothing', () => {
@@ -179,4 +179,40 @@ test('restore: a view moved to another host in Git never carries the old server 
   assert.equal(loadServerPat(serverKey(dp), storage), 'onprem-pat', 'the old server keeps its PAT')
   restoreViews([moved], 'typed-for-new-host', storage)
   assert.equal(loadServerPat('https://evil.example/tfs', storage), 'typed-for-new-host', 'a PAT entered for the restore applies to the new host')
+})
+
+test('the work email is personal: never written to Git, ignored in the file, kept here; an inherited one is cleared once (TC-CON-48)', async () => {
+  const { sharedEmails, clearSharedEmail } = await import('../src/viewDefinitions.ts')
+  const tw = { id: 'tw', url: 'https://dev.azure.com/org/QMS', reason: 'Time Writing', viewName: 'QMS-0025', role: 'time-tracking', showInMenu: true, creatorEmail: 'admin@example.com' }
+  // Written: no email in the shared file.
+  const text = serializeViews(viewsFile([tw]))
+  assert.doesNotMatch(text, /creatorEmail|admin@example\.com/)
+  // An older file that still carries the admin's email: parsing drops it, and a new user gets no email from it.
+  const old = JSON.stringify({ schema: 1, kind: 'azure-devops-views', views: [tw] })
+  assert.equal(parseViews(old)[0].creatorEmail, undefined)
+  assert.deepEqual(sharedEmails(old), ['admin@example.com'])
+  const fresh = memory()
+  saveServerPat(serverKey(tw), 'new-user-pat', fresh)
+  const first = syncViewsFromGit(parseViews(old), fresh, sharedEmails(old))
+  assert.deepEqual(first.added, ['QMS-0025'])
+  assert.equal(loadAzureConnectionProfile('tw', fresh).creatorEmail, undefined, 'a new user is asked for their own email')
+  // The user's own email stays when Git updates the connection.
+  saveAzureConnectionProfile({ ...loadAzureConnectionProfile('tw', fresh), creatorEmail: 'user@example.com' }, fresh)
+  syncViewsFromGit(parseViews(JSON.stringify({ schema: 1, kind: 'azure-devops-views', views: [{ ...tw, viewName: 'QMS-0025 board' }] })), fresh, ['admin@example.com'])
+  assert.equal(loadAzureConnectionProfile('tw', fresh).creatorEmail, 'user@example.com')
+  // A user who already received the admin's email from Git loses it once; their own email afterwards is never touched.
+  const affected = memory()
+  saveAzureConnectionProfile({ ...tw, token: 'pat' }, affected)
+  markViewsSynced([tw], affected)
+  assert.equal(clearSharedEmail(['admin@example.com'], affected), true)
+  assert.equal(loadAzureConnectionProfile('tw', affected).creatorEmail, undefined)
+  assert.equal(loadAzureConnectionProfile('tw', affected).token, 'pat', 'the PAT stays')
+  saveAzureConnectionProfile({ ...loadAzureConnectionProfile('tw', affected), creatorEmail: 'admin@example.com' }, affected)
+  assert.equal(clearSharedEmail(['admin@example.com'], affected), false, 'only once: the admin entering their own email again keeps it')
+  assert.equal(loadAzureConnectionProfile('tw', affected).creatorEmail, 'admin@example.com')
+  // A connection set up only here (not from Git) is never touched.
+  const own = memory()
+  saveAzureConnectionProfile({ ...tw, id: 'mine', token: 'pat' }, own)
+  assert.equal(clearSharedEmail(['admin@example.com'], own), false)
+  assert.equal(loadAzureConnectionProfile('mine', own).creatorEmail, 'admin@example.com')
 })

@@ -694,3 +694,17 @@ test('after the planning lock, a new Time Writing Task (and only the Task) is cr
   const open = await createAzureReleaseHierarchy(config, pat, { ...feature, title: 'Open | Service | v1.0', iterationPath: 'Current PI' }, 'PU', [], 'October 2026', server.transport)
   assert.ok(open.items.every((item) => !item.tags.includes('ad-hoc')), 'planning open: no tag')
 })
+
+test('Predecessor and Successor IDs come from the Dependency links of each work item (TC-CON-49)', async () => {
+  const { dependencyFields, successorRef, predecessorRef } = await import('../src/azureDevOps.ts')
+  const link = (rel, id) => ({ rel, url: `https://tfs.example.com/tfs/Coll/_apis/wit/workItems/${id}` })
+  const fields = dependencyFields({ relations: [
+    link('System.LinkTypes.Dependency-Forward', 502), link('System.LinkTypes.Dependency-Forward', 501), link('System.LinkTypes.Dependency-Forward', 501),
+    link('System.LinkTypes.Dependency-Reverse', 400),
+    link('System.LinkTypes.Hierarchy-Reverse', 10), link('System.LinkTypes.Related', 77),
+    { rel: 'AttachedFile', url: 'https://tfs.example.com/tfs/Coll/_apis/wit/attachments/abc' },
+  ] })
+  assert.deepEqual(fields, { [successorRef]: '501, 502', [predecessorRef]: '400' }, 'successors sorted and once each; parent, related and attachments are not dependencies')
+  assert.deepEqual(dependencyFields({ relations: [link('System.LinkTypes.Hierarchy-Forward', 5)] }), {}, 'no dependency links, no fields')
+  assert.deepEqual(dependencyFields({}), {})
+})

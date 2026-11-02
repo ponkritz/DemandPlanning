@@ -71,3 +71,9 @@ export const boardMatchText = (match: BoardMatch) => [match.feature && `Feature 
 export const windchillFeatureTitle = (stream: string, release: { name: string; release: string; parts?: unknown[] }) => releaseFeatureTitle(stream, release.name, (release.parts?.length ?? 0) > 1 ? '' : release.release)
 export const windchillBoardMatch = (release: { name: string; release: string; parts?: { name: string; release: string }[] }, stream: string, candidates: DpBoardCandidates, threshold = 80): BoardMatch =>
   boardMatch({ names: [release.name, ...(release.parts ?? []).map((part) => part.name)], versions: [release.release, ...(release.parts ?? []).map((part) => part.release)], program: stream, created: windchillFeatureTitle(stream, release) }, candidates, threshold)
+
+// A release of a Release Details view (IOCC, Content, Tool Validations) → QMS-0025, by the same search (QV-46): the
+// release name — and, with a group (IOCC's Type of Release), the group and name together — with its number, the stream
+// as the program; created is the title Create Feature gives the release, a 100% match when found on the board.
+export const releaseBoardMatch = (release: { name: string; release: string; group?: string }, stream: string, created: string, candidates: DpBoardCandidates, threshold = 80): BoardMatch =>
+  boardMatch({ names: [release.name, [release.group, release.name].filter(Boolean).join(' ')], versions: [release.release], program: stream, created }, candidates, threshold)
