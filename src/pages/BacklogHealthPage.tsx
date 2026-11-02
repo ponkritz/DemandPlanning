@@ -1,8 +1,8 @@
-import { DataTable } from '../components/DataTable'
 import { useEffect, useState, type ReactNode } from 'react'
-import { EmptyState, Metric, Metrics, Modal, Notice, Page, Pill, TablePanel, type Tone } from '../components/ui'
+import { DataTable } from '../components/DataTable'
+import { EmptyState, Metric, Metrics, Notice, Page, Pill, TablePanel, type Tone } from '../components/ui'
 import { readAzureIterations, type AzureIteration } from '../azureDevOps'
-import { columnsCsv, defaultHealthColumns, descriptionText, featuresWithoutDoD, healthColumnLabel, healthColumns, healthCsv, healthValue, hierarchyOf, normalizeHealthColumns, olderSprintItems, peopleOf, sprintEnd, unassignedItems, type HealthColumn, type HealthList } from '../backlogHealth'
+import { defaultHealthColumns, descriptionText, featuresWithoutDoD, healthColumnLabel, healthColumns, healthCsv, healthValue, hierarchyOf, normalizeHealthColumns, olderSprintItems, peopleOf, sprintEnd, unassignedItems, type HealthColumn, type HealthList } from '../backlogHealth'
 import { PersonPicker } from '../components/PersonPicker'
 import { downloadCsv } from '../download'
 import { formatDate, todayIso } from '../format'
@@ -38,9 +38,8 @@ export function BacklogHealthPage({ azure, store }: { azure: AzureWorkspace; sto
   const [person, setPerson] = useState('')
   const [iteration, setIteration] = useState('')
   const [stateFilter, setStateFilter] = useState('')
-  const [columnsByList, setColumnsByList] = useState<Record<List, HealthColumn[]>>(() => ({ sprints: loadColumns('sprints'), dod: loadColumns('dod'), unassigned: loadColumns('unassigned') }))
-  const [draft, setDraft] = useState<HealthColumn[] | null>(null)
-  const [sort, setSort] = useState<{ column: HealthColumn; descending: boolean } | null>(null)
+  // The list's own columns (chosen before the table default) start shown; the table's Columns list changes them now.
+  const [columnsByList] = useState<Record<List, HealthColumn[]>>(() => ({ sprints: loadColumns('sprints'), dod: loadColumns('dod'), unassigned: loadColumns('unassigned') }))
   const canRead = Boolean(config && pat.trim() && !azure.isSample)
   // Sprint dates come from the team's iterations in Azure DevOps (read once per visit).
   useEffect(() => {
@@ -66,22 +65,6 @@ export function BacklogHealthPage({ azure, store }: { azure: AzureWorkspace; sto
   const byId = new Map(azure.items.map((item) => [item.id, item]))
   const current = lists.find((entry) => entry.key === list)!
   const columns = columnsByList[list]
-  // Sorted by a column (click its header: ascending, descending, back to the list's order); numbers and dates in order.
-  if (sort && columns.includes(sort.column)) {
-    const value = (item: AzureWorkItem) => sort.column === 'id' ? String(item.id).padStart(12, '0') : healthValue(sort.column, item, byId, dated)
-    shown.sort((a, b) => { const left = value(a), right = value(b); return (!left && right ? 1 : left && !right ? -1 : left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' }) * (sort.descending ? -1 : 1)) })
-  }
-  const sortBy = (column: HealthColumn) => setSort((now) => now?.column !== column ? { column, descending: false } : !now.descending ? { column, descending: true } : null)
-  const exportList = () => downloadCsv(columnsCsv(shown, columns, azure.items, dated), `${current.file}-${todayIso()}.csv`)
-  function moveColumn(id: HealthColumn, offset: number) {
-    setDraft((now) => { if (!now) return now; const next = [...now], index = next.indexOf(id), target = index + offset; if (index >= 0 && target >= 0 && target < next.length) [next[index], next[target]] = [next[target], next[index]]; return next })
-  }
-  function applyColumns() {
-    if (!draft) return
-    const next = normalizeHealthColumns(draft, list)
-    setColumnsByList((now) => ({ ...now, [list]: next })); setDraft(null)
-    try { localStorage.setItem(columnsKey(list), JSON.stringify(next)) } catch { /* kept for this visit */ }
-  }
   // One cell: links for the item and its parents, short paths, state pills, local dates, plain-text descriptions.
   function cell(column: HealthColumn, item: AzureWorkItem): ReactNode {
     const none = <span className="muted">—</span>
@@ -120,13 +103,15 @@ export function BacklogHealthPage({ azure, store }: { azure: AzureWorkspace; sto
       <PersonPicker value={who} people={people} onChange={setPerson} meLabel="Everyone" label={unassigned ? 'Created or updated by' : 'Assigned to'} />
       {list === 'dod' && <label className="check"><input type="checkbox" checked={openOnly} onChange={(event) => setOpenOnly(event.target.checked)} />Open Features only</label>}
       <span className="muted">{shown.length} of {rows[list].length}</span>
-      <button type="button" className="ghost" onClick={() => setDraft([...columns])}>Columns</button>
-      <button type="button" className="ghost" disabled={!shown.length} onClick={exportList}>Export CSV</button>
       <button type="button" className="ghost" onClick={exportAll}>Export all lists</button>
     </div>
     <TablePanel title={current.label} count={`${shown.length} items`} empty={shown.length ? undefined : list === 'sprints' && !iterations ? 'Waiting for the Sprint dates from Azure DevOps.' : 'Nothing here.'}>
-      <DataTable tableId="BacklogHealthPage-1"><thead><tr>{columns.map((column) => { const active = sort?.column === column; return <th key={column} aria-sort={active ? (sort.descending ? 'descending' : 'ascending') : undefined}><button type="button" className="sort-header" onClick={() => sortBy(column)} title={`Sort by ${healthColumnLabel(column)}`}>{healthColumnLabel(column)}<span aria-hidden="true">{active ? (sort.descending ? ' ▼' : ' ▲') : ''}</span></button></th> })}</tr></thead><tbody>{shown.map((item) => <tr key={item.key}>{columns.map((column) => <td key={column} className={column === 'description' ? 'description-cell' : undefined}>{cell(column, item)}</td>)}</tr>)}</tbody></DataTable>
+      {/* UI-07: each list on the table default — its columns (the list's own first, the others ticked on in Columns), sort, layout and one Export. */}
+      <DataTable key={list} id={`health:${list}`} rows={shown} rowKey={(item) => item.key} exportName={`${current.file}-${todayIso()}`} columns={[...columns, ...healthColumns.map((column) => column.id).filter((id) => !columns.includes(id))].map((column) => ({
+        id: column, label: healthColumnLabel(column), defaultHidden: !columns.includes(column), fixed: column === 'id', firstSortDesc: column === 'createdDate' || column === 'changedDate',
+        value: (item: AzureWorkItem) => column === 'id' ? item.id : column === 'createdDate' ? item.createdDate ?? '' : column === 'changedDate' ? item.changedDate ?? '' : column === 'description' ? descriptionText(item) : healthValue(column, item, byId, dated),
+        render: (item: AzureWorkItem) => cell(column, item), className: column === 'description' ? 'description-cell' : undefined,
+      }))} />
     </TablePanel>
-    {draft && <Modal title="Columns" eyebrow={current.label.toUpperCase()} onClose={() => setDraft(null)}><p className="muted">Choose and reorder the columns of this list; Export CSV follows them. ID stays visible. Saved in this browser.</p><div className="backlog-column-options">{[...draft, ...healthColumns.map((column) => column.id).filter((id) => !draft.includes(id))].map((id) => <div className="backlog-column-choice" key={id}><label className="checkbox-label"><input type="checkbox" checked={draft.includes(id)} disabled={id === 'id'} onChange={(event) => setDraft((now) => now && (event.target.checked ? [...now, id] : now.filter((value) => value !== id)))} />{healthColumnLabel(id)}{id === 'id' ? ' (required)' : ''}</label><div className="button-row"><button type="button" className="ghost" aria-label={`Move ${healthColumnLabel(id)} up`} disabled={!draft.includes(id) || draft.indexOf(id) === 0} onClick={() => moveColumn(id, -1)}>↑</button><button type="button" className="ghost" aria-label={`Move ${healthColumnLabel(id)} down`} disabled={!draft.includes(id) || draft.indexOf(id) === draft.length - 1} onClick={() => moveColumn(id, 1)}>↓</button></div></div>)}</div><div className="modal-actions"><button type="button" className="ghost" onClick={() => setDraft([...defaultHealthColumns[list]])}>Reset defaults</button><button type="button" className="ghost" onClick={() => setDraft(null)}>Cancel</button><button type="button" className="primary" onClick={applyColumns}>Apply</button></div></Modal>}
   </Page>
 }

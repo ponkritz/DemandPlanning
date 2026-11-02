@@ -3,48 +3,14 @@ import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
 import { fixture, navigate, openPage, startApp, text } from './helpers.mjs'
 
+// UI-10: every table has one Export that offers Excel or CSV.
+const exportFrom = async (page, scope, format = 'CSV (.csv)') => { await scope.getByRole('button', { name: /^Export/ }).first().click(); const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('menuitem', { name: format }).click()]); return download }
+
 // Documentation, Windchill export and data-safety scenarios of the UAT (TC-DOC-01, TC-DOC-02, TC-CON-39, TC-CON-37,
 // TC-STO-04, TC-INS-01, TC-QV-23), automated against the built web app.
 let app
 before(async () => { app = await startApp() })
 after(async () => { await app.stop() })
-
-test('shared tables: column selection, ordering, density, wrap, resizing and exports', async () => {
-  const { page, context, errors } = await openPage(app)
-  await navigate(page, 'Documentation')
-  const shell = page.locator('.dt-shell').filter({ has: page.locator('thead th') }).first()
-  await shell.waitFor()
-  const headers = shell.locator('thead tr').first().locator('th')
-  const count = await headers.count()
-  assert.ok(count > 1)
-  await shell.getByLabel('Table density').selectOption('comfortable')
-  await shell.getByLabel('Wrap text', { exact: true }).check()
-  assert.match(await shell.getAttribute('class'), /dt-comfortable dt-wrap/)
-  await shell.locator('summary').click()
-  const choices = shell.locator('.dt-columns > div')
-  const first = await choices.first().locator('label').innerText()
-  await choices.first().getByRole('button', { name: /right/ }).click()
-  assert.equal((await headers.nth(1).innerText()).trim(), first.trim())
-  await choices.first().getByRole('checkbox').uncheck()
-  assert.equal(await headers.count(), count - 1)
-  await shell.locator('summary').click()
-  const handle = shell.locator('.dt-resize').first()
-  await handle.focus()
-  await handle.press('ArrowRight')
-  assert.ok(await headers.first().evaluate(cell => cell.style.width.endsWith('px')))
-  const csvPromise = page.waitForEvent('download')
-  await shell.getByRole('button', { name: 'CSV', exact: true }).click()
-  const csv = await csvPromise
-  assert.match(readFileSync(await csv.path(), 'utf8'), /\S/)
-  const excelPromise = page.waitForEvent('download')
-  await shell.getByRole('button', { name: 'Excel', exact: true }).click()
-  const excel = await excelPromise
-  assert.equal(readFileSync(await excel.path()).subarray(0, 2).toString(), 'PK')
-  await shell.getByRole('button', { name: 'Reset view' }).click()
-  assert.equal(await headers.count(), count)
-  assert.deepEqual(errors, [])
-  await context.close()
-})
 
 test('TC-DOC-01: the Documentation page has one tab per document in docs/, each rendered without raw Markdown', async () => {
   const { page, context, errors } = await openPage(app)
@@ -95,17 +61,17 @@ test('TC-CON-39 / TC-CON-37 / TC-QV-27: a Windchill export lists its unique rele
   assert.match(body, /5 releases · 6 of 7 documents · 1 clubbed/)
   for (const row of ['Remote Diagnostics 1.6 ▸ 2 documents', 'Service1_rel1_Service2_rel2 1 + 2 ▸ 1 document', 'CareLink 3.2']) assert.ok(body.includes(row), row)
   assert.match(body, /1 document without a release number in the name/)
-  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export releases CSV' }).click()])
+  const download = await exportFrom(page, releases)
   const csv = readFileSync(await download.path(), 'utf8')
   assert.match(csv, /Remote Diagnostics/)
   // CON-69: a cell that a spreadsheet would read as a formula is prefixed so that it stays text.
   await page.locator('input[type=file]').first().setInputFiles(fixture('windchill-formula.csv'))
   await page.locator('.notice, .panel', { hasText: /windchill-formula/ }).first().waitFor().catch(() => {})
   // VIEW-01: the imported rows are on the "Raw data" tab, not below the releases.
-  assert.equal(await page.locator('.query-view').count(), 0, 'the raw rows are not shown on the Releases tab')
+  assert.equal(await page.getByLabel(/^Search /).count(), 0, 'the raw rows are not shown on the Releases tab')
   await page.getByRole('tab', { name: /^Raw data/ }).click()
-  await page.locator('.query-view').waitFor()
-  const [exported] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: /^Export CSV/ }).first().click()])
+  await page.getByLabel(/^Search /).waitFor()
+  const exported = await exportFrom(page, page.getByRole('tabpanel'))
   const content = readFileSync(await exported.path(), 'utf8')
   assert.ok(content.includes("'=HYPERLINK") || content.includes('"\'=HYPERLINK'), `formula cell is neutralised: ${content.split('\n')[1]}`)
   assert.deepEqual(errors, [])
@@ -148,12 +114,12 @@ test('TC-CON-40: an export with a Location column reads its releases from Locati
   assert.ok(body.includes('/Products/Remote Diagnostics 1.6/DHF 2 Remote Diagnostics 1.6'), 'the unique locations table shows the folder, its count and the release read from it')
   assert.ok(body.includes('/Quality/Manuals 1 none'))
   assert.equal(await page.getByRole('button', { name: 'Save locations to Git' }).count(), 0, 'no Git storage connected: no save button')
-  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export locations CSV' }).click()])
+  const download = await exportFrom(page, releases.locator('details.dp-counted', { hasText: /unique locations/ }))
   // The CSV starts with a UTF-8 byte-order mark so that Excel reads it as UTF-8.
   const csv = readFileSync(await download.path(), 'utf8').replace(/^\uFEFF/, '').split('\r\n')
-  assert.equal(csv[0], 'Location,Documents,Releases,Release folder')
+  assert.equal(csv[0], 'Location,Documents,Releases read from it,Release folder')
   assert.equal(csv[1], '/Products/Remote Diagnostics 1.6/DHF,2,Remote Diagnostics 1.6,Products/Remote Diagnostics 1.6')
-  await releases.getByLabel(/^Read from/).selectOption('name')
+  await releases.locator('label.inline-field', { hasText: /^Read from/ }).locator('select').selectOption('name')
   // The names in this fixture are plain document names: only the clubbed one holds releases.
   assert.match(await text(releases), /1 release · 1 of 7 documents · 1 clubbed · from Document name/)
   assert.deepEqual(errors, [])
@@ -183,7 +149,7 @@ test('TC-CON-41: the export page follows the header month, sorts by any column a
   assert.deepEqual((await names())[0], 'Service1_rel1_Service2_rel2', 'Z→A')
   await releases.getByRole('button', { name: /^Latest Last Modified/ }).click()
   assert.deepEqual((await names())[0], 'Service1_rel1_Service2_rel2', 'newest first again (2026-10-06)')
-  assert.equal(await releases.locator('table').first().locator('th [role=separator]').count(), 5, 'every heading (QMS-0025 match included) has a resize handle')
+  assert.equal(await releases.locator('th [role=separator]').count(), 5, 'every heading (QMS-0025 match included) has a resize handle')
   assert.deepEqual(errors, [])
   await context.close()
 })
@@ -263,6 +229,60 @@ test('TC-CON-55 / TC-QV-28: an ECP setup named "ECP - Type 2" reads projects fro
   await context.close()
 })
 
+test('TC-UI-04 / TC-UI-05: every table follows the table default — move, hide, density, one Export with Excel dates; Settings → Table defaults changes them all', async () => {
+  const { page, context, errors } = await openPage(app)
+  await navigate(page, 'Import Windchill export')
+  await page.locator('input[type=file]').first().setInputFiles(fixture('windchill-export.csv'))
+  await page.getByRole('tab', { name: /^Raw data/ }).click()
+  const table = page.getByRole('tabpanel')
+  const headings = () => table.locator('thead th').allTextContents()
+  assert.deepEqual((await headings()).map((h) => h.trim()), ['Number', 'Name', 'State', 'Last Modified'])
+  // Move with the Columns list (↑) and hide a column there; the order and choice stay for this table.
+  await table.getByRole('button', { name: /^Columns/ }).click()
+  await table.getByRole('button', { name: 'Move Name up' }).click()
+  await table.locator('.column-choice', { hasText: 'State' }).getByRole('checkbox').uncheck()
+  assert.deepEqual((await headings()).map((h) => h.trim()), ['Name', 'Number', 'Last Modified'], '1, 2, 3 → 2, 1, 3; State hidden')
+  await table.getByLabel('Row density').selectOption('compact')
+  assert.equal(await table.locator('.data-table-compact').count(), 1)
+  // One Export: Excel holds the date as a real date-time (a number with a date format).
+  await table.getByRole('button', { name: /^Export/ }).first().click()
+  const [xlsx] = await Promise.all([page.waitForEvent('download'), page.getByRole('menuitem', { name: 'Excel (.xlsx)' }).click()])
+  assert.match(xlsx.suggestedFilename(), /\.xlsx$/)
+  const { readXlsx } = await import('../src/xlsx.ts')
+  const [sheet] = await readXlsx(new Uint8Array(readFileSync(await xlsx.path())))
+  assert.deepEqual(sheet.rows[0], ['Name', 'Number', 'Last Modified'], 'the export follows the shown columns and order')
+  assert.match(sheet.rows[1][2], /^\d{4}-\d{2}-\d{2}/, 'the date cell is a real date in the workbook (read back as a date)')
+  // Settings → Table defaults: without CSV, every Export offers Excel only.
+  await navigate(page, 'Table defaults')
+  await page.getByRole('checkbox', { name: 'CSV (.csv)' }).uncheck()
+  await navigate(page, 'Import Windchill export')
+  await page.locator('nav button', { hasText: /windchill-export/ }).first().click().catch(() => {})
+  await page.getByRole('tab', { name: /^Raw data/ }).click()
+  assert.equal(await page.getByRole('tabpanel').getByRole('button', { name: 'Export Excel' }).count(), 1, 'one format: a single Export Excel button')
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
+test('TC-UI-06: the page tables follow the table default too — My Work keeps its tree, Backlog Health its lists, each with Columns and one Export', async () => {
+  const { page, context, errors } = await openPage(app)
+  await page.getByRole('button', { name: 'Load synthetic sample' }).click()
+  await navigate(page, 'Assigned to Me')
+  const pick = page.locator('input[placeholder^="Choose a person"]').first()
+  await pick.click(); await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter')
+  const work = page.locator('.data-table').first()
+  await work.locator('button.tree-toggle').first().click()
+  assert.ok(await work.locator('tr.work-child').count() > 0, 'a Feature opens its children as rows of the same table')
+  assert.equal(await work.getByRole('button', { name: /^Columns/ }).count(), 1)
+  assert.equal(await work.getByRole('button', { name: /^Export/ }).count(), 1)
+  await navigate(page, 'Backlog Health')
+  assert.equal(await page.getByRole('button', { name: 'Export CSV' }).count(), 0, 'no second export: the table has its own')
+  assert.equal(await page.locator('.data-table').getByRole('button', { name: /^Columns/ }).count(), 1)
+  await navigate(page, 'Baselines')
+  assert.ok(await page.locator('.data-table').count() >= 1, 'Baselines tables on the default')
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
 test('TC-QV-18: Pulse Check shows the Supported summary next to Releases, with the S&S IT export\'s releases of the month', async () => {
   const { page, context, errors } = await openPage(app)
   await navigate(page, 'Import Windchill export')
@@ -332,10 +352,10 @@ test('TC-CON-42: tables fit their columns — widening a column widens the table
   assert.ok(after[0] >= before[0] + 190, `the first column grew (${before[0]} → ${after[0]})`)
   assert.deepEqual(after.slice(1), before.slice(1), 'the other columns keep their width')
   assert.ok(tableAfter >= tableBefore + 190, `the table grew instead (${tableBefore} → ${tableAfter})`)
-  await releases.locator('.dt-shell').first().getByLabel('Wrap text').check()
+  await releases.getByLabel('Wrap text').check()
   assert.match(await table.getAttribute('class'), /\bwrap\b/)
   assert.equal(await table.locator('tbody td').first().evaluate((cell) => getComputedStyle(cell).whiteSpace), 'pre-wrap')
-  await releases.locator('.dt-shell').first().getByLabel('Wrap text').uncheck()
+  await releases.getByLabel('Wrap text').uncheck()
   assert.equal(await table.locator('tbody td').first().evaluate((cell) => getComputedStyle(cell).whiteSpace), 'nowrap')
   assert.deepEqual(errors, [])
   await context.close()

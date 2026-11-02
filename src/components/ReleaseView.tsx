@@ -1,4 +1,3 @@
-import { DataTable } from './DataTable'
 import { useMemo, useState, type ReactNode } from 'react'
 import type { AzureWorkItem } from '../domain'
 import { releaseFeatureTitle, releaseRegister, type ReleaseEntry } from '../releaseSource'
@@ -10,9 +9,9 @@ import { QueryView } from './QueryView'
 import { ResultTabs } from './ResultTabs'
 import { EmptyState, Pill, TablePanel } from './ui'
 import type { QueryColumn, QueryOrder } from '../queryView'
-import { useColumnWidths } from './columnWidths'
+import { DataTable, type DataColumn } from './DataTable'
 import { BoardMatchCell } from './DpBoardColumn'
-import { dpBoardCandidates, releaseBoardMatch, type BoardMatch } from '../dpBoardMatch'
+import { boardMatchText, dpBoardCandidates, releaseBoardMatch, type BoardMatch } from '../dpBoardMatch'
 import { nestGroups, nestedKeys, type GroupLevel, type NestedGroup } from '../nestedGroups'
 
 // IOCC: nested grouping of its releases (QV-37), by Type of Release, then name, then version.
@@ -37,7 +36,6 @@ export function ReleaseView({ name, items, backlog, columns, orderBy, unresolved
 // typed, the IOCC Type of Release column and nested grouping (Group by … then by …, Collapse all / Expand all).
 function ReleaseTable({ name, title = 'Releases', detail, register, azure, assign, featureSetup, threshold = 80, typed, info, action, empty, featureTitle = (release) => releaseFeatureTitle(name, [release.group, release.name].filter(Boolean).join(' '), release.release) }: { featureTitle?: (release: ReleaseEntry) => string; name: string; title?: string; detail?: string; register: ReleaseEntry[]; featureSetup?: FeatureSetups | null; azure?: AzureWorkspace; assign?: { me: string; canChoose: boolean }; fuzzy?: boolean; threshold?: number; typed?: boolean; info?: ReactNode; action?: ReactNode; empty?: ReactNode }) {
   const [open, setOpen] = useState('')
-  const widths = useColumnWidths(`releases:${name}:${title}`)
   const [groupBy, setGroupBy] = useState<string[]>(typed ? ['type'] : [])
   const [collapsed, setCollapsed] = useState<string[]>([])
   const levels = useMemo(() => groupBy.map((id) => releaseLevels.find((level) => level.id === id)!).filter(Boolean), [groupBy])
@@ -46,42 +44,37 @@ function ReleaseTable({ name, title = 'Releases', detail, register, azure, assig
   const regroup = (next: string[]) => { setGroupBy(next); setCollapsed([]) }
   // IOCC: the Area Path segment after IOCC is the Type of Release, in its own column.
   const grouped = typed || register.some((release) => release.group)
-  const headings = [...(grouped ? ['Type of Release'] : []), 'Name', 'Release', 'Approved', 'Documents', 'Time Writing Feature', 'Planned (h)', 'Booked (h)', ...(azure ? ['QMS-0025 match'] : [])]
   // QV-46: the QMS-0025 match of every release, searched as on the DP table and the Windchill releases (boardMatch):
   // the release name (and, for IOCC, Type of Release + name) with its number, the stream as the program; a board title
   // equal to the Create Feature title is 100%. No match: the closest item and Create Feature, on every such release.
   const boardItems = azure?.items
   const candidates = useMemo(() => boardItems ? dpBoardCandidates(boardItems) : [], [boardItems])
   const matches = useMemo(() => new Map<string, BoardMatch>(azure ? register.map((release) => [release.key, releaseBoardMatch(release, name, featureTitle(release), candidates, threshold)]) : []), [azure, register, name, candidates, threshold, featureTitle])
-  const releaseRows = (release: ReleaseEntry): ReactNode[] => [
-          <tr key={release.key}>
-            {grouped && <td>{release.group || '—'}</td>}
-            <td><button type="button" className="text-button" aria-expanded={open === release.key} onClick={() => setOpen(open === release.key ? '' : release.key)}>{open === release.key ? '▾' : '▸'} {release.name}</button></td>
-            <td>{release.release || '—'}</td><td>{release.approvalDate ? formatDate(release.approvalDate) : '—'}</td><td>{release.documents}</td>
-            <td>{release.match && release.match.score >= 50 && <Pill tone={release.match.score >= threshold ? 'open' : 'warning'}>{release.match.score}% match</Pill>}{release.features.length ? release.features.map((feature) => <a key={feature.id} className="feature-link" href={feature.url} target="_blank" rel="noreferrer">#{feature.id} {feature.title}</a>) : release.match && release.match.score >= 50 ? <><small className="muted">Closest: <a href={release.match.feature.url} target="_blank" rel="noreferrer">#{release.match.feature.id} {release.match.feature.title}</a> — below {threshold}%</small></> : release.tracked ? <Pill tone="info">Named by {release.trackedBy.length} item{release.trackedBy.length === 1 ? '' : 's'}, no Feature</Pill> : <><Pill tone="warning">Not tracked</Pill></>}</td>
-            <td>{release.hourTasks ? formatHours(release.planned) : '—'}</td>
-            <td>{release.hourTasks ? <>{formatHours(release.booked)}{release.planned > 0 && release.booked > release.planned && <small className="negative">+{formatHours(release.booked - release.planned)} over plan</small>}</> : '—'}<small>{release.hourTasks ? `${release.hourTasks} task${release.hourTasks === 1 ? '' : 's'}` : ''}</small></td>
-            {azure && <td><BoardMatchCell match={matches.get(release.key) ?? {}} azure={azure} stream={name} title={featureTitle(release)} items={release.items} assign={assign} featureSetup={featureSetup} /></td>}
-          </tr>,
-          ...(open === release.key ? [<tr key={`${release.key}/docs`} className="release-docs"><td colSpan={headings.length}><ul>{release.items.map((item) => <li key={item.key}><a href={item.url} target="_blank" rel="noreferrer">#{item.id} {item.title}</a><small> · {item.state}{item.approvalDate ? ` · approved ${formatDate(item.approvalDate)}` : ''}</small></li>)}</ul></td></tr>] : []),
+  // UI-07…12: the release table follows the shared design default; the documents of a release open under it.
+  const columns: DataColumn<ReleaseEntry>[] = [
+    ...(grouped ? [{ id: 'type', label: 'Type of Release', value: (release: ReleaseEntry) => release.group || '' }] : []),
+    { id: 'name', label: 'Name', value: (release) => release.name, render: (release) => <button type="button" className="text-button" aria-expanded={open === release.key} onClick={() => setOpen(open === release.key ? '' : release.key)}>{open === release.key ? '▾' : '▸'} {release.name}</button> },
+    { id: 'release', label: 'Release', value: (release) => release.release || '', render: (release) => release.release || '—' },
+    { id: 'approved', label: 'Approved', value: (release) => release.approvalDate ?? '', render: (release) => release.approvalDate ? formatDate(release.approvalDate) : '—' },
+    { id: 'documents', label: 'Documents', value: (release) => release.documents, align: 'right' },
+    { id: 'feature', label: 'Time Writing Feature', value: (release) => release.features.map((feature) => `#${feature.id} ${feature.title}`).join('; '), render: (release) => <>{release.match && release.match.score >= 50 && <Pill tone={release.match.score >= threshold ? 'open' : 'warning'}>{release.match.score}% match</Pill>}{release.features.length ? release.features.map((feature) => <a key={feature.id} className="feature-link" href={feature.url} target="_blank" rel="noreferrer">#{feature.id} {feature.title}</a>) : release.match && release.match.score >= 50 ? <><small className="muted">Closest: <a href={release.match.feature.url} target="_blank" rel="noreferrer">#{release.match.feature.id} {release.match.feature.title}</a> — below {threshold}%</small></> : <span className="muted">—</span>}</> },
+    { id: 'planned', label: 'Planned (h)', value: (release) => release.hourTasks ? release.planned : '', render: (release) => release.hourTasks ? formatHours(release.planned) : '—', align: 'right' },
+    { id: 'booked', label: 'Booked (h)', value: (release) => release.hourTasks ? release.booked : '', render: (release) => <>{release.hourTasks ? <>{formatHours(release.booked)}{release.planned > 0 && release.booked > release.planned && <small className="negative">+{formatHours(release.booked - release.planned)} over plan</small>}</> : '—'}<small>{release.hourTasks ? `${release.hourTasks} task${release.hourTasks === 1 ? '' : 's'}` : ''}</small></>, align: 'right' },
+    ...(azure ? [{ id: 'match', label: 'QMS-0025 match', value: (release: ReleaseEntry) => boardMatchText(matches.get(release.key) ?? {}), sortable: false, render: (release: ReleaseEntry) => <BoardMatchCell match={matches.get(release.key) ?? {}} azure={azure} stream={name} title={featureTitle(release)} items={release.items} assign={assign} featureSetup={featureSetup} /> }] : []),
   ]
+  const documents = (release: ReleaseEntry) => open === release.key ? <ul className="release-docs">{release.items.map((item) => <li key={item.key}><a href={item.url} target="_blank" rel="noreferrer">#{item.id} {item.title}</a><small> · {item.state}{item.approvalDate ? ` · approved ${formatDate(item.approvalDate)}` : ''}</small></li>)}</ul> : null
   // A group row (indented by its level, with its release count) and, when open, its sub-groups or its releases.
-  const groupLines = (list: NestedGroup<ReleaseEntry>[]): ReactNode[] => list.flatMap((group) => {
+  const groupLines = (list: NestedGroup<ReleaseEntry>[], row: (release: ReleaseEntry) => ReactNode[], span: number): ReactNode[] => list.flatMap((group) => {
     const shut = collapsed.includes(group.key)
-    return [<tr key={`g:${group.key}`} className={`qe-group qe-group-${Math.min(group.depth, 3)}`}><td colSpan={headings.length}><button type="button" className="text-button" style={{ marginLeft: group.depth * 18 }} aria-expanded={!shut} onClick={() => setCollapsed((current) => shut ? current.filter((key) => key !== group.key) : [...current, group.key])}>{shut ? '▸' : '▾'} {group.label}: {group.value || '(blank)'}</button> <span className="muted">{group.items.length} release{group.items.length === 1 ? '' : 's'}</span></td></tr>,
-      ...(shut ? [] : group.children.length ? groupLines(group.children) : group.items.flatMap(releaseRows))]
+    return [<tr key={`g:${group.key}`} className={`qe-group qe-group-${Math.min(group.depth, 3)}`}><td colSpan={span}><button type="button" className="text-button" style={{ marginLeft: group.depth * 18 }} aria-expanded={!shut} onClick={() => setCollapsed((current) => shut ? current.filter((key) => key !== group.key) : [...current, group.key])}>{shut ? '▸' : '▾'} {group.label}: {group.value || '(blank)'}</button> <span className="muted">{group.items.length} release{group.items.length === 1 ? '' : 's'}</span></td></tr>,
+      ...(shut ? [] : group.children.length ? groupLines(group.children, row, span) : group.items.flatMap(row))]
   })
-  const toolbar = register.length > 0 ? <div className="button-row">
-    {typed && [...groupBy, ''].slice(0, releaseLevels.length).map((value, level) => <label key={level} className="inline-select">{level ? 'then by' : 'Group by'}<select aria-label={level ? `Group level ${level + 1}` : 'Group releases by'} value={value} onChange={(event) => regroup(event.target.value ? [...groupBy.slice(0, level), event.target.value] : groupBy.slice(0, level))}><option value="">{level ? '—' : 'No grouping'}</option>{releaseLevels.filter((entry) => entry.id === value || !groupBy.slice(0, level).includes(entry.id)).map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</select></label>)}
-    {typed && groupKeys.length > 1 && <><button type="button" className="ghost" disabled={groupKeys.every((key) => collapsed.includes(key))} onClick={() => setCollapsed(groupKeys)}>Collapse all</button><button type="button" className="ghost" disabled={!collapsed.length} onClick={() => setCollapsed([])}>Expand all</button></>}
-
-    {widths.resized && <button type="button" className="ghost" onClick={widths.reset}>Reset widths</button>}
-    {action}
-  </div> : action
-  return <TablePanel title={title} detail={detail} info={info} action={toolbar}>
-      {register.length ? <DataTable tableId="ReleaseView-1" className={`release-register ${widths.tableClass}`}><thead><tr>{headings.map((heading) => <th key={heading} style={widths.style(heading)}>{heading}{widths.handle(heading)}</th>)}</tr></thead><tbody>
-        {groups ? groupLines(groups) : register.flatMap(releaseRows)}
-      </tbody></DataTable> : empty ?? <EmptyState title="No releases." />}
+  const grouping = typed && register.length > 0 ? <>
+    {[...groupBy, ''].slice(0, releaseLevels.length).map((value, level) => <label key={level} className="inline-select">{level ? 'then by' : 'Group by'}<select aria-label={level ? `Group level ${level + 1}` : 'Group releases by'} value={value} onChange={(event) => regroup(event.target.value ? [...groupBy.slice(0, level), event.target.value] : groupBy.slice(0, level))}><option value="">{level ? '—' : 'No grouping'}</option>{releaseLevels.filter((entry) => entry.id === value || !groupBy.slice(0, level).includes(entry.id)).map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</select></label>)}
+    {groupKeys.length > 1 && <><button type="button" className="ghost" disabled={groupKeys.every((key) => collapsed.includes(key))} onClick={() => setCollapsed(groupKeys)}>Collapse all</button><button type="button" className="ghost" disabled={!collapsed.length} onClick={() => setCollapsed([])}>Expand all</button></>}
+  </> : null
+  return <TablePanel title={title} detail={detail} info={info} action={action}>
+      {register.length ? <DataTable id={`releases:${name}:${title}`} className="release-register" columns={columns} rows={register} rowKey={(release) => release.key} exportName={`${name} ${title}`} toolbar={grouping} expand={documents} group={groups ? (_, row, span) => groupLines(groups, row, span) : undefined} /> : empty ?? <EmptyState title="No releases." />}
     </TablePanel>
 }
 

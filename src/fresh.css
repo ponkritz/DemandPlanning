@@ -435,3 +435,17 @@ table.resizable.wrap th,table.resizable.wrap td{white-space:pre-wrap;overflow-wr
 .view-actions-menu label input[type=file]{display:none}
 .view-source-bar .check{font-size:12.5px}
 .act-button input[type=file]{display:none}
+/* The table design default (UI-07…12): one toolbar, one density switch, the same look for every table. */
+.data-table{display:grid;gap:8px;min-width:0}
+.data-table-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.data-table-controls{display:inline-flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap}
+.data-table-button{padding:6px 10px}
+.data-table-density{padding:5px 8px;font-size:12px}
+.data-table-export{position:relative;display:inline-flex}
+.data-table-scroll{overflow:auto;max-width:100%}
+.data-table-compact td{padding:5px 10px;font-size:12px}
+.data-table-compact th{padding:7px 10px}
+.data-table-comfortable td{padding:11px 14px}
+.data-table td.align-right,.data-table th.align-right{text-align:right}
+.data-table td.align-center,.data-table th.align-center{text-align:center}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}

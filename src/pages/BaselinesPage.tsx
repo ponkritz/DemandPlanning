@@ -1,5 +1,5 @@
-import { DataTable } from '../components/DataTable'
 import { useState } from 'react'
+import { DataTable } from '../components/DataTable'
 import { EmptyState, Metric, Metrics, Notice, Page, Pill, TablePanel } from '../components/ui'
 import { BaselineRulesEditor } from '../components/BaselineRulesEditor'
 import { GitSyncBar } from '../components/GitStorage'
@@ -61,23 +61,18 @@ export function BaselinesPage({ azure, month, store, git, onOpenSettings, canEdi
       <Metric label="Scope growth" value={`${totals.growth >= 0 ? '+' : ''}${formatHours(totals.growth)}h`} hint="Current baseline minus first baseline" tone={totals.growth > 0 ? 'negative' : undefined} />
     </Metrics>
     <TablePanel className="admin-section" title="Release baselines" info="Each release (Feature under a stream with rules) gets a baseline from its scope: the driver count (documents, assets, …) in the stream's formula. Changing the scope adds a dated entry, so re-baselining shows as scope growth instead of overwriting the first estimate." count={`${releases.length} releases`}>
-      {releases.length ? <DataTable tableId="BaselinesPage-1" className="baseline-table"><thead><tr><th>Stream</th><th>Release</th><th>Scope</th><th>Baseline (h)</th><th>Actual (h)</th><th>Variance (h)</th><th>Scope growth (h)</th><th /></tr></thead><tbody>{releases.map((row) => {
-        const key = `${row.stream}|${row.feature.key}`
-        return [
-          <tr key={key}>
-            <td>{row.stream}</td>
-            <td><a href={row.feature.url} target="_blank" rel="noreferrer">#{row.feature.id} {row.feature.title}</a>{row.scope && row.scope.history.length > 1 && <button type="button" className="text-button small" onClick={() => setOpen(open === key ? null : key)}>{open === key ? 'Hide' : 'Show'} {row.scope.history.length} versions</button>}</td>
-            <td>{row.scope ? scopeText(row.rule, row.scope.history[row.scope.history.length - 1]) : <Pill tone="warning">Not scoped</Pill>}{row.current && row.current.missing.length > 0 && <small>Missing {row.current.missing.join(', ')}</small>}</td>
-            <td><strong>{row.current ? formatHours(row.current.total) : '—'}</strong>{row.current?.capped && <small>capped from {formatHours(row.current.uncapped)}h</small>}</td>
-            <td>{formatHours(row.actual)}</td>
-            <td className={row.variance != null && row.variance > 0 ? 'negative' : ''}>{row.variance == null ? '—' : `${row.variance > 0 ? '+' : ''}${formatHours(row.variance)}`}</td>
-            <td className={row.growth ? 'negative' : ''}>{row.growth == null ? '—' : `${row.growth > 0 ? '+' : ''}${formatHours(row.growth)}`}</td>
-            <td>{!readOnly && <button type="button" className="ghost" onClick={() => setEditing(editing === key ? null : key)}>{row.scope ? 'Re-baseline' : 'Set scope'}</button>}</td>
-          </tr>,
-          open === key && row.scope ? <tr key={`${key}-history`} className="baseline-history"><td /><td colSpan={7}><ol>{row.scope.history.map((entry, index) => <li key={entry.at}><strong>v{index + 1}</strong> {formatDate(entry.at)} · {scopeText(row.rule, entry)} → {formatHours(baselineHours(row.rule, entry).total)}h{entry.reason && <em> — {entry.reason}</em>}</li>)}</ol></td></tr> : null,
-          editing === key && !git.readOnly ? <tr key={`${key}-edit`} className="baseline-edit"><td /><td colSpan={7}><ScopeForm row={row} onCancel={() => setEditing(null)} onSave={(entry) => saveScope(row, entry)} /></td></tr> : null,
-        ]
-      })}</tbody></DataTable>
+      {releases.length ? <DataTable id="baselines:releases" className="baseline-table" rows={releases} rowKey={(row) => `${row.stream}|${row.feature.key}`} exportName="Release baselines"
+        expand={(row) => { const key = `${row.stream}|${row.feature.key}`; return <>{open === key && row.scope ? <ol className="baseline-history">{row.scope.history.map((entry, index) => <li key={entry.at}><strong>v{index + 1}</strong> {formatDate(entry.at)} · {scopeText(row.rule, entry)} → {formatHours(baselineHours(row.rule, entry).total)}h{entry.reason && <em> — {entry.reason}</em>}</li>)}</ol> : null}{editing === key && !git.readOnly ? <div className="baseline-edit"><ScopeForm row={row} onCancel={() => setEditing(null)} onSave={(entry) => saveScope(row, entry)} /></div> : null}</> }}
+        columns={[
+          { id: 'stream', label: 'Stream', value: (row) => row.stream },
+          { id: 'release', label: 'Release', value: (row) => `#${row.feature.id} ${row.feature.title}`, render: (row) => { const key = `${row.stream}|${row.feature.key}`; return <><a href={row.feature.url} target="_blank" rel="noreferrer">#{row.feature.id} {row.feature.title}</a>{row.scope && row.scope.history.length > 1 && <button type="button" className="text-button small" onClick={() => setOpen(open === key ? null : key)}>{open === key ? 'Hide' : 'Show'} {row.scope.history.length} versions</button>}</> } },
+          { id: 'scope', label: 'Scope', value: (row) => row.scope ? scopeText(row.rule, row.scope.history[row.scope.history.length - 1]) : 'Not scoped', render: (row) => <>{row.scope ? scopeText(row.rule, row.scope.history[row.scope.history.length - 1]) : <Pill tone="warning">Not scoped</Pill>}{row.current && row.current.missing.length > 0 && <small>Missing {row.current.missing.join(', ')}</small>}</> },
+          { id: 'baseline', label: 'Baseline (h)', align: 'right', firstSortDesc: true, value: (row) => row.current?.total ?? '', render: (row) => <><strong>{row.current ? formatHours(row.current.total) : '—'}</strong>{row.current?.capped && <small>capped from {formatHours(row.current.uncapped)}h</small>}</> },
+          { id: 'actual', label: 'Actual (h)', align: 'right', firstSortDesc: true, value: (row) => row.actual, render: (row) => formatHours(row.actual) },
+          { id: 'variance', label: 'Variance (h)', align: 'right', firstSortDesc: true, value: (row) => row.variance ?? '', render: (row) => <span className={row.variance != null && row.variance > 0 ? 'negative' : ''}>{row.variance == null ? '—' : `${row.variance > 0 ? '+' : ''}${formatHours(row.variance)}`}</span> },
+          { id: 'growth', label: 'Scope growth (h)', align: 'right', firstSortDesc: true, value: (row) => row.growth ?? '', render: (row) => <span className={row.growth ? 'negative' : ''}>{row.growth == null ? '—' : `${row.growth > 0 ? '+' : ''}${formatHours(row.growth)}`}</span> },
+          { id: 'action', label: '', sortable: false, export: false, render: (row) => { const key = `${row.stream}|${row.feature.key}`; return !readOnly && <button type="button" className="ghost" onClick={() => setEditing(editing === key ? null : key)}>{row.scope ? 'Re-baseline' : 'Set scope'}</button> } },
+        ]} />
         : <EmptyState title={rules.length ? 'No releases found for the streams with rules.' : 'No estimation rules yet.'} detail={rules.length ? `Releases are the Features under the Epics ${rules.map((rule) => rule.stream).join(', ')}. Refresh from Azure DevOps or check the stream names in the rules below.` : 'Add a rule for a stream below.'} />}
     </TablePanel>
     <BaselineRulesEditor key={JSON.stringify(rules)} rules={rules} streams={streams} onSave={saveRules} readOnly={readOnly} />
@@ -89,7 +84,14 @@ export function BaselinesPage({ azure, month, store, git, onOpenSettings, canEdi
         <Metric label="Variance" value={formatHours(data.variance)} hint={`${data.flags.length} task(s) above +25%`} tone={data.flags.length ? 'negative' : undefined} />
     </Metrics>
     <TablePanel title="Time Writing Tasks this month" info="Completed Work minus Original Estimate on the same Task." count={`${rows.length} tasks`} empty={rows.length ? undefined : 'No selected-month Time Writing Tasks.'}>
-      <DataTable tableId="BaselinesPage-2"><thead><tr><th>Epic</th><th>Time Writing Task</th><th>Original Estimate</th><th>Completed Work</th><th>Variance</th><th>Signal</th></tr></thead><tbody>{rows.map(({ group, task, variance, flagged }) => <tr key={task.key}><td>{group.epic?.title ?? 'No Epic path'}</td><td><a href={task.url} target="_blank" rel="noreferrer">#{task.id} {task.title}</a></td><td>{formatHours(task.originalEstimate)}</td><td>{formatHours(task.completedWork)}</td><td className={variance != null && variance > 0 ? 'negative' : ''}>{formatHours(variance)}</td><td><Pill tone={flagged ? 'warning' : 'neutral'}>{flagged ? '>25%' : '—'}</Pill></td></tr>)}</tbody></DataTable>
+      <DataTable id="baselines:tasks" rows={rows} rowKey={(row) => row.task.key} exportName="Time Writing Tasks plan check" columns={[
+        { id: 'epic', label: 'Epic', value: (row) => row.group.epic?.title ?? 'No Epic path' },
+        { id: 'task', label: 'Time Writing Task', value: (row) => `#${row.task.id} ${row.task.title}`, render: (row) => <a href={row.task.url} target="_blank" rel="noreferrer">#{row.task.id} {row.task.title}</a> },
+        { id: 'estimate', label: 'Original Estimate', align: 'right', firstSortDesc: true, value: (row) => row.task.originalEstimate ?? '', render: (row) => formatHours(row.task.originalEstimate) },
+        { id: 'completed', label: 'Completed Work', align: 'right', firstSortDesc: true, value: (row) => row.task.completedWork ?? '', render: (row) => formatHours(row.task.completedWork) },
+        { id: 'variance', label: 'Variance', align: 'right', firstSortDesc: true, value: (row) => row.variance ?? '', render: (row) => <span className={row.variance != null && row.variance > 0 ? 'negative' : ''}>{formatHours(row.variance)}</span> },
+        { id: 'signal', label: 'Signal', value: (row) => row.flagged ? '>25%' : '', render: (row) => <Pill tone={row.flagged ? 'warning' : 'neutral'}>{row.flagged ? '>25%' : '—'}</Pill> },
+      ]} />
     </TablePanel>
   </Page>
 }

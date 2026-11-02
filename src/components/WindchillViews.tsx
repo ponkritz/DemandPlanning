@@ -1,11 +1,11 @@
-import { DataTable } from './DataTable'
 import { useState } from 'react'
-import { projectLevels, windchillCsv, windchillOps, windchillCell, type WindchillFilter, type WindchillLogic, type WindchillView } from '../windchillViews'
+import { projectLevels, windchillOps, windchillCell, type WindchillFilter, type WindchillLogic, type WindchillView } from '../windchillViews'
 import { defaultStreams, windchillOptionsForView } from '../streams'
 import { ResultTabs } from './ResultTabs'
+import { DataTable, type DataColumn } from './DataTable'
+import { windchillDateValue } from '../windchillReleases'
 import { ViewActions } from './ViewActions'
 import { formatDateTime } from '../format'
-import { downloadCsv } from '../download'
 import type { WindchillWorkspace } from '../useWindchill'
 import type { GitStorage } from '../useGitStorage'
 import { EmptyState, Notice, Panel, Pill } from './ui'
@@ -48,12 +48,12 @@ export function WindchillViewsPanel({ windchill }: { windchill: WindchillWorkspa
     try { windchill.saveView({ ...form, columns: form.columnsText.split(',') }); setForm(null); setError('') } catch (failure) { setError(failure instanceof Error ? failure.message : 'The view could not be saved.') }
   }
   return <Panel className="connection-panel" eyebrow="WINDCHILL" title="Windchill views" info="Each view is one search: an object type, filter rows and the columns to show. Open in browser runs it where your company sign-in works; save the results (Ctrl+S) or copy them, then Import file or Paste results. Fetch runs it directly, from the browser with your Windchill sign-in there or from the desktop app, where Windchill allows that. With Git storage connected the results are also saved to Git for the web app." action={<button type="button" className="primary" onClick={() => edit(blank())}>＋ New view</button>}>
-    {windchill.views.length ? <div className="azure-table"><DataTable tableId="WindchillViews-1"><thead><tr><th>View</th><th>Object type</th><th>Filters</th><th>Results</th><th /></tr></thead><tbody>{windchill.views.map((view) => {
+    {windchill.views.length ? <div className="azure-table"><table><thead><tr><th>View</th><th>Object type</th><th>Filters</th><th>Results</th><th /></tr></thead><tbody>{windchill.views.map((view) => {
       const source = windchill.sources.find((entry) => entry.viewId === view.id), status = windchill.status[view.id]
       return <tr key={view.id}><td><strong>{view.name}</strong>{!view.showInMenu && <small>not in menu</small>}</td><td>{view.entitySet}</td><td>{view.filters.map((filter) => `${filter.field} ${windchillOps.find((entry) => entry.op === filter.op)?.label} ${filter.value}`).join(' · ') || '—'}</td>
         <td>{source ? `${source.rows.length} · ${formatDateTime(source.fetchedAt)}${source.fromGit ? ' (via Git)' : ''}` : '—'}{status && <small className={status.state === 'error' ? 'negative' : ''}>{status.message}</small>}<WindchillImport view={view} windchill={windchill} /></td>
         <td><div className="button-row"><button type="button" className="ghost" disabled={status?.state === 'busy'} onClick={() => void windchill.fetchView(view.id)}>{status?.state === 'busy' ? 'Searching…' : 'Fetch'}</button><button type="button" className="ghost" onClick={() => edit(view)}>Edit</button><button type="button" className="text-button" onClick={() => { if (window.confirm(`Remove the Windchill view “${view.name}” and its saved results from this app?`)) windchill.removeView(view.id) }}>Remove</button></div></td></tr>
-    })}</tbody></DataTable></div> : !form && <EmptyState title="No Windchill views yet." detail="Add one: e.g. Documents (v7/DocMgmt/Documents — domains and versions are listed by Test connection) where Number starts with DHF and State/Value equals RELEASED, showing Number, Name, Version, State/Value." />}
+    })}</tbody></table></div> : !form && <EmptyState title="No Windchill views yet." detail="Add one: e.g. Documents (v7/DocMgmt/Documents — domains and versions are listed by Test connection) where Number starts with DHF and State/Value equals RELEASED, showing Number, Name, Version, State/Value." />}
     {form && <form className="connection-form windchill-form" onSubmit={save}>
       <label>View name<input required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="e.g. Released DHF documents" /></label>
       <label>Object type<input required value={form.entitySet} onChange={(event) => setForm({ ...form, entitySet: event.target.value })} placeholder="e.g. v7/DocMgmt/Documents or v7/ProdMgmt/Parts" /></label>
@@ -93,7 +93,8 @@ export function WindchillPage({ view, windchill, git, gitNote, month, board }: {
   const source = windchill.sources.find((entry) => entry.viewId === view.id), status = windchill.status[view.id]
   const columns = source?.columns.length ? source.columns : view.columns
   const rows = (source?.rows ?? []).filter((row) => !search.trim() || columns.some((column) => windchillCell(row, column).toLowerCase().includes(search.trim().toLowerCase())))
-  const csv = () => windchillCsv(columns, rows)
+  // UI-07…12: the raw rows follow the table default; a date written by Windchill ("27-Oct-2026 09:15") is exported as a date-time.
+  const rawColumns: DataColumn<Record<string, unknown>>[] = columns.map((column) => ({ id: column, label: column, value: (row) => windchillDateValue(windchillCell(row, column)), render: (row) => windchillCell(row, column) }))
   return <Panel className="connection-panel backlog-panel">
     <div className="view-source-bar"><div><strong>{view.name}</strong><span className="muted"> · {view.exportFile ? `Windchill export ${view.exportFile}` : view.entitySet}{source ? ` · ${source.rows.length} results · ${view.exportFile ? 'imported' : 'fetched'} ${formatDateTime(source.fetchedAt)}${source.fromGit ? ' (desktop app, via Git)' : ''}` : ''}</span></div>
       {/* QV-48: a small main action (import a newer file, or refresh a search) and the rest in a ⋯ menu. */}
@@ -107,11 +108,9 @@ export function WindchillPage({ view, windchill, git, gitNote, month, board }: {
     {gitNote && <div className={`notice ${gitNote.tone}`} role="status">{gitNote.text}</div>}
     {!source ? <EmptyState title={`“${view.name}” has not been fetched yet.`} detail="Fetch it from Windchill, or Open in browser, save the results (Ctrl+S) or copy them, then Import file or Paste results. Results saved to Git from another computer also appear here." />
       // QV-47: the consolidation (releases / projects) and the raw imported rows are two tabs of the page.
-      : <ResultTabs id={`wc:${view.id}`} mainLabel={windchillOptionsForView(view).project ? 'Projects' : 'Releases'} rawLabel={view.exportFile ? 'Raw data' : 'Query output'} rawCount={source.rows.length} main={<WindchillReleasesPanel view={view} rows={source.rows} columns={columns} git={git} month={month} board={board} onSetup={view.exportFile ? (setup) => windchill.setSetup(view.id, setup) : undefined} />} raw={<div className="query-view">
-        <div className="query-toolbar"><input className="search" aria-label={`Search ${view.name}`} placeholder="Search all columns" value={search} onChange={(event) => setSearch(event.target.value)} /><span className="muted">{rows.length} of {source.rows.length}</span>{!view.exportFile && <Pill tone="info">{view.filters.length} filter{view.filters.length === 1 ? '' : 's'}</Pill>}<button type="button" className="ghost" onClick={() => downloadCsv(csv(), `${view.name.replace(/[^\w-]+/g, '-')}.csv`)}>Export CSV</button></div>
-        <div className="azure-table query-table"><DataTable tableId="WindchillViews-2"><thead><tr>{columns.map((column) => <th key={column}>{column}</th>)}</tr></thead><tbody>{rows.slice(0, 1000).map((row, index) => <tr key={index}>{columns.map((column) => <td key={column}>{windchillCell(row, column)}</td>)}</tr>)}</tbody></DataTable></div>
-        {rows.length > 1000 && <p className="muted">Showing the first 1000 of {rows.length}; search to narrow, or export CSV for all.</p>}
-      </div>} />}
+      : <ResultTabs id={`wc:${view.id}`} mainLabel={windchillOptionsForView(view).project ? 'Projects' : 'Releases'} rawLabel={view.exportFile ? 'Raw data' : 'Query output'} rawCount={source.rows.length} main={<WindchillReleasesPanel view={view} rows={source.rows} columns={columns} git={git} month={month} board={board} onSetup={view.exportFile ? (setup) => windchill.setSetup(view.id, setup) : undefined} />} raw={<DataTable id={`wc:${view.id}`} columns={rawColumns} rows={rows} rowKey={(_, index) => String(index)} exportName={view.name} limit={1000}
+        toolbar={<><input className="search" aria-label={`Search ${view.name}`} placeholder="Search all columns" value={search} onChange={(event) => setSearch(event.target.value)} />{!view.exportFile && <Pill tone="info">{view.filters.length} filter{view.filters.length === 1 ? '' : 's'}</Pill>}</>}
+        status={`${rows.length} of ${source.rows.length}`} />} />}
   </Panel>
 }
 

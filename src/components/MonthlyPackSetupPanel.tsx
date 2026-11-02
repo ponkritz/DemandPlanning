@@ -1,4 +1,3 @@
-import { DataTable } from './DataTable'
 import { useEffect, useState } from 'react'
 import type { AzureWorkItem } from '../domain'
 import type { GitStorage } from '../useGitStorage'
@@ -79,7 +78,7 @@ export function MonthlyPackSetupPanel({ pack, git, items }: { pack: MonthlyPackS
       </div>
       <label className="pack-department">Department name (title: “… | Performance Pulse update”)<input value={draft.department ?? ''} maxLength={80} placeholder="e.g. I&D Quality" onChange={(event) => setDraft((current) => ({ ...current, department: event.target.value }))} /></label>
       <h3>Slide lines</h3>
-      <div className="azure-table"><DataTable tableId="MonthlyPackSetupPanel-1" className="pack-setup"><thead><tr><th>Line</th><th>Streams</th><th>Epics (Features closed in the month)</th><th /></tr></thead><tbody>
+      <div className="azure-table"><table className="pack-setup"><thead><tr><th>Line</th><th>Streams</th><th>Epics (Features closed in the month)</th><th /></tr></thead><tbody>
         {draft.lines.map((line) => <tr key={line.id}>
           <td><input aria-label={`Line ${line.id} label`} value={line.label} maxLength={80} onChange={(event) => setLine(line.id, { label: event.target.value })} /></td>
           <td>{streamNames.map((name) => <label key={name} className="check"><input type="checkbox" checked={line.streams.includes(name)} onChange={(event) => setLine(line.id, { streams: event.target.checked ? [...line.streams, name] : line.streams.filter((entry) => entry !== name) })} />{name}</label>)}</td>
@@ -89,17 +88,17 @@ export function MonthlyPackSetupPanel({ pack, git, items }: { pack: MonthlyPackS
           </td>
           <td className="pack-row-actions"><button type="button" className="text-button" onClick={() => setDraft((current) => ({ ...current, lines: move(current.lines, line.id, -1) }))}>↑</button><button type="button" className="text-button" onClick={() => setDraft((current) => ({ ...current, lines: move(current.lines, line.id, 1) }))}>↓</button><button type="button" className="text-button danger-text" onClick={() => setDraft((current) => ({ ...current, lines: current.lines.filter((entry) => entry.id !== line.id) }))}>Remove</button></td>
         </tr>)}
-      </tbody></DataTable></div>
+      </tbody></table></div>
       <div className="button-row"><button type="button" className="ghost" onClick={() => setDraft((current) => ({ ...current, lines: [...current.lines, { id: newId('line', current.lines.map((line) => line.id)), label: 'New line', streams: [], epicIds: [] }] }))}>＋ Add line</button></div>
       <h3>KPI Pulse rows</h3>
-      <div className="azure-table"><DataTable tableId="MonthlyPackSetupPanel-2" className="pack-setup"><thead><tr><th>KPI</th><th>Reads</th><th>Epic</th><th /></tr></thead><tbody>
+      <div className="azure-table"><table className="pack-setup"><thead><tr><th>KPI</th><th>Reads</th><th>Epic</th><th /></tr></thead><tbody>
         {draft.kpis.map((row) => <tr key={row.id}>
           <td><input aria-label={`KPI ${row.id} label`} value={row.label} maxLength={80} onChange={(event) => setKpi(row.id, { label: event.target.value })} /></td>
           <td><select aria-label={`KPI ${row.label} metric`} value={row.metric} onChange={(event) => setKpi(row.id, { metric: event.target.value as KpiMetric })}>{(Object.keys(kpiMetrics) as KpiMetric[]).map((metric) => <option key={metric} value={metric}>{kpiMetrics[metric]}</option>)}</select></td>
           <td>{['open', 'closed-month', 'closed-ytd', 'percent-closed'].includes(row.metric) ? <select aria-label={`KPI ${row.label} Epic`} value={row.epicId ?? ''} onChange={(event) => setKpi(row.id, { epicId: Number(event.target.value) || undefined })}><option value="">Choose an Epic…</option>{epics.map((epic) => <option key={epic.id} value={epic.id}>#{epic.id} {epic.title}</option>)}</select> : <span className="muted">—</span>}</td>
           <td className="pack-row-actions"><button type="button" className="text-button" onClick={() => setDraft((current) => ({ ...current, kpis: move(current.kpis, row.id, -1) }))}>↑</button><button type="button" className="text-button" onClick={() => setDraft((current) => ({ ...current, kpis: move(current.kpis, row.id, 1) }))}>↓</button><button type="button" className="text-button danger-text" onClick={() => setDraft((current) => ({ ...current, kpis: current.kpis.filter((entry) => entry.id !== row.id) }))}>Remove</button></td>
         </tr>)}
-      </tbody></DataTable></div>
+      </tbody></table></div>
       <div className="button-row"><button type="button" className="ghost" onClick={() => setDraft((current) => ({ ...current, kpis: [...current.kpis, { id: newId('kpi', current.kpis.map((row) => row.id)), label: 'New KPI', metric: 'manual' }] }))}>＋ Add KPI row</button>{pack.setupHistory && <a className="text-button" href={pack.setupHistory} target="_blank" rel="noreferrer">History in GitHub</a>}</div>
     </fieldset>
   </Panel>
