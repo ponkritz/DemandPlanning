@@ -14,7 +14,9 @@
 .dt-toolbar summary::-webkit-details-marker { display:none; }
 .dt-toolbar summary::after { content:'⌄'; color:var(--text-3); }
 .dt-toolbar details[open] > summary { background:var(--accent-soft); border-color:var(--accent-line); color:var(--accent-text); }
-.dt-columns { position:absolute; top:calc(100% + 6px); right:0; z-index:40; width:340px; max-width:calc(100vw - 48px); max-height:360px; overflow:auto; padding:8px; border:1px solid var(--line); border-radius:10px; background:var(--surface); color:var(--text); box-shadow:0 8px 24px var(--shadow); }
+.dt-toolbar details[open] { flex-basis:100%; order:1; }
+.dt-toolbar details[open] > summary { width:max-content; margin-left:auto; }
+.dt-columns { position:relative; margin:6px 0 0 auto; width:340px; max-width:calc(100vw - 48px); max-height:360px; overflow:auto; padding:8px; border:1px solid var(--line); border-radius:10px; background:var(--surface); color:var(--text); box-shadow:0 8px 24px var(--shadow); }
 .dt-columns p { margin:4px 6px 8px; color:var(--text-3); font-size:11px; font-weight:400; }
 .dt-columns > div { display:flex; align-items:center; gap:8px; padding:6px; border-radius:6px; }
 .dt-columns > div:hover { background:var(--surface-2); }
