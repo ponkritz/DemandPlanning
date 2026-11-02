@@ -451,7 +451,7 @@ Ver. = verification method (T test, D demonstration, I inspection, A analysis); 
 | SET-11 | SR-14 | UR-10 | D | M | TC-SET-04 | — | — | — |
 | SET-12 | SR-14 | UR-10 | D | C | TC-SET-04 | — | — | OI-09 |
 | SET-13 | SR-14 | UR-10 | T | S | TC-SET-05 | — | — | — |
-| SET-14 | SR-14 | UR-10 | T | S | TC-SET-06 | — | — | — |
+| SET-14 | SR-14 | UR-10 | T | S | TC-SET-06 | — | — | KB-24 |
 | STO-01 | SR-15 | UR-11, UR-19 | T | M | TC-STO-01 | — | `browser-state.test.mjs` | — |
 | STO-02 | SR-15 | UR-11, UR-19 | T | M | TC-STO-01 | — | `browser-state.test.mjs` | — |
 | STO-03 | SR-15 | UR-11, UR-19 | T | M | TC-STO-02 | — | `browser-state.test.mjs` | — |

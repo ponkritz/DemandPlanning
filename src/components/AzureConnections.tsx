@@ -258,6 +258,17 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
         </tr>
       })}</tbody></table></div>
         : otherPresets.length ? null : <EmptyState title="No other views." detail="Time Writing and the streams are in the Stream mapping above; add any other view here." />}
+    </Panel>}
+    {show('sources') && sources.length > 0 && <Panel className="connection-panel" eyebrow="READ ONLY" title="Fetched read-only sources" info="Snapshots from document and reference connections, stored with the app data.">
+      <div className="azure-table"><table><thead><tr><th>Connection</th><th>Project</th><th>Work items</th><th>By type</th><th>Fetched</th></tr></thead><tbody>{sources.map((source) => {
+        const types = Object.entries(source.items.reduce<Record<string, number>>((counts, item) => { counts[item.workItemType] = (counts[item.workItemType] ?? 0) + 1; return counts }, {})).sort((a, b) => b[1] - a[1])
+        return <tr key={source.connectionId}><td><strong>{source.name}</strong><small>{roleLabel[source.role]}</small></td><td>{source.organization} / {source.project}</td><td>{source.items.length}</td><td>{types.slice(0, 4).map(([type, count]) => `${type} ${count}`).join(' · ') || '—'}</td><td>{formatDateTime(source.fetchedAt)}</td></tr>
+      })}</tbody></table></div>
+    </Panel>}
+    {show('sample') && <Panel className="connection-panel" eyebrow="DEMO" title="Synthetic sample" info="Replaces the cached Time Writing data and release source with a generated dataset, without reading from or writing to Azure DevOps.">
+      <div className="button-row"><button type="button" className="ghost" disabled={busy} onClick={() => { if (azure.saved.length && !azure.isSample && !window.confirm('Replace the saved Azure cache with a synthetic sample dataset? Export a JSON backup first if you need the current data.')) return; azure.loadSampleData() }}>Load synthetic sample dataset</button></div>
+    </Panel>}
+    {/* The connection editor, outside the sections: Edit / Add query / Set up open it from Stream mapping and Other views alike (KI fix). */}
       {form && <Modal title={form.id ? `Edit “${connectionProfiles.find((profile) => profile.id === form.id)?.reason ?? form.name}”` : clonedFrom ? `Clone of “${clonedFrom}”` : 'New connection'} eyebrow={`AZURE DEVOPS · ${roleLabel[form.role].toUpperCase()}`} wide form onClose={() => { setForm(null); setFormError('') }}><form className="connection-editor" onSubmit={submit}>
         {clonedFrom ? <Notice>All settings and the PAT of “{clonedFrom}” are copied. Change the name and what differs (query, project, team, …), then Save and refresh data. “{clonedFrom}” itself is not changed.</Notice> : !form.id && form.organization && <Notice>Pre-filled settings: enter your PAT, change anything else if needed, then Save and Test.</Notice>}
         <div className="connection-form">
@@ -277,16 +288,6 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
         {formError && <Notice tone="error">{formError}</Notice>}
         <div className="button-row"><button className="primary">Save and refresh data</button><button type="button" className="ghost" onClick={() => { setForm(null); setFormError('') }}>Cancel</button></div>
       </form></Modal>}
-    </Panel>}
-    {show('sources') && sources.length > 0 && <Panel className="connection-panel" eyebrow="READ ONLY" title="Fetched read-only sources" info="Snapshots from document and reference connections, stored with the app data.">
-      <div className="azure-table"><table><thead><tr><th>Connection</th><th>Project</th><th>Work items</th><th>By type</th><th>Fetched</th></tr></thead><tbody>{sources.map((source) => {
-        const types = Object.entries(source.items.reduce<Record<string, number>>((counts, item) => { counts[item.workItemType] = (counts[item.workItemType] ?? 0) + 1; return counts }, {})).sort((a, b) => b[1] - a[1])
-        return <tr key={source.connectionId}><td><strong>{source.name}</strong><small>{roleLabel[source.role]}</small></td><td>{source.organization} / {source.project}</td><td>{source.items.length}</td><td>{types.slice(0, 4).map(([type, count]) => `${type} ${count}`).join(' · ') || '—'}</td><td>{formatDateTime(source.fetchedAt)}</td></tr>
-      })}</tbody></table></div>
-    </Panel>}
-    {show('sample') && <Panel className="connection-panel" eyebrow="DEMO" title="Synthetic sample" info="Replaces the cached Time Writing data and release source with a generated dataset, without reading from or writing to Azure DevOps.">
-      <div className="button-row"><button type="button" className="ghost" disabled={busy} onClick={() => { if (azure.saved.length && !azure.isSample && !window.confirm('Replace the saved Azure cache with a synthetic sample dataset? Export a JSON backup first if you need the current data.')) return; azure.loadSampleData() }}>Load synthetic sample dataset</button></div>
-    </Panel>}
   </section>
 }
 

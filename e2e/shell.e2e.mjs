@@ -148,6 +148,14 @@ test('TC-SET-06: each Settings page is its own menu entry; its sections show one
   await sections.getByRole('tab', { name: 'Stream mapping' }).click()
   await page.locator('.panel', { has: page.locator('h2, h3', { hasText: /^Stream mapping/ }) }).first().waitFor()
   assert.equal(await page.locator('.panel', { has: page.locator('h2, h3', { hasText: /^Servers and PATs/ }) }).count(), 0, 'one section at a time')
+  // KB-24: the connection editor opens from the Stream mapping section itself (it was only rendered with Other views).
+  const mappingPanel = page.locator('.panel', { has: page.locator('h2, h3', { hasText: /^Stream mapping/ }) }).first()
+  await mappingPanel.locator('tbody tr').first().getByRole('button', { name: /^(Set up|Add query|Edit)$/ }).first().click()
+  const editor = page.getByRole('dialog')
+  await editor.waitFor()
+  assert.equal(await editor.locator('form.connection-editor').count(), 1, 'the connection editor opens on the Stream mapping page')
+  await editor.getByRole('button', { name: 'Cancel' }).click()
+  await editor.waitFor({ state: 'detached' })
   // Another page and back: the section shown last is remembered.
   await navigate(page, 'Storage')
   assert.equal(await text(page.locator('header.topbar h1')), 'Storage')
