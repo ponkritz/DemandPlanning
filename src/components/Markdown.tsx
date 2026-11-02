@@ -1,4 +1,3 @@
-import { DataTable } from './DataTable'
 import { Fragment, type ReactNode } from 'react'
 import { linkTarget, parseInline, type Block, type ListBlock } from '../markdown'
 
@@ -27,6 +26,6 @@ export function Markdown({ blocks, docs, onLink }: { blocks: Block[]; docs: stri
     if (block.kind === 'paragraph') return <p key={index}>{inline(block.text)}</p>
     if (block.kind === 'list') return list(block, index)
     if (block.kind === 'rule') return <hr key={index} />
-    return <div key={index} className="azure-table markdown-table"><DataTable tableId="Markdown-1">{block.header.some(Boolean) && <thead><tr>{block.header.map((cell, cellIndex) => <th key={cellIndex}>{inline(cell)}</th>)}</tr></thead>}<tbody>{block.rows.map((row, rowIndex) => <tr key={rowIndex}>{block.header.map((_, cellIndex) => <td key={cellIndex}>{inline(row[cellIndex] ?? '')}</td>)}</tr>)}</tbody></DataTable></div>
+    return <div key={index} className="azure-table markdown-table"><table>{block.header.some(Boolean) && <thead><tr>{block.header.map((cell, cellIndex) => <th key={cellIndex}>{inline(cell)}</th>)}</tr></thead>}<tbody>{block.rows.map((row, rowIndex) => <tr key={rowIndex}>{block.header.map((_, cellIndex) => <td key={cellIndex}>{inline(row[cellIndex] ?? '')}</td>)}</tr>)}</tbody></table></div>
   })}</div>
 }

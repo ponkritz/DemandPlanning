@@ -122,6 +122,14 @@ const monthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep
 // the month as a word (27-Oct-2026, 27 Oct 2026 09:15, Oct 27, 2026), dotted (27.10.2026) or slashed (27/10/2026,
 // 10/27/2026: the part above 12 is the day; when both could be the month, month/day/year is assumed), each with an
 // optional time. Undefined when the text is not a date, so that it is never mistaken for one.
+// A cell of a Windchill export for sorting and export (UI-11): a date as a Date (the wall-clock time written), else the text.
+export function windchillDateValue(text: string): string | Date {
+  if (!/\d/.test(text) || text.length > 40) return text
+  const at = parseExportDate(text)
+  if (at === undefined) return text
+  const utc = new Date(at)
+  return new Date(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate(), utc.getUTCHours(), utc.getUTCMinutes(), utc.getUTCSeconds())
+}
 export function parseExportDate(text: string): number | undefined {
   const value = text.trim()
   if (!value) return undefined

@@ -1,5 +1,5 @@
-import { DataTable } from '../components/DataTable'
 import { useState } from 'react'
+import { TableDefaultsPanel } from '../components/TableDefaultsPanel'
 import type { MasterValue } from '../domain'
 import type { SharePointConfig } from '../sharepoint'
 import { EmptyState, Modal, Notice, Page, Panel, Pill, SettingsSummary, type Tone } from '../components/ui'
@@ -160,6 +160,7 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, mont
     ]} />}
     {tab === 'features' && <FeatureSetupPanel setup={featureSetup} git={git} items={azure.items} />}
     {tab === 'pack' && shared && <MonthlyPackSetupPanel pack={monthlyPack} git={git} items={azure.items} />}
+    {tab === 'tables' && <TableDefaultsPanel store={store} git={git} canEdit={shared} />}
     {tab === 'access' && <AccessPanel access={access} git={git} people={people} />}
     {!shared && tab === 'access' && <Notice tone="info">Capacity, periods, resources, master data and the shared connection setup are managed by roles with “Manage shared settings”.</Notice>}
     {tab === 'capacity' && <SectionTabs page="capacity" sections={[
@@ -189,7 +190,7 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, mont
         {unmapped.length > 0 && ` No region yet for ${unmapped.join(', ')}; regional holidays are not applied to them.`}
       </Notice>}
       <label className="default-joined">Default Joined on (everyone without their own date; months before it count no capacity)<span className="button-row"><input type="date" aria-label="Default Joined on" value={capacity.defaultJoinedOn ?? ''} onChange={(event) => setDefaultJoined(event.target.value)} />{capacity.defaultJoinedOn && <button type="button" className="text-button" onClick={() => setDefaultJoined('')}>Clear</button>}</span></label>
-      {resources.length ? <div className="azure-table"><DataTable tableId="AdminPage-1" className="resource-table"><thead><tr><th>Person</th><th>Region</th><th>Role</th><th>Reports to</th><th>Employed</th><th>Status in {shortMonthName(month)}</th><th>Utilization</th><th>Booked (h)</th><th>Absence (h)</th><th>Main streams</th></tr></thead><tbody>{resources.map((person) => {
+      {resources.length ? <div className="azure-table"><table className="resource-table"><thead><tr><th>Person</th><th>Region</th><th>Role</th><th>Reports to</th><th>Employed</th><th>Status in {shortMonthName(month)}</th><th>Utilization</th><th>Booked (h)</th><th>Absence (h)</th><th>Main streams</th></tr></thead><tbody>{resources.map((person) => {
         const profile = profiles[person.name] ?? {}
         return <tr key={person.name}>
           <td><strong>{person.name}</strong><small>{person.months} {person.months === 1 ? 'month' : 'months'} · {person.firstMonth === person.lastMonth ? shortMonthName(person.firstMonth) : `${shortMonthName(person.firstMonth)} – ${shortMonthName(person.lastMonth)}`}</small></td>
@@ -201,7 +202,7 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, mont
           <td><Pill tone={statusTone[person.status]}>{person.status}</Pill></td><td>{formatPercent(person.utilization)}</td><td>{formatHours(person.work)}</td><td>{formatHours(person.absence)}</td>
           <td>{person.streams.slice(0, 2).join(', ') || '—'}{person.streams.length > 2 && <small>+{person.streams.length - 2} more</small>}</td>
         </tr>
-      })}</tbody></DataTable></div>
+      })}</tbody></table></div>
         : <EmptyState title="No resources from Azure yet." detail="Refresh from Azure DevOps; people appear once they are Assigned To a Time Writing Task." />}
       {!resources.length && <div className="button-row"><button className="primary" onClick={() => onOpenTab('connections', 'servers')}>Go to Azure connections</button></div>}
       {resources.some((person) => profiles[person.name]?.reportsTo) && <TeamTree names={names} profiles={profiles} />}

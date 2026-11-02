@@ -8,9 +8,9 @@ const storageKey = (table: string) => `demand-planning-column-widths-v1:${table}
 const minWidth = 48
 const wrapKey = (table: string) => `demand-planning-table-wrap-v1:${table}`
 
-export function useColumnWidths(table: string) {
+export function useColumnWidths(table: string, defaultWrap = false) {
   const [widths, setWidths] = useState<Record<string, number>>(() => { try { return JSON.parse(localStorage.getItem(storageKey(table)) ?? '{}') as Record<string, number> } catch { return {} } })
-  const [wrap, setWrapState] = useState(() => { try { return localStorage.getItem(wrapKey(table)) === '1' } catch { return false } })
+  const [wrap, setWrapState] = useState(() => { try { const saved = localStorage.getItem(wrapKey(table)); return saved == null ? defaultWrap : saved === '1' } catch { return defaultWrap } })
   const setWrap = (next: boolean) => { setWrapState(next); try { localStorage.setItem(wrapKey(table), next ? '1' : '0') } catch { /* session only */ } }
   const save = (next: Record<string, number>) => { setWidths(next); try { localStorage.setItem(storageKey(table), JSON.stringify(next)) } catch { /* session only */ } }
   const style = (column: string): CSSProperties | undefined => widths[column] ? { width: widths[column], minWidth: widths[column], maxWidth: widths[column] } : undefined
@@ -26,5 +26,5 @@ export function useColumnWidths(table: string) {
       window.addEventListener('pointermove', move); window.addEventListener('pointerup', up)
     }} />
   const wrapToggle = <label className="check wrap-toggle"><input type="checkbox" checked={wrap} onChange={(event) => setWrap(event.target.checked)} />Wrap text</label>
-  return { style, handle, reset: () => save({}), resized: Object.keys(widths).length > 0, wrap, tableClass: `resizable ${wrap ? 'wrap' : 'no-wrap'}`, wrapToggle }
+  return { style, handle, reset: () => save({}), resized: Object.keys(widths).length > 0, wrap, setWrap, tableClass: `resizable ${wrap ? 'wrap' : 'no-wrap'}`, wrapToggle }
 }

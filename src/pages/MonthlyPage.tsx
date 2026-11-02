@@ -1,5 +1,5 @@
-import { DataTable } from '../components/DataTable'
 import { useState, useSyncExternalStore } from 'react'
+import { DataTable } from '../components/DataTable'
 import { isRunning, runInBackground, subscribeJobs } from '../backgroundJobs'
 import { Metric, Metrics, Notice, Page, Pill, TablePanel } from '../components/ui'
 import { GapsPanel } from '../components/GapsPanel'
@@ -15,6 +15,9 @@ import { ScopeSwitch } from '../components/ScopeSwitch'
 
 type Edit = { originalEstimate?: string; completedWork?: string }
 const adhoc = (tags: string) => tags.split(';').some(tag => tag.trim().toLowerCase() === 'ad-hoc')
+
+// A typed hour value for sorting and export (a number when it is one).
+const numberOrText = (value: string | number | undefined) => { const text = String(value ?? '').trim(); return text !== '' && Number.isFinite(Number(text)) ? Number(text) : text }
 
 export function MonthlyPage({ azure, month, store, my }: { azure: AzureWorkspace; month: string; store: PageProps['store']; my: MyWork }) {
   const [today] = useState(todayIso)
@@ -83,7 +86,16 @@ export function MonthlyPage({ azure, month, store, my }: { azure: AzureWorkspace
       <Metric label="Staged changes" value={staged} hint="Saved in one Azure operation" />
     </Metrics>
     <TablePanel title="Time Writing Tasks" info={<>Planning locks after its configured deadline (default: 5th). Actuals for this month lock on the next month’s configured deadline (default: 5th). Settings can lock, unlock or extend them separately. A Task first receiving Completed Work after planning has locked is tagged <code>ad-hoc</code>.</>} action={<><Pill tone={planningLocked ? 'locked' : 'open'}>Planning {planningLocked ? 'locked' : 'open'}</Pill><Pill tone={actualsLocked ? 'locked' : 'open'}>Actuals {actualsLocked ? 'locked' : 'open'}</Pill><button className="primary" disabled={saving || !staged || !azure.pat.trim()} onClick={() => void saveAll()}>{saving ? 'Saving and refreshing…' : `Save ${staged} staged task(s) and refresh`}</button><button className="ghost" disabled={saving || !staged} onClick={() => setEdits({})}>Discard staged changes</button></>} empty={data.monthlyTasks.length ? undefined : `No Time Writing Tasks have a title for ${month}.`}>
-      <DataTable tableId="MonthlyPage-1"><thead><tr><th>Epic</th><th>Feature</th><th>Month Task</th><th>State</th><th>Original Estimate</th><th>Completed Work</th><th>Tags</th></tr></thead><tbody>{data.epicBreakdown.flatMap(group => data.monthlyTasks.filter(task => group.stories.some(story => story.id === task.parentId)).map(task => { const feature = featureOf(task.parentId), isAdhoc = adhoc(task.tags); return <tr key={task.key}><td>{group.epic ? <a href={group.epic.url} target="_blank" rel="noreferrer">#{group.epic.id} {group.epic.title}</a> : 'No Epic path'}</td><td>{feature ? <a href={feature.url} target="_blank" rel="noreferrer">#{feature.id} {feature.title}</a> : 'No Feature'}</td><td><a href={task.url} target="_blank" rel="noreferrer">#{task.id} {task.title}</a></td><td><Pill tone="info">{task.state}</Pill></td><td><input aria-label={`Original Estimate for ${task.id}`} disabled={planningLocked || isAdhoc || saving} inputMode="decimal" value={editValue(task, 'originalEstimate')} onChange={event => change(task.id, 'originalEstimate', event.target.value)} /></td><td><input aria-label={`Completed Work for ${task.id}`} disabled={actualsLocked || saving} inputMode="decimal" value={editValue(task, 'completedWork')} onChange={event => change(task.id, 'completedWork', event.target.value)} /></td><td>{isAdhoc ? <Pill tone="warning">ad-hoc</Pill> : task.tags || '—'}</td></tr> }))}</tbody></DataTable>
+      {/* UI-07: the month Tasks on the table default; the estimate and work fields stay editable in their cells. */}
+      <DataTable id="monthly:tasks" rows={data.epicBreakdown.flatMap((group) => data.monthlyTasks.filter((task) => group.stories.some((story) => story.id === task.parentId)).map((task) => ({ group, task, feature: featureOf(task.parentId) })))} rowKey={(row) => row.task.key} exportName={`Time Writing Tasks ${month}`} columns={[
+        { id: 'epic', label: 'Epic', value: (row) => row.group.epic?.title ?? 'No Epic path', render: (row) => row.group.epic ? <a href={row.group.epic.url} target="_blank" rel="noreferrer">#{row.group.epic.id} {row.group.epic.title}</a> : 'No Epic path' },
+        { id: 'feature', label: 'Feature', value: (row) => row.feature?.title ?? 'No Feature', render: (row) => row.feature ? <a href={row.feature.url} target="_blank" rel="noreferrer">#{row.feature.id} {row.feature.title}</a> : 'No Feature' },
+        { id: 'task', label: 'Month Task', value: (row) => `#${row.task.id} ${row.task.title}`, render: (row) => <a href={row.task.url} target="_blank" rel="noreferrer">#{row.task.id} {row.task.title}</a> },
+        { id: 'state', label: 'State', value: (row) => row.task.state, render: (row) => <Pill tone="info">{row.task.state}</Pill> },
+        { id: 'estimate', label: 'Original Estimate', firstSortDesc: true, value: (row) => numberOrText(editValue(row.task, 'originalEstimate')), render: (row) => <input aria-label={`Original Estimate for ${row.task.id}`} disabled={planningLocked || adhoc(row.task.tags) || saving} inputMode="decimal" value={editValue(row.task, 'originalEstimate')} onChange={(event) => change(row.task.id, 'originalEstimate', event.target.value)} /> },
+        { id: 'completed', label: 'Completed Work', firstSortDesc: true, value: (row) => numberOrText(editValue(row.task, 'completedWork')), render: (row) => <input aria-label={`Completed Work for ${row.task.id}`} disabled={actualsLocked || saving} inputMode="decimal" value={editValue(row.task, 'completedWork')} onChange={(event) => change(row.task.id, 'completedWork', event.target.value)} /> },
+        { id: 'tags', label: 'Tags', value: (row) => adhoc(row.task.tags) ? 'ad-hoc' : row.task.tags || '', render: (row) => adhoc(row.task.tags) ? <Pill tone="warning">ad-hoc</Pill> : row.task.tags || '—' },
+      ]} />
       {!azure.pat.trim() && data.monthlyTasks.length > 0 && <p className="muted">Select an ADS configuration whose PAT has Work Items (Read &amp; Write) to save staged Azure fields.</p>}
     </TablePanel>
     <GapsPanel gaps={gaps} month={month} />

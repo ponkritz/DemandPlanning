@@ -1,4 +1,3 @@
-import { DataTable } from './DataTable'
 import { useState } from 'react'
 import { EmptyState, Modal, Notice, Panel, Pill, type Tone, Info } from './ui'
 import { formatDateTime } from '../format'
@@ -183,7 +182,7 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
     <div className="settings-section-heading"><div><p className="eyebrow">SETTINGS</p><h2>Azure DevOps <Info>Each connection is one set: base URL (Azure DevOps Services or an on-prem Azure DevOps Server collection), project, PAT and an optional query, plus what its data is used for. Add as many as you need; Fetch all reads every connection read-only, one after another. PATs stay in this browser and are excluded from backups, SharePoint and Git.</Info></h2></div><button className="primary" onClick={onOpenBoard}>Open {timeWritingView(connectionProfiles, activeConnectionProfileId).name} →</button></div>
     {show('email') && <WorkEmailPanel email={azure.creatorEmail} onSave={azure.setCreatorEmail} />}
     {show('servers') && <Panel className="connection-panel" eyebrow="STEP 1" title="Servers and PATs" action={<button type="button" className="ghost" onClick={() => setNewServer({ serverUrl: '', organization: '', pat: '' })}>＋ Add server</button>} info={<ul><li>One PAT per server: an on-prem collection (e.g. tfsapac04 · DHPCollection, for DHP.Vault and DHP) or a cloud organization (dev.azure.com/ALMP-ORG-MSTP01). Every connection on the server uses it, so it is entered once.</li><li>PATs stay in this browser or desktop app only; they are never saved to Git, backups or SharePoint, and each user enters their own.</li></ul>}>
-      <div className="azure-table"><DataTable tableId="AzureConnections-1"><thead><tr><th>Server</th><th>Projects</th><th>Used by</th><th>PAT</th><th /></tr></thead><tbody>
+      <div className="azure-table"><table><thead><tr><th>Server</th><th>Projects</th><th>Used by</th><th>PAT</th><th /></tr></thead><tbody>
         {servers.map((server) => <tr key={server.key}>
           <td><strong>{server.label}</strong>{server.onPrem && <Pill tone="info">On-prem</Pill>}</td>
           <td><small className="plain">{server.projects.join(', ')}</small></td>
@@ -197,7 +196,7 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
             {server.savedPat && <button type="button" className="text-button" onClick={() => { if (!window.confirm(`Remove the PAT for ${server.label} from this browser? Connections on it cannot fetch until a PAT is entered again. It is not revoked in Azure DevOps.`)) return; saveServerPat(server.key, ''); azure.reloadConnectionProfiles(); setPatNote({ key: server.key, text: `PAT removed for ${server.label}.` }) }}>Remove</button>}
           </form>{patNote?.key === server.key && <small className="positive">{patNote.text}</small>}</td>
         </tr>)}
-      </tbody></DataTable></div>
+      </tbody></table></div>
       {newServer && <Modal title="Add server" eyebrow="AZURE DEVOPS · STEP 1" wide form onClose={() => setNewServer(null)}><form className="connection-editor" onSubmit={(event) => {
         event.preventDefault()
         try {
@@ -220,7 +219,7 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
       action={<div className="button-row">{canManage && git?.connected && !git.readOnly && !azure.isSample && <button type="button" className="ghost" title="Write this browser's stream mapping to the shared setup in Git now; every other user gets it at their next start" onClick={() => void shareMapping('stream mapping')}>Save stream mapping to Git</button>}{mapping.some((row) => !row.profile && row.preset && !row.timeWriting && presetHasPat(row.preset)) && <button type="button" className="primary" onClick={() => { for (const row of mapping) if (!row.profile && row.preset && !row.timeWriting && presetHasPat(row.preset)) setUpStream(row.preset) }}>Set up all with saved PATs</button>}<label className="inline-select">Fuzzy match threshold<input type="number" min={1} max={100} step={1} value={threshold} disabled={!canManage} aria-label="Fuzzy match threshold (%)" onChange={(event) => { const value = Math.round(Number(event.target.value)); if (value >= 1 && value <= 100) store.update((draft) => { draft.releaseSourceSettings = { ...normalizeReleaseSourceSettings(draft.releaseSourceSettings), matchThreshold: value }; return draft }) }} />%</label></div>}>
       {!canManage && <Notice tone="info">The stream mapping (servers, projects and queries of DP, CP, IOCC, Content, Tool Validations and DP's data sets) is set by roles with “Manage shared settings” and comes from Git: changes made here are replaced by the shared mapping at the next start. Enter your PAT per server above.</Notice>}
       {canManage && <Notice tone="info">Changes you make to the stream mapping are saved to the shared setup in Git right away and replace every other user's mapping at their next start.</Notice>}
-      <div className="azure-table"><DataTable tableId="AzureConnections-2"><thead><tr><th>Stream</th><th>Server · project</th><th>Query</th><th>Rule</th><th>Status</th><th /></tr></thead><tbody>
+      <div className="azure-table"><table><thead><tr><th>Stream</th><th>Server · project</th><th>Query</th><th>Rule</th><th>Status</th><th /></tr></thead><tbody>
         {mapping.map((row) => { const [tone, label] = row.profile ? statusTone(row.profile) : ['warning' as Tone, row.windchill ? 'Windchill export' : 'Not mapped']; const status = row.profile ? connectionStatus[row.profile.id] : undefined; return <tr key={row.name}>
           <td><strong>{row.name}</strong>{row.profile && <small>{viewNameOf(row.profile)}</small>}{row.timeWriting && row.profile && !azure.creatorEmail && <small className="warning-text">Work email missing: set it under Your work email</small>}</td>
           <td>{row.windchill ? <small className="plain">Windchill export “{row.name}”</small> : row.where ? <small className="plain">{row.where}</small> : <span className="muted">—</span>}</td>
@@ -234,7 +233,7 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
             {row.profile && (canManage || row.timeWriting) && <button type="button" className="ghost" onClick={() => edit(row.profile!)}>Edit</button>}
           </div></td>
         </tr> })}
-      </tbody></DataTable></div>
+      </tbody></table></div>
     </Panel>}
     {show('views') && <Panel className="connection-panel" eyebrow="STEP 3" title="Other views" info="Any other Azure DevOps view: custom queries, backlog views and background sources such as the DHP release register (Pedestal). Each is saved as soon as it is fetched (an empty Time Writing result never replaces saved data without asking). Nothing is written to Azure DevOps when fetching. Connections on a server with a PAT need no PAT of their own."
       action={<div className="button-row"><button type="button" className="ghost" onClick={() => { setFormError(''); setForm(empty(connectionProfiles.some((profile) => profile.role === 'time-tracking') ? 'reference' : 'time-tracking')) }}>＋ Add connection</button><button type="button" className="primary" disabled={!connectionProfiles.length || fetchingAll || busy} onClick={() => { setFetchingAll(true); void azure.fetchAll().finally(() => setFetchingAll(false)) }}>{fetchingAll ? 'Fetching all…' : 'Fetch all'}</button></div>}>
@@ -246,7 +245,7 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
       {extras.length > 0 && keep && <Notice tone="warning">{timeWriting.length} Time Writing (QMS-0025) connections: only “{keep.reason}” is used; {extras.map((profile) => `“${profile.reason}”`).join(', ')} {extras.length === 1 ? 'is a duplicate' : 'are duplicates'}. <button type="button" className="text-button" onClick={() => void removeDuplicates()}>Keep “{keep.reason}”, remove the other{extras.length === 1 ? '' : 's'}</button></Notice>}
       {keep && twins.map((profile) => <Notice key={profile.id} tone="warning">“{profile.reason}” reads the same backlog as the Time Writing connection “{keep.reason}”. If “{profile.reason}” loads and “{keep.reason}” does not, <button type="button" className="text-button" onClick={() => void switchTimeWriting(profile)}>use “{profile.reason}” as Time Writing and remove “{keep.reason}”</button>.</Notice>)}
       {cleanup && <Notice tone={cleanup.tone}>{cleanup.text}</Notice>}
-      {others.length ? <div className="azure-table"><DataTable tableId="AzureConnections-3" className="connection-table"><thead><tr><th>Connection</th><th>Used for</th><th>Organization / project</th><th>Query</th><th>Status</th><th /></tr></thead><tbody>{others.map((profile) => {
+      {others.length ? <div className="azure-table"><table className="connection-table"><thead><tr><th>Connection</th><th>Used for</th><th>Organization / project</th><th>Query</th><th>Status</th><th /></tr></thead><tbody>{others.map((profile) => {
         const parts = splitAzureUrl(profile.url, profile.baseUrl), [tone, label] = statusTone(profile), status = connectionStatus[profile.id]
         const active = profile.role === 'time-tracking' && profile.id === activeConnectionProfileId
         return <tr key={profile.id}>
@@ -257,7 +256,7 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
           <td><Pill tone={tone}>{label}</Pill><small>{status?.message ?? lastFetch(profile)}</small></td>
           <td><div className="button-row nowrap"><button type="button" className="ghost" disabled={status?.state === 'busy' || fetchingAll} onClick={() => void azure.fetchConnection(profile.id)}>Fetch</button><button type="button" className="ghost" disabled={status?.state === 'busy' || fetchingAll} onClick={() => void azure.testConnection(profile.id)}>Test</button>{profile.role === 'backlog-view' && <button type="button" className="ghost" disabled={status?.state === 'busy' || fetchingAll || busy} onClick={() => void switchTimeWriting(profile)}>Use as Time Writing</button>}<button type="button" className="ghost" onClick={() => edit(profile)}>Edit</button><button type="button" className="ghost" title="New connection with the same settings and PAT" onClick={() => clone(profile)}>Clone</button><button type="button" className="text-button" onClick={() => { if (window.confirm(`Remove “${profile.reason}” from this browser? Its PAT is not revoked in Azure DevOps.`)) azure.removeConnection(profile.id) }}>Remove</button></div></td>
         </tr>
-      })}</tbody></DataTable></div>
+      })}</tbody></table></div>
         : otherPresets.length ? null : <EmptyState title="No other views." detail="Time Writing and the streams are in the Stream mapping above; add any other view here." />}
       {form && <Modal title={form.id ? `Edit “${connectionProfiles.find((profile) => profile.id === form.id)?.reason ?? form.name}”` : clonedFrom ? `Clone of “${clonedFrom}”` : 'New connection'} eyebrow={`AZURE DEVOPS · ${roleLabel[form.role].toUpperCase()}`} wide form onClose={() => { setForm(null); setFormError('') }}><form className="connection-editor" onSubmit={submit}>
         {clonedFrom ? <Notice>All settings and the PAT of “{clonedFrom}” are copied. Change the name and what differs (query, project, team, …), then Save and refresh data. “{clonedFrom}” itself is not changed.</Notice> : !form.id && form.organization && <Notice>Pre-filled settings: enter your PAT, change anything else if needed, then Save and Test.</Notice>}
@@ -280,10 +279,10 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
       </form></Modal>}
     </Panel>}
     {show('sources') && sources.length > 0 && <Panel className="connection-panel" eyebrow="READ ONLY" title="Fetched read-only sources" info="Snapshots from document and reference connections, stored with the app data.">
-      <div className="azure-table"><DataTable tableId="AzureConnections-4"><thead><tr><th>Connection</th><th>Project</th><th>Work items</th><th>By type</th><th>Fetched</th></tr></thead><tbody>{sources.map((source) => {
+      <div className="azure-table"><table><thead><tr><th>Connection</th><th>Project</th><th>Work items</th><th>By type</th><th>Fetched</th></tr></thead><tbody>{sources.map((source) => {
         const types = Object.entries(source.items.reduce<Record<string, number>>((counts, item) => { counts[item.workItemType] = (counts[item.workItemType] ?? 0) + 1; return counts }, {})).sort((a, b) => b[1] - a[1])
         return <tr key={source.connectionId}><td><strong>{source.name}</strong><small>{roleLabel[source.role]}</small></td><td>{source.organization} / {source.project}</td><td>{source.items.length}</td><td>{types.slice(0, 4).map(([type, count]) => `${type} ${count}`).join(' · ') || '—'}</td><td>{formatDateTime(source.fetchedAt)}</td></tr>
-      })}</tbody></DataTable></div>
+      })}</tbody></table></div>
     </Panel>}
     {show('sample') && <Panel className="connection-panel" eyebrow="DEMO" title="Synthetic sample" info="Replaces the cached Time Writing data and release source with a generated dataset, without reading from or writing to Azure DevOps.">
       <div className="button-row"><button type="button" className="ghost" disabled={busy} onClick={() => { if (azure.saved.length && !azure.isSample && !window.confirm('Replace the saved Azure cache with a synthetic sample dataset? Export a JSON backup first if you need the current data.')) return; azure.loadSampleData() }}>Load synthetic sample dataset</button></div>

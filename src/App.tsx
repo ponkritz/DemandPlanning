@@ -1,4 +1,6 @@
 import { BrandMark } from './components/BrandMark'
+import { TableDefaultsContext } from './components/tableDesign'
+import { normalizeTableDefaults } from './tableDefaults'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import './fresh.css'
@@ -171,6 +173,7 @@ export default function App() {
   // QE Mapping (QEM-12): the QE Name of a new row is picked from the Resources list (Settings → Resources): everyone with
   // Time Writing Tasks, and the people with a resource profile.
   const qeResources = useMemo(() => page !== 'qemapping' ? [] : (() => { const capacity = capacityContext(store.state); return [...new Set([...azureResources(azure.items, month, capacity).map((person) => person.name), ...Object.keys(capacity.profiles ?? {})])].filter(Boolean).sort((a, b) => a.localeCompare(b)) })(), [page, azure.items, month, store.state])
+  const tableDesign = useMemo(() => normalizeTableDefaults(store.state.tableDefaults), [store.state.tableDefaults])
   const openWindchill = (id: string, stream = '') => { setWindchillId(id); setWindchillFor(id ? '' : stream); setPage('windchill') }
   // Views shown in the menu that are not the Time Writing backlog nor a default stream: listed under "Other views".
   const others = otherMenuViews(views, azure.connectionProfiles, windchillViews)
@@ -212,7 +215,8 @@ export default function App() {
 
   if (!store.ready) return <main className="content"><h1>I&amp;D Quality Demand Planning</h1>{store.loadError ? <Notice tone="error"><p>{store.loadError}</p><p>Do not clear browser data. If you still have an older tab open with unsaved changes, export its JSON backup first.</p><button className="primary" onClick={store.retryLoad}>Retry loading saved data</button></Notice> : <p role="status">Loading saved browser data…</p>}{buildStatus}</main>
 
-  return <HeaderSlot.Provider value={headerSlot}><div className={`app-shell${navOpen ? ' nav-open' : ''}`}>
+  // UI-12: every table follows the shared design default.
+  return <TableDefaultsContext.Provider value={tableDesign}><HeaderSlot.Provider value={headerSlot}><div className={`app-shell${navOpen ? ' nav-open' : ''}`}>
     {navOpen && <div className="nav-backdrop" onClick={() => setNavOpen(false)} aria-hidden="true" />}
     <aside className="sidebar" id="primary-navigation">
       <div className="brand" title="I&amp;D Quality Demand Planning"><div className="brand-mark"><BrandMark /></div><div><strong>I&amp;D Quality</strong><span>Demand Planning</span></div></div>
@@ -271,5 +275,5 @@ export default function App() {
       {page === 'admin' && <AdminPage key={`${settingsTab}:${settingsVisit}`} tab={settingsTab} onOpenTab={openSettings} {...pageProps} azure={azure} git={git} access={access} featureSetup={featureSetup} monthlyPack={monthlyPack} loadEverything={loadEverything} onOpenBoard={() => setPage('board')} />}
       {page === 'docs' && <DocsPage />}
     </main>
-  </div></HeaderSlot.Provider>
+  </div></HeaderSlot.Provider></TableDefaultsContext.Provider>
 }

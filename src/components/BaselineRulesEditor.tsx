@@ -1,4 +1,3 @@
-import { DataTable } from './DataTable'
 import { useState } from 'react'
 import { describeRule, exampleBaselineRules, normalizeRules, type BaselineRule } from '../baseline'
 import { Notice, Panel } from './ui'
@@ -21,7 +20,7 @@ export function BaselineRulesEditor({ rules, streams, onSave, readOnly = false }
     action={readOnly ? undefined : <div className="button-row"><button type="button" className="ghost" onClick={() => { setSaved(''); setDraft(exampleBaselineRules) }}>Load example values</button><button type="button" className="primary" disabled={!dirty} onClick={() => { const next = normalizeRules(draft); onSave(next); setDraft(next); setSaved('Estimation rules saved.') }}>Save rules</button></div>}>
     {saved && <Notice tone="success">{saved}</Notice>}
     {unset.length > 0 && <Notice tone="warning">No hours per unit yet for {unset.join(', ')}: their baseline is 0h until the formula is filled in.</Notice>}
-    <fieldset className="plain-fieldset" disabled={readOnly}><div className="azure-table"><DataTable tableId="BaselineRulesEditor-1" className="rule-table uniform-rules"><thead><tr><th>Stream (Epic title)</th><th>Hours per unit</th><th>Fixed units per release</th><th>Driver</th><th>Units per driver</th><th>Maximum hours</th><th>Formula</th><th /></tr></thead><tbody>
+    <fieldset className="plain-fieldset" disabled={readOnly}><div className="azure-table"><table className="rule-table uniform-rules"><thead><tr><th>Stream (Epic title)</th><th>Hours per unit</th><th>Fixed units per release</th><th>Driver</th><th>Units per driver</th><th>Maximum hours</th><th>Formula</th><th /></tr></thead><tbody>
       {draft.map((rule, index) => <tr key={index}>
         <td><input aria-label="Stream (Epic title)" value={rule.stream} onChange={(event) => update(index, { stream: event.target.value })} /></td>
         <td><input aria-label={`Hours per unit for ${rule.stream}`} type="number" min="0" step="0.05" value={rule.hoursPerUnit} onChange={(event) => update(index, { hoursPerUnit: number(event.target.value) })} /></td>
@@ -32,7 +31,7 @@ export function BaselineRulesEditor({ rules, streams, onSave, readOnly = false }
         <td className="rule-formula">{describeRule(normalizeRules([rule])[0] ?? rule)}</td>
         <td><button type="button" className="text-button" aria-label={`Remove ${rule.stream || 'stream'}`} onClick={() => { setSaved(''); setDraft((current) => current.filter((_, position) => position !== index)) }}>✕</button></td>
       </tr>)}
-    </tbody></DataTable></div></fieldset>
+    </tbody></table></div></fieldset>
     {!readOnly && <div className="button-row rule-add">{unused.length > 0 && <select aria-label="Add a rule for stream" value="" onChange={(event) => { if (!event.target.value) return; setSaved(''); setDraft((current) => [...current, blank(event.target.value)]) }}><option value="">＋ Add rule for a stream…</option>{unused.map((stream) => <option key={stream}>{stream}</option>)}</select>}<button type="button" className="ghost" onClick={() => { setSaved(''); setDraft((current) => [...current, blank('')]) }}>＋ Custom stream</button></div>}
   </Panel>
 }

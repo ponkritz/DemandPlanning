@@ -83,6 +83,9 @@ This document lists every software component of the system: the in-house source 
 | ReleaseView | `src/components/ReleaseView.tsx` | Release source view: releases derived from document paths or Titles (per stream rule), with the Time Writing Feature match and hours and the QMS-0025 match column with Create Feature (QV-46). | QV |
 | ResultTabs | `src/components/ResultTabs.tsx` | The two tabs of a Release Details page: the consolidation (Releases, CP report, Projects) and the raw rows (Query output / Raw data), the choice kept per page in the browser tab (QV-47). | QV |
 | ViewActions | `src/components/ViewActions.tsx` | The compact actions of a Release Details page: the main action as a small icon button with its name as tooltip, the others in a ⋯ menu (QV-48). | QV |
+| DataTable | `src/components/DataTable.tsx` | The one table component (UI-07…13): resize, move by dragging a heading or ↑ ↓ in the Columns list, choose columns, Wrap text, Compact / Comfortable, Reset layout, sort, expandable, grouped and tree rows, a totals row that follows the columns, and one Export offering Excel or CSV. | UI, QV, CON |
+| tableDesign | `src/components/tableDesign.ts` | The React context that hands the shared table design default to every DataTable (UI-12). | UI |
+| TableDefaultsPanel | `src/components/TableDefaultsPanel.tsx` | Settings → Table defaults: the shared, audited design default of every table (UI-12). | UI, SET |
 | ScopeSwitch | `src/components/ScopeSwitch.tsx` | Team / Individual toggle with person picker, in the header or page top. | MON, OVR |
 | SectionTabs | `src/components/SectionTabs.tsx` | The section row of a Settings page: one section at a time, the last one remembered per page (SET-14). | SET, NAV |
 | SetupGuide | `src/components/SetupGuide.tsx` | "Get started" pop-up listing setup steps with live status and buttons to the right place. | NAV |
@@ -93,8 +96,6 @@ This document lists every software component of the system: the in-house source 
 | WindchillViews | `src/components/WindchillViews.tsx` | Windchill views settings, the Windchill export page and import of results saved or copied from the browser. | CON |
 | WorkloadCharts | `src/components/WorkloadCharts.tsx` | SVG charts: utilization, Epic mix, Epic bullet, Pareto, utilization heatmap and donut. | OVR |
 | columnWidths | `src/components/columnWidths.tsx` | `useColumnWidths` hook: draggable table column widths kept per table in this browser. | UI |
-| DataTable | `src/components/DataTable.tsx` | Shared table presentation: resizable columns, column visibility and drag or keyboard ordering, wrap, density and displayed-row CSV/Excel exports. Local preferences per table and schema. | UI |
-| DataTable styles | `src/components/DataTable.css` | Shared table toolbar, density, wrap, resize handles and scroll layout. | UI |
 | ui | `src/components/ui.tsx` | Shared UI primitives: Page, Panel, TablePanel, Metrics, Pill, Notice, EmptyState, Modal, Info, SettingsSummary. | UI |
 
 ### 1.3 Domain logic and calculations
@@ -137,7 +138,8 @@ This document lists every software component of the system: the in-house source 
 | streams | `src/streams.ts` | Release stream definitions and data sets, name matching and connection/export lookup per stream. | QV, OVR |
 | viewSources | `src/viewSources.ts` | Picks the saved fetch snapshot for a read-only connection, with legacy shared release snapshot rule. | QV, FET |
 | windchillReleases | `src/windchillReleases.ts` | Unique releases of a Windchill export from the Location column (deepest folder with a version) or the document names (clubbed names included); unique locations; the windchill-locations analysis file. | CON |
-| xlsx | `src/xlsx.ts` | Library-free .xlsx zip reader/writer and CSV reader with inflate size limit. | QEM |
+| xlsx | `src/xlsx.ts` | Library-free .xlsx zip reader/writer and CSV reader with inflate size limit; the writer writes numbers and real dates (a serial with a date format, UI-11). | QEM, UI |
+| tableDefaults | `src/tableDefaults.ts` | The table design default (UI-07…12): the shared setting and its check, the per-table layout kept in the browser, column order and sort helpers, and dates exported as real date-times (Excel serial, CSV yyyy-mm-dd hh:mm:ss). | UI |
 | monthlyPack | `src/monthlyPack.ts` | Monthly pack: setup and month files, Epic counts, releases and supported counts per slide line, YoY, capacity lines, slide boxes and copy text. | PCK |
 | pptx | `src/pptx.ts` | Library-free .pptx writer: 16:9 slides with a title and boxes of bullet lines, on the xlsx zip writer. | PCK |
 
@@ -258,6 +260,7 @@ This document lists every software component of the system: the in-house source 
 | nested-groups.test | `tests/nested-groups.test.mjs` | Nested grouping: levels, order, blank last, unique keys. | QV |
 | monthly-pack.test | `tests/monthly-pack.test.mjs` | Monthly pack files, Epic counts, lines, YoY, slide text and the .pptx writer. | PCK |
 | qe-mapping.test | `tests/qe-mapping.test.mjs` | xlsx/CSV read/write and QE Mapping editing and Git file handling. | QEM |
+| table-defaults.test | `tests/table-defaults.test.mjs` | The table design default: shared setting check, column layout and moves, and dates in Excel / CSV exports read back (TC-UI-04, TC-UI-05). | UI |
 | query-view.test | `tests/query-view.test.mjs` | Query layout, field resolution, sorting, summary, CSV and column order. | QV |
 | release-overview.test | `tests/release-overview.test.mjs` | Releases per stream approved in the month for Overview and Pulse Check. | OVR |
 | release-source.test | `tests/release-source.test.mjs` | Release-source WIQL paging, tree / links queries, path parsing, register and approval dates. | QV, CON |
@@ -283,7 +286,7 @@ The end-to-end suite (`pnpm test:e2e`, after `pnpm build:web`) drives the built 
 |---|---|---|---|
 | helpers | `e2e/helpers.mjs` | Starts `vite preview` on a free port, opens Chromium pages with clean storage, records page errors, shared actions (navigate, load sample). | CI |
 | shell.e2e | `e2e/shell.e2e.mjs` | Sidebar groups and footer, header and month picker, Get started pop-up, synthetic sample, theme toggle, phone width, Force Update dialog, Git storage form defaults, manager not on the board (TC-GIT-06, TC-SET-05, TC-NAV-01, 03, 31, 33, TC-UI-01, TC-SMP-01, TC-UPD-02). | NAV, UI, SMP, UPD |
-| documents-and-data.e2e | `e2e/documents-and-data.e2e.mjs` | Documentation tabs, links and download; Windchill export releases from names and from Location with the locations CSV; "＋ ECP" import named after the stream with the ECP CSV, Project No / Project Name columns, an ECP setup at the 3rd folder with the type-2 CSV (TC-CON-53, 54, 55); neutralised CSV; JSON backup without credentials (TC-DOC-01, 02, TC-CON-39, 40, 37, TC-STO-04, TC-INS-01); Windchill releases' QMS-0025 match column (TC-QV-23); auto-fit tables and Wrap text (TC-CON-42); the DP Supported Releases list in Pulse Check folded until Show list (TC-QV-17). | DOC, CON, STO, NFR, QV |
+| documents-and-data.e2e | `e2e/documents-and-data.e2e.mjs` | Documentation tabs, links and download; Windchill export releases from names and from Location with the locations CSV; "＋ ECP" import named after the stream with the ECP CSV, Project No / Project Name columns, an ECP setup at the 3rd folder with the type-2 CSV (TC-CON-53, 54, 55); the table default on the Windchill raw data — move, hide, density, Excel export with dates, Settings → Table defaults (TC-UI-04, 05); My Work tree, Backlog Health and Baselines on the default (TC-UI-06); neutralised CSV; JSON backup without credentials (TC-DOC-01, 02, TC-CON-39, 40, 37, TC-STO-04, TC-INS-01); Windchill releases' QMS-0025 match column (TC-QV-23); auto-fit tables and Wrap text (TC-CON-42); the DP Supported Releases list in Pulse Check folded until Show list (TC-QV-17). | DOC, CON, STO, NFR, QV |
 | backlog.e2e | `e2e/backlog.e2e.mjs` | New User Story form from a Feature row of the Backlogs (TC-BKL-10); the Edit form from Feature, User Story and Task rows (TC-BKL-11). | CI, BKL |
 | workspace.e2e | `e2e/workspace.e2e.mjs` | Insights workspace hidden for now: not in the menu, the Dashboard unchanged (TC-WSP-07; the TC-WSP-06 scenario returns with the page). | CI |
 | monthly-pack.e2e | `e2e/monthly-pack.e2e.mjs` | Monthly pack tab with the synthetic sample, the .pptx download and the setup tab (TC-PCK-04). | CI |

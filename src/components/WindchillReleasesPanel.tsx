@@ -1,12 +1,9 @@
-import { DataTable } from './DataTable'
 import { useMemo, useState } from 'react'
-import { releasesInMonth, windchillLocationsFile, windchillReleases, type ReleaseSource, type WindchillRelease } from '../windchillReleases'
+import { releasesInMonth, windchillDateValue, windchillLocationsFile, windchillReleases, type ReleaseSource, type WindchillRelease } from '../windchillReleases'
 import { monthName } from '../format'
-import { useColumnWidths } from './columnWidths'
-import { csvCell } from '../csv'
-import { downloadCsv } from '../download'
 import type { GitStorage } from '../useGitStorage'
 import { Notice, TablePanel } from './ui'
+import { DataTable, type DataColumn } from './DataTable'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { FeatureSetups } from '../featureSetup'
 import { boardMatchText, dpBoardCandidates, type BoardMatch, windchillBoardMatch, windchillFeatureTitle } from '../dpBoardMatch'
@@ -39,7 +36,6 @@ export function WindchillReleasesPanel({ view, rows, columns, git, month, board,
   const [saved, setSaved] = useState<{ tone: 'info' | 'success' | 'error'; text: string } | null>(null)
   const [scope, setScope] = useState<'month' | 'all'>('month')
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: 'latest', desc: true })
-  const widths = useColumnWidths(`windchill-releases:${view.id}`)
   const result = useMemo(() => windchillReleases(rows, columns, { source, nameColumn: nameColumn || undefined, locationColumn: locationColumn || undefined, ...windchillOptionsForView(view) }), [rows, columns, source, nameColumn, locationColumn, view])
   // ECP (CON-86): a release is a project, so its columns read "Project No" and "Project Name".
   const isProject = Boolean(windchillOptionsForView(view).project)
@@ -60,10 +56,23 @@ export function WindchillReleasesPanel({ view, rows, columns, git, month, board,
     return [...list].sort(compare)
   }, [result.releases, inMonth, month, sort, matches])
   const shownDocuments = new Set(shown.flatMap((entry) => entry.documents.map((doc) => doc.row))).size
-  const toggleSort = (key: SortKey) => setSort((current) => current.key === key ? { key, desc: !current.desc } : { key, desc: key === 'latest' || key === 'documents' || key === 'locations' || key === 'match' })
-  const heading = (key: SortKey, label: string) => <th key={key} style={widths.style(key)} aria-sort={sort.key === key ? (sort.desc ? 'descending' : 'ascending') : 'none'}><button type="button" className="sort-button" onClick={() => toggleSort(key)}>{label}{sort.key === key ? (sort.desc ? ' ▾' : ' ▴') : ''}</button>{widths.handle(key, label)}</th>
-  const releasesCsv = () => [[labels.name, labels.release, 'Documents', 'Latest', 'Locations', ...(board ? ['QMS-0025 match'] : []), 'Document names'].join(','), ...shown.map((entry) => [entry.name, entry.release, String(entry.documents.length), entry.latest, entry.locations.join('; '), ...(board ? [boardMatchText(matches.get(entry.key) ?? {})] : []), entry.documents.map((doc) => doc.name).join('; ')].map(csvCell).join(','))].join('\r\n')
-  const locationsCsv = () => [['Location', 'Documents', 'Releases', 'Release folder'].join(','), ...result.locations.map((entry) => [entry.location, String(entry.count), entry.releases.map((release) => `${release.name} ${release.release}`).join('; '), entry.releases[0]?.folder ?? ''].map(csvCell).join(','))].join('\r\n')
+  const fromLocation = result.source === 'location'
+  // UI-07…12: the release (or project) table and the locations follow the shared design default; one Export each.
+  const releaseColumns: DataColumn<WindchillRelease>[] = [
+    { id: 'name', label: labels.name, value: (entry) => entry.name, render: (entry) => <strong>{entry.name}</strong> },
+    { id: 'release', label: labels.release, value: (entry) => entry.release },
+    { id: 'documents', label: 'Documents', value: (entry) => entry.documents.length, firstSortDesc: true, render: (entry) => <button type="button" className="text-button" aria-expanded={open === entry.key} onClick={() => setOpen(open === entry.key ? '' : entry.key)}>{open === entry.key ? '▾' : '▸'} {entry.documents.length} document{entry.documents.length === 1 ? '' : 's'}</button> },
+    ...(fromLocation ? [{ id: 'locations', label: 'Locations', value: (entry: WindchillRelease) => entry.locations.length, align: 'right' as const, firstSortDesc: true }] : []),
+    ...(result.dateColumn ? [{ id: 'latest', label: `Latest ${result.dateColumn}`, value: (entry: WindchillRelease) => entry.latest ? windchillDateValue(entry.latest) : '', firstSortDesc: true, render: (entry: WindchillRelease) => entry.latest || '—' }] : []),
+    ...(board ? [{ id: 'match', label: 'QMS-0025 match', value: (entry: WindchillRelease) => boardMatchText(matches.get(entry.key) ?? {}), render: (entry: WindchillRelease) => <BoardMatchCell match={matches.get(entry.key) ?? {}} azure={board.azure} stream={board.stream} title={windchillFeatureTitle(board.stream, entry)} assign={board.assign} featureSetup={board.featureSetup} /> }] : []),
+    { id: 'documentNames', label: 'Document names', value: (entry) => entry.documents.map((doc) => doc.name).join('; '), defaultHidden: true, export: 'always' },
+  ]
+  const locationColumns: DataColumn<typeof result.locations[number]>[] = [
+    { id: 'location', label: 'Location', value: (entry) => entry.location },
+    { id: 'documents', label: 'Documents', value: (entry) => entry.count, align: 'right' },
+    { id: 'releases', label: 'Releases read from it', value: (entry) => entry.releases.map((release) => `${release.name} ${release.release}`).join('; '), render: (entry) => entry.releases.length ? entry.releases.map((release) => `${release.name} ${release.release}`).join('; ') : <span className="muted">none</span> },
+    { id: 'folder', label: 'Release folder', value: (entry) => entry.releases[0]?.folder ?? '', defaultHidden: true, export: 'always' },
+  ]
   const saveToGit = async () => {
     if (!git) return
     setSaved({ tone: 'info', text: 'Saving to Git…' })
@@ -73,31 +82,25 @@ export function WindchillReleasesPanel({ view, rows, columns, git, month, board,
       setSaved({ tone: 'success', text: `Saved to Git (${path}).` })
     } catch (error) { setSaved({ tone: 'error', text: `Not saved to Git: ${error instanceof Error ? error.message : String(error)}` }) }
   }
-  const fromLocation = result.source === 'location'
   const columnLabel = fromLocation ? `“${result.locationColumn}”` : `“${result.nameColumn}”`
   return <TablePanel title="Releases" info={<><p><strong>Location</strong> (the folder path) is the preferred source: the releases are read from the deepest folder that holds a version — the name and number in one folder ("Remote Diagnostics 1.6"), a clubbed folder ("Ser1 Rel1_Ser2 Rel2": one release, as written, counted once), or a version folder under the name folder ("Remote Diagnostics/1.6", "CareLink/R3.2"); the folders after it (document type) are ignored, and the number is kept exactly as the folder writes it. <strong>Document name</strong> is the fallback: the name holds the release name(s), the release number(s) and then the document name, with any delimiters; a clubbed name ("Ser1 Rel1_Ser2 Rel2") is one release.</p><p>Each release is listed once (name and number; case and trailing zeros ignored, 3.1 = 3.1.0). <strong>Save locations to Git</strong> writes every distinct Location with its document count and the release read from it to the Git data repository (windchill-analysis/{view.id}-locations.json), for analysis of the folder naming; no document contents.</p></>}
     count={inMonth && month ? `${shown.length} of ${result.releases.length} release${result.releases.length === 1 ? '' : 's'} with the latest ${result.dateColumn ?? 'date'} in ${monthName(month)} · ${shownDocuments} document${shownDocuments === 1 ? '' : 's'}${result.clubbed ? ` · ${result.clubbed} clubbed` : ''} · from ${fromLocation ? 'Location' : 'Document name'}` : `${result.releases.length} release${result.releases.length === 1 ? '' : 's'} · ${rows.length - result.unmatched.length} of ${rows.length} documents${result.clubbed ? ` · ${result.clubbed} clubbed` : ''} · from ${fromLocation ? 'Location' : 'Document name'}`}
     action={<div className="button-row">
       {month && <label className="inline-field">Show<select value={scope} onChange={(event) => setScope(event.target.value as 'month' | 'all')}><option value="month">Latest in {monthName(month)} (header month)</option><option value="all">All months</option></select></label>}
-
-      {widths.resized && <button type="button" className="ghost" onClick={widths.reset}>Reset widths</button>}
       {onSetup && <label className="inline-field">Logic<select aria-label="Logic" value={isProject ? 'ecp' : 'standard'} onChange={(event) => onSetup({ logic: event.target.value as WindchillLogic, ...(view.projectLevel ? { projectLevel: view.projectLevel } : {}) })}><option value="standard">Standard (releases)</option><option value="ecp">ECP (projects)</option></select></label>}
       {onSetup && isProject && <label className="inline-field">Project details at<select aria-label="Project details at" value={view.projectLevel ?? 2} onChange={(event) => onSetup({ logic: 'ecp', projectLevel: Number(event.target.value) })}>{projectLevels.map((level) => <option key={level} value={level}>{ordinal(level)} folder</option>)}</select></label>}
       <label className="inline-field">Read from<select value={source} onChange={(event) => setSource(event.target.value as ReleaseSource | 'auto')}><option value="auto">Automatic ({result.locationColumn ? 'Location' : 'Document name'})</option><option value="location" disabled={!result.locationColumn && !columns.length}>Location</option><option value="name">Document name</option></select></label>
       {fromLocation ? <label className="inline-field">Location column<select value={locationColumn || result.locationColumn || ''} onChange={(event) => setLocationColumn(event.target.value)}>{columns.map((entry) => <option key={entry} value={entry}>{entry}</option>)}</select></label>
         : <label className="inline-field">Name column<select value={nameColumn || result.nameColumn} onChange={(event) => setNameColumn(event.target.value)}>{columns.map((entry) => <option key={entry} value={entry}>{entry}</option>)}</select></label>}
-      <button type="button" className="ghost" disabled={!shown.length} onClick={() => downloadCsv(releasesCsv(), `${fileName}-releases.csv`)}>Export releases CSV</button>
-      {fromLocation && <button type="button" className="ghost" disabled={!result.locations.length} onClick={() => downloadCsv(locationsCsv(), `${fileName}-locations.csv`)}>Export locations CSV</button>}
       {fromLocation && git?.connected && !git.readOnly && <button type="button" className="primary" disabled={!result.locations.length || saved?.tone === 'info'} onClick={() => void saveToGit()}>Save locations to Git</button>}
     </div>}
     empty={result.releases.length ? (shown.length ? undefined : `No release has its latest ${result.dateColumn ?? 'date'} in ${monthName(month ?? '')}. Choose another month in the header, or show all months.`) : `No release found in the ${columnLabel} column. Choose the column that holds the ${fromLocation ? 'folder paths' : 'document names'}, or read from the ${fromLocation ? 'document names' : 'Location'} instead.`}>
     {saved && <Notice tone={saved.tone === 'error' ? 'warning' : 'info'}><span role="status">{saved.text}</span></Notice>}
-    {shown.length > 0 && <DataTable tableId="WindchillReleasesPanel-1" className={widths.tableClass}><thead><tr>{heading('name', labels.name)}{heading('release', labels.release)}{heading('documents', 'Documents')}{fromLocation && heading('locations', 'Locations')}{result.dateColumn && heading('latest', `Latest ${result.dateColumn}`)}{board && heading('match', 'QMS-0025 match')}</tr></thead><tbody>
-      {shown.flatMap((entry) => [<tr key={entry.key}><td style={widths.style('name')}><strong>{entry.name}</strong></td><td style={widths.style('release')}>{entry.release}</td><td style={widths.style('documents')}><button type="button" className="text-button" aria-expanded={open === entry.key} onClick={() => setOpen(open === entry.key ? '' : entry.key)}>{open === entry.key ? '▾' : '▸'} {entry.documents.length} document{entry.documents.length === 1 ? '' : 's'}</button></td>{fromLocation && <td style={widths.style('locations')}>{entry.locations.length}</td>}{result.dateColumn && <td style={widths.style('latest')}>{entry.latest || '—'}</td>}{board && <td style={widths.style('match')}><BoardMatchCell match={matches.get(entry.key) ?? {}} azure={board.azure} stream={board.stream} title={windchillFeatureTitle(board.stream, entry)} assign={board.assign} featureSetup={board.featureSetup} /></td>}</tr>,
-        ...(open === entry.key ? [<tr key={`${entry.key}/docs`} className="release-docs"><td colSpan={3 + (fromLocation ? 1 : 0) + (result.dateColumn ? 1 : 0) + (board ? 1 : 0)}><ul>{entry.documents.map((doc, index) => <li key={index}>{doc.name}</li>)}</ul>{entry.locations.length > 0 && <ul className="muted">{entry.locations.map((location) => <li key={location}>{location}</li>)}</ul>}</td></tr>] : [])])}
-    </tbody></DataTable>}
+    {shown.length > 0 && <DataTable id={`windchill-releases:${view.id}`} columns={releaseColumns} rows={shown} rowKey={(entry) => entry.key} exportName={`${fileName}-${isProject ? 'projects' : 'releases'}`}
+      sort={{ id: sort.key, desc: sort.desc }} onSort={(next) => setSort({ key: next.id as SortKey, desc: next.desc })}
+      expand={(entry) => open === entry.key ? <><ul>{entry.documents.map((doc, index) => <li key={index}>{doc.name}</li>)}</ul>{entry.locations.length > 0 && <ul className="muted">{entry.locations.map((location) => <li key={location}>{location}</li>)}</ul>}</> : null} />}
     {fromLocation && result.locations.length > 0 && <details className="dp-counted" open={showLocations} onToggle={(event) => setShowLocations((event.target as HTMLDetailsElement).open)}><summary>{result.locations.length} unique location{result.locations.length === 1 ? '' : 's'}</summary>
-      <DataTable tableId="WindchillReleasesPanel-2"><thead><tr><th>Location</th><th>Documents</th><th>Releases read from it</th></tr></thead><tbody>{result.locations.slice(0, 500).map((entry) => <tr key={entry.location}><td>{entry.location}</td><td>{entry.count}</td><td>{entry.releases.length ? entry.releases.map((release) => `${release.name} ${release.release}`).join('; ') : <span className="muted">none</span>}</td></tr>)}</tbody></DataTable>{result.locations.length > 500 && <p className="muted">First 500 shown; the CSV and the Git file hold all.</p>}</details>}
+      <DataTable id={`windchill-locations:${view.id}`} columns={locationColumns} rows={result.locations} rowKey={(entry) => entry.location} exportName={`${fileName}-locations`} limit={500} /></details>}
     {result.unmatched.length > 0 && <details className="dp-counted"><summary>{result.unmatched.length} document{result.unmatched.length === 1 ? '' : 's'} without a release {fromLocation ? 'in the Location' : 'number in the name'}</summary><ul>{[...new Set(result.unmatched)].slice(0, 200).map((text, index) => <li key={index}>{text}</li>)}</ul>{result.unmatched.length > 200 && <p className="muted">First 200 shown.</p>}</details>}
   </TablePanel>
 }

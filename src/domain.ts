@@ -145,6 +145,8 @@ export interface AppState {
   releaseScopes?: ReleaseScope[]
   resourceProfiles?: Record<string, { region?: string; role?: string; reportsTo?: string; peopleManager?: boolean }>
   releaseSource?: { organization: string; project: string; query: string; fetchedAt: string; items: AzureWorkItem[]; columns?: { ref: string; name: string }[]; orderBy?: { ref: string; desc: boolean }[]; unresolved?: string[] }
+  // The design default of every table (UI-12), normalized on read (tableDefaults.ts).
+  tableDefaults?: unknown
   releaseSourceSettings?: { streamSegment?: number; releasePattern?: string; approvalDateField?: string; matchThreshold?: number }
   releasePlans?: ReleasePlan[]
   // Read-only snapshots from additional Azure connections (backlog views, document sources such as Vault, reference data).

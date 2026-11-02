@@ -1,5 +1,5 @@
-import { DataTable } from '../components/DataTable'
 import { listJobs, runInBackground, subscribeJobs } from '../backgroundJobs'
+import { DataTable } from '../components/DataTable'
 import { useState, useSyncExternalStore } from 'react'
 import { PersonPicker } from '../components/PersonPicker'
 import { AssigneeConfirm } from '../components/AssigneeConfirm'
@@ -190,15 +190,12 @@ export function BulkActionsPage({ azure, store, my, assign }: { azure: AzureWork
           </Panel>
         </div>
         <Panel className="action-card state-checks" eyebrow="CHECK" title="State checks" info="Your Features and User Stories whose state does not match their children: all User Stories Closed → close the Feature; all Tasks Closed → close the User Story; an Active Feature needs at least one Active User Story. A Feature is closed only from Active.">
-          {checks.length ? <div className="azure-table"><DataTable tableId="BulkActionsPage-1"><thead><tr><th>Work item</th><th>State</th><th>Check</th><th /></tr></thead><tbody>{checks.map((check) => {
-            const next = check.kind === 'feature-needs-active-story' ? null : nextStateFor(check.item)
-            return <tr key={`${check.kind}-${check.item.id}`}>
-              <td><ItemLink item={check.item} /> {check.item.title}<small>{check.item.workItemType}</small></td>
-              <td><Pill tone={check.kind === 'feature-needs-active-story' ? 'warning' : 'danger'}>{check.item.state}</Pill></td>
-              <td>{checkText[check.kind](check)}</td>
-              <td>{next ? <button type="button" className="ghost" disabled={Boolean(blocked) || busy === `check-${check.item.id}`} onClick={() => void applyState(check.item, next.state)}>{busy === `check-${check.item.id}` ? 'Saving…' : next.label}</button> : check.kind === 'feature-needs-active-story' ? <a href={check.item.url} target="_blank" rel="noreferrer">Open in Azure DevOps</a> : null}</td>
-            </tr>
-          })}</tbody></DataTable></div> : <EmptyState title="Nothing to fix." detail="Every Feature and User Story matches the state of its children." />}
+          {checks.length ? <DataTable id="bulk:state-checks" rows={checks} rowKey={(check) => `${check.kind}-${check.item.id}`} exportName="State checks" columns={[
+            { id: 'item', label: 'Work item', value: (check) => `#${check.item.id} ${check.item.title}`, render: (check) => <><ItemLink item={check.item} /> {check.item.title}<small>{check.item.workItemType}</small></> },
+            { id: 'state', label: 'State', value: (check) => check.item.state, render: (check) => <Pill tone={check.kind === 'feature-needs-active-story' ? 'warning' : 'danger'}>{check.item.state}</Pill> },
+            { id: 'check', label: 'Check', value: (check) => String(checkText[check.kind](check)) },
+            { id: 'action', label: '', sortable: false, export: false, render: (check) => { const next = check.kind === 'feature-needs-active-story' ? null : nextStateFor(check.item); return next ? <button type="button" className="ghost" disabled={Boolean(blocked) || busy === `check-${check.item.id}`} onClick={() => void applyState(check.item, next.state)}>{busy === `check-${check.item.id}` ? 'Saving…' : next.label}</button> : check.kind === 'feature-needs-active-story' ? <a href={check.item.url} target="_blank" rel="noreferrer">Open in Azure DevOps</a> : null } },
+          ]} /> : <EmptyState title="Nothing to fix." detail="Every Feature and User Story matches the state of its children." />}
         </Panel>
       </>}
     {confirmTasks && <AssigneeConfirm title={`Create ${month} Time Writing tasks`} people={assignablePeople(azure.items)} me={assign.me} initial={shownEmail} canChoose={assign.canChoose} busy={creatingTasks} confirmLabel="Create tasks"
