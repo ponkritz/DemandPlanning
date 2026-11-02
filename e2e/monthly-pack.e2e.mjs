@@ -39,8 +39,7 @@ test('TC-PCK-04: Pulse Check → Monthly pack shows both slides for the month be
   for (const part of ['ppt/presentation.xml', 'ppt/slides/slide1.xml', 'ppt/slides/slide2.xml', 'ppt/slideMasters/slideMaster1.xml']) assert.ok(content.includes(part), part)
   assert.ok(bytes.toString('utf8').includes('<a:t>Actions/Deliverables Realized</a:t>') && bytes.toString('utf8').includes('<a:t>KPI Pulse</a:t>'), 'the boxes are in the slides')
   // Settings → Monthly pack lists the default slide lines and KPI rows (read-only with the sample).
-  await navigate(page, 'Settings')
-  await page.getByRole('tab', { name: 'Monthly pack' }).click()
+  await page.locator('.sidebar nav button', { hasText: /^.Monthly pack$/ }).first().click()
   const setup = await text(page.locator('.admin-section', { hasText: 'Monthly pack setup' }))
   for (const line of ['Serviceability', 'Digital Platform', 'Clinical Platform', 'IOCC', 'PPU', 'Content', 'Tool validation', 'Utilization (YTD)', 'Overall CAPA Health']) assert.ok(setup.includes(line) || await page.locator(`input[value="${line}"]`).count() === 1, line)
   assert.deepEqual(errors, [])

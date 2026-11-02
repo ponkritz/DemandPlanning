@@ -1017,6 +1017,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-SET-05 Manager not on the board** — Req SET-13 — E2E `shell.e2e.mjs` ("TC-SET-05": synthetic sample, Settings → Resources, Chen Wei reports to → Other (type a name)… → "Maria Lopez" → OK; the select shows Maria Lopez, the reporting lines show Maria Lopez at the top marked "not on the board" with Chen Wei under her, and Diya Sharma's Reports to offers Maria Lopez under "Not on the board").
 
+**TC-SET-06 Settings pages and sections** — Req SET-14, NAV-17 — E2E `shell.e2e.mjs` ("TC-SET-06: each Settings page is its own menu entry; its sections show one at a time and the last one is remembered"; also "TC-NAV-01 / TC-NAV-17" for the Settings group and entries); browser check: the menu has a SETTINGS group with Azure DevOps, Storage, Access, Feature setup (and, with Manage shared settings, Capacity & periods, Resources, Master data, Monthly pack, Audit); each opens its page with its name in the header; Azure DevOps shows the sections Servers and PATs · Stream mapping · Other views · Synthetic sample (Read-only sources once something was fetched), one at a time; after another page and back, the section last shown is open; Feature setup has no section row; Get started → Open for the Time Writing step lands on Azure DevOps → Stream mapping, for Git on Storage → Git storage; a stream not set up in the menu (＋) opens Stream mapping; no page errors.
+
 **TC-SET-04 Master data, audit, reset** — Req SET-10…12, OI-06, OI-09
 - Expected:
   - An added value appears with "Active".
@@ -1436,6 +1438,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | SET-05, SET-06 | TC-SET-02 |
 | SET-07…09 | TC-SET-03 |
 | SET-13 | TC-SET-05 |
+| SET-14 | TC-SET-06 |
 | SET-10…12 | TC-SET-04 |
 | STO-01, STO-02 | TC-STO-01 |
 | STO-03 | TC-STO-02 |

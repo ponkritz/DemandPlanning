@@ -22,11 +22,11 @@ This document lists every software component of the system: the in-house source 
 | fresh | `src/fresh.css` | Final "fresh look" style layer (white sidebar, soft canvas, borderless cards) built on the index.css tokens. | UI |
 | theme | `src/theme.ts` | Theme preference (system/light/dark): parse, cycle, resolve against prefers-color-scheme, apply and store per browser; `?theme=` support. | UI |
 | headerSlot | `src/headerSlot.ts` | React context for a header slot that pages can fill (e.g. the Team / Individual switch). | NAV |
-| settingsTabs | `src/settingsTabs.ts` | Settings tab identifiers, the remembered-tab storage key and the tab to open when Settings is opened from elsewhere. | SET, CON |
+| settingsTabs | `src/settingsTabs.ts` | The Settings pages (menu order, shared ones), the remembered page and the remembered section of each page (SET-14). | SET, CON, NAV |
 | index | `src/docs/index.ts` | Bundles docs/*.md at build time into the list of project documents shown on the Documentation page. | DOC |
 | registry | `src/pages/registry.ts` | Single source of page ids, labels, icons, sidebar groups, header text and month-picker use. | NAV |
 | types | `src/pages/types.ts` | `PageProps` shared by pages: the app store, the selected month and its setter. | — |
-| AdminPage | `src/pages/AdminPage.tsx` | Settings page: tabs for Azure DevOps connections, Git and SharePoint storage, Access, Feature setup, capacity/absence, periods, resources, master data and audit. | SET, CON, GIT, SNP, CAP |
+| AdminPage | `src/pages/AdminPage.tsx` | Settings pages (one per menu entry, SET-14), with sections for Azure DevOps connections, Git and SharePoint storage, Access, Feature setup, capacity/absence, periods, resources, master data and audit. | SET, CON, GIT, SNP, CAP |
 | BacklogHealthPage | `src/pages/BacklogHealthPage.tsx` | Backlog Health: open work in ended Sprints, Features without DoD and unassigned work, with person filter, chosen columns, sorting and CSV. | CON |
 | BaselinesPage | `src/pages/BaselinesPage.tsx` | Baselines: estimation rules editor, release baselines vs booked hours, and the monthly Time Writing task plan check. | BAS, GIT |
 | BoardPage | `src/pages/BoardPage.tsx` | Backlogs / Release Details: editable Time Writing tree, read-only query views, release views, the CP release report and the DP table with DDT month filter and board match. | CON, FET, QV, ATM |
@@ -79,6 +79,7 @@ This document lists every software component of the system: the in-house source 
 | ReleaseQuadrants | `src/components/ReleaseQuadrants.tsx` | Releases summary lines, the Supported summary next to them (DP Supported Releases, S&S IT export releases of the month), and a 2×2 quadrant per stream with documents approved in the month and totals. | OVR, QV |
 | ReleaseView | `src/components/ReleaseView.tsx` | Release source view: releases derived from document paths or Titles (per stream rule), with the Time Writing Feature match and hours and the QMS-0025 match column with Create Feature (QV-46). | QV |
 | ScopeSwitch | `src/components/ScopeSwitch.tsx` | Team / Individual toggle with person picker, in the header or page top. | MON, OVR |
+| SectionTabs | `src/components/SectionTabs.tsx` | The section row of a Settings page: one section at a time, the last one remembered per page (SET-14). | SET, NAV |
 | SetupGuide | `src/components/SetupGuide.tsx` | "Get started" pop-up listing setup steps with live status and buttons to the right place. | NAV |
 | SharedTimePanel | `src/components/SharedTimePanel.tsx` | Settings → Capacity: map Epics/Features as regional holidays or common activities applied to people in scope. | CAP, SET |
 | TeamFilterBar | `src/components/TeamFilterBar.tsx` | Region switch and role multi-select filter for team views. | OVR |

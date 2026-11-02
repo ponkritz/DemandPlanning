@@ -15,7 +15,8 @@ import { SharedTimePanel } from '../components/SharedTimePanel'
 import type { FeatureSetup } from '../useFeatureSetup'
 import type { Access } from '../useAccess'
 import type { PageProps } from './types'
-import { settingsTabKey as tabKey, type SettingsTab } from '../settingsTabs'
+import { settingsPagesFor, type SettingsTab } from '../settingsTabs'
+import { SectionTabs } from '../components/SectionTabs'
 import { MonthlyPackSetupPanel } from '../components/MonthlyPackSetupPanel'
 import type { MonthlyPackStore } from '../useMonthlyPack'
 
@@ -24,7 +25,7 @@ const shortMonthName = (month: string) => new Intl.DateTimeFormat('en', { month:
 
 // The Windchill host and views setup is hidden (Windchill exports are imported under Release Details instead).
 // Everyone sets up their own connections and tokens here; the shared sections need the role right to manage them.
-export function AdminPage({ store, month, azure, git, access, featureSetup, monthlyPack, loadEverything, onOpenBoard }: PageProps & { azure: AzureWorkspace; git: GitStorage; access: Access; featureSetup: FeatureSetup; monthlyPack: MonthlyPackStore; loadEverything: () => Promise<{ loaded: string[]; failed: string[] }>; onOpenBoard: () => void }) {
+export function AdminPage({ store, month, azure, git, access, featureSetup, monthlyPack, loadEverything, onOpenBoard, tab: requested, onOpenTab }: PageProps & { tab: SettingsTab; onOpenTab: (tab: SettingsTab, section?: string) => void; azure: AzureWorkspace; git: GitStorage; access: Access; featureSetup: FeatureSetup; monthlyPack: MonthlyPackStore; loadEverything: () => Promise<{ loaded: string[]; failed: string[] }>; onOpenBoard: () => void }) {
   const [everything, setEverything] = useState<{ busy: boolean; loaded?: string[]; failed?: string[] }>({ busy: false })
   const shared = access.can('settings.manage')
   const [reason, setReason] = useState('Approved operational extension')
@@ -130,36 +131,37 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, mont
   }
 
   const connectionFailed = store.connection.status === 'error' || store.connection.status === 'conflict'
-  // One tab at a time; the shared tabs only for roles that manage shared settings (Feature setup is for everyone: each
-  // person keeps their own and may enable it for all). The last tab is remembered here.
-  const tabs = ([['connections', 'Azure DevOps'], ['storage', 'Storage'], ['access', 'Access'], ['features', 'Feature setup'], ...(shared ? [['capacity', 'Capacity & periods'], ['resources', 'Resources'], ['masters', 'Master data'], ['pack', 'Monthly pack'], ['audit', 'Audit']] : [])] as [SettingsTab, string][])
-  const [chosen, setChosen] = useState<SettingsTab>(() => { try { return (localStorage.getItem(tabKey) as SettingsTab | null) ?? 'connections' } catch { return 'connections' } })
-  const tab = tabs.some(([key]) => key === chosen) ? chosen : 'connections'
-  const openTab = (key: SettingsTab) => { setChosen(key); try { localStorage.setItem(tabKey, key) } catch { /* not remembered */ } }
+  // One Settings page at a time (chosen in the menu, SET-14); the shared pages only for roles that manage shared settings.
+  const tab = settingsPagesFor(shared).some((page) => page.key === requested) ? requested : 'connections'
   return <Page>
-    <div className="overview-tabs settings-tabs" role="tablist" aria-label="Settings">{tabs.map(([key, label]) => <button key={key} type="button" role="tab" aria-selected={tab === key} className={`backlog-tab${tab === key ? ' active' : ''}`} onClick={() => openTab(key)}>{label}</button>)}</div>
-    {tab === 'connections' && <AzureConnections azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={shared} />}
-    {tab === 'storage' && <>
-      <GitStoragePanel git={git} />
-      {git.connected && <Panel className="connection-panel" eyebrow="GIT" title="Load everything from Git" info="Loads everything shared through Git at once: planning data, the connection setup, on-prem view data, Windchill exports, access roles and the Feature setup. Data here is replaced only by newer data from Git; connections you changed here are kept."
+    {tab === 'connections' && <SectionTabs page="connections" sections={[
+      { key: 'servers', label: 'Servers and PATs', node: <AzureConnections section="servers" azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={shared} /> },
+      { key: 'mapping', label: 'Stream mapping', node: <AzureConnections section="mapping" azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={shared} /> },
+      { key: 'views', label: 'Other views', node: <AzureConnections section="views" azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={shared} /> },
+      ...((store.state.azureSources ?? []).length ? [{ key: 'sources', label: 'Read-only sources', node: <AzureConnections section="sources" azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={shared} /> }] : []),
+      { key: 'sample', label: 'Synthetic sample', node: <AzureConnections section="sample" azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={shared} /> },
+    ]} />}
+    {tab === 'storage' && <SectionTabs page="storage" sections={[
+      { key: 'git', label: 'Git storage', node: <GitStoragePanel git={git} /> },
+      ...(git.connected ? [{ key: 'load', label: 'Load from Git', node: <Panel className="connection-panel" eyebrow="GIT" title="Load everything from Git" info="Loads everything shared through Git at once: planning data, the connection setup, on-prem view data, Windchill exports, access roles and the Feature setup. Data here is replaced only by newer data from Git; connections you changed here are kept."
         action={<button type="button" className="primary" disabled={everything.busy || git.isSample} onClick={() => { setEverything({ busy: true }); void loadEverything().then((result) => setEverything({ busy: false, ...result })) }}>{everything.busy ? 'Loading…' : 'Load everything from Git'}</button>}>
         {git.isSample && <Notice tone="warning">Synthetic sample data is loaded: loading from Git is disabled.</Notice>}
         {everything.loaded && <Notice tone={everything.failed?.length ? 'warning' : 'success'}>Loaded: {everything.loaded.join('; ') || 'nothing'}.{everything.failed?.length ? ` Not loaded — ${everything.failed.join(' · ')}` : ''}</Notice>}
-      </Panel>}
-      {shared && <AzureViewsGitPanel git={git} azure={azure} />}
-      <Panel className="connection-panel" eyebrow="CENTRAL DATA" title="SharePoint connection" info="Uses Microsoft sign-in and stores one versioned JSON data file in the I&D Quality document library. No client secret is stored in the browser." action={<Pill tone={store.connection.mode === 'sharepoint' ? 'open' : connectionFailed ? 'danger' : 'neutral'}>{store.connection.status}</Pill>}>
+      </Panel> }] : []),
+      ...(shared ? [{ key: 'shared', label: 'Shared setup in Git', node: <AzureViewsGitPanel git={git} azure={azure} /> }] : []),
+      { key: 'sharepoint', label: 'SharePoint', node: <Panel className="connection-panel" eyebrow="CENTRAL DATA" title="SharePoint connection" info="Uses Microsoft sign-in and stores one versioned JSON data file in the I&D Quality document library. No client secret is stored in the browser." action={<Pill tone={store.connection.mode === 'sharepoint' ? 'open' : connectionFailed ? 'danger' : 'neutral'}>{store.connection.status}</Pill>}>
         <SettingsSummary rows={[['Host', sharePointConfig.hostname], ['Site', sharePointConfig.sitePath], ['Data file', sharePointConfig.stateFilePath], ['Application ID', sharePointConfig.clientId ? 'Set' : '']]} />
         <div className="button-row"><button type="button" className={store.connection.mode === 'sharepoint' ? 'ghost' : 'primary'} onClick={() => setSharePointOpen(true)}>{store.connection.mode === 'sharepoint' ? 'Change connection…' : 'Connect to SharePoint…'}</button>{store.connection.mode === 'empty' && <button type="button" className="primary" onClick={() => void store.initializeSharePoint()}>Initialize central data</button>}{store.connection.mode === 'sharepoint' && <><button type="button" className="ghost" onClick={() => void store.pullSharePoint()}>Pull latest</button><button type="button" className="ghost" onClick={store.disconnectSharePoint}>Disconnect</button></>}</div>
         {sharePointOpen && <Modal title="SharePoint connection" eyebrow="SETTINGS · STORAGE" wide form onClose={() => setSharePointOpen(false)}><form className="connection-form" onSubmit={(event) => { setSharePointOpen(false); void connectSharePoint(event) }}><label>Tenant ID (optional)<input value={sharePointConfig.tenantId} onChange={(event) => setSharePointConfig({ ...sharePointConfig, tenantId: event.target.value })} placeholder="Auto-detect from work sign-in" /></label><label>Application (client) ID<input required value={sharePointConfig.clientId} onChange={(event) => setSharePointConfig({ ...sharePointConfig, clientId: event.target.value })} placeholder="Registered SPA client ID" /></label><label>SharePoint host<input required value={sharePointConfig.hostname} onChange={(event) => setSharePointConfig({ ...sharePointConfig, hostname: event.target.value })} /></label><label>Site path<input required value={sharePointConfig.sitePath} onChange={(event) => setSharePointConfig({ ...sharePointConfig, sitePath: event.target.value })} /></label><label className="wide-field">Central data file<input required value={sharePointConfig.stateFilePath} onChange={(event) => setSharePointConfig({ ...sharePointConfig, stateFilePath: event.target.value })} /></label><div className="connection-actions"><button className="primary" disabled={store.connection.status === 'connecting'}>{store.connection.status === 'connecting' ? 'Connecting…' : 'Connect to SharePoint'}</button><button type="button" className="ghost" onClick={() => setSharePointOpen(false)}>Cancel</button></div></form></Modal>}
         {store.connection.message && <Notice tone={connectionFailed ? 'error' : 'info'}>{store.connection.message}{store.connection.account ? ` Signed in as ${store.connection.account}.` : ''}</Notice>}
-      </Panel>
-    </>}
+      </Panel> },
+    ]} />}
     {tab === 'features' && <FeatureSetupPanel setup={featureSetup} git={git} items={azure.items} />}
     {tab === 'pack' && shared && <MonthlyPackSetupPanel pack={monthlyPack} git={git} items={azure.items} />}
     {tab === 'access' && <AccessPanel access={access} git={git} people={people} />}
     {!shared && tab === 'access' && <Notice tone="info">Capacity, periods, resources, master data and the shared connection setup are managed by roles with “Manage shared settings”.</Notice>}
-    {tab === 'capacity' && <div className="admin-grid">
-      <Panel eyebrow="CAPACITY" title="Capacity and absence" info="Used by the Dashboard to compute available hours and utilization. Saved with the planning data in Git (with the holidays and common activities), so everyone who loads from Git gets the same settings.">
+    {tab === 'capacity' && <SectionTabs page="capacity" sections={[
+      { key: 'capacity', label: 'Capacity and absence', node: <Panel eyebrow="CAPACITY" title="Capacity and absence" info="Used by the Dashboard to compute available hours and utilization. Saved with the planning data in Git (with the holidays and common activities), so everyone who loads from Git gets the same settings.">
         <SettingsSummary rows={[['Absence Epic', `#${capacity.absenceEpicId}`], ['Funded hours per day', `${capacity.hoursPerDay}h`], ['Overloaded at', `${capacity.overloadedAt}%`], ['Has capacity below', `${capacity.availableBelow}%`], ['NPRA maximum', `${capacity.npraHoursPerMonth}h per person per month`]]} />
         <div className="button-row"><button type="button" className="ghost" onClick={() => setCapacityOpen(true)}>Edit capacity settings…</button></div>
         {capacityOpen && <Modal title="Capacity and absence" eyebrow="SETTINGS · CAPACITY" form onClose={() => setCapacityOpen(false)}><form onSubmit={(event) => { saveCapacity(event); setCapacityOpen(false) }}>
@@ -169,15 +171,15 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, mont
           <div className="modal-actions"><button type="button" className="ghost" onClick={() => setCapacityOpen(false)}>Cancel</button><button className="primary">Save capacity settings</button></div>
         </form></Modal>}
         {capacityMessage && <Notice tone="success">{capacityMessage}</Notice>}
-      </Panel>
-      <div className="shared-time-panel"><GitSyncBar git={git} /></div>
-      <SharedTimePanel settings={capacity} items={azure.items} month={month} onSave={saveSharedTime} />
-      <Panel eyebrow="PERIOD CONTROL" title={monthName(month)}>
+      </Panel> },
+      { key: 'time', label: 'Holidays and common activities', node: <><div className="shared-time-panel"><GitSyncBar git={git} /></div>
+      <SharedTimePanel settings={capacity} items={azure.items} month={month} onSave={saveSharedTime} /></> },
+      { key: 'period', label: 'Period control', node: <Panel eyebrow="PERIOD CONTROL" title={monthName(month)}>
         <label>Reason for change<textarea value={reason} onChange={(event) => setReason(event.target.value)} /></label>
         <div className="control-card"><div><strong>Planning</strong><p>Deadline: {formatDate(period?.planningDeadline, `${month}-05 (default)`)}</p></div><Pill tone={period?.planningLocked ? 'locked' : 'open'}>{period?.planningLocked ? 'Locked' : 'Open'}</Pill><button className="primary" onClick={() => toggle('planning')}>{period?.planningLocked ? 'Unlock' : 'Lock'}</button><label>Extend until<input type="date" onChange={(event) => extend('planning', event.target.value)} /></label></div>
         <div className="control-card"><div><strong>Actuals</strong><p>Deadline: {formatDate(period?.actualsDeadline, `${month}-05 (default)`)}</p></div><Pill tone={period?.actualsLocked ? 'locked' : 'open'}>{period?.actualsLocked ? 'Locked' : 'Open'}</Pill><button className="primary" onClick={() => toggle('actuals')}>{period?.actualsLocked ? 'Unlock' : 'Lock'}</button><label>Extend until<input type="date" onChange={(event) => extend('actuals', event.target.value)} /></label></div>
-      </Panel>
-    </div>}
+      </Panel> },
+    ]} />}
     {tab === 'resources' && <Panel className="admin-section" eyebrow="AZURE DEVOPS" title="Resources" info="People come from Azure (everyone Assigned To a Time Writing Task, absence included); add or remove them in Azure DevOps. Region, role and reporting line are saved with the planning data in Git (see Git storage above). Region decides which regional holidays apply. Joined on / Left on (both days worked) limit a person's funded hours to the working days they are employed: a month they join or leave in is prorated, and in a month before joining or after leaving they have no capacity and are not counted." action={<Pill tone={resources.length ? 'open' : 'neutral'}>{resources.length} {resources.length === 1 ? 'person' : 'people'}</Pill>}>
       {resources.length > 0 && <GitSyncBar git={git} />}
       {resources.length > 0 && <Notice tone={unmapped.length ? 'warning' : 'info'}>
@@ -199,7 +201,7 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, mont
         </tr>
       })}</tbody></table></div>
         : <EmptyState title="No resources from Azure yet." detail="Refresh from Azure DevOps; people appear once they are Assigned To a Time Writing Task." />}
-      {!resources.length && <div className="button-row"><button className="primary" onClick={() => openTab('connections')}>Go to Azure connections</button></div>}
+      {!resources.length && <div className="button-row"><button className="primary" onClick={() => onOpenTab('connections', 'servers')}>Go to Azure connections</button></div>}
       {resources.some((person) => profiles[person.name]?.reportsTo) && <TeamTree names={names} profiles={profiles} />}
     </Panel>}
     {tab === 'masters' && <Panel className="admin-section" eyebrow="MASTER DATA" title="Admin-controlled dropdowns">

@@ -6,7 +6,7 @@ import type { SettingsTab } from '../settingsTabs'
 // opens the right place. Dismissing it keeps it closed in this browser; the top-bar button reopens it.
 const stateLabel = { done: 'Done', todo: 'To do', blocked: 'After the step above' } as const
 const stateTone = { done: 'open', todo: 'warning', blocked: 'neutral' } as const
-export function SetupGuide({ steps, busy, onOpenTab, onFetch, onClose, onDismiss }: { steps: SetupStep[]; busy: boolean; onOpenTab: (tab: SettingsTab) => void; onFetch: () => void; onClose: () => void; onDismiss: () => void }) {
+export function SetupGuide({ steps, busy, onOpenTab, onFetch, onClose, onDismiss }: { steps: SetupStep[]; busy: boolean; onOpenTab: (tab: SettingsTab, section?: string) => void; onFetch: () => void; onClose: () => void; onDismiss: () => void }) {
   const required = steps.filter((step) => step.required), optional = steps.filter((step) => !step.required)
   const doneCount = required.filter((step) => step.state === 'done').length
   const next = steps.find((step) => step.state === 'todo')
@@ -16,7 +16,7 @@ export function SetupGuide({ steps, busy, onOpenTab, onFetch, onClose, onDismiss
       <p className="muted">{step.why}</p>
       <ol className="setup-how">{step.how.map((line) => <li key={line}>{line}</li>)}</ol>
       <div className="button-row">
-        {step.tab && <button type="button" className={step === next ? 'primary' : 'ghost'} disabled={step.state === 'blocked'} onClick={() => onOpenTab(step.tab!)}>Open {step.tab === 'storage' ? 'Storage' : step.tab === 'resources' ? 'Resources' : 'Azure DevOps'} settings</button>}
+        {step.tab && <button type="button" className={step === next ? 'primary' : 'ghost'} disabled={step.state === 'blocked'} onClick={() => onOpenTab(step.tab!, step.section)}>Open {step.tab === 'storage' ? 'Storage' : step.tab === 'resources' ? 'Resources' : 'Azure DevOps'} settings</button>}
         {step.action === 'fetch' && <button type="button" className={step === next ? 'primary' : 'ghost'} disabled={step.state === 'blocked' || busy} onClick={onFetch}>{busy ? 'Fetching…' : 'Fetch now'}</button>}
       </div>
     </>}
