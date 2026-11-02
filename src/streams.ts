@@ -1,8 +1,7 @@
 import type { AzureConnectionProfileSummary } from './azureCredentials.ts'
 
 // The release streams the team works with, in this order. DP, CP, IOCC, Content and Tool Validations come from an
-// Azure DevOps connection with a query (connection named like the stream); S&S IT from a Windchill export (ECP will
-// follow as a Windchill export). Release Details and Pulse Check show exactly these. Each stream reads its releases
+// Azure DevOps connection with a query (connection named like the stream); S&S IT and ECP from a Windchill export. Release Details and Pulse Check show exactly these. Each stream reads its releases
 // with its own rule (see releasePath): DP — release name from the Area Path, number from the Iteration Path; IOCC —
 // grouped by the Area Path segment after "IOCC", release name from the document Title; Tool Validations — one entry
 // per tool (the tool's Area Path folder, else the Title before its version or document word), whatever the number of
@@ -10,7 +9,8 @@ import type { AzureConnectionProfileSummary } from './azureCredentials.ts'
 // (cpReporting); the others keep the general path rule. DP and IOCC releases are matched to QMS-0025 Features by a
 // fuzzy match with a percentage.
 export type ReleaseRule = 'path' | 'dp' | 'iocc' | 'tool' | 'cp'
-export interface StreamDef { name: string; source: 'azure' | 'windchill'; rule: ReleaseRule; fuzzy: boolean; project?: boolean }
+// aliases: earlier names of the stream; an export or connection named after one still belongs to it (QRE → ECP).
+export interface StreamDef { name: string; source: 'azure' | 'windchill'; rule: ReleaseRule; fuzzy: boolean; project?: boolean; aliases?: string[] }
 export const defaultStreams: StreamDef[] = [
   { name: 'DP', source: 'azure', rule: 'dp', fuzzy: true },
   { name: 'CP', source: 'azure', rule: 'cp', fuzzy: true },
@@ -18,8 +18,8 @@ export const defaultStreams: StreamDef[] = [
   { name: 'Content', source: 'azure', rule: 'path', fuzzy: false },
   { name: 'Tool Validations', source: 'azure', rule: 'tool', fuzzy: false },
   { name: 'S&S IT', source: 'windchill', rule: 'path', fuzzy: false },
-  // QRE: projects "PJ-<number> <name>" from the Location (CON-83).
-  { name: 'QRE', source: 'windchill', rule: 'path', fuzzy: false, project: true },
+  // ECP (formerly QRE): projects "<number> <name>" from the Location's second folder (CON-83).
+  { name: 'ECP', source: 'windchill', rule: 'path', fuzzy: false, project: true, aliases: ['QRE'] },
 ]
 export const defaultMatchThreshold = 80
 
@@ -52,7 +52,8 @@ export function profilesForStream<P extends AzureConnectionProfileSummary>(strea
 export const streamOfProfile = (profile: Pick<AzureConnectionProfileSummary, 'viewName' | 'reason' | 'role'>) => profile.role === 'time-tracking' ? undefined : defaultStreams.find((stream) => stream.source === 'azure' && (namesStream(profile.viewName, stream.name) || namesStream(profile.reason, stream.name)))
 // The Windchill export of a Windchill stream, by its name.
 export function exportForStream<T extends { name: string; exportFile?: string }>(stream: StreamDef, views: T[]) {
-  return stream.source === 'windchill' ? views.find((view) => view.exportFile && namesStream(view.name, stream.name)) : undefined
+  if (stream.source !== 'windchill') return undefined
+  return views.find((view) => view.exportFile && namesStream(view.name, stream.name)) ?? views.find((view) => view.exportFile && (stream.aliases ?? []).some((alias) => namesStream(view.name, alias)))
 }
 
 // Data sets that feed a stream without being one: DP combines the Pedestal release register (DHP, Release work items)
@@ -73,4 +74,4 @@ export function profileForDataSet(name: string, profiles: AzureConnectionProfile
 export const dataSetOfProfile = (profile: Pick<AzureConnectionProfileSummary, 'id' | 'viewName' | 'reason' | 'role'>) => profile.role === 'time-tracking' ? undefined : dataSets.find((set) => profile.id === set.presetId || namesDataSet(profile.viewName, set) || namesDataSet(profile.reason, set))
 
 // How a Windchill export is read (CON-83): QRE by project, the others by release (S&S IT's rules).
-export const windchillOptionsFor = (name: string): { project?: boolean } => defaultStreams.some((stream) => stream.source === 'windchill' && stream.project && namesStream(name, stream.name)) ? { project: true } : {}
+export const windchillOptionsFor = (name: string): { project?: boolean } => defaultStreams.some((stream) => stream.source === 'windchill' && stream.project && [stream.name, ...(stream.aliases ?? [])].some((known) => namesStream(name, known))) ? { project: true } : {}

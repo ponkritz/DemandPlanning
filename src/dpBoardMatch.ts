@@ -68,12 +68,12 @@ export const boardMatchText = (match: BoardMatch) => [match.feature && `Feature 
 // A Windchill release (S&S IT) → QMS-0025, by the same search: the release name (and each part of a clubbed release)
 // with its number; Create Feature titles it "{stream} | {release name} | v{release}" — a clubbed release
 // "{stream} | {its name as written}", which already holds the numbers.
-// A QRE project (CON-83): "QRE | PJ-1234 Name".
-const isProject = (release: string) => /^PJ-\d+$/i.test(release)
-export const windchillFeatureTitle = (stream: string, release: { name: string; release: string; parts?: unknown[] }) => isProject(release.release) ? `${stream.trim()} | ${`${release.release} ${release.name}`.trim()}` : releaseFeatureTitle(stream, release.name, (release.parts?.length ?? 0) > 1 ? '' : release.release)
-export const windchillBoardMatch = (release: { name: string; release: string; parts?: { name: string; release: string }[] }, stream: string, candidates: DpBoardCandidates, threshold = 80): BoardMatch =>
-  isProject(release.release)
-    ? boardMatch({ names: [`${release.release} ${release.name}`, release.release], versions: [], program: stream, created: windchillFeatureTitle(stream, release) }, candidates, threshold)
+// An ECP project (CON-83): "ECP | PJ-1234 Name" — the project number and name as written, never "v<number>".
+const isProject = (release: { release: string; project?: boolean }) => Boolean(release.project) || /^PJ-\d+$/i.test(release.release)
+export const windchillFeatureTitle = (stream: string, release: { name: string; release: string; parts?: unknown[]; project?: boolean }) => isProject(release) ? `${stream.trim()} | ${`${release.release} ${release.name}`.trim()}` : releaseFeatureTitle(stream, release.name, (release.parts?.length ?? 0) > 1 ? '' : release.release)
+export const windchillBoardMatch = (release: { name: string; release: string; parts?: { name: string; release: string }[]; project?: boolean }, stream: string, candidates: DpBoardCandidates, threshold = 80): BoardMatch =>
+  isProject(release) || !release.release.trim()
+    ? boardMatch({ names: [`${release.release} ${release.name}`.trim(), release.release].filter(Boolean), versions: [], program: stream, created: windchillFeatureTitle(stream, release) }, candidates, threshold)
     : boardMatch({ names: [release.name, ...(release.parts ?? []).map((part) => part.name)], versions: [release.release, ...(release.parts ?? []).map((part) => part.release)], program: stream, created: windchillFeatureTitle(stream, release) }, candidates, threshold)
 
 // A release of a Release Details view (IOCC, Content, Tool Validations) → QMS-0025, by the same search (QV-46): the
