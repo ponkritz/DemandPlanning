@@ -84,6 +84,18 @@ export function releasesFromLocation(location: string): LocationRelease[] {
   return []
 }
 export const releaseFromLocation = (location: string): LocationRelease | undefined => releasesFromLocation(location)[0]
+// QRE (CON-83): each release is a project, "PJ-<number> <name>", read from the Location's folder at index 2 when split on
+// "/" ("/Projects/PJ-1234 Name/DHF" → PJ-1234, Name); when that folder is not a project, the first folder that is.
+const project = /^(PJ[-_ ]?\d+)[\s_:.-]*(.*)$/i
+export function projectFromLocation(location: string): LocationRelease | undefined {
+  const segments = location.split('/').map((segment) => segment.trim())
+  const folder = [segments[2] ?? '', ...segments].find((segment) => project.test(segment))
+  if (!folder) return undefined
+  const [, code, rest] = project.exec(folder)!
+  const release = code.toUpperCase().replace(/^PJ[-_ ]?/, 'PJ-'), name = rest.trim()
+  const part = { name, release, raw: folder }
+  return { name, release, folder: segments.slice(0, segments.indexOf(folder) + 1).join('/'), clubbed: false, parts: [part] }
+}
 // Every distinct Location value with its document count and the release read from it, most documents first.
 export function uniqueLocations(rows: Record<string, unknown>[], column: string): UniqueLocation[] {
   const counts = new Map<string, number>()
@@ -125,7 +137,7 @@ export function parseExportDate(text: string): number | undefined {
   return undefined
 }
 
-export interface ReleaseOptions { source?: ReleaseSource | 'auto'; nameColumn?: string; locationColumn?: string }
+export interface ReleaseOptions { source?: ReleaseSource | 'auto'; nameColumn?: string; locationColumn?: string; project?: boolean }
 // Unique releases of an export. Source 'location' reads the Location column, 'name' the document names, 'auto' (the
 // default) Location when the export has such a column, else the names. A document counts once per release it names.
 export function windchillReleases(rows: Record<string, unknown>[], columns: string[], options: ReleaseOptions | string = {}) {
@@ -142,7 +154,9 @@ export function windchillReleases(rows: Record<string, unknown>[], columns: stri
     // From Location the number is kept as written (CON-72); from the names trailing zeros are ignored (CON-71).
     // A clubbed name or folder is one release (oneRelease), kept as written and counted once.
     const parsed = releasesFromDocumentName(text)
-    const release = source === 'location'
+    const release = chosen.project
+      ? ((entry) => entry && { ...entry, document: text, key: entry.release.toLowerCase() })(projectFromLocation(folder) ?? projectFromLocation(`//${text}`))
+      : source === 'location'
       ? (([entry]) => entry && { ...entry, document: text, key: entry.release.toLowerCase() })(releasesFromLocation(folder))
       : (() => { const one = oneRelease(parsed, parsed[0]?.span ?? ''); return one && { ...one, document: parsed[0]?.document ?? '', key: one.clubbed ? one.release.toLowerCase() : normalizeVersion(one.release) } })()
     if (!release) { if (text || folder) unmatched.push(source === 'location' ? folder || text : text); continue }
@@ -173,7 +187,7 @@ export const releasesInMonth = <T extends Pick<WindchillRelease, 'latestAt'>>(re
 
 // The releases of a Windchill export with the latest date in the month, as "name number" texts for the Pulse Check
 // Supported line (QV-33), newest first.
-export const windchillSupported = (rows: Record<string, unknown>[], columns: string[], month: string) => releasesInMonth(windchillReleases(rows, columns).releases, month).map((entry) => `${entry.name} ${entry.release}`)
+export const windchillSupported = (rows: Record<string, unknown>[], columns: string[], month: string, options: ReleaseOptions = {}) => releasesInMonth(windchillReleases(rows, columns, options).releases, month).map((entry) => options.project ? `${entry.release} ${entry.name}`.trim() : `${entry.name} ${entry.release}`)
 
 // The analysis file saved to the Git data repository (windchill-analysis/<export>-locations.json): every distinct
 // Location with its document count and the release read from it, plus the unique releases — so that the folder

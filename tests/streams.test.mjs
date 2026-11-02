@@ -10,7 +10,7 @@ const doc = (id, areaPath, iterationPath, title = `Doc ${id}`, approvalDate = '2
 const feature = (id, title) => ({ key: `o/q/${id}`, id, title, workItemType: 'Feature', state: 'Active', assignedTo: '', areaPath: 'Q', iterationPath: 'Q', tags: '', url: '', organization: 'o', project: 'q', syncedAt: '' })
 
 test('default streams in order; connections and exports found by name', () => {
-  assert.deepEqual(defaultStreams.map((stream) => `${stream.name}:${stream.source}`), ['DP:azure', 'CP:azure', 'IOCC:azure', 'Content:azure', 'Tool Validations:azure', 'S&S IT:windchill'])
+  assert.deepEqual(defaultStreams.map((stream) => `${stream.name}:${stream.source}`), ['DP:azure', 'CP:azure', 'IOCC:azure', 'Content:azure', 'Tool Validations:azure', 'S&S IT:windchill', 'QRE:windchill'])
   const profiles = [{ id: 'tw', reason: 'QMS-0025', role: 'time-tracking' }, { id: 'a', reason: 'Dose planning (DP)', viewName: 'DP', role: 'reference' }, { id: 'b', reason: 'tool validations', role: 'release-source' }]
   assert.equal(profileForStream(defaultStreams[0], profiles).id, 'a')
   assert.equal(profileForStream(defaultStreams[4], profiles).id, 'b', 'name match ignores case and spaces')

@@ -10,7 +10,7 @@ import type { AzureConnectionProfileSummary } from './azureCredentials.ts'
 // (cpReporting); the others keep the general path rule. DP and IOCC releases are matched to QMS-0025 Features by a
 // fuzzy match with a percentage.
 export type ReleaseRule = 'path' | 'dp' | 'iocc' | 'tool' | 'cp'
-export interface StreamDef { name: string; source: 'azure' | 'windchill'; rule: ReleaseRule; fuzzy: boolean }
+export interface StreamDef { name: string; source: 'azure' | 'windchill'; rule: ReleaseRule; fuzzy: boolean; project?: boolean }
 export const defaultStreams: StreamDef[] = [
   { name: 'DP', source: 'azure', rule: 'dp', fuzzy: true },
   { name: 'CP', source: 'azure', rule: 'cp', fuzzy: true },
@@ -18,6 +18,8 @@ export const defaultStreams: StreamDef[] = [
   { name: 'Content', source: 'azure', rule: 'path', fuzzy: false },
   { name: 'Tool Validations', source: 'azure', rule: 'tool', fuzzy: false },
   { name: 'S&S IT', source: 'windchill', rule: 'path', fuzzy: false },
+  // QRE: projects "PJ-<number> <name>" from the Location (CON-83).
+  { name: 'QRE', source: 'windchill', rule: 'path', fuzzy: false, project: true },
 ]
 export const defaultMatchThreshold = 80
 
@@ -69,3 +71,6 @@ export function profileForDataSet(name: string, profiles: AzureConnectionProfile
   return profiles.find((profile) => profile.role !== 'time-tracking' && (profile.id === set.presetId || namesDataSet(profile.viewName, set) || namesDataSet(profile.reason, set)))
 }
 export const dataSetOfProfile = (profile: Pick<AzureConnectionProfileSummary, 'id' | 'viewName' | 'reason' | 'role'>) => profile.role === 'time-tracking' ? undefined : dataSets.find((set) => profile.id === set.presetId || namesDataSet(profile.viewName, set) || namesDataSet(profile.reason, set))
+
+// How a Windchill export is read (CON-83): QRE by project, the others by release (S&S IT's rules).
+export const windchillOptionsFor = (name: string): { project?: boolean } => defaultStreams.some((stream) => stream.source === 'windchill' && stream.project && namesStream(name, stream.name)) ? { project: true } : {}

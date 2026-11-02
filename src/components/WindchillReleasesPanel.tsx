@@ -10,6 +10,7 @@ import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { FeatureSetups } from '../featureSetup'
 import { boardMatchText, dpBoardCandidates, type BoardMatch, windchillBoardMatch, windchillFeatureTitle } from '../dpBoardMatch'
 import { BoardMatchCell } from './DpBoardColumn'
+import { windchillOptionsFor } from '../streams'
 
 // A Windchill export's unique releases (windchillReleases): from the Location column (folder path) when the export
 // has one — the preferred source, its folder names follow a few fixed shapes — else from the document names; the
@@ -34,7 +35,7 @@ export function WindchillReleasesPanel({ view, rows, columns, git, month, board 
   const [scope, setScope] = useState<'month' | 'all'>('month')
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: 'latest', desc: true })
   const widths = useColumnWidths(`windchill-releases:${view.id}`)
-  const result = useMemo(() => windchillReleases(rows, columns, { source, nameColumn: nameColumn || undefined, locationColumn: locationColumn || undefined }), [rows, columns, source, nameColumn, locationColumn])
+  const result = useMemo(() => windchillReleases(rows, columns, { source, nameColumn: nameColumn || undefined, locationColumn: locationColumn || undefined, ...windchillOptionsFor(board?.stream || view.name) }), [rows, columns, source, nameColumn, locationColumn, board?.stream, view.name])
   const fileName = view.name.replace(/[^\w-]+/g, '-')
   const boardItems = board?.azure.items, stream = board?.stream ?? '', threshold = board?.threshold
   const candidates = useMemo(() => boardItems ? dpBoardCandidates(boardItems) : [], [boardItems])

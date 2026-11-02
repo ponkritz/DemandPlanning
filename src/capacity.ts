@@ -1,5 +1,5 @@
 import type { AzureWorkItem } from './domain'
-import { isMonthTask, timeWritingMonth, workingDays } from './azureInsights.ts'
+import { isMonthTask, isTrainingWork, timeWritingMonth, workingDays } from './azureInsights.ts'
 import { isMine, type Me } from './myWork.ts'
 
 // Capacity model for the selected month. Source rows are the Tasks whose title starts or ends with the month and year
@@ -193,12 +193,14 @@ export function capacityModel(source: AzureWorkItem[], month: string, settings: 
     const person = people.get(name) ?? { name, employedDays: days, funded: personFunded, absence: 0, absenceByKind: emptyKinds(), available: personFunded, work: 0, planned: 0, utilization: null, plannedUtilization: null, status: 'No bookings' as LoadStatus, tasks: 0, streams: [], npra: 0, npraPlanned: 0, npraTasks: 0, npraAllowance, npraOver: 0, npraDeducted: 0, reserved: 0, streamMap: new Map() }
     people.set(name, person)
     const work = hours(task.completedWork), planned = hours(task.originalEstimate)
-    if (epic?.id === settings.absenceEpicId) {
-      const kind = absenceKind([task.title, ...chain.map(item => item.title)])
+    // Team Holidays and Training (CAP-16): leave is absence; training is NPRA.
+    const training = epic?.id === settings.absenceEpicId && isTrainingWork(task, chain)
+    if (epic?.id === settings.absenceEpicId && !training) {
+      const kind = absenceKind([task.title, ...chain.filter(item => item.workItemType !== 'Epic').map(item => item.title)])
       person.absence += work; person.absenceByKind[kind] += work
       continue
     }
-    if (isNpraTask(task, chain)) { person.npra += work; person.npraPlanned += planned; person.npraTasks += 1; continue }
+    if (training || isNpraTask(task, chain)) { person.npra += work; person.npraPlanned += planned; person.npraTasks += 1; continue }
     person.work += work; person.planned += planned; person.tasks += 1
     const key = epic?.key ?? 'unmapped', title = epic?.title ?? 'No Epic path'
     const personStream = person.streamMap.get(key) ?? { key, epic, title, work: 0, planned: 0, tasks: 0 }

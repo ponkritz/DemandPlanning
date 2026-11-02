@@ -163,3 +163,25 @@ test('Pulse Check Supported line: the export\'s releases with the latest date in
   assert.deepEqual(windchillSupported(rows, columns, '2026-08'), ['CareLink R3.2'])
   assert.deepEqual(windchillSupported(rows, columns, '2026-09'), [])
 })
+
+test('QRE: each release is a project "PJ-<number> <name>" from the Location folder at index 2 (TC-CON-51)', async () => {
+  const { projectFromLocation, windchillReleases, windchillSupported } = await import('../src/windchillReleases.ts')
+  const { windchillOptionsFor } = await import('../src/streams.ts')
+  const { windchillFeatureTitle } = await import('../src/dpBoardMatch.ts')
+  assert.deepEqual(projectFromLocation('/Projects/PJ-1234 Patient Monitor Upgrade/DHF/Test Reports'), { name: 'Patient Monitor Upgrade', release: 'PJ-1234', folder: '/Projects/PJ-1234 Patient Monitor Upgrade', clubbed: false, parts: [{ name: 'Patient Monitor Upgrade', release: 'PJ-1234', raw: 'PJ-1234 Patient Monitor Upgrade' }] })
+  assert.equal(projectFromLocation('/Projects/pj_77 - On-Demand Fix/DHF').release, 'PJ-77', 'PJ written in any case, with "_" or "-", one form')
+  assert.equal(projectFromLocation('/Other/Programs/PJ-5 Deep/DHF').release, 'PJ-5', 'not at index 2: the first project folder')
+  assert.equal(projectFromLocation('/Products/Remote Diagnostics 1.6/DHF'), undefined, 'no project, no release')
+  assert.deepEqual(windchillOptionsFor('QRE export'), { project: true })
+  assert.deepEqual(windchillOptionsFor('S&S IT'), {})
+  const columns = ['Name', 'Location', 'Last Modified']
+  const rows = [
+    { Name: 'Plan.docx', Location: '/Projects/PJ-1234 Patient Monitor Upgrade/DHF', 'Last Modified': '2026-10-03 10:00' },
+    { Name: 'Report.docx', Location: '/Projects/PJ-1234 Patient Monitor Upgrade/Reports', 'Last Modified': '2026-10-20 10:00' },
+    { Name: 'Spec.docx', Location: '/Projects/PJ-0099 Scanner Service/DHF', 'Last Modified': '2026-09-12 09:00' },
+  ]
+  const result = windchillReleases(rows, columns, { project: true })
+  assert.deepEqual(result.releases.map((entry) => [entry.release, entry.name, entry.documents.length]), [['PJ-1234', 'Patient Monitor Upgrade', 2], ['PJ-0099', 'Scanner Service', 1]], 'one project once, with its documents; newest first')
+  assert.deepEqual(windchillSupported(rows, columns, '2026-10', { project: true }), ['PJ-1234 Patient Monitor Upgrade'], 'Pulse Check: the projects whose latest date is in the month')
+  assert.equal(windchillFeatureTitle('QRE', result.releases[0]), 'QRE | PJ-1234 Patient Monitor Upgrade')
+})

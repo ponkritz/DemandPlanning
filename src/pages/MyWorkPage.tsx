@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { PersonPicker } from '../components/PersonPicker'
+import { addMonthTask } from '../monthTaskAction'
 import { EmptyState, Metric, Metrics, Notice, Page, Pill, TablePanel, type Tone } from '../components/ui'
 import { currentIndiaMonth, updateAzureWorkItem } from '../azureDevOps'
 import { capacityContext } from '../capacity'
@@ -102,6 +103,8 @@ export function MyWorkPage({ azure, store, my, onOpenBulk, assign, featureSetup 
             const children = item.workItemType === 'Feature' ? featureChildren(azure.items, item) : []
             const open = expanded.includes(item.key)
             const count = children.length
+            // BKL-22: this month's Time Writing Task for me under the Feature (or the Feature above a Story).
+            const monthButton = (entry: AzureWorkItem) => (entry.workItemType === 'Feature' || entry.workItemType === 'User Story') && config && meEmail ? <button type="button" className="text-button" disabled={Boolean(blocked) || busy.startsWith('month-')} title="Add this month's Time Writing Task for you under this Feature (or the Feature above this Story)" onClick={() => { setBusy(`month-${entry.id}`); void addMonthTask(config, pat, azure.items, entry, meEmail).then((done) => { azure.applyWorkItems(done.changed, 'Add Time Writing Task', done.text); setLog((current) => [{ tone: 'success', text: done.text }, ...current]) }, (failure) => setLog((current) => [{ tone: 'error', text: failure instanceof Error ? failure.message : String(failure) }, ...current])).finally(() => setBusy('')) }}>{busy === `month-${entry.id}` ? 'Adding…' : '＋ Time Writing Task'}</button> : null
             const editButton = (entry: AzureWorkItem) => ['Feature', 'User Story', 'Task'].includes(entry.workItemType) ? <button type="button" className="text-button" disabled={Boolean(blocked)} title={`Edit ${entry.workItemType} #${entry.id}`} onClick={() => setEditing(entry)}>Edit</button> : null
             const action = (entry: AzureWorkItem) => { const next = nextStateFor(entry); return next ? <button type="button" className="ghost" disabled={Boolean(blocked) || busy === `state-${entry.id}`} onClick={() => void finish(entry, next.state)}>{busy === `state-${entry.id}` ? 'Saving…' : next.label}</button> : <small className="muted" title="Only an Active Feature or User Story can be closed">Set to Active first</small> }
             // One level at a time: the Feature opens its direct children; a child with work under it (a User Story's
@@ -111,14 +114,14 @@ export function MyWorkPage({ azure, store, my, onOpenBulk, assign, featureSetup 
               <td><Pill tone={stateTone(entry.state)}>{entry.state}</Pill></td>
               <td><small className="plain">{item.title}</small></td>
               <td><small className="plain">{shortPath(entry.iterationPath)}</small></td>
-              <td>{isMine(entry, my.me) && nextStateFor(entry) && /new|active/i.test(entry.state) ? action(entry) : <small className="muted">{isMine(entry, my.me) ? '—' : 'Not mine'}</small>}{editButton(entry)}</td>
+              <td>{isMine(entry, my.me) && nextStateFor(entry) && /new|active/i.test(entry.state) ? action(entry) : <small className="muted">{isMine(entry, my.me) ? '—' : 'Not mine'}</small>}{editButton(entry)}{monthButton(entry)}</td>
             </tr>
             return [<tr key={item.key} className={open ? 'work-open' : undefined}>
               <td>{children.length ? <button type="button" className="tree-toggle work-toggle" aria-expanded={open} aria-label={`${open ? 'Collapse' : 'Expand'} Feature #${item.id}: ${count} child items`} title={`${count} ${count === 1 ? 'item' : 'items'} directly under this Feature`} onClick={() => toggle(item.key)}>{open ? '▾' : '▸'}</button> : item.workItemType === 'Feature' ? <span className="work-toggle work-toggle-empty" title="No User Stories or Tasks under this Feature" aria-hidden="true">·</span> : null}<span className={`type-dot type-${item.workItemType.replace(/\s/g, '').toLowerCase()}`} aria-hidden="true" /><a href={item.url} target="_blank" rel="noreferrer">#{item.id}</a> <strong className="inline">{item.title}</strong><small>{item.workItemType}{children.length ? ` · ${count} ${count === 1 ? 'item' : 'items'}` : ''}</small></td>
               <td><Pill tone={stateTone(item.state)}>{item.state}</Pill></td>
               <td>{feature && feature.id !== item.id ? <small className="plain">{feature.title}</small> : '—'}</td>
               <td><small className="plain">{shortPath(item.iterationPath)}</small></td>
-              <td>{action(item)}{item.workItemType === 'Feature' && !hasOptionalStories(azure.items, item) && <button type="button" className="text-button" disabled={Boolean(blocked)} title="Add the missing User Stories and this month's Time Writing task under this Feature" onClick={() => setEditor({ resume: item })}>Complete children</button>}{editButton(item)}{item.workItemType === 'Feature' && <button type="button" className="text-button" disabled={Boolean(blocked)} title="Create a User Story under this Feature" onClick={() => setStoryOf(item)}>＋ User Story</button>}</td>
+              <td>{action(item)}{item.workItemType === 'Feature' && !hasOptionalStories(azure.items, item) && <button type="button" className="text-button" disabled={Boolean(blocked)} title="Add the missing User Stories and this month's Time Writing task under this Feature" onClick={() => setEditor({ resume: item })}>Complete children</button>}{editButton(item)}{monthButton(item)}{item.workItemType === 'Feature' && <button type="button" className="text-button" disabled={Boolean(blocked)} title="Create a User Story under this Feature" onClick={() => setStoryOf(item)}>＋ User Story</button>}</td>
             </tr>, ...(open ? children.flatMap((child) => [childRow(child.item, 1, child.children), ...(expanded.includes(child.item.key) ? child.children.map((grandchild) => childRow(grandchild, 2)) : [])]) : [])]
           })}</tbody></table>}
         </TablePanel>

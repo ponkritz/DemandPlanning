@@ -28,10 +28,10 @@ export function setupSteps(facts: SetupFacts): SetupStep[] {
       how: ['Settings → Storage → Git storage.', 'The team\'s data repository is already filled in (ponkritz/DemandPlanningStorage, branch main); change it only if your team uses another.', 'Paste a GitHub fine-grained token limited to that repository (Contents: Read, or Read and write to save changes), tick “Remember token in this browser” and press Connect & load.', ...(facts.gitConnected && facts.gitReadOnly ? ['Your token can read but not save: that is enough to use the app.'] : [])],
     },
     {
-      id: 'timewriting', title: 'Check the Time Writing connection and your email', required: true, tab: 'connections', section: 'mapping',
+      id: 'timewriting', title: 'Check the Time Writing connection and your email', required: true, tab: 'connections', section: facts.email ? 'mapping' : 'email',
       state: facts.timeWriting && facts.email ? 'done' : 'todo',
       why: 'The QMS-0025 Time Writing backlog is where your Features, User Stories and month Tasks live. Your email tells the app which work is yours and who new work is assigned to.',
-      how: ['Settings → Azure DevOps.', facts.gitConnected ? 'The connections from Git are already listed: open “Time Writing” and check it.' : 'Add a connection with the role Time Writing: server https://dev.azure.com, your organization, project and team.', 'Enter your work email (the one Azure DevOps shows for you) and save.'],
+      how: ['Settings → Azure DevOps.', facts.gitConnected ? 'The connections from Git are already listed: open “Time Writing” and check it.' : 'Add a connection with the role Time Writing: server https://dev.azure.com, your organization, project and team.', 'Settings → Azure DevOps → Your work email: enter the email Azure DevOps shows for you and save. It is kept on this computer on its own, not in the connection.'],
     },
     {
       id: 'pat', title: 'Enter your Azure DevOps token (PAT)', required: true, tab: 'connections', section: 'servers',
