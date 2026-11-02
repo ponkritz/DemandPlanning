@@ -170,6 +170,23 @@ test('TC-QV-23: the export\'s releases have a QMS-0025 match column with Create 
   await context.close()
 })
 
+test('TC-CON-53: "＋ ECP" imports the export as the ECP page whatever the file is called, read by project', async () => {
+  const { page, context, errors } = await openPage(app)
+  await page.locator('nav button', { hasText: /^＋\s*ECP$/ }).click()
+  assert.equal(await page.getByLabel(/^Name/).first().inputValue(), 'ECP', 'the import is named after the stream')
+  await page.locator('input[type=file]').first().setInputFiles(fixture('windchill-ecp.csv'))
+  const releases = page.locator('.panel').filter({ has: page.locator('h2, h3', { hasText: /^Releases/ }) }).first()
+  await releases.waitFor()
+  await releases.getByLabel('Show').selectOption('all')
+  const body = await text(releases)
+  assert.match(body, /123456/)
+  assert.match(body, /Lab Automation/)
+  assert.equal(await page.locator('nav button', { hasText: /^＋\s*ECP$/ }).count(), 0, 'ECP is no longer "not imported"')
+  assert.equal(await page.locator('nav button', { hasText: /^\S*\s*ECP$/ }).count(), 1, 'ECP opens the export')
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
 test('TC-QV-18: Pulse Check shows the Supported summary next to Releases, with the S&S IT export\'s releases of the month', async () => {
   const { page, context, errors } = await openPage(app)
   await navigate(page, 'Import Windchill export')

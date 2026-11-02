@@ -120,8 +120,9 @@ function ExportFileButton({ label, onFile, onError }: { label: string; onFile: (
 }
 
 // Release Details → Import Windchill export: a search run in Windchill and exported as CSV becomes a page here.
-export function WindchillExportImport({ windchill, git, onImported }: { windchill: WindchillWorkspace; git?: GitStorage; onImported: (id: string) => void }) {
-  const [name, setName] = useState('')
+// Opened from a stream not imported yet ("＋ ECP"), the Name is that stream's, so the export becomes its page (CON-85).
+export function WindchillExportImport({ windchill, git, onImported, stream = '' }: { windchill: WindchillWorkspace; git?: GitStorage; onImported: (id: string) => void; stream?: string }) {
+  const [name, setName] = useState(stream)
   const [error, setError] = useState('')
   const [fromGit, setFromGit] = useState<{ tone: 'info' | 'success' | 'warning' | 'error'; text: string } | null>(null)
   // Restore every export saved to Git (e.g. on a new computer): missing ones are added, newer results replace older.
@@ -134,13 +135,14 @@ export function WindchillExportImport({ windchill, git, onImported }: { windchil
       setFromGit({ tone: result.failed.length ? 'warning' : result.files ? 'success' : 'info', text: result.files ? `${result.files} export${result.files === 1 ? '' : 's'} in Git; ${result.applied.length ? `newer results loaded for ${result.applied.join(', ')}` : 'the results here are already up to date'}.${result.added ? ` ${result.added} added to Release Details.` : ''}${result.failed.length ? ` Not readable: ${result.failed.join(', ')}.` : ''}` : 'No Windchill exports saved in Git yet.' })
     } catch (failure) { setFromGit({ tone: 'error', text: `Load from Git failed: ${failure instanceof Error ? failure.message : String(failure)}` }) }
   }
-  return <Panel className="connection-panel" eyebrow="RELEASE DETAILS" title="Import a Windchill export" info="In Windchill, run your search (e.g. a saved search), export the result list to a CSV file, then import it here. The columns are kept as in the file; with Git storage connected the export is also saved to Git for the web app.">
+  return <Panel className="connection-panel" eyebrow="RELEASE DETAILS" title={stream ? `Import the ${stream} export` : 'Import a Windchill export'} info="In Windchill, run your search (e.g. a saved search), export the result list to a CSV file, then import it here. The columns are kept as in the file; with Git storage connected the export is also saved to Git for the web app.">
     <div className="connection-form">
       <label>Name<input value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. GSS_BST released documents (default: the file name)" /></label>
-      <div className="connection-actions"><ExportFileButton label="Choose CSV export…" onFile={(text, file) => { onImported(windchill.importExport(text, file, name)); setName('') }} onError={setError} />{git?.connected && <button type="button" className="ghost" disabled={fromGit?.text === 'Loading from Git…'} onClick={() => void loadAll()}>Load all exports from Git</button>}</div>
+      <div className="connection-actions"><ExportFileButton label="Choose CSV export…" onFile={(text, file) => { onImported(windchill.importExport(text, file, name)); setName(stream) }} onError={setError} />{git?.connected && <button type="button" className="ghost" disabled={fromGit?.text === 'Loading from Git…'} onClick={() => void loadAll()}>Load all exports from Git</button>}</div>
     </div>
     {error && <Notice tone="error">{error}</Notice>}
     {fromGit && <Notice tone={fromGit.tone}>{fromGit.text}</Notice>}
+    {stream && <p className="muted">Saved as <strong>{name.trim() || stream}</strong>: keep the name starting with “{stream}” so that the export is the {stream} page, Pulse Check and Monthly pack use it.</p>}
     <p className="muted">CSV or tab-separated text. Excel files: open them and save as CSV first.</p>
   </Panel>
 }

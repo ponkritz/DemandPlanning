@@ -721,9 +721,11 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-CON-50 Work email as its own setting** — Req CON-82 — L1 `work-email.test.mjs` ("your work email is its own setting: saved and read, never taken from the first connection or changed by a Git sync (TC-CON-50)"; "first start: the email on the Time Writing connection becomes the setting only after the shared-email clean-up ran (TC-CON-50)"); E2E `shell.e2e.mjs` (TC-SET-06: *Your work email* is the first section of Azure DevOps); browser check (desktop app): enter the email under Settings → Azure DevOps → Your work email, Force Update and restart — the email is still there, Assigned to Me shows your work and the access role is yours; edit and save the Time Writing connection (no email field) — the email is unchanged; Get started points to Your work email while it is empty.
 
-**TC-CON-51 QRE projects from Windchill** — Req CON-83 — L1 `windchill-releases.test.mjs` ("QRE: each release is a project \"PJ-<number> <name>\" from the Location folder at index 2 (TC-CON-51)"), `streams.test.mjs` ("default streams in order; connections and exports found by name"); browser check: import a Windchill export named "QRE" — Release Details → Windchill exports → QRE lists each PJ project once with its documents and latest date, the month filter follows the header month, Pulse Check → Supported shows "QRE [n] : PJ-1234 Name, …", and Create Feature proposes "QRE | PJ-1234 Name".
+**TC-CON-51 ECP projects from Windchill** — Req CON-83 — L1 `windchill-releases.test.mjs` ("ECP: each release is the second Location folder, \"<project number> <project name>\", with everything under it (TC-CON-51)"), `streams.test.mjs` ("default streams in order; connections and exports found by name"); browser check: import a Windchill export through "＋ ECP" (an export still named "QRE" also shows as ECP) — Release Details → Windchill exports → ECP lists each second folder of the Location ("Parent folder/<number> <name>/Phase") once as "<number> <name>" with every document under it, phases and deeper folders included, and its latest date; the month filter follows the header month; Pulse Check → Supported shows "ECP [n] : 123456 Name, …"; Create Feature proposes "ECP | 123456 Name".
 
 **TC-CON-52 BRITE placeholder** — Req CON-84 — inspection: Release Details shows BRITE at its root; it opens "BRITE is not set up yet."; Pulse Check and the Monthly pack have no BRITE line.
+
+**TC-CON-53 Import a stream's export from its menu entry** — Req CON-85 — E2E `documents-and-data.e2e.mjs` ("TC-CON-53: \"＋ ECP\" imports the export as the ECP page whatever the file is called, read by project"); browser check: with no ECP export, click "＋ ECP" — the import shows "Import the ECP export" with Name "ECP"; choose a CSV called anything (e.g. "Search Results.csv") — the ECP page opens with its projects, the menu shows ECP (no ＋), and Pulse Check lists ECP.
 
 **TC-CON-44 DP and DHFI defaults** — Req CON-76 — L1 `connections.test.mjs` ("pre-filled connections from the shared setup …": DP reads the Release work items of DHP with DDTDate, SourceProgram, PsName and Release; DHFI [Approved] reads the DHP.Vault documents, hidden from the menu); browser check in a fresh browser with only the on-prem PAT: Settings → Azure DevOps → Stream mapping → Set up DP, Pedestal and DHFI from their defaults; Release Details → DP lists Release items for the DDT month; Get started shows the release streams step done.
 
@@ -1340,6 +1342,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CON-82 | TC-CON-50 |
 | CON-83 | TC-CON-51 |
 | CON-84 | TC-CON-52 |
+| CON-85 | TC-CON-53 |
 | QV-20 | TC-QV-06 |
 | QV-21 | TC-QV-07 |
 | CON-21, CON-22 | TC-CON-08 |

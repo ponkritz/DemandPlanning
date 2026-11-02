@@ -18,9 +18,9 @@ import { windchillCell } from './windchillViews.ts'
 // spaces in the name and trailing zero parts in the number (3.1 = 3.1.0).
 export interface DocumentRelease { name: string; release: string; raw: string; document: string; span: string }
 export interface ReleasePart { name: string; release: string; raw: string }
-export interface WindchillRelease { key: string; name: string; release: string; clubbed: boolean; parts: ReleasePart[]; documents: { name: string; row: Record<string, unknown> }[]; latest: string; latestAt?: number; locations: string[] }
+export interface WindchillRelease { key: string; name: string; release: string; clubbed: boolean; parts: ReleasePart[]; documents: { name: string; row: Record<string, unknown> }[]; latest: string; latestAt?: number; locations: string[]; project?: boolean }
 export type ReleaseSource = 'location' | 'name'
-export interface LocationRelease { name: string; release: string; folder: string; clubbed: boolean; parts: ReleasePart[] }
+export interface LocationRelease { name: string; release: string; folder: string; clubbed: boolean; parts: ReleasePart[]; project?: boolean }
 export interface UniqueLocation { location: string; count: number; releases: LocationRelease[] }
 
 const sep = String.raw`[\s_\-|/:;,+&([{]`
@@ -84,18 +84,26 @@ export function releasesFromLocation(location: string): LocationRelease[] {
   return []
 }
 export const releaseFromLocation = (location: string): LocationRelease | undefined => releasesFromLocation(location)[0]
-// QRE (CON-83): each release is a project, "PJ-<number> <name>", read from the Location's folder at index 2 when split on
-// "/" ("/Projects/PJ-1234 Name/DHF" → PJ-1234, Name); when that folder is not a project, the first folder that is.
+// ECP (CON-83): a Location reads "Parent folder/Project number Project name/Phase/…"; each release is the second folder,
+// "<project number> <project name>", whatever the name, and every document anywhere under it belongs to it. Leading
+// slashes do not count ("/Projects/PJ-1234 Name/DHF" and "Projects/PJ-1234 Name/DHF" → PJ-1234, Name). The number is the
+// folder's first word when it holds a digit ("PJ-1234", "pj_77" → PJ-77, "123456"); a folder without one is a name only.
 const project = /^(PJ[-_ ]?\d+)[\s_:.-]*(.*)$/i
-export function projectFromLocation(location: string): LocationRelease | undefined {
-  const segments = location.split('/').map((segment) => segment.trim())
-  const folder = [segments[2] ?? '', ...segments].find((segment) => project.test(segment))
-  if (!folder) return undefined
-  const [, code, rest] = project.exec(folder)!
-  const release = code.toUpperCase().replace(/^PJ[-_ ]?/, 'PJ-'), name = rest.trim()
-  const part = { name, release, raw: folder }
-  return { name, release, folder: segments.slice(0, segments.indexOf(folder) + 1).join('/'), clubbed: false, parts: [part] }
+const projectParts = (folder: string) => {
+  const pj = project.exec(folder)
+  if (pj) return { name: pj[2].trim(), release: pj[1].toUpperCase().replace(/^PJ[-_ ]?/, 'PJ-') }
+  const [first = '', ...rest] = folder.split(/\s+/)
+  return /\d/.test(first) ? { name: rest.join(' ').replace(/^[\s_:.-]+/, '').trim(), release: first.replace(/[\s_:.-]+$/, '') } : { name: folder, release: '' }
 }
+export function projectFromLocation(location: string): LocationRelease | undefined {
+  const segments = location.split('/').map((segment) => segment.trim()).filter(Boolean)
+  const folder = segments[1] ?? ''
+  if (!folder) return undefined
+  const { name, release } = projectParts(folder)
+  return { name, release, folder: `${location.trim().startsWith('/') ? '/' : ''}${segments.slice(0, 2).join('/')}`, clubbed: false, parts: [{ name, release, raw: folder }], project: true }
+}
+// Without a Location, a document named "PJ-<number> <name> …" still names its project (CON-83).
+const projectFromName = (text: string): LocationRelease | undefined => project.test(text.trim()) ? projectFromLocation(`-/${text.trim()}`) : undefined
 // Every distinct Location value with its document count and the release read from it, most documents first.
 export function uniqueLocations(rows: Record<string, unknown>[], column: string): UniqueLocation[] {
   const counts = new Map<string, number>()
@@ -155,7 +163,7 @@ export function windchillReleases(rows: Record<string, unknown>[], columns: stri
     // A clubbed name or folder is one release (oneRelease), kept as written and counted once.
     const parsed = releasesFromDocumentName(text)
     const release = chosen.project
-      ? ((entry) => entry && { ...entry, document: text, key: entry.release.toLowerCase() })(projectFromLocation(folder) ?? projectFromLocation(`//${text}`))
+      ? ((entry) => entry && { ...entry, document: text, key: entry.release.toLowerCase() })(folder ? projectFromLocation(folder) : projectFromName(text))
       : source === 'location'
       ? (([entry]) => entry && { ...entry, document: text, key: entry.release.toLowerCase() })(releasesFromLocation(folder))
       : (() => { const one = oneRelease(parsed, parsed[0]?.span ?? ''); return one && { ...one, document: parsed[0]?.document ?? '', key: one.clubbed ? one.release.toLowerCase() : normalizeVersion(one.release) } })()
@@ -163,7 +171,7 @@ export function windchillReleases(rows: Record<string, unknown>[], columns: stri
     const when = date ? windchillCell(row, date) : ''
     {
       const key = `${release.name.toLowerCase().replace(/[^a-z0-9]+/g, '')}\u0000${release.key}`
-      const entry = byKey.get(key) ?? { key, name: release.name, release: release.release, clubbed: release.clubbed, parts: release.parts, documents: [], latest: '', locations: [] }
+      const entry = byKey.get(key) ?? { key, name: release.name, release: release.release, clubbed: release.clubbed, parts: release.parts, documents: [], latest: '', locations: [], ...(chosen.project ? { project: true } : {}) }
       if (entry.documents.some((doc) => doc.row === row)) continue
       entry.documents.push({ name: release.document || text, row })
       if (folder && !entry.locations.includes(folder)) entry.locations.push(folder)

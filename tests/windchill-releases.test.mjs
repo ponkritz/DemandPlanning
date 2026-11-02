@@ -164,24 +164,35 @@ test('Pulse Check Supported line: the export\'s releases with the latest date in
   assert.deepEqual(windchillSupported(rows, columns, '2026-09'), [])
 })
 
-test('QRE: each release is a project "PJ-<number> <name>" from the Location folder at index 2 (TC-CON-51)', async () => {
+test('ECP: each release is the second Location folder, "<project number> <project name>", with everything under it (TC-CON-51)', async () => {
   const { projectFromLocation, windchillReleases, windchillSupported } = await import('../src/windchillReleases.ts')
-  const { windchillOptionsFor } = await import('../src/streams.ts')
+  const { windchillOptionsFor, exportForStream, defaultStreams } = await import('../src/streams.ts')
   const { windchillFeatureTitle } = await import('../src/dpBoardMatch.ts')
-  assert.deepEqual(projectFromLocation('/Projects/PJ-1234 Patient Monitor Upgrade/DHF/Test Reports'), { name: 'Patient Monitor Upgrade', release: 'PJ-1234', folder: '/Projects/PJ-1234 Patient Monitor Upgrade', clubbed: false, parts: [{ name: 'Patient Monitor Upgrade', release: 'PJ-1234', raw: 'PJ-1234 Patient Monitor Upgrade' }] })
-  assert.equal(projectFromLocation('/Projects/pj_77 - On-Demand Fix/DHF').release, 'PJ-77', 'PJ written in any case, with "_" or "-", one form')
-  assert.equal(projectFromLocation('/Other/Programs/PJ-5 Deep/DHF').release, 'PJ-5', 'not at index 2: the first project folder')
-  assert.equal(projectFromLocation('/Products/Remote Diagnostics 1.6/DHF'), undefined, 'no project, no release')
-  assert.deepEqual(windchillOptionsFor('QRE export'), { project: true })
+  assert.deepEqual(projectFromLocation('Projects/123456 Patient Monitor Upgrade/Design Phase/Reports'), { name: 'Patient Monitor Upgrade', release: '123456', folder: 'Projects/123456 Patient Monitor Upgrade', clubbed: false, parts: [{ name: 'Patient Monitor Upgrade', release: '123456', raw: '123456 Patient Monitor Upgrade' }], project: true }, 'Parent folder/Project number Project name/Phase')
+  assert.equal(projectFromLocation('/Projects/PJ-1234 Patient Monitor Upgrade/DHF').release, 'PJ-1234', 'a leading "/" does not count')
+  assert.equal(projectFromLocation('/Projects/PJ-1234 Patient Monitor Upgrade/DHF').folder, '/Projects/PJ-1234 Patient Monitor Upgrade')
+  assert.equal(projectFromLocation('Projects/pj_77 - On-Demand Fix/DHF').release, 'PJ-77', 'PJ written in any case, with "_" or "-", one form')
+  assert.deepEqual([projectFromLocation('Other/Programs/PJ-5 Deep/DHF').release, projectFromLocation('Other/Programs/PJ-5 Deep/DHF').name], ['', 'Programs'], 'the second folder only: a project folder deeper down is under it')
+  assert.deepEqual([projectFromLocation('Products/Lab Automation/DHF').release, projectFromLocation('Products/Lab Automation/DHF').name], ['', 'Lab Automation'], 'no number: the name alone')
+  assert.equal(projectFromLocation('Products'), undefined, 'no second folder, no release')
+  assert.deepEqual(windchillOptionsFor('ECP export'), { project: true })
+  assert.deepEqual(windchillOptionsFor('QRE'), { project: true }, 'an export still named QRE is read as ECP')
   assert.deepEqual(windchillOptionsFor('S&S IT'), {})
+  const ecp = defaultStreams.find((stream) => stream.name === 'ECP')
+  assert.equal(exportForStream(ecp, [{ id: 'q', name: 'QRE', exportFile: 'x.csv' }])?.id, 'q', 'an export imported as QRE stays the ECP page')
+  assert.equal(exportForStream(ecp, [{ id: 'q', name: 'QRE', exportFile: 'x.csv' }, { id: 'e', name: 'ECP', exportFile: 'y.csv' }])?.id, 'e', 'one named ECP comes first')
   const columns = ['Name', 'Location', 'Last Modified']
   const rows = [
-    { Name: 'Plan.docx', Location: '/Projects/PJ-1234 Patient Monitor Upgrade/DHF', 'Last Modified': '2026-10-03 10:00' },
-    { Name: 'Report.docx', Location: '/Projects/PJ-1234 Patient Monitor Upgrade/Reports', 'Last Modified': '2026-10-20 10:00' },
-    { Name: 'Spec.docx', Location: '/Projects/PJ-0099 Scanner Service/DHF', 'Last Modified': '2026-09-12 09:00' },
+    { Name: 'Plan.docx', Location: 'Projects/123456 Patient Monitor Upgrade/Design', 'Last Modified': '2026-10-03 10:00' },
+    { Name: 'Report.docx', Location: 'Projects/123456 Patient Monitor Upgrade/Verification', 'Last Modified': '2026-10-20 10:00' },
+    { Name: 'Spec.docx', Location: 'Projects/PJ-0099 Scanner Service/Design', 'Last Modified': '2026-09-12 09:00' },
+    { Name: 'Deep.docx', Location: 'Projects/123456 Patient Monitor Upgrade/Design/Sub/Deeper', 'Last Modified': '2026-10-05 10:00' },
+    { Name: 'Other.docx', Location: 'Projects/Lab Automation/Design', 'Last Modified': '2026-10-07 10:00' },
   ]
   const result = windchillReleases(rows, columns, { project: true })
-  assert.deepEqual(result.releases.map((entry) => [entry.release, entry.name, entry.documents.length]), [['PJ-1234', 'Patient Monitor Upgrade', 2], ['PJ-0099', 'Scanner Service', 1]], 'one project once, with its documents; newest first')
-  assert.deepEqual(windchillSupported(rows, columns, '2026-10', { project: true }), ['PJ-1234 Patient Monitor Upgrade'], 'Pulse Check: the projects whose latest date is in the month')
-  assert.equal(windchillFeatureTitle('QRE', result.releases[0]), 'QRE | PJ-1234 Patient Monitor Upgrade')
+  assert.deepEqual(result.releases.map((entry) => [entry.release, entry.name, entry.documents.length]), [['123456', 'Patient Monitor Upgrade', 3], ['', 'Lab Automation', 1], ['PJ-0099', 'Scanner Service', 1]], 'one project per second folder, with every document under it; newest first')
+  assert.deepEqual(windchillSupported(rows, columns, '2026-10', { project: true }), ['123456 Patient Monitor Upgrade', 'Lab Automation'], 'Pulse Check: number + name of the projects whose latest date is in the month')
+  assert.equal(windchillFeatureTitle('ECP', result.releases[0]), 'ECP | 123456 Patient Monitor Upgrade', 'number + name, never "v123456"')
+  assert.equal(windchillFeatureTitle('ECP', result.releases[1]), 'ECP | Lab Automation')
+  assert.equal(windchillFeatureTitle('ECP', result.releases[2]), 'ECP | PJ-0099 Scanner Service')
 })
