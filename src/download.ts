@@ -44,3 +44,7 @@ export function downloadXlsx(contents: Uint8Array, filename: string) {
 export function downloadPptx(contents: Uint8Array, filename: string) {
   saveBlob(contents as BlobPart, 'application/vnd.openxmlformats-officedocument.presentationml.presentation', filename)
 }
+
+export function downloadJson(contents: string, filename: string) {
+  saveBlob(contents, 'application/json;charset=utf-8', filename)
+}

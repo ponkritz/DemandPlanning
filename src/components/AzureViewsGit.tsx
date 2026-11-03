@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { listAzureConnectionProfiles } from '../azureCredentials'
-import { markViewsSynced, parseViews, restoreViews, serializeViews, viewsFile } from '../viewDefinitions'
+import { markViewsSynced, parseViews, restoreViews, serializeViews, viewsBackupFolder, viewsBackupName, viewsFile } from '../viewDefinitions'
+import { downloadJson } from '../download'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { GitStorage } from '../useGitStorage'
 import { Notice, Panel } from './ui'
@@ -52,7 +53,33 @@ export function AzureViewsGitPanel({ git, azure }: { git: GitStorage; azure: Azu
     finally { setBusy('') }
   }
 
-  return <Panel className="connection-panel admin-section" eyebrow="AZURE DEVOPS" title="Views in Git" info="On-prem views: each fetch in the desktop app is saved to the Git data repository, and the web app shows it — the web cannot reach on-prem servers. Also keep the Azure DevOps connections — view names, queries, project URLs, on-prem servers and roles — in the Git data repository, next to the planning data, and restore them on another computer. PATs are never written to Git: a restored connection keeps the PAT it has here, or uses the PAT entered below, or one saved here for the same organisation or server.">
+  // Back up and clean up (CON-88): a backup (download + dated copy in Git), then every connection removed here and from
+  // the shared setup in Git; every other computer removes its connections at its next start. PATs stay per server.
+  const backupText = () => serializeViews(viewsFile(listAzureConnectionProfiles()))
+  function downloadBackup() {
+    const name = viewsBackupName(new Date())
+    downloadJson(backupText(), name)
+    setNotice({ tone: 'success', text: `Backup of ${count} connection${count === 1 ? '' : 's'} downloaded as ${name} (no PATs).` })
+  }
+  async function cleanUp() {
+    const list = listAzureConnectionProfiles()
+    if (!window.confirm(`Back up and remove all ${list.length} connection${list.length === 1 ? '' : 's'}?\n\n1. A backup is downloaded and saved to Git (${viewsBackupFolder}/).\n2. Every connection and its saved data is removed here and from the shared setup in Git (azure-views.json and azure-data/). Every other computer removes its connections at its next start.\n3. PATs stay, per server.\n\nThen add the correct connections in Settings → Azure DevOps (Stream mapping, Other views).`)) return
+    setBusy('clean'); setNotice(null)
+    const at = new Date(), name = viewsBackupName(at), text = backupText()
+    let backup = ''
+    try {
+      downloadJson(text, name)
+      backup = (await git.backupViews(text, name, `Backup before clean-up: ${list.length} connection${list.length === 1 ? '' : 's'}`)).path
+      const result = await git.resetViews(at.toISOString(), `Clean up the connections (backup: ${backup})`)
+      const removed = azure.removeAllConnectionsHere(at.toISOString())
+      setNotice({ tone: 'success', text: `Backed up to ${backup} and downloaded. Removed ${removed.length} connection${removed.length === 1 ? '' : 's'} here, emptied the shared setup in Git and removed ${result.dataFiles} on-prem data file${result.dataFiles === 1 ? '' : 's'}. Every other computer removes its connections at its next start. Add the correct connections now in Settings → Azure DevOps; each stream you set up is saved to Git, and “Save connections to Git” here saves the others.` })
+    } catch (failure) {
+      const reason = failure instanceof Error ? failure.message : String(failure)
+      setNotice({ tone: 'error', text: backup ? `The clean-up stopped: ${reason}. The backup is in Git (${backup}) and downloaded; the connections here were not removed. Try again.` : `Nothing was removed: the backup could not be saved to Git (${reason}). The downloaded file has the connections.` })
+    } finally { setBusy('') }
+  }
+
+  return <><Panel className="connection-panel admin-section" eyebrow="AZURE DEVOPS" title="Views in Git" info="On-prem views: each fetch in the desktop app is saved to the Git data repository, and the web app shows it — the web cannot reach on-prem servers. Also keep the Azure DevOps connections — view names, queries, project URLs, on-prem servers and roles — in the Git data repository, next to the planning data, and restore them on another computer. PATs are never written to Git: a restored connection keeps the PAT it has here, or uses the PAT entered below, or one saved here for the same organisation or server.">
     {!git.connected ? <Notice tone="warning">Connect Git storage above to save the views.</Notice> : <>
       <div className="connection-form">
         <label className="wide-field">Change description<input value={commit} onChange={(event) => setCommit(event.target.value)} placeholder="e.g. Add DP, CP and IOCC queries" /></label>
@@ -64,4 +91,7 @@ export function AzureViewsGitPanel({ git, azure }: { git: GitStorage; azure: Azu
     {git.viewsSync && !notice && <Notice tone="info">{git.viewsSync} The connection setup in Git is the default for everyone; a connection you change here stays as you set it (Restore from Git brings it back to Git's version).</Notice>}
     {notice && <Notice tone={notice.tone}>{notice.text}</Notice>}
   </Panel>
+  <Panel className="connection-panel admin-section" eyebrow="AZURE DEVOPS" title="Back up and clean up" info={<ul><li>Download a backup of every connection (names, servers, projects, queries, roles; never a PAT).</li><li>Back up and remove all: the backup is also saved to Git ({viewsBackupFolder}/), then every connection and its data is removed here and from the shared setup in Git, and every other computer removes its connections at its next start. PATs stay per server. Then add the correct connections again.</li></ul>}>
+    <div className="button-row"><button type="button" className="ghost" disabled={Boolean(busy) || !count} onClick={downloadBackup}>Download backup</button><button type="button" className="danger-button" style={{ marginTop: 0 }} disabled={Boolean(busy) || !count || !git.connected || git.readOnly} title={!git.connected ? 'Connect Git storage first' : git.readOnly ? 'Your Git token is read-only' : undefined} onClick={() => void cleanUp()}>{busy === 'clean' ? 'Cleaning up…' : `Back up and remove all ${count} connection${count === 1 ? '' : 's'}…`}</button></div>
+  </Panel></>
 }

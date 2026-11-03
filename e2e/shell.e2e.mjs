@@ -19,6 +19,19 @@ test('TC-NAV-01 / TC-NAV-17: the sidebar shows the groups in order, with Documen
   await context.close()
 })
 
+test('TC-CON-56: Storage → Shared setup in Git offers Back up and clean up; removing all needs Git storage that can save', async () => {
+  const { page, context, errors } = await openPage(app)
+  await navigate(page, 'Storage')
+  await page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'Shared setup in Git' }).click()
+  const panel = page.locator('.panel', { has: page.locator('h2, h3', { hasText: /^Back up and clean up/ }) }).first()
+  await panel.waitFor()
+  const remove = panel.getByRole('button', { name: /^Back up and remove all \d+ connections?…$/ })
+  assert.equal(await remove.isDisabled(), true, 'without Git storage nothing can be removed for everyone')
+  assert.equal(await panel.getByRole('button', { name: 'Download backup' }).count(), 1)
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
 test('TC-NAV-03: the header shows the page title with its description, and the month picker only where a month applies', async () => {
   const { page, context, errors } = await openPage(app)
   await navigate(page, 'Pulse Check')

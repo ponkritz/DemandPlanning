@@ -20,7 +20,11 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
   const resumeFeature = mode.resume ?? null
   const scoped = useMemo(() => items.filter((item) => item.state.trim().toLowerCase() !== 'removed' && item.organization.toLowerCase() === config.organization.toLowerCase() && item.project.toLowerCase() === config.project.toLowerCase()), [items, config.organization, config.project])
   const epics = scoped.filter((item) => item.workItemType === 'Epic').sort((a, b) => a.id - b.id)
-  const [parent, setParent] = useState<AzureWorkItem | null>(mode.parent ?? null)
+  // A new Feature: the Parent Epic starts blank on every opening and is chosen in the form (BKL-23); the Epic the form
+  // was opened from is only offered in the list.
+  const isNew = !resumeFeature
+  const epicOptions = mode.parent && !epics.some((epic) => epic.key === mode.parent!.key) ? [mode.parent, ...epics] : epics
+  const [parent, setParent] = useState<AzureWorkItem | null>(null)
   const [assigneeName, setAssigneeName] = useState(() => resumeFeature && canChoose ? people.find((person) => person.email === resumeFeature.assignedToEmail && person.email !== me)?.name ?? '' : '')
   const assignee = canChoose && assigneeName ? people.find((person) => person.name === assigneeName)?.email ?? '' : me
   const [titleText, setTitleText] = useState(resumeFeature?.title ?? initialTitle)
@@ -78,7 +82,7 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
   const chooseReview = (checked: boolean) => { setReviewChoice(checked); if (checked) { setSkipStories(epicSetup ? epicSetup.stories.map((_, index) => index) : []); setMilestones([]) } }
   const storiesChosen = (count: number) => { if (count > 0) setReviewChoice(false) }
   const dod = dodText ?? (epicSetup ? epicSetup.featureDoD.trim() || defaultDoDFor(epicSetup) : featureDoD(releaseKind))
-  const needsDoD = Boolean(parent) && !resumeFeature
+  const needsDoD = isNew
   const values = { ...titleValues(title, monthLabel, titleFields), ...(titleFields.length ? fieldPlaceholders(titleFields, fieldValues) : {}) }
   const filled = (template: string) => { const missing = missingValues(template, values); return missing.length ? `${template} (needs ${titleFields.length ? missing.map((key) => titleFields.find((field) => fieldKey(field.label) === key)?.label ?? key).join(', ') : '“Program | Service | vRelease”'})` : fillTitle(template, values) }
   // The saved PAT loads the PI / Sprint schedule as soon as the editor opens.
@@ -101,7 +105,8 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
 
   async function create(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if ((!parent && !resumeFeature) || submitting.current) return
+    if (submitting.current) return
+    if (isNew && !parent) { setError('Choose the parent Epic.'); return }
     const data = new FormData(event.currentTarget)
     const token = pat; setError(''); submitting.current = true; setCreating(true)
     const parseHours = (value: string, label: string) => { if (!value.trim()) return undefined; const hours = Number(value); if (!Number.isFinite(hours) || hours < 0 || hours > 1000000) throw new Error(`${label} must be a number from 0 to 1,000,000.`); return hours }
@@ -157,8 +162,8 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
       <div className="nf-head">
         <span className="nf-type">FEATURE</span>
         <div className="nf-headmain">
-          {parent && <div className="nf-top">
-            <label>Parent Epic<select disabled={creating} value={parent.key} onChange={(event) => setParent(epics.find((item) => item.key === event.target.value) ?? null)}>{epics.map((epic) => <option value={epic.key} key={epic.key}>#{epic.id} · {epic.title}</option>)}</select></label>
+          {isNew && <div className="nf-top">
+            <label>Parent Epic<select required aria-label="Parent Epic" disabled={creating} value={parent?.key ?? ''} onChange={(event) => setParent(epicOptions.find((item) => item.key === event.target.value) ?? null)}><option value="">Choose the parent Epic…</option>{epicOptions.map((epic) => <option value={epic.key} key={epic.key}>#{epic.id} · {epic.title}</option>)}</select></label>
             <label>Release Classification<select value={releaseClassification} disabled={creating} onChange={(event) => setReleaseClassification(event.target.value)}><option value="">(not set)</option>{releaseClassifications.map((value) => <option value={value} key={value}>{value}</option>)}</select></label>
           </div>}
           <input className="nf-title" aria-label="Feature title" name="title" required maxLength={255} value={title} onChange={(event) => setTitle(event.target.value)} disabled={creating || Boolean(resumeFeature)} placeholder={titleFields.length ? titleFields.map((field) => field.label).join(' | ') : 'Program | Service | vRelease'} autoFocus />
@@ -169,13 +174,13 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
       <div className="nf-strip">
         <label>Assigned to{canChoose ? <PersonPicker label="Assigned to" value={assigneeName} people={people.filter((person) => person.email !== me).map((person) => person.name)} onChange={setAssigneeName} meLabel={me ? `Me (${me})` : 'Choose a person…'} /> : <span className="nf-value" title={me}>{me || 'Set your work email in Settings'}</span>}</label>
         <label>State<span className="nf-value">{resumeFeature ? resumeFeature.state : 'New'}</span></label>
-        <label>Area{parent ? <input name="areaPath" key={parent.key} value={parent.areaPath} readOnly title={parent.areaPath} /> : <span className="nf-value" title={resumeFeature?.areaPath}>{resumeFeature?.areaPath.split('\\').pop()}</span>}</label>
+        <label>Area{parent ? <input name="areaPath" key={parent.key} value={parent.areaPath} readOnly title={parent.areaPath} /> : isNew ? <span className="nf-value muted">From the parent Epic</span> : <span className="nf-value" title={resumeFeature?.areaPath}>{resumeFeature?.areaPath.split('\\').pop()}</span>}</label>
         <label>Iteration (PI → Sprint)<select aria-label="PI / Sprint schedule" required value={sprintPath} onChange={(event) => { const pair = selectablePairs.find((value) => value.sprint.path === event.target.value); setSprintPath(pair?.sprint.path ?? ''); setIterationPath(pair?.pi.path ?? '') }} disabled={creating || iterationLoading}><option value="">{iterationLoading ? 'Loading the schedule…' : selectablePairs.length ? 'Select a PI → Sprint' : 'Load the schedule ↻'}</option>{pairs.length > 0 && <optgroup label="Current">{pairs.map((pair) => <option key={pair.sprint.path} value={pair.sprint.path}>{pairLabel(pair)}</option>)}</optgroup>}{futurePairs.length > 0 && <optgroup label="Future">{futurePairs.map((pair) => <option key={pair.sprint.path} value={pair.sprint.path}>{pairLabel(pair)}</option>)}</optgroup>}</select>
           <button type="button" className="text-button" onClick={() => void loadIterations()} disabled={creating || iterationLoading || !(pat || savedPat)} title="Reload the current and future PI / Sprint schedule">↻ Reload</button></label>
       </div>
       <div className="nf-body">
         <div className="nf-main">
-          {parent && <><label>Feature DoD (Definition of Done) — required<textarea required maxLength={100000} rows={4} value={dod} onChange={(event) => setDodText(event.target.value)} disabled={creating} placeholder="e.g. IQOQ finished and Checklist uploaded into the Feature." /><small>{dodText == null && epicSetup?.featureDoD.trim() ? `From the ${setupSource === 'personal' ? 'your own' : 'shared'} setup of Epic #${epicSetup.epicId}. ` : ''}Saved at the top of the Description.</small></label>
+          {isNew && <><label>Feature DoD (Definition of Done) — required<textarea required maxLength={100000} rows={4} value={dod} onChange={(event) => setDodText(event.target.value)} disabled={creating} placeholder="e.g. IQOQ finished and Checklist uploaded into the Feature." /><small>{dodText == null && epicSetup?.featureDoD.trim() ? `From the ${setupSource === 'personal' ? 'your own' : 'shared'} setup of Epic #${epicSetup.epicId}. ` : ''}Saved at the top of the Description.</small></label>
             <details className="nf-more"><summary>Description and acceptance criteria (optional)</summary>
               <label>Description<textarea name="description" maxLength={100000} value={description} onChange={(event) => setDescription(event.target.value)} disabled={creating} /></label>
               <label>Acceptance criteria<textarea name="acceptance" maxLength={100000} disabled={creating} /></label>
@@ -184,8 +189,8 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
         </div>
         <div className="nf-side">
           <h4>Planning</h4>
-          {parent && <label>Target date<input name="targetDate" type="date" disabled={creating} /></label>}
-          {parent && <><h4>Time Writing ({monthLabel})</h4>
+          {isNew && <label>Target date<input name="targetDate" type="date" disabled={creating} /></label>}
+          {isNew && <><h4>Time Writing ({monthLabel})</h4>
             {lateTask && <p className="muted adhoc-note">Planning for {monthLabel} is locked: the new Task is tagged <code>ad-hoc</code>.</p>}
             <label>Original Estimate (h)<input type="number" min="0" max="1000000" step="0.25" value={taskOriginalEstimate} onChange={(event) => setTaskOriginalEstimate(event.target.value)} disabled={creating} placeholder={epicSetup?.task.originalEstimate != null ? `${epicSetup.task.originalEstimate} (setup)` : 'Optional'} /></label>
             <label>Completed Work (h)<input type="number" min="0" max="1000000" step="0.25" value={taskCompletedWork} onChange={(event) => setTaskCompletedWork(event.target.value)} disabled={creating} placeholder="Optional" /></label></>}

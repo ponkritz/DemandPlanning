@@ -105,11 +105,32 @@ const isDate = (value: FieldValue | undefined): value is string => typeof value 
 // list item or line break joined with " · ", the tags removed and the entities decoded.
 const entities: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' }
 const looksLikeHtml = (value: string) => /<\/?[a-z][a-z0-9]*(\s[^<>]*)?\/?>/i.test(value)
+// One pass from left to right (KB-03): every character is read a bounded number of times, so a crafted field of
+// any size (e.g. many "<" or unclosed <script>) cannot freeze the page.
+const lineEnds = /^(p|div|li|tr|h[1-6])$/
 export function htmlToText(value: string) {
-  return value
-    .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, '')
-    .replace(/<br\s*\/?>|<\/(p|div|li|tr|h[1-6])>/gi, '\n')
-    .replace(/<[^>]*>/g, '')
+  const lower = value.toLowerCase(), noClose = new Set<string>()
+  let text = '', at = 0
+  while (at < value.length) {
+    const open = value.indexOf('<', at)
+    if (open < 0) { text += value.slice(at); break }
+    text += value.slice(at, open)
+    const close = value.indexOf('>', open + 1)
+    if (close < 0) { text += value.slice(open); break }
+    const tag = /^(\/?)([a-z][a-z0-9]*)/i.exec(value.slice(open + 1, Math.min(close, open + 40)))
+    const name = tag?.[2].toLowerCase() ?? '', closing = tag?.[1] === '/'
+    at = close + 1
+    // A script or style block goes with its content, up to its closing tag.
+    if (!closing && (name === 'script' || name === 'style') && !noClose.has(name)) {
+      const end = lower.indexOf(`</${name}`, at)
+      if (end < 0) { noClose.add(name); continue }
+      const endClose = value.indexOf('>', end)
+      at = endClose < 0 ? value.length : endClose + 1
+      continue
+    }
+    if (name === 'br' || (closing && lineEnds.test(name))) text += '\n'
+  }
+  return text
     .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (match, code: string) => { if (code[0] !== '#') return entities[code.toLowerCase()] ?? match; const point = code[1].toLowerCase() === 'x' ? parseInt(code.slice(2), 16) : Number(code.slice(1)); return Number.isFinite(point) && point >= 0 && point <= 0x10ffff ? String.fromCodePoint(point) : match })
     .split('\n').map((line) => line.replace(/\s+/g, ' ').trim()).filter(Boolean).join(' · ')
 }

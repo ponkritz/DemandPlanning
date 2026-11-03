@@ -8,7 +8,7 @@ import { applyWindchillSnapshots, parseWindchillSnapshot, windchillDigest, windc
 import { loadWindchillViews, saveWindchillViews, type WindchillView } from './windchillViews'
 import { windchillAnalysisFolder } from './windchillReleases'
 import { loadAzureConnectionProfile, saveAzureConnectionProfile, type AzureConnectionProfileSummary, listAzureConnectionProfiles } from './azureCredentials'
-import { parseViews, sharedEmails, syncViewsFromGit, connectionKey } from './viewDefinitions'
+import { applyViewsReset, resetPending, parseViews, parseViewsReset, serializeViews, serializeViewsReset, sharedEmails, syncViewsFromGit, connectionKey, viewsBackupFolder, viewsFile, viewsResetPath } from './viewDefinitions'
 import { personalSetupPath } from './featureSetup'
 
 export type GitStatus = 'off' | 'loading' | 'synced' | 'empty' | 'saving' | 'error' | 'conflict'
@@ -95,13 +95,18 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
   // At start: the shared connection setup in Git becomes this browser's default (connections changed here are kept).
   const [viewsSync, setViewsSync] = useState('')
   async function syncViews() {
+    // A clean-up by an admin (CON-88) not applied here yet: every connection here goes first, with its data.
+    const reset = config && token ? applyViewsReset(parseViewsReset((await readTextFile(siblingConfig(config, viewsResetPath), token)).text)) : null
+    if (reset?.length) { const ids = reset.map((profile) => profile.id); store.update((draft) => { draft.azureSources = (draft.azureSources ?? []).filter((source) => !ids.includes(source.connectionId)); return draft }) }
+    const resetNote = reset?.length ? `Your admin cleaned up the connections: ${reset.length} removed here (${reset.map((profile) => profile.viewName || profile.reason).join(', ')}); your PATs are kept per server. ` : ''
+    if (resetNote) setViewsSync(resetNote)
     const file = await readViews()
     if (file.text == null) return null
     const result = syncViewsFromGit(parseViews(file.text), localStorage, sharedEmails(file.text))
     // A connection removed in Git goes with its data here, as a connection removed in Settings does.
     if (result.removedIds.length) store.update((draft) => { if (draft.azureSources?.some((source) => result.removedIds.includes(source.connectionId))) draft.azureSources = draft.azureSources.filter((source) => !result.removedIds.includes(source.connectionId)); return draft })
     const parts = [result.added.length && `${result.added.length} added (${result.added.join(', ')})`, result.updated.length && `${result.updated.length} updated (${result.updated.join(', ')})`, result.enforced.length && `stream mapping set by your admin applied: ${result.enforced.join(', ')}`, result.kept.length && `kept as changed here: ${result.kept.join(', ')}`, result.removed.length && `${result.removed.length} removed as in Git (${result.removed.join(', ')})`].filter(Boolean)
-    setViewsSync((result.emailCleared ? 'Your Time Writing connection had another person\'s email from the shared setup; it was removed — enter your own work email in Settings → Azure DevOps. ' : '') + (parts.length ? `Connections from Git: ${parts.join('; ')}.${result.noPat.length ? ` No PAT here yet for ${result.noPat.join(', ')}: they show the data saved to Git; add a PAT in Settings to fetch.` : ''}` : 'Connections are the same as in Git.'))
+    setViewsSync(resetNote + (result.emailCleared ? 'Your Time Writing connection had another person\'s email from the shared setup; it was removed — enter your own work email in Settings → Azure DevOps. ' : '') + (parts.length ? `Connections from Git: ${parts.join('; ')}.${result.noPat.length ? ` No PAT here yet for ${result.noPat.join(', ')}: they show the data saved to Git; add a PAT in Settings to fetch.` : ''}` : 'Connections are the same as in Git.'))
     return result
   }
   async function writeViews(text: string, commitMessage: string) {
@@ -110,6 +115,29 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     const current = await readTextFile(viewsConfig, token)
     if (current.text === text) return { changed: false, commitUrl: historyUrl(viewsConfig) }
     return { changed: true, ...(await writeTextFile(viewsConfig, token, text, current.sha, commitMessage)) }
+  }
+
+  // Back up and clean up (CON-88). backupViews: the connection setup as it is now, as a new dated file in
+  // azure-views-backups/ (never a PAT). resetViews: announces the clean-up to every computer (azure-views-reset.json),
+  // empties the shared setup (azure-views.json) and removes every on-prem view's data (azure-data/).
+  async function backupViews(text: string, name: string, commitMessage: string) {
+    if (!config || !token) throw new Error('Connect Git storage first.')
+    if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
+    const target = siblingConfig(config, `${viewsBackupFolder}/${name}`)
+    return { path: target.path, ...(await writeTextFile(target, token, text, await fileSha(target, token), commitMessage)) }
+  }
+  async function resetViews(resetAt: string, commitMessage: string) {
+    if (!config || !token || !viewsConfig) throw new Error('Connect Git storage first.')
+    if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
+    const marker = siblingConfig(config, viewsResetPath)
+    await writeTextFile(marker, token, serializeViewsReset(resetAt), await fileSha(marker, token), commitMessage)
+    await writeViews(serializeViews(viewsFile([])), commitMessage)
+    let removed = 0
+    for (const entry of (await listFolder(siblingConfig(config, snapshotFolder), token)).filter((item) => item.name.endsWith('.json'))) {
+      if (await deleteFile({ ...config, path: entry.path }, token, commitMessage)) removed += 1
+    }
+    try { localStorage.removeItem(digestKey) } catch { /* only used for commit messages */ }
+    return { dataFiles: removed }
   }
 
   // Access roles (access.json): read by everyone with Git storage; saved only with a token that can write. The version
@@ -213,6 +241,8 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     const target = siblingConfig(config, `${snapshotFolder}/${snapshotFileName(profile.id)}`)
     try {
       if ((await writeCheck.current) === false) { note(profile.id, 'info', 'Not saved to Git: the Git token here is read-only.'); return }
+      // An admin cleaned up the connections after this computer started (CON-88): its old views are not saved back.
+      if (resetPending(parseViewsReset((await readTextFile(siblingConfig(config, viewsResetPath), token)).text))) { note(profile.id, 'info', 'Not saved to Git: your admin cleaned up the connections. Restart the app to take the new setup.'); return }
       const digest = await snapshotDigest(source)
       let digests: Record<string, string> = {}
       try { digests = JSON.parse(localStorage.getItem(digestKey) ?? '{}') as Record<string, string> } catch { digests = {} }
@@ -320,6 +350,6 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     setConfig(null); setToken(''); setSynced(null); setStatus('off'); setMessage('Git storage disconnected in this browser. The data stays in the app and in the repository.'); sha.current = null
   }
 
-  return { readPackTemplate, writePackTemplate, packTemplateHistory: config ? historyUrl(siblingConfig(config, packTemplateFile)) : '', config, connected, readOnly, status, message, dirty, commitUrl, history: config ? historyUrl(config) : '', isSample, load: () => load(), connect, save, disconnect, viewsPath: viewsConfig?.path ?? '', viewsHistory: viewsConfig ? historyUrl(viewsConfig) : '', readViews, writeViews, syncViews, pushWindchillAnalysis, accessScope: accessConfig && token ? `${accessConfig.owner}/${accessConfig.repo}@${accessConfig.branch}:${accessConfig.path}` : '', accessPath: accessConfig?.path ?? '', accessHistory: accessConfig ? historyUrl(accessConfig) : '', readAccess, writeAccess, readFeatureSetup, writeFeatureSetup, readPersonalFeatureSetup, writePersonalFeatureSetup, featureSetupHistory: config ? historyUrl(siblingConfig(config, 'feature-setup.json')) : '', readQeMapping, writeQeMapping, readMonthlyPack, writeMonthlyPack, monthlyPackHistory: (name: string) => config ? historyUrl(siblingConfig(config, name)) : '', qeMappingHistory: config ? historyUrl(siblingConfig(config, 'qe-mapping.json')) : '', removeSnapshots, viewsSync, snapshotNotes, pushSnapshot, pullSnapshot, pullSnapshots, pushWindchill, pullWindchill, pullWindchillOne, snapshotsHistory: config ? historyUrl(siblingConfig(config, snapshotFolder)) : '' }
+  return { backupViews, resetViews, readPackTemplate, writePackTemplate, packTemplateHistory: config ? historyUrl(siblingConfig(config, packTemplateFile)) : '', config, connected, readOnly, status, message, dirty, commitUrl, history: config ? historyUrl(config) : '', isSample, load: () => load(), connect, save, disconnect, viewsPath: viewsConfig?.path ?? '', viewsHistory: viewsConfig ? historyUrl(viewsConfig) : '', readViews, writeViews, syncViews, pushWindchillAnalysis, accessScope: accessConfig && token ? `${accessConfig.owner}/${accessConfig.repo}@${accessConfig.branch}:${accessConfig.path}` : '', accessPath: accessConfig?.path ?? '', accessHistory: accessConfig ? historyUrl(accessConfig) : '', readAccess, writeAccess, readFeatureSetup, writeFeatureSetup, readPersonalFeatureSetup, writePersonalFeatureSetup, featureSetupHistory: config ? historyUrl(siblingConfig(config, 'feature-setup.json')) : '', readQeMapping, writeQeMapping, readMonthlyPack, writeMonthlyPack, monthlyPackHistory: (name: string) => config ? historyUrl(siblingConfig(config, name)) : '', qeMappingHistory: config ? historyUrl(siblingConfig(config, 'qe-mapping.json')) : '', removeSnapshots, viewsSync, snapshotNotes, pushSnapshot, pullSnapshot, pullSnapshots, pushWindchill, pullWindchill, pullWindchillOne, snapshotsHistory: config ? historyUrl(siblingConfig(config, snapshotFolder)) : '' }
 }
 export type GitStorage = ReturnType<typeof useGitStorage>

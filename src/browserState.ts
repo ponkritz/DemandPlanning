@@ -5,7 +5,8 @@ const itemTextFields = ['key', 'organization', 'project', 'title', 'state', 'wor
 export function validAzureWorkItem(value: unknown): value is AzureWorkItem {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const item = value as Record<string, unknown>
-  return Number.isSafeInteger(item.id) && itemTextFields.every((key) => typeof item[key] === 'string')
+  // Its link opens in a new tab: only an https address (what Azure DevOps returns) or none, never javascript: or data: (KB-06).
+  return Number.isSafeInteger(item.id) && itemTextFields.every((key) => typeof item[key] === 'string') && /^(?:https:\/\/|$)/i.test(item.url as string)
 }
 export const validFetchedAt = (value: unknown) => typeof value === 'string' && Number.isFinite(Date.parse(value))
 

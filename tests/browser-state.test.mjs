@@ -112,3 +112,11 @@ test('backup validation rejects unsupported schemas, malformed arrays and invali
   assert.throws(() => validateBackup({ ...emptyState(), azureSources: [{ ...view, items: [{ id: 1 }] }] }), /view data/)
   assert.throws(() => validateBackup({ ...emptyState(), azureSources: [{ ...view, fetchedAt: 'yesterday' }] }), /view data/)
 })
+
+import { validAzureWorkItem } from '../src/browserState.ts'
+test('a work item from a backup or Git keeps only an https link or none (KB-06, TC-STO-04)', () => {
+  const item = (url) => ({ key: 'o/p/1', id: 1, organization: 'o', project: 'p', title: 't', workItemType: 'Task', state: 'New', assignedTo: '', areaPath: 'p', iterationPath: 'p', tags: '', url, syncedAt: '2026-10-20T10:00:00Z' })
+  assert.equal(validAzureWorkItem(item('https://dev.azure.com/o/p/_workitems/edit/1')), true)
+  assert.equal(validAzureWorkItem(item('')), true)
+  for (const url of ['javascript:alert(1)', ' javascript:alert(1)', 'data:text/html,x', 'http://tfs.example/1', 'vbscript:x']) assert.equal(validAzureWorkItem(item(url)), false, url)
+})
