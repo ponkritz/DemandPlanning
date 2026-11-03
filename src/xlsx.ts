@@ -11,7 +11,7 @@ const u32 = (bytes: Uint8Array, at: number) => (bytes[at] | (bytes[at + 1] << 8)
 
 // An entry may inflate to at most this many bytes: a tiny zip that inflates to gigabytes would otherwise freeze the tab.
 export const maxInflatedBytes = 100 * 1024 * 1024
-async function inflateRaw(data: Uint8Array): Promise<Uint8Array> {
+async function inflateRaw(data: Uint8Array, limit = maxInflatedBytes): Promise<Uint8Array> {
   const reader = new Blob([data as BlobPart]).stream().pipeThrough(new DecompressionStream('deflate-raw')).getReader()
   const parts: Uint8Array[] = []
   let total = 0
@@ -19,7 +19,7 @@ async function inflateRaw(data: Uint8Array): Promise<Uint8Array> {
     const { done, value } = await reader.read()
     if (done) break
     total += value.length
-    if (total > maxInflatedBytes) { await reader.cancel(); throw new Error('The Excel file is too large to read in the browser (over 100 MB unpacked). Remove sheets or rows and upload it again.') }
+    if (total > limit) { await reader.cancel(); throw new Error('The Excel file is too large to read in the browser (over 100 MB unpacked). Remove sheets or rows and upload it again.') }
     parts.push(value)
   }
   const out = new Uint8Array(total); let at = 0
@@ -34,6 +34,8 @@ export async function unzip(bytes: Uint8Array): Promise<Map<string, Uint8Array>>
   const count = u16(bytes, end + 10)
   let at = u32(bytes, end + 16)
   const files = new Map<string, Uint8Array>()
+  // All entries together stay within the same limit as one (KB-04): many entries each just under it would not.
+  let unpacked = 0
   for (let index = 0; index < count; index++) {
     if (u32(bytes, at) !== 0x02014b50) throw new Error('The Excel file is damaged (zip directory).')
     const method = u16(bytes, at + 10), size = u32(bytes, at + 20), nameLength = u16(bytes, at + 28), extra = u16(bytes, at + 30), comment = u16(bytes, at + 32), local = u32(bytes, at + 42)
@@ -42,8 +44,12 @@ export async function unzip(bytes: Uint8Array): Promise<Map<string, Uint8Array>>
     if (u32(bytes, local) !== 0x04034b50) throw new Error('The Excel file is damaged (zip entry).')
     const start = local + 30 + u16(bytes, local + 26) + u16(bytes, local + 28)
     const data = bytes.subarray(start, start + size)
-    if (method === 0) files.set(name, data)
-    else if (method === 8) files.set(name, await inflateRaw(data))
+    const left = maxInflatedBytes - unpacked
+    const file = method === 0 ? data : method === 8 ? await inflateRaw(data, left) : null
+    if (!file) continue
+    unpacked += file.length
+    if (unpacked > maxInflatedBytes) throw new Error('The Excel file is too large to read in the browser (over 100 MB unpacked). Remove sheets or rows and upload it again.')
+    files.set(name, file)
   }
   return files
 }
@@ -120,18 +126,25 @@ export function excelDate(serial: number, date1904 = false) {
 const numberText = (raw: string) => { const value = Number(raw); return Number.isFinite(value) ? String(Number(value.toPrecision(15))) : raw }
 const columnIndex = (ref: string) => { let index = 0; for (const char of ref.replace(/\d+$/, '').toUpperCase()) index = index * 26 + (char.charCodeAt(0) - 64); return index - 1 }
 
+// Excel's own limits (KB-04): a cell address beyond them is a crafted or damaged file, and the empty cells padded in
+// before a far-away cell are counted, so a few cells cannot make the tab build billions of empty ones.
+export const maxSheetRows = 1048576, maxSheetColumns = 16384, maxSheetCells = 5_000_000
+const tooLarge = () => new Error('The Excel sheet is too large or damaged (a cell beyond Excel\'s limits, or over 5 million cells). Save only the needed rows and columns and upload it again.')
 function readSheet(xml: string, shared: string[], dates: Set<number>, date1904: boolean): string[][] {
   const rows: string[][] = []
+  let cellCount = 0
   const data = /<(?:\w+:)?sheetData\b[^>]*>([\s\S]*?)<\/(?:\w+:)?sheetData>/.exec(xml)?.[1] ?? ''
   let nextRow = 0
   for (const row of data.matchAll(/<(?:\w+:)?row\b([^>]*?)(?:\/>|>([\s\S]*?)<\/(?:\w+:)?row>)/g)) {
     const rowAttrs = attributes(row[1]), rowIndex = rowAttrs.r ? Number(rowAttrs.r) - 1 : nextRow
+    if (!Number.isSafeInteger(rowIndex) || rowIndex < 0 || rowIndex >= maxSheetRows) throw tooLarge()
     nextRow = rowIndex + 1
     const cells: string[] = []
     let nextCell = 0
     for (const cell of (row[2] ?? '').matchAll(/<(?:\w+:)?c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/(?:\w+:)?c>)/g)) {
       const attrs = attributes(cell[1]), body = cell[2] ?? ''
       const index = attrs.r ? columnIndex(attrs.r) : nextCell
+      if (!Number.isSafeInteger(index) || index < 0 || index >= maxSheetColumns) throw tooLarge()
       nextCell = index + 1
       const raw = /<(?:\w+:)?v\b[^>]*>([\s\S]*?)<\/(?:\w+:)?v>/.exec(body)?.[1]
       let value = ''
@@ -140,8 +153,10 @@ function readSheet(xml: string, shared: string[], dates: Set<number>, date1904: 
       else if (attrs.t === 'str' || attrs.t === 'e') value = unescapeXml(raw ?? '')
       else if (attrs.t === 'b') value = raw === '1' ? 'TRUE' : raw === '0' ? 'FALSE' : ''
       else if (raw != null && raw !== '') value = attrs.s != null && dates.has(Number(attrs.s)) && Number.isFinite(Number(raw)) ? excelDate(Number(raw), date1904) : numberText(unescapeXml(raw))
-      if (value !== '') { while (cells.length < index) cells.push(''); cells[index] = value }
+      if (value !== '') { cellCount += Math.max(1, index + 1 - cells.length); if (cellCount > maxSheetCells) throw tooLarge(); while (cells.length < index) cells.push(''); cells[index] = value }
     }
+    cellCount += Math.max(0, rowIndex - rows.length)
+    if (cellCount > maxSheetCells) throw tooLarge()
     while (rows.length < rowIndex) rows.push([])
     rows[rowIndex] = cells
   }

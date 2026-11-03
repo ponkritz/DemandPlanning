@@ -216,3 +216,44 @@ test('the work email is personal: never written to Git, ignored in the file, kep
   assert.equal(clearSharedEmail(['admin@example.com'], own), false)
   assert.equal(loadAzureConnectionProfile('mine', own).creatorEmail, 'admin@example.com')
 })
+
+import { applyViewsReset, markResetApplied, parseViewsReset, removeAllConnections, resetPending, serializeViewsReset, viewsBackupName } from '../src/viewDefinitions.ts'
+test('back up and clean up: every connection removed, PATs kept per server, the reset applied once per computer (TC-CON-56)', () => {
+  // The backup name is dated (UTC, no colons) and the backup holds no PAT.
+  assert.equal(viewsBackupName(new Date('2026-11-02T17:05:09.123Z')), 'azure-views-2026-11-02T17-05-09Z.json')
+  const admin = memory()
+  saveAzureConnectionProfile({ ...dp, token: 'onprem-pat' }, admin)
+  saveAzureConnectionProfile({ id: 'tw', url: 'https://dev.azure.com/org/QMS', reason: 'QMS-0025', role: 'time-tracking', token: 'cloud-pat' }, admin)
+  const backup = serializeViews(viewsFile(listAzureConnectionProfiles(admin)))
+  assert.equal(/onprem-pat|cloud-pat/.test(backup), false, 'no PAT in the backup')
+  assert.deepEqual(parseViews(backup).map((view) => view.id), ['dp', 'tw'], 'the backup restores every connection')
+  // The admin's clean-up: all gone; a PAT that was only on a connection is now its server's.
+  assert.deepEqual(removeAllConnections(admin).map((view) => view.id).sort(), ['dp', 'tw'])
+  assert.equal(listAzureConnectionProfiles(admin).length, 0)
+  assert.equal(loadServerPat(serverKey(dp), admin), 'onprem-pat')
+  assert.equal(loadServerPat('https://dev.azure.com/org', admin), 'cloud-pat')
+  const resetAt = '2026-11-02T17:05:09.123Z'
+  markResetApplied(resetAt, admin)
+  assert.equal(applyViewsReset(resetAt, admin), null, 'the admin does not apply its own clean-up again')
+  // The marker in Git: only a valid one counts.
+  assert.equal(parseViewsReset(serializeViewsReset(resetAt)), resetAt)
+  assert.equal(parseViewsReset('{"schema":1,"kind":"azure-views-reset","resetAt":"soon"}'), null)
+  assert.equal(parseViewsReset('nope'), null); assert.equal(parseViewsReset(null), null)
+  // Another computer, with a connection it changed itself: removed at its next start, once; later connections stay.
+  const user = memory()
+  saveAzureConnectionProfile({ ...dp, query: 'SELECT [System.Id] FROM WorkItems WHERE mine = 1', token: 'user-pat' }, user)
+  markViewsSynced([dp], user)
+  assert.equal(resetPending(resetAt, user), true, 'its old views are not saved back to Git before the reset')
+  assert.deepEqual(applyViewsReset(resetAt, user).map((view) => view.id), ['dp'])
+  assert.equal(listAzureConnectionProfiles(user).length, 0)
+  assert.equal(resetPending(resetAt, user), false)
+  saveAzureConnectionProfile({ ...dp, id: 'dp-new', token: '' }, user)
+  assert.equal(applyViewsReset(resetAt, user), null, 'the same reset is not applied twice')
+  assert.deepEqual(listAzureConnectionProfiles(user).map((view) => view.id), ['dp-new'])
+  assert.equal(loadAzureConnectionProfile('dp-new', user).token, 'user-pat', 'the server PAT serves the new connection')
+  assert.equal(resetPending(null, user), false, 'no marker in Git: nothing pending')
+  // A later clean-up applies even when the earlier marker carried a future time (an admin's wrong clock).
+  markResetApplied('2999-01-01T00:00:00.000Z', user)
+  assert.equal(resetPending('2026-11-03T09:00:00.000Z', user), true)
+  assert.deepEqual(applyViewsReset('2026-11-03T09:00:00.000Z', user).map((view) => view.id), ['dp-new'])
+})

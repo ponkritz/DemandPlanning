@@ -1,0 +1,11 @@
+# Keeps the GitHub Actions pinned to commit SHAs in build-and-deploy.yml up to date (KB-08): a weekly pull request
+# moves each pin to the newest release of its major version, so the pins never go stale.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ['*']

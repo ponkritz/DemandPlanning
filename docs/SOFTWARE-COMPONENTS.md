@@ -51,7 +51,7 @@ This document lists every software component of the system: the in-house source 
 | AccessPanel | `src/components/AccessPanel.tsx` | Settings → Access: shows roles and per-role rights; editable and saved to Git (access.json) only by a role that may manage access. | CON |
 | AssigneeConfirm | `src/components/AssigneeConfirm.tsx` | Confirmation before creating work items: what is created and to whom it is assigned; never blank. | CON, ATM |
 | AzureConnections | `src/components/AzureConnections.tsx` | Settings → Azure DevOps connection setup: servers, presets, add/clone/edit connections, PATs, stream mapping (admins: saved to Git on every change, Save stream mapping to Git) and duplicate clean-up. | CON |
-| AzureViewsGit | `src/components/AzureViewsGit.tsx` | Settings panel to save Azure DevOps connection definitions to Git and restore them elsewhere, never writing PATs. | CON, GIT |
+| AzureViewsGit | `src/components/AzureViewsGit.tsx` | Settings panel to save Azure DevOps connection definitions to Git and restore them elsewhere, never writing PATs; Back up and clean up (download / dated Git backup, remove all with a reset marker). | CON, GIT |
 | AzureWorkItemTree | `src/components/AzureWorkItemTree.tsx` | Expandable Epic → Feature → Story → Task tree with Feature creation and child completion; read-only for other connections. | CON, ATM |
 | BacklogTable | `src/components/BacklogTable.tsx` | Paged backlog table of the work-item tree with level filter and per-browser column chooser. | CON |
 | BaselineRulesEditor | `src/components/BaselineRulesEditor.tsx` | Editor for per-stream estimation rules (hours per unit × units formula, optional max), draft then save. | BAS |
@@ -64,7 +64,7 @@ This document lists every software component of the system: the in-house source 
 | DpBoardColumn | `src/components/DpBoardColumn.tsx` | DP table and Windchill releases cell showing the matching QMS-0025 Feature/User Story, or Create Feature when nothing matches. | QV |
 | DpMonthCounts | `src/components/DpMonthCounts.tsx` | Table of a month's DP Supported Releases with milestones passed (DT, SFV, PRD, RPE) and dates. | QV, OVR |
 | ErrorBoundary | `src/components/ErrorBoundary.tsx` | Catches render errors in a view and shows what failed with a way back instead of a blank app. | UI |
-| FeatureEditor | `src/components/FeatureEditor.tsx` | Modal to add a Feature under an Epic or complete a Feature's children, shared by Backlogs and Assigned to Me. | ATM, CON |
+| FeatureEditor | `src/components/FeatureEditor.tsx` | Modal to add a Feature under an Epic or complete a Feature's children, shared by Backlogs and Assigned to Me; the Parent Epic starts blank. | ATM, CON, BKL |
 | JobsIndicator | `src/components/JobsIndicator.tsx` | Top-bar list of the background jobs: running count, results, Clear finished; asks before leaving the page while one runs. | NAV |
 | MonthlyPackPanel | `src/components/MonthlyPackPanel.tsx` | Pulse Check → Monthly pack: the two slides as boxes with generated lines and the month's text, Save to Git, copy, Download .pptx. | PCK |
 | MonthlyPackSetupPanel | `src/components/MonthlyPackSetupPanel.tsx` | Settings → Monthly pack: slide lines (streams, Epics) and KPI rows (Epic, metric), saved to Git. | PCK |
@@ -154,7 +154,7 @@ This document lists every software component of the system: the in-house source 
 | sharepoint | `src/sharepoint.ts` | SharePoint client via MSAL and Microsoft Graph for remote app state. | SNP |
 | cloudSnapshots | `src/cloudSnapshots.ts` | Frozen whitelisted snapshot files uploaded to SharePoint with read-back verification; listing history. | SNP |
 | viewDefinitions | `src/viewDefinitions.ts` | Azure connection definitions file in Git: serialise/parse, restore with PAT rules, sync (the stream mapping enforced), pending admin changes, duplicates. | CON, GIT |
-| download | `src/download.ts` | File downloads: effort CSV, state JSON backup, CSV, Markdown, XLSX and PPTX. | STO, CON, PCK |
+| download | `src/download.ts` | File downloads: effort CSV, state JSON backup, CSV, JSON, Markdown, XLSX and PPTX. | STO, CON, PCK |
 | seed | `src/seed.ts` | Initial synthetic AppState (people, activities, efforts, baselines, periods). | SMP |
 | sampleData | `src/sampleData.ts` | Deterministic synthetic Azure-shaped dataset, profiles and release scopes for sample mode. | SMP |
 
@@ -217,6 +217,7 @@ This document lists every software component of the system: the in-house source 
 | vite.config | `vite.config.ts` | Vite build: React plugin, version check, build metadata (__APP_BUILD__, build-info.json, meta tag). | CI, UPD |
 | index | `index.html` | HTML entry page with favicon, title and root element loading src/main.tsx. | — |
 | build-and-deploy | `.github/workflows/build-and-deploy.yml` | CI: lint, version check, test, build; package/publish Windows and macOS installers; build and deploy web app to GitHub Pages. | CI |
+| dependabot | `.github/dependabot.yml` | Weekly update pull requests for the GitHub Actions pinned to commit SHAs in the workflow (KB-08). | CI |
 | buildInfo | `src/buildInfo.ts` | Exposes the build metadata injected by Vite as `appBuild`. | UPD |
 
 ### 1.9 Automated tests
@@ -319,7 +320,7 @@ The app has **no other runtime dependency**: CSV, Markdown and .xlsx handling (`
 |---|---|---|
 | Node.js | 24 in CI (`actions/setup-node@v4`, `node-version: 24`); 22.12 or later required by Electron 44 | Runs the tests, the build and the desktop main process. |
 | pnpm | 11.19.0 (`packageManager` field; `pnpm/action-setup@v4`) | Package manager with a frozen lockfile in CI. |
-| GitHub Actions | `actions/checkout@v4`, `pnpm/action-setup@v4`, `actions/setup-node@v4`, `actions/upload-artifact@v4`, `actions/download-artifact@v4`, `actions/configure-pages@v5`, `actions/upload-pages-artifact@v3`, `actions/deploy-pages@v5` | CI/CD (`.github/workflows/build-and-deploy.yml`): Windows validate and package, end-to-end tests (runner pinned to `ubuntu-24.04`: Playwright 1.56 has no Chromium for Ubuntu 26.04), macOS package, publish `desktop-latest`, build and deploy GitHub Pages. |
+| GitHub Actions | `actions/checkout@v4`, `pnpm/action-setup@v4`, `actions/setup-node@v4`, `actions/upload-artifact@v4`, `actions/download-artifact@v4`, `actions/configure-pages@v5`, `actions/upload-pages-artifact@v3`, `actions/deploy-pages@v5`, each pinned to the commit SHA of that tag (updated by Dependabot) | CI/CD (`.github/workflows/build-and-deploy.yml`): Windows validate and package, end-to-end tests (runner pinned to `ubuntu-24.04`: Playwright 1.56 has no Chromium for Ubuntu 26.04), macOS package, publish `desktop-latest`, build and deploy GitHub Pages. |
 | GitHub Pages | — | Hosts the web app (static files only). |
 | GitHub Releases `desktop-latest` | — | Hosts the installers, SHA256SUMS and `latest.json` for the desktop updater. |
 | Browsers | Latest Chrome / Edge (Windows), Chrome / Safari (macOS) per TEST-PLAN.md §3 | Web app runtime; IndexedDB and localStorage. |

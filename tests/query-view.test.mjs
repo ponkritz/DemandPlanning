@@ -120,3 +120,13 @@ test('CSV exports neutralise formula cells and keep numbers; a bad numeric entit
   const item = { key: 'k', id: 1, title: '=1+1', workItemType: 'Release', state: 'Active', fields: {} }
   assert.equal(viewCsv([item], [{ ref: 'System.Title', name: 'Title' }]), "Title\r\n'=1+1")
 })
+
+import { htmlToText as plainText } from '../src/queryView.ts'
+test('rich text of any size becomes text in linear time; script and style blocks are dropped (KB-03, TC-QV-12)', () => {
+  assert.equal(plainText('<p>One</p><script>alert(1)</script><style>p{}</style><div>Two<br/>Three</div>'), 'One · Two · Three')
+  assert.equal(plainText('a < b and <script>never closed'), 'a never closed', 'as before: the text up to the next > is one tag')
+  assert.equal(plainText('<b>x</b> 3 < 4'), 'x 3 < 4', 'a < with no > after it stays text')
+  const started = Date.now()
+  plainText(`<p>${'<script'.repeat(150000)}`); plainText(`<b>${'<'.repeat(1000000)}`); plainText(`${'<i>x'.repeat(250000)}`)
+  assert.ok(Date.now() - started < 2000, `three 1 MB fields took ${Date.now() - started} ms`)
+})

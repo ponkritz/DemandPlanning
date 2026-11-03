@@ -124,3 +124,14 @@ test('add a row: the QE Name column is found for the Resources list, the row com
   const added = addRow(sheet(['Product', 'QE Name']), { c0: 'CP', c1: 'Ana Costa' })
   assert.deepEqual(added.sheet.rows.map((row) => row.cells), [{ c0: 'CP', c1: 'Ana Costa' }, { c0: 'old' }], 'the new row first, with the values entered')
 })
+
+import { unzip, zip } from '../src/xlsx.ts'
+test('a crafted Excel sheet with cells beyond Excel\'s limits is refused, not padded (KB-04, TC-QEM-01)', async () => {
+  const files = await unzip(writeXlsx([{ name: 'Map', rows: [['QE Name', 'Stream'], ['Ana', 'DP']] }]))
+  const text = (name) => new TextDecoder().decode(files.get(name))
+  const sheet = [...files.keys()].find((name) => /worksheets\/sheet1\.xml$/.test(name))
+  const crafted = (from, to) => zip([...files.keys()].map((name) => [name, name === sheet ? text(name).replace(from, to) : text(name)]))
+  assert.deepEqual((await readXlsx(crafted('r="B2"', 'r="B2"')))[0].rows[1], ['Ana', 'DP'], 'an ordinary sheet still reads')
+  await assert.rejects(readXlsx(crafted('r="B2"', 'r="XFE2"')), /too large or damaged/, 'a column beyond XFD')
+  await assert.rejects(readXlsx(crafted(/<row r="2"/, '<row r="2000000"')), /too large or damaged/, 'a row beyond 1,048,576')
+})

@@ -1,4 +1,4 @@
-import { forgetAzureConnectionProfile, listAzureConnectionProfiles, loadAzureConnectionProfile, saveAzureConnectionProfile, serverKey, viewsBaselineKey, type AzureConnectionProfileSummary } from './azureCredentials.ts'
+import { forgetAzureConnectionProfile, listAzureConnectionProfiles, loadAzureConnectionProfile, loadServerPat, saveAzureConnectionProfile, saveServerPat, serverKey, viewsBaselineKey, type AzureConnectionProfileSummary } from './azureCredentials.ts'
 import { dataSetOfProfile, streamOfProfile } from './streams.ts'
 export { serverKey }
 
@@ -189,4 +189,55 @@ export function removeDuplicateConnections(preferred: string[] = [], storage: Pi
   const remove = duplicateConnections(listAzureConnectionProfiles(storage), preferred)
   for (const profile of remove) { try { forgetAzureConnectionProfile(profile.id, storage) } catch { /* kept */ } }
   return remove
+}
+
+// Back up and clean up the shared connection setup (CON-86). An admin backs up every connection (a download and a dated
+// copy in Git, never a PAT), then removes them all here and in Git. Because the start sync never removes anything when
+// Git lists no connections, and keeps a connection a user changed, the clean-up is announced by a reset marker in Git
+// (azure-views-reset.json): at their next start every computer that has not applied that reset yet removes all its
+// connections, then takes the connections now in Git. PATs are kept per server; a PAT saved only on a connection is
+// moved to its server first.
+export const viewsResetPath = 'azure-views-reset.json'
+export const viewsBackupFolder = 'azure-views-backups'
+const resetKind = 'azure-views-reset'
+const resetSeenKey = 'demand-planning-views-reset-v1'
+export const serializeViewsReset = (resetAt: string) => `${JSON.stringify({ schema: 1, kind: resetKind, resetAt }, null, 2)}\n`
+export function parseViewsReset(text: string | null): string | null {
+  if (!text) return null
+  try {
+    const raw = JSON.parse(text) as { schema?: unknown; kind?: unknown; resetAt?: unknown }
+    return raw?.schema === 1 && raw.kind === resetKind && typeof raw.resetAt === 'string' && Number.isFinite(Date.parse(raw.resetAt)) ? raw.resetAt : null
+  } catch { return null }
+}
+// The backup file name: azure-views-backups/azure-views-2026-11-02T17-05-00Z.json (UTC, no colons).
+export const viewsBackupName = (at: Date) => `azure-views-${at.toISOString().replace(/\.\d+Z$/, 'Z').replace(/:/g, '-')}.json`
+export function removeAllConnections(storage: Pick<Storage, 'getItem' | 'setItem'> = localStorage): AzureConnectionProfileSummary[] {
+  const removed = listAzureConnectionProfiles(storage)
+  for (const profile of removed) {
+    const full = loadAzureConnectionProfile(profile.id, storage)
+    const key = serverKey(profile)
+    if (full?.token && key && !loadServerPat(key, storage)) { try { saveServerPat(key, full.token, storage) } catch { /* the PAT goes with the connection */ } }
+    try { forgetAzureConnectionProfile(profile.id, storage) } catch { /* kept */ }
+  }
+  try { storage.setItem(baselineKey, '{}'); storage.setItem(pendingKey, '[]') } catch { /* compared again next time */ }
+  return removed
+}
+// This computer has applied the reset of resetAt (the admin's own clean-up, or a reset found in Git).
+export function markResetApplied(resetAt: string, storage: Pick<Storage, 'setItem'> = localStorage) { try { storage.setItem(resetSeenKey, resetAt) } catch { /* applied again next start: removes only what came after */ } }
+// A reset in Git this computer has not applied yet (it still has the connections from before the clean-up).
+export function resetPending(resetAt: string | null, storage: Pick<Storage, 'getItem'> = localStorage) {
+  if (!resetAt) return false
+  let seen = ''
+  try { seen = storage.getItem(resetSeenKey) ?? '' } catch { seen = '' }
+  // Any reset not applied here yet, whatever its time: a marker dated in the future (a wrong clock) never blocks a later one.
+  return seen !== resetAt
+}
+// At start: a reset in Git newer than the last one applied here removes every connection here. Returns the removed ones,
+// or null when there is nothing to apply.
+export function applyViewsReset(resetAt: string | null, storage: Pick<Storage, 'getItem' | 'setItem'> = localStorage): AzureConnectionProfileSummary[] | null {
+  if (!resetAt) return null
+  if (!resetPending(resetAt, storage)) return null
+  const removed = removeAllConnections(storage)
+  markResetApplied(resetAt, storage)
+  return removed
 }

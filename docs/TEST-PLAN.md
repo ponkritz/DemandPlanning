@@ -706,6 +706,8 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-BKL-12 Backlog filtered to me; ＋ Time Writing Task** — Req BKL-21, BKL-22 — E2E `backlog.e2e.mjs` ("TC-BKL-12: QMS-0025 opens filtered to the person browsing; clearing the filter shows everyone; rows offer ＋ Time Writing Task"); L1 `my-work.test.mjs` ("QMS-0025 shows mine by default: my items with everything above and below; featureOf finds the Feature of a Story (TC-BKL-12)"); browser check with the QMS-0025 board and your work email: the backlog shows your items with their Epic / Feature above and the work below; Assigned to me ✕ clears to everyone and a restart filters again; ＋ Time Writing Task on a Feature (and on a Story) creates this month's Task for you under your own Time Writing story, or reports that it exists; the same button on Assigned to Me rows.
 
+**TC-BKL-13 Parent Epic blank on New Feature** — Req BKL-23 — E2E `backlog.e2e.mjs` ("TC-BKL-13: New Feature opens with the Parent Epic blank; every Epic is offered"); browser check: the same from Assigned to Me and from Create Feature on Release Details; Create without an Epic says "Choose the parent Epic."
+
 **TC-CON-45 Git view data with another query is not applied** — Req CON-77 — L1 `git-snapshots.test.mjs` ("a snapshot fetched with another query than the connection has here is not applied"); browser check:
 - Pre: Git storage connected; the DP connection's query changed here; Git holds DP data fetched with the old query.
 - Steps: reload the web app; open DP; Load from Git.
@@ -729,6 +731,8 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-CON-54 ECP columns Project No and Project Name** — Req CON-86 — E2E `documents-and-data.e2e.mjs` ("TC-CON-53 / TC-CON-54: \"＋ ECP\" imports the export as the ECP page whatever the file is called, read by project, with Project No / Project Name columns"); browser check: Release Details → Windchill exports → ECP — the table's columns read Project Name and Project No (and Download CSV has the same headers); S&S IT still reads Release name and Release.
 **TC-CON-55 Several ECP setups, each listed on its own** — Req CON-87 — L1 `windchill-releases.test.mjs` ("ECP setups: several ECP exports, each with its own name and project folder (2nd, 3rd…), listed on their own (TC-CON-55)"); E2E `documents-and-data.e2e.mjs` ("TC-CON-55 / TC-QV-28: an ECP setup named \"ECP - Type 2\" reads projects from the 3rd Location folder, is listed on its own, with compact page actions"); browser check: click "＋ ECP" — Logic shows ECP setup; choose Project details at "3rd folder", Name "ECP - Type 2", import — the page lists "123456 Patient Monitor" with all its phases, the menu shows "ECP - Type 2" and "＋ ECP export"; import a second export as "ECP - Type 1" at the 2nd folder — both are listed under Windchill exports and as separate lines in Pulse Check → Supported and the Monthly pack; changing "Project details at" on a page re-reads its projects.
+
+**TC-CON-56 Back up and clean up the connections** — Req CON-88 — L1 `view-definitions.test.mjs` ("back up and clean up: every connection removed, PATs kept per server, the reset applied once per computer (TC-CON-56)"); E2E `shell.e2e.mjs` ("TC-CON-56: Storage → Shared setup in Git offers Back up and clean up; removing all needs Git storage that can save"); browser check (admin, Git storage that can save): Back up and remove all… downloads the backup, adds `azure-views-backups/azure-views-<time>.json` and `azure-views-reset.json` in Git, empties `azure-views.json` and `azure-data/`, and Settings → Azure DevOps lists no connections while the server PATs stay; a second computer started afterwards shows no old connections, then the ones the admin added.
 
 
 **TC-CON-44 DP and DHFI defaults** — Req CON-76 — L1 `connections.test.mjs` ("pre-filled connections from the shared setup …": DP reads the Release work items of DHP with DDTDate, SourceProgram, PsName and Release; DHFI [Approved] reads the DHP.Vault documents, hidden from the menu); browser check in a fresh browser with only the on-prem PAT: Settings → Azure DevOps → Stream mapping → Set up DP, Pedestal and DHFI from their defaults; Release Details → DP lists Release items for the DDT month; Get started shows the release streams step done.
@@ -804,7 +808,7 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-QV-11 DP milestone names and query scope** — Req QV-26 — L1 `dp-milestones.test.mjs` ("DP milestones carry the team names: DT, SFV, PRD, RPE"), `streams.test.mjs` (titles "SFV Done", "DT Done"); browser check with Azure DevOps mocked (DP query rows from two projects): the Supported Releases hint reads "DT n · SFV n · PRD n · RPE n", "What was counted" shows "DT · Design Transfer · Completed", "SFV · Start of Verification / Start of Hardening", the legend lists all four names, and rows of both projects are shown and counted.
 
-**TC-QV-12 Rich-text cells as plain text** — Req QV-27 — L1 `query-view.test.mjs` ("rich-text values (Acceptance Criteria) show as text: tags removed, entities decoded, lines joined"); browser check with Azure DevOps mocked (a query with [Microsoft.VSTS.Common.AcceptanceCriteria] holding `<div><b>Given</b>…</div>`): the cell reads "Given … · When … · Then …" with no tags, the hover shows the same, the CSV holds the text; no page errors.
+**TC-QV-12 Rich-text cells as plain text** — Req QV-27 — L1 `query-view.test.mjs` ("rich-text values (Acceptance Criteria) show as text: tags removed, entities decoded, lines joined"; "rich text of any size becomes text in linear time; script and style blocks are dropped (KB-03, TC-QV-12)"); browser check with Azure DevOps mocked (a query with [Microsoft.VSTS.Common.AcceptanceCriteria] holding `<div><b>Given</b>…</div>`): the cell reads "Given … · When … · Then …" with no tags, the hover shows the same, the CSV holds the text; no page errors.
 
 **TC-QV-13 View notes behind Info** — Req QV-28 — browser check with Azure DevOps mocked (DP view, October, a Git save note): no info banners above the counts; the ⓘ Info next to "DP" lists "Month filter: by DDT Date in your time zone." and the legend "DT = Design Transfer (DDT) · SFV = … · PRD = … · RPE = …"; a fetch error still shows as a banner; no page errors.
 
@@ -1070,7 +1074,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
   - The global error shows with both buttons.
   - The browser warns before leaving the page.
 
-**TC-STO-04 Restore validation** — Req STO-07, STO-08 — L1 `browser-state.test.mjs`.
+**TC-STO-04 Restore validation** — Req STO-07, STO-08 — L1 `browser-state.test.mjs` (also "a work item from a backup or Git keeps only an https link or none (KB-06, TC-STO-04)").
 - L3: restore each file in TD-05.
 - Expected:
   - (a) restores after the checkbox is ticked.
@@ -1238,7 +1242,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 ### 6.21 QE Mapping
 
-**TC-QEM-01 Read an Excel as it is** — Req QEM-02 — L1 `qe-mapping.test.mjs` ("reads an Excel workbook as it is: every sheet, shared / rich / inline strings, dates, numbers, booleans, formulas"; "reads CSV with commas, semicolons or tabs, quotes and line breaks in fields"; "a sheet becomes a table as it is: header from the first non-empty row, names made unique, empty rows and columns dropped").
+**TC-QEM-01 Read an Excel as it is** — Req QEM-02 — L1 `qe-mapping.test.mjs` ("reads an Excel workbook as it is: every sheet, shared / rich / inline strings, dates, numbers, booleans, formulas"; "reads CSV with commas, semicolons or tabs, quotes and line breaks in fields"; "a sheet becomes a table as it is: header from the first non-empty row, names made unique, empty rows and columns dropped"; "a crafted Excel sheet with cells beyond Excel's limits is refused, not padded (KB-04, TC-QEM-01)").
 
 **TC-QEM-02 Edit, filter, group** — Req QEM-03…QEM-06 — L1 `qe-mapping.test.mjs` ("editing: cells, rows and columns keep their ids; filter, group and export").
 
@@ -1361,6 +1365,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CON-85 | TC-CON-53 |
 | CON-86 | TC-CON-54 |
 | CON-87 | TC-CON-55 |
+| CON-88 | TC-CON-56 |
 | QV-20 | TC-QV-06 |
 | QV-21 | TC-QV-07 |
 | CON-21, CON-22 | TC-CON-08 |
@@ -1428,6 +1433,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | BKL-20 | TC-BKL-11 |
 | BKL-21 | TC-BKL-12 |
 | BKL-22 | TC-BKL-12 |
+| BKL-23 | TC-BKL-13 |
 | QV-01, QV-02 | TC-QV-01 |
 | QV-03, QV-05 | TC-QV-02 |
 | QV-04 | TC-FET-07 |

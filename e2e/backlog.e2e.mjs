@@ -32,6 +32,23 @@ test('TC-BKL-10: ＋ User Story on a Feature opens the New User Story form with 
   await context.close()
 })
 
+test('TC-BKL-13: New Feature opens with the Parent Epic blank; every Epic is offered', async () => {
+  const { page, context, errors } = await openPage(app)
+  await loadSample(page)
+  await navigate(page, 'QMS-0025')
+  await page.getByRole('button', { name: '＋ New Feature' }).first().click()
+  const form = page.locator('form.nf-form')
+  await form.waitFor()
+  const epic = form.getByLabel('Parent Epic')
+  assert.equal(await epic.inputValue(), '', 'no Epic is chosen when the form opens')
+  assert.equal(await epic.locator('option:checked').innerText(), 'Choose the parent Epic…')
+  assert.ok(await epic.locator('option').count() > 1, 'the Epics are offered')
+  await form.getByRole('button', { name: 'Cancel' }).click()
+  assert.equal(await page.locator('form.nf-form').count(), 0)
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
 test('TC-BKL-11: Edit on a Feature, User Story and Task row opens the Edit form, which reads the item fresh from Azure DevOps first', async () => {
   const { page, context, errors } = await openPage(app)
   await loadSample(page)

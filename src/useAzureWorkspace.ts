@@ -8,7 +8,7 @@ import { approvalDateFrom, checkWorkItemQuery, defaultReleaseQuery, fetchRelease
 import { sampleDataset, sampleProfiles, sampleReleaseScopes } from './sampleData'
 import { indiaMonth } from './azureInsights'
 import { columnName, pickFields, queryLayout } from './queryView'
-import { duplicateOf, promoteToTimeWriting } from './viewDefinitions'
+import { duplicateOf, markResetApplied, promoteToTimeWriting, removeAllConnections } from './viewDefinitions'
 
 const defaultUrl = 'https://dev.azure.com/ALMP-ORG-MSTP01/Patient%20Safety%20and%20Quality/_backlogs/backlog/InD%20Quality/Epics'
 const defaultConfig = parseAzureProjectUrl(defaultUrl)
@@ -229,6 +229,17 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
     return id
   }
 
+  // Clean-up (CON-88): every connection here goes, with its saved data; PATs stay per server. resetAt: the clean-up
+  // announced in Git, so this computer does not apply it again at its next start.
+  function removeAllConnectionsHere(resetAt?: string) {
+    const removed = removeAllConnections()
+    if (resetAt) markResetApplied(resetAt)
+    const ids = removed.map((profile) => profile.id)
+    setConnectionProfiles(listAzureConnectionProfiles()); setActiveConnectionProfileId(''); setPat(''); setPreview(null)
+    store.update((draft) => { draft.azureSources = (draft.azureSources ?? []).filter((source) => !ids.includes(source.connectionId)); return draft })
+    setConnectionStatus({})
+    return removed
+  }
   function removeConnection(id: string) {
     const name = connectionProfiles.find((profile) => profile.id === id)?.reason ?? 'Connection'
     forgetAzureConnectionProfile(id)
@@ -432,7 +443,7 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
     return replaced
   }
 
-  return { reloadConnectionProfiles, makeTimeWriting, projectUrl, changeProjectUrl, team, setTeam, pat, setPat, creatorEmail, setCreatorEmail, role, setRole, connectionStatus, saveConnection, removeConnection, fetchConnection, loadFromGit: (id: string) => loadFromGit(id), canLoadFromGit, fetchAll, fetchCloud, testConnection, applyWorkItems, isSample, loadSampleData, connectionProfiles, activeConnectionProfileId, selectConnectionProfile, saveConnectionProfile, forgetConnectionProfile, busy, error, setError, message, setMessage, preview, setPreview, saved, items, config, needsScopedRefresh, fetchPreview, refresh, lastRefreshed, rememberPat, forgetPat, featureCreated, savePreview, saveTimeWritingEffort }
+  return { removeAllConnectionsHere, reloadConnectionProfiles, makeTimeWriting, projectUrl, changeProjectUrl, team, setTeam, pat, setPat, creatorEmail, setCreatorEmail, role, setRole, connectionStatus, saveConnection, removeConnection, fetchConnection, loadFromGit: (id: string) => loadFromGit(id), canLoadFromGit, fetchAll, fetchCloud, testConnection, applyWorkItems, isSample, loadSampleData, connectionProfiles, activeConnectionProfileId, selectConnectionProfile, saveConnectionProfile, forgetConnectionProfile, busy, error, setError, message, setMessage, preview, setPreview, saved, items, config, needsScopedRefresh, fetchPreview, refresh, lastRefreshed, rememberPat, forgetPat, featureCreated, savePreview, saveTimeWritingEffort }
 }
 
 export type AzureWorkspace = ReturnType<typeof useAzureWorkspace>
