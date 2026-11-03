@@ -35,6 +35,10 @@ This document lists every software component of the system: the in-house source 
 | BulkActionsPage | `src/pages/BulkActionsPage.tsx` | Bulk actions: move my User Stories from past Sprints to the current PI + Sprint, state checks, and create this month's Time Writing story and task. | ATM, CON |
 | DashboardPage | `src/pages/DashboardPage.tsx` | Dashboard: demand vs capacity for a period and filters — utilization, overload, rebalancing, trends, Epic mix, insights and releases. | OVR, CAP |
 | DocsPage | `src/pages/DocsPage.tsx` | Documentation page: reads the bundled project documents in-app, remembers the chosen one, keeps document and anchor links in the page. | DOC |
+| ToolValidationPackage | `src/components/ToolValidationPackage.tsx` | Private validation package browser, search, categories, connection link and original-format downloads shared by Web/Desktop. | DOC |
+| toolValidation | `src/toolValidation.ts` | Scoped read-only GitHub package listing and authenticated raw binary downloads; safe access errors. | DOC |
+| tool-validation.test | `tests/tool-validation.test.mjs` | Package path/auth/read-only boundaries, formats, large binary fidelity and failure handling (TC-DOC-04). | DOC |
+| tool-validation.e2e | `e2e/tool-validation.e2e.mjs` | Web/Desktop private document list/search/download and disconnected/denied-access checks using synthetic fixtures (TC-DOC-04). | DOC |
 | MonthlyPage | `src/pages/MonthlyPage.tsx` | Monthly Time Writing: the selected month's Time Writing Tasks (team or individual) with planned/completed hours and gaps. | MON, TWN |
 | MyWorkPage | `src/pages/MyWorkPage.tsx` | Assigned to Me: my pending Azure DevOps items, resolve/close them, and create a Feature under an Epic with its stories and task. | ATM, CON |
 | BritePage | `src/pages/BritePage.tsx` | BRITE placeholder at the root of Release Details, until its exports and rules are known (CON-84). | CON |
