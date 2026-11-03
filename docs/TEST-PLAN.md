@@ -1300,6 +1300,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-WSP-06 Insights workspace end to end** — Req WSP-01…06 — E2E `workspace.e2e.mjs` ("TC-WSP-06": synthetic sample, the KPI tiles with their change, the two charts, the exception queue filtered by a kind chip, the timeline from target dates; the insight cards with filters and what was checked, the evidence rows, Add to monthly pack and the queue count, Save refused with the sample, the presentation preview, a suggested question jumping to the queue filtered on Over 25% baseline; the Dashboard unchanged with its six tabs); browser check with Git connected (writable token): queue two cards, Save to monthly pack, then Pulse Check → Monthly pack of that month shows them under Key takeaways and the Git history has the commit. Suspended while WSP-07 hides the page; its E2E scenario is in the Git history of `workspace.e2e.mjs` and returns with the page.
 
+**TC-DOC-04 Private Tool Validation Package downloads** — Req DOC-12 — L1 `tool-validation.test.mjs`: configured repo/branch, authenticated read-only GET, fixed folders, path rejection, binary fidelity above 1 MB and safe errors. E2E `tool-validation.e2e.mjs`: missing configuration, list/search, DOCX download bytes, denied access, refresh and connection settings. Execute the same workflow in Web and Windows Desktop; verify downloaded PDF/Word/CSV files open in their native viewers. No private content or PAT is included in app exports or the public build. These automated checks use synthetic files; actual document review/approval remains outside the app.
+
 ## 7. Requirements coverage matrix
 
 | Requirement | Test cases |
@@ -1513,6 +1515,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | DOC-01…03, DOC-05 | TC-DOC-01 |
 | DOC-04, DOC-06…08 | TC-DOC-02 |
 | DOC-09…11 | TC-DOC-03 |
+| DOC-12 | TC-DOC-04 |
 | UI-01, UI-02 | TC-UI-01 |
 | UI-03, UI-04 | TC-INS-03 |
 | UI-05 | TC-UI-02 |

@@ -19,6 +19,8 @@ This plan says what is under configuration control, how each item is identified 
 
 Not configuration items: local `node_modules`, `dist/` and `release/` build folders, and data in Azure DevOps, Windchill or SharePoint (owned by those systems).
 
+The separate Philips Tool Validation Package is stored under `tool-validation/demandplanning` in the private data repository, identified by that repository's commit history. Documentation → Tool Validation Package uses the Git storage PAT to list and download files in Web and Windows Desktop. Contents: Read is sufficient; write access is not required. Package files are fetched on request, retain their original formats and are not bundled in this public app repository or app backups. Blank templates and draft records are distinct from executed, approved validation evidence. Configure the PAT locally on each browser/desktop installation in Settings → Storage; never add it to repository files. The UI supports the package root and the process-references, blank-templates, records, supporting and planning folders.
+
 ## 2. Identification
 
 - **Version** `x.y.z` (semantic) in `package.json`, checked by `scripts/verify-version.mjs`:

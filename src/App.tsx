@@ -273,7 +273,7 @@ export default function App() {
       {page === 'board' && <BoardPage azure={azure} store={store} current={view} month={month} git={git} onOpenConnection={openConnection} assign={assign} featureSetup={featureSetup.setups} />}
       {page === 'snapshots' && <SnapshotsPage {...pageProps} />}
       {page === 'admin' && <AdminPage key={`${settingsTab}:${settingsVisit}`} tab={settingsTab} onOpenTab={openSettings} {...pageProps} azure={azure} git={git} access={access} featureSetup={featureSetup} monthlyPack={monthlyPack} loadEverything={loadEverything} onOpenBoard={() => setPage('board')} />}
-      {page === 'docs' && <DocsPage />}
+      {page === 'docs' && <DocsPage git={git} onConfigure={() => openSettings('storage', 'git')} />}
     </main>
   </div></HeaderSlot.Provider></TableDefaultsContext.Provider>
 }

@@ -4,6 +4,8 @@ import { Markdown } from '../components/Markdown'
 import { parseMarkdown, plainText } from '../markdown'
 import { projectDocs } from '../docs'
 import { downloadMarkdown } from '../download'
+import { ToolValidationPackage } from '../components/ToolValidationPackage'
+import type { GitStorage } from '../useGitStorage'
 
 // Documentation: the requirements, test plan and other project documents of this build, read in the app. The chosen
 // document is remembered in this browser; links between documents and to sections stay in the page.
@@ -11,7 +13,8 @@ const docKey = 'demand-planning-docs-tab-v1'
 const files = projectDocs.map((doc) => doc.file)
 const initialDoc = () => { try { const saved = localStorage.getItem(docKey); return saved && files.includes(saved) ? saved : files[0] } catch { return files[0] } }
 
-export function DocsPage() {
+export function DocsPage({ git, onConfigure }: { git: GitStorage; onConfigure: () => void }) {
+  const [view, setView] = useState<'project' | 'validation'>('project')
   const [file, setFileState] = useState(initialDoc)
   const doc = projectDocs.find((entry) => entry.file === file) ?? projectDocs[0]
   const blocks = useMemo(() => parseMarkdown(doc.source), [doc])
@@ -23,6 +26,8 @@ export function DocsPage() {
     requestAnimationFrame(() => { const element = target ? document.getElementById(target) : null; if (element) element.scrollIntoView({ block: 'start' }); else window.scrollTo({ top: 0 }) })
   }
   return <Page className="docs-page">
+    <div className="button-row" aria-label="Documentation area"><button type="button" className={view === 'project' ? 'primary' : 'ghost'} aria-pressed={view === 'project'} onClick={() => setView('project')}>Project documentation</button><button type="button" className={view === 'validation' ? 'primary' : 'ghost'} aria-pressed={view === 'validation'} onClick={() => setView('validation')}>Tool Validation Package</button></div>
+    {view === 'validation' ? <ToolValidationPackage key={git.accessScope} git={git} onConfigure={onConfigure} /> : <>
     <div className="overview-tabs" role="tablist" aria-label="Documents">{projectDocs.map((entry) => <button key={entry.file} type="button" role="tab" aria-selected={entry.file === file} className={`backlog-tab ${entry.file === file ? 'backlog-tab-active' : ''}`} onClick={() => { open(entry.file); window.scrollTo({ top: 0 }) }}>{entry.label}</button>)}</div>
     <div className="docs-layout">
       {sections.length > 1 && <nav className="docs-toc" aria-label="Sections"><p className="eyebrow">ON THIS PAGE</p><ul>{sections.map((section) => section.kind === 'heading' && <li key={section.id}><a href={`#${section.id}`} onClick={(event) => { event.preventDefault(); go(null, section.id) }}>{plainText(section.text)}</a></li>)}</ul></nav>}
@@ -30,5 +35,6 @@ export function DocsPage() {
         <Markdown blocks={blocks} docs={files} onLink={go} />
       </Panel>
     </div>
+    </>}
   </Page>
 }

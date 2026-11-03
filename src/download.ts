@@ -48,3 +48,12 @@ export function downloadPptx(contents: Uint8Array, filename: string) {
 export function downloadJson(contents: string, filename: string) {
   saveBlob(contents, 'application/json;charset=utf-8', filename)
 }
+
+// Shared Web/Electron renderer download; private bytes never enter app data or backups.
+export function downloadFile(contents: Uint8Array, mime: string, filename: string) {
+  const url = URL.createObjectURL(new Blob([contents as BlobPart], { type: mime }))
+  const anchor = document.createElement('a')
+  anchor.href = url; anchor.download = [...filename].map((char) => char.charCodeAt(0) < 32 || '\\/:*?"<>|'.includes(char) ? '_' : char).join('')
+  document.body.appendChild(anchor); anchor.click(); anchor.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 60_000)
+}
