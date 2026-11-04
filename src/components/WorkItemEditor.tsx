@@ -9,6 +9,7 @@ import { PersonPicker } from './PersonPicker'
 import { assignablePeople } from '../myWork'
 import { runInBackground } from '../backgroundJobs'
 import { formatDateTime } from '../format'
+import { usePlanningClock } from '../usePlanningClock'
 
 // Edit a Feature, User Story or Task (Backlogs, Assigned to Me): the title; Assigned to, State and Iteration (Feature:
 // a PI; story / Task: a Sprint, current or future); the type's own fields (Feature: DoD, Target date; story: Story
@@ -73,8 +74,9 @@ export function WorkItemEditor({ item: opened, items, config, savedPat = '', me,
   const item = loaded?.item
   const locks = editLocks(item ?? opened)
   const month = locks.monthTask
-  const planLocked = Boolean(month && (planningLockedNow(month) || isAdhocTask(item?.tags ?? '')))
-  const actualLocked = Boolean(month && actualsLockedNow(month))
+  const now = usePlanningClock()
+  const planLocked = Boolean(month && (planningLockedNow(month, now) || isAdhocTask(item?.tags ?? '')))
+  const actualLocked = Boolean(month && actualsLockedNow(month, now))
   const pairs = [...currentIterationPairs(choices), ...futureIterationPairs(choices)]
   // Feature: the PIs of the current and future Sprints; story / Task: those Sprints. The current value is always listed.
   const pis = [...new Map(pairs.map((pair) => [pair.pi.path, pair.pi])).values()]

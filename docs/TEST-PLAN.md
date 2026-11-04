@@ -522,8 +522,8 @@ Cases marked **UAT** are also run in acceptance testing.
 
 | Situation | Planning (OE) | Actuals (CW) |
 |---|---|---|
-| Before M-05 23:59:59, no record | open | open |
-| At M-05 23:59:59 exactly | locked | open |
+| Before M-05 23:59:59.999, no record | open | open |
+| At M-05 23:59:59.999 exactly | locked | open |
 | After M-05, extension M-10, now M-07 | open | open |
 | Explicit planning lock, before M-05 | locked | open |
 | Explicit lock + active extension | locked (see OI-03) | — |
@@ -1028,14 +1028,16 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
   - Step 2 stores 80 and 100 (OI-05).
   - Step 3 writes the audit "Update"/"CapacitySettings".
 
-**TC-SET-02 Period control** — Req SET-05, SET-06, OI-01, OI-02
+**TC-SET-02 Period control** — Req SET-05, SET-06, MON-06, MON-07, GIT-03, GIT-04, OI-01, OI-02 — L1 `planning-lock.test.mjs`, `git-storage.test.mjs`; E2E `period-controls.e2e.mjs` uses mocked GitHub to verify new-month creation, independent modes/dates, selected-month enforcement, reload and second-browser persistence, local fallback, denied/read-only saves and concurrent-edit rejection.
 - Steps:
-  1. Lock and unlock planning with a reason.
-  2. Set Extend until.
+  1. Select month M in Capacity & periods → Period control; verify defaults M-05 and (M+1)-05.
+  2. Change both dates and set different Plan/Actual modes, enter a reason, then Save month controls.
+  3. Switch months and back, reload, and load the shared file in another browser. Check Monthly Time Writing for M and M+1.
+  4. Attempt a read-only, denied or conflicting shared save. Repeat without Git and wait for the local save confirmation before reload.
 - Expected:
-  - Each toggle is audited, with the reason as the detail.
-  - The extension is stored as the chosen date at 23:59:59.
-  - The Monthly page reflects it per TC-MON-03.
+    - Each saved month retains independent dates and modes, actor, timestamp and reason. Other months and unrelated shared settings are preserved.
+    - Dates end at 23:59:59.999 local when entered and persist as shared timestamps. Manual Unlock opens after expiry; Automatic restores deadline enforcement. Open forms update after deadline passage.
+    - Failed shared saves do not apply local controls; read-only users cannot save; conflicts require reload. Without Git, local persistence is explicit and shared availability is not claimed.
 
 **TC-SET-03 Resources** — Req SET-07…09, CAP-09
 - Steps:

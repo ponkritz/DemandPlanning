@@ -46,5 +46,9 @@ The 3–5 day target is viable for a testable Release 1, not for every productio
 
 Deferred on request; to be decided again when needed:
 
+- **Access coverage and usability (planning only, 4 November 2026).** Offer every Dashboard and Settings subpage in the Access configuration, and simplify the Access page layout so page visibility and edit permissions are easier to configure. Do not implement until explicitly requested.
+- **People from Holidays and Trainings (planning only, 4 November 2026).** Use the names in the Holidays and Trainings Epic as an additional source for the user list, Reports to choices and resource mapping. Confirm the exact Epic/source and deduplication against existing Azure identities before implementation.
+- **Ad-hoc hierarchy (planning only).** Extend the late-work rule from monthly Tasks to the complete Feature → User Story → Task hierarchy, including new descendants of existing work. Determine applicability by the work month; future-month work follows its own period controls. This is separate from the month-control persistence fix.
+
 - **DP release matching and DHFI linking (Release Details → DP).** The DP page now shows only the DP connection's query with chosen columns (QV-22). Each DP row is matched again to its QMS-0025 Feature / User Story by SourceProgram + Title at 80%, with Create Feature when none matches (QV-29). Linking the DHFI documents and the Pedestal register stays off the page (OI-14). Pulse Check and the Dashboard count DP from its query by its milestones (QV-24, QV-25).
 

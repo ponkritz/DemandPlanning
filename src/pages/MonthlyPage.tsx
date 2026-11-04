@@ -9,9 +9,10 @@ import { formatHours, todayIso } from '../format'
 import type { PageProps } from './types'
 import type { MyWork } from '../useMyWork'
 import { isMine } from '../myWork'
-import { actualsLocked as isActualsLocked, planningLocked as isPlanningLocked } from '../planningLock'
+import { actualsLocked as isActualsLocked, planningLocked as isPlanningLocked, actualsLockedNow, planningLockedNow } from '../planningLock'
 import { usePersonScope } from '../usePersonScope'
 import { ScopeSwitch } from '../components/ScopeSwitch'
+import { usePlanningClock } from '../usePlanningClock'
 
 type Edit = { originalEstimate?: string; completedWork?: string }
 const adhoc = (tags: string) => tags.split(';').some(tag => tag.trim().toLowerCase() === 'ad-hoc')
@@ -21,7 +22,7 @@ const numberOrText = (value: string | number | undefined) => { const text = Stri
 
 export function MonthlyPage({ azure, month, store, my }: { azure: AzureWorkspace; month: string; store: PageProps['store']; my: MyWork }) {
   const [today] = useState(todayIso)
-  const [now] = useState(() => new Date())
+  const now = usePlanningClock()
   const [edits, setEdits] = useState<Record<number, Edit>>({})
   const saving = useSyncExternalStore(subscribeJobs, () => isRunning('monthly:save'))
   // Individual (default: me) shows only that person's Tasks; Team shows everyone's.
@@ -47,7 +48,7 @@ export function MonthlyPage({ azure, month, store, my }: { azure: AzureWorkspace
       const edit = edits[task.id], isAdhoc = adhoc(task.tags)
       const planChanged = edit.originalEstimate != null && edit.originalEstimate !== (task.originalEstimate == null ? '' : String(task.originalEstimate))
       const actualChanged = edit.completedWork != null && edit.completedWork !== (task.completedWork == null ? '' : String(task.completedWork))
-      if ((planChanged && (planningLocked || isAdhoc)) || (actualChanged && actualsLocked)) { azure.setError('A staged change is in a locked field. Unlock the period in Settings before saving.'); return }
+      if ((planChanged && (planningLockedNow(month) || isAdhoc)) || (actualChanged && actualsLockedNow(month))) { azure.setError('A staged change is in a locked field. Unlock the period in Settings before saving.'); return }
       for (const item of [planChanged ? edit.originalEstimate : undefined, actualChanged ? edit.completedWork : undefined]) if (item != null && (!item.trim() || !Number.isFinite(Number(item)) || Number(item) < 0)) { azure.setError('Original Estimate and Completed Work must be non-negative numbers.'); return }
     }
     // A background job: the page stays usable; each saved Task leaves the staged edits, a failed one stays staged.
@@ -60,7 +61,8 @@ export function MonthlyPage({ azure, month, store, my }: { azure: AzureWorkspace
           const edit = staged[task.id], isAdhoc = adhoc(task.tags)
           const planChanged = edit.originalEstimate != null && edit.originalEstimate !== (task.originalEstimate == null ? '' : String(task.originalEstimate))
           const actualChanged = edit.completedWork != null && edit.completedWork !== (task.completedWork == null ? '' : String(task.completedWork))
-          await azure.saveTimeWritingEffort(task.id, planChanged ? Number(edit.originalEstimate) : undefined, actualChanged ? Number(edit.completedWork) : undefined, planningLocked && !isAdhoc && task.originalEstimate == null && actualChanged)
+          if ((planChanged && (planningLockedNow(month) || isAdhoc)) || (actualChanged && actualsLockedNow(month))) throw new Error('The selected month locked while saving. Unlock it in Settings before continuing.')
+          await azure.saveTimeWritingEffort(task.id, planChanged ? Number(edit.originalEstimate) : undefined, actualChanged ? Number(edit.completedWork) : undefined, planningLockedNow(month) && !isAdhoc && task.originalEstimate == null && actualChanged)
           saved += 1
           setEdits((current) => { const next = { ...current }; if (next[task.id] === edit) delete next[task.id]; return next })
         }

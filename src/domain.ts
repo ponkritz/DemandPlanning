@@ -74,11 +74,14 @@ export interface Baseline {
 }
 
 export interface PeriodControl {
+  controlVersion?: 2
   month: string
   planningDeadline: string
   actualsDeadline: string
   planningLocked: boolean
   actualsLocked: boolean
+  planningOverride?: 'locked' | 'unlocked'
+  actualsOverride?: 'locked' | 'unlocked'
   planningExtendedUntil?: string
   actualsExtendedUntil?: string
   extensionReason?: string

@@ -2,6 +2,13 @@
 
 Version history of the I&D Quality Demand Planning app, newest first. Every merged change bumps the version in `package.json` and adds its entry here, in the same pull request (CI-09; [CONFIGURATION-MANAGEMENT.md](CONFIGURATION-MANAGEMENT.md) §4): **major** for a change that breaks existing data, shared setup files or the way users work; **minor** for a new or changed feature; **patch** for a fix, a dependency update or documentation only. `pnpm test` fails when the newest version here is not the version in `package.json`. CI tags each version `vX.Y.Z` on its merge commit and publishes its GitHub release with the installers and this entry (CI-10); the build number of a version is the CI build of that merge (shown in the app under Force Update, and in `latest.json`). Open bugs and accepted limitations of every version are in [KNOWN-ISSUES.md](KNOWN-ISSUES.md); the third-party components of every version are in [SWBOM.md](SWBOM.md).
 
+## v1.6.2 — 2026-11-04
+
+**Fixed**
+- Plan and Actual controls now belong to the selected work month. Defaults are the 5th of that month for Plan and the 5th of the following month for Actuals. Dates, independent Automatic/Locked/Unlocked modes and a required reason are saved explicitly, including months without an existing record.
+- Save month controls persists to the configured private Git planning file when connected, with conflict detection for that month and preservation of other shared settings. Without Git, controls persist locally with a warning. Existing files without periods remain compatible; legacy same-month default Actuals dates are corrected.
+- Manual Unlock now reopens entry after a deadline. Open Monthly and Task editor forms re-evaluate locks as time passes; staged saves recheck the current lock. No Azure hierarchy tagging or Access redesign is included in this fix.
+
 ## v1.6.1 — 2026-11-04
 
 **Changed**
