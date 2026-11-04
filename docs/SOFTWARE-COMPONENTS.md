@@ -35,6 +35,9 @@ This document lists every software component of the system: the in-house source 
 | BulkActionsPage | `src/pages/BulkActionsPage.tsx` | Bulk actions: move my User Stories from past Sprints to the current PI + Sprint, state checks, and create this month's Time Writing story and task. | ATM, CON |
 | DashboardPage | `src/pages/DashboardPage.tsx` | Dashboard: demand vs capacity for a period and filters — utilization, overload, rebalancing, trends, Epic mix, insights and releases. | OVR, CAP |
 | DocsPage | `src/pages/DocsPage.tsx` | Documentation page: reads the bundled project documents in-app, remembers the chosen one, keeps document and anchor links in the page. | DOC |
+| PeriodControls | `src/components/PeriodControls.tsx` | Selected-month Plan/Actual deadlines, independent modes, audited explicit save and shared/local persistence status. | SET, MON, GIT |
+| usePlanningClock | `src/usePlanningClock.ts` | Refreshes deadline-sensitive forms on clock ticks and focus/resume. | MON |
+| period-controls.e2e | `e2e/period-controls.e2e.mjs` | Selected-month persistence across reload and browsers, input locks, read-only/conflict/failure behaviour (TC-SET-02). | SET, MON, GIT |
 | ToolValidationPackage | `src/components/ToolValidationPackage.tsx` | Private validation package browser, search, categories, connection link and original-format downloads shared by Web/Desktop. | DOC |
 | toolValidation | `src/toolValidation.ts` | Scoped read-only GitHub package listing and authenticated raw binary downloads; safe access errors. | DOC |
 | tool-validation.test | `tests/tool-validation.test.mjs` | Package path/auth/read-only boundaries, formats, large binary fidelity and failure handling (TC-DOC-04). | DOC |

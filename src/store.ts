@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import type { AppState, AuditEvent } from './domain'
+import type { AppState, AuditEvent, PeriodControl } from './domain'
+import { normalizePeriods } from './planningLock'
 import { seedState } from './seed'
 import { SharePointStateClient, defaultSharePointConfig, type SharePointConfig } from './sharepoint'
 import { loadBrowserState, indexedStateRepository, createStateWriter, validateBackup } from './browserState'
@@ -93,6 +94,21 @@ export function useAppStore() {
     })
   }
 
+  // An explicit local period Save confirms the IndexedDB transaction, rather than the delayed autosave status.
+  async function savePeriods(periods: PeriodControl[]) {
+    const next = { ...state, periods: normalizePeriods(periods) }
+    setState(next); pendingSave.current = true
+    setCache({ status: 'saving', message: 'Saving month controls to browser database…' })
+    try {
+      await writer.current(next)
+      pendingSave.current = false
+      setCache({ status: 'saved', message: `Saved in this browser at ${new Date().toLocaleTimeString()}.` })
+    } catch (error) {
+      setCache({ status: 'error', message: 'Month controls are in memory only. Browser database save failed; retry before closing.' })
+      throw error
+    }
+  }
+
   function reset() {
     setState(structuredClone(seedState))
   }
@@ -165,7 +181,7 @@ export function useAppStore() {
 
   const listSnapshots = () => snapshotClient().listSnapshots()
 
-  return { state, setState, update, addAudit, reset, connection, connectSharePoint, initializeSharePoint, pullSharePoint, disconnectSharePoint, getSavedSharePointConfig, ready, loadError, cache, retryLoad: () => { setLoadError(''); setLoadAttempt((value) => value + 1) }, retrySave: () => setSaveAttempt((value) => value + 1), restoreBackup, saveSnapshot, listSnapshots, hasPendingSave: () => pendingSnapshot.current || pendingSave.current || (connection.mode === 'sharepoint' && pendingRemoteSave.current) }
+  return { state, setState, update, addAudit, savePeriods, reset, connection, connectSharePoint, initializeSharePoint, pullSharePoint, disconnectSharePoint, getSavedSharePointConfig, ready, loadError, cache, retryLoad: () => { setLoadError(''); setLoadAttempt((value) => value + 1) }, retrySave: () => setSaveAttempt((value) => value + 1), restoreBackup, saveSnapshot, listSnapshots, hasPendingSave: () => pendingSnapshot.current || pendingSave.current || (connection.mode === 'sharepoint' && pendingRemoteSave.current) }
 }
 
 function friendlyError(error: unknown) {

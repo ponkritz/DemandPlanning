@@ -50,8 +50,8 @@ As-built behaviour that is ambiguous, inconsistent or may not match the intent. 
 | ID | Observation | Severity | Status | Affects |
 |---|---|---|---|---|
 | OI-01 | "Extend until" writes no audit entry, and does nothing when the month has no period record yet. | Low | Open — product owner decision | SET-06 |
-| OI-02 | The Settings actuals card for month M governs the Monthly page's actuals for month M−1. A toggle-created period sets the planning and actuals deadlines both to M-05, in UTC (`Z`). The Monthly page's defaults use local time. | Medium | Open — product owner decision | MON-07, SET-05 |
-| OI-03 | On the Monthly page an explicit lock always locks, even while an extension is active (`rules.ts` treats an active extension as open). After the deadline, "Unlock" alone does not reopen entry; an extension is also needed. | Medium | Open — product owner decision | MON-06, MON-07 |
+| OI-02 | Settings and Monthly previously used different month records for Actuals. Both controls now belong to the selected work month, defaulting to M-05 and (M+1)-05, and persist in shared planning data. Legacy same-month default Actuals dates are corrected. | Medium | Closed — fixed in v1.6.2; TC-SET-02 | MON-07, SET-05 |
+| OI-03 | Unlock previously failed after the deadline. Active Azure Monthly and Task editor paths now use independent manual Locked/Unlocked overrides or Automatic deadline enforcement. The unused legacy local-effort rules are not an entry path for Azure hours. | Medium | Closed — fixed in v1.6.2; TC-SET-02 | MON-06, MON-07 |
 | OI-04 | Snapshots exclude capacity settings, baseline rules, release scopes, resource profiles, release source, release plans and read-only sources. | Low | Open — product owner decision | SNP-05 |
 | OI-05 | Invalid capacity input is replaced by defaults silently, and the success message still shows. | Low | Open — product owner decision | SET-03 |
 | OI-06 | Master data has no activate/deactivate control, no duplicate or blank-trim check, and no audit. | Low | Open — product owner decision | SET-10 |

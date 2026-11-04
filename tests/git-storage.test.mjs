@@ -108,3 +108,11 @@ test('capacity settings, holidays and common activities travel in the Git planni
 test('the default data repository is a valid config: ponkritz/DemandPlanningStorage, main, planning-data.json (GIT-13)', () => {
   assert.deepEqual(validateGitConfig(defaultGitRepository), { owner: 'ponkritz', repo: 'DemandPlanningStorage', branch: 'main', path: 'planning-data.json' })
 })
+
+test('monthly controls round-trip in shared planning data; old files without controls remain compatible (TC-SET-02)', () => {
+  const periods = [{ controlVersion: 2, month: '2026-11', planningDeadline: '2026-11-05T23:59:59Z', actualsDeadline: '2026-12-05T23:59:59Z', planningLocked: false, actualsLocked: true, planningOverride: 'unlocked', extensionReason: 'Allowed extension', updatedAt: '2026-11-04T11:00:00Z', updatedBy: 'owner@example.invalid' }]
+  const data = planningData({ ...state, periods })
+  assert.deepEqual(parsePlanning(serializePlanning(data)).periods, periods)
+  assert.equal(parsePlanning(serializePlanning(planningData(state))).periods, undefined, 'older shared files do not erase local settings')
+  assert.throws(() => parsePlanning(JSON.stringify({ ...data, periods: 'corrupt' })), /Period controls/)
+})

@@ -1,4 +1,5 @@
 import type { AppState, AzureWorkItem } from './domain'
+import { normalizePeriods } from './planningLock.ts'
 
 // A saved Azure DevOps work item as the views expect it: an integer ID and the text fields every item carries.
 const itemTextFields = ['key', 'organization', 'project', 'title', 'state', 'workItemType', 'assignedTo', 'areaPath', 'iterationPath', 'tags', 'url', 'syncedAt']
@@ -27,7 +28,7 @@ export function validateBackup(value: unknown): AppState {
   if (state.azureWorkItems?.some((item) => !validAzureWorkItem(item))) throw new Error('Invalid Azure work items in backup.')
   // View data: each source names its connection, carries a fetch time and holds valid work items only.
   if (state.azureSources?.some((source) => !source || typeof source !== 'object' || typeof source.connectionId !== 'string' || !validFetchedAt(source.fetchedAt) || !Array.isArray(source.items) || source.items.some((item) => !validAzureWorkItem(item)))) throw new Error('Invalid Azure view data in backup.')
-  return state
+  return { ...state, periods: normalizePeriods(state.periods) }
 }
 
 function openDatabase(factory: IDBFactory | undefined): Promise<IDBDatabase> {

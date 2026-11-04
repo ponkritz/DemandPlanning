@@ -11,6 +11,8 @@ import { loadAzureConnectionProfile, saveAzureConnectionProfile, type AzureConne
 import { applyViewsReset, resetPending, parseViews, parseViewsReset, serializeViews, serializeViewsReset, sharedEmails, syncViewsFromGit, connectionKey, viewsBackupFolder, viewsFile, viewsResetPath } from './viewDefinitions'
 import { personalSetupPath } from './featureSetup'
 import { listValidationDocuments as listPackage, readValidationDocument as readPackage } from './toolValidation'
+import type { PeriodControl } from './domain'
+import { normalizePeriods, replacePeriod } from './planningLock'
 
 export type GitStatus = 'off' | 'loading' | 'synced' | 'empty' | 'saving' | 'error' | 'conflict'
 
@@ -52,7 +54,7 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
       sha.current = file.sha
       if (!file.data) { setSynced(''); setStatus('empty'); setMessage(`${target.path} does not exist yet in ${target.owner}/${target.repo}. Save to create it from the data in this app.`); return }
       const data = file.data
-      store.update((draft) => { draft.baselineRules = data.baselineRules; draft.releaseScopes = data.releaseScopes; draft.resourceProfiles = data.resourceProfiles; if (data.capacitySettings) draft.capacitySettings = data.capacitySettings; return draft })
+      store.update((draft) => { draft.baselineRules = data.baselineRules; draft.releaseScopes = data.releaseScopes; draft.resourceProfiles = data.resourceProfiles; if (data.capacitySettings) draft.capacitySettings = data.capacitySettings; if (data.periods) draft.periods = data.periods; return draft })
       setSynced(serializePlanning(data)); setCommitUrl(historyUrl(target)); setStatus('synced'); setMessage(`Loaded from ${target.owner}/${target.repo} · ${target.path}`)
     } catch (error) { setStatus('error'); setMessage(error instanceof Error ? error.message : String(error)) }
   }, [config, token, store])
@@ -346,6 +348,22 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     return { files: files.length, applied, added: added.length, failed }
   }
 
+  // Save only the chosen month's controls against the latest shared file; leave other shared settings untouched.
+  async function savePeriod(period: PeriodControl, expected?: PeriodControl) {
+    if (!config || !token) throw new Error('Connect Git storage first.')
+    if (!period.extensionReason?.trim()) throw new Error('Enter a reason for the period-control change.')
+    if (isSample) throw new Error('Synthetic sample data cannot be saved to shared storage.')
+    if ((await writeCheck.current) === false) throw new Error('The configured Git token is read-only. Contents: Read and write is required to save period controls.')
+    const file = await readPlanningFile(config, token)
+    const data = file.data ?? planningData(store.state)
+    const periods = replacePeriod(data.periods ?? normalizePeriods(store.state.periods), period, expected)
+    const next = { ...data, periods }
+    const result = await writePlanningFile(config, token, next, file.sha, `Update ${period.month} Plan/Actual controls: ${period.extensionReason}`)
+    sha.current = result.sha; setSynced(serializePlanning(next)); setCommitUrl(result.commitUrl)
+    store.update((draft) => { draft.periods = periods; return draft })
+    return result
+  }
+
   async function listValidationDocuments() {
     if (!config || !token) throw new Error('Connect Git storage first.')
     return listPackage(config, token)
@@ -360,6 +378,6 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     setConfig(null); setToken(''); setSynced(null); setStatus('off'); setMessage('Git storage disconnected in this browser. The data stays in the app and in the repository.'); sha.current = null
   }
 
-  return { listValidationDocuments, readValidationDocument, backupViews, resetViews, readPackTemplate, writePackTemplate, packTemplateHistory: config ? historyUrl(siblingConfig(config, packTemplateFile)) : '', config, connected, readOnly, status, message, dirty, commitUrl, history: config ? historyUrl(config) : '', isSample, load: () => load(), connect, save, disconnect, viewsPath: viewsConfig?.path ?? '', viewsHistory: viewsConfig ? historyUrl(viewsConfig) : '', readViews, writeViews, syncViews, pushWindchillAnalysis, accessScope: accessConfig && token ? `${accessConfig.owner}/${accessConfig.repo}@${accessConfig.branch}:${accessConfig.path}` : '', accessPath: accessConfig?.path ?? '', accessHistory: accessConfig ? historyUrl(accessConfig) : '', readAccess, writeAccess, readFeatureSetup, writeFeatureSetup, readPersonalFeatureSetup, writePersonalFeatureSetup, featureSetupHistory: config ? historyUrl(siblingConfig(config, 'feature-setup.json')) : '', readQeMapping, writeQeMapping, readMonthlyPack, writeMonthlyPack, monthlyPackHistory: (name: string) => config ? historyUrl(siblingConfig(config, name)) : '', qeMappingHistory: config ? historyUrl(siblingConfig(config, 'qe-mapping.json')) : '', removeSnapshots, viewsSync, snapshotNotes, pushSnapshot, pullSnapshot, pullSnapshots, pushWindchill, pullWindchill, pullWindchillOne, snapshotsHistory: config ? historyUrl(siblingConfig(config, snapshotFolder)) : '' }
+  return { savePeriod, listValidationDocuments, readValidationDocument, backupViews, resetViews, readPackTemplate, writePackTemplate, packTemplateHistory: config ? historyUrl(siblingConfig(config, packTemplateFile)) : '', config, connected, readOnly, status, message, dirty, commitUrl, history: config ? historyUrl(config) : '', isSample, load: () => load(), connect, save, disconnect, viewsPath: viewsConfig?.path ?? '', viewsHistory: viewsConfig ? historyUrl(viewsConfig) : '', readViews, writeViews, syncViews, pushWindchillAnalysis, accessScope: accessConfig && token ? `${accessConfig.owner}/${accessConfig.repo}@${accessConfig.branch}:${accessConfig.path}` : '', accessPath: accessConfig?.path ?? '', accessHistory: accessConfig ? historyUrl(accessConfig) : '', readAccess, writeAccess, readFeatureSetup, writeFeatureSetup, readPersonalFeatureSetup, writePersonalFeatureSetup, featureSetupHistory: config ? historyUrl(siblingConfig(config, 'feature-setup.json')) : '', readQeMapping, writeQeMapping, readMonthlyPack, writeMonthlyPack, monthlyPackHistory: (name: string) => config ? historyUrl(siblingConfig(config, name)) : '', qeMappingHistory: config ? historyUrl(siblingConfig(config, 'qe-mapping.json')) : '', removeSnapshots, viewsSync, snapshotNotes, pushSnapshot, pullSnapshot, pullSnapshots, pushWindchill, pullWindchill, pullWindchillOne, snapshotsHistory: config ? historyUrl(siblingConfig(config, snapshotFolder)) : '' }
 }
 export type GitStorage = ReturnType<typeof useGitStorage>

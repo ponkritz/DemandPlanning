@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { TableDefaultsPanel } from '../components/TableDefaultsPanel'
+import { PeriodControls } from '../components/PeriodControls'
 import type { MasterValue } from '../domain'
 import type { SharePointConfig } from '../sharepoint'
 import { EmptyState, Modal, Notice, Page, Panel, Pill, SettingsSummary, type Tone } from '../components/ui'
-import { formatDate, formatDateTime, formatHours, formatPercent, monthName } from '../format'
+import { formatDateTime, formatHours, formatPercent, monthName } from '../format'
 import { azureResources, capacityContext, capacityModel, normalizeCapacitySettings, normalizeProfiles, regions, resourceRoles, type LoadStatus, type ResourceProfile, type SharedTimeRule } from '../capacity'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { GitStorage } from '../useGitStorage'
@@ -29,12 +30,10 @@ const shortMonthName = (month: string) => new Intl.DateTimeFormat('en', { month:
 export function AdminPage({ store, month, azure, git, access, featureSetup, monthlyPack, loadEverything, onOpenBoard, tab: requested, onOpenTab }: PageProps & { tab: SettingsTab; onOpenTab: (tab: SettingsTab, section?: string) => void; azure: AzureWorkspace; git: GitStorage; access: Access; featureSetup: FeatureSetup; monthlyPack: MonthlyPackStore; loadEverything: () => Promise<{ loaded: string[]; failed: string[] }>; onOpenBoard: () => void }) {
   const [everything, setEverything] = useState<{ busy: boolean; loaded?: string[]; failed?: string[] }>({ busy: false })
   const shared = access.can('settings.manage')
-  const [reason, setReason] = useState('Approved operational extension')
   const [capacityMessage, setCapacityMessage] = useState('')
   const [sharePointConfig, setSharePointConfig] = useState<SharePointConfig>(() => store.getSavedSharePointConfig())
   const [sharePointOpen, setSharePointOpen] = useState(false)
   const [capacityOpen, setCapacityOpen] = useState(false)
-  const period = store.state.periods.find((item) => item.month === month)
   const capacity = capacityContext(store.state)
   const profiles = capacity.profiles ?? {}
   const resources = azureResources(azure.items, month, capacity)
@@ -62,35 +61,6 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, mont
       const current = normalizeProfiles(draft.resourceProfiles)
       draft.resourceProfiles = normalizeProfiles({ ...current, [name]: { ...current[name], ...patch } })
       draft.audits.unshift({ id: crypto.randomUUID(), timestamp: now, actor: 'u-owner', action: 'Update', entity: 'Resource', entityId: name, detail: `${name}: ${Object.entries(patch).map(([key, value]) => `${key} = ${value === undefined || value === '' ? 'cleared' : String(value)}`).join(', ')}` })
-      return draft
-    })
-  }
-
-  function toggle(kind: 'planning' | 'actuals') {
-    const now = new Date().toISOString()
-    store.update((draft) => {
-      let current = draft.periods.find((item) => item.month === month)
-      if (!current) {
-        current = { month, planningDeadline: `${month}-05T23:59:59.000Z`, actualsDeadline: `${month}-05T23:59:59.000Z`, planningLocked: false, actualsLocked: false, updatedAt: now, updatedBy: 'u-owner' }
-        draft.periods.push(current)
-      }
-      if (kind === 'planning') current.planningLocked = !current.planningLocked
-      else current.actualsLocked = !current.actualsLocked
-      current.extensionReason = reason; current.updatedAt = now
-      draft.audits.unshift({ id: crypto.randomUUID(), timestamp: now, actor: 'u-owner', action: kind === 'planning' ? (current.planningLocked ? 'Lock planning' : 'Unlock planning') : (current.actualsLocked ? 'Lock actuals' : 'Unlock actuals'), entity: 'PeriodControl', entityId: month, detail: reason })
-      return draft
-    })
-  }
-
-  function extend(kind: 'planning' | 'actuals', date: string) {
-    if (!date) return
-    store.update((draft) => {
-      const current = draft.periods.find((item) => item.month === month)
-      if (current) {
-        if (kind === 'planning') current.planningExtendedUntil = `${date}T23:59:59`
-        else current.actualsExtendedUntil = `${date}T23:59:59`
-        current.extensionReason = reason
-      }
       return draft
     })
   }
@@ -177,11 +147,7 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, mont
       </Panel> },
       { key: 'time', label: 'Holidays and common activities', node: <><div className="shared-time-panel"><GitSyncBar git={git} /></div>
       <SharedTimePanel settings={capacity} items={azure.items} month={month} onSave={saveSharedTime} /></> },
-      { key: 'period', label: 'Period control', node: <Panel eyebrow="PERIOD CONTROL" title={monthName(month)}>
-        <label>Reason for change<textarea value={reason} onChange={(event) => setReason(event.target.value)} /></label>
-        <div className="control-card"><div><strong>Planning</strong><p>Deadline: {formatDate(period?.planningDeadline, `${month}-05 (default)`)}</p></div><Pill tone={period?.planningLocked ? 'locked' : 'open'}>{period?.planningLocked ? 'Locked' : 'Open'}</Pill><button className="primary" onClick={() => toggle('planning')}>{period?.planningLocked ? 'Unlock' : 'Lock'}</button><label>Extend until<input type="date" onChange={(event) => extend('planning', event.target.value)} /></label></div>
-        <div className="control-card"><div><strong>Actuals</strong><p>Deadline: {formatDate(period?.actualsDeadline, `${month}-05 (default)`)}</p></div><Pill tone={period?.actualsLocked ? 'locked' : 'open'}>{period?.actualsLocked ? 'Locked' : 'Open'}</Pill><button className="primary" onClick={() => toggle('actuals')}>{period?.actualsLocked ? 'Unlock' : 'Lock'}</button><label>Extend until<input type="date" onChange={(event) => extend('actuals', event.target.value)} /></label></div>
-      </Panel> },
+      { key: 'period', label: 'Period control', node: <PeriodControls key={month} store={store} git={git} month={month} actor={access.email || 'u-owner'} /> },
     ]} />}
     {tab === 'resources' && <Panel className="admin-section" eyebrow="AZURE DEVOPS" title="Resources" info="People come from Azure (everyone Assigned To a Time Writing Task, absence included); add or remove them in Azure DevOps. Region, role and reporting line are saved with the planning data in Git (see Git storage above). Region decides which regional holidays apply. Joined on / Left on (both days worked) limit a person's funded hours to the working days they are employed: a month they join or leave in is prorated, and in a month before joining or after leaving they have no capacity and are not counted." action={<Pill tone={resources.length ? 'open' : 'neutral'}>{resources.length} {resources.length === 1 ? 'person' : 'people'}</Pill>}>
       {resources.length > 0 && <GitSyncBar git={git} />}
