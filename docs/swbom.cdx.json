@@ -6,7 +6,7 @@
     "component": {
       "type": "application",
       "name": "demandplanning",
-      "version": "1.6.0"
+      "version": "1.6.1"
     },
     "tools": [
       {
@@ -2328,8 +2328,8 @@
     {
       "type": "library",
       "name": "@vitejs/plugin-react",
-      "version": "6.1.2",
-      "purl": "pkg:npm/%40vitejs/plugin-react@6.1.2",
+      "version": "6.2.1",
+      "purl": "pkg:npm/%40vitejs/plugin-react@6.2.1",
       "scope": "excluded",
       "licenses": [
         {
@@ -2341,7 +2341,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "7e124d19476c7106b81e4234c45c70a275b28675517823c36d723b147ee39b3a67542ac5408ecf46b85679c3b6eb7eb5d2f3abb3db6bd98e3171ff2e01d1716f"
+          "content": "f4ac960a28f7af4faa2c6dd0eb6bc19afd15c9ebe66226c0b716822152bda3493a09781a6a365121ef2da5f72141c75902b2796ffeceac8cf85b76f6bb15510c"
         }
       ],
       "properties": [
@@ -9480,6 +9480,36 @@
         {
           "alg": "SHA-512",
           "content": "63bfca0ec6fc2e3a28669c1aa86cae94ee8342592c8029dc7211c693eb19218e1206f52870c044147e54af57c8e1d57e26f974c3a723bee71a222e34a6e462a0"
+        }
+      ],
+      "properties": [
+        {
+          "name": "swbom:scope",
+          "value": "build / test"
+        },
+        {
+          "name": "swbom:direct",
+          "value": "false"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "semver",
+      "version": "7.8.6",
+      "purl": "pkg:npm/semver@7.8.6",
+      "scope": "excluded",
+      "licenses": [
+        {
+          "license": {
+            "id": "ISC"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "f65a52494e0c972de6aedaeec0bb3578b2bafa0cdbcea78117044d8c88c4fbd2ee0e959d61cb6b4254377a3d489608bb8249e9b134673e82cff03a421ea1c827"
         }
       ],
       "properties": [
