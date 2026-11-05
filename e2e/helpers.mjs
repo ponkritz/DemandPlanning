@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
 
 const root = new URL('../', import.meta.url)
-export const fixture = (name) => fileURLToPath(new URL(`fixtures/${name}`, import.meta.url))
+export const fixture = (name) => new URL(`fixtures/${name}`, import.meta.url).pathname
 
 const freePort = () => new Promise((resolve, reject) => {
   const server = createServer()
@@ -36,11 +36,11 @@ export async function startApp() {
 }
 
 // A fresh browser context (clean storage) with the Get started pop-up dismissed unless asked for, and page errors recorded.
-export async function openPage(app, { width = 1300, height = 1000, guide = false, init } = {}) {
+export async function openPage(app, { width = 1300, height = 1000, guide = false, init, initArg } = {}) {
   const context = await app.browser.newContext({ viewport: { width, height }, acceptDownloads: true })
   const errors = []
   if (!guide) await context.addInitScript(() => { localStorage.setItem('demand-planning-setup-guide-v1', 'dismissed') })
-  if (init) await context.addInitScript(init)
+  if (init) await context.addInitScript(init, initArg)
   const page = await context.newPage()
   page.on('pageerror', (error) => errors.push(error.message))
   await page.goto(app.url)

@@ -82,6 +82,18 @@ function headerIndex(row: string[]) {
   return found
 }
 
+// An Epic No or Feature No cell (HIS-14): a number as written by Excel ("37753", "37753.0", "#37753") or several
+// separated by , ; / & (the first one counts). Empty, 0, TBD or N/A: none. Anything else is unreadable and reported.
+export function idOfCell(value: string): { id?: number; unreadable?: boolean } {
+  const text = value.trim()
+  if (placeholder(text)) return {}
+  const match = /^#?\s*(\d{1,9})(?:\.0+)?(?:\s*[,;/&]\s*#?\s*\d{1,9}(?:\.0+)?)*\s*$/.exec(text)
+  if (!match) return { unreadable: true }
+  const id = Number(match[1])
+  return id > 0 ? { id } : {}
+}
+export interface UnreadableId { row: number; column: 'Epic No' | 'Feature No'; value: string }
+
 // The rows of the sheet before the cut-off month; every row not taken is listed with its reason (spreadsheet row number).
 export function parseHistorySheet(rows: string[][], cutoff = defaultCutoff) {
   const headerAt = rows.slice(0, 10).findIndex((row) => { const found = headerIndex(row); return found.person != null && found.month != null })
@@ -89,7 +101,7 @@ export function parseHistorySheet(rows: string[][], cutoff = defaultCutoff) {
   const at = headerIndex(rows[headerAt])
   if (at.planned == null && at.actual == null) throw new Error('No Expected or Actual hours column was found.')
   const cell = (row: string[], name: Column) => at[name] == null ? '' : text(row[at[name]!])
-  const taken: HistoryRow[] = [], skipped: SkippedRow[] = []
+  const taken: HistoryRow[] = [], skipped: SkippedRow[] = [], unreadable: UnreadableId[] = []
   for (let index = headerAt + 1; index < rows.length; index++) {
     const row = rows[index] ?? []
     if (!row.some((value) => text(value))) continue
@@ -101,12 +113,15 @@ export function parseHistorySheet(rows: string[][], cutoff = defaultCutoff) {
     if (!month) { skipped.push({ row: number, reason: 'no month (Month(Date) is not a date)' }); continue }
     if (month >= cutoff) { skipped.push({ row: number, reason: `${month}: from the cut-off on, Azure DevOps counts` }); continue }
     if (!planned && !actual) { skipped.push({ row: number, reason: 'no hours' }); continue }
-    const epic = Number(cell(row, 'epic')), feature = Number(cell(row, 'feature'))
+    const epicCell = idOfCell(cell(row, 'epic')), featureCell = idOfCell(cell(row, 'feature'))
+    if (epicCell.unreadable) unreadable.push({ row: number, column: 'Epic No', value: cell(row, 'epic').slice(0, 60) })
+    if (featureCell.unreadable) unreadable.push({ row: number, column: 'Feature No', value: cell(row, 'feature').slice(0, 60) })
+    const epic = epicCell.id ?? 0, feature = featureCell.id ?? 0
     const stream = cell(row, 'stream'), activity = cell(row, 'activity'), type = cell(row, 'type')
     taken.push({ person, month, ...(Number.isInteger(feature) && feature > 0 ? { featureId: feature } : {}), ...(Number.isInteger(epic) && epic > 0 ? { epicId: epic } : {}), stream: placeholder(stream) ? '' : stream, activity: placeholder(activity) ? '' : activity, ...(placeholder(type) ? {} : { type }), ...(planned ? { planned } : {}), ...(actual ? { actual } : {}) })
     if (taken.length > maxHistoryRows) throw new Error(`More than ${maxHistoryRows} rows: split the history or remove rows outside the months to import.`)
   }
-  return { rows: taken, skipped, header: headerAt + 1 }
+  return { rows: taken, skipped, unreadable, header: headerAt + 1 }
 }
 
 // Matching an Excel name ("Evelyn Simons") to a name the reports know ("Simons, Evelyn" from Azure DevOps): the same

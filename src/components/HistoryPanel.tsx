@@ -1,13 +1,13 @@
 import { useMemo, useRef, useState } from 'react'
 import type { AzureWorkItem } from '../domain'
-import { buildHistoryFile, defaultCutoff, featureChecks, groupOf, matchPeople, parseHistorySheet, pickHistorySheet, streamsWithoutEpic, withHistory, type HistoryRow, type SkippedRow } from '../history'
+import { buildHistoryFile, defaultCutoff, featureChecks, groupOf, matchPeople, parseHistorySheet, pickHistorySheet, streamsWithoutEpic, withHistory, type HistoryRow, type SkippedRow, type UnreadableId } from '../history'
 import type { HistoryStore } from '../useHistory'
 import type { GitStorage } from '../useGitStorage'
 import { readXlsx } from '../xlsx'
 import { formatDateTime, formatHours, monthName } from '../format'
 import { EmptyState, Metric, Metrics, Notice, Panel, SettingsSummary } from './ui'
 
-interface Draft { source: string; sheet: string; rows: HistoryRow[]; skipped: SkippedRow[]; cutoff: string; people: Record<string, string>; streamEpics: Record<string, number> }
+interface Draft { source: string; sheet: string; rows: HistoryRow[]; skipped: SkippedRow[]; unreadable: UnreadableId[]; cutoff: string; people: Record<string, string>; streamEpics: Record<string, number> }
 
 // Settings → Historical hours (HIS-01…HIS-09): upload the Excel planning workbook, check who each name is and which Epic
 // each stream without an Epic No belongs to, then save it to Git for everyone. The file is read in this browser only;
@@ -56,7 +56,7 @@ export function HistoryPanel({ history, git, items, profileNames, editable, impo
       // Earlier choices are kept for the names and streams they covered; new names are matched automatically.
       const people = { ...matchPeople(names, known), ...Object.fromEntries(Object.entries(file?.people ?? {}).filter(([name]) => names.includes(name))) }
       const streamEpics = Object.fromEntries(Object.entries(file?.streamEpics ?? {}).filter(([stream]) => parsed.rows.some((row) => row.epicId == null && (row.stream || '(no stream)') === stream)))
-      setDraft({ source, sheet: sheet.name, rows: parsed.rows, skipped: parsed.skipped, cutoff, people, streamEpics })
+      setDraft({ source, sheet: sheet.name, rows: parsed.rows, skipped: parsed.skipped, unreadable: parsed.unreadable, cutoff, people, streamEpics })
     } catch (failure) { setStatus(`Not read: ${failure instanceof Error ? failure.message : String(failure)}`) }
   }
   const save = async () => {
@@ -83,6 +83,12 @@ export function HistoryPanel({ history, git, items, profileNames, editable, impo
   const features = useMemo(() => new Set(items.filter((item) => item.workItemType === 'Feature').map((item) => item.id)), [items])
   // Rows placed by a Feature in the data need no stream; the others are placed by Epic No, else by their stream (HIS-07, HIS-10).
   const draftStreams = draft ? streamsWithoutEpic(draft.rows.filter((row) => row.month < draft.cutoff && !(row.featureId && features.has(row.featureId)))) : []
+  // Why each stream needs an Epic (HIS-14): its rows' Feature Nos not in the fetched data, or no Feature No and no Epic No.
+  const whyStream = (stream: string) => {
+    const rows = draft ? draft.rows.filter((row) => row.month < draft.cutoff && row.epicId == null && !(row.featureId && features.has(row.featureId)) && (row.stream || '(no stream)') === stream) : []
+    const notFetched = rows.filter((row) => row.featureId).length
+    return [notFetched ? `${notFetched} with a Feature No not in the fetched data` : '', rows.length - notFetched ? `${rows.length - notFetched} without Feature No or Epic No` : ''].filter(Boolean).join(' · ')
+  }
   const checks = draft ? featureChecks(draft.rows.filter((row) => row.month < draft.cutoff), items) : { missing: [], conflicts: [] }
   const byFeature = draft ? draft.rows.filter((row) => row.month < draft.cutoff && row.featureId && features.has(row.featureId)).length : 0
   const draftMonths = draft ? [...new Set(draft.rows.filter((row) => row.month < draft.cutoff).map((row) => row.month))].sort() : []
@@ -135,13 +141,14 @@ export function HistoryPanel({ history, git, items, profileNames, editable, impo
       {draftStreams.length > 0 && <>
         <h4>Streams without an Epic No</h4>
         <p className="muted">Choose the Epic each stream's hours belong to; without one they count under the stream's own name.</p>
-        <div className="azure-table"><table><thead><tr><th>Stream (Features)</th><th>Rows</th><th>Epic</th></tr></thead><tbody>
-          {draftStreams.map(({ stream, count }) => <tr key={stream}><td>{stream}</td><td>{count}</td><td><select aria-label={`Epic for ${stream}`} value={draft.streamEpics[stream] ?? ''} onChange={(event) => { const streamEpics = { ...draft.streamEpics }; const id = Number(event.target.value); if (id > 0) streamEpics[stream] = id; else delete streamEpics[stream]; setDraft({ ...draft, streamEpics }) }}>
+        <div className="azure-table"><table><thead><tr><th>Stream (Features)</th><th>Rows</th><th>Why</th><th>Epic</th></tr></thead><tbody>
+          {draftStreams.map(({ stream, count }) => <tr key={stream}><td>{stream}</td><td>{count}</td><td><small className="muted">{whyStream(stream)}</small></td><td><select aria-label={`Epic for ${stream}`} value={draft.streamEpics[stream] ?? ''} onChange={(event) => { const streamEpics = { ...draft.streamEpics }; const id = Number(event.target.value); if (id > 0) streamEpics[stream] = id; else delete streamEpics[stream]; setDraft({ ...draft, streamEpics }) }}>
             <option value="">Own stream: {stream}</option>{epics.map((epic) => <option key={epic.id} value={epic.id}>#{epic.id} {epic.title}</option>)}
           </select></td></tr>)}
         </tbody></table></div>
         {!epics.length && <small className="muted">No Epics fetched yet: refresh the Time Writing connection to choose from its Epics.</small>}
       </>}
+      {draft.unreadable.length > 0 && <Notice tone="warning">Epic No / Feature No cells that are not a number (the row is placed by the next column that is): {draft.unreadable.slice(0, 30).map((entry) => `row ${entry.row} ${entry.column} “${entry.value}”`).join(' · ')}{draft.unreadable.length > 30 ? ` … and ${draft.unreadable.length - 30} more` : ''}.</Notice>}
       {(checks.missing.length > 0 || checks.conflicts.length > 0) && <Notice tone="warning">
         {checks.missing.length > 0 && <>Feature IDs not in the fetched data (placed by Epic No or stream instead): {checks.missing.slice(0, 40).map((id) => `#${id}`).join(', ')}{checks.missing.length > 40 ? ', …' : ''}. Refresh the Time Writing connection if they should be there. </>}
         {checks.conflicts.length > 0 && <>Feature ID and Epic No disagree (the Feature's Epic is used): {checks.conflicts.slice(0, 40).map((entry) => `#${entry.featureId} → Epic ${entry.epicOfFeature ? `#${entry.epicOfFeature}` : 'none'}, Epic No ${entry.epicNo}`).join('; ')}{checks.conflicts.length > 40 ? '; …' : ''}.</>}

@@ -474,3 +474,7 @@ table.resizable.wrap th,table.resizable.wrap td{white-space:pre-wrap;overflow-wr
 .dash-trail .text-button{padding:0}
 .nav-fold{display:flex;justify-content:flex-end;gap:12px;padding:0 10px;margin:4px 0 2px}.nav-fold .text-button{color:var(--sidebar-muted);font-size:11px;padding:2px 0;background:none;border:0;box-shadow:none}.nav-fold .text-button:hover:not(:disabled){color:#fff}.nav-fold .text-button:disabled{opacity:.45;cursor:default}
 @media(min-width:761px) and (max-width:1000px){.nav-fold{display:none}}
+.view-as-banner{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin:0 0 12px;padding:10px 14px;border-radius:10px;border:1px solid var(--warning-line,#e0b44a);background:var(--warning-bg,#fff7e0);color:var(--text,#1f2937)}
+.view-as-banner span{flex:1;min-width:220px}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .view-as-banner{background:#3a2f12;color:#f5e6c4}}
+:root[data-theme="dark"] .view-as-banner{background:#3a2f12;color:#f5e6c4}

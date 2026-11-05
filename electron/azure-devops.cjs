@@ -29,6 +29,7 @@ function azureReadRequest(input) {
   else if (input.operation === 'backlog-epics') endpoint = `${encodeURIComponent(input.team)}/_apis/work/backlogs/Microsoft.EpicCategory/workItems`
   else if (input.operation === 'iterations') endpoint = `${encodeURIComponent(input.team)}/_apis/work/teamsettings/iterations`
   else if (input.operation === 'iteration-tree') endpoint = '_apis/wit/classificationnodes/iterations'
+  else if (input.operation === 'team-members') return { url: `${collectionBase(input)}/_apis/projects/${encodeURIComponent(input.project)}/teams/${encodeURIComponent(input.team)}/members?api-version=${apiVersion(input)}&$top=1000`, options: { method: 'GET', redirect: 'error', headers: { Authorization: `Basic ${Buffer.from(`:${input.pat.trim()}`).toString('base64')}`, Accept: 'application/json' } } }
   else if (input.operation === 'fields') endpoint = '_apis/wit/fields'
   else if (input.operation === 'query') {
     if (typeof input.query !== 'string' || !/^SELECT \[System.Id\] FROM WorkItem(?:s|Links) WHERE /i.test(input.query) || /\bASOF\b/i.test(input.query) || input.query.length > 100000) throw new Error('Invalid read query.')

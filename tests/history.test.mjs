@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildHistoryFile, featureChecks, groupOf, matchPeople, monthOfCell, parseHistoryFile, parseHistorySheet, pickHistorySheet, serializeHistory, streamsWithoutEpic, withHistory } from '../src/history.ts'
+import { buildHistoryFile, featureChecks, groupOf, idOfCell, matchPeople, monthOfCell, parseHistoryFile, parseHistorySheet, pickHistorySheet, serializeHistory, streamsWithoutEpic, withHistory } from '../src/history.ts'
 import { capacityModel } from '../src/capacity.ts'
 import { personMonths } from '../src/dashboard.ts'
 
@@ -150,4 +150,17 @@ test('historical hours: All, All-BLR, All-NL and All-US rows apply to everyone i
   assert.deepEqual(['Ana Costa', 'Ben Ode', 'Cleo Dunn'].map((name) => person(name).absenceByKind['Public holiday']), [8, 8, 8], 'BLR holiday for each India person, NL holiday for the Netherlands person')
   assert.deepEqual(['Ana Costa', 'Ben Ode', 'Cleo Dunn'].map((name) => person(name).reserved), [2, 2, 2], '"All": the town hall for everyone')
   assert.deepEqual(['Ana Costa', 'Ben Ode', 'Cleo Dunn'].map((name) => person(name).work), [100, 100, 100])
+})
+
+test('historical hours: Epic No / Feature No cells written as Excel writes them are read; others are reported, never silently ignored (HIS-14)', () => {
+  assert.deepEqual(['37753', '37753.0', '#37753', ' 37753 ', '37753, 37754', '37753/37754', '', '0', 'TBD', 'N/A'].map((value) => idOfCell(value).id), [37753, 37753, 37753, 37753, 37753, 37753, undefined, undefined, undefined, undefined])
+  assert.equal(idOfCell('Feature 37753').unreadable, true)
+  assert.equal(idOfCell('I1-10015604 - IEX Data').unreadable, true)
+  const head = ['QA/QE', 'Month(Date)', 'Epic No', 'Stream (Features)', 'Project / Release Title', 'Expected', 'Actual', 'Feature No']
+  const parsed = parseHistorySheet([head,
+    ['Ana Costa', '2026-05-01', '500.0', 'Alpha', 'Alpha 1.0', '4', '6', '#701'],
+    ['Ana Costa', '2026-06-01', 'TBD', 'Beta', 'Beta 2.0', '', '3', 'see Jira'],
+  ], '2026-10')
+  assert.deepEqual(parsed.rows.map((row) => [row.featureId, row.epicId, row.stream]), [[701, 500, 'Alpha'], [undefined, undefined, 'Beta']], '"Stream (Features)" is the stream, "Feature No" the Feature')
+  assert.deepEqual(parsed.unreadable, [{ row: 3, column: 'Feature No', value: 'see Jira' }])
 })

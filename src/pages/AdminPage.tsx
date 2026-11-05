@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { groupOf } from '../history'
+import { fetchTeamMembers } from '../azureDevOps'
 import { HistoryPanel } from '../components/HistoryPanel'
 import type { HistoryStore } from '../useHistory'
 import { TableDefaultsPanel } from '../components/TableDefaultsPanel'
@@ -7,7 +9,7 @@ import type { SharePointConfig } from '../sharepoint'
 import { EmptyState, Modal, Notice, Page, Panel, Pill, SettingsSummary, type Tone } from '../components/ui'
 import { formatDateTime, formatHours, formatPercent, monthName } from '../format'
 import { PeriodControls } from '../components/PeriodControls'
-import { azureResources, capacityContext, capacityModel, normalizeCapacitySettings, normalizeProfiles, regions, resourceRoles, type LoadStatus, type ResourceProfile, type SharedTimeRule } from '../capacity'
+import { azureResources, capacityContext, capacityModel, normalizeCapacitySettings, normalizeProfiles, regions, resourceRoles, resourceRows, type LoadStatus, type ResourceProfile, type SharedTimeRule } from '../capacity'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { GitStorage } from '../useGitStorage'
 import { GitStoragePanel, GitSyncBar } from '../components/GitStorage'
@@ -38,7 +40,28 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, mont
   const [capacityOpen, setCapacityOpen] = useState(false)
   const capacity = capacityContext(store.state)
   const profiles = capacity.profiles ?? {}
-  const resources = azureResources(azure.items, month, capacity)
+  // Resources (CAP-29…CAP-31): Time Writing people with their figures, plus everyone else who can be given a region and role.
+  const historyPeople = history.file ? [...new Set(history.file.rows.filter((row) => !groupOf(row.person)).map((row) => history.file!.people[row.person] || row.person))] : []
+  const resources = resourceRows(azureResources(azure.items, month, capacity), [...new Set(azure.items.map((item) => item.assignedTo).filter(Boolean))], historyPeople, profiles)
+  const [teamStatus, setTeamStatus] = useState('')
+  const [newPerson, setNewPerson] = useState('')
+  async function addTeamMembers() {
+    setTeamStatus('Reading the team from Azure DevOps…')
+    try {
+      if (!azure.config) throw new Error('Set up and fetch the Time Writing connection first')
+      const team = azure.config.team
+      const members = await fetchTeamMembers(azure.config, azure.pat)
+      const known = new Set(resources.map((person) => person.name))
+      const added = members.filter((member) => !known.has(member.name))
+      if (added.length) store.update((draft) => {
+        const current = normalizeProfiles(draft.resourceProfiles)
+        draft.resourceProfiles = normalizeProfiles({ ...current, ...Object.fromEntries(added.map((member) => [member.name, { ...current[member.name], listed: 'team' }])) })
+        draft.audits.unshift({ id: crypto.randomUUID(), timestamp: new Date().toISOString(), actor: 'u-owner', action: 'Update', entity: 'Resource', entityId: 'team', detail: `Added ${added.length} team member${added.length === 1 ? '' : 's'} from Azure DevOps` })
+        return draft
+      })
+      setTeamStatus(`${members.length} team member${members.length === 1 ? '' : 's'} in ${team}; ${added.length} added to the list.`)
+    } catch (failure) { setTeamStatus(`Not read: ${failure instanceof Error ? failure.message : String(failure)}. The PAT needs Project and Team (Read) for the team list.`) }
+  }
   const holidays = capacityModel(azure.items, month, capacity).holidays
   const unmapped = resources.filter((person) => !profiles[person.name]?.region).map((person) => person.name)
   const names = resources.map((person) => person.name)
@@ -152,17 +175,23 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, mont
       <SharedTimePanel settings={capacity} items={azure.items} month={month} onSave={saveSharedTime} /></> },
       { key: 'period', label: 'Period control', node: <PeriodControls key={month} store={store} git={git} month={month} actor={access.email || 'u-owner'} /> },
     ]} />}
-    {tab === 'resources' && <Panel className="admin-section" eyebrow="AZURE DEVOPS" title="Resources" info="People come from Azure (everyone Assigned To a Time Writing Task, absence included); add or remove them in Azure DevOps. Region, role and reporting line are saved with the planning data in Git (see Git storage above). Region decides which regional holidays apply. Joined on / Left on (both days worked) limit a person's funded hours to the working days they are employed: a month they join or leave in is prorated, and in a month before joining or after leaving they have no capacity and are not counted." action={<Pill tone={resources.length ? 'open' : 'neutral'}>{resources.length} {resources.length === 1 ? 'person' : 'people'}</Pill>}>
+    {tab === 'resources' && <Panel className="admin-section" eyebrow="AZURE DEVOPS" title="Resources" info="Everyone whose region, role and dates can be set: the people with Time Writing Tasks (with their figures), everyone else Assigned To fetched work, the people of the historical hours (leavers included), the Azure DevOps team members (Add team members) and people added by name. Region, role and reporting line are saved with the planning data in Git (see Git storage above). Region decides which regional holidays apply. Joined on / Left on (both days worked) limit a person's funded hours to the working days they are employed: a month they join or leave in is prorated, and in a month before joining or after leaving they have no capacity and are not counted." action={<Pill tone={resources.length ? 'open' : 'neutral'}>{resources.length} {resources.length === 1 ? 'person' : 'people'}</Pill>}>
       {resources.length > 0 && <GitSyncBar git={git} />}
       {resources.length > 0 && <Notice tone={unmapped.length ? 'warning' : 'info'}>
         {holidays.length ? `Regional holidays in ${monthName(month)}: ${holidays.map((item) => `${item.region} ${formatHours(item.hours)}h → ${item.people} ${item.people === 1 ? 'person' : 'people'}`).join(' · ')}.` : `No regional holidays in ${monthName(month)}. Add a Feature such as "Public Holidays - India" under absence Epic #${capacity.absenceEpicId} with a "… - Time Writing" story and "<Month YYYY> | <Holiday>" Tasks.`}
         {unmapped.length > 0 && ` No region yet for ${unmapped.join(', ')}; regional holidays are not applied to them.`}
       </Notice>}
+      <div className="button-row">
+        <button type="button" className="ghost" disabled={azure.isSample} onClick={() => void addTeamMembers()}>Add team members from Azure DevOps</button>
+        <form className="inline-form" onSubmit={(event) => { event.preventDefault(); const name = newPerson.trim(); if (name && !resources.some((person) => person.name === name)) setProfile(name, { listed: 'added' }); setNewPerson('') }}><input aria-label="Add a person by name" placeholder="Add a person by name" value={newPerson} onChange={(event) => setNewPerson(event.target.value)} /><button type="submit" className="ghost" disabled={!newPerson.trim()}>Add</button></form>
+      </div>
+      {teamStatus && <Notice tone={teamStatus.startsWith('Not read') ? 'warning' : 'info'}>{teamStatus}</Notice>}
       <label className="default-joined">Default Joined on (everyone without their own date; months before it count no capacity)<span className="button-row"><input type="date" aria-label="Default Joined on" value={capacity.defaultJoinedOn ?? ''} onChange={(event) => setDefaultJoined(event.target.value)} />{capacity.defaultJoinedOn && <button type="button" className="text-button" onClick={() => setDefaultJoined('')}>Clear</button>}</span></label>
       {resources.length ? <div className="azure-table"><table className="resource-table"><thead><tr><th>Person</th><th>Region</th><th>Role</th><th>Reports to</th><th>Employed</th><th>Status in {shortMonthName(month)}</th><th>Utilization</th><th>Booked (h)</th><th>Absence (h)</th><th>Main streams</th></tr></thead><tbody>{resources.map((person) => {
         const profile = profiles[person.name] ?? {}
         return <tr key={person.name}>
-          <td><strong>{person.name}</strong><small>{person.months} {person.months === 1 ? 'month' : 'months'} · {person.firstMonth === person.lastMonth ? shortMonthName(person.firstMonth) : `${shortMonthName(person.firstMonth)} – ${shortMonthName(person.lastMonth)}`}</small></td>
+          <td><strong>{person.name}</strong>{person.months ? <small>{person.months} {person.months === 1 ? 'month' : 'months'} · {person.firstMonth === person.lastMonth ? shortMonthName(person.firstMonth) : `${shortMonthName(person.firstMonth)} – ${shortMonthName(person.lastMonth)}`}</small>
+            : <small>No Time Writing yet · {person.sources.map((source) => ({ 'time writing': 'Time Writing', assigned: 'assigned in Azure DevOps', history: 'historical hours', team: 'team member', added: 'added by name', profile: 'profile' })[source]).join(', ')}{(profile.listed && !person.sources.some((source) => source === 'assigned' || source === 'history')) && <> · <button type="button" className="text-button" onClick={() => setProfile(person.name, { listed: undefined })}>Remove</button></>}</small>}</td>
           <td><select aria-label={`Region for ${person.name}`} value={profile.region ?? ''} onChange={(event) => setProfile(person.name, { region: (event.target.value || undefined) as ResourceProfile['region'] })}><option value="">Not set</option>{regions.map((region) => <option key={region}>{region}</option>)}</select></td>
           <td><select aria-label={`Role for ${person.name}`} value={profile.role ?? ''} onChange={(event) => setProfile(person.name, { role: (event.target.value || undefined) as ResourceProfile['role'] })}><option value="">Not set</option>{resourceRoles.map((role) => <option key={role}>{role}</option>)}</select><label className="check"><input type="checkbox" checked={Boolean(profile.peopleManager)} onChange={(event) => setProfile(person.name, { peopleManager: event.target.checked || undefined })} />People manager</label></td>
           <td>{otherFor === person.name ? <form className="inline-form" onSubmit={(event) => { event.preventDefault(); const name = otherName.trim(); if (name && name !== person.name) setProfile(person.name, { reportsTo: name }); setOtherFor('') }}><input aria-label={`Manager of ${person.name}`} placeholder="Manager's name" value={otherName} autoFocus onChange={(event) => setOtherName(event.target.value)} /><button type="submit" className="ghost">OK</button><button type="button" className="text-button" onClick={() => setOtherFor('')}>Cancel</button></form>
