@@ -23,13 +23,37 @@ export const defaultCpReportingSettings: CpReportingSettings = {
 
 // A field by its display name (the query's column names), else by its reference name's last part.
 export type FieldColumns = { ref: string; name: string }[] | undefined
-const squash = (text: string) => text.toLowerCase().replace(/[\s_]+/g, '')
+// Field names repeat on every item: each is squashed once.
+const squashed = new Map<string, string>()
+const squash = (text: string) => { let found = squashed.get(text); if (found === undefined) { found = text.toLowerCase().replace(/[\s_]+/g, ''); if (squashed.size >= 50000) squashed.clear(); squashed.set(text, found) } return found }
+// Per fields object, each field name squashed and each part after a dot, to the first key it belongs to: the same
+// result as scanning the keys in order, without squashing every key on every read (KB-27).
+const keyIndexes = new WeakMap<object, Map<string, string>>()
+const keyIndexesShapes = new Map<string, Map<string, string>>()
+function keyIndex(fields: Record<string, unknown>) {
+  let index = keyIndexes.get(fields)
+  if (index) return index
+  // Documents of one query share their field names: one index per set of names.
+  const keys = Object.keys(fields), shape = keys.join('\u0001')
+  index = keyIndexesShapes.get(shape)
+  if (index) { keyIndexes.set(fields, index); return index }
+  index = new Map()
+  for (const key of keys) {
+    const name = squash(key)
+    if (!index.has(name)) index.set(name, key)
+    for (let at = name.indexOf('.'); at >= 0; at = name.indexOf('.', at + 1)) { const tail = name.slice(at + 1); if (!index.has(tail)) index.set(tail, key) }
+  }
+  keyIndexes.set(fields, index)
+  if (keyIndexesShapes.size >= 2000) keyIndexesShapes.clear()
+  keyIndexesShapes.set(shape, index)
+  return index
+}
 export function fieldReader(columns: FieldColumns) {
   const refs = new Map((columns ?? []).map((column) => [squash(column.name), column.ref]))
   return (item: Pick<AzureWorkItem, 'fields'>, name: string): string | undefined => {
     const fields = item.fields ?? {}
     const wanted = squash(name)
-    const ref = refs.get(wanted) ?? Object.keys(fields).find((key) => squash(key) === wanted || squash(key).endsWith(`.${wanted}`))
+    const ref = refs.get(wanted) ?? keyIndex(fields).get(wanted)
     const value = ref ? fields[ref] : undefined
     return value == null || String(value).trim() === '' ? undefined : String(value).trim()
   }
@@ -97,8 +121,10 @@ export function cpSignatures(items: AzureWorkItem[], columns: FieldColumns, sett
   if (cycles.length) issues.push({ kind: 'cycle', ids: cycles, text: `${cycles.length} document${cycles.length === 1 ? '' : 's'} in a Parent loop; not counted: ${cycles.slice(0, 20).join(', ')}.` })
   if (orphans.length) issues.push({ kind: 'no-release', ids: orphans, text: `${orphans.length} document${orphans.length === 1 ? '' : 's'} without a Release container above them; not counted: ${orphans.slice(0, 20).join(', ')}${orphans.length > 20 ? ', …' : ''}.` })
   // Release Notes documents not in the main Reports folder, and containers with several main Release Notes.
+  const notesOf = new Map<number, Set<number>>()
+  for (const entry of signatures) if (entry.mainReleaseNotes) { const notes = notesOf.get(entry.releaseId) ?? new Set<number>(); notes.add(entry.documentId); notesOf.set(entry.releaseId, notes) }
   for (const container of containers.values()) {
-    const notes = new Set(signatures.filter((entry) => entry.releaseId === container.id && entry.mainReleaseNotes).map((entry) => entry.documentId))
+    const notes = notesOf.get(container.id) ?? new Set<number>()
     if (notes.size > 1) issues.push({ kind: 'multiple-release-notes', ids: [container.id, ...notes], text: `Release ${container.id} “${container.title}” has ${notes.size} main Release Notes documents (${[...notes].join(', ')}); check which one closes the release.` })
   }
   return { containers, signatures, issues }
@@ -174,17 +200,34 @@ export function cpReleaseName(container: Pick<CpContainer, 'id' | 'title'>, name
 
 export interface CpReleaseRow { container: CpContainer; name: CpName; supported: boolean; completed: boolean; completionReview?: string; signedDocuments: number; releaseNotesDate?: string; signatures: CpSignature[] }
 // The month's report: one row per container with QA/QE activity in the month (shared containers apart), the issues.
+// The signatures by month, by release within a month, and the months each release's main Release Notes is signed in:
+// built once per tree, so a month report no longer scans every signature per release (KB-27).
+const treeIndexes = new WeakMap<object, { byMonth: Map<string, Map<number, CpSignature[]>>; notesMonths: Map<number, Set<string>> }>()
+function treeIndex(tree: ReturnType<typeof cpSignatures>) {
+  let index = treeIndexes.get(tree)
+  if (index) return index
+  index = { byMonth: new Map(), notesMonths: new Map() }
+  for (const entry of tree.signatures) {
+    const releases = index.byMonth.get(entry.month) ?? new Map<number, CpSignature[]>()
+    index.byMonth.set(entry.month, releases)
+    const list = releases.get(entry.releaseId) ?? []
+    list.push(entry); releases.set(entry.releaseId, list)
+    if (entry.mainReleaseNotes) { const months = index.notesMonths.get(entry.releaseId) ?? new Set<string>(); months.add(entry.month); index.notesMonths.set(entry.releaseId, months) }
+  }
+  treeIndexes.set(tree, index)
+  return index
+}
 export function cpMonthReport(tree: ReturnType<typeof cpSignatures>, month: string, names?: ReturnType<typeof cpNameIndex>, settings: CpReportingSettings = defaultCpReportingSettings) {
-  const inMonth = tree.signatures.filter((entry) => entry.month === month)
+  const index = treeIndex(tree)
+  const byRelease = index.byMonth.get(month) ?? new Map<number, CpSignature[]>()
   const issues = [...tree.issues]
   if (names && !names.withContent) issues.push({ kind: 'name-conflict', ids: [], text: `The names connection has ${names.records} records but none with a Content value: check that its query returns the Content field.` })
   const rows: CpReleaseRow[] = []
-  for (const releaseId of [...new Set(inMonth.map((entry) => entry.releaseId))]) {
+  for (const [releaseId, signatures] of byRelease) {
     const container = tree.containers.get(releaseId)!
-    const signatures = inMonth.filter((entry) => entry.releaseId === releaseId)
     const notes = signatures.filter((entry) => entry.mainReleaseNotes)
     // Main Release Notes signed by QA/QE in other months too: a completion month that needs review.
-    const otherMonths = [...new Set(tree.signatures.filter((entry) => entry.releaseId === releaseId && entry.mainReleaseNotes && entry.month !== month).map((entry) => entry.month))]
+    const otherMonths = [...(index.notesMonths.get(releaseId) ?? [])].filter((entry) => entry !== month)
     const completionReview = notes.length && otherMonths.length ? `The main Release Notes also has a QA/QE signature in ${otherMonths.sort().join(', ')}; check the completion month.` : undefined
     if (completionReview) issues.push({ kind: 'completion-conflict', ids: [releaseId], text: `Release ${releaseId} “${container.title}”: ${completionReview}` })
     const name = cpReleaseName(container, names, settings.zeroPad)

@@ -2,7 +2,7 @@ import test, { after, before } from 'node:test'
 import assert from 'node:assert/strict'
 import { loadSample, navigate, openPage, startApp, text } from './helpers.mjs'
 
-// Shell, navigation and first-run scenarios of the UAT (TC-NAV-01, TC-NAV-03, TC-NAV-31, TC-NAV-33, TC-UI-01, TC-SMP-01,
+// Shell, navigation and first-run scenarios of the UAT (TC-NAV-01, TC-NAV-03, TC-NAV-37, TC-HIS-01, TC-NAV-31, TC-NAV-33, TC-UI-01, TC-SMP-01,
 // TC-UPD-02, TC-GIT-06, TC-SET-05), automated against the built web app.
 let app
 before(async () => { app = await startApp() })
@@ -15,6 +15,26 @@ test('TC-NAV-01 / TC-NAV-17: the sidebar shows the groups in order, with Documen
   const entries = (await page.locator('.sidebar nav .nav-items button').allInnerTexts()).map((entry) => entry.replace(/\s+/g, ' ').trim())
   for (const entry of ['My dashboard', 'Team overview', 'Pulse Check', 'Assigned to Me', 'Monthly Time Writing', 'Bulk actions', 'Backlog Health', 'Azure DevOps', 'Storage', 'Access', 'Feature setup', 'Documentation']) assert.ok(entries.some((item) => item.endsWith(entry)), `${entry} is in the menu`)
   assert.match(await text(page.locator('.sidebar-footer')), /v\d+\.\d+\.\d+/, 'the footer shows the version (NAV-15)')
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
+test('TC-NAV-37: Expand all and Collapse all open and close every menu heading, and are remembered', async () => {
+  const { page, context, errors } = await openPage(app)
+  const expandAll = page.getByRole('button', { name: 'Expand all', exact: true }), collapseAll = page.getByRole('button', { name: 'Collapse all', exact: true })
+  const states = () => page.locator('.sidebar nav button.nav-group').evaluateAll((buttons) => buttons.map((button) => button.getAttribute('aria-expanded')))
+  assert.ok(await expandAll.isDisabled(), 'nothing to expand at first')
+  await collapseAll.click()
+  assert.ok((await states()).every((state) => state === 'false'), 'every heading collapsed')
+  assert.ok(await collapseAll.isDisabled())
+  assert.ok(!(await page.locator('.sidebar nav button', { hasText: 'Assigned to Me' }).isVisible()), 'pages are hidden')
+  await page.reload()
+  await page.locator('.sidebar nav').waitFor()
+  assert.ok((await states()).every((state) => state === 'false'), 'still collapsed after a reload')
+  await expandAll.click()
+  assert.ok((await states()).every((state) => state === 'true'), 'every heading open')
+  assert.ok(await page.locator('.sidebar nav button', { hasText: 'Assigned to Me' }).isVisible(), 'pages are shown again')
+  assert.ok(await expandAll.isDisabled())
   assert.deepEqual(errors, [])
   await context.close()
 })
@@ -135,6 +155,17 @@ test('TC-SET-05: Reports to accepts a manager who is not on the board, shown at 
   assert.match(await text(root), /Maria Lopez\s*not on the board\s*Chen Wei/, 'the outside manager is a root with Chen Wei under her')
   // Offered to everyone else too, under "Not on the board".
   assert.equal(await page.getByLabel('Diya Sharma reports to').locator('optgroup[label="Not on the board"] option', { hasText: 'Maria Lopez' }).count(), 1)
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
+test('TC-HIS-01: Settings → Historical hours explains the import and needs Git storage to upload', async () => {
+  const { page, context, errors } = await openPage(app)
+  await navigate(page, 'Historical hours')
+  assert.equal(await text(page.locator('header.topbar h1')), 'Historical hours')
+  const panel = page.locator('.panel', { has: page.locator('h2, h3', { hasText: /^Historical hours/ }) }).first()
+  assert.match(await text(panel), /Connect Git storage/, 'without Git storage nothing can be imported')
+  assert.equal(await panel.getByRole('button', { name: /Upload Excel/ }).count(), 0, 'no upload without Git storage')
   assert.deepEqual(errors, [])
   await context.close()
 })

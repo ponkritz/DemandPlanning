@@ -472,3 +472,5 @@ table.resizable.wrap th,table.resizable.wrap td{white-space:pre-wrap;overflow-wr
 .dash-tile-ok{border-left:3px solid var(--success)}
 .dash-trail{font-size:13px;color:var(--muted);margin:4px 0 12px;display:flex;gap:6px;align-items:center}
 .dash-trail .text-button{padding:0}
+.nav-fold{display:flex;justify-content:flex-end;gap:12px;padding:0 10px;margin:4px 0 2px}.nav-fold .text-button{color:var(--sidebar-muted);font-size:11px;padding:2px 0;background:none;border:0;box-shadow:none}.nav-fold .text-button:hover:not(:disabled){color:#fff}.nav-fold .text-button:disabled{opacity:.45;cursor:default}
+@media(min-width:761px) and (max-width:1000px){.nav-fold{display:none}}

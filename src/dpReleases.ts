@@ -17,10 +17,31 @@ export const pedestalFields = ['SourceProgram', 'PsName', 'Release', 'ReleaseInt
 export type PedestalField = typeof pedestalFields[number]
 export const designReviews = [['DRPE', 'DRPEDate', 'DRPEStatus'], ['DRPC', 'DRPCDate', 'DRPCStatus'], ['DRfH', 'DRfHDate', 'DRfHStatus'], ['DDT', 'DDTDate', 'DDTStatus']] as const
 
+// Per fields object, each field name in lower case and each part after a dot, to the first key it belongs to: the
+// same field as scanning the names in order, without lower-casing every name on every read (KB-27).
+const fieldIndexes = new WeakMap<object, Map<string, string>>()
+const fieldIndexesShapes = new Map<string, Map<string, string>>()
+function fieldIndex(fields: Record<string, unknown>) {
+  let index = fieldIndexes.get(fields)
+  if (index) return index
+  // Documents of one query share their field names: one index per set of names.
+  const keys = Object.keys(fields), shape = keys.join('\u0001')
+  index = fieldIndexesShapes.get(shape)
+  if (index) { fieldIndexes.set(fields, index); return index }
+  index = new Map()
+  for (const ref of keys) {
+    const lower = ref.toLowerCase()
+    if (!index.has(lower)) index.set(lower, ref)
+    for (let at = lower.indexOf('.'); at >= 0; at = lower.indexOf('.', at + 1)) { const tail = lower.slice(at + 1); if (!index.has(tail)) index.set(tail, ref) }
+  }
+  fieldIndexes.set(fields, index)
+  if (fieldIndexesShapes.size >= 2000) fieldIndexesShapes.clear()
+  fieldIndexesShapes.set(shape, index)
+  return index
+}
 export function fieldOf(item: Pick<AzureWorkItem, 'fields'>, name: string) {
   const fields = item.fields ?? {}
-  const wanted = name.toLowerCase()
-  const key = Object.keys(fields).find((ref) => ref.toLowerCase() === wanted || ref.toLowerCase().endsWith(`.${wanted}`))
+  const key = fieldIndex(fields).get(name.toLowerCase())
   const value = key ? fields[key] : undefined
   return value == null || value === '' ? undefined : String(value)
 }

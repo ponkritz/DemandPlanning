@@ -3,13 +3,13 @@ import type { ReleaseStream } from '../releaseOverview'
 import { Panel } from './ui'
 
 // Overview Releases tab: the summary lines first ("CP [2] : Care Pathways 3.1, Care Pathways 3.2"), next to them the
-// Supported summary in the same format (DP's Supported Releases, S&S IT's releases with the latest date in the month —
+// Supported summary in the same format (DP's Supported Releases, S&S IT's releases with a document dated in the month —
 // QV-33), then a 2x2 with one quadrant per stream (counts and the Titles of its documents approved in the month) and a
 // last quadrant with the totals.
 export interface SupportedLine { name: string; releases: string[] }
 export function SupportedSummary({ lines, month }: { lines: SupportedLine[]; month: string }) {
   const total = lines.reduce((sum, line) => sum + line.releases.length, 0)
-  return <Panel className="release-summary supported-summary" eyebrow="SUPPORTED" title={`${monthName(month)} · ${total} supported release${total === 1 ? '' : 's'}`} info="Supported releases in the month, per stream, in the same format as the Releases: DP — the releases with a milestone passed in the month (Supported Releases); IOCC — the releases with a Release Plan, Release Notes or Verification Report signed in the month; Tool Validations — the unique tools with a validation document in the month; S&S IT — the unique releases of its Windchill export whose latest Last Modified falls in the month.">
+  return <Panel className="release-summary supported-summary" eyebrow="SUPPORTED" title={`${monthName(month)} · ${total} supported release${total === 1 ? '' : 's'}`} info="Supported releases in the month, per stream, in the same format as the Releases: DP — the releases with a milestone passed in the month (Supported Releases); IOCC — the releases with a Release Plan, Release Notes or Verification Report signed in the month; Tool Validations — the unique tools with a validation document in the month; S&S IT — the unique releases of its Windchill export with a document whose Last Modified falls in the month (a release counts in every month one of its documents is dated in).">
     <ul>{lines.map((line) => <li key={line.name}><strong>{line.name} [{line.releases.length}]</strong> : {line.releases.length ? line.releases.join(', ') : <span className="muted">none</span>}</li>)}</ul>
   </Panel>
 }

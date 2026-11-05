@@ -18,7 +18,7 @@ import { windchillCell } from './windchillViews.ts'
 // spaces in the name and trailing zero parts in the number (3.1 = 3.1.0).
 export interface DocumentRelease { name: string; release: string; raw: string; document: string; span: string }
 export interface ReleasePart { name: string; release: string; raw: string }
-export interface WindchillRelease { key: string; name: string; release: string; clubbed: boolean; parts: ReleasePart[]; documents: { name: string; row: Record<string, unknown> }[]; latest: string; latestAt?: number; locations: string[]; project?: boolean }
+export interface WindchillRelease { key: string; name: string; release: string; clubbed: boolean; parts: ReleasePart[]; documents: { name: string; row: Record<string, unknown> }[]; latest: string; latestAt?: number; months: string[]; locations: string[]; project?: boolean }
 export type ReleaseSource = 'location' | 'name'
 export interface LocationRelease { name: string; release: string; folder: string; clubbed: boolean; parts: ReleasePart[]; project?: boolean }
 export interface UniqueLocation { location: string; count: number; releases: LocationRelease[] }
@@ -164,6 +164,7 @@ export function windchillReleases(rows: Record<string, unknown>[], columns: stri
   const location = chosen.locationColumn || locationColumn(columns)
   const source: ReleaseSource = chosen.source === 'name' || (chosen.source !== 'location' && !location) ? 'name' : 'location'
   const byKey = new Map<string, WindchillRelease>()
+  const seen = new Map<string, Set<Record<string, unknown>>>()
   const unmatched: string[] = []
   const date = dateColumn(columns)
   for (const row of rows) {
@@ -181,12 +182,16 @@ export function windchillReleases(rows: Record<string, unknown>[], columns: stri
     const when = date ? windchillCell(row, date) : ''
     {
       const key = `${release.name.toLowerCase().replace(/[^a-z0-9]+/g, '')}\u0000${release.key}`
-      const entry = byKey.get(key) ?? { key, name: release.name, release: release.release, clubbed: release.clubbed, parts: release.parts, documents: [], latest: '', locations: [], ...(chosen.project ? { project: true } : {}) }
-      if (entry.documents.some((doc) => doc.row === row)) continue
+      const entry = byKey.get(key) ?? { key, name: release.name, release: release.release, clubbed: release.clubbed, parts: release.parts, documents: [], latest: '', months: [], locations: [], ...(chosen.project ? { project: true } : {}) }
+      const counted = seen.get(key) ?? new Set<Record<string, unknown>>()
+      if (counted.has(row)) continue
+      counted.add(row); seen.set(key, counted)
       entry.documents.push({ name: release.document || text, row })
       if (folder && !entry.locations.includes(folder)) entry.locations.push(folder)
       // The latest date by value; text that is not a date is compared as text, only among such texts.
       const at = parseExportDate(when)
+      // Every month a document of the release is dated in (CON-73): the release is supported in each of them.
+      if (at !== undefined) { const month = new Date(at).toISOString().slice(0, 7); if (!entry.months.includes(month)) entry.months.push(month) }
       if (at !== undefined ? entry.latestAt === undefined || at > entry.latestAt : entry.latestAt === undefined && when > entry.latest) { entry.latest = when; entry.latestAt = at }
       byKey.set(key, entry)
     }
@@ -200,12 +205,23 @@ export function windchillReleases(rows: Record<string, unknown>[], columns: stri
 
 // The month (YYYY-MM) of a release's latest date, from the parsed value; undefined when no date could be read.
 export const releaseMonth = (entry: Pick<WindchillRelease, 'latestAt'>) => entry.latestAt === undefined ? undefined : new Date(entry.latestAt).toISOString().slice(0, 7)
-// The releases whose latest date falls in the month (YYYY-MM), as chosen in the header month picker (CON-73).
-export const releasesInMonth = <T extends Pick<WindchillRelease, 'latestAt'>>(releases: T[], month: string) => releases.filter((entry) => releaseMonth(entry) === month)
+// The releases with a document dated in the month (YYYY-MM), as chosen in the header month picker (CON-73): a
+// document signed in the month counts its release for that month, whatever the release's newer documents.
+export const releasesInMonth = <T extends Pick<WindchillRelease, 'latestAt'> & { months?: string[] }>(releases: T[], month: string) => releases.filter((entry) => entry.months ? entry.months.includes(month) : releaseMonth(entry) === month)
 
-// The releases of a Windchill export with the latest date in the month, as "name number" texts for the Pulse Check
+// The releases of a Windchill export with a document dated in the month, as "name number" texts for the Pulse Check
 // Supported line (QV-33), newest first.
-export const windchillSupported = (rows: Record<string, unknown>[], columns: string[], month: string, options: ReleaseOptions = {}) => releasesInMonth(windchillReleases(rows, columns, options).releases, month).map((entry) => options.project ? `${entry.release} ${entry.name}`.trim() : `${entry.name} ${entry.release}`)
+// The unique releases of an export are read once per imported data set and reused for every month (KB-27).
+const releaseCache = new WeakMap<object, Map<string, ReturnType<typeof windchillReleases>>>()
+export function cachedWindchillReleases(rows: Record<string, unknown>[], columns: string[], options: ReleaseOptions = {}) {
+  let byKey = releaseCache.get(rows)
+  if (!byKey) { byKey = new Map(); releaseCache.set(rows, byKey) }
+  const key = JSON.stringify([columns, options])
+  let result = byKey.get(key)
+  if (!result) { result = windchillReleases(rows, columns, options); byKey.set(key, result) }
+  return result
+}
+export const windchillSupported = (rows: Record<string, unknown>[], columns: string[], month: string, options: ReleaseOptions = {}) => releasesInMonth(cachedWindchillReleases(rows, columns, options).releases, month).map((entry) => options.project ? `${entry.release} ${entry.name}`.trim() : `${entry.name} ${entry.release}`)
 
 // The analysis file saved to the Git data repository (windchill-analysis/<export>-locations.json): every distinct
 // Location with its document count and the release read from it, plus the unique releases — so that the folder

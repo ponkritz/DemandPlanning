@@ -2,6 +2,13 @@
 
 Version history of the I&D Quality Demand Planning app, newest first. Every merged change bumps the version in `package.json` and adds its entry here, in the same pull request (CI-09; [CONFIGURATION-MANAGEMENT.md](CONFIGURATION-MANAGEMENT.md) §4): **major** for a change that breaks existing data, shared setup files or the way users work; **minor** for a new or changed feature; **patch** for a fix, a dependency update or documentation only. `pnpm test` fails when the newest version here is not the version in `package.json`. CI tags each version `vX.Y.Z` on its merge commit and publishes its GitHub release with the installers and this entry (CI-10); the build number of a version is the CI build of that merge (shown in the app under Force Update, and in `latest.json`). Open bugs and accepted limitations of every version are in [KNOWN-ISSUES.md](KNOWN-ISSUES.md); the third-party components of every version are in [SWBOM.md](SWBOM.md).
 
+## v1.8.0 — 2026-11-06
+
+**Imported upstream**
+- Synced Test2 revision aa897ce: historical hours can be imported from the planning workbook into the private Git data repository and used in reporting before the Azure DevOps cut-off; group rows, holidays, leave and training are handled per the source data.
+- Team and release reporting now treat a release as present in every month containing a dated source document; Pulse Check avoids unnecessary recalculation, and the navigation offers Expand all / Collapse all.
+- Retained DemandPlanning's release identity, Windows/web deployment, selected-month Plan/Actual locks, private Tool Validation Package downloads and existing data safeguards.
+
 ## v1.7.0 — 2026-11-05
 
 **Imported upstream**
