@@ -12,6 +12,7 @@ import { defaultStreams, windchillOptionsForView, windchillStreamExports } from 
 import { formatDate, formatDateTime, formatHours, monthName, todayIso } from '../format'
 import type { WindchillWorkspace } from '../useWindchill'
 import { ongoingWork, previousMonth, releaseComparison, workFlow } from '../pulseCheck'
+import { periodComparison, periodKinds, periodStreams, periodWorkFlow, previousPeriod, recentPeriods, type PeriodKind } from '../pulsePeriods'
 import { timeWritingGaps, timeWritingMonth } from '../azureInsights'
 import { capacityContext, capacityModel, inTeam, itemsForPerson, itemsForTeam, teamFiltered } from '../capacity'
 import { isMine } from '../myWork'
@@ -24,17 +25,19 @@ import { MonthlyPackPanel } from '../components/MonthlyPackPanel'
 import type { MyWork } from '../useMyWork'
 import type { Page as PageId } from './registry'
 import type { PageProps } from './types'
+import type { PersonalViewsStore } from '../usePersonalViews'
 
 type Tab = 'releases' | 'last' | 'ongoing' | 'current' | 'pack'
 const tabKeys: Tab[] = ['releases', 'last', 'ongoing', 'current', 'pack']
 const tabKey = 'demand-planning-pulse-tab-v1'
 const dpListKey = 'demand-planning-pulse-dp-list-v1'
+const periodKey = 'demand-planning-pulse-period-v1'
 const change = (now: number, before: number) => now === before ? <span className="muted">±0</span> : <span className={now > before ? 'positive' : 'negative'}>{now > before ? '+' : '−'}{Math.abs(now - before)}</span>
 
 // Pulse Check: the selected month's approved releases per stream (moved from the Dashboard), and Last month — the month
 // before the selected one: the Dashboard's "This month" picture for it, its releases next to the selected month's, the
 // Features and User Stories created and closed, and its Time Writing gaps.
-export function PulseCheckPage({ month, azure, store, my, navigate, windchill, openWindchill, git, pack }: { month: string; azure: AzureWorkspace; store: PageProps['store']; my: MyWork; navigate: (page: PageId) => void; windchill: WindchillWorkspace; openWindchill: (id: string) => void; git: GitStorage; pack: MonthlyPackStore }) {
+export function PulseCheckPage({ month, azure, store, my, navigate, windchill, openWindchill, git, pack, views }: { month: string; azure: AzureWorkspace; store: PageProps['store']; my: MyWork; navigate: (page: PageId) => void; windchill: WindchillWorkspace; openWindchill: (id: string) => void; git: GitStorage; pack: MonthlyPackStore; views?: PersonalViewsStore }) {
   const [tab, setTabState] = useState<Tab>(() => { try { const saved = localStorage.getItem(tabKey) as Tab; return tabKeys.includes(saved) ? saved : 'releases' } catch { return 'releases' } })
   const setTab = (next: Tab) => { setTabState(next); try { localStorage.setItem(tabKey, next) } catch { /* convenience only */ } }
   // QV-32: the DP Supported Releases list is folded by default (the Supported summary already names them); "Show list"
@@ -42,6 +45,9 @@ export function PulseCheckPage({ month, azure, store, my, navigate, windchill, o
   const [dpList, setDpListState] = useState(() => { try { return localStorage.getItem(dpListKey) === 'open' } catch { return false } })
   const setDpList = (open: boolean) => { setDpListState(open); try { localStorage.setItem(dpListKey, open ? 'open' : 'closed') } catch { /* convenience only */ } }
   const last = previousMonth(month)
+  // QV-50: Month (the tabs below), or a calendar Quarter / Half-year / Year compared with the period before.
+  const [period, setPeriodState] = useState<{ kind: PeriodKind; key: string }>(() => { try { const saved = (views?.filter('pulse', (value) => value && typeof value === 'object' ? value : undefined) ?? JSON.parse(localStorage.getItem(periodKey) ?? '{}')) as { kind?: PeriodKind; key?: string }; return periodKinds.some(([kind]) => kind === saved.kind) ? { kind: saved.kind!, key: saved.key ?? '' } : { kind: 'month', key: '' } } catch { return { kind: 'month', key: '' } } })
+  const setPeriod = (next: { kind: PeriodKind; key: string }) => { setPeriodState(next); try { localStorage.setItem(periodKey, JSON.stringify(next)) } catch { /* convenience only */ } views?.setFilter('pulse', next) }
   // The default streams, in order: DP, CP, IOCC, Content and Tool Validations from their connections, S&S IT (and
   // later ECP) from their Windchill exports.
   // Each ECP export on its own line (CON-87).
@@ -73,7 +79,20 @@ export function PulseCheckPage({ month, azure, store, my, navigate, windchill, o
     </TablePanel>}
   </>
   const tabLabels: [Tab, string][] = [['releases', `Releases · ${monthName(last)}`], ['last', `Last month · ${monthName(last)}`], ['ongoing', 'Ongoing activities'], ['current', `Current month releases · ${monthName(month)}`], ['pack', `Monthly pack · ${monthName(last)}`]]
+  const choices = period.kind === 'month' ? [] : recentPeriods(period.kind, last)
+  const chosen = choices.find((entry) => entry.key === period.key) ?? choices[0]
+  const periodBar = <div className="button-row pulse-period" role="group" aria-label="Pulse Check period">
+    <label className="inline-select">Period<select value={period.kind} onChange={(event) => setPeriod({ kind: event.target.value as PeriodKind, key: '' })}>{periodKinds.map(([kind, label]) => <option key={kind} value={kind}>{label}</option>)}</select></label>
+    {chosen && <label className="inline-select">{periodKinds.find(([kind]) => kind === period.kind)?.[1]}<select value={chosen.key} onChange={(event) => setPeriod({ kind: period.kind, key: event.target.value })}>{choices.map((entry) => <option key={entry.key} value={entry.key}>{entry.label}</option>)}</select></label>}
+  </div>
+  if (chosen) {
+    const before = previousPeriod(chosen)
+    const windchillLines = (at: string) => exports.map(({ name, view }) => { const source = view ? windchill.sources.find((entry) => entry.viewId === view.id) : undefined; return { name, releases: source && view ? windchillSupported(source.rows, source.columns.length ? source.columns : view.columns, at, windchillOptionsForView(view)) : [] } })
+    const of = (months: string[]) => periodStreams(months.map((at) => defaultStreamReleases(store.state, azure.connectionProfiles, at)), months.map(windchillLines))
+    return <Page>{periodBar}<PeriodPulse label={chosen.label} previous={before.label} months={chosen.months} rows={periodComparison(of(chosen.months), of(before.months))} azure={azure} absenceEpicId={capacityContext(store.state).absenceEpicId} /></Page>
+  }
   return <Page>
+    {periodBar}
     <div className="overview-tabs" role="tablist" aria-label="Pulse Check sections">{tabLabels.map(([key, label]) => <button key={key} type="button" role="tab" aria-selected={tab === key} className={`backlog-tab ${tab === key ? 'backlog-tab-active' : ''}`} onClick={() => setTab(key)}>{label}</button>)}</div>
     {tab === 'releases' && releases(lastStreams, last)}
     {tab === 'last' && <LastMonth month={month} last={last} azure={azure} store={store} my={my} navigate={navigate} current={streams} />}
@@ -148,5 +167,36 @@ function LastMonth({ month, last, azure, store, my, navigate, current }: { month
       <MonthSections items={items} month={last} settings={settings} navigate={navigate} utilizationOnly />
       <GapsPanel gaps={gaps} month={last} />
     </>}
+  </>
+}
+
+// A quarter, half-year or year (QV-50): each stream's releases in the period (each release once) against the period
+// before, and the Features and User Stories opened and closed in it.
+function PeriodPulse({ label, previous, months, rows, azure, absenceEpicId }: { label: string; previous: string; months: string[]; rows: ReturnType<typeof periodComparison>; azure: AzureWorkspace; absenceEpicId: number }) {
+  const flow = periodWorkFlow(azure.items, months, absenceEpicId)
+  const total = rows.reduce((sum, row) => sum + row.releases, 0), totalBefore = rows.reduce((sum, row) => sum + row.previousReleases, 0)
+  const elapsed = months.filter((entry) => entry <= todayIso().slice(0, 7)).length
+  return <>
+    <Metrics>
+      <Metric label={`Releases · ${label}`} value={total} hint={`${previous}: ${totalBefore}`} />
+      <Metric label="Change" value={<>{change(total, totalBefore)}</>} hint={`against ${previous}`} />
+      <Metric label="Features closed" value={flow.totals.Feature.closed} hint={`${flow.totals.Feature.created} opened`} />
+      <Metric label="User Stories closed" value={flow.totals['User Story'].closed} hint={`${flow.totals['User Story'].created} opened`} />
+    </Metrics>
+    {elapsed < months.length && <p className="muted">{label} is still running: {elapsed} of its {months.length} months so far.</p>}
+    <TablePanel title={`Releases · ${label} vs ${previous}`} info={<ul><li>Per stream, the releases of every month of {label} ({months.length} months), each release once however many months it appears in; documents add up. DP counts its Completed Releases, and its Supported Releases once each.</li><li>The Windchill streams count the releases with a date in each month.</li><li>{previous} is the period of the same length just before.</li></ul>}
+      empty={rows.length ? undefined : 'No release views under Release Details.'}>
+      {rows.length > 0 && <table><thead><tr><th>Stream</th><th>Releases {label}</th><th>Releases {previous}</th><th>Change</th><th>Documents / supported {label}</th></tr></thead><tbody>
+        {rows.map((row) => <tr key={row.name}><td><strong>{row.name}</strong>{row.list.length > 0 && <details><summary><small>{row.list.length} release{row.list.length === 1 ? '' : 's'}</small></summary><small className="plain">{row.list.join(' · ')}</small></details>}</td><td>{row.releases}</td><td>{row.previousReleases}</td><td>{change(row.releases, row.previousReleases)}</td><td>{row.supported != null ? <>{row.supported}<small>supported</small></> : row.documents}</td></tr>)}
+        <tr className="matrix-total"><td>Total</td><td>{total}</td><td>{totalBefore}</td><td>{change(total, totalBefore)}</td><td /></tr>
+      </tbody></table>}
+    </TablePanel>
+    <TablePanel title={`Work closed and opened · ${label}`} info="Features and User Stories created (Created Date) and closed (Closed Date) in the months of the period, per stream — the Epic above them. Removed items and work under the absence Epic are left out."
+      count={`Features +${flow.totals.Feature.created} / ✓${flow.totals.Feature.closed} · Stories +${flow.totals['User Story'].created} / ✓${flow.totals['User Story'].closed}`} empty={flow.streams.length ? undefined : `No Features or User Stories created or closed in ${label}.`}>
+      {flow.streams.length > 0 && <table><thead><tr><th>Stream (Epic)</th><th>Features opened</th><th>Features closed</th><th>Stories opened</th><th>Stories closed</th></tr></thead><tbody>
+        {flow.streams.map((stream) => <tr key={stream.key}><td>{stream.epic ? <a href={stream.epic.url} target="_blank" rel="noreferrer">#{stream.epic.id} {stream.title}</a> : stream.title}</td><td>{stream.counts.Feature.created}</td><td>{stream.counts.Feature.closed}</td><td>{stream.counts['User Story'].created}</td><td>{stream.counts['User Story'].closed}</td></tr>)}
+        <tr className="matrix-total"><td>Total</td><td>{flow.totals.Feature.created}</td><td>{flow.totals.Feature.closed}</td><td>{flow.totals['User Story'].created}</td><td>{flow.totals['User Story'].closed}</td></tr>
+      </tbody></table>}
+    </TablePanel>
   </>
 }

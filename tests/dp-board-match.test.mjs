@@ -50,8 +50,8 @@ test('a new Feature title maps back when it holds the Title; the service part dr
 })
 
 test('Create Feature from a DP row: Program (SourceProgram, else DP) | PsName | vRelease, falling back to the Title', () => {
-  assert.equal(dpFeatureTitle(row(9, 'RSGMS Viewer 3.0.0.2', { 'Custom.SourceProgram': 'DHP', 'Custom.PsName': 'RSGMS', 'Custom.Release': '3.0.0.2' })), 'DHP | RSGMS | v3.0.0.2')
-  assert.equal(dpFeatureTitle(row(10, 'Cardio Suite 2.1')), 'DP | Cardio Suite | v2.1', 'no SourceProgram, PsName or Release: DP and the Title')
+  assert.equal(dpFeatureTitle(row(9, 'RSGMS Viewer 3.0.0.2', { 'Custom.SourceProgram': 'DHP', 'Custom.PsName': 'RSGMS', 'Custom.Release': '3.0.0.2' })), 'DHP | RSGMS | 3.0.0.2')
+  assert.equal(dpFeatureTitle(row(10, 'Cardio Suite 2.1')), 'DP | Cardio Suite | 2.1', 'no SourceProgram, PsName or Release: DP and the Title')
 })
 
 test('a Title unlike the PsName: the search combines PsName and Release, so the Feature Create Feature made is found', () => {
@@ -67,7 +67,7 @@ test('a Title unlike the PsName: the search combines PsName and Release, so the 
 test('Windchill release (S&S IT) → QMS-0025: the same search with the release name and number; Create Feature title (TC-QV-23)', async () => {
   const { windchillBoardMatch, windchillFeatureTitle } = await import('../src/dpBoardMatch.ts')
   const release = { name: 'Remote Diagnostics', release: '1.6', parts: [{ name: 'Remote Diagnostics', release: '1.6' }] }
-  assert.equal(windchillFeatureTitle('S&S IT', release), 'S&S IT | Remote Diagnostics | v1.6')
+  assert.equal(windchillFeatureTitle('S&S IT', release), 'S&S IT | Remote Diagnostics | 1.6')
   const ss = dpBoardCandidates([board(50, 'Feature', 'Remote Diagnostics v1.6'), board(51, 'Feature', 'S&S IT | Remote Diagnostics | v1.7'), board(52, 'User Story', 'Remote Diagnostics 1.6 validation')])
   const match = windchillBoardMatch(release, 'S&S IT', ss)
   assert.deepEqual([match.feature.item.id, match.story.item.id], [50, 52], 'name and number match without the stream; v1.7 is another release')

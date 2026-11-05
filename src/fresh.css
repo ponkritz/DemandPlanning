@@ -449,3 +449,26 @@ table.resizable.wrap th,table.resizable.wrap td{white-space:pre-wrap;overflow-wr
 .data-table td.align-right,.data-table th.align-right{text-align:right}
 .data-table td.align-center,.data-table th.align-center{text-align:center}
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* Personal views (MYD-06, MYD-07): the Customize bar and editor of a page's sections, and the pinned menu group. */
+.layout-bar{display:flex;justify-content:flex-end;align-items:center;gap:12px;margin:-6px 0 6px}
+.layout-editor{border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:14px 16px;margin-bottom:16px;display:grid;gap:10px}
+.layout-editor ol{margin:0;padding-left:1.4em;display:grid;gap:6px}
+.layout-editor li{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.layout-editor li .ghost{padding:3px 9px}
+.layout-section{display:grid;gap:18px}
+.nav-pinned .nav-group{cursor:default}
+.sidebar-footer .customize-menu{color:var(--sidebar-text);padding:0 0 8px;font-size:12px}
+
+/* Team overview (MYD-10, MYD-11): six headline tiles, each opening its analysis, and the trail back. */
+.dash-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:18px}
+.dash-tile{display:grid;gap:4px;align-content:start;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.dash-tile>span{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.dash-tile>strong{font-size:24px;font-variant-numeric:tabular-nums}
+.dash-tile>small{color:var(--muted);font-size:12px}
+.dash-tile>.text-button{justify-self:start;padding-left:0;margin-top:4px}
+.dash-tile-danger{border-left:3px solid var(--danger)}
+.dash-tile-warning{border-left:3px solid var(--warning,#b7791f)}
+.dash-tile-ok{border-left:3px solid var(--success)}
+.dash-trail{font-size:13px;color:var(--muted);margin:4px 0 12px;display:flex;gap:6px;align-items:center}
+.dash-trail .text-button{padding:0}

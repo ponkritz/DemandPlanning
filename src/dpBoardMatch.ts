@@ -24,7 +24,7 @@ export const dpServiceOf = (item: AzureWorkItem) => item.title.replace(versions,
 export const dpVersionOf = (item: Pick<AzureWorkItem, 'title' | 'fields'>) => [...item.title.matchAll(versions)].at(-1)?.[0].replace(/^v/i, '') ?? fieldOf(item, 'Release')?.trim() ?? ''
 
 // Create Feature from a DP row: Program (SourceProgram, else DP) | Service (PsName, else the Title without its version)
-// | vRelease (the Release field, else the Title's version).
+// | Release (the Release field, no "v", else the Title's version).
 export const dpFeatureTitle = (row: AzureWorkItem) => releaseFeatureTitle(dpProgramOf(row) || 'DP', fieldOf(row, 'PsName')?.trim() || dpServiceOf(row), fieldOf(row, 'Release')?.trim() || dpVersionOf(row))
 
 const names = (title: string, program: string): PreparedName[] => program && !title.toLowerCase().includes(program.toLowerCase()) ? [prepareName(title), prepareName(title, program)] : [prepareName(title)]

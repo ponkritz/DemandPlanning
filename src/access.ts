@@ -7,7 +7,9 @@ export const roles = ['Admin', 'Product Owner', 'People Manager', 'Scrum Master'
 export type Role = typeof roles[number]
 
 export const areas = [
-  { key: 'overview', label: 'Data Insights (Dashboard, Pulse Check, PI Review)' },
+  { key: 'overview', label: 'My dashboard' },
+  // MYD-05: the team's insights for selected roles only (Dashboard, Pulse Check, PI Review); My dashboard is for everyone.
+  { key: 'insights', label: 'Team insights (Team overview, Pulse Check, PI Review)' },
   { key: 'mywork', label: 'Assigned to Me' },
   { key: 'bulk', label: 'Bulk actions' },
   { key: 'monthly', label: 'Monthly Time Writing' },
@@ -51,7 +53,7 @@ export function defaultPolicy(adminEmail = ''): AccessPolicy {
     roles: {
       'Admin': { areas: [...allAreas], actions: [...allActions] },
       'Product Owner': { areas: ['overview', 'board', 'health', 'release', 'baselines', 'qemapping', 'docs'], actions: ['azure.write', 'azure.createForOthers', 'baselines.edit'] },
-      'People Manager': { areas: ['overview', ...myWork, 'board', 'release', 'baselines', 'qemapping', 'snapshots', 'docs'], actions: ['azure.write', 'azure.createForOthers', 'baselines.edit'] },
+      'People Manager': { areas: ['overview', 'insights', ...myWork, 'board', 'release', 'baselines', 'qemapping', 'snapshots', 'docs'], actions: ['azure.write', 'azure.createForOthers', 'baselines.edit'] },
       'Scrum Master': { areas: ['overview', ...myWork, 'board', 'health', 'release', 'docs'], actions: ['azure.write', 'azure.createForOthers'] },
       'Team Member': { areas: ['overview', ...myWork, 'board', 'release', 'docs'], actions: ['azure.write'] },
     },
@@ -74,10 +76,14 @@ export function parseAccess(text: string): AccessPolicy {
     const assigned = pick(value, roles)
     if (isEmail(email) && assigned.length) members[normalEmail(email)] = [...new Set([...(members[normalEmail(email)] ?? []), ...assigned])]
   }
+  // A file written before Team insights existed: the roles that saw the Data Insights then and lead people (Admin,
+  // People Manager) keep the team's insights; every other role keeps My dashboard only.
+  const before = !Object.values(rolesIn).some((role) => Array.isArray(role?.areas) && role.areas.includes('insights'))
+  const areasOf = (role: Role) => { const listed = pick(rolesIn[role]?.areas, allAreas); return before && listed.includes('overview') && (role === 'Admin' || role === 'People Manager') ? allAreas.filter((area) => listed.includes(area) || area === 'insights') : listed }
   return {
     schema: 1,
     defaultRole: roles.includes(input.defaultRole as Role) ? input.defaultRole as Role : null,
-    roles: Object.fromEntries(roles.map((role) => [role, { areas: pick(rolesIn[role]?.areas, allAreas), actions: pick(rolesIn[role]?.actions, allActions) }])) as Record<Role, RoleRights>,
+    roles: Object.fromEntries(roles.map((role) => [role, { areas: areasOf(role), actions: pick(rolesIn[role]?.actions, allActions) }])) as Record<Role, RoleRights>,
     members,
   }
 }

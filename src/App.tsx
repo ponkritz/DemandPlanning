@@ -6,12 +6,14 @@ import './App.css'
 import './fresh.css'
 import { useAppStore } from './store'
 import { Notice } from './components/ui'
+import { MenuCustomizer } from './components/PersonalLayout'
+import { usePersonalViews } from './usePersonalViews'
 import { ThemeToggle } from './components/Clock'
 import { DataNotices, DataStatus } from './components/DataStatus'
 import { JobsIndicator } from './components/JobsIndicator'
 import { pages, pageGroups, pageMeta, type Page } from './pages/registry'
 import { DashboardPage } from './pages/DashboardPage'
-import { WorkspacePage } from './pages/WorkspacePage'
+import { MyDashboardPage } from './pages/MyDashboardPage'
 import { MonthlyPage } from './pages/MonthlyPage'
 import { BaselinesPage } from './pages/BaselinesPage'
 import { SnapshotsPage } from './pages/SnapshotsPage'
@@ -134,11 +136,14 @@ export default function App() {
     return { loaded, failed }
   }
   const access = useAccess(git, azure)
+  // MYD-06…MYD-09: each person's sections, menu and filters, in Git per person.
+  const personalViews = usePersonalViews(git, azure.creatorEmail)
+  const [menuEditor, setMenuEditor] = useState(false)
   const featureSetup = useFeatureSetup(git, azure.creatorEmail)
   const qeMapping = useQeMapping(git)
   // Who creates new work items (the email on the Time Writing connection) and whether they may assign them to others.
   const assign = { me: azure.creatorEmail.trim().toLowerCase(), canChoose: access.can('azure.createForOthers') }
-  const [requested, setPage] = useState<Page>('overview')
+  const [requested, setPage] = useState<Page>('mydash')
   const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null)
   // The selected month starts on the viewer's current month (their time zone).
   const [month, setMonth] = useState(() => todayIso().slice(0, 7))
@@ -160,7 +165,7 @@ export default function App() {
   const openView = (id: string) => { setViewId(id); saveBacklogTab(id); setPage('board') }
   // Access roles: each menu entry belongs to an area; Settings is always there (each person's own connections and tokens).
   // A page the viewer's roles do not include falls back to the first one they do.
-  const areaOf = (id: Page): Area | null => id === 'admin' ? null : id === 'board' ? (view.onPrem ? 'release' : 'board') : id === 'windchill' || id === 'brite' ? 'release' : id === 'pulse' || id === 'pireview' || id === 'workspace' ? 'overview' : id
+  const areaOf = (id: Page): Area | null => id === 'admin' ? null : id === 'board' ? (view.onPrem ? 'release' : 'board') : id === 'windchill' || id === 'brite' ? 'release' : id === 'overview' || id === 'pulse' || id === 'pireview' ? 'insights' : id === 'mydash' ? 'overview' : id
   const allowed = (id: Page) => { const area = areaOf(id); return area == null || access.sees(area) }
   const page = allowed(requested) ? requested : pages.find((entry) => allowed(entry.id))?.id ?? 'admin'
   const meta = pageMeta(page)
@@ -220,7 +225,7 @@ export default function App() {
     {navOpen && <div className="nav-backdrop" onClick={() => setNavOpen(false)} aria-hidden="true" />}
     <aside className="sidebar" id="primary-navigation">
       <div className="brand" title="I&amp;D Quality Demand Planning"><div className="brand-mark"><BrandMark /></div><div><strong>I&amp;D Quality</strong><span>Demand Planning</span></div></div>
-      <nav aria-label="Primary navigation">{pageGroups.map((group) => {
+      <nav aria-label="Primary navigation">{(() => { const pinned = personalViews.menu.pinned.map((id) => pages.find((item) => item.id === id)).filter((item): item is typeof pages[number] => Boolean(item && !item.hidden && allowed(item.id))); return pinned.length ? <div className="nav-section nav-pinned"><span className="nav-group">PINNED</span><div className="nav-items">{pinned.map((item) => <button key={`pin:${item.id}`} className={page === item.id ? 'nav-active' : ''} aria-current={page === item.id ? 'page' : undefined} onClick={() => setPage(item.id)}><span className="nav-icon">{item.icon}</span>{item.label}</button>)}</div></div> : null })()}{pageGroups.map((group) => {
         const pageButton = (item: typeof pages[number]) => !allowed(item.id) ? [] : [<button key={item.id} className={page === item.id ? 'nav-active' : ''} aria-current={page === item.id ? 'page' : undefined} onClick={() => setPage(item.id)}><span className="nav-icon">{item.icon}</span>{item.label}{item.id === 'mywork' && my.pending.length > 0 && <span className="nav-badge" aria-label={`${my.pending.length} pending`}>{my.pending.length}</span>}</button>]
         const windchillMeta = pageMeta('windchill')
         // Release Details has two sub-lists: the default Azure streams (DP, CP, IOCC, Content, Tool Validations) and the
@@ -236,7 +241,7 @@ export default function App() {
         ] : group === 'Other views' ? [{ key: group, entries: [
           ...others.azure.filter((entry) => access.sees(entry.onPrem ? 'release' : 'board')).map((entry) => navButton(`view:${entry.id}`, pageMeta('board').icon, entry.name, page === 'board' && view.id === entry.id, () => openView(entry.id))),
           ...(access.sees('release') ? others.windchill.map((entry) => navButton(entry.id, pageMeta('windchill').icon, entry.name, page === 'windchill' && windchillView?.id === entry.id, () => openWindchill(entry.id))) : []),
-        ] }] : group === 'Settings' ? [{ key: group, entries: settingsPagesFor(access.can('settings.manage')).map((entry) => navButton(`settings:${entry.key}`, pageMeta('admin').icon, entry.label, page === 'admin' && settingsTab === entry.key, () => openSettings(entry.key))) }] : [{ key: group, entries: pages.filter((item) => item.group === group && !item.hidden).flatMap((item) => item.id === 'board' ? (access.sees('board') ? views.filter((entry) => !entry.readOnly).map((entry) => navButton(`view:${entry.id}`, item.icon, entry.name, page === 'board' && view.id === entry.id, () => openView(entry.id))) : []) : pageButton(item)) }]
+        ] }] : group === 'Settings' ? [{ key: group, entries: settingsPagesFor(access.can('settings.manage')).map((entry) => navButton(`settings:${entry.key}`, pageMeta('admin').icon, entry.label, page === 'admin' && settingsTab === entry.key, () => openSettings(entry.key))) }] : [{ key: group, entries: pages.filter((item) => !personalViews.menu.hidden.includes(item.id) && item.group === group && !item.hidden).flatMap((item) => item.id === 'board' ? (access.sees('board') ? views.filter((entry) => !entry.readOnly).map((entry) => navButton(`view:${entry.id}`, item.icon, entry.name, page === 'board' && view.id === entry.id, () => openView(entry.id))) : []) : pageButton(item)) }]
         const shown = sections.filter((section) => section.entries.length)
         if (!shown.length) return null
         const open = !collapsed.includes(group)
@@ -250,17 +255,18 @@ export default function App() {
           </div> : <div key={section.key} className="nav-items">{section.entries}</div>)}</div>
         </div>
       })}</nav>
-      <div className="sidebar-footer"><DesktopDownload /><small className="storage-line" title="Where app data is saved">{storageLabel}</small>{buildStatus}</div>
+      <div className="sidebar-footer"><button type="button" className="text-button customize-menu" onClick={() => setMenuEditor(true)}>Customize menu</button><DesktopDownload /><small className="storage-line" title="Where app data is saved">{storageLabel}</small>{buildStatus}</div>
     </aside>
+    {menuEditor && <MenuCustomizer pages={pages.filter((item) => !item.hidden && item.id !== 'admin' && allowed(item.id)).map(({ id, label, group }) => ({ id, label, group }))} menu={personalViews.menu} onChange={personalViews.setMenu} onClose={() => setMenuEditor(false)} />}
     <main>
       <header className="topbar"><button type="button" className="menu-button" aria-label={navOpen ? 'Close menu' : 'Open menu'} aria-expanded={navOpen} aria-controls="primary-navigation" onClick={() => setNavOpen((open) => !open)}>{navOpen ? '✕' : '☰'}</button><h1 title={meta.detail}>{page === 'board' ? view.name : page === 'windchill' && windchillView ? windchillView.name : page === 'admin' ? settingsLabel(settingsTab) : meta.label}</h1><div className="topbar-slot" ref={setHeaderSlot} /><div className="topbar-actions">{openSteps > 0 && <button type="button" className="ghost setup-button" title="What to configure and how" onClick={() => setGuideOpen(true)}>Setup · {steps.filter((step) => step.required && step.state === 'done').length}/{steps.filter((step) => step.required).length}</button>}<JobsIndicator /><DataStatus azure={azure} />{(meta.usesMonth || (page === 'board' && view.readOnly)) && <label className="month-picker"><span className="sr-only">Month</span><input type="month" aria-label="Month" value={month} onChange={(event) => /^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value) && setMonth(event.target.value)} /></label>}<ThemeToggle /></div></header>
       <DataNotices azure={azure} onOpenConnection={openConnection} />
       {guideOpen && <SetupGuide steps={steps} busy={azure.busy} onClose={() => setGuideOpen(false)} onDismiss={dismissGuide} onOpenTab={(tab, section) => { openSettings(tab, section); setGuideOpen(false) }} onFetch={() => void azure.refresh()} />}
       {store.cache.status === 'error' && <Notice tone="error"><p>{store.cache.message}</p><div className="button-row"><button className="ghost" onClick={() => exportStateJson(store.state)}>Export JSON backup now</button><button className="primary" onClick={store.retrySave}>Retry browser save</button></div></Notice>}
       {store.connection.mode !== 'sharepoint' && store.connection.status === 'error' && <Notice tone="error">{store.connection.message}</Notice>}
-      {page === 'overview' && <DashboardPage month={month} azure={azure} navigate={setPage} store={store} setMonth={setMonth} my={my} />}
-      {page === 'workspace' && <WorkspacePage month={month} azure={azure} store={store} git={git} windchill={windchill} />}
-      {page === 'pulse' && <PulseCheckPage month={month} azure={azure} store={store} my={my} navigate={setPage} windchill={windchill} openWindchill={openWindchill} git={git} pack={monthlyPack} />}
+      {page === 'mydash' && <MyDashboardPage month={month} azure={azure} store={store} my={my} navigate={setPage} views={personalViews} canSetDefault={access.can('settings.manage')} />}
+      {page === 'overview' && <DashboardPage month={month} azure={azure} navigate={setPage} store={store} setMonth={setMonth} my={my} views={personalViews} canSetDefault={access.can('settings.manage')} />}
+      {page === 'pulse' && <PulseCheckPage month={month} azure={azure} store={store} my={my} navigate={setPage} windchill={windchill} openWindchill={openWindchill} git={git} pack={monthlyPack} views={personalViews} />}
       {page === 'pireview' && <PiReviewPage />}
       {page === 'brite' && <BritePage />}
       {page === 'qemapping' && <QeMappingPage git={git} store={qeMapping} resources={qeResources} />}

@@ -6,7 +6,7 @@ import { ReleaseFeatureButton } from './ReleaseFeatureEditor'
 
 // DP table: a "QMS-0025 match" column — the Feature and User Story on the Time Writing board whose title matches the
 // row's SourceProgram + Title at the threshold (dpBoardMatch) — and, when neither matches, Create Feature in the
-// default Create Feature form, titled Program (SourceProgram, else DP) | Service (PsName) | vRelease (Release).
+// default Create Feature form, titled Program (SourceProgram, else DP) | Service (PsName) | Release (the number, no "v").
 function Hit({ hit, label }: { hit: BoardHit; label: string }) {
   return <a href={hit.item.url} target="_blank" rel="noreferrer" title={`${hit.item.title} — ${hit.score}% match`}>{label} {hit.item.id} <small>{hit.score}%</small></a>
 }
