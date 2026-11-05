@@ -4,6 +4,7 @@ import { guardAzureWrites } from './azureDevOps'
 import { GitConflictError } from './gitStorage'
 import type { GitStorage } from './useGitStorage'
 import type { AzureWorkspace } from './useAzureWorkspace'
+import { canViewAs, setViewAsGuard, viewAsLabel, viewAsRights, type ViewAs } from './viewAs'
 
 // The last policy read from Git, kept in this browser so it still applies while Git storage is not connected here.
 const cacheKey = 'demand-planning-access-v1'
@@ -15,7 +16,7 @@ type PolicyState = { scope: string; policy: AccessPolicy | null; sha: string | n
 // The viewer's access: who they are (the email entered on the Time Writing connection, the same one new work is
 // assigned to) and the roles policy in Git (access.json). Without Git storage or without the file, nothing is
 // restricted. Without an email, the policy's default role applies. The email is typed in, not verified.
-export function useAccess(git: GitStorage, azure: AzureWorkspace) {
+export function useAccess(git: GitStorage, azure: AzureWorkspace, viewAs: ViewAs | null = null) {
   const email = azure.isSample ? '' : azure.creatorEmail.trim().toLowerCase()
 
   const scope = git.accessScope
@@ -38,8 +39,12 @@ export function useAccess(git: GitStorage, azure: AzureWorkspace) {
   const [cached] = useState(cachedPolicy)
   const current = state.scope === scope && scope ? state : { policy: cached, sha: null, error: '', loaded: !scope }
 
-  const rights = rightsFor(current.policy, email)
+  // The viewer's own rights decide who may use View as; while it is on, the page follows the person's or role's rights.
+  const ownRights = rightsFor(current.policy, email)
+  const active = viewAs && canViewAs(ownRights) ? viewAs : null
+  const rights = active ? viewAsRights(current.policy, active) : ownRights
   useEffect(() => { guardAzureWrites(() => rights.actions.has('azure.write')) })
+  useEffect(() => { setViewAsGuard(active ? viewAsLabel(active) : ''); return () => setViewAsGuard('') }, [active])
 
   async function save(policy: AccessPolicy, message: string) {
     try {
@@ -56,7 +61,7 @@ export function useAccess(git: GitStorage, azure: AzureWorkspace) {
   return {
     email,
     policy: current.policy, loaded: current.loaded, error: current.error, path: git.accessPath, history: git.accessHistory,
-    rights,
+    rights, ownRights, canViewAs: canViewAs(ownRights), viewingAs: active,
     sees: (area: Area) => rights.areas.has(area),
     can: (action: Action) => rights.actions.has(action),
     reload: load, save,

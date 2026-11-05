@@ -2,7 +2,7 @@ import test, { after, before } from 'node:test'
 import assert from 'node:assert/strict'
 import { loadSample, navigate, openPage, startApp, text } from './helpers.mjs'
 
-// Shell, navigation and first-run scenarios of the UAT (TC-NAV-01, TC-NAV-03, TC-NAV-37, TC-HIS-01, TC-NAV-31, TC-NAV-33, TC-UI-01, TC-SMP-01,
+// Shell, navigation and first-run scenarios of the UAT (TC-NAV-01, TC-NAV-03, TC-NAV-37, TC-HIS-01, TC-ACC-04, TC-NAV-31, TC-NAV-33, TC-UI-01, TC-SMP-01,
 // TC-UPD-02, TC-GIT-06, TC-SET-05), automated against the built web app.
 let app
 before(async () => { app = await startApp() })
@@ -166,6 +166,27 @@ test('TC-HIS-01: Settings → Historical hours explains the import and needs Git
   const panel = page.locator('.panel', { has: page.locator('h2, h3', { hasText: /^Historical hours/ }) }).first()
   assert.match(await text(panel), /Connect Git storage/, 'without Git storage nothing can be imported')
   assert.equal(await panel.getByRole('button', { name: /Upload Excel/ }).count(), 0, 'no upload without Git storage')
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
+test('TC-ACC-04: an Admin views the app as a role, read only, and exits', async () => {
+  // An access policy cached in this browser whose default role is Admin (no Git storage in the test).
+  const policy = { schema: 1, defaultRole: 'Admin', roles: { 'Admin': { areas: ['overview', 'insights', 'mywork', 'monthly', 'bulk', 'board', 'health', 'release', 'baselines', 'qemapping', 'snapshots', 'docs'], actions: ['azure.write', 'settings.manage', 'access.manage'] }, 'Product Owner': { areas: [], actions: [] }, 'People Manager': { areas: [], actions: [] }, 'Scrum Master': { areas: [], actions: [] }, 'Team Member': { areas: ['overview', 'mywork', 'docs'], actions: [] } }, members: {} }
+  const { page, context, errors } = await openPage(app, { init: (text) => localStorage.setItem('demand-planning-access-v1', text), initArg: JSON.stringify(policy) })
+  await page.getByRole('button', { name: 'View as…' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.getByRole('radio', { name: 'A role' }).check()
+  await dialog.getByRole('combobox', { name: 'Role' }).selectOption('Team Member')
+  await dialog.getByRole('button', { name: 'View as', exact: true }).click()
+  const banner = page.locator('.view-as-banner')
+  assert.match(await text(banner), /Viewing as the role Team Member · Team Member — read only/)
+  const menu = await text(page.locator('.sidebar nav'))
+  assert.ok(!/Team overview|Pulse Check/.test(menu), 'the role\'s menu: no Team insights')
+  assert.match(menu, /My dashboard/)
+  await banner.getByRole('button', { name: 'Exit View as' }).click()
+  assert.equal(await page.locator('.view-as-banner').count(), 0)
+  assert.match(await text(page.locator('.sidebar nav')), /Team overview/, 'the Admin\'s own menu is back')
   assert.deepEqual(errors, [])
   await context.close()
 })

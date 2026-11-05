@@ -32,6 +32,8 @@ import { useGitStorage } from './useGitStorage'
 import { useWindchill } from './useWindchill'
 import { WindchillExportImport, WindchillPage } from './components/WindchillViews'
 import { BacklogHealthPage } from './pages/BacklogHealthPage'
+import { viewAsLabel, viewAsPeople, type ViewAs } from './viewAs'
+import { ViewAsDialog } from './components/ViewAsDialog'
 import { useHistory } from './useHistory'
 import { withHistory } from './history'
 import { PulseCheckPage } from './pages/PulseCheckPage'
@@ -123,7 +125,12 @@ export default function App() {
     autoFetched.current = true
     void azure.fetchCloud()
   }, [store.ready, azure, git.connected, setupSynced])
-  const my = useMyWork(azure, store)
+  // View as (CON-89…CON-92): an Admin sees the app as a person or a role, read-only, for this page load only.
+  const [viewAs, setViewAs] = useState<ViewAs | null>(null)
+  const [viewAsOpen, setViewAsOpen] = useState(false)
+  const access = useAccess(git, azure, viewAs)
+  const viewedPerson = access.viewingAs?.kind === 'person' ? access.viewingAs : undefined
+  const my = useMyWork(azure, store, viewedPerson)
   // Settings → Storage: everything shared through Git, loaded now (as at start, plus the planning data, roles and
   // Feature setup); each part reports separately so one failure does not hide the rest.
   async function loadEverything() {
@@ -137,9 +144,8 @@ export default function App() {
     await step('Feature setup', async () => { await featureSetup.reload(); return 'Feature setup' })
     return { loaded, failed }
   }
-  const access = useAccess(git, azure)
   // MYD-06…MYD-09: each person's sections, menu and filters, in Git per person.
-  const personalViews = usePersonalViews(git, azure.creatorEmail)
+  const personalViews = usePersonalViews(git, viewedPerson?.email ?? azure.creatorEmail)
   // Historical hours (HIS-05): the report pages read the Azure DevOps items with the history merged in before its
   // cut-off month; every other page (and every write) keeps the Azure DevOps items only.
   const history = useHistory(git)
@@ -266,11 +272,13 @@ export default function App() {
           </div> : <div key={section.key} className="nav-items">{section.entries}</div>)}</div>
         </div>
       })}</nav>
-      <div className="sidebar-footer"><button type="button" className="text-button customize-menu" onClick={() => setMenuEditor(true)}>Customize menu</button><DesktopDownload /><small className="storage-line" title="Where app data is saved">{storageLabel}</small>{buildStatus}</div>
+      <div className="sidebar-footer"><button type="button" className="text-button customize-menu" onClick={() => setMenuEditor(true)}>Customize menu</button>{access.canViewAs && <button type="button" className="text-button customize-menu" onClick={() => setViewAsOpen(true)}>View as…</button>}<DesktopDownload /><small className="storage-line" title="Where app data is saved">{storageLabel}</small>{buildStatus}</div>
     </aside>
     {menuEditor && <MenuCustomizer pages={pages.filter((item) => !item.hidden && item.id !== 'admin' && allowed(item.id)).map(({ id, label, group }) => ({ id, label, group }))} menu={personalViews.menu} onChange={personalViews.setMenu} onClose={() => setMenuEditor(false)} />}
     <main>
       <header className="topbar"><button type="button" className="menu-button" aria-label={navOpen ? 'Close menu' : 'Open menu'} aria-expanded={navOpen} aria-controls="primary-navigation" onClick={() => setNavOpen((open) => !open)}>{navOpen ? '✕' : '☰'}</button><h1 title={meta.detail}>{page === 'board' ? view.name : page === 'windchill' && windchillView ? windchillView.name : page === 'admin' ? settingsLabel(settingsTab) : meta.label}</h1><div className="topbar-slot" ref={setHeaderSlot} /><div className="topbar-actions">{openSteps > 0 && <button type="button" className="ghost setup-button" title="What to configure and how" onClick={() => setGuideOpen(true)}>Setup · {steps.filter((step) => step.required && step.state === 'done').length}/{steps.filter((step) => step.required).length}</button>}<JobsIndicator /><DataStatus azure={azure} />{(meta.usesMonth || (page === 'board' && view.readOnly)) && <label className="month-picker"><span className="sr-only">Month</span><input type="month" aria-label="Month" value={month} onChange={(event) => /^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value) && setMonth(event.target.value)} /></label>}<ThemeToggle /></div></header>
+      {access.viewingAs && <div className="view-as-banner" role="status"><span>👁 Viewing as <strong>{viewAsLabel(access.viewingAs)}</strong>{access.rights.roles.length ? ` · ${access.rights.roles.join(', ')}` : ' · default role'} — read only: nothing is saved to Azure DevOps or Git.</span><button type="button" className="ghost" onClick={() => setViewAsOpen(true)}>Change</button><button type="button" className="primary" onClick={() => setViewAs(null)}>Exit View as</button></div>}
+      {viewAsOpen && <ViewAsDialog current={access.viewingAs} people={viewAsPeople(azure.items, access.policy)} onStart={(next) => { setViewAs(next); setViewAsOpen(false); setPage('mydash') }} onClose={() => setViewAsOpen(false)} />}
       <DataNotices azure={azure} onOpenConnection={openConnection} />
       {guideOpen && <SetupGuide steps={steps} busy={azure.busy} onClose={() => setGuideOpen(false)} onDismiss={dismissGuide} onOpenTab={(tab, section) => { openSettings(tab, section); setGuideOpen(false) }} onFetch={() => void azure.refresh()} />}
       {store.cache.status === 'error' && <Notice tone="error"><p>{store.cache.message}</p><div className="button-row"><button className="ghost" onClick={() => exportStateJson(store.state)}>Export JSON backup now</button><button className="primary" onClick={store.retrySave}>Retry browser save</button></div></Notice>}

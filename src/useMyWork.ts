@@ -8,12 +8,14 @@ const nameKey = 'demand-planning-my-name-v1'
 
 // Who "me" is: the Time Writing connection's Azure email, plus a display name (chosen once, kept in this browser)
 // for cached or sample items that carry no email.
-export function useMyWork(azure: AzureWorkspace, store: PageProps['store']) {
+export function useMyWork(azure: AzureWorkspace, store: PageProps['store'], viewAsPerson?: { name: string; email?: string }) {
   const [chosen, setChosen] = useState(() => { try { return localStorage.getItem(nameKey) ?? '' } catch { return '' } })
   const email = azure.creatorEmail.trim().toLowerCase()
   const nameFromEmail = email ? azure.items.find((item) => item.assignedToEmail === email)?.assignedTo : undefined
   // Choosing someone else's name shows their work (matched by name); your email is only used for your own view.
-  const me: Me = chosen && chosen !== nameFromEmail ? { name: chosen } : { ...(email ? { email } : {}), ...(nameFromEmail ? { name: nameFromEmail } : {}) }
+  // View as a person (CON-90): their own work, by their Azure email and name.
+  const viewed: Me | undefined = viewAsPerson ? { ...(viewAsPerson.email ? { email: viewAsPerson.email } : {}), ...(viewAsPerson.name && viewAsPerson.name !== viewAsPerson.email ? { name: viewAsPerson.name } : {}) } : undefined
+  const me: Me = viewed ?? (chosen && chosen !== nameFromEmail ? { name: chosen } : { ...(email ? { email } : {}), ...(nameFromEmail ? { name: nameFromEmail } : {}) })
   const known = Boolean(me.email || me.name)
   const absenceEpicId = capacityContext(store.state).absenceEpicId
   const pending = known ? myPendingWork(azure.items, me, absenceEpicId) : []

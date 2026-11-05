@@ -381,6 +381,10 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-ACC-03 Add members by name** — Req CON-74 — browser check with the Time Writing backlog loaded: Settings → Access → Choose a person lists the people Assigned To an item in QMS-0025 by name (members already listed left out; two people with the same name show their email); pick one and Add member adds their email with the everyone-else role; the table shows the name with the email under it, sorted by name; Other (enter an email)… shows the email field and adds a person not in the backlog; without the backlog loaded only the email field and the hint are shown.
 
+**TC-ACC-04 View as a role** — Req CON-89, CON-91, CON-92 — E2E `shell.e2e.mjs` ("TC-ACC-04: an Admin views the app as a role, read only, and exits"); L1 `view-as.test.mjs` ("View as: only the Admin role may use it, and only with an access policy (CON-89)"); browser check with Git storage and access.json: a People Manager or Team Member has no View as…; an Admin views as Team Member — the menu loses Team insights, the banner says read only; Exit restores the Admin's menu; a reload ends View as.
+
+**TC-ACC-05 View as a person, read only** — Req CON-90, CON-92 — L1 `view-as.test.mjs` ("View as: a person gets the roles of their work email (else the default role); a role gets that role only (CON-90, CON-91)"; "View as is read only: writes to Git storage and Azure DevOps are refused while it is on (CON-92)"); browser check with the Time Writing data fetched: view as a team member — My dashboard and Assigned to Me show their hours and work, the menu follows their roles; Save in Monthly Time Writing, a state change in Assigned to Me and Save to Git all report "Read only while viewing as …" and nothing changes in Azure DevOps or Git.
+
 **TC-NAV-12 Freshness in the viewer's time zone** — Req NAV-12 — L1 `format.test.mjs` and `app-update.test.mjs` (the same instant in Asia/Kolkata, America/New_York and UTC; local "today"); browser check in America/New_York: a fetch at 09:00 UTC shows "05:00 AM EDT".
 
 **TC-OV-10 Releases summary, tracking Feature and local approval dates** — Req QV-18, QV-19, OV-10 — L1 `release-overview.test.mjs`, `format.test.mjs`, `release-source.test.mjs` (the same UTC instant is 30 September in New York and 1 October in India); browser check in Asia/Kolkata with CP, DP and IOCC loaded from Git: October shows three stream quadrants and the total (3 releases, 4 documents); September shows the CP release approved 29 Sep 18:30 UTC as “September 30, 2026”, in both the quadrant and the CP view.
@@ -901,6 +905,8 @@ TC-OVR-01 to TC-OVR-03 tested the earlier Overview and are **retired** with OVR-
 
 **TC-CAP-06 Team Holidays and Training** — Req CAP-16 — L1 `capacity.test.mjs` ("Team Holidays and Training (same Epic ID): training is NPRA, PTO / Sick / Unplanned stay absence; the Epic title is not read (TC-CAP-06)"), `my-work.test.mjs` ("Team Holidays and Training: my Training story gets its month Task; leave there is still left out (TC-CAP-06)"); browser check with the QMS-0025 board: Pulse Check → Last month — a person's Training month Task hours appear in the NPRA table and the NPRA total, not in absence; PTO / Sick / Unplanned stay in the absence split; Bulk actions → Create month tasks lists the Training Feature for your own Training story and no leave Feature; Settings → Capacity & periods names the Epic "Team Holidays and Training".
 
+**TC-CAP-07 Everyone in Resources** — Req CAP-29, CAP-30, CAP-31 — L1 `resources.test.mjs` ("Resources list everyone who can be given a region: Time Writing, assignees, historical hours, team members, added by name (CAP-29, CAP-31)"; "Team members are read from Azure DevOps (read only), groups left out, one entry per name (CAP-30)"); browser check with the Time Writing data fetched: Resources lists the people with Time Writing and, as "No Time Writing yet", the other assignees and the historical-hours people; Add team members from Azure DevOps adds the team's other members (or shows the PAT hint); Add a person by name adds one, Remove takes them off again; a region set for a leaver applies to their historical holidays.
+
 **TC-CAP-01 Capacity calculation** — Req CAP-01…09, OVR-09 — L1 `capacity.test.mjs`, `monthly-hours.test.mjs`, `azure-insights.test.mjs`. Plus L3 analysis (A) with one person in October 2026:
 - 22 working days × 8 = 176 h funded.
 - An India holiday of 8 h gives 168 h available.
@@ -1338,6 +1344,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-HIS-08 Group rows (All, All-BLR, All-NL, All-US)** — Req HIS-13 — L1 `history.test.mjs` ("historical hours: All, All-BLR, All-NL and All-US rows apply to everyone in that group (HIS-13)"); browser check: import a workbook with an All-BLR holiday — the check shows the group rows apart from the People list, and after saving every India person has that holiday in the month, Netherlands and US people do not.
 
+**TC-HIS-09 Reading Epic No and Feature No** — Req HIS-14 — L1 `history.test.mjs` ("historical hours: Epic No / Feature No cells written as Excel writes them are read; others are reported, never silently ignored (HIS-14)"); browser check: a stream whose rows carry Feature Nos is not listed under "Streams without an Epic No" when those Features are fetched; when listed, its "Why" names the cause.
+
 **TC-DOC-04 Private Tool Validation Package downloads** — Req DOC-12 — L1 `tool-validation.test.mjs`: configured repository and branch, authenticated read-only GET, fixed folders, path rejection, binary fidelity above 1 MB and safe errors. E2E `tool-validation.e2e.mjs`: missing configuration, list/search, DOCX download bytes, denied access, refresh and connection settings. Execute the same workflow in Web and Windows Desktop; verify downloaded PDF, Word and CSV files open in their native viewers. No private content or PAT is included in app exports or the public build. These automated checks use synthetic files; actual document review/approval remains outside the app.
 
 ## 7. Requirements coverage matrix
@@ -1363,7 +1371,6 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | NAV-34 | TC-NAV-34 |
 | NAV-36 | TC-NAV-36 |
 | NAV-37 | TC-NAV-37 |
-| DOC-12 | TC-DOC-04 |
 | CON-01…03 | TC-CON-01 |
 | CON-04…08, CON-19 | TC-CON-02 |
 | CON-09 | TC-CON-03 |
@@ -1408,6 +1415,10 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CON-86 | TC-CON-54 |
 | CON-87 | TC-CON-55 |
 | CON-88 | TC-CON-56 |
+| CON-89 | TC-ACC-04 |
+| CON-90 | TC-ACC-05 |
+| CON-91 | TC-ACC-04 |
+| CON-92 | TC-ACC-04, TC-ACC-05 |
 | QV-20 | TC-QV-06 |
 | QV-21 | TC-QV-07 |
 | CON-21, CON-22 | TC-CON-08 |
@@ -1523,6 +1534,9 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CAP-14 | TC-CAP-04 |
 | CAP-15 | TC-CAP-05 |
 | CAP-16 | TC-CAP-06 |
+| CAP-29 | TC-CAP-07 |
+| CAP-30 | TC-CAP-07 |
+| CAP-31 | TC-CAP-07 |
 | BAS-01…04 | TC-BAS-01 |
 | BAS-05…07 | TC-BAS-02 |
 | BAS-08…10 | TC-BAS-03 |
@@ -1559,6 +1573,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | DOC-01…03, DOC-05 | TC-DOC-01 |
 | DOC-04, DOC-06…08 | TC-DOC-02 |
 | DOC-09…11 | TC-DOC-03 |
+| DOC-12 | TC-DOC-04 |
 | UI-01, UI-02 | TC-UI-01 |
 | UI-03, UI-04 | TC-INS-03 |
 | UI-05 | TC-UI-02 |
@@ -1627,6 +1642,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | HIS-11 | TC-HIS-06 |
 | HIS-12 | TC-HIS-07 |
 | HIS-13 | TC-HIS-08 |
+| HIS-14 | TC-HIS-09 |
 | NFR-02 | TC-STO-01 |
 | NFR-03…05 | TC-DSK-02, TC-INS-01 |
 | NFR-06 | TC-INS-02 |
@@ -1649,9 +1665,9 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-09 | TC-OV-11…14, TC-CAP-01, TC-CAP-02, TC-CAP-03, TC-QV-17, TC-CON-21, TC-QV-10, TC-QV-11, TC-QV-21 |
 | UC-10 | TC-OV-11 (Months, Streams), TC-OV-13 |
 | UC-11 | TC-BAS-01…04 |
-| UC-12 | TC-GIT-01…04, TC-GIT-05, TC-GIT-06, TC-ACC-03 |
+| UC-12 | TC-GIT-01…04, TC-GIT-05, TC-GIT-06, TC-ACC-03…05 |
 | UC-13 | TC-SNP-01…03 |
-| UC-14 | TC-SET-01…05, TC-CAP-02, TC-CAP-03, TC-NAV-34 |
+| UC-14 | TC-SET-01…05, TC-CAP-02, TC-CAP-03, TC-NAV-34, TC-CAP-07 |
 | UC-15 | TC-STO-01…04, TC-SNP-04 |
 | UC-16 | TC-UPD-01, TC-UPD-02 |
 | UC-17 | TC-DSK-01…03, TC-INS-02 |
@@ -1664,7 +1680,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-24 | TC-PCK-01…07 |
 | UC-25 | TC-WSP-01…07 |
 | UC-26 | TC-MYD-01…05, TC-QV-31, TC-QV-32 |
-| UC-27 | TC-HIS-01…08 |
+| UC-27 | TC-HIS-01…09 |
 
 ## 8. Result record
 

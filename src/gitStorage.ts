@@ -1,4 +1,6 @@
+import { assertNotViewingAs } from './viewAs.ts'
 import type { AppState } from './domain'
+import type { PeriodControl } from './domain'
 import { normalizeRules, normalizeScopes, type BaselineRule, type ReleaseScope } from './baseline.ts'
 import { normalizeCapacitySettings, normalizeProfiles, type CapacitySettings, type ResourceProfile } from './capacity.ts'
 import { normalizePeriods } from './planningLock.ts'
@@ -9,7 +11,7 @@ import { normalizePeriods } from './planningLock.ts'
 // The token stays in this browser (like the Azure PAT) and is never written to app data or exports.
 export interface GitConfig { owner: string; repo: string; branch: string; path: string }
 export type StoredCapacity = Omit<CapacitySettings, 'profiles'>
-export interface PlanningData { schema: 1; baselineRules: BaselineRule[]; releaseScopes: ReleaseScope[]; resourceProfiles: Record<string, ResourceProfile>; capacitySettings?: StoredCapacity; periods?: AppState['periods'] }
+export interface PlanningData { schema: 1; baselineRules: BaselineRule[]; releaseScopes: ReleaseScope[]; resourceProfiles: Record<string, ResourceProfile>; capacitySettings?: StoredCapacity; periods?: PeriodControl[] }
 
 export const defaultGitPath = 'planning-data.json'
 // The team's data repository, prefilled in the Connect Git storage form (GIT-13): a user adds only the token.
@@ -36,11 +38,12 @@ export function saveGitToken(token: string, storage: Pick<Storage, 'setItem'> = 
 export function forgetGitStorage(storage: Pick<Storage, 'removeItem'> = localStorage) { storage.removeItem(tokenKey); storage.removeItem(configKey) }
 
 // Capacity settings are written once they exist (an older file without them loads as before and keeps this browser's).
-export function planningData(state: Pick<AppState, 'baselineRules' | 'releaseScopes' | 'resourceProfiles' | 'capacitySettings'> & Partial<Pick<AppState, 'periods'>>): PlanningData {
+export function planningData(state: Pick<AppState, 'baselineRules' | 'releaseScopes' | 'resourceProfiles' | 'capacitySettings' | 'periods'>): PlanningData {
   const profiles = normalizeProfiles(state.resourceProfiles)
   const capacity = state.capacitySettings == null ? undefined : normalizeCapacitySettings(state.capacitySettings)
   if (capacity?.sharedTime) capacity.sharedTime = [...capacity.sharedTime].sort((a, b) => a.id - b.id)
-  return { schema: 1, baselineRules: normalizeRules(state.baselineRules), releaseScopes: normalizeScopes(state.releaseScopes), resourceProfiles: Object.fromEntries(Object.keys(profiles).sort().map((key) => [key, profiles[key]])), ...(capacity ? { capacitySettings: capacity } : {}), ...(state.periods === undefined ? {} : { periods: normalizePeriods(state.periods) }) }
+  const periods = normalizePeriods(state.periods ?? [])
+  return { schema: 1, baselineRules: normalizeRules(state.baselineRules), releaseScopes: normalizeScopes(state.releaseScopes), resourceProfiles: Object.fromEntries(Object.keys(profiles).sort().map((key) => [key, profiles[key]])), ...(capacity ? { capacitySettings: capacity } : {}), ...(periods.length ? { periods } : {}) }
 }
 // Stable, diff-friendly text: the same data always serialises to the same file.
 export const serializePlanning = (data: PlanningData) => `${JSON.stringify(data, null, 2)}\n`
@@ -50,7 +53,9 @@ export function parsePlanning(text: string): PlanningData {
   try { raw = JSON.parse(text) } catch { throw new Error('The Git data file is not valid JSON. Fix or revert it in the repository; nothing was loaded.') }
   if (!raw || typeof raw !== 'object' || (raw as { schema?: unknown }).schema !== 1) throw new Error('The Git data file is not a Demand Planning data file (schema 1). Nothing was loaded.')
   const input = raw as Record<string, unknown>
-  return planningData({ baselineRules: (Array.isArray(input.baselineRules) ? input.baselineRules : []) as BaselineRule[], releaseScopes: input.releaseScopes as ReleaseScope[], resourceProfiles: input.resourceProfiles as Record<string, ResourceProfile>, capacitySettings: input.capacitySettings == null ? undefined : input.capacitySettings as AppState['capacitySettings'], ...(input.periods === undefined ? {} : { periods: normalizePeriods(input.periods) }) })
+  const rawPeriods = input.periods == null ? [] : input.periods
+  const data = planningData({ baselineRules: (Array.isArray(input.baselineRules) ? input.baselineRules : []) as BaselineRule[], releaseScopes: input.releaseScopes as ReleaseScope[], resourceProfiles: input.resourceProfiles as Record<string, ResourceProfile>, capacitySettings: input.capacitySettings == null ? undefined : input.capacitySettings as AppState['capacitySettings'], periods: rawPeriods as PeriodControl[] })
+  return input.periods != null ? { ...data, periods: normalizePeriods(rawPeriods) } : data
 }
 
 export function encodeBase64(text: string) { let binary = ''; for (const byte of new TextEncoder().encode(text)) binary += String.fromCharCode(byte); return btoa(binary) }
@@ -118,6 +123,7 @@ export async function readTextFile(config: GitConfig, token: string, fetchImpl: 
   return { text: decodeBase64(body.content), sha: body.sha }
 }
 export async function writeTextFile(config: GitConfig, token: string, text: string, sha: string | null, message: string, fetchImpl: Fetch = fetch): Promise<{ sha: string; commitUrl: string }> {
+  assertNotViewingAs()
   const response = await fetchImpl(fileUrl(config), { method: 'PUT', headers: { ...headers(token), 'Content-Type': 'application/json' }, body: JSON.stringify({ message: message.trim() || `Update ${config.path}`, content: encodeBase64(text), branch: config.branch, ...(sha ? { sha } : {}) }) })
   if (!response.ok) throw await failure(response, config, `save ${config.path}`)
   const body = (await response.json()) as { content?: { sha?: string }; commit?: { html_url?: string } }
@@ -128,6 +134,7 @@ export async function writeTextFile(config: GitConfig, token: string, text: stri
 // A binary file (the Monthly pack's PowerPoint template): written as base64 like a text file, read raw as bytes.
 export function bytesToBase64(bytes: Uint8Array) { let binary = ''; for (let at = 0; at < bytes.length; at += 0x8000) binary += String.fromCharCode(...bytes.subarray(at, at + 0x8000)); return btoa(binary) }
 export async function writeBinaryFile(config: GitConfig, token: string, bytes: Uint8Array, sha: string | null, message: string, fetchImpl: Fetch = fetch): Promise<{ sha: string; commitUrl: string }> {
+  assertNotViewingAs()
   const response = await fetchImpl(fileUrl(config), { method: 'PUT', headers: { ...headers(token), 'Content-Type': 'application/json' }, body: JSON.stringify({ message: message.trim() || `Update ${config.path}`, content: bytesToBase64(bytes), branch: config.branch, ...(sha ? { sha } : {}) }) })
   if (!response.ok) throw await failure(response, config, `save ${config.path}`)
   const body = (await response.json()) as { content?: { sha?: string }; commit?: { html_url?: string } }
@@ -144,6 +151,7 @@ export async function readBinaryFile(config: GitConfig, token: string, fetchImpl
 // Deletes a file as one commit; false when it does not exist. The version id is read first, so the delete is of the
 // file as it is now.
 export async function deleteFile(config: GitConfig, token: string, message: string, fetchImpl: Fetch = fetch): Promise<boolean> {
+  assertNotViewingAs()
   const sha = await fileSha(config, token, fetchImpl)
   if (!sha) return false
   const response = await fetchImpl(fileUrl(config), { method: 'DELETE', headers: { ...headers(token), 'Content-Type': 'application/json' }, body: JSON.stringify({ message: message.trim() || `Delete ${config.path}`, sha, branch: config.branch }) })
@@ -179,6 +187,7 @@ export async function fileSha(config: GitConfig, token: string, fetchImpl: Fetch
 // Writes the data file as one commit. The sha of the version that was loaded is required, so a concurrent change
 // is refused (GitConflictError) instead of being overwritten.
 export async function writePlanningFile(config: GitConfig, token: string, data: PlanningData, sha: string | null, message: string, fetchImpl: Fetch = fetch): Promise<{ sha: string; commitUrl: string }> {
+  assertNotViewingAs()
   const response = await fetchImpl(fileUrl(config), { method: 'PUT', headers: { ...headers(token), 'Content-Type': 'application/json' }, body: JSON.stringify({ message: message.trim() || 'Update planning data', content: encodeBase64(serializePlanning(data)), branch: config.branch, ...(sha ? { sha } : {}) }) })
   if (!response.ok) throw await failure(response, config, 'save the data file')
   const body = (await response.json()) as { content?: { sha?: string }; commit?: { html_url?: string } }

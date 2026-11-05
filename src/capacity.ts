@@ -37,7 +37,7 @@ export const absenceKinds: AbsenceKind[] = ['PTO', 'Sick Leave', 'Unplanned Leav
 // after leaving gives them no capacity and leaves them out of the head-count; a month they join or leave in is prorated.
 export const resourceRoles = ['QE', 'QMS', 'CAPA', 'Lead', 'Manager'] as const
 export type ResourceRole = typeof resourceRoles[number]
-export interface ResourceProfile { region?: Region; role?: ResourceRole; reportsTo?: string; peopleManager?: boolean; joinedOn?: string; leftOn?: string }
+export interface ResourceProfile { region?: Region; role?: ResourceRole; reportsTo?: string; peopleManager?: boolean; joinedOn?: string; leftOn?: string; listed?: 'team' | 'added' }
 const isDay = (value: unknown): value is string => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`)) && new Date(`${value}T00:00:00Z`).toISOString().startsWith(value)
 
 export function normalizeProfiles(value: unknown): Record<string, ResourceProfile> {
@@ -53,6 +53,7 @@ export function normalizeProfiles(value: unknown): Record<string, ResourceProfil
     if (input.peopleManager === true) profile.peopleManager = true
     if (isDay(input.joinedOn)) profile.joinedOn = input.joinedOn
     if (isDay(input.leftOn) && !(profile.joinedOn && input.leftOn < profile.joinedOn)) profile.leftOn = input.leftOn
+    if (input.listed === 'team' || input.listed === 'added') profile.listed = input.listed
     if (Object.keys(profile).length) result[name] = profile
   }
   return result
@@ -370,4 +371,24 @@ export function itemsForTeam(source: AzureWorkItem[], filter: TeamFilter, settin
     const holiday = holidayRegionOf(item, byId, settings)
     return holiday != null ? holiday === 'everyone' || !filter.region || holiday === filter.region : matches(item.assignedTo)
   })
+}
+
+// Settings → Resources (CAP-29…CAP-31): everyone whose region, role and dates can be set — the people with Time Writing
+// (their figures), everyone else Assigned To fetched work, the people of the historical hours (leavers included), the
+// Azure DevOps team members and people added by name (kept in their profile as listed), and anyone with a profile.
+export type ResourceSource = 'time writing' | 'assigned' | 'history' | 'team' | 'added' | 'profile'
+export interface ResourceRow extends AzureResource { sources: ResourceSource[] }
+export function resourceRows(timeWriting: AzureResource[], assignees: string[], historyPeople: string[], profiles: Record<string, ResourceProfile>): ResourceRow[] {
+  const rows = new Map<string, ResourceRow>(timeWriting.map((person) => [person.name, { ...person, sources: ['time writing'] }]))
+  const add = (name: string, source: ResourceSource) => {
+    const key = name.trim()
+    if (!key || key === 'Unassigned') return
+    const row = rows.get(key) ?? { name: key, firstMonth: '', lastMonth: '', months: 0, tasks: 0, work: 0, absence: 0, streams: [], status: 'No bookings' as LoadStatus, utilization: null, sources: [] }
+    if (!row.sources.includes(source)) row.sources.push(source)
+    rows.set(key, row)
+  }
+  for (const name of assignees) add(name, 'assigned')
+  for (const name of historyPeople) add(name, 'history')
+  for (const [name, profile] of Object.entries(profiles)) add(name, profile.listed === 'team' ? 'team' : profile.listed === 'added' ? 'added' : 'profile')
+  return [...rows.values()].sort((a, b) => a.name.localeCompare(b.name))
 }

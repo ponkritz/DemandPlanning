@@ -1,3 +1,4 @@
+import { assertNotViewingAs } from './viewAs.ts'
 import type { AzureWorkItem } from './domain'
 import { featureDoD, fillTitle, missingValues, reviewStoryTitle, titleValues, fieldPlaceholders, type TitleField } from './featureSetup.ts'
 import { planMonthStory, timeWritingMonth } from './azureInsights.ts'
@@ -27,7 +28,7 @@ export const projectApiBase = (config: Pick<AzureConfig, 'organization' | 'proje
 // Azure DevOps Services accepts 7.1; older Azure DevOps Server versions need a lower version (e.g. 6.0 or 5.0).
 export const apiVersionOf = (config: Pick<AzureConfig, 'apiVersion'>) => config.apiVersion && /^\d{1,2}\.\d(-preview(\.\d)?)?$/.test(config.apiVersion) ? config.apiVersion : '7.1'
 export interface AzureRequest extends AzureConfig {
-  operation: 'backlog-epics' | 'areas' | 'iterations' | 'iteration-tree' | 'fields' | 'query' | 'items' | 'create-feature' | 'create-child' | 'update-time-writing-effort' | 'update-work-item' | 'edit-work-item' | 'comments' | 'add-comment'
+  operation: 'backlog-epics' | 'areas' | 'team-members' | 'iterations' | 'iteration-tree' | 'fields' | 'query' | 'items' | 'create-feature' | 'create-child' | 'update-time-writing-effort' | 'update-work-item' | 'edit-work-item' | 'comments' | 'add-comment'
   pat: string
   query?: string
   ids?: number[]
@@ -831,6 +832,7 @@ export function assertWritableBase(config: Pick<AzureConfig, 'organization' | 'b
   if (changesAzure(operation) && !isCloudBase(collectionUrl(config))) throw new Error('Changes are written to Azure DevOps Services (dev.azure.com) only; on-premises servers are read-only. Nothing was changed.')
 }
 export async function requestAzure(request: AzureRequest): Promise<unknown> {
+  if (changesAzure(request.operation)) assertNotViewingAs()
   if (changesAzure(request.operation) && !writesAllowed()) throw new Error('Your role does not allow changes in Azure DevOps. An Admin can change this in Settings → Access.')
   assertWritableBase(request, request.operation)
   if ((request.operation === 'create-feature' || request.operation === 'create-child') && !isAssignee(request.feature?.assignedTo)) throw new Error('A new work item must be assigned to someone (an email). Nothing was created.')
@@ -845,7 +847,7 @@ export async function requestAzure(request: AzureRequest): Promise<unknown> {
   const base = projectApiBase(request)
   const updating = request.operation === 'update-time-writing-effort' || request.operation === 'update-work-item' || request.operation === 'edit-work-item'
   const writing = request.operation === 'create-feature' || request.operation === 'create-child' || updating
-  const readingMetadata = request.operation === 'backlog-epics' || request.operation === 'areas' || request.operation === 'iterations' || request.operation === 'iteration-tree' || request.operation === 'fields'
+  const readingMetadata = request.operation === 'backlog-epics' || request.operation === 'areas' || request.operation === 'team-members' || request.operation === 'iterations' || request.operation === 'iteration-tree' || request.operation === 'fields'
   const create = request.operation === 'create-feature' || request.operation === 'create-child'
   const endpoint = updating ? `_apis/wit/workitems/${request.workItemId}` : create ? `_apis/wit/workitems/$${request.operation === 'create-feature' ? 'Feature' : encodeURIComponent(request.workItemType!)}` : request.operation === 'backlog-epics' ? `${encodeURIComponent(request.team)}/_apis/work/backlogs/Microsoft.EpicCategory/workItems` : request.operation === 'iteration-tree' ? '_apis/wit/classificationnodes/iterations' : request.operation === 'fields' ? '_apis/wit/fields' : readingMetadata ? `${encodeURIComponent(request.team)}/_apis/work/teamsettings/${request.operation === 'areas' ? 'teamfieldvalues' : 'iterations'}` : request.operation === 'query' ? '_apis/wit/wiql' : '_apis/wit/workitemsbatch'
   const body = request.operation === 'edit-work-item' ? editPatch(request.edit!, request.rev!) : request.operation === 'update-work-item' ? workItemUpdatePatch(request) : request.operation === 'update-time-writing-effort' ? [{ ...(request.planHours == null ? {} : { op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.OriginalEstimate', value: request.planHours }) }, { ...(request.actualHours == null ? {} : { op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.CompletedWork', value: request.actualHours }) }, ...(request.tags ? [{ op: 'add', path: '/fields/System.Tags', value: request.tags }] : [])].filter(patch => 'op' in patch) : create ? featurePatch(request, request.feature!) : request.operation === 'query' ? { query: request.query } : { ids: request.ids, errorPolicy: 'Fail', $expand: 'Relations' }
@@ -853,7 +855,7 @@ export async function requestAzure(request: AzureRequest): Promise<unknown> {
   let response: Response | undefined
   for (const [attempt, version] of versions.entries()) {
     try {
-      const url = `${base}/${endpoint}?api-version=${version}${request.operation === 'query' ? `&$top=${/\bFROM\s+WorkItemLinks\b/i.test(request.query ?? '') ? 20000 : 1000}` : ''}${request.operation === 'iteration-tree' ? '&$depth=10' : ''}${create ? `&validateOnly=${request.validateOnly === true}` : ''}`
+      const url = request.operation === 'team-members' ? `${collectionUrl(request)}/_apis/projects/${encodeURIComponent(request.project)}/teams/${encodeURIComponent(request.team)}/members?api-version=${version}&$top=1000` : `${base}/${endpoint}?api-version=${version}${request.operation === 'query' ? `&$top=${/\bFROM\s+WorkItemLinks\b/i.test(request.query ?? '') ? 20000 : 1000}` : ''}${request.operation === 'iteration-tree' ? '&$depth=10' : ''}${create ? `&validateOnly=${request.validateOnly === true}` : ''}`
       response = await fetch(url, {
         method: readingMetadata ? 'GET' : updating ? 'PATCH' : 'POST', redirect: 'error', credentials: 'omit',
         headers: { Authorization: `Basic ${btoa(`:${request.pat}`)}`, 'Content-Type': writing ? 'application/json-patch+json' : 'application/json', Accept: 'application/json' },
@@ -898,4 +900,14 @@ export async function readFieldNames(config: AzureConfig, pat: string, transport
     const response = await transport({ ...config, team: config.team || config.project, pat, operation: 'fields' }) as { value?: { referenceName?: unknown; name?: unknown }[] }
     return Object.fromEntries((response.value ?? []).flatMap((field) => typeof field.referenceName === 'string' && typeof field.name === 'string' ? [[field.referenceName, field.name]] : []))
   } catch { return {} }
+}
+
+// The members of the connection's team (CAP-30): read only, for Settings → Resources. Needs a PAT that may read the
+// project's teams (Project and Team, Read); names and emails only.
+export async function fetchTeamMembers(config: AzureConfig, pat: string, transport: AzureTransport = requestAzure) {
+  if (!config.organization || !config.project || !config.team) throw new Error('The Time Writing connection needs an organization, project and team.')
+  if (!pat.trim()) throw new Error('Enter the PAT of the Time Writing connection first.')
+  const response = await transport({ ...config, pat: pat.trim(), operation: 'team-members' }) as { value?: { identity?: { displayName?: unknown; uniqueName?: unknown; isContainer?: unknown } }[] }
+  const members = (response.value ?? []).flatMap(({ identity }) => identity && identity.isContainer !== true && typeof identity.displayName === 'string' && identity.displayName.trim() ? [{ name: identity.displayName.trim().slice(0, 120), ...(typeof identity.uniqueName === 'string' && /^[^\s@]+@[^\s@]+$/.test(identity.uniqueName) ? { email: identity.uniqueName.trim().toLowerCase().slice(0, 200) } : {}) }] : [])
+  return [...new Map(members.map((member) => [member.name, member])).values()].sort((a, b) => a.name.localeCompare(b.name))
 }
