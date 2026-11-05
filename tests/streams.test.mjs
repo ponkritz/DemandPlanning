@@ -108,3 +108,53 @@ test('IOCC: Completed = Release Notes or Verification Report signed, Supported =
   assert.equal(october.documents.length, 4)
   assert.deepEqual(names(ioccMonthCounts(items, '2026-09', 'UTC').supported), ['Core Gateway 5.1 (Core) 1'])
 })
+
+test('Pulse Check is worked out once per data set: the same sources and month give the same streams; new data recalculates (QV-51, KB-27)', async () => {
+  const { fieldReader, cpSignatures } = await import('../src/cpReporting.ts')
+  const { approvalMonthOf } = await import('../src/releaseSource.ts')
+  const { windchillReleases, cachedWindchillReleases, windchillSupported } = await import('../src/windchillReleases.ts')
+  const source = (connectionId, items) => ({ connectionId, name: connectionId, role: 'reference', organization: 'o', project: 'p', query: 'q', fetchedAt: '2026-10-20T00:00:00Z', items })
+  const profiles = [{ id: 'io', reason: 'IOCC', role: 'reference' }]
+  const state = { azureSources: [source('io', [doc(2, 'DHP\\IOCC\\Core', '', 'Patient Monitor v1.4 Release Notes')])] }
+  const first = defaultStreamReleases(state, profiles, '2026-10', 'UTC')
+  assert.equal(defaultStreamReleases(state, profiles, '2026-10', 'UTC'), first, 'reopening reuses the streams')
+  assert.notEqual(defaultStreamReleases(state, profiles, '2026-09', 'UTC'), first, 'another month is its own')
+  const fetched = { azureSources: [source('io', [doc(2, 'DHP\\IOCC\\Core', '', 'Patient Monitor v1.4 Release Notes'), doc(3, 'DHP\\IOCC\\Core', '', 'Patient Monitor v1.5 Release Notes')])] }
+  const again = defaultStreamReleases(fetched, profiles, '2026-10', 'UTC')
+  assert.notEqual(again, first, 'a new fetch (new arrays) recalculates')
+  assert.deepEqual(again.find((stream) => stream.name === 'IOCC').releases.map((entry) => entry.release).sort(), ['1.4', '1.5'])
+  // The field lookup gives the same field as scanning the names in order: exact name, else the part after a dot.
+  const read = fieldReader(undefined)
+  const item = { fields: { 'Custom.Approver_Name1': 'Ana', 'Other.ApproverName1': 'Bo', 'A.B.Type': 'Release Notes', Title: 'x' } }
+  assert.equal(read(item, 'ApproverName1'), 'Ana', 'the first matching name wins')
+  assert.equal(read(item, 'Type'), 'Release Notes', 'after any dot')
+  assert.equal(read(item, 'B.Type'), 'Release Notes')
+  assert.equal(read(item, 'title'), 'x')
+  assert.equal(read(item, 'Missing'), undefined)
+  // DP fields by name, with any prefix, the first matching field winning; DP months read once and picked per month.
+  const { fieldOf } = await import('../src/dpReleases.ts')
+  const { dpMonthCounts } = await import('../src/dpMilestones.ts')
+  const dpItem = { id: 7, workItemType: 'Release', title: 'x', state: 'Active', fields: { 'Custom.DDTDate': '2026-10-05T00:00:00Z', 'Other.DDTDate': 'later', 'Custom.DDTStatus': 'Done', PsName: 'DoseNav', Release: '2.1.0' } }
+  assert.equal(fieldOf(dpItem, 'ddtdate'), '2026-10-05T00:00:00Z')
+  assert.equal(fieldOf(dpItem, 'Custom.DDTStatus'), 'Done')
+  assert.equal(fieldOf(dpItem, 'Missing'), undefined)
+  const dpItems = [dpItem]
+  assert.equal(dpMonthCounts(dpItems, '2026-10', 'UTC').completed.length, 1)
+  assert.equal(dpMonthCounts(dpItems, '2026-09', 'UTC').completed.length, 0)
+  // Approval months in the viewer's time zone (one formatter per zone).
+  assert.equal(approvalMonthOf('2026-10-31T23:30:00Z', 'Asia/Kolkata'), '2026-11')
+  assert.equal(approvalMonthOf('2026-10-31T23:30:00Z', 'UTC'), '2026-10')
+  assert.equal(approvalMonthOf('not a date', 'UTC'), undefined)
+  // A release tree of 4,000 documents with many fields is read in well under a second (it took seconds before).
+  const items = []; let id = 1
+  for (let r = 0; r < 40; r++) { const release = id++; items.push({ id: release, workItemType: 'Release', title: `Release ${r}.0`, url: '', state: 'Active', fields: {} }); const folder = id++; items.push({ id: folder, parentId: release, workItemType: 'Folder', title: 'Reports', url: '', state: '', fields: {} })
+    for (let d = 0; d < 100; d++) { const fields = { 'Custom.Type': 'Release Notes', 'Custom.ApproverName1': 'Ana', 'Custom.ApproverFunction1': 'QAQE for Software', 'Custom.ApproverApprovalDate1': `2026-${String(1 + (d % 12)).padStart(2, '0')}-0${1 + (d % 9)}T10:00:00Z` }; for (let k = 0; k < 40; k++) fields[`Custom.Field${k}`] = 'x'; items.push({ id: id++, parentId: folder, workItemType: 'Document', title: `Doc ${d}`, url: '', state: 'Approved', fields }) } }
+  const started = performance.now()
+  assert.equal(cpSignatures(items, undefined).signatures.length, 4000)
+  assert.ok(performance.now() - started < 1500, `read in ${Math.round(performance.now() - started)} ms`)
+  // A Windchill export's releases are read once and reused for every month; a document counts once per release.
+  const rows = [{ Name: 'A', Location: '/Products/Monitor/Release 2.1.0', Date: '2026-10-03' }, { Name: 'B', Location: '/Products/Monitor/Release 2.1.0', Date: '2026-09-03' }]
+  assert.equal(cachedWindchillReleases(rows, ['Name', 'Location', 'Date']), cachedWindchillReleases(rows, ['Name', 'Location', 'Date']))
+  assert.deepEqual(cachedWindchillReleases(rows, ['Name', 'Location', 'Date']).releases.map((entry) => entry.documents.length), windchillReleases(rows, ['Name', 'Location', 'Date']).releases.map((entry) => entry.documents.length))
+  assert.deepEqual(windchillSupported(rows, ['Name', 'Location', 'Date'], '2026-10'), windchillSupported([...rows], ['Name', 'Location', 'Date'], '2026-10'))
+})

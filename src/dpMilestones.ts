@@ -37,12 +37,24 @@ export function uniqueReleases(entries: CountedMilestone[]): SupportedRelease[] 
   }
   return [...byKey.values()].sort((a, b) => a.date.localeCompare(b.date) || a.item.id - b.item.id)
 }
-export function dpMonthCounts(items: AzureWorkItem[], month: string, timeZone?: string) {
-  const supported: CountedMilestone[] = []
-  for (const item of items) for (const [milestone, dateField, statusField] of dpMilestones) {
-    const date = fieldOf(item, dateField), status = fieldOf(item, statusField)
-    if (date && isDone(status) && approvalMonthOf(date, timeZone) === month) supported.push({ item, milestone, date, status: status! })
+// Every milestone Done, with its month, read once per data set and time zone; each month then only picks its own (KB-27).
+const doneCache = new WeakMap<object, Map<string, (CountedMilestone & { month?: string })[]>>()
+function doneMilestones(items: AzureWorkItem[], timeZone?: string) {
+  let byZone = doneCache.get(items)
+  if (!byZone) { byZone = new Map(); doneCache.set(items, byZone) }
+  let done = byZone.get(timeZone ?? '')
+  if (!done) {
+    done = []
+    for (const item of items) for (const [milestone, dateField, statusField] of dpMilestones) {
+      const date = fieldOf(item, dateField), status = fieldOf(item, statusField)
+      if (date && isDone(status)) done.push({ item, milestone, date, status: status!, month: approvalMonthOf(date, timeZone) })
+    }
+    byZone.set(timeZone ?? '', done)
   }
+  return done
+}
+export function dpMonthCounts(items: AzureWorkItem[], month: string, timeZone?: string) {
+  const supported: CountedMilestone[] = doneMilestones(items, timeZone).filter((entry) => entry.month === month).map(({ item, milestone, date, status }) => ({ item, milestone, date, status }))
   supported.sort((a, b) => a.date.localeCompare(b.date) || a.item.id - b.item.id)
   // milestones: every milestone Done in the month; completed / supported: the unique releases behind them.
   const completed = uniqueReleases(supported.filter((entry) => entry.milestone === 'DDT'))

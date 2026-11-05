@@ -137,7 +137,7 @@ test('export dates are read in the formats Windchill writes, and the list is new
   assert.deepEqual(releases.map((entry) => `${entry.name} ${entry.release} ${entry.latest}`), ['B 2.0 10/27/2026 9:15 AM', 'D 4.0 3-Oct-2026', 'A 1.0 9/5/2026', 'C 3.0 n/a'], 'by date value, not by text; D keeps its later document date')
 })
 
-test('the header month filter keeps the releases whose latest date falls in that month (CON-73)', () => {
+test('the header month filter keeps the releases with a document dated in that month, not only the latest (CON-73)', () => {
   const rows = [
     { Name: 'A 1.0 Plan', 'Last Modified': '2026-10-03' },
     { Name: 'A 1.0 Report', 'Last Modified': '2026-08-20' },
@@ -146,13 +146,14 @@ test('the header month filter keeps the releases whose latest date falls in that
   ]
   const { releases } = windchillReleases(rows, ['Name', 'Last Modified'])
   assert.deepEqual(releases.map((entry) => [`${entry.name} ${entry.release}`, releaseMonth(entry)]), [['A 1.0', '2026-10'], ['B 2.0', '2026-09'], ['C 3.0', undefined]], 'the month comes from the latest document, A is October not August')
+  assert.deepEqual(releases.map((entry) => entry.months), [['2026-10', '2026-08'], ['2026-09'], []], 'every month a document is dated in')
   assert.deepEqual(releasesInMonth(releases, '2026-10').map((entry) => entry.name), ['A'])
   assert.deepEqual(releasesInMonth(releases, '2026-09').map((entry) => entry.name), ['B'])
-  assert.deepEqual(releasesInMonth(releases, '2026-08'), [], 'A moved to October with its newer document')
+  assert.deepEqual(releasesInMonth(releases, '2026-08').map((entry) => entry.name), ['A'], 'A is supported in August too: its Report was signed then, even though a newer document is dated October')
   assert.deepEqual(releasesInMonth(releases, '2026-11'), [])
 })
 
-test('Pulse Check Supported line: the export\'s releases with the latest date in the month, "name number", newest first (QV-33)', () => {
+test('Pulse Check Supported line: the export\'s releases with a document dated in the month, "name number", newest first (QV-33)', () => {
   const rows = [
     { Name: 'Plan', Location: '/Products/RTS 3.0.0.1_CC 3.0.0.1/DHF', 'Last Modified': '2026-10-06' },
     { Name: 'SRS', Location: '/Products/Remote Diagnostics/1.7/DHF', 'Last Modified': '2026-10-03' },
@@ -162,6 +163,10 @@ test('Pulse Check Supported line: the export\'s releases with the latest date in
   assert.deepEqual(windchillSupported(rows, columns, '2026-10'), ['RTS 3.0.0.1_CC 3.0.0.1 3.0.0.1 + 3.0.0.1', 'Remote Diagnostics 1.7'])
   assert.deepEqual(windchillSupported(rows, columns, '2026-08'), ['CareLink R3.2'])
   assert.deepEqual(windchillSupported(rows, columns, '2026-09'), [])
+  // A release whose documents were signed in two months is supported in both.
+  const spread = [...rows, { Name: 'Plan', Location: '/Products/CareLink/R3.2/DHF', 'Last Modified': '2026-10-02' }]
+  assert.deepEqual(windchillSupported(spread, columns, '2026-08'), ['CareLink R3.2'])
+  assert.ok(windchillSupported(spread, columns, '2026-10').includes('CareLink R3.2'))
 })
 
 test('ECP: each release is the second Location folder, "<project number> <project name>", with everything under it (TC-CON-51)', async () => {

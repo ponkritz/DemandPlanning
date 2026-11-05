@@ -1,4 +1,4 @@
-import type { AppState } from './domain'
+import type { AppState, AzureWorkItem } from './domain'
 import type { AzureConnectionProfileSummary } from './azureCredentials.ts'
 import { releaseFor, releaseOf } from './releasePath.ts'
 import { defaultStreams, profileForStream, profilesForStream, streamOfProfile, type ReleaseRule } from './streams.ts'
@@ -59,6 +59,18 @@ function ioccStream(state: Pick<AppState, 'azureSources' | 'releaseSource'>, pro
 // CP from its release-folder tree (cpReporting): Completed Releases = main Release Notes signed by QA/QE in the month,
 // Supported Releases = any QA/QE-signed document under the release in the month — each Release container once,
 // shared containers apart. Another CP connection (e.g. "CP Releases") gives the release names.
+// The CP tree and the release names do not depend on the month: read once per fetched data set (KB-27).
+type Columns = Parameters<typeof cpSignatures>[1]
+const treeCache = new WeakMap<object, Map<string, ReturnType<typeof cpSignatures>>>()
+const namesCache = new WeakMap<object, Map<string, ReturnType<typeof cpNameIndex>>>()
+function cached<T>(cache: WeakMap<object, Map<string, T>>, items: object, key: string, make: () => T) {
+  let byKey = cache.get(items)
+  if (!byKey) { byKey = new Map(); cache.set(items, byKey) }
+  if (!byKey.has(key)) byKey.set(key, make())
+  return byKey.get(key)!
+}
+const cpTree = (items: AzureWorkItem[], columns: Columns, timeZone?: string) => cached(treeCache, items, JSON.stringify([columns ?? null, timeZone ?? '']), () => cpSignatures(items, columns, undefined, timeZone))
+const cpNames = (items: AzureWorkItem[], columns: Columns) => cached(namesCache, items, JSON.stringify(columns ?? null), () => cpNameIndex(items, columns))
 export function cpReportFor(state: Pick<AppState, 'azureSources' | 'releaseSource'>, profiles: AzureConnectionProfileSummary[], month: string, timeZone?: string) {
   const stream = defaultStreams.find((entry) => entry.rule === 'cp')!
   const tree = profileForStream(stream, profiles)
@@ -71,7 +83,7 @@ export function cpReportFor(state: Pick<AppState, 'azureSources' | 'releaseSourc
   const withField = (name: string) => candidates.map((entry) => ({ ...entry, count: entry.found.items.filter((item) => entry.field(item, name)).length })).filter((entry) => entry.count > 0).sort((a, b) => b.count - a.count)[0]
   const chosen = withField('Content') ?? withField('Release')
   const enrichment = chosen?.found, enrichmentName = chosen ? chosen.profile.viewName || chosen.profile.reason : undefined
-  const report = cpMonthReport(cpSignatures(source?.items ?? [], source && 'columns' in source ? source.columns : undefined, undefined, timeZone), month, enrichment ? cpNameIndex(enrichment.items, 'columns' in enrichment ? enrichment.columns : undefined) : undefined)
+  const report = cpMonthReport(cpTree(source?.items ?? [], source && 'columns' in source ? source.columns : undefined, timeZone), month, enrichment ? cpNames(enrichment.items, 'columns' in enrichment ? enrichment.columns : undefined) : undefined)
   return { profile: tree, source, enrichment, enrichmentName, report }
 }
 function cpStream(state: Pick<AppState, 'azureSources' | 'releaseSource'>, profiles: AzureConnectionProfileSummary[], month: string, timeZone?: string): ReleaseStream {
@@ -89,7 +101,25 @@ function cpStream(state: Pick<AppState, 'azureSources' | 'releaseSource'>, profi
 
 // Pulse Check: the default Azure streams in their order (DP, CP, IOCC, Content, Tool Validations), each from the
 // connection named like it, also before it is fetched; a stream without a connection is listed as not set up.
+// The streams of a month are worked out once per data set (KB-27): the store replaces its arrays on every change, so
+// the same profiles, sources and month always give the same streams. Callers only read the result.
+const none = {}
+const streamCache = new WeakMap<object, WeakMap<object, WeakMap<object, Map<string, ReleaseStream[]>>>>()
 export function defaultStreamReleases(state: Pick<AppState, 'azureSources' | 'releaseSource'>, profiles: AzureConnectionProfileSummary[], month: string, timeZone?: string): ReleaseStream[] {
+  let bySources = streamCache.get(profiles)
+  if (!bySources) { bySources = new WeakMap(); streamCache.set(profiles, bySources) }
+  let byRelease = bySources.get(state.azureSources ?? none)
+  if (!byRelease) { byRelease = new WeakMap(); bySources.set(state.azureSources ?? none, byRelease) }
+  let byMonth = byRelease.get(state.releaseSource ?? none)
+  if (!byMonth) { byMonth = new Map(); byRelease.set(state.releaseSource ?? none, byMonth) }
+  const key = `${month}\u0000${timeZone ?? ''}`
+  const cached = byMonth.get(key)
+  if (cached) return cached
+  const streams = computeStreams(state, profiles, month, timeZone)
+  byMonth.set(key, streams)
+  return streams
+}
+function computeStreams(state: Pick<AppState, 'azureSources' | 'releaseSource'>, profiles: AzureConnectionProfileSummary[], month: string, timeZone?: string): ReleaseStream[] {
   const releaseConnections = profiles.filter((profile) => profile.role === 'release-source').length
   return defaultStreams.filter((stream) => stream.source === 'azure').map((stream) => {
     const profile = profileForStream(stream, profiles)

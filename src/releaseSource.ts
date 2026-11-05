@@ -143,10 +143,19 @@ export function viewMonthOf(item: Pick<AzureWorkItem, 'approvalDate' | 'changedD
 }
 
 // Month (YYYY-MM) of a date in the viewer's time zone.
+// One formatter per time zone: creating one per date was the main cost of Pulse Check on large views (KB-27).
+const monthFormats = new Map<string, Intl.DateTimeFormat>()
+const monthFormat = (timeZone?: string) => { let format = monthFormats.get(timeZone ?? ''); if (!format) { format = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', ...(timeZone ? { timeZone } : {}) }); monthFormats.set(timeZone ?? '', format) } return format }
+const monthsOf = new Map<string, string | undefined>()
 export function approvalMonthOf(date: string | undefined, timeZone?: string) {
-  if (!date || !Number.isFinite(Date.parse(date))) return undefined
-  const parts = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', ...(timeZone ? { timeZone } : {}) }).formatToParts(new Date(date))
-  return `${parts.find((part) => part.type === 'year')!.value}-${parts.find((part) => part.type === 'month')!.value}`
+  if (!date) return undefined
+  const key = `${timeZone ?? ''}\u0000${date}`
+  if (monthsOf.has(key)) return monthsOf.get(key)
+  let month: string | undefined
+  if (Number.isFinite(Date.parse(date))) { const parts = monthFormat(timeZone).formatToParts(new Date(date)); month = `${parts.find((part) => part.type === 'year')!.value}-${parts.find((part) => part.type === 'month')!.value}` }
+  if (monthsOf.size >= 200000) monthsOf.clear()
+  monthsOf.set(key, month)
+  return month
 }
 
 // Releases completed in a month: those whose approval date falls in it.

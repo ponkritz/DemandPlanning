@@ -315,6 +315,8 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-NAV-32 Other views in the menu** — Req NAV-32, NAV-17 — L1 `connections.test.mjs` ("Other views: read-only views and Windchill exports that are not a default stream, from the cloud or on-prem"); browser check: add an on-prem connection named e.g. "Risk register" with Show in menu on: it appears under Other views (not under Release Details), opens its view, and the heading is highlighted while it is collapsed and the view is open; with Show in menu off it disappears, and the heading is hidden when empty. **UAT**
 
+**TC-NAV-37 Expand all / Collapse all in the menu** — Req NAV-37, NAV-17 — E2E `shell.e2e.mjs` ("TC-NAV-37: Expand all and Collapse all open and close every menu heading, and are remembered"); browser check: with a page pinned, Collapse all closes every heading and the Release Details lists while the pinned page stays; Expand all opens them; at 900px the buttons are hidden; on a phone (off-canvas menu) they work.
+
 **TC-NAV-33 Get started pop-up** — Req NAV-33 — L1 `setup-guide.test.mjs` ("release streams: DP's Pedestal and DHFI data sets count, and the missing ones are named"; "a first-time user: Git first, the rest waits for the step it depends on"; "partly set up: Git and the connection done, the PAT is next, then Fetch"; "fully set up: nothing required left; region and streams follow the facts and who may change them"); browser check: a new browser without data opens the pop-up by itself with "Connect the shared Git storage" as the next step and the PAT and fetch steps "After the step above"; "Open Storage settings" closes it and shows Settings → Storage; the top bar shows "Setup · 0/4" and reopens it; a reload opens it again; after "Don't show again automatically" a reload does not, the Setup button still does; at 390 × 844 nothing overflows. **UAT**
 
 **TC-NAV-36 Background jobs** — Req NAV-36 — L1 `background-jobs.test.mjs` ("background jobs: run, report progress and the result; the same job is not started twice"; "… a failed result or a thrown error marks the job; Clear finished keeps the running ones"); browser check (QMS-0025 with a saved PAT): New Feature → Save closes the form at once and the top bar shows “⟳ 1 running” with its progress, then “✓ Jobs done” with “#id … Hierarchy complete”; the menu and other pages stay usable meanwhile; Bulk actions → Create month tasks and Move run the same way and their buttons wait while the job runs; Monthly Time Writing → Save leaves a failed Task staged; reloading while a job runs asks first.
@@ -395,13 +397,13 @@ Cases marked **UAT** are also run in acceptance testing.
   - PAT inputs are `type="password"`.
   - No secret is in the repository.
 
-**TC-CON-41 Windchill releases: header month, sorting and column widths** — Req CON-73 — **UAT** — L1 `windchill-releases.test.mjs` ("the header month filter keeps the releases whose latest date falls in that month (CON-73)"); E2E `documents-and-data.e2e.mjs` ("TC-CON-41": with the header month 2026-10 the export lists the October releases, 2026-08 only CareLink, All months all; clicking Release name sorts A→Z, again Z→A; a heading has a resize handle).
+**TC-CON-41 Windchill releases: header month, sorting and column widths** — Req CON-73 — **UAT** — L1 `windchill-releases.test.mjs` ("the header month filter keeps the releases with a document dated in that month, not only the latest (CON-73)"); E2E `documents-and-data.e2e.mjs` ("TC-CON-41": with the header month 2026-10 the export lists the October releases, 2026-08 only CareLink, All months all; clicking Release name sorts A→Z, again Z→A; a heading has a resize handle).
 - Steps:
   1. Import `e2e/fixtures/windchill-export.csv`; set the header month to 2026-10, then 2026-08; choose Show → All months.
   2. Click the "Release name" heading twice; click "Latest Last Modified".
   3. Drag the handle at the right edge of "Release name" to the left; reload; press Reset widths.
 - Expected:
-  - The header shows the month picker on the export page. For 2026-10 the count reads "4 of 5 releases with the latest Last Modified in October 2026 · 5 documents"; for 2026-08 "1 of 5 … August 2026 · 1 document" (CareLink 3.2); All months lists all 5.
+  - The header shows the month picker on the export page. For 2026-10 the count reads "4 of 5 releases with a document Last Modified in October 2026 · 5 documents"; for 2026-08 "1 of 5 … August 2026 · 1 document" (CareLink 3.2); All months lists all 5.
   - Release name sorts A→Z (CareLink first), then Z→A; Latest Last Modified sorts newest first again; the active heading shows ▾ or ▴.
   - The column keeps its dragged width after the reload; Reset widths returns it to automatic.
 
@@ -522,8 +524,8 @@ Cases marked **UAT** are also run in acceptance testing.
 
 | Situation | Planning (OE) | Actuals (CW) |
 |---|---|---|
-| Before M-05 23:59:59.999, no record | open | open |
-| At M-05 23:59:59.999 exactly | locked | open |
+| Before M-05 23:59:59, no record | open | open |
+| At M-05 23:59:59 exactly | locked | open |
 | After M-05, extension M-10, now M-07 | open | open |
 | Explicit planning lock, before M-05 | locked | open |
 | Explicit lock + active extension | locked (see OI-03) | — |
@@ -725,7 +727,7 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-CON-50 Work email as its own setting** — Req CON-82 — L1 `work-email.test.mjs` ("your work email is its own setting: saved and read, never taken from the first connection or changed by a Git sync (TC-CON-50)"; "first start: the email on the Time Writing connection becomes the setting only after the shared-email clean-up ran (TC-CON-50)"); E2E `shell.e2e.mjs` (TC-SET-06: *Your work email* is the first section of Azure DevOps); browser check (desktop app): enter the email under Settings → Azure DevOps → Your work email, Force Update and restart — the email is still there, Assigned to Me shows your work and the access role is yours; edit and save the Time Writing connection (no email field) — the email is unchanged; Get started points to Your work email while it is empty.
 
-**TC-CON-51 ECP projects from Windchill** — Req CON-83 — L1 `windchill-releases.test.mjs` ("ECP: each release is the second Location folder, \"<project number> <project name>\", with everything under it (TC-CON-51)"), `streams.test.mjs` ("default streams in order; connections and exports found by name"); browser check: import a Windchill export through "＋ ECP" (an export still named "QRE" also shows as ECP) — Release Details → Windchill exports → ECP lists each second folder of the Location ("Parent folder/<number> <name>/Phase") once as "<number> <name>" with every document under it, phases and deeper folders included, and its latest date; the month filter follows the header month; Pulse Check → Supported shows "ECP [n] : 123456 Name, …"; Create Feature proposes "ECP | 123456 Name".
+**TC-CON-51 ECP projects from Windchill** — Req CON-83 — L1 `windchill-releases.test.mjs` ("ECP: each release is the second Location folder, \"<project number> <project name>\", with everything under it (TC-CON-51)"), `streams.test.mjs` ("default streams in order; connections and exports found by name"); browser check: import a Windchill export through "＋ ECP" (an export still named "QRE" also shows as ECP) — Release Details → Windchill exports → ECP lists each second folder of the Location ("Parent folder/<number> <name>/Phase") once as "<number> <name>" with every document under it, phases and deeper folders included, and the months its documents are dated in; the month filter follows the header month; Pulse Check → Supported shows "ECP [n] : 123456 Name, …"; Create Feature proposes "ECP | 123456 Name".
 
 **TC-CON-52 BRITE placeholder** — Req CON-84 — inspection: Release Details shows BRITE at its root; it opens "BRITE is not set up yet."; Pulse Check and the Monthly pack have no BRITE line.
 
@@ -822,11 +824,11 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-QV-17 Supported Releases section in Pulse Check** — Req QV-32, QV-24, QV-25 — L1 `dp-milestones.test.mjs` (the two unique-release tests), `streams.test.mjs` ("Pulse Check streams: …"); E2E `documents-and-data.e2e.mjs` ("TC-QV-17: Pulse Check folds the DP Supported Releases list; Show list opens it and the choice is remembered"); browser check with Azure DevOps mocked (the TC-QV-10 data): Pulse Check → Current month releases (October) shows "Supported Releases · DP · October 2026" with "3 releases · 4 milestones" and no list until **Show list**; opened, #501 RSGMS 3.0.0.2 once with SFV and DT chips and "Completed (DT)"; the Releases tab (September) shows #504 with DT; no page errors.
 
-**TC-QV-18 Supported summary next to Releases, with S&S IT** — Req QV-33 — **UAT** — L1 `windchill-releases.test.mjs` ("Pulse Check Supported line: the export's releases with the latest date in the month, \"name number\", newest first (QV-33)"); E2E `documents-and-data.e2e.mjs` ("TC-QV-18": an S&S IT export imported, Pulse Check → Releases with the header month 2026-11 (the tab shows the month before) shows "SUPPORTED · October 2026 · 4 supported releases" with "S&S IT [4] : …", and for 2026-09 "S&S IT [1] : CareLink 3.2").
+**TC-QV-18 Supported summary next to Releases, with S&S IT** — Req QV-33 — **UAT** — L1 `windchill-releases.test.mjs` ("Pulse Check Supported line: the export's releases with a document dated in the month, \"name number\", newest first (QV-33)"); E2E `documents-and-data.e2e.mjs` ("TC-QV-18": an S&S IT export imported, Pulse Check → Releases with the header month 2026-11 (the tab shows the month before) shows "SUPPORTED · October 2026 · 4 supported releases" with "S&S IT [4] : …", and for 2026-09 "S&S IT [1] : CareLink 3.2").
 - Steps:
   1. Import the S&S IT export (`e2e/fixtures/windchill-export.csv`, named "S&S IT"); with a DP connection fetched (TD-02), open Pulse Check → Releases; set the header month.
 - Expected:
-  - Next to the RELEASES summary a SUPPORTED summary lists, per stream and in the same format, "DP [n] : name release, …" (its Supported Releases) and "S&S IT [n] : name number, …" (the export's releases whose latest Last Modified is in the month), with the total in the title; a stream without any shows "none".
+  - Next to the RELEASES summary a SUPPORTED summary lists, per stream and in the same format, "DP [n] : name release, …" (its Supported Releases) and "S&S IT [n] : name number, …" (the export's releases with a document whose Last Modified is in the month), with the total in the title; a stream without any shows "none".
 
 
 **TC-QV-19 Tool Validations: unique tools in the month** — Req QV-34 — L1 `streams.test.mjs` ("Tool Validations: one entry per tool, whatever the number of its documents (QV-34)"); browser check with the Tool Validations connection fetched (TD-02 fixture: five documents in October — Minitab Validation Plan / Protocol / Report under Area Path "…\Tool Validations\Minitab", "JIRA Cloud v9.4 Validation Protocol" and "… Report" under "…\Tool Validations") → Pulse Check → Releases (header month November, the tab shows October) shows "Tool Validations [2] : JIRA Cloud 9.4, Minitab", the Supported summary the same line (October, the tab's month — never the header month's data), the quadrant 2 releases · 5 documents, and the Dashboard delivery table 2 for October; with the header month set to October the Releases tab shows September (0 tools in both summaries) and the Current month releases tab shows the two tools in both summaries.
@@ -849,6 +851,8 @@ Cases marked **UAT** are also run in acceptance testing.
 **TC-QV-30 CP Platform titles (PF1.0 / PF2.0)** — Req QV-49 — L1 `cp-reporting.test.mjs` ("Platform titles: \"PF1.0 / PF2.0 <Name>-<Number>\" give the name with its variant and an alphanumeric number (QV-49, TC-QV-30)"); browser check: a CP container "PF2.0 Carpo-A12" shows as "PF2.0 Carpo A12" with no warning, and Create Feature offers "PF2.0 Carpo | A12".
 
 **TC-QV-31 Pulse Check over a quarter, half-year or year** — Req QV-50 — L1 `pulse-check.test.mjs` ("Pulse Check periods: calendar quarter, half-year and year against the period before; each release once (QV-50, TC-QV-31)"); E2E `shell.e2e.mjs` (TC-MYD-01: Quarter shows "Releases · Qn yyyy vs Qn yyyy" and the work opened and closed; Month brings the tabs back); browser check: a release seen in two months of the quarter counts once.
+
+**TC-QV-32 Pulse Check opens without recalculating** — Req QV-51 — L1 `streams.test.mjs` ("Pulse Check is worked out once per data set: the same sources and month give the same streams; new data recalculates (QV-51, KB-27)"); browser check with the real DP, CP, IOCC and S&S IT data loaded: open Pulse Check, switch to Year and back, leave and reopen — the page opens without a pause after the first time; Refresh, then the figures follow the new data.
 
 
 
@@ -1034,16 +1038,14 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
   - Step 2 stores 80 and 100 (OI-05).
   - Step 3 writes the audit "Update"/"CapacitySettings".
 
-**TC-SET-02 Period control** — Req SET-05, SET-06, MON-06, MON-07, GIT-03, GIT-04, OI-01, OI-02 — L1 `planning-lock.test.mjs`, `git-storage.test.mjs`; E2E `period-controls.e2e.mjs` uses mocked GitHub to verify new-month creation, independent modes/dates, selected-month enforcement, reload and second-browser persistence, local fallback, denied/read-only saves and concurrent-edit rejection.
+**TC-SET-02 Period control** — Req SET-05, SET-06, OI-01, OI-02
 - Steps:
-  1. Select month M in Capacity & periods → Period control; verify defaults M-05 and (M+1)-05.
-  2. Change both dates and set different Plan/Actual modes, enter a reason, then Save month controls.
-  3. Switch months and back, reload, and load the shared file in another browser. Check Monthly Time Writing for M and M+1.
-  4. Attempt a read-only, denied or conflicting shared save. Repeat without Git and wait for the local save confirmation before reload.
+  1. Lock and unlock planning with a reason.
+  2. Set Extend until.
 - Expected:
-    - Each saved month retains independent dates and modes, actor, timestamp and reason. Other months and unrelated shared settings are preserved.
-    - Dates end at 23:59:59.999 local when entered and persist as shared timestamps. Manual Unlock opens after expiry; Automatic restores deadline enforcement. Open forms update after deadline passage.
-    - Failed shared saves do not apply local controls; read-only users cannot save; conflicts require reload. Without Git, local persistence is explicit and shared availability is not claimed.
+  - Each toggle is audited, with the reason as the detail.
+  - The extension is stored as the chosen date at 23:59:59.
+  - The Monthly page reflects it per TC-MON-03.
 
 **TC-SET-03 Resources** — Req SET-07…09, CAP-09
 - Steps:
@@ -1320,7 +1322,23 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-MYD-05 Team overview tiles and tabs** — Req MYD-10, MYD-11, MYD-12 — E2E `shell.e2e.mjs` ("TC-MYD-05: Team overview shows six headline tiles; each opens its analysis, with a trail back; Delivery opens Pulse Check"); unit tests of the calculations as before (`dashboard.test.mjs`, `insights.test.mjs`); inspection: the menu offers no Insights workspace and `src/workspace.ts` is gone.
 
-**TC-DOC-04 Private Tool Validation Package downloads** — Req DOC-12 — L1 `tool-validation.test.mjs`: configured repo/branch, authenticated read-only GET, fixed folders, path rejection, binary fidelity above 1 MB and safe errors. E2E `tool-validation.e2e.mjs`: missing configuration, list/search, DOCX download bytes, denied access, refresh and connection settings. Execute the same workflow in Web and Windows Desktop; verify downloaded PDF/Word/CSV files open in their native viewers. No private content or PAT is included in app exports or the public build. These automated checks use synthetic files; actual document review/approval remains outside the app.
+**TC-HIS-01 Historical hours page** — Req HIS-01 — E2E `shell.e2e.mjs` ("TC-HIS-01: Settings → Historical hours explains the import and needs Git storage to upload"); browser check with Git storage and the real planning workbook: Upload Excel… reads TransformedData; the counts (rows May–Sep 2026, people, recorded hours, rows not imported with their reasons) match the workbook; Save to Git writes `history-hours.json` to the data repository (not to the app's repository); the page shows the source, cut-off and the Azure DevOps Tasks left out; Remove history removes the file.
+
+**TC-HIS-02 Reading the workbook** — Req HIS-02, HIS-03 — L1 `history.test.mjs` ("historical hours: the TransformedData sheet read before the cut-off; every other row listed with its reason (HIS-02, HIS-03)").
+
+**TC-HIS-03 The history file in Git** — Req HIS-04, HIS-08 — L1 `history.test.mjs` ("historical hours: the Git file keeps known shapes only (HIS-04)"); browser check: upload again after saving — earlier name and stream choices are kept.
+
+**TC-HIS-04 History in the reports** — Req HIS-05, HIS-07, HIS-09 — L1 `history.test.mjs` ("historical hours in the reports: before the cut-off the history only, from it Azure DevOps only; real Epics and mapped streams used (HIS-05, HIS-07)"); browser check: after the import the Team overview and Pulse Check show May–Sep 2026 per person and stream (a person who has left by name), October from Azure DevOps only; Assigned to Me, Bulk actions and Monthly Time Writing show no imported row.
+
+**TC-HIS-05 Names** — Req HIS-06 — L1 `history.test.mjs` ("historical hours: Excel names matched to Azure DevOps names in any order; ambiguous or unknown names stay as written (HIS-06)"); browser check: change a report name in the People list and save — the person's history follows the new name.
+
+**TC-HIS-06 Feature ID and Git storage source** — Req HIS-10, HIS-11 — L1 `history.test.mjs` ("historical hours: a Feature ID of a Feature in the data wins over Epic No and stream; disagreements and unknown Features listed (HIS-10)"); browser check with Git storage: put the planning workbook in the data repository (or its history/ folder) — From Git storage… lists it and reads it like an upload; a TransformedData sheet with a Feature ID column shows "By Feature ID" and the warning lists Feature IDs not fetched and those whose Epic No disagrees.
+
+**TC-HIS-07 Holidays, leave and trainings in the history** — Req HIS-12 — L1 `history.test.mjs` ("historical hours: holidays, leave and trainings under their Features count for the row's own person only (HIS-12)"); browser check: after importing a workbook whose holiday rows carry the regional holiday Feature's ID, Capacity and workload shows each person's own holiday hours for the month, not the team's total.
+
+**TC-HIS-08 Group rows (All, All-BLR, All-NL, All-US)** — Req HIS-13 — L1 `history.test.mjs` ("historical hours: All, All-BLR, All-NL and All-US rows apply to everyone in that group (HIS-13)"); browser check: import a workbook with an All-BLR holiday — the check shows the group rows apart from the People list, and after saving every India person has that holiday in the month, Netherlands and US people do not.
+
+**TC-DOC-04 Private Tool Validation Package downloads** — Req DOC-12 — L1 `tool-validation.test.mjs`: configured repository and branch, authenticated read-only GET, fixed folders, path rejection, binary fidelity above 1 MB and safe errors. E2E `tool-validation.e2e.mjs`: missing configuration, list/search, DOCX download bytes, denied access, refresh and connection settings. Execute the same workflow in Web and Windows Desktop; verify downloaded PDF, Word and CSV files open in their native viewers. No private content or PAT is included in app exports or the public build. These automated checks use synthetic files; actual document review/approval remains outside the app.
 
 ## 7. Requirements coverage matrix
 
@@ -1344,6 +1362,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | NAV-33 | TC-NAV-33 |
 | NAV-34 | TC-NAV-34 |
 | NAV-36 | TC-NAV-36 |
+| NAV-37 | TC-NAV-37 |
+| DOC-12 | TC-DOC-04 |
 | CON-01…03 | TC-CON-01 |
 | CON-04…08, CON-19 | TC-CON-02 |
 | CON-09 | TC-CON-03 |
@@ -1490,6 +1510,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | QV-48 | TC-QV-28 |
 | QV-49 | TC-QV-30 |
 | QV-50 | TC-QV-31 |
+| QV-51 | TC-QV-32 |
 | QV-38 | TC-CON-42 |
 | OVR-01…08 | retired (TC-OVR-01…03 retired) |
 | OV-11 | TC-OV-11 |
@@ -1538,7 +1559,6 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | DOC-01…03, DOC-05 | TC-DOC-01 |
 | DOC-04, DOC-06…08 | TC-DOC-02 |
 | DOC-09…11 | TC-DOC-03 |
-| DOC-12 | TC-DOC-04 |
 | UI-01, UI-02 | TC-UI-01 |
 | UI-03, UI-04 | TC-INS-03 |
 | UI-05 | TC-UI-02 |
@@ -1594,6 +1614,19 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | MYD-10 | TC-MYD-05 |
 | MYD-11 | TC-MYD-05 |
 | MYD-12 | TC-MYD-05 |
+| HIS-01 | TC-HIS-01 |
+| HIS-02 | TC-HIS-02 |
+| HIS-03 | TC-HIS-02 |
+| HIS-04 | TC-HIS-03 |
+| HIS-05 | TC-HIS-04 |
+| HIS-06 | TC-HIS-05 |
+| HIS-07 | TC-HIS-04 |
+| HIS-08 | TC-HIS-03 |
+| HIS-09 | TC-HIS-04 |
+| HIS-10 | TC-HIS-06 |
+| HIS-11 | TC-HIS-06 |
+| HIS-12 | TC-HIS-07 |
+| HIS-13 | TC-HIS-08 |
 | NFR-02 | TC-STO-01 |
 | NFR-03…05 | TC-DSK-02, TC-INS-01 |
 | NFR-06 | TC-INS-02 |
@@ -1605,7 +1638,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 | Use case | Test cases |
 |---|---|
-| UC-01 | TC-NAV-01…06, TC-NAV-33, TC-UI-01, TC-UI-02, TC-UI-03, TC-CON-36, TC-CON-38 |
+| UC-01 | TC-NAV-01…06, TC-NAV-33, TC-NAV-37, TC-UI-01, TC-UI-02, TC-UI-03, TC-CON-36, TC-CON-38 |
 | UC-02 | TC-CON-01…07, TC-CON-17…19, TC-CON-44, TC-CON-28, TC-NAV-02, TC-NAV-34, TC-QV-14, TC-QV-16, TC-QV-23, TC-QV-24, TC-CON-46, TC-QV-25, TC-CON-47 |
 | UC-03 | TC-CON-03, TC-FET-01…06 |
 | UC-04 | TC-TWN-01, TC-TWN-02, TC-MON-01…06 |
@@ -1630,7 +1663,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-23 | TC-QEM-01…08 |
 | UC-24 | TC-PCK-01…07 |
 | UC-25 | TC-WSP-01…07 |
-| UC-26 | TC-MYD-01…05, TC-QV-31 |
+| UC-26 | TC-MYD-01…05, TC-QV-31, TC-QV-32 |
+| UC-27 | TC-HIS-01…08 |
 
 ## 8. Result record
 

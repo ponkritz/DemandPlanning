@@ -32,6 +32,8 @@ import { useGitStorage } from './useGitStorage'
 import { useWindchill } from './useWindchill'
 import { WindchillExportImport, WindchillPage } from './components/WindchillViews'
 import { BacklogHealthPage } from './pages/BacklogHealthPage'
+import { useHistory } from './useHistory'
+import { withHistory } from './history'
 import { PulseCheckPage } from './pages/PulseCheckPage'
 import { PiReviewPage } from './pages/PiReviewPage'
 import { BritePage } from './pages/BritePage'
@@ -138,6 +140,10 @@ export default function App() {
   const access = useAccess(git, azure)
   // MYD-06…MYD-09: each person's sections, menu and filters, in Git per person.
   const personalViews = usePersonalViews(git, azure.creatorEmail)
+  // Historical hours (HIS-05): the report pages read the Azure DevOps items with the history merged in before its
+  // cut-off month; every other page (and every write) keeps the Azure DevOps items only.
+  const history = useHistory(git)
+  const reportAzure = useMemo(() => history.file ? { ...azure, items: withHistory(azure.items, history.file).items } : azure, [azure, history.file])
   const [menuEditor, setMenuEditor] = useState(false)
   const featureSetup = useFeatureSetup(git, azure.creatorEmail)
   const qeMapping = useQeMapping(git)
@@ -189,7 +195,11 @@ export default function App() {
   useEffect(() => { setNavOpen(false) }, [page, viewId, windchillId])
   useEffect(() => { if (!navOpen) return; const close = (event: KeyboardEvent) => { if (event.key === 'Escape') setNavOpen(false) }; window.addEventListener('keydown', close); return () => window.removeEventListener('keydown', close) }, [navOpen])
   const [collapsed, setCollapsed] = useState<string[]>(() => { try { const saved = JSON.parse(localStorage.getItem('demand-planning-nav-collapsed-v1') ?? '[]'); return Array.isArray(saved) ? saved.filter((key): key is string => typeof key === 'string') : [] } catch { return [] } })
-  const toggleNav = (key: string) => setCollapsed((now) => { const next = now.includes(key) ? now.filter((entry) => entry !== key) : [...now, key]; try { localStorage.setItem('demand-planning-nav-collapsed-v1', JSON.stringify(next)) } catch { /* this visit only */ } return next })
+  const saveCollapsed = (next: string[]) => { try { localStorage.setItem('demand-planning-nav-collapsed-v1', JSON.stringify(next)) } catch { /* this visit only */ } return next }
+  const toggleNav = (key: string) => setCollapsed((now) => saveCollapsed(now.includes(key) ? now.filter((entry) => entry !== key) : [...now, key]))
+  // Expand all / Collapse all (NAV-37): every heading and both Release Details lists at once.
+  const navKeys = [...pageGroups, 'release:ads', 'release:windchill']
+  const allCollapsed = navKeys.every((key) => collapsed.includes(key))
   const navButton = (key: string, icon: string, label: string, active: boolean, onClick: () => void) => <button key={key} className={active ? 'nav-active' : ''} aria-current={active ? 'page' : undefined} onClick={onClick}><span className="nav-icon">{icon}</span>{label}</button>
   // Settings pages (SET-14): one menu entry each; opening one on a given section (e.g. Stream mapping) shows that
   // section. The page is remounted so it picks up the section asked for.
@@ -225,6 +235,7 @@ export default function App() {
     {navOpen && <div className="nav-backdrop" onClick={() => setNavOpen(false)} aria-hidden="true" />}
     <aside className="sidebar" id="primary-navigation">
       <div className="brand" title="I&amp;D Quality Demand Planning"><div className="brand-mark"><BrandMark /></div><div><strong>I&amp;D Quality</strong><span>Demand Planning</span></div></div>
+      <div className="nav-fold" role="group" aria-label="Menu headings"><button type="button" className="text-button" disabled={!collapsed.length} onClick={() => setCollapsed(saveCollapsed([]))}>Expand all</button><button type="button" className="text-button" disabled={allCollapsed} onClick={() => setCollapsed(saveCollapsed(navKeys))}>Collapse all</button></div>
       <nav aria-label="Primary navigation">{(() => { const pinned = personalViews.menu.pinned.map((id) => pages.find((item) => item.id === id)).filter((item): item is typeof pages[number] => Boolean(item && !item.hidden && allowed(item.id))); return pinned.length ? <div className="nav-section nav-pinned"><span className="nav-group">PINNED</span><div className="nav-items">{pinned.map((item) => <button key={`pin:${item.id}`} className={page === item.id ? 'nav-active' : ''} aria-current={page === item.id ? 'page' : undefined} onClick={() => setPage(item.id)}><span className="nav-icon">{item.icon}</span>{item.label}</button>)}</div></div> : null })()}{pageGroups.map((group) => {
         const pageButton = (item: typeof pages[number]) => !allowed(item.id) ? [] : [<button key={item.id} className={page === item.id ? 'nav-active' : ''} aria-current={page === item.id ? 'page' : undefined} onClick={() => setPage(item.id)}><span className="nav-icon">{item.icon}</span>{item.label}{item.id === 'mywork' && my.pending.length > 0 && <span className="nav-badge" aria-label={`${my.pending.length} pending`}>{my.pending.length}</span>}</button>]
         const windchillMeta = pageMeta('windchill')
@@ -264,9 +275,9 @@ export default function App() {
       {guideOpen && <SetupGuide steps={steps} busy={azure.busy} onClose={() => setGuideOpen(false)} onDismiss={dismissGuide} onOpenTab={(tab, section) => { openSettings(tab, section); setGuideOpen(false) }} onFetch={() => void azure.refresh()} />}
       {store.cache.status === 'error' && <Notice tone="error"><p>{store.cache.message}</p><div className="button-row"><button className="ghost" onClick={() => exportStateJson(store.state)}>Export JSON backup now</button><button className="primary" onClick={store.retrySave}>Retry browser save</button></div></Notice>}
       {store.connection.mode !== 'sharepoint' && store.connection.status === 'error' && <Notice tone="error">{store.connection.message}</Notice>}
-      {page === 'mydash' && <MyDashboardPage month={month} azure={azure} store={store} my={my} navigate={setPage} views={personalViews} canSetDefault={access.can('settings.manage')} />}
-      {page === 'overview' && <DashboardPage month={month} azure={azure} navigate={setPage} store={store} setMonth={setMonth} my={my} views={personalViews} canSetDefault={access.can('settings.manage')} />}
-      {page === 'pulse' && <PulseCheckPage month={month} azure={azure} store={store} my={my} navigate={setPage} windchill={windchill} openWindchill={openWindchill} git={git} pack={monthlyPack} views={personalViews} />}
+      {page === 'mydash' && <MyDashboardPage month={month} azure={reportAzure} store={store} my={my} navigate={setPage} views={personalViews} canSetDefault={access.can('settings.manage')} />}
+      {page === 'overview' && <DashboardPage month={month} azure={reportAzure} navigate={setPage} store={store} setMonth={setMonth} my={my} views={personalViews} canSetDefault={access.can('settings.manage')} />}
+      {page === 'pulse' && <PulseCheckPage month={month} azure={reportAzure} store={store} my={my} navigate={setPage} windchill={windchill} openWindchill={openWindchill} git={git} pack={monthlyPack} views={personalViews} />}
       {page === 'pireview' && <PiReviewPage />}
       {page === 'brite' && <BritePage />}
       {page === 'qemapping' && <QeMappingPage git={git} store={qeMapping} resources={qeResources} />}
@@ -278,7 +289,7 @@ export default function App() {
       {page === 'health' && <BacklogHealthPage azure={azure} store={store} />}
       {page === 'board' && <BoardPage azure={azure} store={store} current={view} month={month} git={git} onOpenConnection={openConnection} assign={assign} featureSetup={featureSetup.setups} />}
       {page === 'snapshots' && <SnapshotsPage {...pageProps} />}
-      {page === 'admin' && <AdminPage key={`${settingsTab}:${settingsVisit}`} tab={settingsTab} onOpenTab={openSettings} {...pageProps} azure={azure} git={git} access={access} featureSetup={featureSetup} monthlyPack={monthlyPack} loadEverything={loadEverything} onOpenBoard={() => setPage('board')} />}
+      {page === 'admin' && <AdminPage key={`${settingsTab}:${settingsVisit}`} tab={settingsTab} onOpenTab={openSettings} {...pageProps} azure={azure} git={git} access={access} featureSetup={featureSetup} monthlyPack={monthlyPack} history={history} loadEverything={loadEverything} onOpenBoard={() => setPage('board')} />}
       {page === 'docs' && <DocsPage git={git} onConfigure={() => openSettings('storage', 'git')} />}
     </main>
   </div></HeaderSlot.Provider></TableDefaultsContext.Provider>
