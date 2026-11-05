@@ -46,8 +46,9 @@ This document lists every software component of the system: the in-house source 
 | MyWorkPage | `src/pages/MyWorkPage.tsx` | Assigned to Me: my pending Azure DevOps items, resolve/close them, and create a Feature under an Epic with its stories and task. | ATM, CON |
 | BritePage | `src/pages/BritePage.tsx` | BRITE placeholder at the root of Release Details, until its exports and rules are known (CON-84). | CON |
 | PiReviewPage | `src/pages/PiReviewPage.tsx` | PI Review placeholder page (planned PI summary). | NAV |
-| WorkspacePage | `src/pages/WorkspacePage.tsx` | Insights workspace: KPI tiles, trend and cumulative releases charts, exception queue, timeline health, insight cards with evidence, the pack preview and the insights queue saved to the Monthly pack. | WSP |
 | PulseCheckPage | `src/pages/PulseCheckPage.tsx` | Pulse Check: last month's and this month's releases per stream, Supported Releases, Windchill exports, analysis and ongoing activities. | OVR, NAV, QV |
+| MyDashboardPage | `src/pages/MyDashboardPage.tsx` | My dashboard: the person's hours against capacity, open work, streams and releases for the header month; the start page. | MYD |
+| PersonalLayout | `src/components/PersonalLayout.tsx` | Customize a page's sections (show, hide, order, reset, default for everyone) and the menu (pin, hide). | MYD |
 | QeMappingPage | `src/pages/QeMappingPage.tsx` | QE Mapping: upload Excel/CSV, edit cells/rows/columns, filter and group, then save to Git or export. | QEM |
 | SnapshotsPage | `src/pages/SnapshotsPage.tsx` | Snapshots: SharePoint snapshot history, browser storage and backup recovery, legacy snapshot records. | SNP, STO |
 
@@ -129,13 +130,15 @@ This document lists every software component of the system: the in-house source 
 | dpReleases | `src/dpReleases.ts` | DP releases from Pedestal Release items dated by matching DHFI documents (exact version). | QV |
 | featureSetup | `src/featureSetup.ts` | Per-Epic Feature setup (stories, Time Writing story, task defaults), placeholders, shared/personal layers, parse/serialise. | CON |
 | format | `src/format.ts` | Display formatting: hours, percent, dates in viewer time zone, month names, relative time. | UI |
-| workspace | `src/workspace.ts` | Insights workspace rules: KPI deltas, data completeness, exception queue, timeline health, cumulative sums, insight cards and the suggested questions. | WSP |
 | packInputs | `src/packInputs.ts` | The Monthly pack's inputs for a month (streams' releases and supported counts, utilisation), shared by the pack tab and the Insights workspace. | PCK, WSP |
 | insights | `src/insights.ts` | Dashboard insights: month forecast, plan accuracy, stream momentum, resilience, anomalies and health score. | OVR |
 | markdown | `src/markdown.ts` | Small Markdown parser to plain data (headings with GitHub anchors, lists, tables, inline) and link targets. | DOC |
 | closeChain | `src/closeChain.ts` | After a close: the follow-up question and the staged closing of the related User Stories or Feature, each write read back. | ATM |
 | myWork | `src/myWork.ts` | "Me" matching, pending work, month-task and move candidates, state checks and next states, Feature children. | ATM |
 | pulseCheck | `src/pulseCheck.ts` | Pulse Check: previous month, release comparison, work flow opened/closed and ongoing work. | OVR |
+| pulsePeriods | `src/pulsePeriods.ts` | Pulse Check over calendar quarters, half-years and years: periods, the period before, releases once per period, work opened and closed. | QV, MYD |
+| personalViews | `src/personalViews.ts` | Personal views file: path per person, validated parse, defaults merge, section order. | MYD |
+| usePersonalViews | `src/usePersonalViews.ts` | Personal views state: browser cache, Git per person with retry, admin defaults, filters per page. | MYD, GIT |
 | qeMapping | `src/qeMapping.ts` | QE Mapping table model: sheets with stable column/row ids, edits, filter, group, CSV, Git file parse/serialise. | QEM |
 | queryView | `src/queryView.ts` | Query-view layout from WIQL SELECT/ORDER BY (flat and tree / links queries), field resolution, cell formatting, sorting, summary, CSV, column order. | QV |
 | releaseOverview | `src/releaseOverview.ts` | Releases with documents approved in the month per stream (CP from QA/QE signatures, cpReporting), with counts and totals. | OVR, QV |
@@ -249,7 +252,6 @@ This document lists every software component of the system: the in-house source 
 | capacity.test | `tests/capacity.test.mjs` | Capacity model: absence, streams, thresholds, shared time and holidays. | CAP |
 | cloud-snapshots.test | `tests/cloud-snapshots.test.mjs` | Snapshot freezing, folder safety, verified upload, failures and history listing. | SNP |
 | connections.test | `tests/connections.test.mjs` | Connection URLs, roles, paged queries, on-prem servers, presets, desktop downloads and menu views. | CON, FET, DSK |
-| workspace.test | `tests/workspace.test.mjs` | KPI helpers, data completeness, exception queue, timeline health and insight cards. | WSP |
 | dashboard.test | `tests/dashboard.test.mjs` | Periods, person-month records, overload, concentration, rebalancing and bands. | OVR |
 | desktop-update.test | `tests/desktop-update.test.mjs` | Desktop update manifest, build comparison, verified download and per-platform manifest merge. | DSK, CI |
 | cp-reporting.test | `tests/cp-reporting.test.mjs` | CP release reporting: containers, signatures, slots, months, Supported / Completed, shared work, data issues, names and the Create Feature title. | QV |
@@ -265,6 +267,7 @@ This document lists every software component of the system: the in-house source 
 | monthly-hours.test | `tests/monthly-hours.test.mjs` | Monthly hours series, Epic colours and chart geometry (Pareto, donut). | CAP, OVR, MON |
 | my-work.test | `tests/my-work.test.mjs` | My pending work, month-task and move candidates, constrained updates and desktop proxy limits, the ad-hoc tag on a new month Task, the New User Story fields. | ATM, MON, BKL |
 | pulse-check.test | `tests/pulse-check.test.mjs` | Previous month, release comparison, work flow and ongoing activities. | OVR |
+| personal-views.test | `tests/personal-views.test.mjs` | Personal views: file path per person, validated parse, defaults merge, section order and moves. | MYD |
 | nested-groups.test | `tests/nested-groups.test.mjs` | Nested grouping: levels, order, blank last, unique keys. | QV |
 | monthly-pack.test | `tests/monthly-pack.test.mjs` | Monthly pack files, Epic counts, lines, YoY, slide text and the .pptx writer. | PCK |
 | qe-mapping.test | `tests/qe-mapping.test.mjs` | xlsx/CSV read/write and QE Mapping editing and Git file handling. | QEM |
@@ -296,7 +299,6 @@ The end-to-end suite (`pnpm test:e2e`, after `pnpm build:web`) drives the built 
 | shell.e2e | `e2e/shell.e2e.mjs` | Sidebar groups and footer, header and month picker, Get started pop-up, synthetic sample, theme toggle, phone width, Force Update dialog, Git storage form defaults, manager not on the board (TC-GIT-06, TC-SET-05, TC-NAV-01, 03, 31, 33, TC-UI-01, TC-SMP-01, TC-UPD-02). | NAV, UI, SMP, UPD |
 | documents-and-data.e2e | `e2e/documents-and-data.e2e.mjs` | Documentation tabs, links and download; Windchill export releases from names and from Location with the locations CSV; "＋ ECP" import named after the stream with the ECP CSV, Project No / Project Name columns, an ECP setup at the 3rd folder with the type-2 CSV (TC-CON-53, 54, 55); the table default on the Windchill raw data — move, hide, density, Excel export with dates, Settings → Table defaults (TC-UI-04, 05); My Work tree, Backlog Health and Baselines on the default (TC-UI-06); neutralised CSV; JSON backup without credentials (TC-DOC-01, 02, TC-CON-39, 40, 37, TC-STO-04, TC-INS-01); Windchill releases' QMS-0025 match column (TC-QV-23); auto-fit tables and Wrap text (TC-CON-42); the DP Supported Releases list in Pulse Check folded until Show list (TC-QV-17). | DOC, CON, STO, NFR, QV |
 | backlog.e2e | `e2e/backlog.e2e.mjs` | New User Story form from a Feature row of the Backlogs (TC-BKL-10); the Edit form from Feature, User Story and Task rows (TC-BKL-11). | CI, BKL |
-| workspace.e2e | `e2e/workspace.e2e.mjs` | Insights workspace hidden for now: not in the menu, the Dashboard unchanged (TC-WSP-07; the TC-WSP-06 scenario returns with the page). | CI |
 | monthly-pack.e2e | `e2e/monthly-pack.e2e.mjs` | Monthly pack tab with the synthetic sample, the .pptx download and the setup tab (TC-PCK-04). | CI |
 
 ## 2. Third-party components (SOUP)
@@ -308,11 +310,11 @@ Direct dependencies from `package.json`, with the exact version resolved by `pnp
 | react | 19.3.1 | MIT | runtime | UI rendering library. | The app does not render; caught by the ErrorBoundary and by every L3 test. |
 | react-dom | 19.3.1 | MIT | runtime | React DOM renderer. | As react. |
 | @azure/msal-browser | 5.27.0 | MIT | runtime (SharePoint only) | Microsoft Entra ID sign-in for the optional SharePoint storage (SNP). | SharePoint sign-in fails; local and Git storage are unaffected. |
-| electron | 44.10.1 | MIT | runtime (desktop) | Desktop shell: Chromium and Node.js runtime, IPC, window. Bundles its own Chromium and Node versions. | Desktop app fails to start or a sandbox weakness; web app unaffected. |
+| electron | 44.10.2 | MIT | runtime (desktop) | Desktop shell: Chromium and Node.js runtime, IPC, window. Bundles its own Chromium and Node versions. | Desktop app fails to start or a sandbox weakness; web app unaffected. |
 | vite | 8.3.5 | MIT | build | Bundler and dev server; emits `build-info.json`. | Build fails in CI (no release). |
-| @vitejs/plugin-react | 6.1.2 | MIT | build | React fast-refresh and JSX transform for Vite. | Build fails in CI. |
+| @vitejs/plugin-react | 6.2.1 | MIT | build | React fast-refresh and JSX transform for Vite. | Build fails in CI. |
 | typescript | 6.0.3 | Apache-2.0 | build | Type checking (`tsc -b`). | Type errors go unnoticed; lint and tests still run. |
-| oxlint | 1.90.0 | MIT | build | Static analysis (`pnpm lint`). | Lint findings go unnoticed. |
+| oxlint | 1.91.0 | MIT | build | Static analysis (`pnpm lint`). | Lint findings go unnoticed. |
 | electron-builder | 26.18.0 | MIT | build | Packages the NSIS installer and the macOS disk image. | No installer is produced; CI fails. |
 | playwright | 1.56.1 | Apache-2.0 | test | Drives Chromium for the end-to-end suite (`pnpm test:e2e`); the browser is installed by `playwright install chromium`. | End-to-end tests cannot run; unit tests and the build are unaffected. |
 | fake-indexeddb | 6.2.7 | Apache-2.0 | test | IndexedDB in Node for the storage tests. | Storage tests cannot run. |
@@ -347,6 +349,6 @@ Advisories found later are listed here with the GHSA / CVE identifier that `pnpm
 
 **Component-level security notes** (not advisories, from the assessment):
 
-- Electron 44.10.1 bundles its own Chromium and Node.js; the main window runs with context isolation, sandbox and no Node integration (DSK-02). Updating Electron is the way to take Chromium security fixes; the daily check updates it within the 44.x range, a major update is a reviewed change.
+- Electron 44.10.2 bundles its own Chromium and Node.js; the main window runs with context isolation, sandbox and no Node integration (DSK-02). Updating Electron is the way to take Chromium security fixes; the daily check updates it within the 44.x range, a major update is a reviewed change.
 - @azure/msal-browser 5.27.0 keeps the Entra session in `sessionStorage`; the requested Graph scope is broader than needed (SECURITY-ASSESSMENT.md PT-13).
 - react / react-dom 19.3.1 neutralise `javascript:` URLs in `href` and escape text content; the app uses no `dangerouslySetInnerHTML`.

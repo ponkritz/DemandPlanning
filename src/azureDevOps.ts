@@ -404,7 +404,7 @@ export function mergeAzureWorkItems(current: AzureWorkItem[], incoming: AzureWor
 
 export function releaseHierarchyTitles(title: string, kind: 'PU' | 'Release', monthLabel: string) {
   const parts = title.split('|').map((part) => part.trim())
-  if (parts.length !== 3 || parts.some((part) => !part)) throw new Error('Use the Feature title format Program | Service | vRelease.')
+  if (parts.length !== 3 || parts.some((part) => !part)) throw new Error('Use the Feature title format Program | Service | Release.')
   const identifier = `${parts[1]} ${parts[2].replace(/^v/i, '')}`
   return {
     reviews: (kind === 'PU' ? ['SFV', 'DT', 'IQOQ'] : ['PRD', 'SFV', 'DT', 'IQOQ']).map((milestone) => ({ milestone, title: `${milestone} : Review of Deliverables (${identifier})` })),
@@ -651,7 +651,7 @@ export async function completeFeatureFromSetup(config: AzureConfig, pat: string,
     if (!isAssignee(storyOwner)) throw new Error('The Time Writing User Story default assignee is not an email.')
     // The values typed in the form win; else a title of as many "|" parts as the setup's title fields fills them.
     const values = { ...titleValues(feature.title, monthLabel, setup.titleFields), ...(setup.titleFields?.length && setup.fieldValues?.length === setup.titleFields.length ? fieldPlaceholders(setup.titleFields, setup.fieldValues) : {}) }
-    const shape = setup.titleFields?.length ? setup.titleFields.map((field) => field.label).join(' | ') : 'Program | Service | vRelease'
+    const shape = setup.titleFields?.length ? setup.titleFields.map((field) => field.label).join(' | ') : 'Program | Service | Release'
     const fill = (template: string, what: string) => {
       const missing = missingValues(template, values)
       if (missing.length) throw new Error(`${what} uses {${missing.join('}, {')}}, which this Feature title does not provide (use "${shape}"). Nothing more was created.`)

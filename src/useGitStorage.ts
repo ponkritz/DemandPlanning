@@ -13,6 +13,7 @@ import { personalSetupPath } from './featureSetup'
 import { listValidationDocuments as listPackage, readValidationDocument as readPackage } from './toolValidation'
 import type { PeriodControl } from './domain'
 import { normalizePeriods, replacePeriod } from './planningLock'
+import { personalViewsPath, viewsDefaultsPath } from './personalViews'
 
 export type GitStatus = 'off' | 'loading' | 'synced' | 'empty' | 'saving' | 'error' | 'conflict'
 
@@ -202,6 +203,30 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     if (!path) throw new Error('Set your email on the Time Writing connection to keep your own Feature setup.')
     return readTextFile(siblingConfig(config, path), token)
   }, [config, token])
+  // Personal views (MYD-06…MYD-09): personal-views/<email>.json per person, personal-views-defaults.json for everyone.
+  const readPersonalViews = useCallback(async (email: string) => {
+    if (!config || !token) throw new Error('Connect Git storage first.')
+    const path = personalViewsPath(email)
+    if (!path) throw new Error('Set your work email to keep your own views.')
+    return readTextFile(siblingConfig(config, path), token)
+  }, [config, token])
+  async function writePersonalViews(email: string, text: string, sha: string | null, commitMessage: string) {
+    if (!config || !token) throw new Error('Connect Git storage first.')
+    if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
+    const path = personalViewsPath(email)
+    if (!path) throw new Error('Set your work email to keep your own views.')
+    return writeTextFile(siblingConfig(config, path), token, text, sha, commitMessage)
+  }
+  const readViewsDefaults = useCallback(async () => {
+    if (!config || !token) throw new Error('Connect Git storage first.')
+    return readTextFile(siblingConfig(config, viewsDefaultsPath), token)
+  }, [config, token])
+  async function writeViewsDefaults(text: string, commitMessage: string) {
+    if (!config || !token) throw new Error('Connect Git storage first.')
+    if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
+    const target = siblingConfig(config, viewsDefaultsPath)
+    return writeTextFile(target, token, text, await fileSha(target, token), commitMessage)
+  }
   async function writePersonalFeatureSetup(email: string, text: string, sha: string | null, commitMessage: string) {
     if (!config || !token) throw new Error('Connect Git storage first.')
     if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
@@ -378,6 +403,6 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     setConfig(null); setToken(''); setSynced(null); setStatus('off'); setMessage('Git storage disconnected in this browser. The data stays in the app and in the repository.'); sha.current = null
   }
 
-  return { savePeriod, listValidationDocuments, readValidationDocument, backupViews, resetViews, readPackTemplate, writePackTemplate, packTemplateHistory: config ? historyUrl(siblingConfig(config, packTemplateFile)) : '', config, connected, readOnly, status, message, dirty, commitUrl, history: config ? historyUrl(config) : '', isSample, load: () => load(), connect, save, disconnect, viewsPath: viewsConfig?.path ?? '', viewsHistory: viewsConfig ? historyUrl(viewsConfig) : '', readViews, writeViews, syncViews, pushWindchillAnalysis, accessScope: accessConfig && token ? `${accessConfig.owner}/${accessConfig.repo}@${accessConfig.branch}:${accessConfig.path}` : '', accessPath: accessConfig?.path ?? '', accessHistory: accessConfig ? historyUrl(accessConfig) : '', readAccess, writeAccess, readFeatureSetup, writeFeatureSetup, readPersonalFeatureSetup, writePersonalFeatureSetup, featureSetupHistory: config ? historyUrl(siblingConfig(config, 'feature-setup.json')) : '', readQeMapping, writeQeMapping, readMonthlyPack, writeMonthlyPack, monthlyPackHistory: (name: string) => config ? historyUrl(siblingConfig(config, name)) : '', qeMappingHistory: config ? historyUrl(siblingConfig(config, 'qe-mapping.json')) : '', removeSnapshots, viewsSync, snapshotNotes, pushSnapshot, pullSnapshot, pullSnapshots, pushWindchill, pullWindchill, pullWindchillOne, snapshotsHistory: config ? historyUrl(siblingConfig(config, snapshotFolder)) : '' }
+  return { readPersonalViews, writePersonalViews, readViewsDefaults, writeViewsDefaults, savePeriod, listValidationDocuments, readValidationDocument, backupViews, resetViews, readPackTemplate, writePackTemplate, packTemplateHistory: config ? historyUrl(siblingConfig(config, packTemplateFile)) : '', config, connected, readOnly, status, message, dirty, commitUrl, history: config ? historyUrl(config) : '', isSample, load: () => load(), connect, save, disconnect, viewsPath: viewsConfig?.path ?? '', viewsHistory: viewsConfig ? historyUrl(viewsConfig) : '', readViews, writeViews, syncViews, pushWindchillAnalysis, accessScope: accessConfig && token ? `${accessConfig.owner}/${accessConfig.repo}@${accessConfig.branch}:${accessConfig.path}` : '', accessPath: accessConfig?.path ?? '', accessHistory: accessConfig ? historyUrl(accessConfig) : '', readAccess, writeAccess, readFeatureSetup, writeFeatureSetup, readPersonalFeatureSetup, writePersonalFeatureSetup, featureSetupHistory: config ? historyUrl(siblingConfig(config, 'feature-setup.json')) : '', readQeMapping, writeQeMapping, readMonthlyPack, writeMonthlyPack, monthlyPackHistory: (name: string) => config ? historyUrl(siblingConfig(config, name)) : '', qeMappingHistory: config ? historyUrl(siblingConfig(config, 'qe-mapping.json')) : '', removeSnapshots, viewsSync, snapshotNotes, pushSnapshot, pullSnapshot, pullSnapshots, pushWindchill, pullWindchill, pullWindchillOne, snapshotsHistory: config ? historyUrl(siblingConfig(config, snapshotFolder)) : '' }
 }
 export type GitStorage = ReturnType<typeof useGitStorage>

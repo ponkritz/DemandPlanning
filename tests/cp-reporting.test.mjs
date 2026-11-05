@@ -104,9 +104,9 @@ test('CP release names: version from the title, Content from the CP_Releases dat
 test('CP Create Feature title: the release name and number only, found again by the board match (TC-QV-25)', async () => {
   const { releaseOnlyTitle } = await import('../src/releaseSource.ts')
   const { boardMatch, dpBoardCandidates } = await import('../src/dpBoardMatch.ts')
-  assert.equal(releaseOnlyTitle('Cupid', '26.6'), 'Cupid | v26.6')
+  assert.equal(releaseOnlyTitle('Cupid', '26.6'), 'Cupid | 26.6')
   assert.equal(releaseOnlyTitle('Release 26.6 ClinicalPlatform', ''), 'Release 26.6 ClinicalPlatform')
-  const board = dpBoardCandidates([{ key: 'b/1', id: 1, title: 'Cupid | v26.6', workItemType: 'Feature', state: 'Active', url: '' }, { key: 'b/2', id: 2, title: 'Cupid | v25.9', workItemType: 'Feature', state: 'Active', url: '' }])
+  const board = dpBoardCandidates([{ key: 'b/1', id: 1, title: 'Cupid | 26.6', workItemType: 'Feature', state: 'Active', url: '' }, { key: 'b/2', id: 2, title: 'Cupid | v25.9', workItemType: 'Feature', state: 'Active', url: '' }])
   const match = boardMatch({ names: ['Cupid', 'Release 26.6 ClinicalPlatform'], versions: ['26.6'], created: releaseOnlyTitle('Cupid', '26.6') }, board)
   assert.deepEqual([match.feature.item.id, match.feature.score], [1, 100], 'the created Feature is found; the 25.9 one is another release')
 })
@@ -145,4 +145,17 @@ test('CP names: the connection with Content is used, a Release with text around 
   // A names connection without any Content says so.
   const blank = cpReportFor({ azureSources: [source('tree', tree, columns), source('rel', [{ ...releases[0], fields: { 'Custom.Release': '26.2.0.0' } }], [{ ref: 'Custom.Release', name: 'Release' }])] }, profiles.slice(1), '2026-10', 'UTC')
   assert.ok(blank.report.issues.some((issue) => /none with a Content value/.test(issue.text)))
+})
+
+test('Platform titles: "PF1.0 / PF2.0 <Name>-<Number>" give the name with its variant and an alphanumeric number (QV-49, TC-QV-30)', async () => {
+  const { cpPlatformTitle } = await import('../src/cpReporting.ts')
+  const { releaseOnlyTitle } = await import('../src/releaseSource.ts')
+  assert.deepEqual(cpPlatformTitle('PF2.0 Carpo-A12'), { variant: 'PF2.0', name: 'PF2.0 Carpo', number: 'A12' })
+  assert.deepEqual(cpPlatformTitle('PF1.0 Care Path-Lite-B3'), { variant: 'PF1.0', name: 'PF1.0 Care Path-Lite', number: 'B3' }, 'the number follows the last hyphen')
+  assert.equal(cpPlatformTitle('pf 1.0 Helene-7').name, 'PF1.0 Helene', 'case and a space after PF do not matter')
+  for (const title of ['PF3.0 Carpo-A1', 'PF2.0 Carpo', 'Release 26.2 ClinicalPlatform', 'PF2.0 -A1']) assert.equal(cpPlatformTitle(title), undefined, title)
+  const name = cpReleaseName({ id: 7, title: 'PF2.0 Carpo-A12' }, undefined)
+  assert.deepEqual([name.name, name.rawVersion, name.displayLabel, name.nameStatus, name.warnings], ['PF2.0 Carpo', 'A12', 'PF2.0 Carpo A12', 'resolved_from_title', []])
+  assert.equal(releaseOnlyTitle(name.name, name.rawVersion), 'PF2.0 Carpo | A12', 'the Create Feature title, no "v"')
+  assert.equal(cpReleaseName({ id: 8, title: 'Release 26.2 ClinicalPlatform' }, undefined).rawVersion, '26.2', 'the other CP titles read as before')
 })

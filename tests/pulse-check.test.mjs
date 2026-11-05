@@ -55,3 +55,27 @@ test('ongoing activities: in-progress Features and User Stories per stream, book
   assert.deepEqual(work.items.map(({ item, booked, overdue }) => [item.id, booked, overdue]), [[10, 6, true], [11, 6, false]])
   assert.deepEqual([work.features, work.stories, work.overdue, work.streams], [1, 1, 1, ['CP']])
 })
+
+test('Pulse Check periods: calendar quarter, half-year and year against the period before; each release once (QV-50, TC-QV-31)', async () => {
+  const { periodContaining, previousPeriod, recentPeriods, periodStreams, periodComparison, periodWorkFlow } = await import('../src/pulsePeriods.ts')
+  assert.deepEqual(periodContaining('quarter', '2026-08'), { kind: 'quarter', key: '2026-Q3', label: 'Q3 2026', months: ['2026-07', '2026-08', '2026-09'] })
+  assert.equal(periodContaining('half', '2026-08').label, 'H2 2026')
+  assert.equal(periodContaining('year', '2026-08').months.length, 12)
+  assert.equal(previousPeriod(periodContaining('quarter', '2027-02')).label, 'Q4 2026', 'Q1 → Q4 of the year before')
+  assert.equal(previousPeriod(periodContaining('half', '2026-03')).label, 'H2 2025')
+  assert.deepEqual(recentPeriods('quarter', '2026-11', 3).map((entry) => entry.label), ['Q4 2026', 'Q3 2026', 'Q2 2026'])
+  // The same release in two months of the quarter counts once; documents add up; DP's supported releases once each.
+  const july = [{ name: 'CP', releases: [{ name: 'Cupid', release: '26.6', documents: 2 }], documents: 2 }, { name: 'DP', releases: [], documents: 0, supportedEntries: [{ key: 'a', label: 'RSGMS 3.0' }] }]
+  const august = [{ name: 'CP', releases: [{ name: 'cupid', release: '26.6', documents: 1 }, { name: 'Pluto', release: '27.1', documents: 3 }], documents: 4 }, { name: 'DP', releases: [], documents: 0, supportedEntries: [{ key: 'a', label: 'RSGMS 3.0' }, { key: 'b', label: 'Dose 2.1' }] }]
+  const quarter = periodStreams([july, august], [[{ name: 'S&S IT', releases: ['Remote 1.6'] }], [{ name: 'S&S IT', releases: ['Remote 1.6', 'Remote 1.7'] }]])
+  assert.deepEqual(quarter.find((stream) => stream.name === 'CP'), { name: 'CP', releases: ['Cupid 26.6', 'Pluto 27.1'], documents: 6 })
+  assert.deepEqual(quarter.find((stream) => stream.name === 'DP').supported, ['Dose 2.1', 'RSGMS 3.0'])
+  assert.equal(quarter.find((stream) => stream.name === 'S&S IT').releases.length, 2, 'Windchill releases once each')
+  const rows = periodComparison(quarter, periodStreams([july]))
+  assert.deepEqual(rows.find((row) => row.name === 'CP'), { name: 'CP', releases: 2, previousReleases: 1, documents: 6, previousDocuments: 2, list: ['Cupid 26.6', 'Pluto 27.1'] })
+  assert.equal(rows.find((row) => row.name === 'DP').supported, 2)
+  // Work opened and closed over the months of the period, summed per stream.
+  const epic = item(1, 'Epic', { title: 'Stream A' })
+  const flow = periodWorkFlow([epic, item(2, 'Feature', { parentId: 1, createdDate: '2026-07-03T10:00:00Z' }), item(3, 'Feature', { parentId: 1, createdDate: '2026-08-03T10:00:00Z', state: 'Closed', closedDate: '2026-09-02T10:00:00Z' })], ['2026-07', '2026-08', '2026-09'])
+  assert.deepEqual(flow.totals.Feature, { created: 2, closed: 1 })
+})

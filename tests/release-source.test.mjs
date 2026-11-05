@@ -151,9 +151,10 @@ test('versions equal up to trailing zero parts, for matching and for grouping', 
   assert.deepEqual(register.map((entry) => [entry.release, entry.documents, entry.features.map((feature) => feature.id)]), [['3.1', 2, [9]]], '3.1 and 3.1.0.0 are one release')
 })
 
-test('Create Feature title from a release: "Stream | Name | vRelease", mapping back to the release', async () => {
+test('Create Feature title from a release: "Stream | Name | Release" without a "v", mapping back to the release (BKL-24)', async () => {
   const { releaseFeatureTitle, tracksRelease } = await import('../src/releaseSource.ts')
-  assert.equal(releaseFeatureTitle('DP', 'RSGMS', '3.0.0.2'), 'DP | RSGMS | v3.0.0.2')
+  assert.equal(releaseFeatureTitle('DP', 'RSGMS', '3.0.0.2'), 'DP | RSGMS | 3.0.0.2')
+  assert.equal(tracksRelease('DP | RSGMS | v3.0.0.2', 'RSGMS', '3.0.0.2'), true, 'a Feature made earlier with "v" still maps back')
   assert.equal(tracksRelease(releaseFeatureTitle('DP', 'RSGMS', '3.0.0.2'), 'RSGMS', '3.0.0.2'), true, 'still maps back to the release')
   assert.equal(releaseFeatureTitle('DP', 'RSGMS', ''), 'DP | RSGMS', 'no version, no v')
 })

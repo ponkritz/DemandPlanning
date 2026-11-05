@@ -7,7 +7,7 @@ import { windchillSupported } from './windchillReleases.ts'
 import { capacityModel, type CapacitySettings } from './capacity.ts'
 import { yearMonths } from './monthlyPack.ts'
 
-// The data the Monthly pack reads for a month, shared by Pulse Check → Monthly pack and the Insights workspace so
+// The data the Monthly pack reads for a month, used by Pulse Check → Monthly pack so
 // both show the same figures: the streams' releases and supported counts (Azure streams per their Pulse Check rules,
 // Windchill exports per their month), and the actual utilisation of the month, of January to the month, and of the
 // QE role in the month.

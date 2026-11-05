@@ -121,7 +121,7 @@ export function cpVersionKey(version: string | undefined, zeroPad = true) {
   return parts.join('.')
 }
 
-export type CpNameStatus = 'resolved_from_content' | 'candidate_from_title' | 'name_unavailable' | 'conflicting_names' | 'version_unavailable' | 'enrichment_not_supplied'
+export type CpNameStatus = 'resolved_from_title' | 'resolved_from_content' | 'candidate_from_title' | 'name_unavailable' | 'conflicting_names' | 'version_unavailable' | 'enrichment_not_supplied'
 export interface CpName { releaseContainerId: number; sourceTitle: string; rawVersion?: string; normalizedVersion?: string; name?: string; displayLabel: string; nameStatus: CpNameStatus; nameSource?: string; supportingCPReleaseIds: number[]; candidateNames: { name: string; ids: number[] }[]; warnings: string[] }
 interface NameEntry { ids: number[]; blank: number; names: Map<string, { name: string; ids: number[] }> }
 // Version → Content names of the CP_Releases data set, built once per import.
@@ -146,7 +146,16 @@ export function cpNameIndex(releases: AzureWorkItem[] | undefined, columns: Fiel
 }
 // A candidate only from an explicit title shape: "Release <version> <Name> … Clinical Platform", <Name> a capitalised word.
 const titleCandidate = (title: string) => /^\s*(?:Release\s+)?\d+(?:\.\d+){1,3}\s+([A-Z][a-z]{2,})\b(?=.*Clinical\s*Platform)/.exec(title)?.[1]
+// A Platform release (QV-49): "PF1.0 <Name>-<Number>" or "PF2.0 …" — the name with its variant ("PF2.0 Carpo") and the
+// number after the last hyphen, which may hold letters ("A12"); the name may itself contain spaces and hyphens.
+export function cpPlatformTitle(title: string) {
+  const found = /^\s*(PF\s?[12]\.0)\s+(.+)-\s*([A-Za-z0-9][A-Za-z0-9.]*)\s*$/i.exec(title)
+  if (!found || !found[2].trim()) return undefined
+  return { variant: found[1].replace(/\s+/g, '').toUpperCase(), name: `${found[1].replace(/\s+/g, '').toUpperCase()} ${found[2].trim()}`, number: found[3] }
+}
 export function cpReleaseName(container: Pick<CpContainer, 'id' | 'title'>, names: ReturnType<typeof cpNameIndex>, zeroPad = true): CpName {
+  const platform = cpPlatformTitle(container.title)
+  if (platform) return { releaseContainerId: container.id, sourceTitle: container.title, rawVersion: platform.number, normalizedVersion: platform.number.toLowerCase(), name: platform.name, displayLabel: `${platform.name} ${platform.number}`, nameStatus: 'resolved_from_title', nameSource: `container title (${platform.variant})`, supportingCPReleaseIds: [], candidateNames: [], warnings: [] }
   const rawVersion = cpTitleVersion(container.title), normalizedVersion = cpVersionKey(rawVersion, zeroPad)
   const base = { releaseContainerId: container.id, sourceTitle: container.title, ...(rawVersion ? { rawVersion } : {}), ...(normalizedVersion ? { normalizedVersion } : {}), supportingCPReleaseIds: [] as number[], candidateNames: [] as { name: string; ids: number[] }[], warnings: [] as string[] }
   const fromTitle = titleCandidate(container.title)

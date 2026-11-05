@@ -708,6 +708,8 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-BKL-13 Parent Epic blank on New Feature** — Req BKL-23 — E2E `backlog.e2e.mjs` ("TC-BKL-13: New Feature opens with the Parent Epic blank; every Epic is offered"); browser check: the same from Assigned to Me and from Create Feature on Release Details; Create without an Epic says "Choose the parent Epic."
 
+**TC-BKL-14 Release number without "v" in Feature titles** — Req BKL-24 — L1 `release-source.test.mjs` ("Create Feature title from a release: \"Stream | Name | Release\" without a \"v\", mapping back to the release (BKL-24)"), `dp-board-match.test.mjs`, `cp-reporting.test.mjs`; browser check: Create Feature on a DP, CP and Windchill row pre-fills the title with the number and no "v".
+
 **TC-CON-45 Git view data with another query is not applied** — Req CON-77 — L1 `git-snapshots.test.mjs` ("a snapshot fetched with another query than the connection has here is not applied"); browser check:
 - Pre: Git storage connected; the DP connection's query changed here; Git holds DP data fetched with the old query.
 - Steps: reload the web app; open DP; Load from Git.
@@ -843,6 +845,10 @@ Cases marked **UAT** are also run in acceptance testing.
 **TC-QV-26 Create Feature on every stream's releases** — Req QV-46, QV-31 — L1 `dp-board-match.test.mjs` ("IOCC, Content and Tool Validations releases → QMS-0025: the same search, Create Feature when nothing matches (TC-QV-26)"); browser check with the QMS-0025 board loaded and an IOCC and a Tool Validations view fetched: each release table ends with **QMS-0025 match**; a release whose Feature is on the board shows "Feature id n%" (and "Story id n%"); a release without one shows the closest item or "no match" and **Create Feature**, which opens the New Feature form titled "IOCC \| {Type of Release} {name} \| v{release}" (Tool Validations: "Tool Validations \| {tool} \| v{release}") under the Epic named like the stream; the Time Writing Feature column has no button; without the board loaded the cell reads "board not loaded" and Create Feature stays offered (disabled with its reason when it cannot open); no page errors.
 **TC-QV-27 Consolidation and raw data on two tabs** — Req QV-47 — E2E `documents-and-data.e2e.mjs` ("TC-CON-39 / TC-CON-37 / TC-QV-27: a Windchill export lists its unique releases, clubbed names included, its raw rows on their own tab, and exports a neutralised CSV"); browser check: open DP, CP, IOCC, Content and Tool Validations under Release Details — each shows its releases (CP report) first and the query rows only on the "Query output (n)" tab; open S&S IT and an ECP export — Releases / Projects first, the imported rows with search and Export CSV on "Raw data (n)"; the tab chosen stays when moving between pages.
 **TC-QV-28 Compact page actions** — Req QV-48 — E2E `documents-and-data.e2e.mjs` ("TC-CON-55 / TC-QV-28: an ECP setup named \"ECP - Type 2\" reads projects from the 3rd Location folder, is listed on its own, with compact page actions"); browser check: on DP / IOCC the header shows "All months", a small ↻ (tooltip "Refresh from Azure") and ⋯ with Load from Git and Connection settings; on a Windchill export a small ⤒ (tooltip "Import newer export") and ⋯ with Load from Git and Remove this export…; the menu closes on Escape or a click outside.
+
+**TC-QV-30 CP Platform titles (PF1.0 / PF2.0)** — Req QV-49 — L1 `cp-reporting.test.mjs` ("Platform titles: \"PF1.0 / PF2.0 <Name>-<Number>\" give the name with its variant and an alphanumeric number (QV-49, TC-QV-30)"); browser check: a CP container "PF2.0 Carpo-A12" shows as "PF2.0 Carpo A12" with no warning, and Create Feature offers "PF2.0 Carpo | A12".
+
+**TC-QV-31 Pulse Check over a quarter, half-year or year** — Req QV-50 — L1 `pulse-check.test.mjs` ("Pulse Check periods: calendar quarter, half-year and year against the period before; each release once (QV-50, TC-QV-31)"); E2E `shell.e2e.mjs` (TC-MYD-01: Quarter shows "Releases · Qn yyyy vs Qn yyyy" and the work opened and closed; Month brings the tabs back); browser check: a release seen in two months of the quarter counts once.
 
 
 
@@ -1288,19 +1294,31 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 ### 6.23 Insights workspace
 
-**TC-WSP-01 KPI helpers and data completeness** — Req WSP-02 — L1 `workspace.test.mjs` ("KPI helpers: deltas, signed text, month utilization and data completeness (WSP-01, WSP-02)": the change in points, the month's planned utilisation, the share of planned Tasks with actuals, people without region or role, a future month without a value, the cumulative sum).
+**TC-WSP-01 KPI helpers and data completeness** — *(Retired — see TC-MYD-05)* Req WSP-02 — L1 `workspace.test.mjs` ("KPI helpers: deltas, signed text, month utilization and data completeness (WSP-01, WSP-02)": the change in points, the month's planned utilisation, the share of planned Tasks with actuals, people without region or role, a future month without a value, the cumulative sum).
 
-**TC-WSP-02 Exception queue** — Req WSP-03 — L1 `workspace.test.mjs` ("exception queue: over baseline, missing baseline and capacity risk, high first then by impact (WSP-03)": +60% high and +30% medium, within 25% and a closed release without scope left out, 95% not a capacity risk, the order, the stream with most planned hours, the month decides the capacity rows).
+**TC-WSP-02 Exception queue** — *(Retired — see TC-MYD-05)* Req WSP-03 — L1 `workspace.test.mjs` ("exception queue: over baseline, missing baseline and capacity risk, high first then by impact (WSP-03)": +60% high and +30% medium, within 25% and a closed release without scope left out, 95% not a capacity risk, the order, the stream with most planned hours, the month decides the capacity rows).
 
-**TC-WSP-03 Timeline health** — Req WSP-04 — L1 `workspace.test.mjs` ("timeline health: Features with a Target Date in the window per Epic — completed, overdue, at risk, planned (WSP-04)": the window, outside dates, Removed, undated Features and User Stories left out, the per-Epic and total counts, the sort by date).
+**TC-WSP-03 Timeline health** — *(Retired — see TC-MYD-05)* Req WSP-04 — L1 `workspace.test.mjs` ("timeline health: Features with a Target Date in the window per Epic — completed, overdue, at risk, planned (WSP-04)": the window, outside dates, Removed, undated Features and User Stories left out, the per-Epic and total counts, the sort by date).
 
-**TC-WSP-04 Insight cards** — Req WSP-05 — L1 `workspace.test.mjs` ("insight cards: each rule names its evidence, tone and pack line (WSP-05)": the seven rules with their tones, texts, bars and evidence columns, a stream not set up, the pack lines, the cards without data).
+**TC-WSP-04 Insight cards** — *(Retired — see TC-MYD-05)* Req WSP-05 — L1 `workspace.test.mjs` ("insight cards: each rule names its evidence, tone and pack line (WSP-05)": the seven rules with their tones, texts, bars and evidence columns, a stream not set up, the pack lines, the cards without data).
 
-**TC-WSP-05 Page, filters and routing** — Req WSP-01 — L1 `format.test.mjs` ("page registry …": the page in the Data Insights group with the header month); browser check: Settings → Access shows the page under Data Insights; a role without that area does not see it.
+**TC-WSP-05 Page, filters and routing** — *(Retired — see TC-MYD-05)* Req WSP-01 — L1 `format.test.mjs` ("page registry …": the page in the Data Insights group with the header month); browser check: Settings → Access shows the page under Data Insights; a role without that area does not see it.
 
-**TC-WSP-07 Insights workspace hidden** — Req WSP-07 — **UAT** — E2E `workspace.e2e.mjs` ("TC-WSP-07": synthetic sample, the menu has no Insights workspace, Data Insights still lists Dashboard and Pulse Check, the Dashboard keeps its six tabs).
+**TC-WSP-07 Insights workspace hidden** — *(Retired — see TC-MYD-05)* Req WSP-07 — E2E `workspace.e2e.mjs` ("TC-WSP-07": synthetic sample, the menu has no Insights workspace, Data Insights still lists Dashboard and Pulse Check, the Dashboard keeps its six tabs).
 
-**TC-WSP-06 Insights workspace end to end** — Req WSP-01…06 — E2E `workspace.e2e.mjs` ("TC-WSP-06": synthetic sample, the KPI tiles with their change, the two charts, the exception queue filtered by a kind chip, the timeline from target dates; the insight cards with filters and what was checked, the evidence rows, Add to monthly pack and the queue count, Save refused with the sample, the presentation preview, a suggested question jumping to the queue filtered on Over 25% baseline; the Dashboard unchanged with its six tabs); browser check with Git connected (writable token): queue two cards, Save to monthly pack, then Pulse Check → Monthly pack of that month shows them under Key takeaways and the Git history has the commit. Suspended while WSP-07 hides the page; its E2E scenario is in the Git history of `workspace.e2e.mjs` and returns with the page.
+**TC-WSP-06 Insights workspace end to end** — *(Retired — see TC-MYD-05)* Req WSP-01…06 — E2E `workspace.e2e.mjs` ("TC-WSP-06": synthetic sample, the KPI tiles with their change, the two charts, the exception queue filtered by a kind chip, the timeline from target dates; the insight cards with filters and what was checked, the evidence rows, Add to monthly pack and the queue count, Save refused with the sample, the presentation preview, a suggested question jumping to the queue filtered on Over 25% baseline; the Dashboard unchanged with its six tabs); browser check with Git connected (writable token): queue two cards, Save to monthly pack, then Pulse Check → Monthly pack of that month shows them under Key takeaways and the Git history has the commit. Suspended while WSP-07 hides the page; its E2E scenario is in the Git history of `workspace.e2e.mjs` and returns with the page.
+
+### 6.24 My dashboard and team insights
+
+**TC-MYD-01 My dashboard as the start page** — Req MYD-01…MYD-04 — E2E `shell.e2e.mjs` ("TC-MYD-01: My dashboard is the start page: my hours, my open work and my streams; Pulse Check offers quarter, half-year and year"); browser check: without a work email or chosen name it asks who you are; with one, the hours match Monthly Time Writing for the month and the counts match Assigned to Me.
+
+**TC-MYD-02 Team insights for selected roles** — Req MYD-05 — L1 `access.test.mjs` ("Team insights: My dashboard for every role, the team insights for Admin and People Manager; older files keep them for those two (MYD-05, TC-MYD-02)"); browser check (Git storage with access.json): a Team Member sees My dashboard but not the Dashboard or Pulse Check; a People Manager sees both; ticking Team insights for Scrum Master in Settings → Access shows them to Scrum Masters.
+
+**TC-MYD-03 Personal views model** — Req MYD-06, MYD-09 — L1 `personal-views.test.mjs` ("personal views: a file per person, only known shapes kept, defaults under my own changes (MYD-06…MYD-09, TC-MYD-03)"; "sections in my order: removed sections dropped, new ones placed after their neighbour, hidden apart (MYD-06, TC-MYD-03)").
+
+**TC-MYD-04 Customize sections and menu** — Req MYD-06, MYD-07, MYD-08 — E2E `shell.e2e.mjs` ("TC-MYD-04: a person hides and moves the sections of My dashboard and pins a page to the menu; both survive a reload"); browser check (Git storage, work email): the file `personal-views/<email>.json` appears in Git and the layout comes back on another computer; an admin's "Use as default for everyone" applies to a person who changed nothing; the Dashboard and Pulse Check periods are remembered.
+
+**TC-MYD-05 Team overview tiles and tabs** — Req MYD-10, MYD-11, MYD-12 — E2E `shell.e2e.mjs` ("TC-MYD-05: Team overview shows six headline tiles; each opens its analysis, with a trail back; Delivery opens Pulse Check"); unit tests of the calculations as before (`dashboard.test.mjs`, `insights.test.mjs`); inspection: the menu offers no Insights workspace and `src/workspace.ts` is gone.
 
 **TC-DOC-04 Private Tool Validation Package downloads** — Req DOC-12 — L1 `tool-validation.test.mjs`: configured repo/branch, authenticated read-only GET, fixed folders, path rejection, binary fidelity above 1 MB and safe errors. E2E `tool-validation.e2e.mjs`: missing configuration, list/search, DOCX download bytes, denied access, refresh and connection settings. Execute the same workflow in Web and Windows Desktop; verify downloaded PDF/Word/CSV files open in their native viewers. No private content or PAT is included in app exports or the public build. These automated checks use synthetic files; actual document review/approval remains outside the app.
 
@@ -1438,6 +1456,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | BKL-21 | TC-BKL-12 |
 | BKL-22 | TC-BKL-12 |
 | BKL-23 | TC-BKL-13 |
+| BKL-24 | TC-BKL-14 |
 | QV-01, QV-02 | TC-QV-01 |
 | QV-03, QV-05 | TC-QV-02 |
 | QV-04 | TC-FET-07 |
@@ -1469,6 +1488,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | QV-46 | TC-QV-26 |
 | QV-47 | TC-QV-27 |
 | QV-48 | TC-QV-28 |
+| QV-49 | TC-QV-30 |
+| QV-50 | TC-QV-31 |
 | QV-38 | TC-CON-42 |
 | OVR-01…08 | retired (TC-OVR-01…03 retired) |
 | OV-11 | TC-OV-11 |
@@ -1561,6 +1582,18 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | WSP-05 | TC-WSP-04, TC-WSP-06 |
 | WSP-06 | TC-WSP-06 |
 | WSP-07 | TC-WSP-07 |
+| MYD-01 | TC-MYD-01 |
+| MYD-02 | TC-MYD-01 |
+| MYD-03 | TC-MYD-01 |
+| MYD-04 | TC-MYD-01 |
+| MYD-05 | TC-MYD-02 |
+| MYD-06 | TC-MYD-03, TC-MYD-04 |
+| MYD-07 | TC-MYD-04 |
+| MYD-08 | TC-MYD-04 |
+| MYD-09 | TC-MYD-03 |
+| MYD-10 | TC-MYD-05 |
+| MYD-11 | TC-MYD-05 |
+| MYD-12 | TC-MYD-05 |
 | NFR-02 | TC-STO-01 |
 | NFR-03…05 | TC-DSK-02, TC-INS-01 |
 | NFR-06 | TC-INS-02 |
@@ -1597,6 +1630,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-23 | TC-QEM-01…08 |
 | UC-24 | TC-PCK-01…07 |
 | UC-25 | TC-WSP-01…07 |
+| UC-26 | TC-MYD-01…05, TC-QV-31 |
 
 ## 8. Result record
 

@@ -58,3 +58,18 @@ test('a role without Azure changes: write requests are refused before anything i
     assert.equal(sent.length, 1, 'reads still work')
   } finally { guardAzureWrites(() => true); delete globalThis.window; globalThis.fetch = original }
 })
+
+test('Team insights: My dashboard for every role, the team insights for Admin and People Manager; older files keep them for those two (MYD-05, TC-MYD-02)', () => {
+  const policy = defaultPolicy('admin@example.com')
+  for (const role of Object.keys(policy.roles)) assert.ok(policy.roles[role].areas.includes('overview'), `${role} sees My dashboard`)
+  assert.deepEqual(Object.keys(policy.roles).filter((role) => policy.roles[role].areas.includes('insights')), ['Admin', 'People Manager'])
+  // A file written before the area existed: Admin and People Manager get it, the others do not.
+  const old = JSON.parse(serializeAccess(policy))
+  for (const role of Object.keys(old.roles)) old.roles[role].areas = old.roles[role].areas.filter((area) => area !== 'insights')
+  const migrated = parseAccess(JSON.stringify(old))
+  assert.deepEqual(Object.keys(migrated.roles).filter((role) => migrated.roles[role].areas.includes('insights')), ['Admin', 'People Manager'])
+  // Once a file lists the area anywhere, it is taken as written: an admin who removed it from People Manager keeps that.
+  const chosen = JSON.parse(serializeAccess(policy)); chosen.roles['People Manager'].areas = chosen.roles['People Manager'].areas.filter((area) => area !== 'insights')
+  assert.equal(parseAccess(JSON.stringify(chosen)).roles['People Manager'].areas.includes('insights'), false)
+  assert.equal(rightsFor(parseAccess(serializeAccess(policy)), 'someone@example.com').areas.has('insights'), false, 'the default role (Team Member) sees My dashboard only')
+})
