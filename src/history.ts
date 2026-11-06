@@ -13,7 +13,10 @@ export const defaultCutoff = '2026-10'
 export const maxHistoryRows = 20000
 const kind = 'history-hours'
 
-export interface HistoryRow { person: string; month: string; featureId?: number; epicId?: number; stream: string; activity: string; type?: string; planned?: number; actual?: number }
+export interface HistoryRow { person: string; month: string; featureId?: number; epicId?: number; stream: string; activity: string; type?: string; tag?: string; planned?: number; actual?: number }
+// The optional Tag column (HIS-16): its tags, separated by ";" or ",", go on the row's Task like Azure DevOps tags — "Training"
+// or "NPRA" makes it training / NPRA (CAP-32). The app's own tags ("History import", "Shared: …") cannot be set from it.
+export const tagOfCell = (value: string) => value.split(/[;,]/).map((tag) => tag.trim().replace(/\s+/g, ' ')).filter((tag) => tag && !/^(history import|shared\s*:)/i.test(tag)).join('; ').slice(0, 80)
 export interface HistoryFile {
   schema: 1; kind: typeof kind
   // The first month taken from Azure DevOps: the history counts only before it.
@@ -54,6 +57,7 @@ const columns = {
   stream: /^stream/i,
   activity: /^(project\s*\/\s*release title|activity|title|topic explanation)$/i,
   type: /^(service\s*\/\s*project\s*\/\s*release|type)$/i,
+  tag: /^tags?$/i,
   planned: /^(expected|planned|planned hours|estimate)$/i,
   actual: /^(actual|recorded|recorded hours|actual hours|completed work)$/i,
 }
@@ -117,8 +121,8 @@ export function parseHistorySheet(rows: string[][], cutoff = defaultCutoff) {
     if (epicCell.unreadable) unreadable.push({ row: number, column: 'Epic No', value: cell(row, 'epic').slice(0, 60) })
     if (featureCell.unreadable) unreadable.push({ row: number, column: 'Feature No', value: cell(row, 'feature').slice(0, 60) })
     const epic = epicCell.id ?? 0, feature = featureCell.id ?? 0
-    const stream = cell(row, 'stream'), activity = cell(row, 'activity'), type = cell(row, 'type')
-    taken.push({ person, month, ...(Number.isInteger(feature) && feature > 0 ? { featureId: feature } : {}), ...(Number.isInteger(epic) && epic > 0 ? { epicId: epic } : {}), stream: placeholder(stream) ? '' : stream, activity: placeholder(activity) ? '' : activity, ...(placeholder(type) ? {} : { type }), ...(planned ? { planned } : {}), ...(actual ? { actual } : {}) })
+    const stream = cell(row, 'stream'), activity = cell(row, 'activity'), type = cell(row, 'type'), tag = tagOfCell(cell(row, 'tag'))
+    taken.push({ person, month, ...(Number.isInteger(feature) && feature > 0 ? { featureId: feature } : {}), ...(Number.isInteger(epic) && epic > 0 ? { epicId: epic } : {}), stream: placeholder(stream) ? '' : stream, activity: placeholder(activity) ? '' : activity, ...(placeholder(type) ? {} : { type }), ...(tag && !placeholder(tag) ? { tag } : {}), ...(planned ? { planned } : {}), ...(actual ? { actual } : {}) })
     if (taken.length > maxHistoryRows) throw new Error(`More than ${maxHistoryRows} rows: split the history or remove rows outside the months to import.`)
   }
   return { rows: taken, skipped, unreadable, header: headerAt + 1 }
@@ -172,7 +176,7 @@ export function parseHistoryFile(textValue: string | null | undefined): HistoryF
     const id = (value: unknown) => typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined
     const epicId = id(row.epicId), featureId = id(row.featureId)
     const planned = number(row.planned), actual = number(row.actual)
-    rows.push({ person, month, ...(featureId ? { featureId } : {}), ...(epicId ? { epicId } : {}), stream: short(row.stream), activity: short(row.activity), ...(short(row.type) ? { type: short(row.type, 80) } : {}), ...(planned ? { planned } : {}), ...(actual ? { actual } : {}) })
+    rows.push({ person, month, ...(featureId ? { featureId } : {}), ...(epicId ? { epicId } : {}), stream: short(row.stream), activity: short(row.activity), ...(short(row.type) ? { type: short(row.type, 80) } : {}), ...(tagOfCell(short(row.tag, 200)) ? { tag: tagOfCell(short(row.tag, 200)) } : {}), ...(planned ? { planned } : {}), ...(actual ? { actual } : {}) })
   }
   const record = (value: unknown, check: (entry: unknown) => boolean) => value && typeof value === 'object' && !Array.isArray(value) ? Object.fromEntries(Object.entries(value as Record<string, unknown>).filter(([name, entry]) => name.length <= 200 && check(entry)).slice(0, 2000)) : {}
   return {
@@ -231,7 +235,7 @@ export function withHistory(items: AzureWorkItem[], file: HistoryFile | null): H
     const person = group ? '' : file.people[row.person] || row.person
     const id = next--
     // A group row is shared time: its hours apply to each person in the group (counted once per person in the reports).
-    added.push({ ...base, key: `history/task/${-id}`, id, workItemType: 'Task', title: `${row.month} | ${activity}`, assignedTo: person, parentId: featureId, ...(group ? { tags: `History import; Shared: ${group}` } : {}), ...(row.planned ? { originalEstimate: row.planned } : {}), ...(row.actual ? { completedWork: row.actual } : {}) })
+    added.push({ ...base, key: `history/task/${-id}`, id, workItemType: 'Task', title: `${row.month} | ${activity}`, assignedTo: person, parentId: featureId, tags: ['History import', row.tag, group ? `Shared: ${group}` : ''].filter(Boolean).join('; '), ...(row.planned ? { originalEstimate: row.planned } : {}), ...(row.actual ? { completedWork: row.actual } : {}) })
     if (!group) { hours += row.actual ?? 0; people.add(person) }
   }
   const result = { items: [...kept, ...added], leftOut: { tasks: leftTasks, hours: Math.round(leftHours * 10) / 10 }, added: { rows: file.rows.filter((row) => row.month < file.cutoff).length, hours: Math.round(hours * 10) / 10, people: people.size } }

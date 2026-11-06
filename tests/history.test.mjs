@@ -175,3 +175,25 @@ test('historical hours: the file is read with every month, so a later cut-off br
   const file = buildHistoryFile({ rows: all.rows.filter((row) => row.month < '2026-11'), cutoff: '2026-11', source: 'plan.xlsx', sheet: 'TransformedData', importedBy: '', streamEpics: {}, people: {} })
   assert.equal(withHistory([], file).added.rows, 2)
 })
+
+test('historical hours: a Tag column marks training / NPRA rows; the app\'s own tags cannot be set from it (TC-HIS-11)', async () => {
+  const { tagOfCell } = await import('../src/history.ts')
+  assert.equal(tagOfCell(' Training , NPRA '), 'Training; NPRA')
+  assert.equal(tagOfCell('Shared: everyone; History import; Training'), 'Training', 'no group or import marker from the file')
+  const base = { organization: 'org', project: 'Quality', state: 'Active', areaPath: '', iterationPath: '', tags: '', url: '', syncedAt: '', assignedTo: '' }
+  const item = (id, workItemType, title, parentId) => ({ ...base, key: `org/q/${id}`, id, workItemType, title, ...(parentId ? { parentId } : {}) })
+  // Leave and training in one Feature of the absence Epic: only the Tag tells them apart.
+  const ado = [item(37778, 'Epic', 'Absence and Training'), item(810, 'Feature', 'Ana Costa', 37778)]
+  const rows = [['QA/QE', 'Month(Date)', 'Epic No', 'Stream(Features)', 'Project / Release Title', 'Expected', 'Actual', 'Feature ID', 'Tag'],
+    ['Ana Costa', '2026-08-01', '', 'Absence', 'PTO', '', '16', '810', ''],
+    ['Ana Costa', '2026-08-01', '', 'Absence', 'White belt', '', '6', '810', 'Training'],
+    ['Ana Costa', '2026-08-01', '', 'Absence', 'Town hall', '', '2', '810', 'NPRA'],
+  ]
+  const parsed = parseHistorySheet(rows, '2026-10').rows
+  assert.deepEqual(parsed.map((entry) => entry.tag), [undefined, 'Training', 'NPRA'])
+  const file = buildHistoryFile({ rows: parsed, cutoff: '2026-10', source: 'plan.xlsx', sheet: 'TransformedData', importedBy: '', streamEpics: {}, people: {} })
+  assert.deepEqual(parseHistoryFile(serializeHistory(file)).rows.map((entry) => entry.tag), [undefined, 'Training', 'NPRA'], 'kept in history-hours.json')
+  const settings = { absenceEpicId: 37778, hoursPerDay: 8, overloadedAt: 100, availableBelow: 80, npraHoursPerMonth: 20, profiles: { 'Ana Costa': { region: 'India' } } }
+  const ana = capacityModel(withHistory(ado, file).items, '2026-08', settings).people.find((entry) => entry.name === 'Ana Costa')
+  assert.deepEqual([ana.absence, ana.npra], [16, 8], 'PTO is absence; the tagged rows are training / NPRA')
+})

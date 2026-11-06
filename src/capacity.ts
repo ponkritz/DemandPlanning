@@ -14,7 +14,7 @@ export type SharedTimeScope = 'everyone' | Region
 export interface SharedTimeRule { id: number; kind: SharedTimeKind; scope: SharedTimeScope; label?: string }
 // NPRA (non-project related activities: internal meetings such as stand-ups, special projects and town halls, and
 // trainings such as white belt, AI and Cornerstone): a Task is NPRA when it or an ancestor carries a tag starting with
-// "NPRA" ("NPRA", "NPRA Hours", "NPRA - Training"). The hours booked on NPRA Tasks come off the person's available
+// "NPRA" ("NPRA", "NPRA Hours", "NPRA - Training") or "Training" (CAP-32). The hours booked on NPRA Tasks come off the person's available
 // hours (only what is booked, nothing is reserved up front) and are tracked against npraHoursPerMonth (20 by default),
 // the maximum per person per month; hours over it are flagged. 0 tracks without a maximum.
 // defaultJoinedOn: the Joined on of everyone without their own (YYYY-MM-DD; '' for none): months before it give them no
@@ -24,7 +24,7 @@ export interface SharedTimeRule { id: number; kind: SharedTimeKind; scope: Share
 export interface MonthLock { planOn?: string; actualsOn?: string; planLocked?: boolean; actualsLocked?: boolean; reason?: string; updatedAt?: string; updatedBy?: string }
 export interface CapacitySettings { planLockDay?: number; actualsLockDay?: number; monthLocks?: Record<string, MonthLock>; absenceEpicId: number; hoursPerDay: number; overloadedAt: number; availableBelow: number; npraHoursPerMonth: number; defaultJoinedOn?: string; sharedTime?: SharedTimeRule[]; profiles?: Record<string, ResourceProfile> }
 export const defaultCapacitySettings: CapacitySettings = { absenceEpicId: 37778, hoursPerDay: 8, overloadedAt: 100, availableBelow: 80, npraHoursPerMonth: 20, defaultJoinedOn: '2026-05-01' }
-export const npraTag = /^npra\b/i
+export const npraTag = /^(npra|trainings?)\b/i
 export const isNpra = (item: Pick<AzureWorkItem, 'tags'>) => (item.tags ?? '').split(';').some((tag) => npraTag.test(tag.trim()))
 // An NPRA Task: tagged itself, or under a tagged Story / Feature / Epic (the absence Epic and mapped shared time win).
 export const isNpraTask = (task: AzureWorkItem, chain: AzureWorkItem[]) => [task, ...chain].some(isNpra)

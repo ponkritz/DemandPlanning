@@ -239,3 +239,23 @@ test('Team Holidays and Training (same Epic ID): training is NPRA, PTO / Sick / 
   assert.deepEqual([ana.absenceByKind.PTO, ana.absenceByKind['Sick Leave'], ana.absenceByKind['Unplanned Leave'], ana.absenceByKind['Other absence']], [16, 8, 8, 0], '"Training" in the Epic title does not change the kinds')
   assert.ok(!model.streams.some((stream) => stream.title === 'Team Holidays and Training'), 'training is not a stream either')
 })
+
+test('training under the absence Epic is read from the User Story or a Training / NPRA tag, not the shared Feature (TC-CAP-08)', () => {
+  const epic = [item(900, { workItemType: 'Epic', title: 'Absence and Training' })]
+  const rows = [
+    ...backlog.filter((entry) => entry.id < 40 && entry.id !== 900), ...epic,
+    // One Feature per person holding both leave and training, its title naming "Training" too.
+    item(70, { workItemType: 'Feature', parentId: 900, title: 'Ana - Holidays and Training', assignedTo: 'Ana' }),
+    item(71, { parentId: 70, title: 'Ana | PTO | Time Writing', assignedTo: 'Ana' }), item(72, { workItemType: 'Task', parentId: 71, title: 'October 2026 | Ana | PTO | Time Writing', assignedTo: 'Ana', completedWork: 16 }),
+    item(73, { parentId: 70, title: 'Ana | Training | Time Writing', assignedTo: 'Ana' }), item(74, { workItemType: 'Task', parentId: 73, title: 'October 2026 | Ana | Training | Time Writing', assignedTo: 'Ana', completedWork: 6 }),
+    item(75, { parentId: 70, title: 'Ana | Courses', assignedTo: 'Ana', tags: 'Training' }), item(76, { workItemType: 'Task', parentId: 75, title: 'October 2026 | Ana | Courses', assignedTo: 'Ana', completedWork: 3 }),
+    item(77, { workItemType: 'Task', parentId: 71, title: 'October 2026 | Ana | Townhall', assignedTo: 'Ana', tags: 'NPRA', completedWork: 2 }),
+    // A Task tagged "Training" outside the Epic is NPRA as well.
+    item(78, { workItemType: 'Task', parentId: 20, title: 'October 2026 | Release 1 course', assignedTo: 'Ben', tags: 'Training', completedWork: 5 }),
+  ]
+  const model = capacityModel(rows, '2026-10', { ...settings, npraHoursPerMonth: 20 })
+  const ana = model.people.find((person) => person.name === 'Ana'), ben = model.people.find((person) => person.name === 'Ben')
+  assert.equal(ana.absence, 16, 'only the PTO story is absence, though the Feature title says Training')
+  assert.equal(ana.npra, 11, 'Training story 6 + Training-tagged story 3 + NPRA-tagged Task 2')
+  assert.equal(ben.npra, 5, 'a Training tag counts as NPRA outside the Epic too')
+})

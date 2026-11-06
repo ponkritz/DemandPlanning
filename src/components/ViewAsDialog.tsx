@@ -11,14 +11,15 @@ export function ViewAsDialog({ current, people, onStart, onClose }: { current: V
   const chosen = people.find((entry) => (entry.email || entry.name) === person)
   return <Modal title="View as" eyebrow="ADMIN" onClose={onClose}>
     <p className="muted">See the app as someone else sees it — read only: nothing you do is saved to Azure DevOps or Git while View as is on. It ends when you choose Exit or reload the page.</p>
-    <div className="button-row" role="radiogroup" aria-label="View as">
-      <label className="checkbox-label"><input type="radio" name="view-as-kind" checked={kind === 'person'} onChange={() => setKind('person')} />A person</label>
-      <label className="checkbox-label"><input type="radio" name="view-as-kind" checked={kind === 'role'} onChange={() => setKind('role')} />A role</label>
+    <div className="view-as-form">
+      <div className="segmented" role="radiogroup" aria-label="View as">
+        <label className={kind === 'person' ? 'active' : undefined}><input type="radio" name="view-as-kind" checked={kind === 'person'} onChange={() => setKind('person')} />A person</label>
+        <label className={kind === 'role' ? 'active' : undefined}><input type="radio" name="view-as-kind" checked={kind === 'role'} onChange={() => setKind('role')} />A role</label>
+      </div>
+      {kind === 'person' ? <label>Person<select value={person} onChange={(event) => setPerson(event.target.value)}><option value="">Choose…</option>{people.map((entry) => <option key={entry.email || entry.name} value={entry.email || entry.name}>{entry.name}{entry.email && entry.email !== entry.name ? ` · ${entry.email}` : ''}</option>)}</select></label>
+        : <label>Role<select value={role} onChange={(event) => setRole(event.target.value as Role)}>{roles.map((entry) => <option key={entry}>{entry}</option>)}</select></label>}
+      <small className="muted">{kind === 'person' ? 'Their menu and pages follow the roles of their work email in Settings → Access (the default role when they have none or no email is known); My dashboard, Assigned to Me and Monthly show their own work.' : 'The menu and pages of that role; My dashboard and Assigned to Me stay yours.'}</small>
     </div>
-    {kind === 'person' ? <label className="inline-field">Person<select value={person} onChange={(event) => setPerson(event.target.value)}><option value="">Choose…</option>{people.map((entry) => <option key={entry.email || entry.name} value={entry.email || entry.name}>{entry.name}{entry.email && entry.email !== entry.name ? ` · ${entry.email}` : ''}</option>)}</select></label>
-      : <label className="inline-field">Role<select value={role} onChange={(event) => setRole(event.target.value as Role)}>{roles.map((entry) => <option key={entry}>{entry}</option>)}</select></label>}
-    {kind === 'person' && <small className="muted">Their menu and pages follow the roles of their work email in Settings → Access (the default role when they have none or no email is known); My dashboard, Assigned to Me and Monthly show their own work.</small>}
-    {kind === 'role' && <small className="muted">The menu and pages of that role; My dashboard and Assigned to Me stay yours.</small>}
-    <div className="button-row"><button type="button" className="ghost" onClick={onClose}>Cancel</button><button type="button" className="primary" disabled={kind === 'person' && !chosen} onClick={() => onStart(kind === 'role' ? { kind: 'role', role } : { kind: 'person', name: chosen!.name, ...(chosen!.email ? { email: chosen!.email } : {}) })}>View as</button></div>
+    <div className="modal-actions"><button type="button" className="ghost" onClick={onClose}>Cancel</button><button type="button" className="primary" disabled={kind === 'person' && !chosen} onClick={() => onStart(kind === 'role' ? { kind: 'role', role } : { kind: 'person', name: chosen!.name, ...(chosen!.email ? { email: chosen!.email } : {}) })}>View as</button></div>
   </Modal>
 }

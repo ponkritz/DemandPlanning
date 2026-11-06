@@ -478,3 +478,14 @@ table.resizable.wrap th,table.resizable.wrap td{white-space:pre-wrap;overflow-wr
 .view-as-banner span{flex:1;min-width:220px}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .view-as-banner{background:#3a2f12;color:#f5e6c4}}
 :root[data-theme="dark"] .view-as-banner{background:#3a2f12;color:#f5e6c4}
+/* Sidebar tools (Customize menu, View as), Customize menu and View as dialogs (MYD-07, CON-89). */
+.sidebar-tools{display:grid;gap:6px;margin-bottom:6px}.sidebar-tools .download-link{margin:0}.sidebar-tools .download-link span{width:16px;text-align:center}
+.menu-customizer{border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:60vh}.menu-customizer table{font-size:13px}.menu-customizer thead th{position:sticky;top:0;z-index:1}
+.menu-customizer th:not(:first-child),.menu-customizer td:not(:first-child){width:84px;text-align:center}.menu-customizer td{padding:8px 14px;vertical-align:middle}
+.menu-customizer .menu-group th{background:var(--surface);color:var(--teal-text);text-align:left;padding:12px 14px 4px;border-top:0;border-bottom:1px solid var(--line-soft)}
+.menu-customizer .menu-hidden td:first-child{color:var(--muted);text-decoration:line-through}.menu-customizer input[type=checkbox]{width:16px;height:16px}
+.view-as-form{display:grid;gap:12px;margin:16px 0 4px}.view-as-form>label select{width:100%}.view-as-form small{line-height:1.5}
+.segmented{display:inline-flex;justify-self:start;border:1px solid var(--line);border-radius:9px;padding:3px;background:var(--surface-2);gap:3px}
+.segmented label{display:flex;align-items:center;gap:6px;padding:7px 14px;border-radius:7px;font-size:12.5px;cursor:pointer;color:var(--text-2)}
+.segmented label.active{background:var(--surface);color:var(--text);box-shadow:0 1px 3px var(--shadow)}.segmented input{width:auto;margin:0}
+@media(max-width:1000px){.sidebar-tools .download-link{font-size:0;justify-content:center}.sidebar-tools .download-link span{font-size:16px}}
