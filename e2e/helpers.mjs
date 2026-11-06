@@ -9,7 +9,9 @@ import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
 
 const root = new URL('../', import.meta.url)
-export const fixture = (name) => new URL(`fixtures/${name}`, import.meta.url).pathname
+// URL.pathname keeps a leading slash before a Windows drive ("/C:/…"), which Playwright then treats as
+// "C:\\C:\\…". Convert the file URL instead so the same browser suite works on Windows and CI.
+export const fixture = (name) => fileURLToPath(new URL(`fixtures/${name}`, import.meta.url))
 
 const freePort = () => new Promise((resolve, reject) => {
   const server = createServer()
