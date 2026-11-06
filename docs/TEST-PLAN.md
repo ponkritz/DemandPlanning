@@ -460,6 +460,8 @@ Cases marked **UAT** are also run in acceptance testing.
 **TC-FET-06 Unscoped cache hidden** — Req FET-16
 - L1: `azure-devops.test.mjs` (scoped cache, no project fallback).
 
+**TC-FET-09 Start-up fetch does not wait for slow Git** — Req FET-21, FET-20 — E2E `shell.e2e.mjs` ("TC-FET-09: the start-up fetch does not wait for slow Git and shows in the top bar"); browser check: with Git storage and many on-prem views, opening the app shows "Fetch Azure DevOps at start" in the top bar right after the connection setup is read, with "1 of 1 connection fetched" or the reason (no PAT here, on-premises); with no connection set up nothing is shown.
+
 **TC-FET-08 Cloud fetch at start** — Req FET-20, CON-45 — browser check with Azure DevOps mocked: with a cloud Time Writing connection and an on-prem connection, opening the app sends the cloud fetch once and nothing to the on-prem server; a rejected PAT shows the usual error and keeps the saved data. Settings shows one tab at a time, the shared tabs only with "manage shared settings", and reopens on the last tab; "Fetch work items from Azure DevOps →" opens the Azure DevOps tab. Live check needed: the QMS-0025 data refreshes after Force Update. **UAT**
 
 **TC-FET-07 Query fields and names** — Req FET-18, FET-19, QV-04
@@ -505,7 +507,7 @@ Cases marked **UAT** are also run in acceptance testing.
 
 ### 6.5 Monthly Time Writing
 
-**TC-MON-01 Scope switch** — Req MON-01…03, MON-19 — **UAT**
+**TC-MON-01 Scope switch** — *(Retired — see TC-ACT-11)* Req MON-01…03, MON-19 — **UAT**
 - Steps:
   1. Open Monthly with Me set.
   2. Switch to Team.
@@ -518,7 +520,7 @@ Cases marked **UAT** are also run in acceptance testing.
   - Step 4 shows the MON-03 notice and no rows.
   - The gaps panel lists only my stories in Individual mode.
 
-**TC-MON-02 Metrics and table** — Req MON-04, MON-05, MON-08
+**TC-MON-02 Metrics and table** — *(Retired — see TC-ACT-11)* Req MON-04, MON-05, MON-08
 - Expected:
   - The four metrics show for the month.
   - The columns are as in MON-05, and the links open the Azure items.
@@ -536,7 +538,7 @@ Cases marked **UAT** are also run in acceptance testing.
 | At (M+1)-05 23:59:59, no record for M+1 | locked | locked |
 | Task tagged ad-hoc, planning open | disabled | open |
 
-**TC-MON-04 Staging, validation and save** — Req MON-11…14, MON-16, MON-17 — **UAT**
+**TC-MON-04 Staging, validation and save** — *(Retired — see TC-ACT-11)* Req MON-11…14, MON-16, MON-17 — **UAT**
 - Steps:
   1. Change T1's CW to 6. "Staged changes" becomes 1.
   2. Press "Discard staged changes": the value reverts.
@@ -549,7 +551,7 @@ Cases marked **UAT** are also run in acceptance testing.
   - Step 5 shows "Saving and refreshing…". Azure T1 then shows CW 6 and only CW changed in its history. The data refreshes, and staged returns to 0.
   - In step 6 the button is disabled.
 
-**TC-MON-05 Locked-field rejection** — Req MON-13
+**TC-MON-05 Locked-field rejection** — *(Retired — see TC-ACT-11)* Req MON-13
 - Steps:
   1. Stage OE on a Task while planning is open.
   2. Lock planning in Settings.
@@ -575,7 +577,7 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-MON-10 Month locks over the month change and in Git** — Req MON-06, MON-07, MON-22, MON-24 — L1 `planning-lock.test.mjs` ("month locks: by default November planning locks after 5 November and November actuals after 4 December…", "month locks reset when the month rolls over…", "month locks: each month can have its own dates…", "month locks are kept with the capacity settings in the Git planning data…"); browser check: keep Monthly Time Writing open over midnight at a lock date — the pill changes within a minute.
 
-**TC-MON-07 Gaps panel** — Req MON-18
+**TC-MON-07 Gaps panel** — *(Retired — see TC-ACT-11)* Req MON-18
 - Expected (TD-02a, October 2026):
   - (a) S2 is listed as a Time Writing story with no October Task.
   - (b) T6 is listed under "without a month in the title", and so are T4 and T5, because S1 is a Time Writing story.
@@ -608,13 +610,13 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-ATM-09 Expand a Feature, then a User Story** — Req ATM-17 — L1 `my-work.test.mjs` ("featureChildren: stories, bugs and tasks under a Feature with their own children, any person, Removed left out"); browser check on sample data (person Ana Costa): ▸ on the Feature shows only its User Stories (and items placed straight under it), no Tasks; ▸ on a User Story then shows its Tasks with planned and recorded hours, and ▾ hides them again; a story without Tasks has no ▸; my New or Active items keep their action, other people's show "Not mine"; ▾ on the Feature closes it all.
 
-**TC-ATM-10 Month tasks: show with / without task, select all** — Req ATM-18 — browser check on sample data: the switch Without task / With task / Both filters the list and shows its counts; Select all and Deselect all act only on the shown Features whose task can be created and the "N of M selected" count follows; with nothing creatable both buttons are disabled.
+**TC-ATM-10 Month tasks: show with / without task, select all** — *(Retired — see TC-ACT-11)* Req ATM-18 — browser check on sample data: the switch Without task / With task / Both filters the list and shows its counts; Select all and Deselect all act only on the shown Features whose task can be created and the "N of M selected" count follows; with nothing creatable both buttons are disabled.
 
 **TC-ATM-11 New Feature and Complete children on Assigned to Me** — Req ATM-19, BKL-10 — L1 `my-work.test.mjs` ("Complete children only for a Feature without optional User Stories"); browser check: ＋ New Feature opens the board's "Add Feature under an Epic" editor with the Epic selectable; Complete children shows only on a Feature with no User Story other than its Time Writing story; both are disabled with sample data; after a real create the result shows as a notice and the data refreshes. **UAT**
 
 **TC-ATM-12 Close follow-up: User Stories with the Feature, the Feature with the last User Story** — Req ATM-20 — L1 `my-work.test.mjs` ("closing a Feature offers its open User Stories; closing the last open User Story offers the Feature (ATM-20)": open stories only, the last-story rule, Closed Features and Tasks left alone, the staged states, the question texts; the chain writes each item in order when confirmed, nothing when declined, reports a Resolved Feature and a failed write, sets a New Feature to Active then Closed); browser check (QMS-0025, own test items): Close Feature → the prompt lists its open User Stories → OK closes them and the log says so; close the last open User Story → the prompt offers the Feature → Cancel leaves it open.
 
-**TC-ATM-13 Month Tasks up to the Target date** — Req ATM-21 — L1 `my-work.test.mjs` ("Bulk month Tasks up to the Target date …"); browser check:
+**TC-ATM-13 Month Tasks up to the Target date** — *(Retired — see TC-ACT-11)* Req ATM-21 — L1 `my-work.test.mjs` ("Bulk month Tasks up to the Target date …"); browser check:
 - Steps: Bulk actions → Create month tasks with a Feature whose Target date is in January 2027 (month October 2026); in the confirmation tick it, enter 20 h; Create tasks. Run it again.
 - Expected: Tasks for October, November, December 2026 and January 2027, each with Original Estimate 20 h (October without hours if planning had locked); the result names the later months; the second run creates nothing.
 
@@ -631,6 +633,8 @@ Cases marked **UAT** are also run in acceptance testing.
 **TC-ATM-18 One leave row per leave story** — Req ATM-26 — L1 `my-work.test.mjs` ("a leave Feature with one story per leave type lists one row per story of mine, never \"Choose story\" (TC-ATM-18)", "ensureStoryMonthTask creates the month Task under the given story once, then reuses it (TC-ATM-18)"); browser check: with a leave Feature "#<id> <your name>" holding your stories PTO and Sick Leave, Bulk actions → Leave shows "<your name> › PTO" and "<your name> › Sick Leave" as separate rows, never "Choose story"; ticking PTO and creating puts "<Month> | PTO" under the PTO story; running again creates nothing.
 
 **TC-ATM-19 Missing leave and training stories** — Req ATM-27 — L1 `my-work.test.mjs` ("a leave Feature with one story per leave type lists one row per story of mine, never \"Choose story\" (TC-ATM-18)", "ensureAbsenceStoryMonthTask creates \"<Name> \| <Type> \| Time Writing\" and its month Task once, or uses my story of that type (TC-ATM-19)"); browser check: with your Feature "#<id> <your name>" under the Absence and Training Epic holding only a PTO story, Bulk actions → Leave and training shows "Story + task missing" rows for Training, Sick Leave and Unplanned Leave; ticking Training and creating adds "<your name> \| Training \| Time Writing" with "<Month> \| <your name> \| Training \| Time Writing" under it, assigned to you; running again creates nothing.
+
+**TC-ATM-20 Sprint check** — Req ATM-07, ATM-08, ATM-09, ATM-20 — E2E `shell.e2e.mjs` ("TC-ATM-20: Sprint check offers the move to the current PI + Sprint and the state checks, without month tasks"); browser check with the Time Writing connection: Find current Sprint, move a User Story from an ended Sprint, close a Feature from the state checks — as on Bulk actions before.
 
 **TC-ATM-03 Close an item** — Req ATM-06 — **UAT**
 - Steps:
@@ -653,7 +657,7 @@ Cases marked **UAT** are also run in acceptance testing.
   - After confirmation only S3's Iteration Path changes, and the result shows "1 moved".
   - With no dated current Sprint, the ATM-07 message shows.
 
-**TC-ATM-05 Month tasks** — Req ATM-10…12, TWN-09 — **UAT**
+**TC-ATM-05 Month tasks** — *(Retired — see TC-ACT-11)* Req ATM-10…12, TWN-09 — **UAT**
 - Pre: F1 has no Task of mine for the current month. Remove T1 and T2 for this case, or run it in a later month.
 - Steps:
   1. Press Create.
@@ -719,6 +723,8 @@ Cases marked **UAT** are also run in acceptance testing.
 **TC-BKL-12 Backlog filtered to me; ＋ Time Writing Task** — Req BKL-21, BKL-22 — E2E `backlog.e2e.mjs` ("TC-BKL-12: QMS-0025 opens filtered to the person browsing; clearing the filter shows everyone; rows offer ＋ Time Writing Task"); L1 `my-work.test.mjs` ("QMS-0025 shows mine by default: my items with everything above and below; featureOf finds the Feature of a Story (TC-BKL-12)"); browser check with the QMS-0025 board and your work email: the backlog shows your items with their Epic / Feature above and the work below; Assigned to me ✕ clears to everyone and a restart filters again; ＋ Time Writing Task on a Feature (and on a Story) creates this month's Task for you under your own Time Writing story, or reports that it exists; the same button on Assigned to Me rows.
 
 **TC-BKL-13 Parent Epic blank on New Feature** — Req BKL-23 — E2E `backlog.e2e.mjs` ("TC-BKL-13: New Feature opens with the Parent Epic blank; every Epic is offered"); browser check: the same from Assigned to Me and from Create Feature on Release Details; Create without an Epic says "Choose the parent Epic."
+
+**TC-BKL-15 Your own User Story on New Feature** — Req BKL-25 — E2E `backlog.e2e.mjs` ("TC-BKL-15: New Feature offers your own User Story (title and description) under the new Feature"); browser check with the Time Writing connection: enter a title and description, Save — the story is created under the new Feature in the Sprint chosen, assigned like the Feature, and named in the result; left empty, nothing extra is created; not shown on Complete Feature children.
 
 **TC-BKL-14 Release number without "v" in Feature titles** — Req BKL-24 — L1 `release-source.test.mjs` ("Create Feature title from a release: \"Stream | Name | Release\" without a \"v\", mapping back to the release (BKL-24)"), `dp-board-match.test.mjs`, `cp-reporting.test.mjs`; browser check: Create Feature on a DP, CP and Windchill row pre-fills the title with the number and no "v".
 
@@ -1360,6 +1366,46 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-DOC-04 Private Tool Validation Package downloads** — Req DOC-12 — L1 `tool-validation.test.mjs`: configured repository and branch, authenticated read-only GET, fixed folders, path rejection, binary fidelity above 1 MB and safe errors. E2E `tool-validation.e2e.mjs`: missing configuration, list/search, DOCX download bytes, denied access, refresh and connection settings. Execute the same workflow in Web and Windows Desktop; verify downloaded PDF, Word and CSV files open in their native viewers. No private content or PAT is included in app exports or the public build. These automated checks use synthetic files; actual document review/approval remains outside the app.
 
+### 6.25 My Activities and Testing
+
+**TC-ACT-01 Testing heading for admins only; My Activities in My Work** — Req ACT-01, ACT-02, ACT-07 — E2E `shell.e2e.mjs` ("TC-ACT-01: My Activities is under My Work for everyone; the Testing heading is for the Admin role only"); browser check: with access.json, an Admin sees TESTING › My Activities, a Team Member does not (also not through View as a Team Member); without a policy nobody sees it; on a phone the cards stack and the stream shows under the activity.
+
+**TC-ACT-02 My Activities lists the month and saves once** — Req ACT-03, ACT-05, ACT-06 — **UAT** — E2E `shell.e2e.mjs` ("TC-ACT-02: My Activities shows the person's KPI cards, month tasks, hours and deadline"); L1 `my-work.test.mjs` (TC-ATM-16…19, the month-task rules it reuses); browser check with the Time Writing connection: a Feature of yours without a task is listed only under Suggested missing items, not in Your activities, and Save stays disabled; Add moves it into Your activities, enter hours, Save adds "<Month> \| <Feature>" with those hours, once; unticking it returns it to the suggestions; change an actual and Save updates Completed Work; tick a leave row and its task is added under your leave story; with sample data or during View as nothing is saved and the reason is shown; the KPI cards, the last day and the suggestions follow.
+
+**TC-ACT-03 Add a new activity** — Req ACT-04, ACT-06 — **UAT** — browser check: choose a stream, then a Feature (yours listed first), enter hours, Save activity — your month task appears under it with the hours; choose a Feature where you already have one — its current hours show in the fields and the hint says what you save replaces them; Save replaces them and adds no second task; only Active Epics and their Active or New Features are offered, each with its ID; only your own Features are listed and typing in the search box narrows them; a Feature can be chosen first and its Epic fills in; the chosen Epic's and Feature's ID and each activity's ID open the item in Azure DevOps.
+
+**TC-ACT-04 Add a User Story** — Req ACT-08, ACT-06 — E2E `shell.e2e.mjs` ("TC-ACT-02: My Activities shows the person's KPI cards, month tasks, hours and deadline": the User Story choice shows Title, Description and Comment); browser check with the Time Writing connection: choose User Story, an Epic and a Feature, enter a title, a description and a comment, Add User Story — the story appears under the Feature, assigned to you, in the current Sprint, with the description and the comment in its Discussion; without a title the button stays disabled; with sample data or during View as nothing is saved.
+
+**TC-ACT-06 KPI cards on top** — Req ACT-11, ACT-05 — E2E `shell.e2e.mjs` ("TC-ACT-02: My Activities shows the person's KPI cards, month tasks, hours and deadline": Tasks, Planned hours, Actual hours, Capacity, Monthly update and Unsaved changes above the cards); browser check: with your work email set, Tasks, Planned hours and Actual hours equal Monthly Time Writing in Individual (Me) for the same month, Capacity equals My dashboard; change an hour and Unsaved changes counts it.
+
+**TC-ACT-07 Create a Feature** — Req ACT-12, ACT-06, ACT-10 — E2E `shell.e2e.mjs` ("TC-ACT-02: My Activities shows the person's KPI cards, month tasks, hours and deadline": the Feature choice asks for Feature title and Feature DoD, the month-task box is ticked, Create Feature stays disabled without a DoD); browser check with the Time Writing connection: choose Feature, an Active Epic, enter a title, a DoD and hours, Create Feature — the Feature appears under the Epic, assigned to you, in the current PI, with "Feature DoD: …" in its Description, your month task with the hours under it and the Feature Active; untick the task box and only the Feature is created (state New); with sample data or during View as nothing is saved.
+
+**TC-ACT-08 A User Story with the new Feature** — Req ACT-13, ACT-12 — E2E `shell.e2e.mjs` ("TC-ACT-02: My Activities shows the person's KPI cards, month tasks, hours and deadline": ticking Add a User Story under it asks for its title and keeps Create Feature disabled until one is entered); browser check with the Time Writing connection: create a Feature with a User Story title, description and comment — the story appears under the new Feature, assigned to you, in the current Sprint, with the comment in its Discussion; a failing story is reported and the Feature stays.
+
+**TC-ACT-09 Layout, KPI order and the Feature drop-down** — Req ACT-02, ACT-04, ACT-05, ACT-11 — E2E `shell.e2e.mjs` ("TC-ACT-02: My Activities shows the person's KPI cards, month tasks, hours and deadline": columns Epic, Activity, Planned, Actual; Save in the heading row of Your activities; KPI cards Capacity, Planned hours, Actual hours, Tasks, Unsaved changes only after an hour is changed; the ring and the last day as tiles in the same row, all tiles one height; suggestions below Your activities; the Feature drop-down lists only your Features, typing narrows it, picking one fills in its Epic); browser check: the % badges equal Planned ÷ Capacity and Actual ÷ Capacity, and Actual's hint shows Actual ÷ Planned.
+
+**TC-ACT-10 Activities of another person** — Req ACT-14 — E2E `shell.e2e.mjs` ("TC-ACT-10: My Activities can show another person, chosen at the top right"); browser check with the Time Writing connection: as a person without the right to create work for others, choose a colleague — their month shows and saving says it needs that right; with the right, add a task for them — it is assigned to them, not to you; choose Me to go back.
+
+**TC-ACT-11 My Activities replaces Monthly Time Writing and the Bulk month tasks** — Req ACT-15, ACT-01 — E2E `shell.e2e.mjs` ("TC-ACT-01: My Activities is under My Work for everyone; the Testing heading is for the Admin role only": the menu lists My Activities, Assigned to Me, Sprint check under My Work and no Monthly Time Writing or Bulk actions, also for a Team Member); browser check: My dashboard's My hours link and Assigned to Me's month-tasks links open My Activities; an old pinned Monthly Time Writing or Bulk actions page in a personal menu no longer shows.
+
+**TC-ACT-05 Suggestions by state, Add all, New → Active** — Req ACT-09, ACT-10 — E2E `shell.e2e.mjs` ("TC-ACT-05: suggestions filter by Active / New / Both and Add all moves them into Your activities"); browser check with the Time Writing connection: with a New and an Active Feature of yours without a task, Active / New / Both narrow the suggestions; Add all puts the shown ones in Your activities and Save creates their tasks; the New Feature is then Active in Azure DevOps (the same when adding a task under a New Feature with Add a new activity); a Feature already Active is left as it is.
+
+### 6.26 Planning Overview
+
+**TC-OVW-01 Delivery and health by Target date** — Req OVW-03, OVW-07, OVW-01 — L1 `planning-overview.test.mjs` ("Planning Overview: delivery by Target date — done, overdue, open; the absence Epic left out (TC-OVW-01)"); browser check: Testing → Planning Overview — the Delivery tile counts the Features due this month that are done; Delivery health lists the Epics with completed / open / overdue Features of the next six months; only Active Epics in the Epic filter.
+
+**TC-OVW-02 Exceptions and filters** — Req OVW-02, OVW-04, OVW-06, OVW-01 — L1 `planning-overview.test.mjs` ("Planning Overview: exceptions — over 25% baseline, missing baseline, capacity risk; filters narrow them (TC-OVW-02)"); browser check: with baselines set, a release booked more than 25% over its baseline is listed with its % over and the tile counts it; a release without a baseline is "Missing baseline"; a person planned over the overload threshold is "Capacity risk"; Region, Epic and Owner narrow every figure; the type chips filter the queue; an item's ID opens it in Azure DevOps.
+
+**TC-OVW-03 The page for admins** — Req OVW-01, OVW-05, OVW-08 — E2E `shell.e2e.mjs` ("TC-OVW-03: an Admin opens the Planning Overview with its tiles, chart, queue and health"); browser check: the chart shows 12 months with the legend, hover gives the month's figures and "Show as a table" the same numbers; Generate Monthly Pack opens Settings → Monthly pack; a Team Member does not see the page.
+
+### 6.27 Capacity vs Actual
+
+**TC-CVA-01 Tiles, people and Epics** — Req CVA-02, CVA-04, CVA-05 — L1 `capacity-actual.test.mjs` ("Capacity vs Actual: tiles, bands per person and hours by Epic (TC-CVA-01)"); browser check: Testing → Capacity vs Actual — Actual equals the Completed Work booked in the month; utilization = actual ÷ capacity; a person over the overload threshold shows **Over**, below the available threshold **Under**; the Epic list adds up to Actual.
+
+**TC-CVA-02 Filters** — Req CVA-01 — L1 `capacity-actual.test.mjs` ("Capacity vs Actual: Region, Owner and Epic filters (TC-CVA-02)"); browser check: Region and Owner narrow the people and every figure; an Epic narrows the actual hours to that Epic while capacity stays the same; Clear filters restores all.
+
+**TC-CVA-03 The page for admins** — Req CVA-01, CVA-03, CVA-06 — E2E `shell.e2e.mjs` ("TC-CVA-03: an Admin opens Capacity vs Actual with its tiles, chart and people"); browser check: 12 months on the chart, bars over capacity in red, hover and the table view give the same figures; on a phone the tiles stack; a Team Member does not see the page.
+
 ## 7. Requirements coverage matrix
 
 | Requirement | Test cases |
@@ -1457,6 +1503,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | FET-15, FET-17 | TC-FET-05 |
 | FET-16 | TC-FET-06 |
 | FET-18, FET-19 | TC-FET-07 |
+| FET-20 | TC-FET-08, TC-FET-09 |
+| FET-21 | TC-FET-09 |
 | TWN-01…06 | TC-TWN-01 |
 | TWN-07, TWN-08 | TC-TWN-02 |
 | TWN-09 | TC-TWN-03, TC-ATM-05 |
@@ -1475,7 +1523,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | ATM-01…03 | TC-ATM-01 |
 | ATM-04, ATM-05 | TC-ATM-02 |
 | ATM-06 | TC-ATM-03, TC-ATM-08 |
-| ATM-07…09 | TC-ATM-04 |
+| ATM-07…09 | TC-ATM-04, TC-ATM-20 |
 | ATM-10…12 | TC-ATM-05 |
 | ATM-13, ATM-14 | TC-ATM-06 |
 | ATM-15, ATM-16 | TC-ATM-07 |
@@ -1505,6 +1553,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | BKL-22 | TC-BKL-12 |
 | BKL-23 | TC-BKL-13 |
 | BKL-24 | TC-BKL-14 |
+| BKL-25 | TC-BKL-15 |
 | QV-01, QV-02 | TC-QV-01 |
 | QV-03, QV-05 | TC-QV-02 |
 | QV-04 | TC-FET-07 |
@@ -1663,6 +1712,35 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | HIS-15 | TC-HIS-10 |
 | HIS-16 | TC-HIS-11 |
 | DOC-12 | TC-DOC-04 |
+| ACT-01 | TC-ACT-01 |
+| ACT-02 | TC-ACT-01, TC-ACT-09 |
+| ACT-03 | TC-ACT-02 |
+| ACT-04 | TC-ACT-03, TC-ACT-09 |
+| ACT-05 | TC-ACT-02, TC-ACT-06, TC-ACT-09 |
+| ACT-06 | TC-ACT-02, TC-ACT-03 |
+| ACT-07 | TC-ACT-01 |
+| ACT-08 | TC-ACT-04 |
+| ACT-09 | TC-ACT-05 |
+| ACT-10 | TC-ACT-05, TC-ACT-07 |
+| ACT-11 | TC-ACT-06, TC-ACT-09 |
+| ACT-12 | TC-ACT-07, TC-ACT-08 |
+| ACT-13 | TC-ACT-08 |
+| ACT-14 | TC-ACT-10 |
+| ACT-15 | TC-ACT-11 |
+| OVW-01 | TC-OVW-01, TC-OVW-02, TC-OVW-03 |
+| OVW-02 | TC-OVW-02 |
+| OVW-03 | TC-OVW-01 |
+| OVW-04 | TC-OVW-02 |
+| OVW-05 | TC-OVW-03 |
+| OVW-06 | TC-OVW-02 |
+| OVW-07 | TC-OVW-01 |
+| OVW-08 | TC-OVW-03 |
+| CVA-01 | TC-CVA-02, TC-CVA-03 |
+| CVA-02 | TC-CVA-01 |
+| CVA-03 | TC-CVA-03 |
+| CVA-04 | TC-CVA-01 |
+| CVA-05 | TC-CVA-01 |
+| CVA-06 | TC-CVA-03 |
 | NFR-02 | TC-STO-01 |
 | NFR-03…05 | TC-DSK-02, TC-INS-01 |
 | NFR-06 | TC-INS-02 |
@@ -1676,11 +1754,11 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 |---|---|
 | UC-01 | TC-NAV-01…06, TC-NAV-33, TC-NAV-37, TC-UI-01, TC-UI-02, TC-UI-03, TC-CON-36, TC-CON-38 |
 | UC-02 | TC-CON-01…07, TC-CON-17…19, TC-CON-44, TC-CON-28, TC-NAV-02, TC-NAV-34, TC-QV-14, TC-QV-16, TC-QV-23, TC-QV-24, TC-CON-46, TC-QV-25, TC-CON-47 |
-| UC-03 | TC-CON-03, TC-FET-01…06 |
+| UC-03 | TC-CON-03, TC-FET-01…06, TC-FET-09 |
 | UC-04 | TC-TWN-01, TC-TWN-02, TC-MON-01…06, TC-MON-09, TC-MON-10, TC-ATM-19 |
 | UC-05 | TC-MON-07 |
 | UC-06 | TC-ATM-01…11, TC-TWN-03, TC-CON-20, TC-CON-33, TC-CON-34, TC-CON-43 |
-| UC-07 | TC-BKL-01…09, TC-NAV-36, TC-CON-23, TC-CON-25…27, TC-CON-29…32, TC-CON-35 |
+| UC-07 | TC-BKL-01…09, TC-BKL-15, TC-NAV-36, TC-CON-23, TC-CON-25…27, TC-CON-29…32, TC-CON-35 |
 | UC-08 | TC-QV-01…05, TC-FET-07, TC-CON-08, TC-CON-11…16, TC-QV-08, TC-QV-09, TC-QV-10, TC-QV-11, TC-QV-12, TC-QV-13, TC-QV-14, TC-QV-15, TC-QV-16, TC-CON-37, TC-CON-38, TC-CON-39, TC-CON-40, TC-CON-41, TC-QV-18, TC-QV-19, TC-QV-20, TC-QV-21, TC-QV-22, TC-CON-42 |
 | UC-09 | TC-OV-11…14, TC-CAP-01, TC-CAP-02, TC-CAP-03, TC-CAP-08, TC-QV-17, TC-CON-21, TC-QV-10, TC-QV-11, TC-QV-21 |
 | UC-10 | TC-OV-11 (Months, Streams), TC-OV-13 |
@@ -1701,6 +1779,9 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-25 | TC-WSP-01…07 |
 | UC-26 | TC-MYD-01…05, TC-QV-31, TC-QV-32 |
 | UC-27 | TC-HIS-01…11 |
+| UC-28 | TC-ACT-01…11 |
+| UC-29 | TC-OVW-01…03 |
+| UC-30 | TC-CVA-01…03 |
 
 ## 8. Result record
 

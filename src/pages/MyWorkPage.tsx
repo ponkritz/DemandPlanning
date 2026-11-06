@@ -21,7 +21,7 @@ type Log = { tone: 'success' | 'error' | 'info'; text: string }
 const stateTone = (state: string): Tone => /new|proposed|to do/i.test(state) ? 'info' : /active|in progress|committed|doing/i.test(state) ? 'open' : 'neutral'
 const shortPath = (path: string) => path.split('\\').slice(1).join(' › ') || path
 
-export function MyWorkPage({ azure, store, my, onOpenBulk, assign, featureSetup }: { azure: AzureWorkspace; store: PageProps['store']; my: MyWork; onOpenBulk: () => void; assign?: { me: string; canChoose: boolean }; featureSetup?: FeatureSetups | null }) {
+export function MyWorkPage({ azure, store, my, onOpenActivities, assign, featureSetup }: { azure: AzureWorkspace; store: PageProps['store']; my: MyWork; onOpenActivities: () => void; assign?: { me: string; canChoose: boolean }; featureSetup?: FeatureSetups | null }) {
   const [busy, setBusy] = useState('')
   const [log, setLog] = useState<Log[]>([])
   // Opens on Features; the list is always in ascending ID order.
@@ -84,9 +84,9 @@ export function MyWorkPage({ azure, store, my, onOpenBulk, assign, featureSetup 
           <Metric label="Pending work" value={pending.length} hint="New or active items assigned to you" />
           <Metric label="Features" value={counts.Feature ?? 0} hint={`${counts['User Story'] ?? 0} stories · ${counts.Bug ?? 0} bugs`} />
           <Metric label="Tasks" value={counts.Task ?? 0} hint="Including Time Writing tasks" />
-          <Metric label={`${month} tasks missing`} value={missing.length} hint={<>{candidates.length - missing.length} of {candidates.length} Features covered · <button type="button" className="text-button" onClick={onOpenBulk}>Bulk actions →</button></>} tone={missing.length ? 'negative' : undefined} />
+          <Metric label={`${month} tasks missing`} value={missing.length} hint={<>{candidates.length - missing.length} of {candidates.length} Features covered · <button type="button" className="text-button" onClick={onOpenActivities}>My Activities →</button></>} tone={missing.length ? 'negative' : undefined} />
         </Metrics>
-        {sharedMissing.length > 0 && <Notice tone="info">You work on {sharedMissing.length} shared Feature{sharedMissing.length === 1 ? '' : 's'} owned by someone else without your {month} task: {sharedMissing.map((row) => `${row.feature.id} (owner ${row.shared!.owner})`).join(', ')}. <button type="button" className="text-button" onClick={onOpenBulk}>Add in Bulk actions →</button></Notice>}
+        {sharedMissing.length > 0 && <Notice tone="info">You work on {sharedMissing.length} shared Feature{sharedMissing.length === 1 ? '' : 's'} owned by someone else without your {month} task: {sharedMissing.map((row) => `${row.feature.id} (owner ${row.shared!.owner})`).join(', ')}. <button type="button" className="text-button" onClick={onOpenActivities}>Add in My Activities →</button></Notice>}
         {blocked && <Notice tone="warning">{blocked}</Notice>}
         {log.map((entry, index) => <Notice key={index} tone={entry.tone}>{entry.text}</Notice>)}
         <TablePanel title="Pending work" info={<ul>

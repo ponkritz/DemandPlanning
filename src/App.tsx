@@ -1,3 +1,4 @@
+import { runInBackground } from './backgroundJobs'
 import { BrandMark } from './components/BrandMark'
 import { TableDefaultsContext } from './components/tableDesign'
 import { normalizeTableDefaults } from './tableDefaults'
@@ -14,7 +15,9 @@ import { JobsIndicator } from './components/JobsIndicator'
 import { pages, pageGroups, pageMeta, type Page } from './pages/registry'
 import { DashboardPage } from './pages/DashboardPage'
 import { MyDashboardPage } from './pages/MyDashboardPage'
-import { MonthlyPage } from './pages/MonthlyPage'
+import { MyActivitiesPage } from './pages/MyActivitiesPage'
+import { PlanningOverviewPage } from './pages/PlanningOverviewPage'
+import { CapacityActualPage } from './pages/CapacityActualPage'
 import { BaselinesPage } from './pages/BaselinesPage'
 import { SnapshotsPage } from './pages/SnapshotsPage'
 import { AdminPage } from './pages/AdminPage'
@@ -49,7 +52,7 @@ import type { Area } from './access'
 import { useMyWork } from './useMyWork'
 import { setLockSettings } from './planningLock'
 import { MyWorkPage } from './pages/MyWorkPage'
-import { BulkActionsPage } from './pages/BulkActionsPage'
+import { SprintCheckPage } from './pages/SprintCheckPage'
 import { DesktopDownload } from './components/DesktopDownload'
 import { exportStateJson } from './download'
 import { BuildStatus } from './components/BuildStatus'
@@ -94,9 +97,10 @@ export default function App() {
     if (pulled.current || !store.ready || !git.connected || azure.isSample || git.status === 'loading') return
     pulled.current = true
     const web = !window.azureDevOps
+    // The start-up fetch waits only for the connection setup (KB-38): the on-prem views' data is read from Git after it.
     void git.syncViews().catch(() => null)
-      .then(() => web ? git.pullSnapshots() : undefined).catch(() => { /* shown when loading from Settings */ })
       .finally(() => { azure.reloadConnectionProfiles(); setSetupSynced(true) })
+      .then(() => web ? git.pullSnapshots() : undefined).catch(() => { /* shown when loading from Settings */ })
     void git.pullWindchill().then(() => windchill.reload()).catch(() => { /* shown when loading from Git on the import page */ })
   }, [store.ready, git, azure, windchill])
   // Duplicate connections (same server, project, role and query — e.g. one from the shared setup and one set up again)
@@ -119,13 +123,23 @@ export default function App() {
     }
   }, [store, git, azure, setupSynced])
   // Every start (opening the app, Force Update, reload) fetches the cloud connections once, after the shared
-  // connection setup from Git is in place.
+  // connection setup from Git is in place — or after 10 seconds when Git is slow or does not answer (KB-38). The fetch
+  // runs as a background job, so the top bar shows it, its result, or why the Time Writing connection was not fetched.
+  const [gitWaitOver, setGitWaitOver] = useState(false)
+  useEffect(() => { const timer = window.setTimeout(() => setGitWaitOver(true), 10000); return () => window.clearTimeout(timer) }, [])
   const autoFetched = useRef(false)
   useEffect(() => {
-    if (autoFetched.current || !store.ready || azure.isSample || (git.connected && !setupSynced)) return
+    if (autoFetched.current || !store.ready || azure.isSample || (git.connected && !setupSynced && !gitWaitOver)) return
     autoFetched.current = true
-    void azure.fetchCloud()
-  }, [store.ready, azure, git.connected, setupSynced])
+    // Nothing is shown when no connection is set up here (first start, sample data only).
+    if (!azure.connectionProfiles.length) return
+    runInBackground('startup:fetch', 'Fetch Azure DevOps at start', async (progress) => {
+      progress('Fetching the Time Writing connection…')
+      const result = await azure.fetchCloud()
+      const text = result.skipped || (result.targets ? `${result.ok} of ${result.targets} connection${result.targets === 1 ? '' : 's'} fetched and saved.${result.ok < result.targets ? ' See Settings → Azure DevOps for the one that failed.' : ''}` : 'Nothing to fetch.')
+      return { text, failed: Boolean(result.skipped) || result.ok < result.targets }
+    })
+  }, [store.ready, azure, git.connected, setupSynced, gitWaitOver])
   // View as (CON-89…CON-92): an Admin sees the app as a person or a role, read-only, for this page load only.
   const [viewAs, setViewAs] = useState<ViewAs | null>(null)
   const [viewAsOpen, setViewAsOpen] = useState(false)
@@ -178,8 +192,10 @@ export default function App() {
   const openView = (id: string) => { setViewId(id); saveBacklogTab(id); setPage('board') }
   // Access roles: each menu entry belongs to an area; Settings is always there (each person's own connections and tokens).
   // A page the viewer's roles do not include falls back to the first one they do.
-  const areaOf = (id: Page): Area | null => id === 'admin' ? null : id === 'board' ? (view.onPrem ? 'release' : 'board') : id === 'windchill' || id === 'brite' ? 'release' : id === 'overview' || id === 'pulse' || id === 'pireview' ? 'insights' : id === 'mydash' ? 'overview' : id
-  const allowed = (id: Page) => { const area = areaOf(id); return area == null || access.sees(area) }
+  const areaOf = (id: Page): Area | null => id === 'admin' ? null : id === 'board' ? (view.onPrem ? 'release' : 'board') : id === 'windchill' || id === 'brite' ? 'release' : id === 'overview' || id === 'pulse' || id === 'pireview' ? 'insights' : id === 'mydash' ? 'overview' : id === 'activities' ? 'monthly' : id === 'planover' || id === 'capactual' ? 'insights' : id
+  // Testing (ACT-01): pages being tried out, for the Admin role only (an access policy must name it; View as follows the viewed rights).
+  const testing = access.rights.roles.includes('Admin')
+  const allowed = (id: Page) => { if (pageMeta(id).group === 'Testing' && !testing) return false; const area = areaOf(id); return area == null || access.sees(area) }
   const page = allowed(requested) ? requested : pages.find((entry) => allowed(entry.id))?.id ?? 'admin'
   const meta = pageMeta(page)
   // Windchill exports, each in the sidebar under Release Details ('' = the import page).
@@ -290,9 +306,11 @@ export default function App() {
       {page === 'pireview' && <PiReviewPage />}
       {page === 'brite' && <BritePage />}
       {page === 'qemapping' && <QeMappingPage git={git} store={qeMapping} resources={qeResources} />}
-      {page === 'mywork' && <MyWorkPage azure={azure} store={store} my={my} onOpenBulk={() => setPage('bulk')} assign={assign} featureSetup={featureSetup.setups} />}
-      {page === 'bulk' && <BulkActionsPage azure={azure} store={store} my={my} assign={assign} />}
-      {page === 'monthly' && <MonthlyPage azure={azure} month={month} store={store} my={my} />}
+      {page === 'mywork' && <MyWorkPage azure={azure} store={store} my={my} onOpenActivities={() => setPage('activities')} assign={assign} featureSetup={featureSetup.setups} />}
+      {page === 'bulk' && <SprintCheckPage azure={azure} store={store} my={my} />}
+      {page === 'capactual' && <CapacityActualPage azure={reportAzure} store={store} month={month} />}
+      {page === 'planover' && <PlanningOverviewPage azure={reportAzure} store={store} month={month} onOpenPack={() => openSettings('pack')} />}
+      {page === 'activities' && <MyActivitiesPage azure={azure} store={store} my={my} month={month} assign={assign} onOpen={setPage} />}
       {page === 'baselines' && <BaselinesPage azure={azure} month={month} store={store} git={git} onOpenSettings={() => openSettings('storage', 'git')} canEdit={access.can('baselines.edit')} />}
       {page === 'windchill' && (windchillView ? <WindchillPage view={windchillView} windchill={windchill} git={git} gitNote={git.snapshotNotes[`wc:${windchillView.id}`]} month={month} board={{ azure, stream: windchillStreamExports(windchillViews).find((entry) => entry.view?.id === windchillView.id)?.stream.name ?? windchillView.name, threshold: normalizeReleaseSourceSettings(store.state.releaseSourceSettings).matchThreshold ?? defaultMatchThreshold, assign, featureSetup: featureSetup.setups }} /> : access.can('windchill.import') ? <WindchillExportImport key={windchillFor} stream={windchillFor} windchill={windchill} git={git} onImported={(id) => openWindchill(id)} /> : <Notice tone="info">Your role does not include importing Windchill exports. Open an export from the menu; an Admin can change this in Settings → Access.</Notice>)}
       {page === 'health' && <BacklogHealthPage azure={azure} store={store} />}

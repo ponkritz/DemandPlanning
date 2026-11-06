@@ -98,7 +98,7 @@ The CSA guidance asks for a **risk-based** choice of assurance activities, for u
 | Step | How it is done |
 |---|---|
 | Identify the intended use | §1 of this document and REQUIREMENTS-SPECIFICATION.md §1.1–1.2 |
-| Determine the risk-based approach | Per feature: features that **write to the controlled record** (Monthly Time Writing saves, state and iteration changes, work-item creation) and that **handle credentials** are high process risk; reading, dashboards, documents and exports are not |
+| Determine the risk-based approach | Per feature: features that **write to the controlled record** (My Activities saves (formerly Monthly Time Writing), state and iteration changes, work-item creation) and that **handle credentials** are high process risk; reading, dashboards, documents and exports are not |
 | Assurance activities for high process risk features | Scripted testing with expected results (TEST-PLAN.md §6 MON, ATM, BKL, CON-50…56, CON-68, NFR-04, NFR-05 cases), automated L1 tests of the write set, read-back confirmation of every write (NFR-04), and UAT by users on the Azure DevOps test project (TD-02) |
 | Assurance activities for the other features | Automated L1 tests, the E2E suite and **unscripted / exploratory** testing during UAT (UAT-PLAN.md feedback record), with ad-hoc testing by the developer recorded in the pull request |
 | Leverage of existing evidence | SOUP vendors' own release testing (React, Electron, Vite) is leveraged; the project adds the `pnpm audit` check and version pinning (SOFTWARE-COMPONENTS.md §2, §4); GitHub Actions and Pages are used as infrastructure with their vendor's assurance |
