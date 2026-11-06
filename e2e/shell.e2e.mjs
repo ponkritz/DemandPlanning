@@ -191,6 +191,27 @@ test('TC-ACC-04: an Admin views the app as a role, read only, and exits', async 
   await context.close()
 })
 
+test('TC-MON-09: Period control shows each month\'s own plan and actuals lock dates and locks a month early', async () => {
+  const { page, context, errors } = await openPage(app)
+  await navigate(page, 'Capacity & periods')
+  await page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'Period control' }).click()
+  const panel = page.locator('.panel', { has: page.locator('h2, h3', { hasText: /^Locks of / }) }).first()
+  await panel.waitFor()
+  const cards = panel.locator('.control-card')
+  assert.equal(await cards.count(), 2, 'planning and actuals of the month')
+  assert.match(await text(cards.nth(0)), /Planning of .* Locks after .*\(default\)/)
+  assert.match(await text(cards.nth(1)), /Actuals of .* Locks after .*\(default\)/)
+  const planning = cards.nth(0)
+  const before = await text(planning.locator('.pill'))
+  await planning.getByRole('button', { name: 'Lock now' }).click()
+  assert.equal(await text(planning.locator('.pill')), 'Locked')
+  assert.match(await text(planning), /locked early/)
+  await planning.getByRole('button', { name: 'Undo early lock' }).click()
+  assert.equal(await text(planning.locator('.pill')), before, 'back to the date rule')
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
 test('TC-SET-06: each Settings page is its own menu entry; its sections show one at a time and the last one is remembered', async () => {
   const { page, context, errors } = await openPage(app)
   await navigate(page, /Azure DevOps$/)

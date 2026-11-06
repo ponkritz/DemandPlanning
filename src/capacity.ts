@@ -19,7 +19,10 @@ export interface SharedTimeRule { id: number; kind: SharedTimeKind; scope: Share
 // the maximum per person per month; hours over it are flagged. 0 tracks without a maximum.
 // defaultJoinedOn: the Joined on of everyone without their own (YYYY-MM-DD; '' for none): months before it give them no
 // capacity (CAP-15).
-export interface CapacitySettings { absenceEpicId: number; hoursPerDay: number; overloadedAt: number; availableBelow: number; npraHoursPerMonth: number; defaultJoinedOn?: string; sharedTime?: SharedTimeRule[]; profiles?: Record<string, ResourceProfile> }
+// Month locks (MON-06, MON-07, MON-21…MON-24): each month's plan and actuals lock dates (YYYY-MM-DD, the day itself still
+// open), an early lock per month, and the reason and who changed it — kept with the capacity settings in Git.
+export interface MonthLock { planOn?: string; actualsOn?: string; planLocked?: boolean; actualsLocked?: boolean; reason?: string; updatedAt?: string; updatedBy?: string }
+export interface CapacitySettings { planLockDay?: number; actualsLockDay?: number; monthLocks?: Record<string, MonthLock>; absenceEpicId: number; hoursPerDay: number; overloadedAt: number; availableBelow: number; npraHoursPerMonth: number; defaultJoinedOn?: string; sharedTime?: SharedTimeRule[]; profiles?: Record<string, ResourceProfile> }
 export const defaultCapacitySettings: CapacitySettings = { absenceEpicId: 37778, hoursPerDay: 8, overloadedAt: 100, availableBelow: 80, npraHoursPerMonth: 20, defaultJoinedOn: '2026-05-01' }
 export const npraTag = /^npra\b/i
 export const isNpra = (item: Pick<AzureWorkItem, 'tags'>) => (item.tags ?? '').split(';').some((tag) => npraTag.test(tag.trim()))
@@ -100,7 +103,29 @@ export function normalizeCapacitySettings(value: unknown): CapacitySettings {
   const number = (key: ThresholdKey, min: number) => { const candidate = Number(input[key]); return Number.isFinite(candidate) && candidate >= min ? candidate : defaultCapacitySettings[key] }
   const sharedTime = normalizeSharedTime((value as { sharedTime?: unknown } | null)?.sharedTime)
   const settings = { absenceEpicId: Math.trunc(number('absenceEpicId', 1)), hoursPerDay: number('hoursPerDay', 0.25), overloadedAt: number('overloadedAt', 1), availableBelow: number('availableBelow', 0), npraHoursPerMonth: number('npraHoursPerMonth', 0), defaultJoinedOn: defaultJoinedOf((value as { defaultJoinedOn?: unknown } | null)?.defaultJoinedOn), ...(sharedTime.length ? { sharedTime } : {}) }
-  return settings.availableBelow < settings.overloadedAt ? settings : { ...settings, availableBelow: defaultCapacitySettings.availableBelow, overloadedAt: defaultCapacitySettings.overloadedAt }
+  const locks = normalizeLocks(value)
+  const withLocks = { ...settings, ...locks }
+  return withLocks.availableBelow < withLocks.overloadedAt ? withLocks : { ...withLocks, availableBelow: defaultCapacitySettings.availableBelow, overloadedAt: defaultCapacitySettings.overloadedAt }
+}
+const lockDay = (value: unknown) => { const day = Number(value); return Number.isInteger(day) && day >= 1 && day <= 28 ? day : undefined }
+const isLockDate = (value: unknown): value is string => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && new Date(`${value}T00:00:00Z`).toISOString().startsWith(value)
+function normalizeLocks(value: unknown) {
+  const input = (value && typeof value === 'object' ? value : {}) as { planLockDay?: unknown; actualsLockDay?: unknown; monthLocks?: unknown }
+  const monthLocks: Record<string, MonthLock> = {}
+  if (input.monthLocks && typeof input.monthLocks === 'object' && !Array.isArray(input.monthLocks)) for (const [month, raw] of Object.entries(input.monthLocks as Record<string, unknown>)) {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || !raw || typeof raw !== 'object') continue
+    const entry = raw as Record<string, unknown>, lock: MonthLock = {}
+    if (isLockDate(entry.planOn)) lock.planOn = entry.planOn
+    if (isLockDate(entry.actualsOn)) lock.actualsOn = entry.actualsOn
+    if (entry.planLocked === true) lock.planLocked = true
+    if (entry.actualsLocked === true) lock.actualsLocked = true
+    if (typeof entry.reason === 'string' && entry.reason.trim()) lock.reason = entry.reason.trim().slice(0, 500)
+    if (typeof entry.updatedAt === 'string') lock.updatedAt = entry.updatedAt.slice(0, 40)
+    if (typeof entry.updatedBy === 'string') lock.updatedBy = entry.updatedBy.slice(0, 200)
+    if (lock.planOn || lock.actualsOn || lock.planLocked || lock.actualsLocked) monthLocks[month] = lock
+  }
+  const planLockDay = lockDay(input.planLockDay), actualsLockDay = lockDay(input.actualsLockDay)
+  return { ...(planLockDay ? { planLockDay } : {}), ...(actualsLockDay ? { actualsLockDay } : {}), ...(Object.keys(monthLocks).length ? { monthLocks } : {}) }
 }
 
 // Settings the capacity model reads from the shared app data: thresholds plus each person's resource profile.

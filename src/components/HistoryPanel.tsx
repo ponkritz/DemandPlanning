@@ -51,7 +51,8 @@ export function HistoryPanel({ history, git, items, profileNames, editable, impo
       const sheet = pickHistorySheet(sheets)
       if (!sheet) throw new Error('No sheet with a person (QA/QE), a Month(Date) and an Expected / Actual column was found. The planning workbook\'s "TransformedData" sheet has them.')
       const cutoff = file?.cutoff ?? defaultCutoff
-      const parsed = parseHistorySheet(sheet.rows, cutoff)
+      // Every month is read (HIS-15): the cut-off is applied live below, so moving it later brings those months back.
+      const parsed = parseHistorySheet(sheet.rows, '9999-12')
       const names = [...new Set(parsed.rows.map((row) => row.person))].filter((name) => !groupOf(name))
       // Earlier choices are kept for the names and streams they covered; new names are matched automatically.
       const people = { ...matchPeople(names, known), ...Object.fromEntries(Object.entries(file?.people ?? {}).filter(([name]) => names.includes(name))) }
@@ -96,6 +97,8 @@ export function HistoryPanel({ history, git, items, profileNames, editable, impo
   // Rows left out by design (a month from the cut-off on, no hours that month) apart from rows to check (HIS-03).
   const expected = (reason: string) => /from the cut-off on|^no hours$/.test(reason)
   const toCheck = draft ? draft.skipped.filter((entry) => !expected(entry.reason)) : []
+  // Rows from the cut-off month on, left out as the cut-off now stands (they stay in the draft for a later cut-off).
+  const afterCutoff = draft ? draft.rows.filter((row) => row.month >= draft.cutoff).length : 0
   const reasons = draft ? Object.entries(draft.skipped.reduce<Record<string, number>>((all, entry) => { const reason = entry.reason.replace(/^\d{4}-\d{2}: /, ''); all[reason] = (all[reason] ?? 0) + 1; return all }, {})) : []
 
   return <Panel className="admin-section" eyebrow="SHARED DATA" title="Historical hours" info={<ul><li>The planned and recorded hours of the months before Time Writing in Azure DevOps, from the planning workbook (sheet TransformedData: QA/QE, Month(Date), Epic No, Stream(Features), Project / Release Title, Expected, Actual, and an optional Feature ID column), uploaded from this computer or read from the Git data repository (its folder or history/).</li><li>Where a row has a Feature ID of a Feature in the fetched data, its hours count under that Feature and its Epic; else under the Epic No; else under the Epic chosen for its stream.</li><li>Before the cut-off month the history is the only source of hours: Azure DevOps Time Writing Tasks of those months are not counted (they stay in Azure DevOps). From the cut-off on, only Azure DevOps counts.</li><li>The rows are kept in the Git data repository (history-hours.json), never in the app's source; nothing is written to Azure DevOps.</li><li>People who have left appear by name; add them in Settings → Resources (region, role, Left on) so their utilization has a capacity.</li></ul>}>
@@ -121,14 +124,14 @@ export function HistoryPanel({ history, git, items, profileNames, editable, impo
     {draft && <div className="history-draft">
       <h3>Check before saving · {draft.source} · sheet {draft.sheet}</h3>
       <label className="inline-field">Cut-off month (first month from Azure DevOps)<input type="month" value={draft.cutoff} onChange={(event) => /^\d{4}-\d{2}$/.test(event.target.value) && setDraft({ ...draft, cutoff: event.target.value })} /></label>
-      <small className="muted">Only rows before the cut-off are imported. Rows of the cut-off month or later in the file were left out on reading; upload again after changing the cut-off to a later month.</small>
+      <small className="muted">Only rows before the cut-off are imported; from the cut-off month on, Azure DevOps counts. Changing it here applies at once.</small>
       <Metrics>
         <Metric label="Rows imported" value={draft.rows.filter((row) => row.month < draft.cutoff).length} hint={draftMonths.length ? `${monthName(draftMonths[0])} – ${monthName(draftMonths[draftMonths.length - 1])}` : 'no month'} />
         <Metric label="People" value={draftNames.length} hint={`${draftNames.filter((name) => draft.people[name]).length} matched to Azure DevOps / Resources`} />
         <Metric label="Recorded hours" value={`${formatHours(draftHours)}h`} />
         <Metric label="By Feature ID" value={byFeature} hint="rows under a Feature in Azure DevOps" />
         <Metric label="Rows to check" value={toCheck.length} tone={toCheck.length ? 'negative' : undefined} hint={reasons.filter(([reason]) => !expected(reason)).map(([reason, count]) => `${count} ${reason}`).join(' · ') || 'none'} />
-        <Metric label="Left out as expected" value={draft.skipped.length - toCheck.length} hint={reasons.filter(([reason]) => expected(reason)).map(([reason, count]) => `${count} ${reason}`).join(' · ') || 'none'} />
+        <Metric label="Left out as expected" value={draft.skipped.length - toCheck.length + afterCutoff} hint={[afterCutoff ? `${afterCutoff} from ${monthName(draft.cutoff)} on (Azure DevOps counts)` : '', ...reasons.filter(([reason]) => expected(reason)).map(([reason, count]) => `${count} ${reason}`)].filter(Boolean).join(' · ') || 'none'} />
       </Metrics>
       {groups.length > 0 && <Notice tone="info">Rows for a group apply to each person in it, like a regional holiday Feature: {groups.map(([label, count]) => `${count} for ${label}`).join(' · ')}. Holidays and leave under the Team Holidays and Training Epic count as public holidays, everything else as reserved common time. People need their region in Settings → Resources.</Notice>}
       <h4>People</h4>

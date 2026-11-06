@@ -6,7 +6,7 @@
     "component": {
       "type": "application",
       "name": "demandplanning",
-      "version": "1.9.0"
+      "version": "1.10.0"
     },
     "tools": [
       {
@@ -6558,8 +6558,8 @@
     {
       "type": "library",
       "name": "joi",
-      "version": "18.3.1",
-      "purl": "pkg:npm/joi@18.3.1",
+      "version": "18.3.2",
+      "purl": "pkg:npm/joi@18.3.2",
       "scope": "excluded",
       "licenses": [
         {
@@ -6571,7 +6571,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "995f4ce0b961e2f6b7353f74a7b281b5086866a8ecf312d7ec4598138cbf186df22c5e9111b2011074946f4517d495d186ddb0e6d88b4acbe6a587396a48aa23"
+          "content": "8948af029298c391a9666ab64b2e8497df63ee7a28f1049415997242daf71c2928b02fdbe70285ebf637b5e88722568cf16237f2c013dcffb9d6b07496102124"
         }
       ],
       "properties": [
@@ -7562,36 +7562,6 @@
         {
           "alg": "SHA-512",
           "content": "ee8d70100d91c8c3fb22eec635b6bdbdcd11596180089382641257d862568a9d22915fb070eb2056e63db84f023e2c908641854a586e4a464f6af37bbb573617"
-        }
-      ],
-      "properties": [
-        {
-          "name": "swbom:scope",
-          "value": "build / test"
-        },
-        {
-          "name": "swbom:direct",
-          "value": "false"
-        }
-      ]
-    },
-    {
-      "type": "library",
-      "name": "minimatch",
-      "version": "9.0.9",
-      "purl": "pkg:npm/minimatch@9.0.9",
-      "scope": "excluded",
-      "licenses": [
-        {
-          "license": {
-            "id": "ISC"
-          }
-        }
-      ],
-      "hashes": [
-        {
-          "alg": "SHA-512",
-          "content": "381c0137d00be1daa61139694b6cdab31faf4de59c956ce46e57d993b2930398f78de38e373fed4429d9a26532bcd83cdf02f966ff52b3a1cc2570202fc47662"
         }
       ],
       "properties": [
