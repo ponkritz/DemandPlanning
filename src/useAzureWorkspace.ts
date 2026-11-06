@@ -391,8 +391,12 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
     const timeWriting = activeTimeWriting()
     const cloud = (baseUrl?: string) => { try { return !baseUrl || isCloudBase(baseUrl) } catch { return false } }
     const targets = connectionProfiles.filter((profile) => (profile.role !== 'time-tracking' || profile.id === timeWriting) && cloud(profile.baseUrl) && loadAzureConnectionProfile(profile.id)?.token?.trim())
-    for (const profile of targets) await fetchConnection(profile.id)
-    return targets.length
+    let ok = 0
+    for (const profile of targets) if (await fetchConnection(profile.id)) ok += 1
+    // Why the Time Writing connection was not fetched, if it was not (shown with the start-up fetch in the top bar).
+    const main = connectionProfiles.find((profile) => profile.id === timeWriting)
+    const skipped = !main ? 'No Time Writing connection is set up here (Settings → Azure DevOps).' : !cloud(main.baseUrl) ? 'The Time Writing connection is on-premises: use Fetch in Settings → Azure DevOps (VPN).' : !loadAzureConnectionProfile(main.id)?.token?.trim() ? 'No PAT in this browser for the Time Writing connection: add it in Settings → Azure DevOps.' : ''
+    return { targets: targets.length, ok, skipped }
   }
 
   // Writes a fetched Time Writing result to the app cache, replacing the previous Azure cache for that scope.

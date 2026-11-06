@@ -32,9 +32,12 @@ This document lists every software component of the system: the in-house source 
 | BacklogHealthPage | `src/pages/BacklogHealthPage.tsx` | Backlog Health: open work in ended Sprints, Features without DoD and unassigned work, with person filter, chosen columns, sorting and CSV. | CON |
 | BaselinesPage | `src/pages/BaselinesPage.tsx` | Baselines: estimation rules editor, release baselines vs booked hours, and the monthly Time Writing task plan check. | BAS, GIT |
 | BoardPage | `src/pages/BoardPage.tsx` | Backlogs / Release Details: editable Time Writing tree, read-only query views, release views, the CP release report and the DP table with DDT month filter and board match. | CON, FET, QV, ATM |
-| BulkActionsPage | `src/pages/BulkActionsPage.tsx` | Bulk actions: move my User Stories from past Sprints to the current PI + Sprint, state checks, and create this month's Time Writing story and task. | ATM, CON |
+| SprintCheckPage | `src/pages/SprintCheckPage.tsx` | Sprint check (formerly Bulk actions): move my User Stories from past Sprints to the current PI + Sprint, and the state checks of my Features and User Stories. | ATM, CON |
 | DashboardPage | `src/pages/DashboardPage.tsx` | Dashboard: demand vs capacity for a period and filters — utilization, overload, rebalancing, trends, Epic mix, insights and releases. | OVR, CAP |
 | DocsPage | `src/pages/DocsPage.tsx` | Documentation page: reads the bundled project documents in-app, remembers the chosen one, keeps document and anchor links in the page. | DOC |
+| MyActivitiesPage | `src/pages/MyActivitiesPage.tsx` | My Activities (Testing, Admin only): the person's month — this month's activities with planned and actual hours, Features still to add, a new activity under a stream and Feature, progress and the deadline. | ACT, ATM, MON |
+| PlanningOverviewPage | `src/pages/PlanningOverviewPage.tsx` | Planning Overview (Testing, Admin only): filters, four tiles, workload and capacity chart, exception queue, delivery health per Epic. | OVW |
+| CapacityActualPage | `src/pages/CapacityActualPage.tsx` | Capacity vs Actual (Testing, Admin only): filters, four tiles, 12-month chart, by person, hours by Epic. | CVA |
 | PeriodControls | `src/components/PeriodControls.tsx` | Selected-month Plan/Actual deadlines, independent modes, audited explicit save and shared/local persistence status. | SET, MON, GIT |
 | usePlanningClock | `src/usePlanningClock.ts` | Refreshes deadline-sensitive forms on clock ticks and focus/resume. | MON |
 | period-controls.e2e | `e2e/period-controls.e2e.mjs` | Selected-month persistence across reload and browsers, input locks, read-only/conflict/failure behaviour (TC-SET-02). | SET, MON, GIT |
@@ -42,7 +45,6 @@ This document lists every software component of the system: the in-house source 
 | toolValidation | `src/toolValidation.ts` | Scoped read-only GitHub package listing and authenticated raw binary downloads; safe access errors. | DOC |
 | tool-validation.test | `tests/tool-validation.test.mjs` | Package path/auth/read-only boundaries, formats, large binary fidelity and failure handling (TC-DOC-04). | DOC |
 | tool-validation.e2e | `e2e/tool-validation.e2e.mjs` | Web/Desktop private document list/search/download and disconnected/denied-access checks using synthetic fixtures (TC-DOC-04). | DOC |
-| MonthlyPage | `src/pages/MonthlyPage.tsx` | Monthly Time Writing: the selected month's Time Writing Tasks (team or individual) with planned/completed hours and gaps. | MON, TWN |
 | MyWorkPage | `src/pages/MyWorkPage.tsx` | Assigned to Me: my pending Azure DevOps items, resolve/close them, and create a Feature under an Epic with its stories and task. | ATM, CON |
 | BritePage | `src/pages/BritePage.tsx` | BRITE placeholder at the root of Release Details, until its exports and rules are known (CON-84). | CON |
 | PiReviewPage | `src/pages/PiReviewPage.tsx` | PI Review placeholder page (planned PI summary). | NAV |
@@ -266,6 +268,8 @@ This document lists every software component of the system: the in-house source 
 | markdown.test | `tests/markdown.test.mjs` | Markdown anchors, tables, lists, paragraphs, inline and link targets. | DOC |
 | monthly-hours.test | `tests/monthly-hours.test.mjs` | Monthly hours series, Epic colours and chart geometry (Pareto, donut). | CAP, OVR, MON |
 | my-work.test | `tests/my-work.test.mjs` | My pending work, month-task and move candidates, constrained updates and desktop proxy limits, the ad-hoc tag on a new month Task, the New User Story fields. | ATM, MON, BKL |
+| planning-overview.test | `tests/planning-overview.test.mjs` | Planning Overview figures: delivery, exceptions and filters (TC-OVW-01, TC-OVW-02). | OVW |
+| capacity-actual.test | `tests/capacity-actual.test.mjs` | Capacity vs Actual figures and filters (TC-CVA-01, TC-CVA-02). | CVA |
 | pulse-check.test | `tests/pulse-check.test.mjs` | Previous month, release comparison, work flow and ongoing activities. | OVR |
 | personal-views.test | `tests/personal-views.test.mjs` | Personal views: file path per person, validated parse, defaults merge, section order and moves. | MYD |
 | nested-groups.test | `tests/nested-groups.test.mjs` | Nested grouping: levels, order, blank last, unique keys. | QV |

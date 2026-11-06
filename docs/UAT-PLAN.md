@@ -14,8 +14,8 @@ The scenarios are the test cases marked **UAT** in [TEST-PLAN.md](TEST-PLAN.md).
 | Day | Focus | Test cases |
 |---|---|---|
 | 1 | Install and open (web and desktop), navigation, connections, fetch and auto-save | TC-NAV-01, TC-NAV-06, TC-NAV-24, TC-CON-03, TC-FET-02, TC-FET-08, TC-DSK-03 |
-| 2 | Monthly Time Writing: scope, locks, staging and save | TC-MON-01, TC-MON-04 |
-| 3 | Assigned to Me: finish (Features and User Stories: New → Active → Closed), move to the current Sprint, month tasks; New Feature and Complete children; Feature creation | TC-ATM-03, TC-ATM-04, TC-ATM-05, TC-ATM-11, TC-BKL-02 |
+| 2 | My Activities: the month's tasks, planned and actual hours, locks and save (replaces Monthly Time Writing) | TC-ACT-02, TC-ACT-03 |
+| 3 | Assigned to Me: finish (Features and User Stories: New → Active → Closed), move to the current Sprint (Sprint check); New Feature and Complete children; Feature creation | TC-ATM-03, TC-ATM-04, TC-ATM-20, TC-ATM-11, TC-BKL-02 |
 | 4 | Dashboard (period, filters, six tabs, Insights), baselines, Git storage | TC-OV-11, TC-OV-13, TC-NAV-20, TC-NAV-21, TC-GIT-02 |
 | 5 | Force Update, backup and restore, snapshots (where SharePoint is available), Documentation and the Validation Package (traceability matrix, known issues, components, security assessment, DFMEA, development process) | TC-UPD-02, TC-STO-04, TC-SNP-02, TC-DOC-01, TC-DOC-03 |
 | 6 | Sharing through Git (shared connection setup, Load from Git, read-only token), Release Details and Windchill exports, Overview by region and role, Backlog Health | TC-CON-16, TC-CON-17, TC-CON-18, TC-CON-19, TC-CON-21, TC-CON-22, TC-SCR-01 |

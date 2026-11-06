@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { AzureWorkItem } from '../domain'
-import { completeFeatureFromSetup, createFeatureFromSetup, updateAzureTimeWritingEffort, createAzureReleaseHierarchy, completeReleaseHierarchy, currentIndiaMonth, releaseHierarchyTitles, HierarchyCreationError, featureDoD, withFeatureDoD, releaseClassifications, readAzureIterations, currentIterationPairs, futureIterationPairs, type AzureIteration, type AzureConfig, type FeatureInput } from '../azureDevOps'
+import { completeFeatureFromSetup, createFeatureFromSetup, createUserStory, updateAzureTimeWritingEffort, createAzureReleaseHierarchy, completeReleaseHierarchy, currentIndiaMonth, releaseHierarchyTitles, HierarchyCreationError, featureDoD, withFeatureDoD, releaseClassifications, readAzureIterations, currentIterationPairs, futureIterationPairs, type AzureIteration, type AzureConfig, type FeatureInput } from '../azureDevOps'
 import { Modal, Info } from './ui'
 import { PersonPicker } from './PersonPicker'
 import { assignablePeople } from '../myWork'
@@ -47,6 +47,8 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
   const [iterationLoading, setIterationLoading] = useState(false)
   const [pat, setPat] = useState(savedPat)
   const [creating, setCreating] = useState(false)
+  // BKL-25: a User Story of the person's own (title, description) created under the new Feature, in the Sprint chosen.
+  const [ownStory, setOwnStory] = useState({ title: '', description: '' })
   const submitting = useRef(false)
   const [error, setError] = useState('')
   const pairs = currentIterationPairs(iterationChoices)
@@ -133,10 +135,20 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
         const task = bundle.items.find((item) => item.workItemType === 'Task')
         if (task && feature.taskCompletedWork != null) { const updated = await updateAzureTimeWritingEffort(config, token, task.id, undefined, feature.taskCompletedWork); bundle = { ...bundle, items: bundle.items.map((item) => item.id === task.id ? updated : item) } }
       } else bundle = resumeFeature ? await completeReleaseHierarchy(config, token, resumeFeature.id, releaseKind, milestones, monthLabel, undefined, sprintPath, assignee, reviewStory, adhoc) : await createAzureReleaseHierarchy(config, token, feature, releaseKind, milestones, monthLabel, undefined, reviewStory, adhoc)
+      let storyText = ''
+      const own = { title: ownStory.title.trim(), description: ownStory.description.trim() }
+      if (!resumeFeature && own.title) {
+        try {
+          progress('Adding your User Story…')
+          const story = await createUserStory(config, token, { parentId: bundle.feature.id, title: own.title, description: own.description, acceptanceCriteria: '', iterationPath: sprintPath, assignedTo: assignee })
+          bundle = { ...bundle, items: [...bundle.items, story] }
+          storyText = ` Your User Story #${story.id} “${story.title}” was added.`
+        } catch (failure) { storyText = ` Your User Story could not be added (${failure instanceof Error ? failure.message : 'failed'}); add it with New User Story.` }
+      }
       onCreated?.(parent ? [parent, ...bundle.items] : bundle.items)
       const doneText = `Hierarchy complete: ${epicSetup ? `${epicSetup.stories.length - skipStories.length} optional` : milestones.length} ${epicSetup ? 'User Stories' : 'milestone stories'}, ${reviewStory ? 'Review of Deliverables story, ' : ''}Time Writing story and ${monthLabel} task verified${adhoc ? ' (a new Task is tagged ad-hoc: planning is locked)' : ''}.`
       onDone({ feature: bundle.feature, items: bundle.items, parent: parent ?? undefined, text: doneText })
-      return { text: `#${bundle.feature.id} “${bundle.feature.title}”: ${doneText}` }
+      return { text: `#${bundle.feature.id} “${bundle.feature.title}”: ${doneText}${storyText}`, failed: storyText.includes('could not') }
     } catch (failure) {
       const detail = failure instanceof Error ? failure.message : 'Unable to create the hierarchy.'
       if (failure instanceof HierarchyCreationError && failure.createdItems.length) {
@@ -210,6 +222,11 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
             <label className="checkbox-label"><input type="checkbox" checked={reviewStory} onChange={(event) => chooseReview(event.target.checked)} />{reviewStoryTitle(title.trim() || '{feature}')} <small className="muted">(built-in, in the Sprint)</small></label></fieldset>
           <p className="muted nf-always">Always: {plan ? <>“{plan.timeWriting}” at {config.project} (project root), with the Task “{plan.task}”.</> : 'the Time Writing User Story and this month’s Task (enter Program | Service | Release to see the titles).'}</p>
         </>}
+        {!resumeFeature && <fieldset className="milestone-choices nf-own-story" disabled={creating}><legend>Your own User Story <small className="muted">(optional)</small></legend>
+          <label>User Story title<input value={ownStory.title} maxLength={255} placeholder="Leave empty for none" onChange={(event) => setOwnStory((current) => ({ ...current, title: event.target.value }))} /></label>
+          <label>User Story description<textarea value={ownStory.description} rows={2} placeholder="What needs to be done, and why" onChange={(event) => setOwnStory((current) => ({ ...current, description: event.target.value }))} /></label>
+          <small className="muted">Created under the new Feature in the Sprint chosen, assigned like the Feature.</small>
+        </fieldset>}
         <p className="info-line"><Info label="Paths and assignment">Feature → {resumeFeature ? resumeFeature.iterationPath : iterationPath || 'the PI chosen'}. Optional User Stories → {sprintPath || 'the Sprint chosen'}. Time Writing story and Task → {epicSetup?.timeWritingStory.iterationPath || config.project}, never the Sprint. Every new item is assigned to {assignee || 'the person chosen'}. Current date uses India time.</Info></p>
       </section>
       {showPat ? <label>PAT — Work Items: Read &amp; Write<input type="password" required autoComplete="off" value={pat} onChange={(event) => { setPat(event.target.value); setIterationChoices([]); setIterationPath(''); setSprintPath('') }} disabled={creating} /><small>Saved in this browser only. Enter it, then ↻ Reload the schedule.</small></label>

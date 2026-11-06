@@ -11,8 +11,8 @@ export const areas = [
   // MYD-05: the team's insights for selected roles only (Dashboard, Pulse Check, PI Review); My dashboard is for everyone.
   { key: 'insights', label: 'Team insights (Team overview, Pulse Check, PI Review)' },
   { key: 'mywork', label: 'Assigned to Me' },
-  { key: 'bulk', label: 'Bulk actions' },
-  { key: 'monthly', label: 'Monthly Time Writing' },
+  { key: 'bulk', label: 'Sprint check' },
+  { key: 'monthly', label: 'My Activities' },
   { key: 'board', label: 'I&D Board backlogs' },
   { key: 'health', label: 'Backlog Health' },
   { key: 'release', label: 'Release Details (on-prem views, Windchill exports)' },
@@ -24,7 +24,7 @@ export const areas = [
 export type Area = typeof areas[number]['key']
 
 export const actions = [
-  { key: 'azure.write', label: 'Change work items in Azure DevOps (My Work, Bulk actions, Monthly, new Features)' },
+  { key: 'azure.write', label: 'Change work items in Azure DevOps (My Activities, Assigned to Me, Sprint check, new Features)' },
   { key: 'azure.createForOthers', label: 'Create work items for other people (choose who they are assigned to)' },
   { key: 'baselines.edit', label: 'Edit baselines (rules and release scope)' },
   { key: 'windchill.import', label: 'Import Windchill exports' },

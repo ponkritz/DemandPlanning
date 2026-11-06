@@ -34,7 +34,7 @@ export function MyDashboardPage({ month, azure, store, my, navigate, views, canS
     <p className="muted">{name || my.me.email} · {label}</p>
     <CustomizableSections page="mydash" views={views} canSetDefault={canSetDefault} sections={[
       { id: 'hours', label: 'My hours', node: <>
-    <TablePanel title={`My hours · ${label}`} info={<ul><li>Planned = Original Estimate and recorded = Completed Work of your month Time Writing Tasks; capacity = your working days less absence, as on the Dashboard.</li><li>Overrun = hours recorded above the estimate; ad-hoc = hours on Tasks tagged ad-hoc.</li></ul>} action={open('monthly', 'Monthly Time Writing')}>
+    <TablePanel title={`My hours · ${label}`} info={<ul><li>Planned = Original Estimate and recorded = Completed Work of your month Time Writing Tasks; capacity = your working days less absence, as on the Dashboard.</li><li>Overrun = hours recorded above the estimate; ad-hoc = hours on Tasks tagged ad-hoc.</li></ul>} action={open('activities', 'My Activities')}>
       <Metrics>
         <Metric label="Planned" value={`${formatHours(now.plan)}h`} hint={`Capacity ${formatHours(now.capacity)}h`} />
         <Metric label="Recorded" value={`${formatHours(now.actual)}h`} hint={now.absence ? `${formatHours(now.absence)}h absence` : 'No absence booked'} />
@@ -47,14 +47,14 @@ export function MyDashboardPage({ month, azure, store, my, navigate, views, canS
     </TablePanel>
       </> },
       { id: 'work', label: 'My open work', node: <>
-    <TablePanel title="My open work" info="Your New and Active work items (work under the absence Epic left out), and the state checks of Bulk actions." action={open('mywork', 'Assigned to Me')}>
+    <TablePanel title="My open work" info="Your New and Active work items (work under the absence Epic left out), and the state checks of Sprint check." action={open('mywork', 'Assigned to Me')}>
       <Metrics>
         <Metric label="Features" value={count('Feature')} hint="open, assigned to you" />
         <Metric label="User Stories" value={count('User Story')} hint={`${count('Task')} Tasks, ${count('Bug')} Bugs`} />
         <Metric label="Ready to close" value={toClose} hint="all children closed" tone={toClose ? 'negative' : undefined} />
         <Metric label="Features without an active story" value={needsStory} tone={needsStory ? 'negative' : undefined} />
       </Metrics>
-      <div className="button-row">{open('mywork', 'Open my work')}{(toClose > 0 || needsStory > 0) && open('bulk', 'Fix in Bulk actions')}</div>
+      <div className="button-row">{open('mywork', 'Open my work')}{(toClose > 0 || needsStory > 0) && open('bulk', 'Fix in Sprint check')}</div>
     </TablePanel>
       </> },
       { id: 'streams', label: 'My streams and releases', node: <>
