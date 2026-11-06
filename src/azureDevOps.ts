@@ -562,6 +562,25 @@ export async function ensureStoryMonthTask(config: AzureConfig, pat: string, sto
   return { status: 'created', task, story, storyCreated: false }
 }
 
+// A person's leave or training story of one type under their own Feature of the absence Epic (ATM-27): the Feature's
+// stories are re-read now; a story of theirs of that type (typeOf) is used, else "<Name> | <Type> | Time Writing" is
+// created and assigned to them; then that month's Task goes under it, never duplicated.
+export async function ensureAbsenceStoryMonthTask(config: AzureConfig, pat: string, featureId: number, kind: string, storyTitle: string, typeOf: (story: AzureWorkItem) => string | undefined, assignee: string, monthLabel = currentIndiaMonth(), transport: AzureTransport = requestAzure, adhoc = false): Promise<MonthTaskResult> {
+  if (!pat.trim()) throw new Error('Enter a Work Items (Read & Write) PAT.')
+  const email = assignee.trim().toLowerCase()
+  if (!isAssignee(email)) throw new Error('Choose who the month Task is assigned to (an email), or set your work email (Settings → Azure DevOps → Your work email).')
+  if (!storyTitle.trim() || storyTitle.length > 200) throw new Error(`#${featureId}: the story title is empty or too long.`)
+  const source = await transport({ ...config, pat, operation: 'items', ids: [featureId] }) as { value?: RawItem[] }
+  const raw = source.value?.find((item) => item.id === featureId)
+  if (!raw || raw.fields['System.WorkItemType'] !== 'Feature') throw new Error(`#${featureId} is not an accessible Feature.`)
+  const feature = mapAzureWorkItem(raw, config)
+  const own = (await directChildren(config, pat, feature.id, transport)).filter((item) => item.workItemType === 'User Story' && item.state.toLowerCase() !== 'removed' && item.assignedToEmail === email && typeOf(item) === kind)
+  if (own.length) return ensureStoryMonthTask(config, pat, own[0].id, assignee, monthLabel, transport, adhoc)
+  const story = await createChildItem(config, pat, feature, 'User Story', storyTitle.trim(), config.project, email, transport)
+  const task = await createChildItem(config, pat, story, 'Task', `${monthLabel} | ${storyTitle.trim()}`, config.project, email, transport, adhoc)
+  return { status: 'created', task, story, storyCreated: true }
+}
+
 async function createChildItem(config: AzureConfig, pat: string, parent: AzureWorkItem, type: 'User Story' | 'Task', title: string, iterationPath: string, assignedTo: string, transport: AzureTransport, adhoc = false) {
   if (!isAssignee(assignedTo)) throw new Error(`Choose who the ${type} is assigned to (an email). Nothing was created.`)
   const request: AzureRequest = { ...config, pat, operation: 'create-child', workItemType: type, feature: { parentId: parent.id, title, description: '', acceptanceCriteria: '', areaPath: parent.areaPath, iterationPath, assignedTo: assignedTo.trim(), ...(type === 'Task' && adhoc ? { adhoc: true } : {}) } }

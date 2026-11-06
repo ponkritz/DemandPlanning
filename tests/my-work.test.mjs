@@ -357,19 +357,20 @@ test("a Feature shared by two people: each one's own User Story brings the Featu
   assert.deepEqual([forBen.status, forBen.storyTitle], ['needs-task', 'CT | Scanner | v5 - Time Writing'])
 })
 
-test('Team Holidays and Training: my Training story gets its month Task; leave there is still left out (TC-CAP-06)', () => {
+test('Team Holidays and Training: my Training story is offered in the leave and training list, not as missing work (TC-CAP-06)', async () => {
+  const { leaveTaskCandidates } = await import('../src/myWork.ts')
   const rows = [
     item(1, 'Epic', 'CP'), item(37778, 'Epic', 'Team Holidays and Training'),
     item(80, 'Feature', 'Training', { parentId: 37778, ...ben }), item(81, 'User Story', 'Training - Time Writing', { parentId: 80, ...ana }),
     item(82, 'Task', 'September 2026 | Training', { parentId: 81, ...ana, state: 'Closed' }),
     item(90, 'Feature', 'Ana Costa - PTO', { parentId: 37778, ...ana }), item(91, 'User Story', 'Ana - Time Writing', { parentId: 90, ...ana }),
   ]
-  const rows2 = monthTaskCandidates(rows, me, 'October 2026', 37778)
-  assert.deepEqual(rows2.map((row) => row.feature.id), [80], 'the Training Feature is offered; the PTO Feature is not')
-  assert.deepEqual([rows2[0].status, rows2[0].storyTitle], ['needs-task', 'Training - Time Writing'], 'under my own Training story')
+  assert.deepEqual(monthTaskCandidates(rows, me, 'October 2026', 37778), [], 'nothing under the Epic counts as missing work')
+  const leave = leaveTaskCandidates(rows, me, 'October 2026', 37778)
+  assert.deepEqual(leave.map((row) => [row.feature.id, row.story?.id, row.kind, row.status]), [[90, 91, 'PTO', 'needs-task'], [80, 81, 'Training', 'needs-task']], 'my Training story and my PTO story, each with its type')
 })
 
-test('leave in Bulk actions: my PTO / Sick / Unplanned Features under the Epic, apart from work; training and others not (TC-ATM-16)', async () => {
+test('leave in Bulk actions: my Features under the Epic (leave and training), apart from work; others not (TC-ATM-16)', async () => {
   const { leaveTaskCandidates } = await import('../src/myWork.ts')
   const rows = [
     item(1, 'Epic', 'CP'), item(37778, 'Epic', 'Team Holidays and Training'),
@@ -381,8 +382,9 @@ test('leave in Bulk actions: my PTO / Sick / Unplanned Features under the Epic, 
     item(2, 'Feature', 'CP | Care Pathways | v3.1', { parentId: 1, ...ana }),
   ]
   const leave = leaveTaskCandidates(rows, me, 'October 2026', 37778)
-  assert.deepEqual(leave.map((row) => [row.feature.id, row.story?.id, row.leave, row.status]), [[90, 91, true, 'needs-task'], [92, undefined, true, 'needs-story']], "mine (or holding my story), open, not training, not Ben's, not work")
-  assert.deepEqual(monthTaskCandidates(rows, me, 'October 2026', 37778).map((row) => row.feature.id).sort(), [2, 80], 'work and training only: leave is never counted as missing')
+  assert.deepEqual(leave.map((row) => [row.feature.id, row.story?.id, row.leave, row.status, row.kind]), [[90, 91, true, 'needs-task', 'PTO'], [92, undefined, true, 'needs-story', 'Sick Leave'], [80, 81, true, 'needs-task', 'Training']], "mine (or holding my story), open, not Ben's, not work; a Feature named after one type offers only that type")
+  assert.equal(leave[1].storyTitle, 'Ana Costa | Sick Leave | Time Writing', 'my closed sick-leave story: a new one is offered')
+  assert.deepEqual(monthTaskCandidates(rows, me, 'October 2026', 37778).map((row) => row.feature.id), [2], 'work only: leave and training are never counted as missing')
   assert.deepEqual(leaveTaskCandidates(rows, me, 'October 2026', undefined), [], 'no Epic set, no leave')
 })
 
@@ -395,7 +397,12 @@ test('a leave Feature with one story per leave type lists one row per story of m
     item(100, 'User Story', 'PTO', { parentId: 37795, ...ben }),
   ]
   const leave = leaveTaskCandidates(rows, me, 'October 2026', 37778)
-  assert.deepEqual(leave.map((row) => [row.feature.id, row.story?.id, row.status, row.taskTitle]), [[37795, 96, 'needs-task', 'October 2026 | PTO'], [37795, 97, 'exists', 'October 2026 | Sick Leave']], 'my open stories only, each with its own status; Ben\'s and closed ones not listed')
+  assert.deepEqual(leave.filter((row) => row.story).map((row) => [row.feature.id, row.story.id, row.status, row.taskTitle]), [[37795, 96, 'needs-task', 'October 2026 | PTO'], [37795, 97, 'exists', 'October 2026 | Sick Leave']], 'my open stories only, each with its own status; Ben\'s and closed ones not listed')
+  // ATM-27: the types without an open story of mine are offered as "<Name> | <Type> | Time Writing" (story + task).
+  assert.deepEqual(leave.filter((row) => !row.story).map((row) => [row.kind, row.status, row.storyTitle, row.taskTitle]), [
+    ['Training', 'needs-story', 'Ana Costa | Training | Time Writing', 'October 2026 | Ana Costa | Training | Time Writing'],
+    ['Unplanned Leave', 'needs-story', 'Ana Costa | Unplanned Leave | Time Writing', 'October 2026 | Ana Costa | Unplanned Leave | Time Writing'],
+  ])
 })
 
 test('ensureStoryMonthTask creates the month Task under the given story once, then reuses it (TC-ATM-18)', async () => {
@@ -438,4 +445,23 @@ test('a shared leave Feature where everyone keeps a story of the same title: min
   assert.deepEqual(none.map((row) => [row.feature.id, row.status]), [[100, 'needs-story']], 'Ben’s and Cara’s stories are theirs: a story of mine is created')
   const mineToo = leaveTaskCandidates([...rows, item(105, 'User Story', 'Ana Costa PTO', { parentId: 100, ...ana })], me, 'October 2026', 37778)
   assert.deepEqual(mineToo.map((row) => [row.status, row.storyTitle]), [['needs-task', 'Ana Costa PTO']], 'my own story, whatever its title')
+})
+
+test('ensureAbsenceStoryMonthTask creates "<Name> | <Type> | Time Writing" and its month Task once, or uses my story of that type (TC-ATM-19)', async () => {
+  const { ensureAbsenceStoryMonthTask } = await import('../src/azureDevOps.ts')
+  const { absenceStoryType } = await import('../src/myWork.ts')
+  const config = { organization: 'org', project: 'Quality', team: 'T' }
+  const world = new Map([
+    [37795, raw(37795, { 'System.WorkItemType': 'Feature', 'System.Title': 'Ana Costa' })],
+    [96, raw(96, { 'System.WorkItemType': 'User Story', 'System.Title': 'Ana Costa | PTO', 'System.Parent': 37795, 'System.AssignedTo': { displayName: 'Ana Costa', uniqueName: 'ana@x.com' } })],
+  ])
+  const { transport, calls } = fakeAzure(world)
+  const training = await ensureAbsenceStoryMonthTask(config, 'pat', 37795, 'Training', 'Ana Costa | Training | Time Writing', absenceStoryType, 'ana@x.com', 'October 2026', transport)
+  assert.deepEqual([training.status, training.storyCreated, training.story.title, training.story.parentId, training.task.title, training.task.parentId], ['created', true, 'Ana Costa | Training | Time Writing', 37795, 'October 2026 | Ana Costa | Training | Time Writing', training.story.id])
+  const again = await ensureAbsenceStoryMonthTask(config, 'pat', 37795, 'Training', 'Ana Costa | Training | Time Writing', absenceStoryType, 'ana@x.com', 'October 2026', transport)
+  assert.deepEqual([again.status, again.story.id, again.task.id], ['exists', training.story.id, training.task.id], 'running again creates nothing')
+  const pto = await ensureAbsenceStoryMonthTask(config, 'pat', 37795, 'PTO', 'Ana Costa | PTO | Time Writing', absenceStoryType, 'ana@x.com', 'October 2026', transport)
+  assert.deepEqual([pto.storyCreated, pto.story.id, pto.task.title], [false, 96, 'October 2026 | Ana Costa | PTO'], 'my existing PTO story (another title) is used')
+  assert.equal(calls.filter((call) => call.operation === 'create-child' && !call.validateOnly).length, 3, 'two for training (story, task), one for PTO (task)')
+  await assert.rejects(ensureAbsenceStoryMonthTask(config, 'pat', 96, 'PTO', 'x', absenceStoryType, 'ana@x.com', 'October 2026', transport), /not an accessible Feature/)
 })

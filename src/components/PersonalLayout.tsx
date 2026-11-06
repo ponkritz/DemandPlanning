@@ -37,17 +37,21 @@ export function CustomizableSections({ page, sections, views, canSetDefault }: {
   </>
 }
 
-// Menu pins and hidden pages (MYD-07): the Pinned box sits left of each page name; pinned pages appear first in the menu, hidden ones leave it (they still open
+// Menu pins and hidden pages (MYD-07): pages listed by menu group, each with Pinned and In menu boxes; pinned pages appear first in the menu, hidden ones leave it (they still open
 // from links). Only the pages this person's roles allow are listed.
 export function MenuCustomizer({ pages, menu, onChange, onClose }: { pages: { id: string; label: string; group: string }[]; menu: MenuLayout; onChange: (menu: MenuLayout) => void; onClose: () => void }) {
   const flip = (list: string[], id: string) => list.includes(id) ? list.filter((entry) => entry !== id) : [...list, id]
+  const groups = [...new Set(pages.map((page) => page.group))]
   return <Modal title="Customize menu" eyebrow="YOUR VIEWS" onClose={onClose}>
     <p className="muted">Pin the pages you use most to the top of the menu, and hide the ones you never use.</p>
-    <div className="azure-table"><table><thead><tr><th>Pinned</th><th>Page</th><th>Group</th><th>In menu</th></tr></thead><tbody>
-      {pages.map((page) => <tr key={page.id}><td><input type="checkbox" aria-label={`Pin ${page.label}`} checked={menu.pinned.includes(page.id)} onChange={() => onChange({ pinned: flip(menu.pinned, page.id), hidden: menu.hidden.filter((entry) => entry !== page.id) })} /></td>
-        <td>{page.label}</td><td><small className="muted">{page.group}</small></td>
-        <td><input type="checkbox" aria-label={`Show ${page.label} in the menu`} checked={!menu.hidden.includes(page.id)} onChange={() => onChange({ pinned: menu.pinned.filter((entry) => entry !== page.id), hidden: flip(menu.hidden, page.id) })} /></td></tr>)}
-    </tbody></table></div>
-    <div className="button-row"><button type="button" className="ghost" onClick={() => onChange({ pinned: [], hidden: [] })}>Reset menu</button><button type="button" className="primary" onClick={onClose}>Done</button></div>
+    <div className="menu-customizer"><table><thead><tr><th>Page</th><th>Pinned</th><th>In menu</th></tr></thead>
+      {groups.map((group) => <tbody key={group}><tr className="menu-group"><th colSpan={3} scope="colgroup">{group}</th></tr>
+        {pages.filter((page) => page.group === group).map((page) => <tr key={page.id} className={menu.hidden.includes(page.id) ? 'menu-hidden' : undefined}>
+          <td>{page.label}</td>
+          <td><input type="checkbox" aria-label={`Pin ${page.label}`} checked={menu.pinned.includes(page.id)} onChange={() => onChange({ pinned: flip(menu.pinned, page.id), hidden: menu.hidden.filter((entry) => entry !== page.id) })} /></td>
+          <td><input type="checkbox" aria-label={`Show ${page.label} in the menu`} checked={!menu.hidden.includes(page.id)} onChange={() => onChange({ pinned: menu.pinned.filter((entry) => entry !== page.id), hidden: flip(menu.hidden, page.id) })} /></td></tr>)}
+      </tbody>)}
+    </table></div>
+    <div className="modal-actions"><button type="button" className="ghost" onClick={() => onChange({ pinned: [], hidden: [] })}>Reset menu</button><button type="button" className="primary" onClick={onClose}>Done</button></div>
   </Modal>
 }

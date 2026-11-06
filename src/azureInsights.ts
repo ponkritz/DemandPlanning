@@ -22,9 +22,14 @@ export function timeWritingMonth(title: string): string | undefined {
   return trailNumber ? `${trailNumber[1]}-${trailNumber[2].padStart(2, '0')}` : undefined
 }
 // A User Story that names "Time Writing" anywhere in its title (e.g. "<Feature> - Time Writing", "Time Writing - DP").
-// Training under the Team Holidays and Training Epic (formerly Absence; same ID, CAP-16): a month Task whose own title, or
-// its Story's / Feature's, says "training" is training, not leave. The Epic's own title is not read (it says Training).
-export const isTrainingWork = (item: { title: string; workItemType: string }, chain: { title: string; workItemType: string }[] = []) => [item, ...chain].some((entry) => entry.workItemType !== 'Epic' && /\btrainings?\b/i.test(entry.title))
+// Training under the Team Holidays and Training Epic (formerly Absence; same ID, CAP-16, CAP-32): a month Task is training,
+// not leave, when it or its User Story says "training" in its title (each person's "<Name> | Training" story) or carries
+// a "Training" or "NPRA" tag. Leave and training share one Feature under the Epic, so the Feature's and the Epic's titles
+// and tags are not read.
+export const trainingTag = /^(trainings?|npra)\b/i
+export const hasTrainingTag = (item: { tags?: string }) => (item.tags ?? '').split(';').some((tag) => trainingTag.test(tag.trim()))
+type TrainingEntry = { title: string; workItemType: string; tags?: string }
+export const isTrainingWork = (item: TrainingEntry, chain: TrainingEntry[] = []) => [item, ...chain].some((entry) => entry.workItemType !== 'Epic' && entry.workItemType !== 'Feature' && (/\btrainings?\b/i.test(entry.title) || hasTrainingTag(entry)))
 export const isTimeWritingStory = (item: { workItemType: string; title: string }) => item.workItemType === 'User Story' && /\btime[\s_-]*writ(?:ing|ting)\b/i.test(item.title)
 // Time Writing is recognised from the Task, not from its story: a Task whose title starts or ends with a month and year counts
 // for that month wherever it sits, and its Feature and Epic come from the parent chain. Story titles are free text.

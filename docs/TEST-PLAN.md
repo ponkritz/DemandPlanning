@@ -571,7 +571,7 @@ Cases marked **UAT** are also run in acceptance testing.
   - An existing month Task that is reused is not tagged.
   - With planning open (or extended in Settings), nothing is tagged.
 
-**TC-MON-09 Period control** — Req MON-21, MON-23 — E2E `shell.e2e.mjs` ("TC-MON-09: Period control shows each month's own plan and actuals lock dates and locks a month early"); browser check with Git storage: set the default days to 5 and 4 — November planning shows "Locks after 5 Nov (default)", actuals "after 4 Dec"; set a date of its own for November, Use default, Lock now and Undo early lock; save to Git and open on another computer — the same locks show.
+**TC-MON-09 Period control** — Req MON-21, MON-23 — E2E `shell.e2e.mjs` ("TC-MON-09: Period control shows each month's own plan and actuals lock dates and locks a month early"); browser check with Git storage: set the default days to 5 and 4 — the fields read "Last day to update the plan" and "Last day to update actuals"; November planning shows "Last day to update: 5 Nov (default)" (still open on 5 November, Locked from 6 November), actuals "4 Dec"; set a date of its own for November, Use default, Lock now and Undo early lock; save to Git and open on another computer — the same locks show.
 
 **TC-MON-10 Month locks over the month change and in Git** — Req MON-06, MON-07, MON-22, MON-24 — L1 `planning-lock.test.mjs` ("month locks: by default November planning locks after 5 November and November actuals after 4 December…", "month locks reset when the month rolls over…", "month locks: each month can have its own dates…", "month locks are kept with the capacity settings in the Git planning data…"); browser check: keep Monthly Time Writing open over midnight at a lock date — the pill changes within a minute.
 
@@ -624,11 +624,13 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-ATM-15 Features from my User Stories; my own story on a shared Feature** — Req ATM-23 — L1 `my-work.test.mjs` ("a Feature shared by two people: each one's own User Story brings the Feature up for their month Task (TC-ATM-15)"; "month-task candidates: …" for two stories of the same title), `monthly-hours.test.mjs` ("Month task placement: …"); browser check with the QMS-0025 board: a Feature owned by a colleague where you have a User Story (open or Closed) is listed in Bulk actions → Create month tasks and counted on Assigned to Me; with your own Time Writing story under it, the confirmation names that story; after creating, the Task is under your story in Azure DevOps, not under the colleague's; a Feature where your only story is Removed, or that is Closed, is not listed.
 
-**TC-ATM-16 Leave in Bulk actions** — Req ATM-24 — L1 `my-work.test.mjs` ("leave in Bulk actions: my PTO / Sick / Unplanned Features under the Epic, apart from work; training and others not (TC-ATM-16)"); browser check: Bulk actions → Create month tasks shows a Leave list with your PTO / Sick / Unplanned Features, unticked; the work count and Assigned to Me's "tasks missing" do not include them; ticking one adds it to Create n tasks and creates its month Task.
+**TC-ATM-16 Leave in Bulk actions** — Req ATM-24 — L1 `my-work.test.mjs` ("leave in Bulk actions: my Features under the Epic (leave and training), apart from work; others not (TC-ATM-16)"); browser check: Bulk actions → Create month tasks shows a Leave and training list with your stories under the Epic, unticked, each marked Leave or Training; the work count and Assigned to Me's "tasks missing" do not include them; ticking one adds it to Create n tasks and creates its month Task.
 
 **TC-ATM-17 Others' stories never block my month Task** — Req ATM-25 — L1 `my-work.test.mjs` ("a shared leave Feature where everyone keeps a story of the same title: mine is used, or a new one of mine — never \"Choose story\" (TC-ATM-17)"), `monthly-hours.test.mjs` ("Month task placement: …"); browser check: on a shared PTO Feature with colleagues' "PTO - Time Writing" stories, Bulk actions → Leave shows "Story + task missing" (no story of yours) or "Task missing" (your own story), never "Choose story"; creating puts the Task under your story.
 
 **TC-ATM-18 One leave row per leave story** — Req ATM-26 — L1 `my-work.test.mjs` ("a leave Feature with one story per leave type lists one row per story of mine, never \"Choose story\" (TC-ATM-18)", "ensureStoryMonthTask creates the month Task under the given story once, then reuses it (TC-ATM-18)"); browser check: with a leave Feature "#<id> <your name>" holding your stories PTO and Sick Leave, Bulk actions → Leave shows "<your name> › PTO" and "<your name> › Sick Leave" as separate rows, never "Choose story"; ticking PTO and creating puts "<Month> | PTO" under the PTO story; running again creates nothing.
+
+**TC-ATM-19 Missing leave and training stories** — Req ATM-27 — L1 `my-work.test.mjs` ("a leave Feature with one story per leave type lists one row per story of mine, never \"Choose story\" (TC-ATM-18)", "ensureAbsenceStoryMonthTask creates \"<Name> \| <Type> \| Time Writing\" and its month Task once, or uses my story of that type (TC-ATM-19)"); browser check: with your Feature "#<id> <your name>" under the Absence and Training Epic holding only a PTO story, Bulk actions → Leave and training shows "Story + task missing" rows for Training, Sick Leave and Unplanned Leave; ticking Training and creating adds "<your name> \| Training \| Time Writing" with "<Month> \| <your name> \| Training \| Time Writing" under it, assigned to you; running again creates nothing.
 
 **TC-ATM-03 Close an item** — Req ATM-06 — **UAT**
 - Steps:
@@ -907,9 +909,11 @@ TC-OVR-01 to TC-OVR-03 tested the earlier Overview and are **retired** with OVR-
 
 **TC-CAP-05 Default Joined on** — Req CAP-15 — L1 `capacity.test.mjs` ("default Joined on (1 May 2026 unless changed) …"); browser check: Settings → Resources shows Default Joined on 1 May 2026; the Dashboard for April 2026 shows no capacity and lists the April hours to check; May 2026 counts everyone; give one person their own Joined on 2026-01-05 and April shows that person; Clear the default and April counts everyone again; Edit capacity settings… keeps the default.
 
-**TC-CAP-06 Team Holidays and Training** — Req CAP-16 — L1 `capacity.test.mjs` ("Team Holidays and Training (same Epic ID): training is NPRA, PTO / Sick / Unplanned stay absence; the Epic title is not read (TC-CAP-06)"), `my-work.test.mjs` ("Team Holidays and Training: my Training story gets its month Task; leave there is still left out (TC-CAP-06)"); browser check with the QMS-0025 board: Pulse Check → Last month — a person's Training month Task hours appear in the NPRA table and the NPRA total, not in absence; PTO / Sick / Unplanned stay in the absence split; Bulk actions → Create month tasks lists the Training Feature for your own Training story and no leave Feature; Settings → Capacity & periods names the Epic "Team Holidays and Training".
+**TC-CAP-06 Team Holidays and Training** — Req CAP-16, ATM-24 — L1 `capacity.test.mjs` ("Team Holidays and Training (same Epic ID): training is NPRA, PTO / Sick / Unplanned stay absence; the Epic title is not read (TC-CAP-06)"), `my-work.test.mjs` ("Team Holidays and Training: my Training story is offered in the leave and training list, not as missing work (TC-CAP-06)"); browser check with the QMS-0025 board: Pulse Check → Last month — a person's Training month Task hours appear in the NPRA table and the NPRA total, not in absence; PTO / Sick / Unplanned stay in the absence split; Bulk actions → Create month tasks lists your Training and leave stories in the Leave and training list (Training / Leave marks), unticked, and none of them as missing work; Settings → Capacity & periods names the Epic "Team Holidays and Training".
 
 **TC-CAP-07 Everyone in Resources** — Req CAP-29, CAP-30, CAP-31 — L1 `resources.test.mjs` ("Resources list everyone who can be given a region: Time Writing, assignees, historical hours, team members, added by name (CAP-29, CAP-31)"; "Team members are read from Azure DevOps (read only), groups left out, one entry per name (CAP-30)"); browser check with the Time Writing data fetched: Resources lists the people with Time Writing and, as "No Time Writing yet", the other assignees and the historical-hours people; Add team members from Azure DevOps adds the team's other members (or shows the PAT hint); Add a person by name adds one, Remove takes them off again; a region set for a leaver applies to their historical holidays.
+
+**TC-CAP-08 Training read from the User Story or a tag** — Req CAP-32 — L1 `capacity.test.mjs` ("training under the absence Epic is read from the User Story or a Training / NPRA tag, not the shared Feature (TC-CAP-08)"); browser check with the QMS-0025 board: a person's Feature under the Absence and Training Epic holds "<Name> \| PTO \| Time Writing" and "<Name> \| Training \| Time Writing" — Pulse Check counts the PTO Task as absence and the Training Task as NPRA; tag a leave Task "Training" or "NPRA" and it moves to NPRA; a Task tagged "Training" in a project stream counts as NPRA.
 
 **TC-CAP-01 Capacity calculation** — Req CAP-01…09, OVR-09 — L1 `capacity.test.mjs`, `monthly-hours.test.mjs`, `azure-insights.test.mjs`. Plus L3 analysis (A) with one person in October 2026:
 - 22 working days × 8 = 176 h funded.
@@ -1328,7 +1332,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-MYD-03 Personal views model** — Req MYD-06, MYD-09 — L1 `personal-views.test.mjs` ("personal views: a file per person, only known shapes kept, defaults under my own changes (MYD-06…MYD-09, TC-MYD-03)"; "sections in my order: removed sections dropped, new ones placed after their neighbour, hidden apart (MYD-06, TC-MYD-03)").
 
-**TC-MYD-04 Customize sections and menu** — Req MYD-06, MYD-07, MYD-08 — E2E `shell.e2e.mjs` ("TC-MYD-04: a person hides and moves the sections of My dashboard and pins a page to the menu; both survive a reload"); browser check (Git storage, work email): the file `personal-views/<email>.json` appears in Git and the layout comes back on another computer; an admin's "Use as default for everyone" applies to a person who changed nothing; the Dashboard and Pulse Check periods are remembered.
+**TC-MYD-04 Customize sections and menu** — Req MYD-06, MYD-07, MYD-08 — E2E `shell.e2e.mjs` ("TC-MYD-04: a person hides and moves the sections of My dashboard and pins a page to the menu; both survive a reload"); browser check (Git storage, work email): the file `personal-views/<email>.json` appears in Git and the layout comes back on another computer; an admin's "Use as default for everyone" applies to a person who changed nothing; the Dashboard and Pulse Check periods are remembered; Customize menu lists the pages under their menu groups with Pinned and In menu boxes, and the sidebar shows Customize menu and View as… as full-width buttons like Desktop app.
 
 **TC-MYD-05 Team overview tiles and tabs** — Req MYD-10, MYD-11, MYD-12 — E2E `shell.e2e.mjs` ("TC-MYD-05: Team overview shows six headline tiles; each opens its analysis, with a trail back; Delivery opens Pulse Check"); unit tests of the calculations as before (`dashboard.test.mjs`, `insights.test.mjs`); inspection: the menu offers no Insights workspace and `src/workspace.ts` is gone.
 
@@ -1351,6 +1355,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 **TC-HIS-09 Reading Epic No and Feature No** — Req HIS-14 — L1 `history.test.mjs` ("historical hours: Epic No / Feature No cells written as Excel writes them are read; others are reported, never silently ignored (HIS-14)"); browser check: a stream whose rows carry Feature Nos is not listed under "Streams without an Epic No" when those Features are fetched; when listed, its "Why" names the cause.
 
 **TC-HIS-10 Changing the cut-off after reading** — Req HIS-15 — L1 `history.test.mjs` ("historical hours: the file is read with every month, so a later cut-off brings October back without uploading again (HIS-15)"); browser check: load the workbook, change the cut-off from October to November — Rows imported grows by the October rows and "Left out as expected" says how many rows are from November on; save, and the reports show October from the Excel.
+
+**TC-HIS-11 Tag column** — Req HIS-16, CAP-32 — L1 `history.test.mjs` ("historical hours: a Tag column marks training / NPRA rows; the app's own tags cannot be set from it (TC-HIS-11)"); browser check: add a Tag column to the workbook and mark training rows "Training" under the person's absence Feature — after saving, Pulse Check and My dashboard count them as NPRA and the untagged PTO rows as absence; a Tag "Shared: everyone" is ignored.
 
 **TC-DOC-04 Private Tool Validation Package downloads** — Req DOC-12 — L1 `tool-validation.test.mjs`: configured repository and branch, authenticated read-only GET, fixed folders, path rejection, binary fidelity above 1 MB and safe errors. E2E `tool-validation.e2e.mjs`: missing configuration, list/search, DOCX download bytes, denied access, refresh and connection settings. Execute the same workflow in Web and Windows Desktop; verify downloaded PDF, Word and CSV files open in their native viewers. No private content or PAT is included in app exports or the public build. These automated checks use synthetic files; actual document review/approval remains outside the app.
 
@@ -1466,7 +1472,6 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | MON-22 | TC-MON-10 |
 | MON-23 | TC-MON-09 |
 | MON-24 | TC-MON-10 |
-| DOC-12 | TC-DOC-04 |
 | ATM-01…03 | TC-ATM-01 |
 | ATM-04, ATM-05 | TC-ATM-02 |
 | ATM-06 | TC-ATM-03, TC-ATM-08 |
@@ -1481,9 +1486,10 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | ATM-21 | TC-ATM-13 |
 | ATM-22 | TC-ATM-14 |
 | ATM-23 | TC-ATM-15 |
-| ATM-24 | TC-ATM-16 |
+| ATM-24 | TC-ATM-16, TC-CAP-06 |
 | ATM-25 | TC-ATM-17 |
 | ATM-26 | TC-ATM-18 |
+| ATM-27 | TC-ATM-19 |
 | BKL-01…03, BKL-12 | TC-BKL-01 |
 | BKL-04…09, BKL-11 | TC-BKL-02 |
 | BKL-10 | TC-BKL-03, TC-ATM-11 |
@@ -1548,6 +1554,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CAP-29 | TC-CAP-07 |
 | CAP-30 | TC-CAP-07 |
 | CAP-31 | TC-CAP-07 |
+| CAP-32 | TC-CAP-08, TC-HIS-11 |
 | BAS-01…04 | TC-BAS-01 |
 | BAS-05…07 | TC-BAS-02 |
 | BAS-08…10 | TC-BAS-03 |
@@ -1654,6 +1661,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | HIS-13 | TC-HIS-08 |
 | HIS-14 | TC-HIS-09 |
 | HIS-15 | TC-HIS-10 |
+| HIS-16 | TC-HIS-11 |
+| DOC-12 | TC-DOC-04 |
 | NFR-02 | TC-STO-01 |
 | NFR-03…05 | TC-DSK-02, TC-INS-01 |
 | NFR-06 | TC-INS-02 |
@@ -1668,12 +1677,12 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-01 | TC-NAV-01…06, TC-NAV-33, TC-NAV-37, TC-UI-01, TC-UI-02, TC-UI-03, TC-CON-36, TC-CON-38 |
 | UC-02 | TC-CON-01…07, TC-CON-17…19, TC-CON-44, TC-CON-28, TC-NAV-02, TC-NAV-34, TC-QV-14, TC-QV-16, TC-QV-23, TC-QV-24, TC-CON-46, TC-QV-25, TC-CON-47 |
 | UC-03 | TC-CON-03, TC-FET-01…06 |
-| UC-04 | TC-TWN-01, TC-TWN-02, TC-MON-01…06, TC-MON-09, TC-MON-10 |
+| UC-04 | TC-TWN-01, TC-TWN-02, TC-MON-01…06, TC-MON-09, TC-MON-10, TC-ATM-19 |
 | UC-05 | TC-MON-07 |
 | UC-06 | TC-ATM-01…11, TC-TWN-03, TC-CON-20, TC-CON-33, TC-CON-34, TC-CON-43 |
 | UC-07 | TC-BKL-01…09, TC-NAV-36, TC-CON-23, TC-CON-25…27, TC-CON-29…32, TC-CON-35 |
 | UC-08 | TC-QV-01…05, TC-FET-07, TC-CON-08, TC-CON-11…16, TC-QV-08, TC-QV-09, TC-QV-10, TC-QV-11, TC-QV-12, TC-QV-13, TC-QV-14, TC-QV-15, TC-QV-16, TC-CON-37, TC-CON-38, TC-CON-39, TC-CON-40, TC-CON-41, TC-QV-18, TC-QV-19, TC-QV-20, TC-QV-21, TC-QV-22, TC-CON-42 |
-| UC-09 | TC-OV-11…14, TC-CAP-01, TC-CAP-02, TC-CAP-03, TC-QV-17, TC-CON-21, TC-QV-10, TC-QV-11, TC-QV-21 |
+| UC-09 | TC-OV-11…14, TC-CAP-01, TC-CAP-02, TC-CAP-03, TC-CAP-08, TC-QV-17, TC-CON-21, TC-QV-10, TC-QV-11, TC-QV-21 |
 | UC-10 | TC-OV-11 (Months, Streams), TC-OV-13 |
 | UC-11 | TC-BAS-01…04 |
 | UC-12 | TC-GIT-01…04, TC-GIT-05, TC-GIT-06, TC-ACC-03…05 |
@@ -1691,7 +1700,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-24 | TC-PCK-01…07 |
 | UC-25 | TC-WSP-01…07 |
 | UC-26 | TC-MYD-01…05, TC-QV-31, TC-QV-32 |
-| UC-27 | TC-HIS-01…10 |
+| UC-27 | TC-HIS-01…11 |
 
 ## 8. Result record
 

@@ -48,7 +48,20 @@ export function matchesWork(row: { item: AzureWorkItem; feature?: AzureWorkItem;
 // holding a pending item of mine. Status comes from the cached backlog; creation re-checks Azure before writing.
 // Shared activities: a pending Feature owned by someone else is also mine to write time on when I had a month Task
 // under it (any month) or its Description @mentions me (my name, letter case ignored).
-export interface MonthTaskCandidate { feature: AzureWorkItem; storyTitle: string; taskTitle: string; status: 'exists' | 'needs-task' | 'needs-story' | 'conflict'; shared?: { owner: string; reason: 'earlier-task' | 'mention' }; leave?: boolean; story?: AzureWorkItem }
+export interface MonthTaskCandidate { feature: AzureWorkItem; storyTitle: string; taskTitle: string; status: 'exists' | 'needs-task' | 'needs-story' | 'conflict'; shared?: { owner: string; reason: 'earlier-task' | 'mention' }; leave?: boolean; story?: AzureWorkItem; kind?: AbsenceStoryType }
+// The stories a person keeps under their own Feature of the Team Holidays and Training Epic (ATM-27), one per type, titled
+// "<Name> | <Type> | Time Writing". A story's type is read from its title ("training" or a Training / NPRA tag: CAP-32).
+export const absenceStoryTypes = ['PTO', 'Training', 'Sick Leave', 'Unplanned Leave'] as const
+export type AbsenceStoryType = typeof absenceStoryTypes[number]
+export function absenceStoryType(story: Pick<AzureWorkItem, 'title' | 'workItemType' | 'tags'>): AbsenceStoryType | undefined {
+  if (isTrainingWork(story)) return 'Training'
+  const title = story.title.toLowerCase()
+  if (/\bunplanned\b|\bemergency\b/.test(title)) return 'Unplanned Leave'
+  if (/\bsick\b|\bmedical\b/.test(title)) return 'Sick Leave'
+  if (/\bpto\b|\bvacation\b|\bannual leave\b|\bplanned leave\b/.test(title)) return 'PTO'
+  return undefined
+}
+export const absenceStoryTitle = (name: string, type: AbsenceStoryType) => `${name.trim()} | ${type} | Time Writing`
 const entities: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', '#39': "'" }
 // The Description as plain text: tags dropped, the common entities decoded, spaces collapsed.
 const plainText = (html: string) => html.replace(/<[^>]*>/g, ' ').replace(/&(amp|lt|gt|quot|apos|nbsp|#39);/g, (_, name: string) => entities[name]).replace(/\s+/g, ' ')
@@ -70,29 +83,42 @@ export function leaveTaskCandidates(items: AzureWorkItem[], me: Me, monthLabel: 
   const featureIds = new Set<number>()
   for (const item of items) {
     if (!isMine(item, me) || item.state.trim().toLowerCase() === 'removed' || !underEpic(item) || timeWritingMonth(item.title)) continue
-    const chain = chainOf(item)
-    if (isTrainingWork(item, chain)) continue
-    const feature = item.workItemType === 'Feature' ? item : item.workItemType === 'User Story' ? chain.find((entry) => entry.workItemType === 'Feature') : undefined
+    const feature = item.workItemType === 'Feature' ? item : item.workItemType === 'User Story' ? chainOf(item).find((entry) => entry.workItemType === 'Feature') : undefined
     if (feature && isPending(feature)) featureIds.add(feature.id)
   }
-  // ATM-26: a person's leave Feature holds one story per leave type (PTO, Sick Leave, Unplanned Leave): one row per
-  // story of theirs, the month Task going under that story; a leave Feature without a story of theirs keeps one row.
+  // ATM-26: a person's Feature under the Epic holds one story per type (PTO, Training, Sick Leave, Unplanned Leave): one
+  // row per open story of theirs, the month Task going under that story. ATM-27: each type without a story of theirs
+  // gets a row that creates "<Name> | <Type> | Time Writing" and its month Task. Training rows sit in the same list.
   const month = timeWritingMonth(monthLabel) ?? ''
   const rows: MonthTaskCandidate[] = []
-  for (const row of monthRows(items, me, monthLabel, featureIds, new Map())) {
-    const stories = items.filter((story) => story.parentId === row.feature.id && story.workItemType === 'User Story' && isMine(story, me) && isPending(story) && !isTrainingWork(story))
-    if (!stories.length) { rows.push({ ...row, leave: true }); continue }
-    for (const story of stories.sort((a, b) => a.title.localeCompare(b.title))) {
+  const legacy = new Set<number>()
+  for (const feature of items.filter((item) => featureIds.has(item.id)).sort((a, b) => a.title.localeCompare(b.title))) {
+    const live = items.filter((story) => story.parentId === feature.id && story.workItemType === 'User Story' && isMine(story, me) && story.state.trim().toLowerCase() !== 'removed')
+    // A Feature named after one type (an older layout: "Ana Costa - PTO", "Training") is offered only that type, and a
+    // story under it without a type of its own is of that type.
+    const own = absenceStoryType({ ...feature, workItemType: 'User Story' })
+    const kindOf = (story: AzureWorkItem) => absenceStoryType(story) ?? own
+    for (const story of live.filter(isPending).sort((a, b) => a.title.localeCompare(b.title))) {
       const has = items.some((task) => task.parentId === story.id && task.workItemType === 'Task' && task.state.trim().toLowerCase() !== 'removed' && isMine(task, me) && timeWritingMonth(task.title) === month)
-      rows.push({ feature: row.feature, story, storyTitle: story.title, taskTitle: `${monthLabel} | ${story.title.trim()}`, status: has ? 'exists' : 'needs-task', leave: true })
+      const kind = kindOf(story)
+      rows.push({ feature, story, storyTitle: story.title, taskTitle: `${monthLabel} | ${story.title.trim()}`, status: has ? 'exists' : 'needs-task', leave: true, ...(kind ? { kind } : {}) })
+    }
+    const name = me.name?.trim() || (isMine(feature, me) ? feature.assignedTo.trim() : '') || live[0]?.assignedTo.trim() || ''
+    if (!name) { if (!live.length) legacy.add(feature.id); continue }
+    const present = new Set(live.filter(isPending).map(kindOf))
+    for (const kind of own ? [own] : absenceStoryTypes) if (!present.has(kind)) {
+      const storyTitle = absenceStoryTitle(name, kind)
+      rows.push({ feature, storyTitle, taskTitle: `${monthLabel} | ${storyTitle}`, status: 'needs-story', leave: true, kind })
     }
   }
+  // A Feature without a name to build the titles from keeps one row by the Time Writing rules (ATM-24/25).
+  for (const row of monthRows(items, me, monthLabel, legacy, new Map())) rows.push({ ...row, leave: true })
   return rows
 }
 export function monthTaskCandidates(items: AzureWorkItem[], me: Me, monthLabel: string, absenceEpicId?: number): MonthTaskCandidate[] {
   const chainOf = ancestry(items)
-  // Leave under the Team Holidays and Training Epic is left out; training there gets its month Task like any work (CAP-16).
-  const inAbsence = (item: AzureWorkItem) => { const chain = chainOf(item); return absenceEpicId != null && chain.some((entry) => entry.workItemType === 'Epic' && entry.id === absenceEpicId) && !isTrainingWork(item, chain) }
+  // The Team Holidays and Training Epic is left out: its leave and training stories have their own list (ATM-24, ATM-27).
+  const inAbsence = (item: AzureWorkItem) => absenceEpicId != null && chainOf(item).some((entry) => entry.workItemType === 'Epic' && entry.id === absenceEpicId)
   const storyIds = timeWritingStoryIds(items)
   const featureIds = new Set<number>()
   // ATM-23: a Feature in my name, or an active Feature holding a User Story in my name — in any state but Removed, my own
