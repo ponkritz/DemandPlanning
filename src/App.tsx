@@ -47,7 +47,7 @@ import { useMonthlyPack } from './useMonthlyPack'
 import { previousMonth } from './pulseCheck'
 import type { Area } from './access'
 import { useMyWork } from './useMyWork'
-import { setPlanningPeriods } from './planningLock'
+import { setLockSettings } from './planningLock'
 import { MyWorkPage } from './pages/MyWorkPage'
 import { BulkActionsPage } from './pages/BulkActionsPage'
 import { DesktopDownload } from './components/DesktopDownload'
@@ -65,7 +65,8 @@ import { hasServerPat, serverKey } from './azureCredentials'
 export default function App() {
   const store = useAppStore()
   // The Task creation paths check the planning lock of Settings' periods (ad-hoc tag after the lock).
-  setPlanningPeriods(store.state.periods)
+  // Month locks (MON-21): the lock dates kept with the capacity settings in Git apply on every page.
+  setLockSettings(capacityContext(store.state))
   const onFetched = useRef<FetchListener | undefined>(undefined)
   const gitData = useRef<GitDataSource | undefined>(undefined)
   const azure = useAzureWorkspace(store, onFetched, gitData)

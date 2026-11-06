@@ -34,7 +34,7 @@ Implemented in the MVP UI:
 - Unified dashboard for plan, actuals, variance, ad-hoc work, utilization and milestones
 - Activity register with process owners, resources, bands and measurable complexity
 - Monthly planning and actuals; automatic month-level ad-hoc classification after planning freeze
-- Independent planning/actuals locks, extensions, reason and audit trail
+- Month locks: every month has its own planning and actuals lock dates (default: planning after the 5th of the month, actuals after the 4th of the next month — set in Settings → Capacity & periods → Period control), can be moved or locked early per month with a reason and audit trail, are kept in Git so every computer applies the same locks, and follow the month change on their own
 - Versioned, editable effort baselines and non-blocking ±25% variance flags
 - TFS/Windchill/manual release staging model
 - LTE/PI Review snapshots plus CSV/JSON export

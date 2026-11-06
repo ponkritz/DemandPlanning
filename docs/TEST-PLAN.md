@@ -563,13 +563,17 @@ Cases marked **UAT** are also run in acceptance testing.
   - Azure adds the tag `ad-hoc`.
   - The row's tag shows "ad-hoc", and its OE input is disabled.
 
-**TC-MON-08 Ad-hoc tag on Tasks created after the lock** — Req MON-20 — L1 `planning-lock.test.mjs` ("planning lock: the 5th by default…", "ad-hoc after the lock…"), `azure-devops.test.mjs` ("after the planning lock, a new Time Writing Task…"), `my-work.test.mjs` ("Bulk month Tasks after the planning lock…"); browser check:
+**TC-MON-08 Ad-hoc tag on Tasks created after the lock** — Req MON-20 — L1 `planning-lock.test.mjs` ("ad-hoc after the lock…"), `azure-devops.test.mjs` ("after the planning lock, a new Time Writing Task…"), `my-work.test.mjs` ("Bulk month Tasks after the planning lock…"); browser check:
 - Pre: planning of the current month locked (after the 5th, or locked in Settings).
 - Steps: (1) New Feature on an Epic: the Time Writing section says the new Task is tagged `ad-hoc`; Save. (2) Bulk actions → Create month tasks: the confirmation says so; confirm.
 - Expected:
   - The new month Tasks carry the tag `ad-hoc`; the Feature and User Stories do not; the job result names the tag.
   - An existing month Task that is reused is not tagged.
   - With planning open (or extended in Settings), nothing is tagged.
+
+**TC-MON-09 Period control** — Req MON-21, MON-23 — E2E `shell.e2e.mjs` ("TC-MON-09: Period control shows each month's own plan and actuals lock dates and locks a month early"); browser check with Git storage: set the default days to 5 and 4 — November planning shows "Locks after 5 Nov (default)", actuals "after 4 Dec"; set a date of its own for November, Use default, Lock now and Undo early lock; save to Git and open on another computer — the same locks show.
+
+**TC-MON-10 Month locks over the month change and in Git** — Req MON-06, MON-07, MON-22, MON-24 — L1 `planning-lock.test.mjs` ("month locks: by default November planning locks after 5 November and November actuals after 4 December…", "month locks reset when the month rolls over…", "month locks: each month can have its own dates…", "month locks are kept with the capacity settings in the Git planning data…"); browser check: keep Monthly Time Writing open over midnight at a lock date — the pill changes within a minute.
 
 **TC-MON-07 Gaps panel** — Req MON-18
 - Expected (TD-02a, October 2026):
@@ -1346,6 +1350,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-HIS-09 Reading Epic No and Feature No** — Req HIS-14 — L1 `history.test.mjs` ("historical hours: Epic No / Feature No cells written as Excel writes them are read; others are reported, never silently ignored (HIS-14)"); browser check: a stream whose rows carry Feature Nos is not listed under "Streams without an Epic No" when those Features are fetched; when listed, its "Why" names the cause.
 
+**TC-HIS-10 Changing the cut-off after reading** — Req HIS-15 — L1 `history.test.mjs` ("historical hours: the file is read with every month, so a later cut-off brings October back without uploading again (HIS-15)"); browser check: load the workbook, change the cut-off from October to November — Rows imported grows by the October rows and "Left out as expected" says how many rows are from November on; save, and the reports show October from the Excel.
+
 **TC-DOC-04 Private Tool Validation Package downloads** — Req DOC-12 — L1 `tool-validation.test.mjs`: configured repository and branch, authenticated read-only GET, fixed folders, path rejection, binary fidelity above 1 MB and safe errors. E2E `tool-validation.e2e.mjs`: missing configuration, list/search, DOCX download bytes, denied access, refresh and connection settings. Execute the same workflow in Web and Windows Desktop; verify downloaded PDF, Word and CSV files open in their native viewers. No private content or PAT is included in app exports or the public build. These automated checks use synthetic files; actual document review/approval remains outside the app.
 
 ## 7. Requirements coverage matrix
@@ -1456,6 +1462,11 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | MON-15 | TC-MON-06 |
 | MON-18 | TC-MON-07 |
 | MON-20 | TC-MON-08 |
+| MON-21 | TC-MON-09 |
+| MON-22 | TC-MON-10 |
+| MON-23 | TC-MON-09 |
+| MON-24 | TC-MON-10 |
+| DOC-12 | TC-DOC-04 |
 | ATM-01…03 | TC-ATM-01 |
 | ATM-04, ATM-05 | TC-ATM-02 |
 | ATM-06 | TC-ATM-03, TC-ATM-08 |
@@ -1573,7 +1584,6 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | DOC-01…03, DOC-05 | TC-DOC-01 |
 | DOC-04, DOC-06…08 | TC-DOC-02 |
 | DOC-09…11 | TC-DOC-03 |
-| DOC-12 | TC-DOC-04 |
 | UI-01, UI-02 | TC-UI-01 |
 | UI-03, UI-04 | TC-INS-03 |
 | UI-05 | TC-UI-02 |
@@ -1643,6 +1653,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | HIS-12 | TC-HIS-07 |
 | HIS-13 | TC-HIS-08 |
 | HIS-14 | TC-HIS-09 |
+| HIS-15 | TC-HIS-10 |
 | NFR-02 | TC-STO-01 |
 | NFR-03…05 | TC-DSK-02, TC-INS-01 |
 | NFR-06 | TC-INS-02 |
@@ -1657,7 +1668,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-01 | TC-NAV-01…06, TC-NAV-33, TC-NAV-37, TC-UI-01, TC-UI-02, TC-UI-03, TC-CON-36, TC-CON-38 |
 | UC-02 | TC-CON-01…07, TC-CON-17…19, TC-CON-44, TC-CON-28, TC-NAV-02, TC-NAV-34, TC-QV-14, TC-QV-16, TC-QV-23, TC-QV-24, TC-CON-46, TC-QV-25, TC-CON-47 |
 | UC-03 | TC-CON-03, TC-FET-01…06 |
-| UC-04 | TC-TWN-01, TC-TWN-02, TC-MON-01…06 |
+| UC-04 | TC-TWN-01, TC-TWN-02, TC-MON-01…06, TC-MON-09, TC-MON-10 |
 | UC-05 | TC-MON-07 |
 | UC-06 | TC-ATM-01…11, TC-TWN-03, TC-CON-20, TC-CON-33, TC-CON-34, TC-CON-43 |
 | UC-07 | TC-BKL-01…09, TC-NAV-36, TC-CON-23, TC-CON-25…27, TC-CON-29…32, TC-CON-35 |
@@ -1680,7 +1691,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-24 | TC-PCK-01…07 |
 | UC-25 | TC-WSP-01…07 |
 | UC-26 | TC-MYD-01…05, TC-QV-31, TC-QV-32 |
-| UC-27 | TC-HIS-01…09 |
+| UC-27 | TC-HIS-01…10 |
 
 ## 8. Result record
 

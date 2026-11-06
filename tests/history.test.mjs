@@ -164,3 +164,14 @@ test('historical hours: Epic No / Feature No cells written as Excel writes them 
   assert.deepEqual(parsed.rows.map((row) => [row.featureId, row.epicId, row.stream]), [[701, 500, 'Alpha'], [undefined, undefined, 'Beta']], '"Stream (Features)" is the stream, "Feature No" the Feature')
   assert.deepEqual(parsed.unreadable, [{ row: 3, column: 'Feature No', value: 'see Jira' }])
 })
+
+test('historical hours: the file is read with every month, so a later cut-off brings October back without uploading again (HIS-15)', () => {
+  const head = ['QA/QE', 'Month(Date)', 'Epic No', 'Stream (Features)', 'Project / Release Title', 'Expected', 'Actual']
+  const sheet = [head, ['Ana Costa', '2026-09-01', '500', 'Alpha', 'Alpha 1.0', '8', '8'], ['Ana Costa', '2026-10-01', '500', 'Alpha', 'Alpha 1.0', '6', '6']]
+  const all = parseHistorySheet(sheet, '9999-12')
+  assert.deepEqual(all.rows.map((row) => row.month), ['2026-09', '2026-10'], 'both months kept on reading')
+  const cutoff = (month) => all.rows.filter((row) => row.month < month).map((row) => row.month)
+  assert.deepEqual([cutoff('2026-10'), cutoff('2026-11')], [['2026-09'], ['2026-09', '2026-10']], 'October counts once the cut-off is November')
+  const file = buildHistoryFile({ rows: all.rows.filter((row) => row.month < '2026-11'), cutoff: '2026-11', source: 'plan.xlsx', sheet: 'TransformedData', importedBy: '', streamEpics: {}, people: {} })
+  assert.equal(withHistory([], file).added.rows, 2)
+})
