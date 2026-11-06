@@ -5147,36 +5147,6 @@
     },
     {
       "type": "library",
-      "name": "fflate",
-      "version": "0.8.3",
-      "purl": "pkg:npm/fflate@0.8.3",
-      "scope": "required",
-      "licenses": [
-        {
-          "license": {
-            "id": "MIT"
-          }
-        }
-      ],
-      "hashes": [
-        {
-          "alg": "SHA-512",
-          "content": "b5b64db89acbc06529df3b2106d772e16f8e47166e221f1ae629722044030b9ad8d5fdd4db424caf2d0b977581cd4e7c1192ac12e2455e16f9830bfc0ac3ef80"
-        }
-      ],
-      "properties": [
-        {
-          "name": "swbom:scope",
-          "value": "runtime"
-        },
-        {
-          "name": "swbom:direct",
-          "value": "false"
-        }
-      ]
-    },
-    {
-      "type": "library",
       "name": "filelist",
       "version": "1.0.6",
       "purl": "pkg:npm/filelist@1.0.6",
@@ -5870,7 +5840,7 @@
       "name": "graceful-fs",
       "version": "4.2.11",
       "purl": "pkg:npm/graceful-fs@4.2.11",
-      "scope": "required",
+      "scope": "excluded",
       "licenses": [
         {
           "license": {
@@ -5887,7 +5857,7 @@
       "properties": [
         {
           "name": "swbom:scope",
-          "value": "runtime"
+          "value": "build / test"
         },
         {
           "name": "swbom:direct",
@@ -7880,7 +7850,7 @@
       "name": "node-int64",
       "version": "0.4.0",
       "purl": "pkg:npm/node-int64@0.4.0",
-      "scope": "required",
+      "scope": "excluded",
       "licenses": [
         {
           "license": {
@@ -7897,7 +7867,7 @@
       "properties": [
         {
           "name": "swbom:scope",
-          "value": "runtime"
+          "value": "build / test"
         },
         {
           "name": "swbom:direct",
@@ -8837,36 +8807,6 @@
     },
     {
       "type": "library",
-      "name": "read-excel-file",
-      "version": "9.3.14",
-      "purl": "pkg:npm/read-excel-file@9.3.14",
-      "scope": "required",
-      "licenses": [
-        {
-          "license": {
-            "id": "MIT"
-          }
-        }
-      ],
-      "hashes": [
-        {
-          "alg": "SHA-512",
-          "content": "adf12934cb619bf4442294822e7193ad00f9696f94f6bae116e19817e5d13bc4a8cfeedbfab00e5b5cf6bc96cd88420d6c53db8d15b5eafcf42a75f8d528bdab"
-        }
-      ],
-      "properties": [
-        {
-          "name": "swbom:scope",
-          "value": "runtime"
-        },
-        {
-          "name": "swbom:direct",
-          "value": "true"
-        }
-      ]
-    },
-    {
-      "type": "library",
       "name": "readable-stream",
       "version": "2.3.8",
       "purl": "pkg:npm/readable-stream@2.3.8",
@@ -9276,36 +9216,6 @@
         {
           "name": "swbom:scope",
           "value": "build / test"
-        },
-        {
-          "name": "swbom:direct",
-          "value": "false"
-        }
-      ]
-    },
-    {
-      "type": "library",
-      "name": "saxen",
-      "version": "11.2.0",
-      "purl": "pkg:npm/saxen@11.2.0",
-      "scope": "required",
-      "licenses": [
-        {
-          "license": {
-            "id": "MIT"
-          }
-        }
-      ],
-      "hashes": [
-        {
-          "alg": "SHA-512",
-          "content": "d9b1b9eb800025c9bfdefc990b4521b3f9800ab1fee001cc68a1ca001d8ce7132aa265196b6ec543b31869018529570993f315cd2110df803c419596f9e89613"
-        }
-      ],
-      "properties": [
-        {
-          "name": "swbom:scope",
-          "value": "runtime"
         },
         {
           "name": "swbom:direct",
@@ -10603,36 +10513,6 @@
     },
     {
       "type": "library",
-      "name": "unzipper-esm",
-      "version": "0.13.3",
-      "purl": "pkg:npm/unzipper-esm@0.13.3",
-      "scope": "required",
-      "licenses": [
-        {
-          "license": {
-            "id": "MIT"
-          }
-        }
-      ],
-      "hashes": [
-        {
-          "alg": "SHA-512",
-          "content": "2d43ba559e9f0b39036dd31ebf4fdf3a1a0879518a68e91320ea18c552c4d124237ef9801cafa8cb097b95f865a12648b1d189db9989d7c32d77d0b24c04a3ac"
-        }
-      ],
-      "properties": [
-        {
-          "name": "swbom:scope",
-          "value": "runtime"
-        },
-        {
-          "name": "swbom:direct",
-          "value": "false"
-        }
-      ]
-    },
-    {
-      "type": "library",
       "name": "utf8-byte-length",
       "version": "1.0.5",
       "purl": "pkg:npm/utf8-byte-length@1.0.5",
@@ -10862,36 +10742,6 @@
         {
           "name": "swbom:scope",
           "value": "build / test"
-        },
-        {
-          "name": "swbom:direct",
-          "value": "false"
-        }
-      ]
-    },
-    {
-      "type": "library",
-      "name": "worker-f",
-      "version": "0.1.21",
-      "purl": "pkg:npm/worker-f@0.1.21",
-      "scope": "required",
-      "licenses": [
-        {
-          "license": {
-            "id": "MIT"
-          }
-        }
-      ],
-      "hashes": [
-        {
-          "alg": "SHA-512",
-          "content": "a4c8bbc02cf7b9957146f452a61c9a218a0deeb9bd6d5d2eb227d389beeed3590a53e84ea3efe117085a8d89e93821f2af45e9dffdae95ce05f899b66b76087e"
-        }
-      ],
-      "properties": [
-        {
-          "name": "swbom:scope",
-          "value": "runtime"
         },
         {
           "name": "swbom:direct",
