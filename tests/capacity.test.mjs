@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { capacityModel, absenceKind, loadStatus, normalizeCapacitySettings, defaultCapacitySettings, employedDays } from '../src/capacity.ts'
+import { capacityModel, absenceKind, loadStatus, normalizeCapacitySettings, defaultCapacitySettings, employedDays, oldCalculation } from '../src/capacity.ts'
 
 const item = (id, extra = {}) => ({ key: `org/project/${id}`, id, title: 'Release - Time Writing', workItemType: 'User Story', state: 'Active', assignedTo: '', areaPath: '', iterationPath: '', tags: '', url: '', organization: 'org', project: 'project', syncedAt: '', ...extra })
 // Two streams (Epics 1 and 2) plus the absence Epic 900 with a per-person PTO / Sick Feature.
@@ -258,4 +258,52 @@ test('training under the absence Epic is read from the User Story or a Training 
   assert.equal(ana.absence, 16, 'only the PTO story is absence, though the Feature title says Training')
   assert.equal(ana.npra, 11, 'Training story 6 + Training-tagged story 3 + NPRA-tagged Task 2')
   assert.equal(ben.npra, 5, 'a Training tag counts as NPRA outside the Epic too')
+})
+
+test('CAP-33: a person removed in Resources is left out of capacity, utilization and team totals (hours too), listed apart; restore brings them back', () => {
+  assert.deepEqual(normalizeProfiles({ Ben: { removed: true }, Ana: { removed: 'yes' } }), { Ben: { removed: true } }, 'only removed: true is kept')
+  const full = capacityModel(backlog, '2026-10', settings)
+  const without = capacityModel(backlog, '2026-10', { ...settings, profiles: { Ben: { removed: true } } })
+  assert.deepEqual(without.people.map((person) => person.name), ['Ana'])
+  assert.deepEqual(without.removed, [{ name: 'Ben', tasks: 1, hours: 50 }])
+  assert.equal(without.totals.funded, full.totals.funded - 176, 'their funded hours are gone')
+  assert.equal(without.totals.work, full.totals.work - 50, 'their booked hours are gone')
+  assert.deepEqual(capacityModel(backlog, '2026-10', { ...settings, profiles: {} }).removed, [])
+})
+
+test('CAP-35/36: Old Calculation — every hour (absence, holidays, NPRA included) against working days × funded hours − Standard Hours; status from planned', () => {
+  const holiday = [item(60, { workItemType: 'Feature', parentId: 900, title: 'Holidays' }), item(61, { parentId: 60, title: 'Holidays - Time Writing' }), item(62, { workItemType: 'Task', parentId: 61, title: 'October 2026 | Diwali', originalEstimate: 8, completedWork: 8 })]
+  const shared = { ...settings, sharedTime: [{ id: 60, kind: 'holiday', scope: 'everyone' }] }
+  const { rows, totals, standardHours } = oldCalculation(capacityModel([...backlog, ...holiday], '2026-10', shared))
+  assert.equal(standardHours, 32, 'the default Standard Hours')
+  assert.deepEqual(rows.map((row) => row.name), ['Ana', 'Ben'])
+  const [ana, ben] = rows
+  // Ana: 22 days × 8 h − 32 h = 144; plan 100 + 20 + 8 holiday; actual 120 + 40 + 16 PTO + 8 sick + 8 holiday.
+  assert.deepEqual(ana, { name: 'Ana', funded: 176, netCapacity: 144, planned: 128, plannedUtilization: 88.89, available: 16, status: 'Balanced', actual: 192, actualUtilization: 133.33 })
+  assert.deepEqual([ben.planned, ben.actual, ben.available, ben.status], [68, 58, 76, 'Has capacity'])
+  assert.deepEqual([totals.funded, totals.netCapacity, totals.planned, totals.actual, totals.available, totals.plannedUtilization], [352, 288, 196, 250, 92, 68.06])
+  const over = oldCalculation(capacityModel([...backlog, item(70, { workItemType: 'Task', parentId: 20, title: 'October 2026 | Release 1', assignedTo: 'Ben', originalEstimate: 200 })], '2026-10', settings)).rows.find((row) => row.name === 'Ben')
+  assert.deepEqual([over.planned, over.available, over.status], [260, -116, 'Overloaded'])
+  // The breakup sets the total; an empty breakup is 0 h; never below 0.
+  const breakup = normalizeCapacitySettings({ ...settings, standardHours: [{ label: ' Team meetings ', hours: 8 }, { label: 'Admin', hours: '16' }, { label: 'Bad', hours: -1 }] })
+  assert.deepEqual(breakup.standardHours, [{ label: 'Team meetings', hours: 8 }, { label: 'Admin', hours: 16 }])
+  assert.equal(oldCalculation(capacityModel(backlog, '2026-10', breakup)).rows[0].netCapacity, 152)
+  assert.equal(oldCalculation(capacityModel(backlog, '2026-10', normalizeCapacitySettings({ ...settings, standardHours: [] }))).rows[0].netCapacity, 176)
+  assert.equal(oldCalculation(capacityModel(backlog, '2026-10', normalizeCapacitySettings({ ...settings, standardHours: [{ label: 'All', hours: 500 }] }))).rows[0].netCapacity, 0)
+})
+
+test('CAP-37: Old Calculation — an unticked shared-time group (All, All-<Region>) leaves Planned and Actual Hours', () => {
+  const holiday = [item(60, { workItemType: 'Feature', parentId: 900, title: 'Holidays' }), item(61, { parentId: 60, title: 'Holidays - Time Writing' }), item(62, { workItemType: 'Task', parentId: 61, title: 'October 2026 | Diwali', originalEstimate: 8, completedWork: 8 }),
+    item(63, { workItemType: 'Feature', parentId: 1, title: 'PI Planning' }), item(64, { parentId: 63, title: 'PI - Time Writing' }), item(65, { workItemType: 'Task', parentId: 64, title: 'October 2026 | PI Planning', originalEstimate: 16, completedWork: 12 })]
+  const base = { ...settings, profiles: { Ana: { region: 'India' }, Ben: { region: 'US' } }, sharedTime: [{ id: 60, kind: 'holiday', scope: 'India' }, { id: 63, kind: 'activity', scope: 'everyone' }] }
+  const row = (extra) => oldCalculation(capacityModel([...backlog, ...holiday], '2026-10', { ...base, ...normalizeCapacitySettings({ ...base, ...extra }), profiles: base.profiles })).rows
+  const all = row({})
+  // Ana: own plan 120 + All 16 + All-India 8; actual 184 + 12 + 8. Ben (US): own 60 + All 16; actual 50 + 12.
+  assert.deepEqual(all.map((entry) => [entry.name, entry.planned, entry.actual]), [['Ana', 144, 204], ['Ben', 76, 62]])
+  const noIndia = row({ oldCalcExcludedScopes: ['India'] })
+  assert.deepEqual(noIndia.map((entry) => [entry.name, entry.planned, entry.actual]), [['Ana', 136, 196], ['Ben', 76, 62]])
+  const none = row({ oldCalcExcludedScopes: ['everyone', 'India', 'Netherlands', 'US', 'Mars'] })
+  assert.deepEqual(none.map((entry) => [entry.name, entry.planned, entry.actual]), [['Ana', 120, 184], ['Ben', 60, 50]])
+  assert.deepEqual(normalizeCapacitySettings({ oldCalcExcludedScopes: ['US', 'Mars', 'everyone'] }).oldCalcExcludedScopes, ['everyone', 'US'])
+  assert.equal('oldCalcExcludedScopes' in normalizeCapacitySettings({ oldCalcExcludedScopes: [] }), false)
 })

@@ -36,7 +36,8 @@ export function MonthSections({ items, month, settings, navigate, utilizationOnl
   const personOther = (streams: CapacityModel['people'][number]['streams']) => streams.filter((stream) => otherStreams.some((other) => other.key === stream.key)).reduce((sum, stream) => sum + stream.work, 0)
   return <>
   <div className="overview-stack">
-    {(model.prorated.length > 0 || model.outsideEmployment.length > 0) && <p className="muted employment-note" role="note">
+    {(model.prorated.length > 0 || model.outsideEmployment.length > 0 || model.removed.length > 0) && <p className="muted employment-note" role="note">
+      {model.removed.length > 0 && <>Removed in Settings → Resources, not counted: {model.removed.map((person) => `${person.name}${person.hours ? ` (${formatHours(person.hours)}h booked)` : ''}`).join(' · ')}. </>}
       {model.prorated.length > 0 && <>Part of the month only (Settings → Resources): {model.prorated.map((person) => `${person.name} ${person.days} of ${model.workingDays} days, ${formatHours(person.funded)}h funded`).join(' · ')}. </>}
       {model.outsideEmployment.length > 0 && <>Not employed in {monthName(month)}, so not counted: {model.outsideEmployment.map((person) => `${person.name}${person.leftOn ? ` (left ${person.leftOn})` : person.joinedOn ? ` (joins ${person.joinedOn})` : ''}${person.hours ? ` — ${formatHours(person.hours)}h booked on ${person.tasks} Task${person.tasks === 1 ? '' : 's'}, check them` : ''}`).join(' · ')}.</>}
     </p>}

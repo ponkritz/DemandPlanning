@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { Info, Modal, Pill } from './ui'
+import { Info, Modal, Notice, Pill } from './ui'
 import { defaultGitRepository, type SetupLinks } from '../gitStorage'
-import type { SetupInput, SetupStep } from '../setupGuide'
+import type { FetchProblem, SetupInput, SetupStep } from '../setupGuide'
 import type { SettingsTab } from '../settingsTabs'
 
 // The "Get started" pop-up: each setup step in one line — its title, status and the field it needs — with why and how
@@ -65,7 +65,7 @@ function LinksEditor({ links, defaults, onChange, saveBar }: { links: SetupLinks
     {saveBar}
   </details>
 }
-export function SetupGuide({ steps, busy, inputs, links, linkDefaults, editLinks, onOpenTab, onFetch, onClose, onDismiss }: { steps: SetupStep[]; busy: boolean; inputs?: SetupInputs; links?: SetupLinks; linkDefaults?: SetupLinks; editLinks?: { links: SetupLinks; onChange: (links: SetupLinks) => void; saveBar?: React.ReactNode }; onOpenTab: (tab: SettingsTab, section?: string) => void; onFetch: () => void; onClose: () => void; onDismiss: () => void }) {
+export function SetupGuide({ steps, busy, problem, inputs, links, linkDefaults, editLinks, onOpenTab, onFetch, onClose, onDismiss }: { steps: SetupStep[]; busy: boolean; problem?: FetchProblem | null; inputs?: SetupInputs; links?: SetupLinks; linkDefaults?: SetupLinks; editLinks?: { links: SetupLinks; onChange: (links: SetupLinks) => void; saveBar?: React.ReactNode }; onOpenTab: (tab: SettingsTab, section?: string) => void; onFetch: () => void; onClose: () => void; onDismiss: () => void }) {
   const required = steps.filter((step) => step.required), optional = steps.filter((step) => !step.required)
   const doneCount = required.filter((step) => step.state === 'done').length
   const next = steps.find((step) => step.state === 'todo')
@@ -82,7 +82,8 @@ export function SetupGuide({ steps, busy, inputs, links, linkDefaults, editLinks
   </li>
   return <Modal title="Get started" eyebrow={`SETUP · ${doneCount} OF ${required.length} REQUIRED STEPS DONE`} onClose={onClose}>
     <div className="setup-guide">
-      <p className="muted">{doneCount === required.length ? 'You are set up.' : 'Four steps. ⓘ explains each one.'}</p>
+      {problem && <Notice tone="error" className="setup-problem"><strong>Could not fetch from Azure DevOps.</strong> {problem.kind === 'auth' ? 'Your token is missing, wrong or expired: create a new one and Save PAT in step 2, then Fetch now.' : problem.kind === 'network' ? 'Azure DevOps could not be reached: check your network or VPN, then Fetch now in step 4.' : 'Check steps 2 and 4, then Fetch now.'} <Info label="Details">{problem.message}</Info></Notice>}
+      {!problem && <p className="muted">{doneCount === required.length ? 'You are set up.' : 'Four steps. ⓘ explains each one.'}</p>}
       <ol className="setup-steps">{required.map((step, index) => card(step, index))}</ol>
       <h3>Optional</h3>
       <ol className="setup-steps">{optional.map((step, index) => card(step, required.length + index))}</ol>

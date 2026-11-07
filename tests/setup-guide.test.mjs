@@ -76,3 +76,18 @@ test('NAV-40: the token links are https only, shared in the planning data and ke
   assert.deepEqual(steps.map((step) => step.link ?? ''), ['github', 'azure', '', '', '', 'tfs'])
   assert.equal(steps.at(-1).title, 'TFS APAC settings [DP/CP/IOCC/Content]')
 })
+
+import { fetchProblemKind } from '../src/setupGuide.ts'
+test('NAV-41: a failed fetch reopens the token step (token problems) and the Fetch step (any problem)', () => {
+  assert.equal(fetchProblemKind('Azure DevOps returned 401 Unauthorized'), 'auth')
+  assert.equal(fetchProblemKind('The PAT has expired'), 'auth')
+  assert.equal(fetchProblemKind('No PAT in this browser for the Time Writing connection.'), 'auth')
+  assert.equal(fetchProblemKind('TypeError: Failed to fetch'), 'network')
+  assert.equal(fetchProblemKind('Request timed out'), 'network')
+  assert.equal(fetchProblemKind('The team was not found'), 'other')
+  const ready = { ...base, gitConnected: true, timeWriting: true, pat: true, email: 'ana@example.com', fetched: true }
+  assert.deepEqual([states(ready).pat, states(ready).fetch], ['done', 'done'])
+  assert.deepEqual([states({ ...ready, fetchProblem: 'auth' }).pat, states({ ...ready, fetchProblem: 'auth' }).fetch], ['todo', 'todo'])
+  assert.deepEqual([states({ ...ready, fetchProblem: 'network' }).pat, states({ ...ready, fetchProblem: 'network' }).fetch], ['done', 'todo'])
+  assert.equal(requiredOpen(setupSteps({ ...ready, fetchProblem: 'auth' })), 2)
+})

@@ -145,7 +145,7 @@ export interface AppState {
   azureBacklogScope?: { organization: string; project: string; team: string; itemKeys: string[]; areaPaths: string[]; fetchedAt: string; sample?: boolean }
   // NAV-40: the token pages linked from Get started (shared in Git with the planning data).
   setupLinks?: { github?: string; azure?: string; tfs?: string }
-  capacitySettings?: { absenceEpicId?: number; hoursPerDay?: number; overloadedAt?: number; availableBelow?: number; sharedTime?: { id: number; kind: 'holiday' | 'activity'; scope: string; label?: string }[] }
+  capacitySettings?: { absenceEpicId?: number; hoursPerDay?: number; overloadedAt?: number; availableBelow?: number; sharedTime?: { id: number; kind: 'holiday' | 'activity'; scope: string; label?: string }[]; standardHours?: { label: string; hours: number }[]; oldCalcExcludedScopes?: string[] }
   baselineRules?: BaselineRule[]
   releaseScopes?: ReleaseScope[]
   resourceProfiles?: Record<string, { region?: string; role?: string; reportsTo?: string; peopleManager?: boolean }>

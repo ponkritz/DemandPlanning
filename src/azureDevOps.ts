@@ -1,7 +1,7 @@
 import { assertNotViewingAs } from './viewAs.ts'
 import type { AzureWorkItem } from './domain'
 import { featureDoD, fillTitle, missingValues, reviewStoryTitle, titleValues, fieldPlaceholders, type TitleField } from './featureSetup.ts'
-import { planMonthStory, timeWritingMonth } from './azureInsights.ts'
+import { isTimeWritingStory, planMonthStory, timeWritingMonth } from './azureInsights.ts'
 import { editLocks, editPatch, editProblem, editableText, isAdhocTask, withAdhocTag, type WorkItemEdit } from './workItemEdit.ts'
 
 // baseUrl is the organization (https://dev.azure.com/<org>) or, on premises, the Azure DevOps Server collection
@@ -526,6 +526,38 @@ export async function addUserStory(config: AzureConfig, pat: string, input: Stor
   if (!comment?.trim()) return { story }
   try { await addComment(config, pat, story.id, comment.trim(), transport); return { story } }
   catch (failure) { return { story, commentError: failure instanceof Error ? failure.message : 'the comment was not added' } }
+}
+
+// ACT-17: a work Task (not a month Time Writing Task) under a User Story, by the same rules as addUserStory (BKL-27):
+// a current or future Sprint (checked fresh), the parent story's Area Path, the person, the title and description,
+// read back and verified, then the optional comment. Time Writing stories and month titles are refused, so it never
+// becomes a Time Writing Task.
+export async function addTask(config: AzureConfig, pat: string, input: { storyId: number; title: string; description: string; iterationPath: string; assignedTo: string; comment?: string }, transport: AzureTransport = requestAzure): Promise<{ task: AzureWorkItem; commentError?: string }> {
+  if (!pat.trim()) throw new Error('Enter a Work Items (Read & Write) PAT.')
+  const title = input.title.trim(), assignedTo = input.assignedTo.trim().toLowerCase(), iterationPath = input.iterationPath.trim()
+  if (!title || title.length > 255) throw new Error('Enter a title of 1–255 characters.')
+  if (timeWritingMonth(title)) throw new Error('A title with a month (e.g. "November 2026 | …") is a Time Writing Task: use Time Writing task instead.')
+  if (!isAssignee(assignedTo)) throw new Error('Choose who the Task is assigned to (an email). Nothing was created.')
+  if (!iterationPath) throw new Error('Select a Sprint for the Task.')
+  const iterations = await readAzureIterations(config, pat, transport)
+  if (![...currentIterationPairs(iterations), ...futureIterationPairs(iterations)].some((pair) => pair.sprint.path === iterationPath)) throw new Error('The selected PI/Sprint is no longer current. Reload the schedule and review it before creating. No write was attempted.')
+  const source = await transport({ ...config, pat, operation: 'items', ids: [input.storyId] }) as { value?: RawItem[] }
+  const raw = source.value?.find((item) => item.id === input.storyId)
+  if (!raw || raw.fields['System.WorkItemType'] !== 'User Story') throw new Error(`#${input.storyId} is not an accessible User Story; a Task goes under a User Story.`)
+  const story = mapAzureWorkItem(raw, config)
+  if (isTimeWritingStory(story)) throw new Error('This is a Time Writing story: use Time Writing task for month Tasks.')
+  const request: AzureRequest = { ...config, pat, operation: 'create-child', workItemType: 'Task', feature: { parentId: story.id, title, description: input.description, acceptanceCriteria: '', areaPath: story.areaPath, iterationPath, assignedTo } }
+  await transport({ ...request, validateOnly: true })
+  const response = await transport({ ...request, validateOnly: false }) as RawItem
+  if (!Number.isSafeInteger(response.id) || response.id < 1) throw new Error(`Task creation under #${story.id} could not be confirmed. Check it in Azure DevOps before retrying.`)
+  const read = await transport({ ...config, pat, operation: 'items', ids: [response.id] }) as { value?: RawItem[] }
+  const created = read.value?.find((item) => item.id === response.id)
+  if (!created) throw new Error(`Task #${response.id} was created but could not be read back.`)
+  const task = mapAzureWorkItem(created, config)
+  if (task.parentId !== story.id || task.workItemType !== 'Task' || task.title.trim() !== title || task.iterationPath !== iterationPath) throw new Error(`Task #${response.id} was created but does not match what was requested. Check it in Azure DevOps.`)
+  if (!input.comment?.trim()) return { task }
+  try { await addComment(config, pat, task.id, input.comment.trim(), transport); return { task } }
+  catch (failure) { return { task, commentError: failure instanceof Error ? failure.message : 'the comment was not added' } }
 }
 
 // NAV-39: the work email of the PAT's owner, read from work items rather than from an identity service (the
