@@ -23,7 +23,7 @@ export function MyDashboardPage({ month, azure, store, my, navigate, views, canS
   const problems = problemBreakdown(itemsForPerson(azure.items, my.me, settings), [month], settings)
   const checks = stateChecks(azure.items, my.me, my.absenceEpicId)
   const count = (type: string) => my.pending.filter((row) => row.item.workItemType === type).length
-  const toClose = checks.filter((check) => check.kind !== 'feature-needs-active-story').length
+  const toClose = checks.filter((check) => check.kind === 'close-feature' || check.kind === 'close-story').length
   const needsStory = checks.filter((check) => check.kind === 'feature-needs-active-story').length
   const streams = streamTotals(rows.filter((row) => row.month === month)).filter((stream) => stream.plan > 0 || stream.actual > 0)
   // Releases behind my Features: my open or closed Features whose Target Date falls in the month.

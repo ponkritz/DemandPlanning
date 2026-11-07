@@ -1,11 +1,9 @@
 import { useState } from 'react'
 import type { AzureWorkItem } from '../domain'
-import { maxTitleFields, builtinMilestones, builtinSetup, copySetup, defaultTimeWritingStory, emptySetup, fillTitle, missingValues, placeholders, removeSetup, editSetup, setupFor, setupsMissingDoD, defaultDoDFor, fillMissingDoD, missingDoD, sharedSetupRows, titleValues, type EpicSetup, type FeatureSetupFile } from '../featureSetup'
+import { maxTitleFields, builtinMilestones, builtinSetup, copySetup, emptySetup, fillTitle, missingValues, placeholders, removeSetup, editSetup, setupFor, setupsMissingDoD, defaultDoDFor, fillMissingDoD, missingDoD, sharedSetupRows, titleValues, type EpicSetup, type FeatureSetupFile } from '../featureSetup'
 import { currentIndiaMonth } from '../azureDevOps'
-import { assignablePeople } from '../myWork'
 import type { FeatureSetup } from '../useFeatureSetup'
 import type { GitStorage } from '../useGitStorage'
-import { PersonPicker } from './PersonPicker'
 import { EmptyState, Modal, Notice, Panel, Info } from './ui'
 
 // Settings → Feature setup: per Epic, the optional User Stories offered when a Feature is created under it (all ticked
@@ -14,7 +12,6 @@ import { EmptyState, Modal, Notice, Panel, Info } from './ui'
 // Git token can write may edit either, and "Enable for everyone" copies my setup of an Epic into the shared one.
 export function FeatureSetupPanel({ setup, git, items }: { setup: FeatureSetup; git: GitStorage; items: AzureWorkItem[] }) {
   const epics = items.filter((item) => item.workItemType === 'Epic' && item.state.toLowerCase() !== 'removed').sort((a, b) => a.title.localeCompare(b.title))
-  const people = assignablePeople(items)
   const [draft, setDraft] = useState<FeatureSetupFile | null>(null)
   const [epicId, setEpicId] = useState(0)
   const [sample, setSample] = useState('Program | Service | v1.0')
@@ -80,9 +77,6 @@ export function FeatureSetupPanel({ setup, git, items }: { setup: FeatureSetup; 
     setDraft(next); setResult(null)
   }
   const preview = (template: string) => { const missing = missingValues(template, values); return missing.length ? `needs {${missing.join('}, {')}} — the sample title has no such part` : fillTitle(template, values) || '—' }
-  const nameOf = (email: string | undefined) => email ? people.find((person) => person.email === email)?.name ?? email : ''
-  const taskAssigneeName = nameOf(current?.task.assignedTo)
-  const story = current?.timeWritingStory ?? defaultTimeWritingStory
 
   async function save(event: React.FormEvent) {
     event.preventDefault()
@@ -125,7 +119,7 @@ export function FeatureSetupPanel({ setup, git, items }: { setup: FeatureSetup; 
       <summary><strong>All shared setups</strong> <span className="muted">({sharedRows.length} Epic{sharedRows.length === 1 ? '' : 's'}{git.connected ? '' : ', as last loaded in this browser'})</span></summary>
       {sharedRows.length > 0 && !sharedEditable && <p className="muted">{git.connected ? git.readOnly ? 'View only: your Git token can read but not save.' : 'Synthetic sample data is loaded: editing is disabled.' : 'Connect Git storage (Storage tab) to edit them here.'}</p>}
       {sharedEditable && missingCount > 0 && <div className="setup-fill-dod"><span className="warning-text">{missingCount} shared setup{missingCount === 1 ? ' has' : 's have'} no Feature DoD.</span><button type="button" className="ghost" disabled={busy} onClick={fillAll}>Fill missing DoDs with the default</button><small className="muted">Full Release DoD for setups with a PRD story, PU DoD otherwise; review, then Save to Git.</small></div>}
-      {sharedRows.length ? <div className="azure-table"><table className="setup-all-table"><thead><tr><th>Epic</th><th>Feature DoD</th><th>Optional User Stories</th><th>Time Writing story</th><th>Month Task</th><th /></tr></thead><tbody>
+      {sharedRows.length ? <div className="azure-table"><table className="setup-all-table"><thead><tr><th>Epic</th><th>Feature DoD</th><th>Optional User Stories</th><th>Month Task hours</th><th /></tr></thead><tbody>
         {sharedRows.map((row) => { const title = epics.find((item) => item.id === row.epicId)?.title || row.epicTitle, on = sharedEditable && listEditing.includes(row.epicId), changed = Boolean(listDraft) && listChanged(row.epicId); return <tr key={row.epicId} className={on ? 'setup-all-editing' : undefined}>
           <td><strong>#{row.epicId}</strong>{title && <small>{title}</small>}{changed && <small className="warning-text">Changed · not yet in Git</small>}{row.mineInstead && <small className="warning-text">Your own setup replaces it for you</small>}</td>
           {on ? <>
@@ -136,18 +130,13 @@ export function FeatureSetupPanel({ setup, git, items }: { setup: FeatureSetup; 
               <button type="button" className="ghost" aria-label="Move down" disabled={index === row.stories.length - 1} onClick={() => editRow(row.epicId, (entry) => { [entry.stories[index + 1], entry.stories[index]] = [entry.stories[index], entry.stories[index + 1]] })}>↓</button>
               <button type="button" className="text-button" aria-label={`Remove story ${index + 1}`} onClick={() => editRow(row.epicId, (entry) => { entry.stories.splice(index, 1) })}>✕</button>
             </li>)}</ol><button type="button" className="text-button" onClick={() => editRow(row.epicId, (entry) => { entry.stories.push({ title: '', description: '' }) })}>＋ Add User Story</button></td>
-            <td><input aria-label={`Epic #${row.epicId} Time Writing story`} value={row.timeWritingStory} maxLength={255} onChange={(event) => editRow(row.epicId, (entry) => { entry.timeWritingStory.title = event.target.value })} />
-              <label className="setup-all-estimate">Area Path<input aria-label={`Epic #${row.epicId} Time Writing story Area Path`} value={row.storyAreaPath} maxLength={4096} placeholder="The Feature's" onChange={(event) => editRow(row.epicId, (entry) => { entry.timeWritingStory.areaPath = event.target.value })} /></label>
-              <label className="setup-all-estimate">Iteration Path<input aria-label={`Epic #${row.epicId} Time Writing story Iteration Path`} value={row.storyIterationPath} maxLength={4096} placeholder="Project root" onChange={(event) => editRow(row.epicId, (entry) => { entry.timeWritingStory.iterationPath = event.target.value })} /></label></td>
-            <td><input aria-label={`Epic #${row.epicId} month Task`} value={row.task} maxLength={255} onChange={(event) => editRow(row.epicId, (entry) => { entry.task.title = event.target.value })} />
-              <label className="setup-all-estimate">Estimate (h)<input type="number" min="0" max="1000000" step="0.25" value={row.originalEstimate ?? ''} placeholder="None" onChange={(event) => editRow(row.epicId, (entry) => { const value = event.target.value.trim(); if (value === '') delete entry.task.originalEstimate; else entry.task.originalEstimate = Number(value) })} /></label></td>
-            <td><div className="button-row setup-all-actions"><button type="button" className="ghost" onClick={() => setListEditing((current) => current.filter((entry) => entry !== row.epicId))}>Done</button><button type="button" className="text-button" title="Open the full editor of this setup: also the Descriptions, Assigned to and Area / Iteration Paths of the stories and the Task" onClick={() => openShared(row.epicId)}>All fields…</button><button type="button" className="text-button danger-text" onClick={() => removeRow(row.epicId)}>Delete</button></div></td>
+            <td><label className="setup-all-estimate">Estimate (h)<input type="number" min="0" max="1000000" step="0.25" aria-label={`Epic #${row.epicId} month Task hours`} value={row.originalEstimate ?? ''} placeholder="None" onChange={(event) => editRow(row.epicId, (entry) => { const value = event.target.value.trim(); if (value === '') delete entry.task.originalEstimate; else entry.task.originalEstimate = Number(value) })} /></label></td>
+            <td><div className="button-row setup-all-actions"><button type="button" className="ghost" onClick={() => setListEditing((current) => current.filter((entry) => entry !== row.epicId))}>Done</button><button type="button" className="text-button" title="Open the full editor of this setup: also the Descriptions of the optional User Stories" onClick={() => openShared(row.epicId)}>All fields…</button><button type="button" className="text-button danger-text" onClick={() => removeRow(row.epicId)}>Delete</button></div></td>
           </> : <>
             <td>{row.featureDoD.trim() ? row.featureDoD : <><span className="warning-text">Missing</span><small>Default: {defaultDoDFor({ stories: row.stories.map((title) => ({ title, description: '' })) })}</small></>}</td>
             <td>{row.stories.length ? <ol className="setup-all-stories">{row.stories.map((story, index) => <li key={index}>{story || '(untitled)'}</li>)}</ol> : <span className="muted">None</span>}</td>
-            <td>{row.timeWritingStory}<small>Area: {row.storyAreaPath || 'the Feature’s'}</small><small>Iteration: {row.storyIterationPath || 'project root'}</small></td>
-            <td>{row.task}{row.originalEstimate != null && <small>{row.originalEstimate}h estimate</small>}</td>
-            <td><div className="button-row setup-all-actions">{sharedEditable && <button type="button" className="primary" disabled={busy} onClick={() => startRow(row.epicId)}>Edit</button>}<button type="button" className="ghost" title="Open the full editor of this setup: also the Descriptions, Assigned to and Area / Iteration Paths of the stories and the Task" onClick={() => openShared(row.epicId)}>{sharedEditable ? 'All fields…' : 'Open'}</button>{sharedEditable && <button type="button" className="text-button danger-text" disabled={busy} onClick={() => removeRow(row.epicId)}>Delete</button>}</div></td>
+            <td>{row.originalEstimate != null ? `${row.originalEstimate}h` : <span className="muted">None</span>}</td>
+            <td><div className="button-row setup-all-actions">{sharedEditable && <button type="button" className="primary" disabled={busy} onClick={() => startRow(row.epicId)}>Edit</button>}<button type="button" className="ghost" title="Open the full editor of this setup: also the Descriptions of the optional User Stories" onClick={() => openShared(row.epicId)}>{sharedEditable ? 'All fields…' : 'Open'}</button>{sharedEditable && <button type="button" className="text-button danger-text" disabled={busy} onClick={() => removeRow(row.epicId)}>Delete</button>}</div></td>
           </>}
         </tr> })}
       </tbody></table></div> : <p className="muted">{git.connected && !setup.loaded ? 'Loading from Git…' : 'No shared setup yet: every Epic uses the built-in milestones unless someone has a setup of their own.'}</p>}
@@ -172,7 +161,7 @@ export function FeatureSetupPanel({ setup, git, items }: { setup: FeatureSetup; 
     {!epics.length && !chosen ? <EmptyState title="No Epics loaded yet." detail="Fetch the Time Writing connection; its Epics appear here." /> : <>
       <div className="setup-summary">
         <label>Epic<select value={chosen} onChange={(event) => setEpicId(Number(event.target.value))}>{!epic && chosen > 0 && <option value={chosen}>#{chosen}{current?.epicTitle ? ` ${current.epicTitle}` : ' (not in the fetched data)'}</option>}{epics.map((item) => <option key={item.id} value={item.id}>{setupFor(file, item.id) ? '● ' : ''}#{item.id} {item.title}{mine && !setupFor(file, item.id) && setupFor(setup.shared, item.id) ? ' (shared)' : ''}</option>)}</select></label>
-        <div><span className="field-label">{current ? `${mine ? 'My' : 'Shared'} setup of this Epic` : 'No setup of this Epic here'}</span><p>{current ? <>{current.featureDoD.trim() ? <>DoD “{current.featureDoD.trim()}” · </> : <span className="warning-text">Feature DoD missing · </span>}{current.stories.length ? current.stories.map((entry) => entry.title || '(untitled)').join(' · ') : 'No optional User Stories'} · Time Writing story “{story.title}” · Task “{current.task.title}”</> : mine && sharedEntry ? 'The shared setup applies (see above).' : 'The built-in milestones apply (see above).'}</p></div>
+        <div><span className="field-label">{current ? `${mine ? 'My' : 'Shared'} setup of this Epic` : 'No setup of this Epic here'}</span><p>{current ? <>{current.featureDoD.trim() ? <>DoD “{current.featureDoD.trim()}” · </> : <span className="warning-text">Feature DoD missing · </span>}{current.stories.length ? current.stories.map((entry) => entry.title || '(untitled)').join(' · ') : 'No optional User Stories'} · Month Task {current.task.originalEstimate != null ? `${current.task.originalEstimate}h` : 'without default hours'}</> : mine && sharedEntry ? 'The shared setup applies (see above).' : 'The built-in milestones apply (see above).'}</p></div>
         <div className="button-row"><button type="button" className="primary" onClick={() => { setResult(null); if (editable && current && missingDoD(current)) change((entry) => { entry.featureDoD = defaultDoDFor(entry) }); setEditing(true) }}>{editable ? current ? 'Edit setup…' : 'Create setup…' : 'View setup…'}</button>{editable && current && <button type="button" className="text-button danger-text" disabled={busy || Boolean(draft)} onClick={() => void deleteCurrent()}>Delete setup</button>}</div>
       </div>
       {mine && editable && myEntry && !draft && <div className="button-row setup-share"><button type="button" className="ghost" disabled={busy || !myEntry.featureDoD.trim()} onClick={() => void enableForEveryone()} title={myEntry.featureDoD.trim() ? 'Copies your setup of this Epic into the shared setup' : 'Add the Feature DoD to your setup first'}>Enable for everyone</button><small className="muted">{sharedEntry ? 'Replaces the shared setup of this Epic.' : 'This Epic has no shared setup yet.'}</small></div>}
@@ -200,26 +189,9 @@ export function FeatureSetupPanel({ setup, git, items }: { setup: FeatureSetup; 
           <div className="button-row"><button type="button" className="ghost" aria-label="Move up" disabled={index === 0} onClick={() => change((entry) => { [entry.stories[index - 1], entry.stories[index]] = [entry.stories[index], entry.stories[index - 1]] })}>↑</button><button type="button" className="ghost" aria-label="Move down" disabled={index === current.stories.length - 1} onClick={() => change((entry) => { [entry.stories[index + 1], entry.stories[index]] = [entry.stories[index], entry.stories[index + 1]] })}>↓</button><button type="button" className="text-button" onClick={() => change((entry) => { entry.stories.splice(index, 1) })}>Remove</button></div>
         </div>)}
         <button type="button" className="ghost" onClick={() => change((entry) => { entry.stories.push({ title: '', description: '' }) })}>＋ Add optional User Story</button>
-        <h3>Time Writing User Story <Info>Always created under the Feature; it holds the month Task. Keep “Time Writing” in the title so My Activities recognises it before its first Task exists. Its Area Path and Iteration Path are set here: empty Iteration Path = the project root, never the PI or Sprint chosen when creating (the story is not tied to a PI, Sprint or year); empty Area Path = the Feature's.</Info></h3>
+        <h3>Time Writing <Info>The same for every Epic (BKL-28): the person's month Task “&lt;Month&gt; | &lt;Feature&gt;” under “&lt;Feature&gt; - Time Writing” (their own Time Writing story first), assigned to the person, in the Feature's Area Path and the project root iteration; an existing month Task of theirs is reused. Only the default planned hours are set per Epic.</Info></h3>
         <div className="form-row">
-          <label>Title<input value={story.title} maxLength={255} onChange={(event) => change((entry) => { entry.timeWritingStory ??= { ...defaultTimeWritingStory }; entry.timeWritingStory.title = event.target.value })} /><small className="muted">→ {preview(story.title)}</small></label>
-          <label>Assigned to<PersonPicker label="Time Writing story assigned to" value={nameOf(story.assignedTo)} people={people.map((person) => person.name)} onChange={(name) => change((entry) => { entry.timeWritingStory ??= { ...defaultTimeWritingStory }; entry.timeWritingStory.assignedTo = people.find((person) => person.name === name)?.email ?? '' })} meLabel="The person the Feature is assigned to" /></label>
-        </div>
-        <label>Description<textarea rows={2} value={story.description} onChange={(event) => change((entry) => { entry.timeWritingStory ??= { ...defaultTimeWritingStory }; entry.timeWritingStory.description = event.target.value })} /></label>
-        <div className="form-row">
-          <label>Area Path<input value={story.areaPath} placeholder="Empty: the Feature's Area Path, e.g. QMS\\Quality Engineering" onChange={(event) => change((entry) => { entry.timeWritingStory ??= { ...defaultTimeWritingStory }; entry.timeWritingStory.areaPath = event.target.value })} /></label>
-          <label>Iteration Path<input value={story.iterationPath} placeholder="Empty: the project root, e.g. QMS (no PI, Sprint or year)" onChange={(event) => change((entry) => { entry.timeWritingStory ??= { ...defaultTimeWritingStory }; entry.timeWritingStory.iterationPath = event.target.value })} /></label>
-        </div>
-        <h3>Time Writing Task defaults <Info>Always created under the Time Writing User Story above.</Info></h3>
-        <div className="form-row">
-          <label>Title<input value={current?.task.title ?? '{month} | {feature}'} maxLength={255} onChange={(event) => change((entry) => { entry.task.title = event.target.value })} /><small className="muted">→ {preview(current?.task.title ?? '{month} | {feature}')}</small></label>
-          <label>Original Estimate (hours)<input type="number" min="0" max="1000000" step="0.25" value={current?.task.originalEstimate ?? ''} placeholder="None" onChange={(event) => change((entry) => { const value = event.target.value.trim(); if (value === '') delete entry.task.originalEstimate; else if (Number.isFinite(Number(value)) && Number(value) >= 0) entry.task.originalEstimate = Number(value) })} /></label>
-        </div>
-        <label>Description<textarea rows={2} value={current?.task.description ?? ''} onChange={(event) => change((entry) => { entry.task.description = event.target.value })} /></label>
-        <div className="form-row">
-          <label>Assigned to<PersonPicker label="Task assigned to" value={taskAssigneeName} people={people.map((person) => person.name)} onChange={(name) => change((entry) => { entry.task.assignedTo = people.find((person) => person.name === name)?.email ?? '' })} meLabel="The person the Feature is assigned to" /></label>
-          <label>Area Path<input value={current?.task.areaPath ?? ''} placeholder="The Time Writing story's Area Path" onChange={(event) => change((entry) => { entry.task.areaPath = event.target.value })} /></label>
-          <label>Iteration Path<input value={current?.task.iterationPath ?? ''} placeholder="The project (no Sprint)" onChange={(event) => change((entry) => { entry.task.iterationPath = event.target.value })} /></label>
+          <label>Default Original Estimate (hours) of a new month Task<input type="number" min="0" max="1000000" step="0.25" value={current?.task.originalEstimate ?? ''} placeholder="None" onChange={(event) => change((entry) => { const value = event.target.value.trim(); if (value === '') delete entry.task.originalEstimate; else if (Number.isFinite(Number(value)) && Number(value) >= 0) entry.task.originalEstimate = Number(value) })} /><small className="muted">Hours typed when creating win; an existing Task keeps its hours.</small></label>
         </div>
         {current && <button type="button" className="text-button" onClick={() => { const next = structuredClone(file); next.epics = next.epics.filter((entry) => entry.epicId !== chosen); setDraft(next); setResult(null) }}>{mine ? `Delete my setup of this Epic (${sharedEntry ? 'use the shared one' : 'back to PU / Full Release'})` : 'Delete the shared setup of this Epic (back to PU / Full Release)'}</button>}
       </fieldset>

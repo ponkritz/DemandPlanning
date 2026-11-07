@@ -57,10 +57,12 @@ import { DesktopDownload } from './components/DesktopDownload'
 import { exportStateJson } from './download'
 import { BuildStatus } from './components/BuildStatus'
 import { backlogViews, loadBacklogTab, otherMenuViews, saveBacklogTab, timeWritingView } from './backlogViews'
-import { mergeAzureWorkItems } from './azureDevOps'
+import { detectWorkEmail, mergeAzureWorkItems } from './azureDevOps'
 import { formatDateTime, todayIso } from './format'
 import { HeaderSlot } from './headerSlot'
 import { SetupGuide } from './components/SetupGuide'
+import { GitSyncBar } from './components/GitStorage'
+import { defaultGitRepository, normalizeSetupLinks, type SetupLinks } from './gitStorage'
 import { guideKey, requiredOpen, setupSteps } from './setupGuide'
 import { azureResources, capacityContext } from './capacity'
 import { hasServerPat, serverKey } from './azureCredentials'
@@ -242,6 +244,9 @@ export default function App() {
     // DP's data sets count too: without them the DP releases and dates are incomplete.
     dataSets: dataSets.map((set) => { const profile = profileForDataSet(set.name, azure.connectionProfiles); return { name: set.name, connected: Boolean(profile && hasServerPat(serverKey(profile))) } }),
   })
+  // NAV-40: where each token is created — the admin's links from Git, else the defaults (GitHub's and Azure DevOps' token pages).
+  const linkDefaults: SetupLinks = { github: 'https://github.com/settings/personal-access-tokens/new', ...(azure.config?.organization ? { azure: `https://dev.azure.com/${encodeURIComponent(azure.config.organization)}/_usersSettings/tokens` } : {}) }
+  const setupLinks: SetupLinks = { ...linkDefaults, ...normalizeSetupLinks(store.state.setupLinks) }
   const openSteps = requiredOpen(steps)
   const [guideOpen, setGuideOpen] = useState(false)
   const [guideAuto, setGuideAuto] = useState(() => { try { return localStorage.getItem(guideKey) !== 'dismissed' } catch { return true } })
@@ -297,7 +302,7 @@ export default function App() {
       {access.viewingAs && <div className="view-as-banner" role="status"><span>👁 Viewing as <strong>{viewAsLabel(access.viewingAs)}</strong>{access.viewingAs.kind === 'role' ? '' : access.rights.roles.length ? ` (${access.rights.roles.join(', ')})` : ' (default role)'} — read only: nothing is saved to Azure DevOps or Git.</span><button type="button" className="ghost" onClick={() => setViewAsOpen(true)}>Change</button><button type="button" className="primary" onClick={() => setViewAs(null)}>Exit View as</button></div>}
       {viewAsOpen && <ViewAsDialog current={access.viewingAs} people={viewAsPeople(azure.items, access.policy)} onStart={(next) => { setViewAs(next); setViewAsOpen(false); setPage('mydash') }} onClose={() => setViewAsOpen(false)} />}
       <DataNotices azure={azure} onOpenConnection={openConnection} />
-      {guideOpen && <SetupGuide steps={steps} busy={azure.busy} onClose={() => setGuideOpen(false)} onDismiss={dismissGuide} onOpenTab={(tab, section) => { openSettings(tab, section); setGuideOpen(false) }} onFetch={() => void azure.refresh()} />}
+      {guideOpen && <SetupGuide steps={steps} busy={azure.busy} links={setupLinks} linkDefaults={linkDefaults} editLinks={access.can('settings.manage') && git.connected && !git.readOnly && !azure.isSample ? { links: store.state.setupLinks ?? {}, onChange: (links) => store.update((draft) => { draft.setupLinks = links; return draft }), saveBar: <GitSyncBar git={git} /> } : undefined} inputs={{ connectGit: (token) => git.connect({ ...defaultGitRepository, ...git.config }, token, true), saveEmail: (email) => { azure.setCreatorEmail(email) }, savePat: (token) => { azure.rememberPat(token); azure.reloadConnectionProfiles() }, detectEmail: () => azure.config ? detectWorkEmail(azure.config, azure.pat) : Promise.reject(new Error('Set up the Time Writing connection first.')), gitMessage: git.status === 'error' ? git.message : undefined }} onClose={() => setGuideOpen(false)} onDismiss={dismissGuide} onOpenTab={(tab, section) => { openSettings(tab, section); setGuideOpen(false) }} onFetch={() => void azure.refresh()} />}
       {store.cache.status === 'error' && <Notice tone="error"><p>{store.cache.message}</p><div className="button-row"><button className="ghost" onClick={() => exportStateJson(store.state)}>Export JSON backup now</button><button className="primary" onClick={store.retrySave}>Retry browser save</button></div></Notice>}
       {store.connection.mode !== 'sharepoint' && store.connection.status === 'error' && <Notice tone="error">{store.connection.message}</Notice>}
       {page === 'mydash' && <MyDashboardPage month={month} azure={reportAzure} store={store} my={my} navigate={setPage} views={personalViews} canSetDefault={access.can('settings.manage')} />}
@@ -306,11 +311,11 @@ export default function App() {
       {page === 'pireview' && <PiReviewPage />}
       {page === 'brite' && <BritePage />}
       {page === 'qemapping' && <QeMappingPage git={git} store={qeMapping} resources={qeResources} />}
-      {page === 'mywork' && <MyWorkPage azure={azure} store={store} my={my} onOpenActivities={() => setPage('activities')} assign={assign} featureSetup={featureSetup.setups} />}
+      {page === 'mywork' && <MyWorkPage azure={azure} store={store} my={my} month={month} onOpenActivities={() => setPage('activities')} assign={assign} featureSetup={featureSetup.setups} />}
       {page === 'bulk' && <SprintCheckPage azure={azure} store={store} my={my} />}
       {page === 'capactual' && <CapacityActualPage azure={reportAzure} store={store} month={month} />}
       {page === 'planover' && <PlanningOverviewPage azure={reportAzure} store={store} month={month} onOpenPack={() => openSettings('pack')} />}
-      {page === 'activities' && <MyActivitiesPage azure={azure} store={store} my={my} month={month} assign={assign} onOpen={setPage} />}
+      {page === 'activities' && <MyActivitiesPage azure={azure} store={store} my={my} month={month} assign={assign} featureSetup={featureSetup.setups} onOpen={setPage} />}
       {page === 'baselines' && <BaselinesPage azure={azure} month={month} store={store} git={git} onOpenSettings={() => openSettings('storage', 'git')} canEdit={access.can('baselines.edit')} />}
       {page === 'windchill' && (windchillView ? <WindchillPage view={windchillView} windchill={windchill} git={git} gitNote={git.snapshotNotes[`wc:${windchillView.id}`]} month={month} board={{ azure, stream: windchillStreamExports(windchillViews).find((entry) => entry.view?.id === windchillView.id)?.stream.name ?? windchillView.name, threshold: normalizeReleaseSourceSettings(store.state.releaseSourceSettings).matchThreshold ?? defaultMatchThreshold, assign, featureSetup: featureSetup.setups }} /> : access.can('windchill.import') ? <WindchillExportImport key={windchillFor} stream={windchillFor} windchill={windchill} git={git} onImported={(id) => openWindchill(id)} /> : <Notice tone="info">Your role does not include importing Windchill exports. Open an export from the menu; an Admin can change this in Settings → Access.</Notice>)}
       {page === 'health' && <BacklogHealthPage azure={azure} store={store} />}

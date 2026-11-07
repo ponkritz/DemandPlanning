@@ -35,7 +35,7 @@ This document lists every software component of the system: the in-house source 
 | SprintCheckPage | `src/pages/SprintCheckPage.tsx` | Sprint check (formerly Bulk actions): move my User Stories from past Sprints to the current PI + Sprint, and the state checks of my Features and User Stories. | ATM, CON |
 | DashboardPage | `src/pages/DashboardPage.tsx` | Dashboard: demand vs capacity for a period and filters — utilization, overload, rebalancing, trends, Epic mix, insights and releases. | OVR, CAP |
 | DocsPage | `src/pages/DocsPage.tsx` | Documentation page: reads the bundled project documents in-app, remembers the chosen one, keeps document and anchor links in the page. | DOC |
-| MyActivitiesPage | `src/pages/MyActivitiesPage.tsx` | My Activities (Testing, Admin only): the person's month — this month's activities with planned and actual hours, Features still to add, a new activity under a stream and Feature, progress and the deadline. | ACT, ATM, MON |
+| MyActivitiesPage | `src/pages/MyActivitiesPage.tsx` | My Activities (My Work): the person's month — this month's activities with planned and actual hours, Features still to add, a new activity under a stream and Feature (a new Feature through FeatureEditor), progress and the deadline. | ACT, ATM, MON |
 | PlanningOverviewPage | `src/pages/PlanningOverviewPage.tsx` | Planning Overview (Testing, Admin only): filters, four tiles, workload and capacity chart, exception queue, delivery health per Epic. | OVW |
 | CapacityActualPage | `src/pages/CapacityActualPage.tsx` | Capacity vs Actual (Testing, Admin only): filters, four tiles, 12-month chart, by person, hours by Epic. | CVA |
 | PeriodControls | `src/components/PeriodControls.tsx` | Selected-month Plan/Actual deadlines, independent modes, audited explicit save and shared/local persistence status. | SET, MON, GIT |
@@ -74,11 +74,11 @@ This document lists every software component of the system: the in-house source 
 | DpBoardColumn | `src/components/DpBoardColumn.tsx` | DP table and Windchill releases cell showing the matching QMS-0025 Feature/User Story, or Create Feature when nothing matches. | QV |
 | DpMonthCounts | `src/components/DpMonthCounts.tsx` | Table of a month's DP Supported Releases with milestones passed (DT, SFV, PRD, RPE) and dates. | QV, OVR |
 | ErrorBoundary | `src/components/ErrorBoundary.tsx` | Catches render errors in a view and shows what failed with a way back instead of a blank app. | UI |
-| FeatureEditor | `src/components/FeatureEditor.tsx` | Modal to add a Feature under an Epic or complete a Feature's children, shared by Backlogs and Assigned to Me; the Parent Epic starts blank. | ATM, CON, BKL |
+| FeatureEditor | `src/components/FeatureEditor.tsx` | The one New Feature form (BKL-26): add a Feature under an Epic or complete a Feature's children, used by Backlogs, Assigned to Me, Release Details and My Activities; the Parent Epic starts blank. | ATM, CON, BKL, ACT |
 | JobsIndicator | `src/components/JobsIndicator.tsx` | Top-bar list of the background jobs: running count, results, Clear finished; asks before leaving the page while one runs. | NAV |
 | MonthlyPackPanel | `src/components/MonthlyPackPanel.tsx` | Pulse Check → Monthly pack: the two slides as boxes with generated lines and the month's text, Save to Git, copy, Download .pptx. | PCK |
 | MonthlyPackSetupPanel | `src/components/MonthlyPackSetupPanel.tsx` | Settings → Monthly pack: slide lines (streams, Epics) and KPI rows (Epic, metric), saved to Git. | PCK |
-| FeatureSetupPanel | `src/components/FeatureSetupPanel.tsx` | Settings → Feature setup: per-Epic optional stories, Time Writing story and month Task defaults, shared and personal layers. | CON |
+| FeatureSetupPanel | `src/components/FeatureSetupPanel.tsx` | Settings → Feature setup: per-Epic optional stories, title fields, Feature DoD and the month Task's default hours, shared and personal layers. | CON |
 | GapsPanel | `src/components/GapsPanel.tsx` | Lists items the page did not pick up for the month and why. | MON, TWN |
 | GitStorage | `src/components/GitStorage.tsx` | Settings panel for the Git data file location and token, plus a Git sync bar. | GIT |
 | Markdown | `src/components/Markdown.tsx` | Renders parsed Markdown blocks as React elements; internal links via callback, external https in new tab. | DOC |
@@ -87,7 +87,7 @@ This document lists every software component of the system: the in-house source 
 | PersonPicker | `src/components/PersonPicker.tsx` | Typeable person list with "me" first and keyboard selection. | ATM, UI |
 | QueryView | `src/components/QueryView.tsx` | Read-only query results view: summary strip, query columns, sorting, filters, search and CSV export. | QV |
 | WorkItemEditor | `src/components/WorkItemEditor.tsx` | Edit form for a Feature, User Story or Task (Backlogs, Assigned to Me): fresh read, changed fields only, locks, Discussion; saves as a background job. | BKL, ATM |
-| StoryEditor | `src/components/StoryEditor.tsx` | New User Story form under a Feature (Backlogs, Assigned to Me), laid out like New Feature with the Azure DevOps story fields; saves as a background job. | BKL, ATM |
+| StoryEditor | `src/components/StoryEditor.tsx` | New User Story form under a Feature (Backlogs, Assigned to Me), laid out like New Feature with the Azure DevOps story fields and an optional comment; adds the story with addUserStory (BKL-27), as a background job. | BKL, ATM |
 | ReleaseFeatureEditor | `src/components/ReleaseFeatureEditor.tsx` | Create Feature button from Release Details, pre-filling the default Feature form from the release. | QV |
 | ReleaseQuadrants | `src/components/ReleaseQuadrants.tsx` | Releases summary lines, the Supported summary next to them (DP Supported Releases, S&S IT export releases of the month), and a 2×2 quadrant per stream with documents approved in the month and totals. | OVR, QV |
 | ReleaseView | `src/components/ReleaseView.tsx` | Release source view: releases derived from document paths or Titles (per stream rule), with the Time Writing Feature match and hours and the QMS-0025 match column with Create Feature (QV-46). | QV |
@@ -98,7 +98,7 @@ This document lists every software component of the system: the in-house source 
 | TableDefaultsPanel | `src/components/TableDefaultsPanel.tsx` | Settings → Table defaults: the shared, audited design default of every table (UI-12). | UI, SET |
 | ScopeSwitch | `src/components/ScopeSwitch.tsx` | Team / Individual toggle with person picker, in the header or page top. | MON, OVR |
 | SectionTabs | `src/components/SectionTabs.tsx` | The section row of a Settings page: one section at a time, the last one remembered per page (SET-14). | SET, NAV |
-| SetupGuide | `src/components/SetupGuide.tsx` | "Get started" pop-up listing setup steps with live status and buttons to the right place. | NAV |
+| SetupGuide | `src/components/SetupGuide.tsx` | "Get started" pop-up listing setup steps with live status, fields to enter the Git token, PAT and work email right there (NAV-38), the email detected from the token (NAV-39) and buttons to the right place. | NAV |
 | SharedTimePanel | `src/components/SharedTimePanel.tsx` | Settings → Capacity: map Epics/Features as regional holidays or common activities applied to people in scope. | CAP, SET |
 | TeamFilterBar | `src/components/TeamFilterBar.tsx` | Region switch and role multi-select filter for team views. | OVR |
 | WindchillReleasesPanel | `src/components/WindchillReleasesPanel.tsx` | Lists a Windchill export's unique releases from Location or document names (source and columns chosen), filtered to the header month, sortable, with draggable widths and a QMS-0025 match column with Create Feature; the unique locations, CSV exports and Save locations to Git. | CON, QV |

@@ -186,9 +186,10 @@ export function assignablePeople(items: AzureWorkItem[]) {
 // State checks over the person's Features and User Stories (work under the absence Epic left out):
 //  - a Feature whose User Stories are all Closed should be Closed too;
 //  - a User Story whose Tasks are all Closed should be Closed too;
-//  - an Active Feature should have at least one Active User Story.
+//  - an Active Feature should have at least one Active User Story;
+//  - a New Feature with an Active User Story should be Active (ATM-28).
 // Only items with children of that kind are judged; Removed children are ignored.
-export type StateCheckKind = 'close-feature' | 'close-story' | 'feature-needs-active-story'
+export type StateCheckKind = 'close-feature' | 'close-story' | 'feature-needs-active-story' | 'activate-feature'
 export interface StateCheck { kind: StateCheckKind; item: AzureWorkItem; children: AzureWorkItem[] }
 const stateIs = (item: Pick<AzureWorkItem, 'state'>, state: string) => item.state.trim().toLowerCase() === state
 export function stateChecks(items: AzureWorkItem[], me: Me, absenceEpicId?: number): StateCheck[] {
@@ -202,6 +203,7 @@ export function stateChecks(items: AzureWorkItem[], me: Me, absenceEpicId?: numb
       const stories = (children.get(item.id) ?? []).filter((child) => child.workItemType === 'User Story')
       if (stories.length && stories.every((story) => stateIs(story, 'closed'))) checks.push({ kind: 'close-feature', item, children: stories })
       else if (stateIs(item, 'active') && !stories.some((story) => stateIs(story, 'active'))) checks.push({ kind: 'feature-needs-active-story', item, children: stories })
+      else if (stateIs(item, 'new') && stories.some((story) => stateIs(story, 'active'))) checks.push({ kind: 'activate-feature', item, children: stories.filter((story) => stateIs(story, 'active')) })
     } else if (item.workItemType === 'User Story') {
       const tasks = (children.get(item.id) ?? []).filter((child) => child.workItemType === 'Task')
       if (tasks.length && tasks.every((task) => stateIs(task, 'closed'))) checks.push({ kind: 'close-story', item, children: tasks })
@@ -212,9 +214,13 @@ export function stateChecks(items: AzureWorkItem[], me: Me, absenceEpicId?: numb
 
 // What may be done to an item from Assigned to Me: a New Feature or User Story is set to Active; only an Active one
 // is Closed (nothing in any other state). Tasks and Bugs are closed directly.
+// ATM-28: a Feature becomes Active only when one of its User Stories (any, Removed ones aside) is Active.
+export const hasActiveStory = (items: Pick<AzureWorkItem, 'parentId' | 'workItemType' | 'state'>[], featureId: number) => items.some((entry) => entry.parentId === featureId && entry.workItemType === 'User Story' && stateIs(entry, 'active'))
 export const stagedTypes = ['Feature', 'User Story'] as const
-export function nextStateFor(item: Pick<AzureWorkItem, 'workItemType' | 'state'>): { state: 'Active' | 'Closed'; label: string } | null {
+// items given: a New Feature is offered Active only when one of its User Stories is Active (ATM-28).
+export function nextStateFor(item: Pick<AzureWorkItem, 'workItemType' | 'state'> & { id?: number }, items?: Pick<AzureWorkItem, 'parentId' | 'workItemType' | 'state'>[]): { state: 'Active' | 'Closed'; label: string } | null {
   if (!(stagedTypes as readonly string[]).includes(item.workItemType)) return { state: 'Closed', label: `Close ${item.workItemType}` }
+  if (stateIs(item, 'new') && item.workItemType === 'Feature' && items && item.id != null && !hasActiveStory(items, item.id)) return null
   if (stateIs(item, 'new')) return { state: 'Active', label: `Set ${item.workItemType} to Active` }
   if (stateIs(item, 'active')) return { state: 'Closed', label: `Close ${item.workItemType}` }
   return null

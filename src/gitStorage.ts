@@ -1,9 +1,9 @@
 import { assertNotViewingAs } from './viewAs.ts'
 import type { AppState } from './domain'
-import type { PeriodControl } from './domain'
 import { normalizeRules, normalizeScopes, type BaselineRule, type ReleaseScope } from './baseline.ts'
 import { normalizeCapacitySettings, normalizeProfiles, type CapacitySettings, type ResourceProfile } from './capacity.ts'
 import { normalizePeriods } from './planningLock.ts'
+import type { PeriodControl } from './domain.ts'
 
 // Planning data kept in a private GitHub repository: estimation rules, release scopes, the resource
 // region/role mapping and the capacity settings (absence Epic, hours per day, thresholds, holidays and common
@@ -11,7 +11,19 @@ import { normalizePeriods } from './planningLock.ts'
 // The token stays in this browser (like the Azure PAT) and is never written to app data or exports.
 export interface GitConfig { owner: string; repo: string; branch: string; path: string }
 export type StoredCapacity = Omit<CapacitySettings, 'profiles'>
-export interface PlanningData { schema: 1; baselineRules: BaselineRule[]; releaseScopes: ReleaseScope[]; resourceProfiles: Record<string, ResourceProfile>; capacitySettings?: StoredCapacity; periods?: PeriodControl[] }
+export interface PlanningData { schema: 1; baselineRules: BaselineRule[]; releaseScopes: ReleaseScope[]; resourceProfiles: Record<string, ResourceProfile>; capacitySettings?: StoredCapacity; setupLinks?: SetupLinks; periods?: PeriodControl[] }
+// NAV-40: where each token is created (GitHub, Azure DevOps, TFS APAC), linked from Get started; https only.
+export type SetupLinks = { github?: string; azure?: string; tfs?: string }
+export function normalizeSetupLinks(value: unknown): SetupLinks | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const links: SetupLinks = {}
+  for (const key of ['github', 'azure', 'tfs'] as const) {
+    const text = (value as Record<string, unknown>)[key]
+    if (typeof text !== 'string' || text.length > 2000) continue
+    try { const url = new URL(text.trim()); if (url.protocol === 'https:') links[key] = url.toString() } catch { /* not a link: dropped */ }
+  }
+  return Object.keys(links).length ? links : undefined
+}
 
 export const defaultGitPath = 'planning-data.json'
 // The team's data repository, prefilled in the Connect Git storage form (GIT-13): a user adds only the token.
@@ -38,12 +50,12 @@ export function saveGitToken(token: string, storage: Pick<Storage, 'setItem'> = 
 export function forgetGitStorage(storage: Pick<Storage, 'removeItem'> = localStorage) { storage.removeItem(tokenKey); storage.removeItem(configKey) }
 
 // Capacity settings are written once they exist (an older file without them loads as before and keeps this browser's).
-export function planningData(state: Pick<AppState, 'baselineRules' | 'releaseScopes' | 'resourceProfiles' | 'capacitySettings' | 'periods'>): PlanningData {
+export function planningData(state: Pick<AppState, 'baselineRules' | 'releaseScopes' | 'resourceProfiles' | 'capacitySettings' | 'periods'> & { setupLinks?: unknown }): PlanningData {
   const profiles = normalizeProfiles(state.resourceProfiles)
   const capacity = state.capacitySettings == null ? undefined : normalizeCapacitySettings(state.capacitySettings)
   if (capacity?.sharedTime) capacity.sharedTime = [...capacity.sharedTime].sort((a, b) => a.id - b.id)
   const periods = normalizePeriods(state.periods ?? [])
-  return { schema: 1, baselineRules: normalizeRules(state.baselineRules), releaseScopes: normalizeScopes(state.releaseScopes), resourceProfiles: Object.fromEntries(Object.keys(profiles).sort().map((key) => [key, profiles[key]])), ...(capacity ? { capacitySettings: capacity } : {}), ...(periods.length ? { periods } : {}) }
+  return { schema: 1, baselineRules: normalizeRules(state.baselineRules), releaseScopes: normalizeScopes(state.releaseScopes), resourceProfiles: Object.fromEntries(Object.keys(profiles).sort().map((key) => [key, profiles[key]])), ...(capacity ? { capacitySettings: capacity } : {}), ...(normalizeSetupLinks(state.setupLinks) ? { setupLinks: normalizeSetupLinks(state.setupLinks) } : {}), ...(periods.length ? { periods } : {}) }
 }
 // Stable, diff-friendly text: the same data always serialises to the same file.
 export const serializePlanning = (data: PlanningData) => `${JSON.stringify(data, null, 2)}\n`
@@ -54,7 +66,7 @@ export function parsePlanning(text: string): PlanningData {
   if (!raw || typeof raw !== 'object' || (raw as { schema?: unknown }).schema !== 1) throw new Error('The Git data file is not a Demand Planning data file (schema 1). Nothing was loaded.')
   const input = raw as Record<string, unknown>
   const rawPeriods = input.periods == null ? [] : input.periods
-  const data = planningData({ baselineRules: (Array.isArray(input.baselineRules) ? input.baselineRules : []) as BaselineRule[], releaseScopes: input.releaseScopes as ReleaseScope[], resourceProfiles: input.resourceProfiles as Record<string, ResourceProfile>, capacitySettings: input.capacitySettings == null ? undefined : input.capacitySettings as AppState['capacitySettings'], periods: rawPeriods as PeriodControl[] })
+  const data = planningData({ baselineRules: (Array.isArray(input.baselineRules) ? input.baselineRules : []) as BaselineRule[], releaseScopes: input.releaseScopes as ReleaseScope[], resourceProfiles: input.resourceProfiles as Record<string, ResourceProfile>, capacitySettings: input.capacitySettings == null ? undefined : input.capacitySettings as AppState['capacitySettings'], setupLinks: input.setupLinks, periods: rawPeriods as PeriodControl[] })
   return input.periods != null ? { ...data, periods: normalizePeriods(rawPeriods) } : data
 }
 

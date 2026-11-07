@@ -6,7 +6,8 @@ import { actualsLockedNow, planningLockedNow } from '../planningLock'
 import { isTimeWritingStory } from '../azureInsights'
 import { Modal } from './ui'
 import { PersonPicker } from './PersonPicker'
-import { assignablePeople } from '../myWork'
+import { assignablePeople, hasActiveStory } from '../myWork'
+import { activateFeatureOf } from '../closeChain'
 import { runInBackground } from '../backgroundJobs'
 import { formatDateTime } from '../format'
 import { usePlanningClock } from '../usePlanningClock'
@@ -98,6 +99,8 @@ export function WorkItemEditor({ item: opened, items, config, savedPat = '', me,
     if (title.trim() !== item.title.trim()) edit.title = title.trim()
     if (assignee && assignee !== (item.assignedToEmail ?? '')) edit.assignedTo = assignee
     if (state !== item.state) edit.state = state
+    // ATM-28: a Feature becomes Active only when one of its User Stories is Active.
+    if (type === 'Feature' && edit.state?.trim().toLowerCase() === 'active' && !hasActiveStory(items, opened.id)) return 'A Feature becomes Active only when one of its User Stories is Active: set a User Story to Active first.'
     if (iterationPath !== item.iterationPath) edit.iterationPath = iterationPath
     const parts = type === 'Feature' ? splitDoD(loaded.description) : { dod: '', rest: loaded.description }
     if (type === 'Feature' && (dod.trim() !== parts.dod || description.trim() !== parts.rest)) { if (!dod.trim()) return 'Enter the Feature DoD (Definition of Done): a Feature keeps it.'; edit.description = joinDoD(dod, description) }
@@ -142,8 +145,11 @@ export function WorkItemEditor({ item: opened, items, config, savedPat = '', me,
           progress(`Moving User Story ${index + 1} of ${move.length}…`)
           try { moved.push(await updateAzureWorkItem(config, token, story.id, { iterationPath: storySprint })) } catch (failure) { failed.push(`#${story.id}: ${failure instanceof Error ? failure.message : 'failed'}`) }
         }
-        onUpdated?.([updated, ...moved])
-        const text = `#${opened.id} saved and verified${moved.length ? `; ${moved.length} User Stor${moved.length === 1 ? 'y' : 'ies'} moved to ${storySprint.split('\\').pop()}` : ''}.${failed.length ? ` ${failed.length} not moved — ${failed.join(' · ')}` : ''}`
+        // ATM-28: a User Story set to Active makes its New Feature Active.
+        let activated: AzureWorkItem | null = null
+        if (edit.state) { try { activated = await activateFeatureOf(config, token, items, updated) } catch (failure) { failed.push(`Feature not set to Active: ${failure instanceof Error ? failure.message : 'failed'}`) } }
+        onUpdated?.([updated, ...moved, ...(activated ? [activated] : [])])
+        const text = `#${opened.id} saved and verified${moved.length ? `; ${moved.length} User Stor${moved.length === 1 ? 'y' : 'ies'} moved to ${storySprint.split('\\').pop()}` : ''}${activated ? `; Feature #${activated.id} is now Active` : ''}.${failed.length ? ` ${failed.length} not done — ${failed.join(' · ')}` : ''}`
         onDone?.(text, updated)
         return { text, failed: failed.length > 0 }
       } catch (failure) {

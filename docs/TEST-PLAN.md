@@ -319,6 +319,12 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-NAV-33 Get started pop-up** — Req NAV-33 — L1 `setup-guide.test.mjs` ("release streams: DP's Pedestal and DHFI data sets count, and the missing ones are named"; "a first-time user: Git first, the rest waits for the step it depends on"; "partly set up: Git and the connection done, the PAT is next, then Fetch"; "fully set up: nothing required left; region and streams follow the facts and who may change them"); browser check: a new browser without data opens the pop-up by itself with "Connect the shared Git storage" as the next step and the PAT and fetch steps "After the step above"; "Open Storage settings" closes it and shows Settings → Storage; the top bar shows "Setup · 0/4" and reopens it; a reload opens it again; after "Don't show again automatically" a reload does not, the Setup button still does; at 390 × 844 nothing overflows. **UAT**
 
+**TC-NAV-38 Enter the setup values in the Get started pop-up** — Req NAV-38, NAV-33 — E2E `shell.e2e.mjs` ("TC-NAV-33: a new browser gets the Get started pop-up; dismissing it keeps it closed after a reload": the GitHub token and Azure DevOps PAT fields (hidden input) and Your work email, marked autocomplete "email"; saving the email stores it in this browser and the field goes away) — **UAT**; browser check: in a new browser, paste the GitHub token in step 1 and press Connect & load — the shared setup loads and the step shows Done; click the work email field — the browser offers your saved email; choose it, then enter the Azure DevOps PAT in step 3 — both turn Done without opening Settings; a wrong token shows the refusal in the step.
+
+**TC-NAV-39 Email read from the token; order of the setup steps** — Req NAV-39, NAV-33 — L1 `setup-guide.test.mjs` ("a first-time user: Git first, then the connection and token, then the email (read from the token), then Fetch", "NAV-39: the work email is read from the token owner's work items (@Me): Assigned To first, then Created By, then Changed By"); E2E `shell.e2e.mjs` ("TC-NAV-33: a new browser gets the Get started pop-up; dismissing it keeps it closed after a reload": the steps' order, the email waits for the token, Detect from my token after Save PAT) — **UAT**; browser check with a real token: in a new browser, connect Git, save your PAT, press Detect from my token — your name and work email appear with where they were read (Assigned To / Created By / Changed By); Save email; with a token of someone without any work item the step says the email could not be read.
+
+**TC-NAV-40 A short Get started with Info and token links** — Req NAV-40, NAV-33 — L1 `setup-guide.test.mjs` ("NAV-40: the token links are https only, shared in the planning data and kept through a round trip"); E2E `shell.e2e.mjs` ("TC-NAV-33: a new browser gets the Get started pop-up; dismissing it keeps it closed after a reload": the short titles incl. TFS APAC settings [DP/CP/IOCC/Content], no how-to text on the page, the GitHub and Azure DevOps token links) — **UAT**; browser check: hover Info on a step — why and how show; as an Admin with Git open Token links (admin), set the TFS APAC link and save to Git — after reload in another browser step 6 shows Create a TFS APAC PAT with that link; an http link is not kept.
+
 **TC-NAV-36 Background jobs** — Req NAV-36 — L1 `background-jobs.test.mjs` ("background jobs: run, report progress and the result; the same job is not started twice"; "… a failed result or a thrown error marks the job; Clear finished keeps the running ones"); browser check (QMS-0025 with a saved PAT): New Feature → Save closes the form at once and the top bar shows “⟳ 1 running” with its progress, then “✓ Jobs done” with “#id … Hierarchy complete”; the menu and other pages stay usable meanwhile; Bulk actions → Create month tasks and Move run the same way and their buttons wait while the job runs; Monthly Time Writing → Save leaves a failed Task staged; reloading while a job runs asks first.
 
 **TC-NAV-34 Settings editors as pop-ups** — Req NAV-34 — browser check: Settings → Storage shows the Git storage and SharePoint summaries; "Connect Git storage…" and "Connect to SharePoint…" open pop-ups, a click beside them keeps them open, Cancel closes them; Settings → Azure DevOps: Edit on the Time Writing row and "＋ Add server" open pop-ups; Settings → Capacity & periods: "Edit capacity settings…" opens the form in a pop-up; "＋ Map an Epic or Feature…" maps #424242 and closes, the mapping's Edit opens "Change the mapping of #424242"; Settings → Feature setup: Go to Epic #13946 → the summary and "View setup…" (no Git) open "Shared Feature setup · Epic #13946", Close closes it; every pop-up form is one column (title, input, explanation per field) with Cancel then the main action at the bottom right; at 390 × 844 the connection pop-up fits without horizontal scrolling; no page errors. **UAT**
@@ -335,7 +341,7 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-CON-33 Links in Bulk actions** — Req CON-65 — browser check with the synthetic sample: Bulk actions, choose a person with a pending Feature → its row in the Time Writing tasks shows "#100002" as a link to …/_workitems/edit/100002 (target _blank); clicking it opens a new tab and leaves the checkbox unchanged; State checks and Move to current PI + Sprint rows use the same link; no page errors.
 
-**TC-CON-34 Time Writing story paths in the setup** — Req CON-66 — L1 `feature-setup.test.mjs` (rows carry the story's Area and Iteration Path); browser check with GitHub mocked: the row of #37810 shows "Area: the Feature’s · Iteration: project root"; Edit → set Area Path "QMS\Quality Engineering" and Iteration Path "QMS" (with the DoD) → Save to Git → the saved story holds both and the row shows them; the setup pop-up's placeholders say "Empty: the Feature's Area Path" and "Empty: the project root … (no PI, Sprint or year)".
+**TC-CON-34 Time Writing story paths in the setup** — *(Retired — see TC-BKL-18)* Req CON-66 — L1 `feature-setup.test.mjs` (rows carry the story's Area and Iteration Path); browser check with GitHub mocked: the row of #37810 shows "Area: the Feature’s · Iteration: project root"; Edit → set Area Path "QMS\Quality Engineering" and Iteration Path "QMS" (with the DoD) → Save to Git → the saved story holds both and the row shows them; the setup pop-up's placeholders say "Empty: the Feature's Area Path" and "Empty: the project root … (no PI, Sprint or year)".
 
 **TC-CON-35 Default Feature DoD for setups without one** — Req CON-67 — L1 `feature-setup.test.mjs` ("default Feature DoD for setups without one: Full Release with a PRD story, else PU; only missing ones are filled"); browser check with GitHub mocked (#13946 without stories, #37810 with PRD and SFV, both without DoD): the banner says "2 shared setups have no Feature DoD."; #37810 shows "Missing · Default: IQOQ finished and Checklist uploaded into the Feature."; Edit #13946 pre-fills "DT finished. This is a PU release."; "Fill missing DoDs with the default" marks both rows changed and removes the banner; Save to Git saves #13946 with the PU and #37810 with the Full Release DoD; "All fields…" has its tooltip. **UAT**
 
@@ -636,6 +642,8 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-ATM-20 Sprint check** — Req ATM-07, ATM-08, ATM-09, ATM-20 — E2E `shell.e2e.mjs` ("TC-ATM-20: Sprint check offers the move to the current PI + Sprint and the state checks, without month tasks"); browser check with the Time Writing connection: Find current Sprint, move a User Story from an ended Sprint, close a Feature from the state checks — as on Bulk actions before.
 
+**TC-ATM-21 A Feature becomes Active only through an Active User Story** — Req ATM-28 — L1 `my-work.test.mjs` ("ATM-28: a Feature becomes Active only when one of its User Stories is Active"); browser check with the Time Writing connection: create a Feature — it stays New, also after its month Task is added on My Activities; on Assigned to Me the New Feature shows "Set a User Story to Active first"; set one of its User Stories to Active — the Feature becomes Active and the result says so; in Edit, choosing Active for a Feature without an Active User Story is refused with the reason; a New Feature whose User Story was set Active in Azure DevOps is listed under Sprint check → State checks with Set Feature to Active.
+
 **TC-ATM-03 Close an item** — Req ATM-06 — **UAT**
 - Steps:
   1. On a New User Story press Set User Story to Active, then Close User Story; on a New Feature press Set Feature to Active, then Close Feature. A Resolved story or Feature shows "Set to Active first".
@@ -687,12 +695,12 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-BKL-02 Create Feature hierarchy** — Req BKL-04…09, BKL-11 — **UAT**
 - Steps:
-  1. Choose Add Feature under E1 and enter title `DP Core` (invalid).
+  1. Choose Add Feature under E1 (no Feature setup) and clear the title.
   2. Enter `DP | Core | v5.2` and choose PU.
   3. Load the schedule and pick the current Sprint.
   4. Create.
 - Expected:
-  - Step 1 shows the BKL-04 message.
+  - Step 1: Save stays disabled without a title; any free text (e.g. `DP Core`) is accepted, its milestone stories titled "SFV : Review of Deliverables (DP Core)".
   - The PU Feature DoD and SFV, DT and IQOQ stories are offered. Full Release offers PRD as well (see TC-BKL-04 for the DoD).
   - Without a creator email, the BKL-09 message shows.
   - With a schedule that is no longer current, the BKL-08 message shows and nothing is written.
@@ -725,6 +733,12 @@ Cases marked **UAT** are also run in acceptance testing.
 **TC-BKL-13 Parent Epic blank on New Feature** — Req BKL-23 — E2E `backlog.e2e.mjs` ("TC-BKL-13: New Feature opens with the Parent Epic blank; every Epic is offered"); browser check: the same from Assigned to Me and from Create Feature on Release Details; Create without an Epic says "Choose the parent Epic."
 
 **TC-BKL-15 Your own User Story on New Feature** — Req BKL-25 — E2E `backlog.e2e.mjs` ("TC-BKL-15: New Feature offers your own User Story (title and description) under the new Feature"); browser check with the Time Writing connection: enter a title and description, Save — the story is created under the new Feature in the Sprint chosen, assigned like the Feature, and named in the result; left empty, nothing extra is created; not shown on Complete Feature children.
+
+**TC-BKL-16 One Feature creation with the same rules everywhere** — Req BKL-26, BKL-14 — L1 `azure-devops.test.mjs` ("BKL-26, BKL-28: Area Path — User Stories, the Time Writing story and the Task take the Feature's"); E2E `shell.e2e.mjs` ("TC-ACT-02: My Activities shows the person's KPI cards, month tasks, hours and deadline": My Activities has no Feature form of its own); browser check: create a Feature under the same Epic from Backlogs, Assigned to Me, Release Details and My Activities — each uses the Epic's setup, the Epic's Area Path, the preselected current PI → Sprint, and the same Time Writing story and Task titles and paths.
+
+**TC-BKL-17 One User Story creation with the same rules everywhere** — Req BKL-27, BKL-19, BKL-25, ACT-08 — L1 `my-work.test.mjs` ("BKL-27: addUserStory — a current or future Sprint only (checked fresh), the Feature's Area Path, the optional comment"); E2E `backlog.e2e.mjs` ("TC-BKL-10: ＋ User Story on a Feature opens the New User Story form with the Feature as parent and the story fields": a Comment field; "TC-BKL-15: New Feature offers your own User Story (title and description) under the new Feature": a Comment field), `shell.e2e.mjs` ("TC-ACT-02: My Activities shows the person's KPI cards, month tasks, hours and deadline": a Sprint choice); browser check with the Time Writing connection: add a User Story with a comment from Backlogs, from My Activities and with a new Feature — each lands in the Feature's Area Path and the Sprint chosen (current preselected), assigned to the person, with the comment in its Discussion.
+
+**TC-BKL-18 One Time Writing Task rule everywhere** — Req BKL-28, BKL-14, BKL-22, CON-52, CON-53 — L1 `azure-devops.test.mjs` ("BKL-28: the Epic setup no longer shapes the Time Writing story or Task — fixed titles, the person, the Feature's area, the project root", "BKL-28: a new month Task gets the Epic setup's default hours; an existing one is reused and keeps its hours"); browser check with the Time Writing connection: under an Epic whose setup has 6 default hours, create a Feature, add a month Task with ＋ Time Writing Task (header month December) and on My Activities — each Task is "<Month> \| <Feature>" under "<Feature> - Time Writing", assigned to you, in the Feature's Area Path and the project root, with 6h unless hours were typed; a second add for the same month reuses the Task; Settings → Feature setup shows only the default hours for Time Writing.
 
 **TC-BKL-14 Release number without "v" in Feature titles** — Req BKL-24 — L1 `release-source.test.mjs` ("Create Feature title from a release: \"Stream | Name | Release\" without a \"v\", mapping back to the release (BKL-24)"), `dp-board-match.test.mjs`, `cp-reporting.test.mjs`; browser check: Create Feature on a DP, CP and Windchill row pre-fills the title with the number and no "v".
 
@@ -1374,13 +1388,13 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-ACT-03 Add a new activity** — Req ACT-04, ACT-06 — **UAT** — browser check: choose a stream, then a Feature (yours listed first), enter hours, Save activity — your month task appears under it with the hours; choose a Feature where you already have one — its current hours show in the fields and the hint says what you save replaces them; Save replaces them and adds no second task; only Active Epics and their Active or New Features are offered, each with its ID; only your own Features are listed and typing in the search box narrows them; a Feature can be chosen first and its Epic fills in; the chosen Epic's and Feature's ID and each activity's ID open the item in Azure DevOps.
 
-**TC-ACT-04 Add a User Story** — Req ACT-08, ACT-06 — E2E `shell.e2e.mjs` ("TC-ACT-02: My Activities shows the person's KPI cards, month tasks, hours and deadline": the User Story choice shows Title, Description and Comment); browser check with the Time Writing connection: choose User Story, an Epic and a Feature, enter a title, a description and a comment, Add User Story — the story appears under the Feature, assigned to you, in the current Sprint, with the description and the comment in its Discussion; without a title the button stays disabled; with sample data or during View as nothing is saved.
+**TC-ACT-04 Add a User Story** — Req ACT-08, ACT-06 — E2E `shell.e2e.mjs` ("TC-ACT-02: My Activities shows the person's KPI cards, month tasks, hours and deadline": the User Story choice shows Title, Description and Comment); browser check with the Time Writing connection: choose User Story, an Epic and a Feature, enter a title, a description and a comment, Add User Story — the story appears under the Feature, assigned to you, in the Sprint chosen (the current one preselected), with the description and the comment in its Discussion; without a title the button stays disabled; with sample data or during View as nothing is saved.
 
 **TC-ACT-06 KPI cards on top** — Req ACT-11, ACT-05 — E2E `shell.e2e.mjs` ("TC-ACT-02: My Activities shows the person's KPI cards, month tasks, hours and deadline": Tasks, Planned hours, Actual hours, Capacity, Monthly update and Unsaved changes above the cards); browser check: with your work email set, Tasks, Planned hours and Actual hours equal Monthly Time Writing in Individual (Me) for the same month, Capacity equals My dashboard; change an hour and Unsaved changes counts it.
 
-**TC-ACT-07 Create a Feature** — Req ACT-12, ACT-06, ACT-10 — E2E `shell.e2e.mjs` ("TC-ACT-02: My Activities shows the person's KPI cards, month tasks, hours and deadline": the Feature choice asks for Feature title and Feature DoD, the month-task box is ticked, Create Feature stays disabled without a DoD); browser check with the Time Writing connection: choose Feature, an Active Epic, enter a title, a DoD and hours, Create Feature — the Feature appears under the Epic, assigned to you, in the current PI, with "Feature DoD: …" in its Description, your month task with the hours under it and the Feature Active; untick the task box and only the Feature is created (state New); with sample data or during View as nothing is saved.
+**TC-ACT-07 Create a Feature** — *(Retired — see TC-ACT-12)* Req ACT-12, ACT-06, ACT-10 — E2E `shell.e2e.mjs` ("TC-ACT-02: My Activities shows the person's KPI cards, month tasks, hours and deadline": the Feature choice asks for Feature title and Feature DoD, the month-task box is ticked, Create Feature stays disabled without a DoD); browser check with the Time Writing connection: choose Feature, an Active Epic, enter a title, a DoD and hours, Create Feature — the Feature appears under the Epic, assigned to you, in the current PI, with "Feature DoD: …" in its Description, your month task with the hours under it and the Feature Active; untick the task box and only the Feature is created (state New); with sample data or during View as nothing is saved.
 
-**TC-ACT-08 A User Story with the new Feature** — Req ACT-13, ACT-12 — E2E `shell.e2e.mjs` ("TC-ACT-02: My Activities shows the person's KPI cards, month tasks, hours and deadline": ticking Add a User Story under it asks for its title and keeps Create Feature disabled until one is entered); browser check with the Time Writing connection: create a Feature with a User Story title, description and comment — the story appears under the new Feature, assigned to you, in the current Sprint, with the comment in its Discussion; a failing story is reported and the Feature stays.
+**TC-ACT-08 A User Story with the new Feature** — *(Retired — see TC-ACT-12)* Req ACT-13, ACT-12 — E2E `shell.e2e.mjs` ("TC-ACT-02: My Activities shows the person's KPI cards, month tasks, hours and deadline": ticking Add a User Story under it asks for its title and keeps Create Feature disabled until one is entered); browser check with the Time Writing connection: create a Feature with a User Story title, description and comment — the story appears under the new Feature, assigned to you, in the current Sprint, with the comment in its Discussion; a failing story is reported and the Feature stays.
 
 **TC-ACT-09 Layout, KPI order and the Feature drop-down** — Req ACT-02, ACT-04, ACT-05, ACT-11 — E2E `shell.e2e.mjs` ("TC-ACT-02: My Activities shows the person's KPI cards, month tasks, hours and deadline": columns Epic, Activity, Planned, Actual; Save in the heading row of Your activities; KPI cards Capacity, Planned hours, Actual hours, Tasks, Unsaved changes only after an hour is changed; the ring and the last day as tiles in the same row, all tiles one height; suggestions below Your activities; the Feature drop-down lists only your Features, typing narrows it, picking one fills in its Epic); browser check: the % badges equal Planned ÷ Capacity and Actual ÷ Capacity, and Actual's hint shows Actual ÷ Planned.
 
@@ -1388,7 +1402,9 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-ACT-11 My Activities replaces Monthly Time Writing and the Bulk month tasks** — Req ACT-15, ACT-01 — E2E `shell.e2e.mjs` ("TC-ACT-01: My Activities is under My Work for everyone; the Testing heading is for the Admin role only": the menu lists My Activities, Assigned to Me, Sprint check under My Work and no Monthly Time Writing or Bulk actions, also for a Team Member); browser check: My dashboard's My hours link and Assigned to Me's month-tasks links open My Activities; an old pinned Monthly Time Writing or Bulk actions page in a personal menu no longer shows.
 
-**TC-ACT-05 Suggestions by state, Add all, New → Active** — Req ACT-09, ACT-10 — E2E `shell.e2e.mjs` ("TC-ACT-05: suggestions filter by Active / New / Both and Add all moves them into Your activities"); browser check with the Time Writing connection: with a New and an Active Feature of yours without a task, Active / New / Both narrow the suggestions; Add all puts the shown ones in Your activities and Save creates their tasks; the New Feature is then Active in Azure DevOps (the same when adding a task under a New Feature with Add a new activity); a Feature already Active is left as it is.
+**TC-ACT-12 A new Feature from My Activities uses the New Feature form** — Req ACT-16, BKL-26 — E2E `shell.e2e.mjs` ("TC-ACT-02: My Activities shows the person's KPI cards, month tasks, hours and deadline": the Feature choice has no form of its own, only Open New Feature, disabled with the sample-data reason); browser check with the Time Writing connection: Add a new activity → Feature → Open New Feature opens the New Feature form with the person shown as assignee and the header month in "Time Writing (<Month>)"; under an Epic with a Feature setup its title fields, DoD and User Stories appear as on Backlogs; Save creates the Feature in the Epic's Area Path and the chosen PI, the stories in the Sprint and the Time Writing story and Task with the setup's paths (else the project root and the Feature's area).
+
+**TC-ACT-05 Suggestions by state, Add all** — Req ACT-09, ACT-10 — E2E `shell.e2e.mjs` ("TC-ACT-05: suggestions filter by Active / New / Both and Add all moves them into Your activities"); browser check with the Time Writing connection: with a New and an Active Feature of yours without a task, Active / New / Both narrow the suggestions; Add all puts the shown ones in Your activities and Save creates their tasks; the Features keep their state (ATM-28: a New Feature becomes Active only through an Active User Story).
 
 ### 6.26 Planning Overview
 
@@ -1429,6 +1445,9 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | NAV-34 | TC-NAV-34 |
 | NAV-36 | TC-NAV-36 |
 | NAV-37 | TC-NAV-37 |
+| NAV-38 | TC-NAV-38 |
+| NAV-39 | TC-NAV-39 |
+| NAV-40 | TC-NAV-40 |
 | CON-01…03 | TC-CON-01 |
 | CON-04…08, CON-19 | TC-CON-02 |
 | CON-09 | TC-CON-03 |
@@ -1437,7 +1456,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CON-14…16 | TC-CON-04, TC-CON-05 |
 | CON-18 | TC-INS-01 |
 | CON-20 | TC-CON-07 |
-| CON-52, CON-53 | TC-CON-23, TC-CON-26 |
+| CON-52, CON-53 | TC-CON-23, TC-CON-26, TC-BKL-18 |
 | CON-54 | TC-ATM-08 |
 | CON-55 | TC-CON-24 |
 | CON-56 | TC-QV-16 |
@@ -1538,22 +1557,26 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | ATM-25 | TC-ATM-17 |
 | ATM-26 | TC-ATM-18 |
 | ATM-27 | TC-ATM-19 |
+| ATM-28 | TC-ATM-21 |
 | BKL-01…03, BKL-12 | TC-BKL-01 |
 | BKL-04…09, BKL-11 | TC-BKL-02 |
 | BKL-10 | TC-BKL-03, TC-ATM-11 |
 | BKL-13 | TC-BKL-04 |
-| BKL-14 | TC-BKL-05 |
+| BKL-14 | TC-BKL-05, TC-BKL-16, TC-BKL-18 |
 | BKL-15 | TC-BKL-06 |
 | BKL-16 | TC-BKL-07 |
 | BKL-17 | TC-BKL-08 |
 | BKL-18 | TC-BKL-09 |
-| BKL-19 | TC-BKL-10 |
+| BKL-19 | TC-BKL-10, TC-BKL-17 |
 | BKL-20 | TC-BKL-11 |
 | BKL-21 | TC-BKL-12 |
-| BKL-22 | TC-BKL-12 |
+| BKL-22 | TC-BKL-12, TC-BKL-18 |
 | BKL-23 | TC-BKL-13 |
 | BKL-24 | TC-BKL-14 |
 | BKL-25 | TC-BKL-15 |
+| BKL-26 | TC-BKL-16 |
+| BKL-27 | TC-BKL-17 |
+| BKL-28 | TC-BKL-18 |
 | QV-01, QV-02 | TC-QV-01 |
 | QV-03, QV-05 | TC-QV-02 |
 | QV-04 | TC-FET-07 |
@@ -1719,14 +1742,15 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | ACT-05 | TC-ACT-02, TC-ACT-06, TC-ACT-09 |
 | ACT-06 | TC-ACT-02, TC-ACT-03 |
 | ACT-07 | TC-ACT-01 |
-| ACT-08 | TC-ACT-04 |
+| ACT-08 | TC-ACT-04, TC-BKL-17 |
 | ACT-09 | TC-ACT-05 |
-| ACT-10 | TC-ACT-05, TC-ACT-07 |
+| ACT-10 | TC-ACT-05, TC-ACT-07, TC-ATM-21 |
 | ACT-11 | TC-ACT-06, TC-ACT-09 |
 | ACT-12 | TC-ACT-07, TC-ACT-08 |
 | ACT-13 | TC-ACT-08 |
 | ACT-14 | TC-ACT-10 |
 | ACT-15 | TC-ACT-11 |
+| ACT-16 | TC-ACT-12 |
 | OVW-01 | TC-OVW-01, TC-OVW-02, TC-OVW-03 |
 | OVW-02 | TC-OVW-02 |
 | OVW-03 | TC-OVW-01 |
@@ -1752,13 +1776,13 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 | Use case | Test cases |
 |---|---|
-| UC-01 | TC-NAV-01…06, TC-NAV-33, TC-NAV-37, TC-UI-01, TC-UI-02, TC-UI-03, TC-CON-36, TC-CON-38 |
+| UC-01 | TC-NAV-01…06, TC-NAV-33, TC-NAV-37, TC-UI-01, TC-UI-02, TC-UI-03, TC-CON-36, TC-CON-38, TC-NAV-38, TC-NAV-39, TC-NAV-40 |
 | UC-02 | TC-CON-01…07, TC-CON-17…19, TC-CON-44, TC-CON-28, TC-NAV-02, TC-NAV-34, TC-QV-14, TC-QV-16, TC-QV-23, TC-QV-24, TC-CON-46, TC-QV-25, TC-CON-47 |
 | UC-03 | TC-CON-03, TC-FET-01…06, TC-FET-09 |
-| UC-04 | TC-TWN-01, TC-TWN-02, TC-MON-01…06, TC-MON-09, TC-MON-10, TC-ATM-19 |
+| UC-04 | TC-TWN-01, TC-TWN-02, TC-MON-01…06, TC-MON-09, TC-MON-10, TC-ATM-19, TC-BKL-18 |
 | UC-05 | TC-MON-07 |
-| UC-06 | TC-ATM-01…11, TC-TWN-03, TC-CON-20, TC-CON-33, TC-CON-34, TC-CON-43 |
-| UC-07 | TC-BKL-01…09, TC-BKL-15, TC-NAV-36, TC-CON-23, TC-CON-25…27, TC-CON-29…32, TC-CON-35 |
+| UC-06 | TC-ATM-01…11, TC-ATM-21, TC-TWN-03, TC-CON-20, TC-CON-33, TC-CON-34, TC-CON-43 |
+| UC-07 | TC-BKL-01…09, TC-BKL-15, TC-BKL-16, TC-BKL-17, TC-BKL-18, TC-NAV-36, TC-CON-23, TC-CON-25…27, TC-CON-29…32, TC-CON-35 |
 | UC-08 | TC-QV-01…05, TC-FET-07, TC-CON-08, TC-CON-11…16, TC-QV-08, TC-QV-09, TC-QV-10, TC-QV-11, TC-QV-12, TC-QV-13, TC-QV-14, TC-QV-15, TC-QV-16, TC-CON-37, TC-CON-38, TC-CON-39, TC-CON-40, TC-CON-41, TC-QV-18, TC-QV-19, TC-QV-20, TC-QV-21, TC-QV-22, TC-CON-42 |
 | UC-09 | TC-OV-11…14, TC-CAP-01, TC-CAP-02, TC-CAP-03, TC-CAP-08, TC-QV-17, TC-CON-21, TC-QV-10, TC-QV-11, TC-QV-21 |
 | UC-10 | TC-OV-11 (Months, Streams), TC-OV-13 |
@@ -1779,7 +1803,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-25 | TC-WSP-01…07 |
 | UC-26 | TC-MYD-01…05, TC-QV-31, TC-QV-32 |
 | UC-27 | TC-HIS-01…11 |
-| UC-28 | TC-ACT-01…11 |
+| UC-28 | TC-ACT-01…12, TC-BKL-16, TC-BKL-17, TC-BKL-18, TC-ATM-21 |
 | UC-29 | TC-OVW-01…03 |
 | UC-30 | TC-CVA-01…03 |
 

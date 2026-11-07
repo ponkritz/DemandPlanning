@@ -143,6 +143,8 @@ export interface AppState {
   masters: MasterValue[]
   azureWorkItems?: AzureWorkItem[]
   azureBacklogScope?: { organization: string; project: string; team: string; itemKeys: string[]; areaPaths: string[]; fetchedAt: string; sample?: boolean }
+  // NAV-40: the token pages linked from Get started (shared in Git with the planning data).
+  setupLinks?: { github?: string; azure?: string; tfs?: string }
   capacitySettings?: { absenceEpicId?: number; hoursPerDay?: number; overloadedAt?: number; availableBelow?: number; sharedTime?: { id: number; kind: 'holiday' | 'activity'; scope: string; label?: string }[] }
   baselineRules?: BaselineRule[]
   releaseScopes?: ReleaseScope[]

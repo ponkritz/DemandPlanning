@@ -392,6 +392,10 @@ test('release naming and India month rollover implement the final task-title cor
   assert.equal(pu.timeWriting, 'Example | Service | v1.0 - Time Writing')
   assert.equal(pu.task, 'October 2026 | Example | Service | v1.0')
   assert.deepEqual(releaseHierarchyTitles('Example | Service | v1.0', 'Release', 'October 2026').reviews.map((item) => item.milestone), ['PRD', 'SFV', 'DT', 'IQOQ'])
+  // BKL-04: a free-text title; milestone stories then carry the whole title.
+  const free = releaseHierarchyTitles('Audit readiness 2027', 'PU', 'October 2026')
+  assert.deepEqual([free.reviews[0].title, free.timeWriting, free.task], ['SFV : Review of Deliverables (Audit readiness 2027)', 'Audit readiness 2027 - Time Writing', 'October 2026 | Audit readiness 2027'])
+  assert.throws(() => releaseHierarchyTitles('  ', 'PU', 'October 2026'), /Enter the Feature title/)
   assert.equal(currentIndiaMonth(new Date('2026-10-31T18:29:00Z')), 'October 2026')
   assert.equal(currentIndiaMonth(new Date('2026-10-31T18:30:00Z')), 'November 2026')
 })
@@ -581,7 +585,8 @@ test('a Feature from its Epic setup: chosen stories, Time Writing story, Task de
   const stories = result.items.filter((item) => item.workItemType === 'User Story')
   assert.deepEqual(stories.map((item) => item.title), ['US 1 (Service)', 'US 3', 'Review of Deliverables - Example | Service | v1.0', 'Example | Service | v1.0 - Time Writing'], 'the built-in Review of Deliverables story after the optional ones')
   const task = result.items.find((item) => item.workItemType === 'Task')
-  assert.deepEqual([task.title, task.originalEstimate, task.areaPath, task.iterationPath, task.assignedToEmail], ['October 2026 | Example | Service | v1.0', 6, 'Quality Project\\Time', 'Quality Project\\Current PI', 'lead@example.test'])
+  // BKL-28: the setup's title, assignee and paths are not used for Time Writing — only its default hours.
+  assert.deepEqual([task.title, task.originalEstimate, task.areaPath, task.iterationPath, task.assignedToEmail], ['October 2026 | Example | Service | v1.0', 6, result.feature.areaPath, config.project, feature.assignedTo])
   const created = server.writes.filter((item) => item.fields['System.WorkItemType'] === 'User Story')
   assert.ok(created.every((item) => item.fields['System.AssignedTo'].uniqueName === feature.assignedTo), 'stories go to the Feature assignee')
   const before = server.writes.length
@@ -600,17 +605,16 @@ test('a Feature from a setup with title fields: the typed values fill {Field} pl
   await completeFeatureFromSetup(config, pat, result.feature.id, without, 'October 2026', server.transport).then(() => assert.fail('expected a refusal'), (failure) => assert.match(failure.message, /Platform \| Release Name \| Number/))
 })
 
-test('Feature setup: the Time Writing User Story is configurable per Epic (title, Description, Assigned to, Area and Iteration Path)', async () => {
+test('BKL-28: the Epic setup no longer shapes the Time Writing story or Task — fixed titles, the person, the Feature\'s area, the project root', async () => {
   const old = parseFeatureSetup(JSON.stringify({ schema: 1, kind: 'feature-setup', epics: [{ epicId: 1, stories: [] }] }))
-  assert.deepEqual(setupFor(old, 1).timeWritingStory, { title: '{feature} - Time Writing', description: '', assignedTo: '', areaPath: '', iterationPath: '' }, 'files without it keep the built-in story')
+  assert.deepEqual(setupFor(old, 1).timeWritingStory, { title: '{feature} - Time Writing', description: '', assignedTo: '', areaPath: '', iterationPath: '' }, 'older files still load')
   const server = fakeHierarchyServer()
   const timeWritingStory = { title: 'Time Writing | {service}', description: 'Hours', assignedTo: 'lead@example.test', areaPath: 'Quality Project\\Time', iterationPath: 'Quality Project\\Current PI\\Sprint 9' }
-  const result = await createFeatureFromSetup(config, pat, { ...feature, iterationPath: 'Current PI' }, { stories: [], timeWritingStory, task: { title: '{month} | {feature}', description: '', assignedTo: '', areaPath: '', iterationPath: '' } }, 'October 2026', server.transport)
-  const story = result.items.find((item) => item.title === 'Time Writing | Service')
-  assert.deepEqual([story.title, story.areaPath, story.iterationPath, story.assignedToEmail], ['Time Writing | Service', 'Quality Project\\Time', 'Quality Project\\Current PI\\Sprint 9', 'lead@example.test'])
+  const result = await createFeatureFromSetup(config, pat, { ...feature, iterationPath: 'Current PI' }, { stories: [], timeWritingStory, task: { title: 'Custom {feature}', description: '', assignedTo: 'lead@example.test', areaPath: 'Quality Project\\Time', iterationPath: 'Quality Project\\Other' } }, 'October 2026', server.transport)
+  const story = result.items.find((item) => item.title === 'Example | Service | v1.0 - Time Writing')
+  assert.deepEqual([story.areaPath, story.iterationPath, story.assignedToEmail], [result.feature.areaPath, config.project, feature.assignedTo])
   const task = result.items.find((item) => item.workItemType === 'Task')
-  assert.equal(task.parentId, story.id, 'the month Task goes under the configured story')
-  assert.equal(task.assignedToEmail, feature.assignedTo, 'the Task still defaults to the Feature assignee')
+  assert.deepEqual([task.title, task.parentId, task.areaPath, task.iterationPath, task.assignedToEmail], ['October 2026 | Example | Service | v1.0', story.id, result.feature.areaPath, config.project, feature.assignedTo])
 })
 
 test('the Time Writing story without set paths: the project root iteration (no PI, Sprint or year) and the Feature area; an existing one is reused wherever it is', async () => {
@@ -707,4 +711,26 @@ test('Predecessor and Successor IDs come from the Dependency links of each work 
   assert.deepEqual(fields, { [successorRef]: '501, 502', [predecessorRef]: '400' }, 'successors sorted and once each; parent, related and attachments are not dependencies')
   assert.deepEqual(dependencyFields({ relations: [link('System.LinkTypes.Hierarchy-Forward', 5)] }), {}, 'no dependency links, no fields')
   assert.deepEqual(dependencyFields({}), {})
+})
+
+test('BKL-26, BKL-28: Area Path — User Stories, the Time Writing story and the Task take the Feature\'s', async () => {
+  const server = fakeHierarchyServer()
+  const timeWritingStory = { title: '{feature} - Time Writing', description: '', assignedTo: '', areaPath: 'Quality Project\\Time', iterationPath: '' }
+  const task = { title: '{month} | {feature}', description: '', assignedTo: '', areaPath: '', iterationPath: '' }
+  const result = await createFeatureFromSetup(config, pat, { ...feature, iterationPath: 'Current PI', storyIterationPath: 'Quality Project\\Current PI\\Sprint 4' }, { stories: [{ title: 'Review', description: '' }], timeWritingStory, task }, 'October 2026', server.transport)
+  const byTitle = (title) => result.items.find((item) => item.title === title)
+  assert.equal(byTitle('Example | Service | v1.0 - Time Writing').areaPath, result.feature.areaPath, 'the setup\'s story area is not used (BKL-28)')
+  assert.equal(result.items.find((item) => item.workItemType === 'Task').areaPath, result.feature.areaPath, 'the Task: the Feature\'s')
+  assert.equal(byTitle('Review').areaPath, result.feature.areaPath, 'User Stories: the Feature\'s area')
+})
+
+test('BKL-28: a new month Task gets the Epic setup\'s default hours; an existing one is reused and keeps its hours', async () => {
+  const { ensureMonthTask: ensure } = await import('../src/azureDevOps.ts')
+  const server = fakeHierarchyServer()
+  const created = await createFeatureFromSetup(config, pat, { ...feature, iterationPath: 'Current PI' }, { stories: [], reviewStory: false, task: { title: '', description: '', originalEstimate: 6, assignedTo: '', areaPath: '', iterationPath: '' } }, 'October 2026', server.transport)
+  assert.equal(created.items.find((item) => item.workItemType === 'Task').originalEstimate, 6)
+  const november = await ensure(config, pat, created.feature.id, feature.assignedTo, 'November 2026', server.transport, false, 4)
+  assert.deepEqual([november.status, november.task.title, november.task.originalEstimate, november.story.title], ['created', 'November 2026 | Example | Service | v1.0', 4, 'Example | Service | v1.0 - Time Writing'])
+  const again = await ensure(config, pat, created.feature.id, feature.assignedTo, 'November 2026', server.transport, false, 9)
+  assert.deepEqual([again.status, again.task.id, again.task.originalEstimate], ['exists', november.task.id, 4], 'reused, hours unchanged')
 })

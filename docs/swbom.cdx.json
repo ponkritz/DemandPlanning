@@ -6,7 +6,7 @@
     "component": {
       "type": "application",
       "name": "demandplanning",
-      "version": "2.0.0"
+      "version": "3.0.0"
     },
     "tools": [
       {
@@ -18,8 +18,8 @@
     {
       "type": "library",
       "name": "@azure/msal-browser",
-      "version": "5.27.0",
-      "purl": "pkg:npm/%40azure/msal-browser@5.27.0",
+      "version": "5.28.0",
+      "purl": "pkg:npm/%40azure/msal-browser@5.28.0",
       "scope": "required",
       "licenses": [
         {
@@ -31,7 +31,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "8b608a2b2b82b8e64405926202814afef8986403fa0916aaaa591e1e5dd58ad7831ce504fed908fd296ad5c7469f0864201fa4d4e134834d101a5f4ed2000535"
+          "content": "7f7c98e75f19fbec776688026dc2caeaf9c0060a7173cac02862ad4226dc509280554f606a6821e663403c9211c1dbb35d0bcedb1b47c7f82d98fcfc8ae67cfb"
         }
       ],
       "properties": [
@@ -48,8 +48,8 @@
     {
       "type": "library",
       "name": "@azure/msal-common",
-      "version": "16.15.0",
-      "purl": "pkg:npm/%40azure/msal-common@16.15.0",
+      "version": "16.16.0",
+      "purl": "pkg:npm/%40azure/msal-common@16.16.0",
       "scope": "required",
       "licenses": [
         {
@@ -61,7 +61,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "97074b6f507d4399c484f2d520a7bbf171f9c0530dd797c2883918ef294f0d2599b96703f771b78e925a8eb2a13b709095df122cacf4b0788e8b6e26c5dbedb2"
+          "content": "11981df21e67733b1d440400817034034a42e4bff38f8de7d6378f5ef50c81dc1731b1f6ce16fb6fb1e9f8e7bb64e3832bfb1c876c7eb280fa14eaed8146f1ff"
         }
       ],
       "properties": [
@@ -10364,8 +10364,8 @@
     {
       "type": "library",
       "name": "undici",
-      "version": "7.30.1",
-      "purl": "pkg:npm/undici@7.30.1",
+      "version": "7.30.2",
+      "purl": "pkg:npm/undici@7.30.2",
       "scope": "excluded",
       "licenses": [
         {
@@ -10377,7 +10377,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "d372ab31b8c814359047944d3eb4b0ddb775af5d89a7215097dff2c6351b26daa48e6965a82e65163661eae8deb8908aafc10e42f456f3bd8ecbf6b3fa72d8c6"
+          "content": "98bc8f4271f053168cfeb89d7a82bff8a2fc0da0092d197868109f997e38e1a0922e721aa26a8f2ed3517b68dd09872c939c19cd7ac32100bc65e60d44063220"
         }
       ],
       "properties": [
@@ -10572,8 +10572,8 @@
     {
       "type": "library",
       "name": "vite",
-      "version": "8.3.5",
-      "purl": "pkg:npm/vite@8.3.5",
+      "version": "8.3.6",
+      "purl": "pkg:npm/vite@8.3.6",
       "scope": "excluded",
       "licenses": [
         {
@@ -10585,7 +10585,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "cf56298e2789f60d1e6d3990a4b06ffe8abd13717d10894e7beecb6a15bc4ab1372d3886dee7414545d03a56173fd6fe202daada9847795c63f711a5c37e0e11"
+          "content": "508edd2b6f4d9d2e78164fa69a8ee8fa323a53c169ee10e5f97e50d64e39587f9de1d4a56cb554113190fa17e4360bcb406ca81253e3f37ee7672bf830173454"
         }
       ],
       "properties": [

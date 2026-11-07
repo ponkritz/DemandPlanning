@@ -2,6 +2,13 @@
 
 Version history of the I&D Quality Demand Planning app, newest first. Every merged change bumps the version in `package.json` and adds its entry here, in the same pull request (CI-09; [CONFIGURATION-MANAGEMENT.md](CONFIGURATION-MANAGEMENT.md) §4): **major** for a change that breaks existing data, shared setup files or the way users work; **minor** for a new or changed feature; **patch** for a fix, a dependency update or documentation only. `pnpm test` fails when the newest version here is not the version in `package.json`. CI tags each version `vX.Y.Z` on its merge commit and publishes its GitHub release with the installers and this entry (CI-10); the build number of a version is the CI build of that merge (shown in the app under Force Update, and in `latest.json`). Open bugs and accepted limitations of every version are in [KNOWN-ISSUES.md](KNOWN-ISSUES.md); the third-party components of every version are in [SWBOM.md](SWBOM.md).
 
+## v3.0.0 — 2026-11-07
+
+**Imported upstream — major workflow change**
+- Synced Test2 revision b75d753: standardised Feature, User Story and Time Writing Task creation so every entry point follows the same Epic setup, Area and Iteration rules.
+- Added state propagation, streamlined My Activities, and a guided setup that can suggest the signed-in work email and links users to the token-creation pages.
+- Included upstream dependency/security maintenance (MSAL 5.28.0, Vite 8.3.6 and undici 7.30.2), while retaining DemandPlanning’s web/Windows deployment, private Tool Validation Package and local credential protections.
+
 ## v2.0.0 — 2026-11-06
 
 **Imported upstream — major workflow change**
