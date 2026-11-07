@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { EmptyState, Info, Metric, Metrics, Notice, Page, Panel, Pill, TablePanel } from '../components/ui'
 import { EpicMixChart, ParetoChart } from '../components/WorkloadCharts'
 import { epicColors, shortFeatureTitle } from '../chartUtils'
-import { capacityContext, monthlyHours, problemBreakdown, regions, resourceRoles, type Region, type ResourceRole } from '../capacity'
+import { capacityContext, capacityModel, defaultStandardHours, monthlyHours, normalizeCapacitySettings, oldCalculation, sharedTimeScopeLabel, sharedTimeScopes, standardHoursTotal, type SharedTimeScope, type StandardHourLine, problemBreakdown, regions, resourceRoles, type Region, type ResourceRole } from '../capacity'
 import { applyFilter, bandOf, byPerson, byRole, byStream, change, concentration, groupBy, noFilter, periodMonths, persistentOverload, personMonths, plannedOverload, quarterOf, rebalancing, streamTotals, totals, type Bands, type Dimension, type Period, type PersonMonth, type DashboardFilter } from '../dashboard'
 import { MultiSelect } from '../components/MultiSelect'
 import { timeWritingMonth } from '../azureInsights'
@@ -24,7 +24,7 @@ import { CustomizableSections } from '../components/PersonalLayout'
 // Definitions. Hour differences are shown without colour; colour is reserved for utilization against capacity.
 // Team overview (MYD-10…MYD-12): the overview's six tiles each open the tab that explains them; delivery counts live on
 // Pulse Check only.
-const tabs = [['overview', 'Overview'], ['capacity', 'Capacity and workload'], ['streams', 'Streams'], ['quality', 'Plan quality'], ['definitions', 'Definitions']] as const
+const tabs = [['overview', 'Overview'], ['capacity', 'Capacity and workload'], ['streams', 'Streams'], ['quality', 'Plan quality'], ['old', 'Old Calculation'], ['definitions', 'Definitions']] as const
 type Tab = typeof tabs[number][0]
 interface Saved { tab: Tab; period: Period; filter: DashboardFilter }
 const storageKey = 'demand-planning-dashboard-v3'
@@ -77,6 +77,19 @@ function MoreTable<T>({ items, limit = 8, render, head }: { items: T[]; limit?: 
 
 export function DashboardPage({ month, azure, store, my, views, navigate, canSetDefault = false }: { month: string; azure: AzureWorkspace; navigate: (page: PageId) => void; store: PageProps['store']; setMonth?: (month: string) => void; my: MyWork; views?: PersonalViewsStore; canSetDefault?: boolean }) {
   const settings = capacityContext(store.state)
+  // CAP-36: the Standard Hours breakup is kept with the capacity settings (planning data, shared in Git).
+  const saveStandardHours = (lines: StandardHourLine[]) => store.update((draft) => {
+    const next = normalizeCapacitySettings({ ...normalizeCapacitySettings(draft.capacitySettings), standardHours: lines })
+    draft.capacitySettings = next
+    draft.audits.unshift({ id: crypto.randomUUID(), timestamp: new Date().toISOString(), actor: 'u-owner', action: 'Update', entity: 'CapacitySettings', entityId: 'standard-hours', detail: `Standard Hours ${standardHoursTotal(next.standardHours)}h: ${(next.standardHours ?? []).map((line) => `${line.label} ${line.hours}h`).join(', ') || 'none'}` })
+    return draft
+  })
+  // CAP-37: the shared-time groups ('All', 'All-<Region>') left out of the Old Calculation, shared in Git.
+  const saveExcludedScopes = (scopes: SharedTimeScope[]) => store.update((draft) => {
+    draft.capacitySettings = normalizeCapacitySettings({ ...normalizeCapacitySettings(draft.capacitySettings), oldCalcExcludedScopes: scopes })
+    draft.audits.unshift({ id: crypto.randomUUID(), timestamp: new Date().toISOString(), actor: 'u-owner', action: 'Update', entity: 'CapacitySettings', entityId: 'old-calculation-groups', detail: `Old Calculation counts ${sharedTimeScopes.filter((scope) => !scopes.includes(scope)).map(sharedTimeScopeLabel).join(', ') || 'no shared-time group'}` })
+    return draft
+  })
   const bands: Bands = { overloadedAt: settings.overloadedAt, availableBelow: settings.availableBelow }
   const [saved, setSaved] = useState(() => load(month, views?.filter('dashboard', (value) => value)))
   const update = (next: Partial<Saved>) => setSaved((current) => { const value = { ...current, ...next }; try { localStorage.setItem(storageKey, JSON.stringify(value)) } catch { /* convenience only */ } views?.setFilter('dashboard', value); return value })
@@ -137,6 +150,7 @@ export function DashboardPage({ month, azure, store, my, views, navigate, canSet
       {saved.tab === 'capacity' && <><SummaryTab rows={rows} months={months} bands={bands} parts={['rebalancing', 'monitor']} /><InsightsTab rows={rows} months={months} today={today} bands={bands} delivery={[]} parts={['forecast', 'unusual']} /><MonthsTab rows={rows} months={months} bands={bands} /><PeopleTab rows={rows} months={months} bands={bands} /></>}
       {saved.tab === 'streams' && <><StreamsTab rows={rows} months={months} items={chartItems} settings={settings} streamFiltered={saved.filter.streams.length > 0} /><InsightsTab rows={rows} months={months} today={today} bands={bands} delivery={[]} parts={['momentum', 'resilience']} /></>}
       {saved.tab === 'quality' && <><InsightsTab rows={rows} months={months} today={today} bands={bands} delivery={[]} parts={['health', 'accuracy']} /><SummaryTab rows={rows} months={months} bands={bands} parts={['horizon']} /></>}
+      {saved.tab === 'old' && <OldCalculationTab items={azure.items} months={months} headerMonth={month} settings={settings} filter={saved.filter} profiles={settings.profiles ?? {}} bands={bands} canEdit={canSetDefault} onSaveStandard={saveStandardHours} onSaveExcluded={saveExcludedScopes} />}
       {saved.tab === 'definitions' && <DefinitionsTab hoursPerDay={settings.hoursPerDay} absenceEpicId={settings.absenceEpicId} bands={bands} />}
     </>}
   </Page>
@@ -326,7 +340,7 @@ function PeopleTab({ rows, months, bands }: { rows: PersonMonth[]; months: strin
   const label = grouping === 'person' ? 'Person' : grouping === 'role' ? 'Role' : 'Region'
   const groups = groupBy(rows, by).sort((a, b) => (b.planUtil ?? 0) - (a.planUtil ?? 0))
   return <NoHours rows={rows}>
-    <Section eyebrow="WHO" title={`Workload by ${label.toLowerCase()}`} info={`Over the period, highest planned utilization first: capacity (net of absence), planned and recorded hours, utilization in the Settings bands, and the differences actual − plan and capacity − plan. ⚠ = overloaded on recorded hours in 3 or more consecutive elapsed months. Roles and regions come from Settings → Resources; people without one are grouped as "No role" / "No region".`} action={<div className="chip-row" role="group" aria-label="Group by">{(['person', 'role', 'region'] as const).map((entry) => <button key={entry} type="button" className={`chip ${grouping === entry ? 'chip-on' : ''}`} aria-pressed={grouping === entry} onClick={() => setGrouping(entry)}>{entry === 'person' ? 'People' : entry === 'role' ? 'Roles' : 'Regions'}</button>)}</div>}>
+    <Section eyebrow="WHO" title={`Workload by ${label.toLowerCase()}${grouping === 'person' ? ` · ${groups.length} ${groups.length === 1 ? 'person' : 'people'} · ${formatHours(groups.reduce((sum, group) => sum + group.capacity, 0))}h capacity` : ''}`} info={`Over the period, highest planned utilization first: capacity (net of absence), planned and recorded hours, utilization in the Settings bands, and the differences actual − plan and capacity − plan. ⚠ = overloaded on recorded hours in 3 or more consecutive elapsed months. Roles and regions come from Settings → Resources; people without one are grouped as "No role" / "No region".`} action={<div className="chip-row" role="group" aria-label="Group by">{(['person', 'role', 'region'] as const).map((entry) => <button key={entry} type="button" className={`chip ${grouping === entry ? 'chip-on' : ''}`} aria-pressed={grouping === entry} onClick={() => setGrouping(entry)}>{entry === 'person' ? 'People' : entry === 'role' ? 'Roles' : 'Regions'}</button>)}</div>}>
       {grouping === 'person' ? <div className="azure-table"><table><thead><tr><th>Person</th><th>Region · role</th><th>Capacity h</th><th>Absence h</th><th>Plan h</th><th>Actual h</th><th>Planned utilization</th><th>Actual utilization</th><th>Actual − plan h</th></tr></thead><tbody>
         {groups.map((person) => <tr key={person.name}><td><strong>{person.name}{persistent.has(person.name) && <span className="negative" title="Persistent overload on recorded hours"> ⚠</span>}</strong></td><td>{[person.rows[0]?.region, person.rows[0]?.role].filter(Boolean).join(' · ') || '—'}</td><td>{h(person.capacity)}</td><td>{h(person.absence)}</td><td>{h(person.plan)}</td><td>{h(person.actual)}</td><td><Util value={person.planUtil} bands={bands} /></td><td><Util value={person.actualUtil} bands={bands} /></td><td>{signed(Math.round((person.actual - person.plan) * 100) / 100)}</td></tr>)}
       </tbody></table></div> : <>
@@ -483,6 +497,70 @@ function InsightsTab({ rows, months, today, bands, delivery, parts }: { rows: Pe
   </NoHours>
 }
 
+// CAP-35 Old Calculation: one month, per person, every hour against the full capacity (working days employed × funded
+// hours per day) — no absence, holiday, training or NPRA deducted. Region, role and team member filters apply.
+function OldCalculationTab({ items, months, headerMonth, settings, filter, profiles, bands, canEdit, onSaveStandard, onSaveExcluded }: { items: AzureWorkspace['items']; months: string[]; headerMonth: string; settings: ReturnType<typeof capacityContext>; filter: DashboardFilter; profiles: Record<string, { region?: Region; role?: ResourceRole }>; bands: Bands; canEdit: boolean; onSaveStandard: (lines: StandardHourLine[]) => void; onSaveExcluded: (scopes: SharedTimeScope[]) => void }) {
+  const fallback = months.includes(headerMonth) ? headerMonth : months[months.length - 1]
+  const [picked, setPicked] = useState(fallback)
+  const chosen = months.includes(picked) ? picked : fallback
+  const has = <T,>(list: T[], value: T | undefined) => !list.length || (value != null && list.includes(value))
+  const model = capacityModel(items, chosen, settings)
+  const kept = { ...model, people: model.people.filter((person) => has(filter.regions, profiles[person.name]?.region) && has(filter.roles, profiles[person.name]?.role) && has(filter.people, person.name)) }
+  const { rows, totals: sum, standardHours } = oldCalculation(kept)
+  const groupHours = Object.fromEntries(sharedTimeScopes.map((scope) => [scope, model.sharedTime.filter((entry) => entry.scope === scope).reduce((total, entry) => total + entry.hours, 0)])) as Record<SharedTimeScope, number>
+  const info = `Net capacity = working days in ${monthName(chosen)} the person is employed (${model.workingDays} in the month) × ${settings.hoursPerDay}h funded per day − ${formatHours(standardHours)}h Standard Hours (never below 0). Planned hours = every planned hour (Original Estimate): work, absence, holidays, training, NPRA and the shared time that applies to the person. Planned utilization = planned ÷ net capacity. Available = net capacity − planned (negative: planned above capacity). Status from the planned utilization: Overloaded at or above ${bands.overloadedAt}%, Has capacity below ${bands.availableBelow}%, else Balanced. Actual hours = every hour recorded (Completed Work), absence, holidays and NPRA included. Actual utilization = actual ÷ net capacity. Ticked groups (All, All-<Region>: holidays and common activities shared by everyone or a region) are counted in Planned and Actual Hours; unticked groups are left out of both. Removed people are not counted.${filter.streams.length ? ' The stream filter does not apply here.' : ''}`
+  return <Section eyebrow="OLD CALCULATION" title={`${monthName(chosen)} · ${rows.length} ${rows.length === 1 ? 'person' : 'people'}`} info={info} action={<label className="dash-select">Month<select value={chosen} onChange={(event) => setPicked(event.target.value)}>{months.map((entry) => <option key={entry} value={entry}>{monthName(entry)}</option>)}</select></label>}>
+    <StandardHours lines={settings.standardHours ?? defaultStandardHours} canEdit={canEdit} onSave={onSaveStandard} />
+    <SharedGroups excluded={settings.oldCalcExcludedScopes ?? []} hours={groupHours} canEdit={canEdit} onSave={onSaveExcluded} />
+    {!rows.length ? <EmptyState title={`No Time Writing data for ${monthName(chosen)}.`} detail="Choose another month or change the filters." /> : <div className="azure-table"><table aria-label="Old Calculation">
+      <thead><tr><th>Person</th><th className="num">Net Capacity (h)</th><th className="num">Planned Hours</th><th className="num">Planned Utilisation</th><th className="num">Available Hours</th><th>Status</th><th className="num">Actual Hours</th><th className="num">Actual Utilisation</th></tr></thead>
+      <tbody>{rows.map((row) => <tr key={row.name}><td>{row.name}</td><td className="num">{formatHours(row.netCapacity)}</td><td className="num">{formatHours(row.planned)}</td><td className="num"><Util value={row.plannedUtilization} bands={bands} /></td><td className="num">{row.available < 0 ? '−' : ''}{formatHours(Math.abs(row.available))}</td><td>{row.status}</td><td className="num">{formatHours(row.actual)}</td><td className="num"><Util value={row.actualUtilization} bands={bands} /></td></tr>)}</tbody>
+      <tfoot><tr><th>Total</th><th className="num">{formatHours(sum.netCapacity)}</th><th className="num">{formatHours(sum.planned)}</th><th className="num"><Util value={sum.plannedUtilization} bands={bands} /></th><th className="num">{sum.available < 0 ? '−' : ''}{formatHours(Math.abs(sum.available))}</th><th /><th className="num">{formatHours(sum.actual)}</th><th className="num"><Util value={sum.actualUtilization} bands={bands} /></th></tr></tfoot>
+    </table></div>}
+  </Section>
+}
+
+// CAP-36: Standard Hours, deducted from every person's Net Capacity; the total is the sum of its breakup lines. Editing
+// needs the right to manage shared settings; the change is saved with the planning data (Save to Git shares it).
+// CAP-37: tick boxes for the shared-time groups counted in the Old Calculation (Planned and Actual Hours); the hours
+// beside each are that group's planned hours this month, per person in scope.
+function SharedGroups({ excluded, hours, canEdit, onSave }: { excluded: SharedTimeScope[]; hours: Record<SharedTimeScope, number>; canEdit: boolean; onSave: (scopes: SharedTimeScope[]) => void }) {
+  return <div className="standard-hours" role="group" aria-label="Shared time counted">
+    <strong>Count in this calculation:</strong>
+    {sharedTimeScopes.map((scope) => <label key={scope} className="inline-check" title={canEdit ? undefined : 'Changed by roles that manage shared settings'}>
+      <input type="checkbox" checked={!excluded.includes(scope)} disabled={!canEdit} onChange={(event) => onSave(event.target.checked ? excluded.filter((entry) => entry !== scope) : [...excluded, scope])} />
+      {sharedTimeScopeLabel(scope)} <span className="muted">({formatHours(hours[scope] ?? 0)}h)</span>
+    </label>)}
+  </div>
+}
+
+function StandardHours({ lines, canEdit, onSave }: { lines: StandardHourLine[]; canEdit: boolean; onSave: (lines: StandardHourLine[]) => void }) {
+  const [draft, setDraft] = useState<{ label: string; hours: string }[] | null>(null)
+  const total = standardHoursTotal(lines)
+  const draftTotal = draft ? Math.round(draft.reduce((sum, line) => sum + (Number(line.hours) || 0), 0) * 100) / 100 : 0
+  const invalid = draft?.some((line) => line.hours.trim() === '' || !Number.isFinite(Number(line.hours)) || Number(line.hours) < 0 || Number(line.hours) > 744) ?? false
+  const setLine = (index: number, change: Partial<{ label: string; hours: string }>) => setDraft((current) => current && current.map((line, at) => at === index ? { ...line, ...change } : line))
+  if (!draft) return <div className="standard-hours" role="group" aria-label="Standard Hours">
+    <strong>Standard Hours: {formatHours(total)}h</strong> <span className="muted">deducted from every person's Net Capacity{lines.length ? ` — ${lines.map((line) => `${line.label} ${formatHours(line.hours)}h`).join(' · ')}` : ''}</span>
+    {canEdit ? <button type="button" className="text-button" onClick={() => setDraft(lines.map((line) => ({ label: line.label, hours: String(line.hours) })))}>Edit Standard Hours</button> : <span className="muted"> (changed by roles that manage shared settings)</span>}
+  </div>
+  return <form className="standard-hours" aria-label="Edit Standard Hours" onSubmit={(event) => { event.preventDefault(); if (invalid) return; onSave(draft.map((line) => ({ label: line.label.trim() || 'Standard hours', hours: Number(line.hours) }))); setDraft(null) }}>
+    <div className="azure-table"><table><thead><tr><th>Breakup</th><th className="num">Hours</th><th /></tr></thead><tbody>
+      {draft.map((line, index) => <tr key={index}>
+        <td><input aria-label={`Breakup ${index + 1}`} value={line.label} maxLength={80} placeholder="e.g. Team meetings" onChange={(event) => setLine(index, { label: event.target.value })} /></td>
+        <td className="num"><input aria-label={`Hours ${index + 1}`} type="number" min={0} max={744} step={0.25} value={line.hours} onChange={(event) => setLine(index, { hours: event.target.value })} /></td>
+        <td><button type="button" className="text-button" aria-label={`Remove breakup ${index + 1}`} onClick={() => setDraft((current) => current && current.filter((_, at) => at !== index))}>Remove</button></td>
+      </tr>)}
+    </tbody><tfoot><tr><th>Standard Hours (total)</th><th className="num">{formatHours(draftTotal)}h</th><th /></tr></tfoot></table></div>
+    <div className="button-row">
+      <button type="button" className="ghost" disabled={draft.length >= 20} onClick={() => setDraft((current) => current && [...current, { label: '', hours: '0' }])}>Add breakup line</button>
+      <button type="submit" className="primary" disabled={invalid}>Save Standard Hours</button>
+      <button type="button" className="ghost" onClick={() => setDraft(null)}>Cancel</button>
+    </div>
+    {invalid && <p className="warning-text">Each line needs hours between 0 and 744.</p>}
+  </form>
+}
+
 function DefinitionsTab({ hoursPerDay, absenceEpicId, bands }: { hoursPerDay: number; absenceEpicId: number; bands: Bands }) {
   return <Panel title="Definitions, assumptions & source">
     <dl className="dash-findings">
@@ -522,7 +600,7 @@ function OverviewTiles({ rows, months, today, bands, all, overload, forecast, de
   </article>
   void today
   return <div className="dash-tiles" role="list" aria-label="Headline tiles">
-    {tile('Utilization', <><Util value={all.planUtil} bands={bands} /> planned</>, <>Recorded <Util value={all.actualUtil} bands={bands} /> · {formatHours(all.capacity)}h capacity</>, 'Capacity and workload', () => open('capacity'))}
+    {tile('Utilization', <><Util value={all.planUtil} bands={bands} /> planned</>, <>Recorded <Util value={all.actualUtil} bands={bands} /> · {formatHours(all.capacity)}h capacity · {all.people} {all.people === 1 ? 'person' : 'people'}</>, 'Capacity and workload', () => open('capacity'))}
     {tile('Overload and headroom', `${overload.over.length} / ${overload.people}`, <>planned at {bands.overloadedAt}% or more · {signed(all.gap)} unplanned capacity</>, 'Who and when', () => open('capacity'), overload.over.length ? 'danger' : undefined)}
     {tile('Plan accuracy', pctText(accuracy.team.error), accuracy.months ? <>team error over {accuracy.months} elapsed month{accuracy.months === 1 ? '' : 's'} · bias {signedPct(accuracy.team.bias)}</> : 'No elapsed month with a plan yet', 'Plan quality', () => open('quality'))}
     {tile('Plan health', health.overall.score ?? '—', 'score 0–100: balance, recording, resilience', 'Plan quality', () => open('quality'), health.overall.score == null ? undefined : health.overall.score >= 75 ? 'ok' : health.overall.score >= 50 ? 'warning' : 'danger')}

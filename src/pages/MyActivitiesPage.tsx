@@ -1,7 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { isRunning, runInBackground, subscribeJobs } from '../backgroundJobs'
-import { addUserStory, currentIterationPairs, ensureAbsenceStoryMonthTask, ensureMonthTask, ensureStoryMonthTask, futureIterationPairs, readAzureIterations, updateAzureTimeWritingEffort, type AzureIteration } from '../azureDevOps'
-import { azureInsights, timeWritingMonth } from '../azureInsights'
+import { addTask, addUserStory, currentIterationPairs, ensureAbsenceStoryMonthTask, ensureMonthTask, ensureStoryMonthTask, futureIterationPairs, readAzureIterations, updateAzureTimeWritingEffort, type AzureIteration } from '../azureDevOps'
+import { azureInsights, isTimeWritingStory, timeWritingMonth } from '../azureInsights'
 import { capacityContext } from '../capacity'
 import { FeatureEditor } from '../components/FeatureEditor'
 import { PersonPicker } from '../components/PersonPicker'
@@ -46,7 +46,9 @@ export function MyActivitiesPage({ azure, store, my, month, assign, featureSetup
   const [featureId, setFeatureId] = useState('')
   const [newHours, setNewHours] = useState<Hours>({})
   // Add a new activity adds a Time Writing task, or a User Story (title, description, an optional first comment).
-  const [addKind, setAddKind] = useState<'task' | 'story' | 'feature'>('task')
+  const [addKind, setAddKind] = useState<'task' | 'story' | 'work' | 'feature'>('task')
+  // ACT-17: a work Task (not Time Writing) under one of the Feature's User Stories.
+  const [storyId, setStoryId] = useState('')
   // A new Feature (ACT-12, BKL-26): the same New Feature form as everywhere, for the month and person shown.
   const [featureOpen, setFeatureOpen] = useState(false)
   const [story, setStory] = useState({ title: '', description: '', comment: '' })
@@ -55,7 +57,7 @@ export function MyActivitiesPage({ azure, store, my, month, assign, featureSetup
   const [sprint, setSprint] = useState('')
   const storyPairs = iterations ? [...currentIterationPairs(iterations), ...futureIterationPairs(iterations)] : []
   useEffect(() => {
-    if (addKind !== 'story' || iterations || !azure.config || !azure.pat.trim() || azure.isSample) return
+    if ((addKind !== 'story' && addKind !== 'work') || iterations || !azure.config || !azure.pat.trim() || azure.isSample) return
     let live = true
     readAzureIterations(azure.config, azure.pat).then((list) => { if (!live) return; setIterations(list); const current = currentIterationPairs(list); if (current.length === 1) setSprint(current[0].sprint.path) }, () => { if (live) setIterations([]) })
     return () => { live = false }
@@ -186,6 +188,35 @@ export function MyActivitiesPage({ azure, store, my, month, assign, featureSetup
     if (!started) setMessage({ tone: 'info', text: 'Your activities are already being saved (see the top bar).' })
   }
 
+  // ACT-17: the work Task's parent — the chosen Feature's open User Stories (not its Time Writing story), the person's first.
+  const taskStories = chosenFeature ? azure.items.filter((item) => item.workItemType === 'User Story' && item.parentId === chosenFeature.id && !isTimeWritingStory(item) && !['closed', 'removed'].includes(item.state.trim().toLowerCase()))
+    .sort((a, b) => Number(isMine(b, my.me)) - Number(isMine(a, my.me)) || a.title.localeCompare(b.title)) : []
+  const chosenStory = taskStories.find((item) => String(item.id) === storyId)
+  function saveWorkTask() {
+    if (blocked) { setMessage({ tone: 'info', text: blocked }); return }
+    if (!chosenStory) { setMessage({ tone: 'error', text: 'Choose the User Story the Task goes under.' }); return }
+    const title = story.title.trim()
+    if (!title || title.length > 255) { setMessage({ tone: 'error', text: 'Enter a Task title of 1–255 characters.' }); return }
+    if (!sprint) { setMessage({ tone: 'error', text: 'Choose the Sprint for the Task.' }); return }
+    const config = azure.config!, pat = azure.pat, parent = chosenStory, chosenSprint = sprint, entry = { title, description: story.description.trim(), comment: story.comment.trim() }
+    const started = runInBackground('activities:save', `New Task “${title}”`, async (progress) => {
+      try {
+        progress('Creating the Task…')
+        const { task, commentError } = await addTask(config, pat, { storyId: parent.id, title: entry.title, description: entry.description, iterationPath: chosenSprint, assignedTo: assignee, comment: entry.comment })
+        const note = commentError ? ` The comment could not be added: ${commentError}` : ''
+        setStory({ title: '', description: '', comment: '' }); setStoryId('')
+        await azure.refresh()
+        const text = `Task #${task.id} “${task.title}” added under ${parent.title}${entry.comment && !note ? ', with your comment' : ''}.${note}`
+        setMessage({ tone: note ? 'error' : 'success', text })
+        return { text, failed: Boolean(note) }
+      } catch (failure) {
+        const text = failure instanceof Error ? failure.message : 'The Task could not be added.'
+        setMessage({ tone: 'error', text })
+        return { text, failed: true }
+      }
+    })
+    if (!started) setMessage({ tone: 'info', text: 'Your activities are already being saved (see the top bar).' })
+  }
   function saveStory() {
     if (blocked) { setMessage({ tone: 'info', text: blocked }); return }
     if (!chosenFeature) return
@@ -340,9 +371,10 @@ export function MyActivitiesPage({ azure, store, my, month, assign, featureSetup
           <div className="segmented" role="radiogroup" aria-label="What to add">
             <label className={addKind === 'task' ? 'active' : undefined}><input type="radio" name="act-add-kind" checked={addKind === 'task'} onChange={() => setAddKind('task')} />Time Writing task</label>
             <label className={addKind === 'story' ? 'active' : undefined}><input type="radio" name="act-add-kind" checked={addKind === 'story'} onChange={() => setAddKind('story')} />User Story</label>
+            <label className={addKind === 'work' ? 'active' : undefined}><input type="radio" name="act-add-kind" checked={addKind === 'work'} onChange={() => setAddKind('work')} />Task</label>
             <label className={addKind === 'feature' ? 'active' : undefined}><input type="radio" name="act-add-kind" checked={addKind === 'feature'} onChange={() => setAddKind('feature')} />Feature</label>
           </div>
-          <p className="act-sub">{addKind === 'feature' ? <>Creates a Feature with the same form and rules as New Feature on every page: the Epic's Feature setup, the Epic's Area Path, the current PI (changeable), its User Stories in the Sprint, and your {label} Time Writing story and Task.</> : addKind === 'task' ? <>Adds your {label} Time Writing task under a Feature — in your Time Writing user story there, which is created when you have none — so you can book hours on it.</> : <>Adds a User Story under a Feature by the same rules as New User Story everywhere: assigned to you, in the Feature's Area Path and the Sprint you choose (the current one preselected) — with a description and, if you write one, a first comment in its Discussion.</>}</p>
+          <p className="act-sub">{addKind === 'feature' ? <>Creates a Feature with the same form and rules as New Feature on every page: the Epic's Feature setup, the Epic's Area Path, the current PI (changeable), its User Stories in the Sprint, and your {label} Time Writing story and Task.</> : addKind === 'work' ? <>Adds a Task (not a Time Writing task) under one of the Feature's User Stories by the same rules as a User Story: assigned to you, in the story's Area Path and the Sprint you choose (the current one preselected) — with a description and, if you write one, a first comment in its Discussion.</> : addKind === 'task' ? <>Adds your {label} Time Writing task under a Feature — in your Time Writing user story there, which is created when you have none — so you can book hours on it.</> : <>Adds a User Story under a Feature by the same rules as New User Story everywhere: assigned to you, in the Feature's Area Path and the Sprint you choose (the current one preselected) — with a description and, if you write one, a first comment in its Discussion.</>}</p>
           <div className="act-form">
             {addKind !== 'feature' && <label>Epic<select value={stream} onChange={(event) => { setStream(event.target.value); setFeatureId('') }}><option value="">All Epics</option>{epics.map((epic) => <option key={epic.id} value={epic.id}>#{epic.id} {epic.title}</option>)}</select>{chosenEpic && <span className="act-open">{idLink(chosenEpic)} {chosenEpic.title} ↗</span>}</label>}
             {addKind !== 'feature' && <div className="act-field"><span id="act-feature-label">Feature</span><SearchSelect label="Feature" value={featureId} placeholder={features.length ? 'Choose or type to search your Features (ID, title, Epic)' : 'No Active or New Features of yours here'} empty="No Feature of yours matches"
@@ -351,12 +383,14 @@ export function MyActivitiesPage({ azure, store, my, month, assign, featureSetup
             {addKind === 'feature' ? <>
               <p className="act-hint">The New Feature form opens with {self ? 'you' : my.me.name} as the assignee and {label} as the Time Writing month. It applies the Epic's Feature setup (title fields, DoD, User Stories, Time Writing story and Task), else the built-in rules.</p>
               <button type="button" className="act-primary" disabled={Boolean(blocked) || !azure.config} title={blocked || undefined} onClick={() => setFeatureOpen(true)}>Open New Feature</button>
-            </> : addKind === 'story' ? <>
-              <label>Title<input value={story.title} maxLength={255} placeholder="What the story is about" onChange={(event) => setStory((current) => ({ ...current, title: event.target.value }))} /></label>
+            </> : addKind === 'story' || addKind === 'work' ? <>
+              {addKind === 'work' && <label>User Story<select value={storyId} onChange={(event) => setStoryId(event.target.value)} disabled={!chosenFeature}><option value="">{!chosenFeature ? 'Choose a Feature first' : taskStories.length ? 'Choose a User Story' : 'No open User Story under this Feature'}</option>{taskStories.map((item) => <option key={item.id} value={item.id}>#{item.id} {item.title}</option>)}</select></label>}
+              <label>Title<input value={story.title} maxLength={255} placeholder={addKind === 'work' ? 'What needs to be done' : 'What the story is about'} onChange={(event) => setStory((current) => ({ ...current, title: event.target.value }))} /></label>
               <label>Description<textarea value={story.description} rows={4} placeholder="What needs to be done, and why" onChange={(event) => setStory((current) => ({ ...current, description: event.target.value }))} /></label>
               <label>Sprint<select value={sprint} onChange={(event) => setSprint(event.target.value)} disabled={!storyPairs.length}><option value="">{iterations == null ? (blocked ? 'Not available' : 'Loading the schedule…') : storyPairs.length ? 'Choose a Sprint' : 'No current or future Sprint'}</option>{storyPairs.map((pair) => <option key={pair.sprint.path} value={pair.sprint.path}>{pair.pi.name} → {pair.sprint.name}</option>)}</select></label>
               <label>Comment <small className="muted">(optional, added to its Discussion)</small><textarea value={story.comment} rows={3} onChange={(event) => setStory((current) => ({ ...current, comment: event.target.value }))} /></label>
-              <button type="button" className="act-primary" disabled={!chosenFeature || !story.title.trim() || !sprint || saving} onClick={saveStory}>Add User Story</button>
+              {addKind === 'work' ? <button type="button" className="act-primary" disabled={!chosenStory || !story.title.trim() || !sprint || saving} onClick={saveWorkTask}>Add Task</button>
+                : <button type="button" className="act-primary" disabled={!chosenFeature || !story.title.trim() || !sprint || saving} onClick={saveStory}>Add User Story</button>}
             </> : <>
             <label>Reporting period<input value={label} readOnly /></label>
             <div className="act-pair">

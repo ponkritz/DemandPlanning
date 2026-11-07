@@ -84,6 +84,12 @@ test('TC-STO-04 / TC-INS-01: a JSON backup contains the app state but no PAT, co
     localStorage.setItem('demand-planning-git-token-v1', 'e2e-secret-git-token-9876543210')
     localStorage.setItem('demand-planning-azure-connection-profiles-v1', JSON.stringify([{ id: 'tw', url: 'https://dev.azure.com/org/QMS', reason: 'QMS-0025', role: 'time-tracking', creatorEmail: 'me@example.com', showInMenu: true, token: 'e2e-secret-pat-value-0123456789' }]))
   } })
+  // The start-up fetch with the test PAT fails (NAV-41 opens Get started with the reason): close it first.
+  await context.route('https://dev.azure.com/**', (route) => route.fulfill({ status: 401, contentType: 'application/json', body: '{}' }))
+  await page.reload()
+  const guide = page.getByRole('dialog').filter({ hasText: 'Could not fetch from Azure DevOps' })
+  await guide.waitFor({ timeout: 20000 })
+  await guide.getByRole('button', { name: 'Close', exact: true }).last().click()
   await navigate(page, 'Snapshots')
   const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: /Export current JSON backup/ }).click()])
   assert.match(download.suggestedFilename(), /^demand-planning-backup-\d{4}-\d{2}-\d{2}\.json$/)

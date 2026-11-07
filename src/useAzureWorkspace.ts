@@ -1,3 +1,4 @@
+import { fetchProblemKind, type FetchProblem } from './setupGuide'
 import { useRef, useState } from 'react'
 import { initialWorkEmail, saveWorkEmail } from './workEmail'
 import { dependencyFields, fetchAzureWorkItems, isCloudBase, mapAzureWorkItem, mergeAzureWorkItems, parseAzureProjectUrl, readFieldNames, savedBacklogItems, sameAzureScope, updateAzureTimeWritingEffort, type AzureFetchResult, type AzureConfig } from './azureDevOps'
@@ -54,6 +55,9 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
   const [busy, setBusy] = useState(false)
   const fetching = useRef(false)
   const [lastRefreshed, setLastRefreshed] = useState('')
+  // NAV-41: why the last Time Writing fetch failed (cleared by the next successful one); App opens Get started on it.
+  const [fetchProblem, setFetchProblemState] = useState<FetchProblem | null>(null)
+  const setFetchProblem = (message: string | null) => setFetchProblemState(message ? { kind: fetchProblemKind(message), message, at: new Date().toISOString() } : null)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [preview, setPreview] = useState<AzureFetchResult | null>(null)
@@ -107,9 +111,9 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
       } catch { tokenWarning = ' PAT could not be saved in this browser; the current-session token was used for fetching.' }
       const result = await fetchAzureWorkItems({ ...parsed, team: parsed.team || team.trim() }, pat)
       const kept = autoSave(result)
-      setLastRefreshed(new Date().toISOString())
+      setLastRefreshed(new Date().toISOString()); setFetchProblem(null)
       setMessage(`${kept || `${result.items.length} work items fetched from ${result.scope.team}'s Epic backlog and saved.`}${tokenWarning}`)
-    } catch (failure) { setError(failure instanceof Error ? failure.message : 'Unable to fetch Azure DevOps data.') }
+    } catch (failure) { const text = failure instanceof Error ? failure.message : 'Unable to fetch Azure DevOps data.'; setError(text); setFetchProblem(text) }
     finally { fetching.current = false; setBusy(false) }
   }
 
@@ -268,6 +272,7 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
     if (!profile) { setConnectionStatus((current) => ({ ...current, [id]: { state: 'error', message: 'Saved connection not found in this browser.' } })); return false }
     const role = profile.role ?? 'time-tracking'
     if (!profile.token.trim()) {
+      if (role === 'time-tracking') setFetchProblem('No PAT in this browser for the Time Writing connection.')
       if (await fallBackToGit(id, 'No PAT in this browser')) return false
       setConnectionStatus((current) => ({ ...current, [id]: { state: 'error', message: 'No PAT in this browser: this view shows the data the desktop app saved to Git. Add the PAT in Settings to fetch here.' } })); return false
     }
@@ -287,7 +292,7 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
             const asOf = new Date().toISOString(), areaPaths = [...new Set(items.map((item) => item.areaPath))].sort()
             result = { items, areaPaths, asOf, scope: { organization: parsed.organization, project: parsed.project, team: parsed.team, itemKeys: items.map((item) => item.key), areaPaths, fetchedAt: asOf } }
           } else result = await fetchAzureWorkItems(parsed, profile.token)
-          const kept = autoSave(result); setLastRefreshed(new Date().toISOString())
+          const kept = autoSave(result); setLastRefreshed(new Date().toISOString()); setFetchProblem(null)
           done = kept || `${result.items.length} work items fetched and saved`
         } finally { fetching.current = false; setBusy(false) }
       } else if (role === 'release-source') {
@@ -334,6 +339,7 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
       return true
     } catch (failure) {
       const text = failure instanceof Error ? failure.message : 'Unable to fetch this connection.'
+      if (role === 'time-tracking') setFetchProblem(text)
       if (await fallBackToGit(id, `Fetch failed (${text})`)) return false
       setConnectionStatus((current) => ({ ...current, [id]: { state: 'error', message: text } }))
       setError(`${summary?.reason ?? profile.reason}: ${text}`)
@@ -396,6 +402,7 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
     // Why the Time Writing connection was not fetched, if it was not (shown with the start-up fetch in the top bar).
     const main = connectionProfiles.find((profile) => profile.id === timeWriting)
     const skipped = !main ? 'No Time Writing connection is set up here (Settings → Azure DevOps).' : !cloud(main.baseUrl) ? 'The Time Writing connection is on-premises: use Fetch in Settings → Azure DevOps (VPN).' : !loadAzureConnectionProfile(main.id)?.token?.trim() ? 'No PAT in this browser for the Time Writing connection: add it in Settings → Azure DevOps.' : ''
+    if (skipped.startsWith('No PAT')) setFetchProblem(skipped)
     return { targets: targets.length, ok, skipped }
   }
 
@@ -447,7 +454,7 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
     return replaced
   }
 
-  return { removeAllConnectionsHere, reloadConnectionProfiles, makeTimeWriting, projectUrl, changeProjectUrl, team, setTeam, pat, setPat, creatorEmail, setCreatorEmail, role, setRole, connectionStatus, saveConnection, removeConnection, fetchConnection, loadFromGit: (id: string) => loadFromGit(id), canLoadFromGit, fetchAll, fetchCloud, testConnection, applyWorkItems, isSample, loadSampleData, connectionProfiles, activeConnectionProfileId, selectConnectionProfile, saveConnectionProfile, forgetConnectionProfile, busy, error, setError, message, setMessage, preview, setPreview, saved, items, config, needsScopedRefresh, fetchPreview, refresh, lastRefreshed, rememberPat, forgetPat, featureCreated, savePreview, saveTimeWritingEffort }
+  return { fetchProblem, clearFetchProblem: () => setFetchProblem(null), removeAllConnectionsHere, reloadConnectionProfiles, makeTimeWriting, projectUrl, changeProjectUrl, team, setTeam, pat, setPat, creatorEmail, setCreatorEmail, role, setRole, connectionStatus, saveConnection, removeConnection, fetchConnection, loadFromGit: (id: string) => loadFromGit(id), canLoadFromGit, fetchAll, fetchCloud, testConnection, applyWorkItems, isSample, loadSampleData, connectionProfiles, activeConnectionProfileId, selectConnectionProfile, saveConnectionProfile, forgetConnectionProfile, busy, error, setError, message, setMessage, preview, setPreview, saved, items, config, needsScopedRefresh, fetchPreview, refresh, lastRefreshed, rememberPat, forgetPat, featureCreated, savePreview, saveTimeWritingEffort }
 }
 
 export type AzureWorkspace = ReturnType<typeof useAzureWorkspace>

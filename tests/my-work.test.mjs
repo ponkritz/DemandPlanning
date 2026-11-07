@@ -514,3 +514,25 @@ test('BKL-27: addUserStory — a current or future Sprint only (checked fresh), 
   const partly = await addUserStory(config, 'pat', input, transport)
   assert.deepEqual([partly.story.workItemType, partly.commentError], ['User Story', 'refused'])
 })
+
+import { addTask } from '../src/azureDevOps.ts'
+test('ACT-17: addTask — a work Task under a User Story by the User Story rules; never a Time Writing Task', async () => {
+  const config = { organization: 'org', project: 'Quality', team: 'T' }
+  const world = new Map([[5, raw(5, { 'System.WorkItemType': 'User Story', 'System.Title': 'Write the plan', 'System.AreaPath': 'Quality\\QMS-0025' })], [6, raw(6, { 'System.WorkItemType': 'User Story', 'System.Title': 'Plan - Time Writing' })]])
+  const { transport: base, calls } = fakeAzure(world)
+  const day = (offset) => new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10) + 'T00:00:00Z'
+  const schedule = [{ name: 'PI 1', path: 'Quality\\PI 1', attributes: { startDate: day(-30), finishDate: day(60) } }, { name: 'Sprint 3', path: 'Quality\\PI 1\\Sprint 3', attributes: { startDate: day(-5), finishDate: day(5) } }]
+  const transport = async (request) => {
+    if (request.operation === 'iterations') return { value: schedule }
+    if (request.operation === 'iteration-tree') throw new Error('not used')
+    if (request.operation === 'add-comment') { calls.push(request); return { id: 1, text: request.comment, createdBy: { displayName: 'Ana' }, createdDate: '2026-11-07T00:00:00Z' } }
+    return base(request)
+  }
+  const input = { storyId: 5, title: 'Review the draft', description: 'Why', iterationPath: 'Quality\\PI 1\\Sprint 3', assignedTo: 'ana@x.com', comment: 'Note' }
+  const { task, commentError } = await addTask(config, 'pat', input, transport)
+  assert.deepEqual([task.workItemType, task.parentId, task.areaPath, task.iterationPath, task.assignedToEmail, commentError], ['Task', 5, 'Quality\\QMS-0025', 'Quality\\PI 1\\Sprint 3', 'ana@x.com', undefined])
+  assert.equal(calls.filter((call) => call.operation === 'create-child').at(-1).feature.description, 'Why')
+  await assert.rejects(addTask(config, 'pat', { ...input, title: 'November 2026 | Review' }, transport), /Time Writing Task/)
+  await assert.rejects(addTask(config, 'pat', { ...input, storyId: 6 }, transport), /Time Writing story/)
+  await assert.rejects(addTask(config, 'pat', { ...input, iterationPath: 'Quality\\PI 0\\Sprint 1' }, transport), /no longer current/)
+})

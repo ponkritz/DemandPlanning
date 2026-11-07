@@ -325,6 +325,8 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-NAV-40 A short Get started with Info and token links** — Req NAV-40, NAV-33 — L1 `setup-guide.test.mjs` ("NAV-40: the token links are https only, shared in the planning data and kept through a round trip"); E2E `shell.e2e.mjs` ("TC-NAV-33: a new browser gets the Get started pop-up; dismissing it keeps it closed after a reload": the short titles incl. TFS APAC settings [DP/CP/IOCC/Content], no how-to text on the page, the GitHub and Azure DevOps token links) — **UAT**; browser check: hover Info on a step — why and how show; as an Admin with Git open Token links (admin), set the TFS APAC link and save to Git — after reload in another browser step 6 shows Create a TFS APAC PAT with that link; an http link is not kept.
 
+**TC-NAV-41 Get started opens when the fetch fails** — Req NAV-41 — L1 `setup-guide.test.mjs` ("NAV-41: a failed fetch reopens the token step (token problems) and the Fetch step (any problem)"); E2E `shell.e2e.mjs` ("TC-NAV-41: a fetch that fails shows the reason in Get started and opens the token step again": Azure DevOps answers 401) — **UAT**; browser check: with an expired or revoked PAT, open the app — Get started opens with Could not fetch from Azure DevOps and the token step; save a new PAT and Fetch now — the steps turn Done; with the network off (or VPN for on-prem) the reason says Azure DevOps could not be reached.
+
 **TC-NAV-36 Background jobs** — Req NAV-36 — L1 `background-jobs.test.mjs` ("background jobs: run, report progress and the result; the same job is not started twice"; "… a failed result or a thrown error marks the job; Clear finished keeps the running ones"); browser check (QMS-0025 with a saved PAT): New Feature → Save closes the form at once and the top bar shows “⟳ 1 running” with its progress, then “✓ Jobs done” with “#id … Hierarchy complete”; the menu and other pages stay usable meanwhile; Bulk actions → Create month tasks and Move run the same way and their buttons wait while the job runs; Monthly Time Writing → Save leaves a failed Task staged; reloading while a job runs asks first.
 
 **TC-NAV-34 Settings editors as pop-ups** — Req NAV-34 — browser check: Settings → Storage shows the Git storage and SharePoint summaries; "Connect Git storage…" and "Connect to SharePoint…" open pop-ups, a click beside them keeps them open, Cancel closes them; Settings → Azure DevOps: Edit on the Time Writing row and "＋ Add server" open pop-ups; Settings → Capacity & periods: "Edit capacity settings…" opens the form in a pop-up; "＋ Map an Epic or Feature…" maps #424242 and closes, the mapping's Edit opens "Change the mapping of #424242"; Settings → Feature setup: Go to Epic #13946 → the summary and "View setup…" (no Git) open "Shared Feature setup · Epic #13946", Close closes it; every pop-up form is one column (title, input, explanation per field) with Cancel then the main action at the bottom right; at 390 × 844 the connection pop-up fits without horizontal scrolling; no page errors. **UAT**
@@ -935,6 +937,14 @@ TC-OVR-01 to TC-OVR-03 tested the earlier Overview and are **retired** with OVR-
 
 **TC-CAP-08 Training read from the User Story or a tag** — Req CAP-32 — L1 `capacity.test.mjs` ("training under the absence Epic is read from the User Story or a Training / NPRA tag, not the shared Feature (TC-CAP-08)"); browser check with the QMS-0025 board: a person's Feature under the Absence and Training Epic holds "<Name> \| PTO \| Time Writing" and "<Name> \| Training \| Time Writing" — Pulse Check counts the PTO Task as absence and the Training Task as NPRA; tag a leave Task "Training" or "NPRA" and it moves to NPRA; a Task tagged "Training" in a project stream counts as NPRA.
 
+**TC-CAP-09 Remove a person; who counts in capacity** — Req CAP-33, CAP-34 — L1 `capacity.test.mjs` ("CAP-33: a person removed in Resources is left out of capacity, utilization and team totals (hours too), listed apart; restore brings them back"); E2E `shell.e2e.mjs` ("TC-CAP-09: Resources shows who counts in the month's capacity; Remove takes a person out of capacity, Restore brings them back") — **UAT**; browser check with real data: Settings → Resources shows "Capacity in <Month>: n people, X h available" and Info lists the people; remove a person who left — the count drops by one, Pulse Check → Last month and the Team overview Utilization tile no longer count them; Save to Git, reload in another browser — still removed; Restore brings them back.
+
+**TC-CAP-10 Old Calculation tab** — Req CAP-35 — L1 `capacity.test.mjs` ("CAP-35: Old Calculation — every hour (absence, holidays, NPRA included) against working days × funded hours; status from planned") ; E2E `shell.e2e.mjs` ("TC-MYD-05: Team overview shows six headline tiles; each opens its analysis, with a trail back; Delivery opens Pulse Check": the Old Calculation tab lists people with the eight columns and a Month choice) — **UAT**; browser check with real data: Team overview → Old Calculation, choose a month — for one person check Net Capacity = working days × 8 h, Planned and Actual Hours include their PTO, holidays and NPRA, the two utilisations and Available Hours by hand; Status follows the Planned Utilisation.
+
+**TC-CAP-11 Standard Hours and their breakup** — Req CAP-36, CAP-35 — L1 `capacity.test.mjs` ("CAP-35/36: Old Calculation — every hour (absence, holidays, NPRA included) against working days × funded hours − Standard Hours; status from planned") ; E2E `shell.e2e.mjs` ("TC-MYD-05: Team overview shows six headline tiles; each opens its analysis, with a trail back; Delivery opens Pulse Check": Standard Hours: 32h shown; Edit Standard Hours with lines Team meetings 8 h and Admin 16 h shows a 24 h total, Save shows the breakup and the first Net Capacity grows by 8 h) — **UAT**; browser check with real data: Team overview → Old Calculation shows Standard Hours: 32h and Net Capacity = working days × 8 h − 32 h; as an Admin, Edit Standard Hours, enter the real breakup, Save, Save to Git, reload in another browser — the same breakup and figures; a role without shared-settings rights sees no Edit.
+
+**TC-CAP-12 Shared-time groups on or off in the Old Calculation** — Req CAP-37, CAP-35 — L1 `capacity.test.mjs` ("CAP-37: Old Calculation — an unticked shared-time group (All, All-<Region>) leaves Planned and Actual Hours") ; E2E `shell.e2e.mjs` ("TC-MYD-05: Team overview shows six headline tiles; each opens its analysis, with a trail back; Delivery opens Pulse Check": All, All-India, All-Netherlands and All-US ticked by default; All-India can be unticked and ticked again) — **UAT**; browser check with real data: Team overview → Old Calculation, untick All-India — an India person's Planned and Actual Hours drop by the All-India hours shown, others do not change; Pulse Check and Capacity and workload do not change; Save to Git and reload elsewhere — still unticked.
+
 **TC-CAP-01 Capacity calculation** — Req CAP-01…09, OVR-09 — L1 `capacity.test.mjs`, `monthly-hours.test.mjs`, `azure-insights.test.mjs`. Plus L3 analysis (A) with one person in October 2026:
 - 22 working days × 8 = 176 h funded.
 - An India holiday of 8 h gives 168 h available.
@@ -1404,6 +1414,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-ACT-12 A new Feature from My Activities uses the New Feature form** — Req ACT-16, BKL-26 — E2E `shell.e2e.mjs` ("TC-ACT-02: My Activities shows the person's KPI cards, month tasks, hours and deadline": the Feature choice has no form of its own, only Open New Feature, disabled with the sample-data reason); browser check with the Time Writing connection: Add a new activity → Feature → Open New Feature opens the New Feature form with the person shown as assignee and the header month in "Time Writing (<Month>)"; under an Epic with a Feature setup its title fields, DoD and User Stories appear as on Backlogs; Save creates the Feature in the Epic's Area Path and the chosen PI, the stories in the Sprint and the Time Writing story and Task with the setup's paths (else the project root and the Feature's area).
 
+**TC-ACT-13 A work Task from My Activities** — Req ACT-17, BKL-27 — L1 `my-work.test.mjs` ("ACT-17: addTask — a work Task under a User Story by the User Story rules; never a Time Writing Task") ; E2E `shell.e2e.mjs` ("TC-ACT-02: My Activities shows the person's KPI cards, month tasks, hours and deadline": the Task choice asks for the User Story, Title, Description and Comment, and Add Task stays disabled without a title); browser check with the Time Writing connection: Add a new activity → Task, pick a Feature and one of its User Stories, enter a title, description, Sprint and comment → Add Task creates the Task under that story, assigned to the person, in the story's Area Path and the chosen Sprint, with the comment in its Discussion.
+
 **TC-ACT-05 Suggestions by state, Add all** — Req ACT-09, ACT-10 — E2E `shell.e2e.mjs` ("TC-ACT-05: suggestions filter by Active / New / Both and Add all moves them into Your activities"); browser check with the Time Writing connection: with a New and an Active Feature of yours without a task, Active / New / Both narrow the suggestions; Add all puts the shown ones in Your activities and Save creates their tasks; the Features keep their state (ATM-28: a New Feature becomes Active only through an Active User Story).
 
 ### 6.26 Planning Overview
@@ -1448,6 +1460,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | NAV-38 | TC-NAV-38 |
 | NAV-39 | TC-NAV-39 |
 | NAV-40 | TC-NAV-40 |
+| NAV-41 | TC-NAV-41 |
 | CON-01…03 | TC-CON-01 |
 | CON-04…08, CON-19 | TC-CON-02 |
 | CON-09 | TC-CON-03 |
@@ -1627,6 +1640,10 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CAP-30 | TC-CAP-07 |
 | CAP-31 | TC-CAP-07 |
 | CAP-32 | TC-CAP-08, TC-HIS-11 |
+| CAP-33, CAP-34 | TC-CAP-09 |
+| CAP-35 | TC-CAP-10 |
+| CAP-36 | TC-CAP-11 |
+| CAP-37 | TC-CAP-12 |
 | BAS-01…04 | TC-BAS-01 |
 | BAS-05…07 | TC-BAS-02 |
 | BAS-08…10 | TC-BAS-03 |
@@ -1751,6 +1768,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | ACT-14 | TC-ACT-10 |
 | ACT-15 | TC-ACT-11 |
 | ACT-16 | TC-ACT-12 |
+| ACT-17 | TC-ACT-13 |
 | OVW-01 | TC-OVW-01, TC-OVW-02, TC-OVW-03 |
 | OVW-02 | TC-OVW-02 |
 | OVW-03 | TC-OVW-01 |
@@ -1776,7 +1794,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 | Use case | Test cases |
 |---|---|
-| UC-01 | TC-NAV-01…06, TC-NAV-33, TC-NAV-37, TC-UI-01, TC-UI-02, TC-UI-03, TC-CON-36, TC-CON-38, TC-NAV-38, TC-NAV-39, TC-NAV-40 |
+| UC-01 | TC-NAV-01…06, TC-NAV-33, TC-NAV-37, TC-UI-01, TC-UI-02, TC-UI-03, TC-CON-36, TC-CON-38, TC-NAV-38, TC-NAV-39, TC-NAV-40, TC-NAV-41 |
 | UC-02 | TC-CON-01…07, TC-CON-17…19, TC-CON-44, TC-CON-28, TC-NAV-02, TC-NAV-34, TC-QV-14, TC-QV-16, TC-QV-23, TC-QV-24, TC-CON-46, TC-QV-25, TC-CON-47 |
 | UC-03 | TC-CON-03, TC-FET-01…06, TC-FET-09 |
 | UC-04 | TC-TWN-01, TC-TWN-02, TC-MON-01…06, TC-MON-09, TC-MON-10, TC-ATM-19, TC-BKL-18 |
@@ -1784,12 +1802,12 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-06 | TC-ATM-01…11, TC-ATM-21, TC-TWN-03, TC-CON-20, TC-CON-33, TC-CON-34, TC-CON-43 |
 | UC-07 | TC-BKL-01…09, TC-BKL-15, TC-BKL-16, TC-BKL-17, TC-BKL-18, TC-NAV-36, TC-CON-23, TC-CON-25…27, TC-CON-29…32, TC-CON-35 |
 | UC-08 | TC-QV-01…05, TC-FET-07, TC-CON-08, TC-CON-11…16, TC-QV-08, TC-QV-09, TC-QV-10, TC-QV-11, TC-QV-12, TC-QV-13, TC-QV-14, TC-QV-15, TC-QV-16, TC-CON-37, TC-CON-38, TC-CON-39, TC-CON-40, TC-CON-41, TC-QV-18, TC-QV-19, TC-QV-20, TC-QV-21, TC-QV-22, TC-CON-42 |
-| UC-09 | TC-OV-11…14, TC-CAP-01, TC-CAP-02, TC-CAP-03, TC-CAP-08, TC-QV-17, TC-CON-21, TC-QV-10, TC-QV-11, TC-QV-21 |
+| UC-09 | TC-OV-11…14, TC-CAP-01, TC-CAP-02, TC-CAP-03, TC-CAP-08, TC-CAP-10, TC-CAP-11, TC-CAP-12, TC-QV-17, TC-CON-21, TC-QV-10, TC-QV-11, TC-QV-21 |
 | UC-10 | TC-OV-11 (Months, Streams), TC-OV-13 |
 | UC-11 | TC-BAS-01…04 |
 | UC-12 | TC-GIT-01…04, TC-GIT-05, TC-GIT-06, TC-ACC-03…05 |
 | UC-13 | TC-SNP-01…03 |
-| UC-14 | TC-SET-01…05, TC-CAP-02, TC-CAP-03, TC-NAV-34, TC-CAP-07 |
+| UC-14 | TC-SET-01…05, TC-CAP-02, TC-CAP-03, TC-NAV-34, TC-CAP-07, TC-CAP-09 |
 | UC-15 | TC-STO-01…04, TC-SNP-04 |
 | UC-16 | TC-UPD-01, TC-UPD-02 |
 | UC-17 | TC-DSK-01…03, TC-INS-02 |

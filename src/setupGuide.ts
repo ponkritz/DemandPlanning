@@ -11,8 +11,18 @@ export interface SetupFacts {
   streams: { name: string; connected: boolean }[]
   // DP's background data sets (Pedestal releases, DHFI documents): the DP views are incomplete without them.
   dataSets?: { name: string; connected: boolean }[]
+  fetchProblem?: FetchProblemKind
 }
 export type StepState = 'done' | 'todo' | 'blocked'
+// NAV-41: why the Time Writing data could not be fetched — 'auth' (no, wrong or expired token), 'network' (no
+// connection to Azure DevOps) or 'other'; it reopens the token step and the Fetch step of Get started.
+export type FetchProblemKind = 'auth' | 'network' | 'other'
+export interface FetchProblem { kind: FetchProblemKind; message: string; at: string }
+export function fetchProblemKind(message: string): FetchProblemKind {
+  if (/\b40[13]\b|unauthori[sz]ed|forbidden|expired|revoked|\bPAT\b|token|sign[- ]?in|credentials/i.test(message)) return 'auth'
+  if (/failed to fetch|network|timed? ?out|offline|ENOTFOUND|ECONN|DNS|could not reach|unreachable|\b50[234]\b/i.test(message)) return 'network'
+  return 'other'
+}
 // input (NAV-38): the value the step needs, entered in the pop-up itself — the Git token, your work email, your PAT.
 export type SetupInput = 'git-token' | 'email' | 'pat'
 export interface SetupStep { id: string; title: string; why: string; how: string[]; state: StepState; required: boolean; tab?: SettingsTab; section?: string; action?: 'fetch' | 'detect-email'; input?: SetupInput; link?: 'github' | 'azure' | 'tfs' }
@@ -32,7 +42,7 @@ export function setupSteps(facts: SetupFacts): SetupStep[] {
     {
       // NAV-39: the connection and the token come before the email, so the email can be read from the token.
       id: 'pat', title: 'Azure DevOps token (PAT) [QMS-0025]', required: true, tab: 'connections', section: 'servers', link: 'azure', ...(facts.timeWriting ? { input: 'pat' as const } : {}),
-      state: facts.timeWriting && facts.pat ? 'done' : 'todo',
+      state: facts.timeWriting && facts.pat && facts.fetchProblem !== 'auth' ? 'done' : 'todo',
       why: 'The QMS-0025 Time Writing backlog is where your Features, User Stories and month Tasks live. The app reads and updates it as you, with your own Personal Access Token; it stays in this browser only and is never saved to Git.',
       how: [facts.gitConnected ? 'The Time Writing connection comes from Git: it is already set up.' : 'Settings → Azure DevOps: add a connection with the role Time Writing (server https://dev.azure.com, your organization, project and team).', 'In Azure DevOps: User settings → Personal access tokens → New token, scope Work Items: Read & write.', 'Paste it below and press Save PAT. One token covers every connection on that server.'],
     },
@@ -44,7 +54,7 @@ export function setupSteps(facts: SetupFacts): SetupStep[] {
     },
     {
       id: 'fetch', title: 'Fetch data', required: true, action: 'fetch',
-      state: facts.fetched ? 'done' : azureReady ? 'todo' : 'blocked',
+      state: facts.fetched && !facts.fetchProblem ? 'done' : azureReady ? 'todo' : 'blocked',
       why: facts.sample ? 'Sample data is loaded now. Fetching from Azure DevOps replaces it with your team’s real data.' : 'The first fetch loads the Time Writing backlog; after that the app refreshes by itself.',
       how: ['Press Fetch now (or the ↻ button in the top bar).'],
     },
