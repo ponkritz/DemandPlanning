@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { AzureWorkItem } from '../domain'
-import { createUserStory, readAzureIterations, currentIterationPairs, futureIterationPairs, validStoryPoints, storyPriorities, storyRisks, storyValueAreas, type AzureIteration, type AzureConfig } from '../azureDevOps'
+import { addUserStory, readAzureIterations, currentIterationPairs, futureIterationPairs, validStoryPoints, storyPriorities, storyRisks, storyValueAreas, type AzureIteration, type AzureConfig } from '../azureDevOps'
 import { Modal } from './ui'
 import { PersonPicker } from './PersonPicker'
 import { assignablePeople } from '../myWork'
@@ -22,6 +22,8 @@ export function StoryEditor({ feature: initial, items, config, savedPat = '', me
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [acceptance, setAcceptance] = useState('')
+  // BKL-27: an optional first comment, added to the story's Discussion.
+  const [comment, setComment] = useState('')
   const [storyPoints, setStoryPoints] = useState('')
   // Azure's defaults for a new User Story: Priority 2, Value area Business, no Risk.
   const [priority, setPriority] = useState(2)
@@ -68,15 +70,12 @@ export function StoryEditor({ feature: initial, items, config, savedPat = '', me
     const input = { parentId: feature.id, title: title.trim(), description, acceptanceCriteria: acceptance, iterationPath: sprintPath, assignedTo: assignee, ...(points != null ? { storyPoints: points } : {}), priority, ...(risk ? { risk } : {}), valueArea }
     const started = runInBackground(`story:${feature.id}:${input.title.toLowerCase()}`, `New User Story “${input.title}”`, async (progress) => {
       try {
-        progress('Checking the PI / Sprint…')
-        const choices = await readAzureIterations(config, token)
-        if (![...currentIterationPairs(choices), ...futureIterationPairs(choices)].some((pair) => pair.sprint.path === input.iterationPath)) throw new Error('The selected PI/Sprint is no longer current. Reload the schedule and review it before creating. No write was attempted.')
         progress('Creating the User Story…')
-        const story = await createUserStory(config, token, input)
+        const { story, commentError } = await addUserStory(config, token, { ...input, comment })
         onCreated?.([feature, story])
-        const text = `created under Feature #${feature.id} and verified, assigned to ${input.assignedTo}.`
+        const text = `created under Feature #${feature.id} and verified, assigned to ${input.assignedTo}${comment.trim() && !commentError ? ', with your comment' : ''}.${commentError ? ` The comment could not be added: ${commentError}` : ''}`
         onDone({ story, feature, text })
-        return { text: `User Story #${story.id} “${story.title}” ${text}` }
+        return { text: `User Story #${story.id} “${story.title}” ${text}`, failed: Boolean(commentError) }
       } catch (failure) {
         const text = failure instanceof Error ? failure.message : 'Unable to create the User Story.'
         onFailed?.(text)
@@ -100,6 +99,7 @@ export function StoryEditor({ feature: initial, items, config, savedPat = '', me
     </div>
     <label>Description<textarea maxLength={100000} rows={3} value={description} onChange={(event) => setDescription(event.target.value)} /></label>
     <label>Acceptance criteria<textarea maxLength={100000} rows={2} value={acceptance} onChange={(event) => setAcceptance(event.target.value)} /></label>
+    <label>Comment <small className="muted">(optional, added to its Discussion)</small><textarea maxLength={100000} rows={2} value={comment} onChange={(event) => setComment(event.target.value)} /></label>
     <details className="nf-more"><summary>More fields (Risk {risk || 'not set'} · Value area {valueArea})</summary>
       <div className="story-row">
         <label>Risk<select value={risk} onChange={(event) => setRisk(event.target.value)}><option value="">(not set)</option>{storyRisks.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>

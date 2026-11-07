@@ -2,7 +2,7 @@
   "name": "demandplanning",
   "private": true,
   "packageManager": "pnpm@11.19.0",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "Demand planning, capacity and release tracking desktop application",
   "author": "Demand Planning Team",
   "main": "electron/main.cjs",
@@ -23,7 +23,7 @@
     "build:mac": "pnpm build:web && electron-builder --mac dmg --universal"
   },
   "dependencies": {
-    "@azure/msal-browser": "^5.27.0",
+    "@azure/msal-browser": "^5.28.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
@@ -40,7 +40,7 @@
     "oxlint": "^1.91.0",
     "playwright": "1.56.1",
     "typescript": "~6.0.3",
-    "vite": "^8.3.5",
+    "vite": "^8.3.6",
     "wait-on": "^9.5.1"
   },
   "build": {

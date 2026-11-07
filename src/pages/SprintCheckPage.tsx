@@ -46,6 +46,7 @@ export function SprintCheckPage({ azure, store, my }: { azure: AzureWorkspace; s
   const checkText: Record<StateCheck['kind'], (check: StateCheck) => string> = {
     'close-feature': (check) => `All ${check.children.length} User Stor${check.children.length === 1 ? 'y is' : 'ies are'} Closed: the Feature should be Closed too.`,
     'close-story': (check) => `All ${check.children.length} Task${check.children.length === 1 ? ' is' : 's are'} Closed: the User Story should be Closed too.`,
+    'activate-feature': (check) => `${check.children.length} of its User Stor${check.children.length === 1 ? 'y is' : 'ies are'} Active: the Feature should be Active too.`,
     'feature-needs-active-story': (check) => check.children.length ? `The Feature is Active but none of its ${check.children.length} User Stor${check.children.length === 1 ? 'y is' : 'ies are'} Active: set at least one to Active.` : 'The Feature is Active but has no User Story: add one and set it to Active.',
   }
   async function applyState(item: AzureWorkItem, state: string) {
@@ -121,7 +122,7 @@ export function SprintCheckPage({ azure, store, my }: { azure: AzureWorkspace; s
             { id: 'item', label: 'Work item', value: (check) => `#${check.item.id} ${check.item.title}`, render: (check) => <><ItemLink item={check.item} /> {check.item.title}<small>{check.item.workItemType}</small></> },
             { id: 'state', label: 'State', value: (check) => check.item.state, render: (check) => <Pill tone={check.kind === 'feature-needs-active-story' ? 'warning' : 'danger'}>{check.item.state}</Pill> },
             { id: 'check', label: 'Check', value: (check) => String(checkText[check.kind](check)) },
-            { id: 'action', label: '', sortable: false, export: false, render: (check) => { const next = check.kind === 'feature-needs-active-story' ? null : nextStateFor(check.item); return next ? <button type="button" className="ghost" disabled={Boolean(blocked) || busy === `check-${check.item.id}`} onClick={() => void applyState(check.item, next.state)}>{busy === `check-${check.item.id}` ? 'Saving…' : next.label}</button> : check.kind === 'feature-needs-active-story' ? <a href={check.item.url} target="_blank" rel="noreferrer">Open in Azure DevOps</a> : null } },
+            { id: 'action', label: '', sortable: false, export: false, render: (check) => { const next = check.kind === 'feature-needs-active-story' ? null : nextStateFor(check.item, azure.items); return next ? <button type="button" className="ghost" disabled={Boolean(blocked) || busy === `check-${check.item.id}`} onClick={() => void applyState(check.item, next.state)}>{busy === `check-${check.item.id}` ? 'Saving…' : next.label}</button> : check.kind === 'feature-needs-active-story' ? <a href={check.item.url} target="_blank" rel="noreferrer">Open in Azure DevOps</a> : null } },
           ]} /> : <EmptyState title="Nothing to fix." detail="Every Feature and User Story matches the state of its children." />}
         </Panel>
       </>}

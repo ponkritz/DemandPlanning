@@ -117,6 +117,8 @@ export function personalSetupPath(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) ? `feature-setup/${value.replace(/[^a-z0-9._@+-]/g, '_').replace(/\.{2,}/g, '_')}.json` : ''
 }
 export interface FeatureSetups { shared: FeatureSetupFile | null; personal: FeatureSetupFile | null }
+// BKL-28: the only Time Writing setting of an Epic setup — the default Original Estimate of a new month Task.
+export function setupHours(setups: FeatureSetups | null | undefined, epicId: number | undefined): number | undefined { return chooseSetup(setups, epicId).setup?.task.originalEstimate }
 export type SetupSource = 'personal' | 'shared'
 // The setup used for an Epic: my own first, else the shared one; preferShared skips mine when a shared one exists.
 export function chooseSetup(setups: FeatureSetups | null | undefined, epicId: number | undefined, preferShared = false): { setup?: EpicSetup; source?: SetupSource } {

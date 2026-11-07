@@ -56,7 +56,7 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
       sha.current = file.sha
       if (!file.data) { setSynced(''); setStatus('empty'); setMessage(`${target.path} does not exist yet in ${target.owner}/${target.repo}. Save to create it from the data in this app.`); return }
       const data = file.data
-      store.update((draft) => { draft.baselineRules = data.baselineRules; draft.releaseScopes = data.releaseScopes; draft.resourceProfiles = data.resourceProfiles; if (data.capacitySettings) draft.capacitySettings = data.capacitySettings; if (data.periods) draft.periods = data.periods; return draft })
+      store.update((draft) => { draft.baselineRules = data.baselineRules; draft.releaseScopes = data.releaseScopes; draft.resourceProfiles = data.resourceProfiles; if (data.capacitySettings) draft.capacitySettings = data.capacitySettings; if (data.periods) draft.periods = data.periods; draft.setupLinks = data.setupLinks; return draft })
       setSynced(serializePlanning(data)); setCommitUrl(historyUrl(target)); setStatus('synced'); setMessage(`Loaded from ${target.owner}/${target.repo} · ${target.path}`)
     } catch (error) { setStatus('error'); setMessage(error instanceof Error ? error.message : String(error)) }
   }, [config, token, store])
@@ -89,6 +89,31 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     } catch (error) {
       setStatus(error instanceof GitConflictError ? 'conflict' : 'error'); setMessage(error instanceof Error ? error.message : String(error))
     }
+  }
+
+  // Save one month's controls against the latest shared data, preserving every other shared setting.
+  async function savePeriod(period: PeriodControl, expected?: PeriodControl) {
+    if (!config || !token) throw new Error('Connect Git storage first.')
+    if (!period.extensionReason?.trim()) throw new Error('Enter a reason for the period-control change.')
+    if (isSample) throw new Error('Synthetic sample data cannot be saved to shared storage.')
+    if ((await writeCheck.current) === false) throw new Error('The configured Git token is read-only. Contents: Read and write is required to save period controls.')
+    const file = await readPlanningFile(config, token)
+    const data = file.data ?? planningData(store.state)
+    const periods = replacePeriod(data.periods ?? normalizePeriods(store.state.periods), period, expected)
+    const next = { ...data, periods }
+    const result = await writePlanningFile(config, token, next, file.sha, `Update ${period.month} Plan/Actual controls: ${period.extensionReason}`)
+    sha.current = result.sha; setSynced(serializePlanning(next)); setCommitUrl(result.commitUrl)
+    store.update((draft) => { draft.periods = periods; return draft })
+    return result
+  }
+
+  async function listValidationDocuments() {
+    if (!config || !token) throw new Error('Connect Git storage first.')
+    return listPackage(config, token)
+  }
+  async function readValidationDocument(path: string) {
+    if (!config || !token) throw new Error('Connect Git storage first.')
+    return readPackage(config, token, path)
   }
 
   // The Azure DevOps views file (next to the data file): read the current version, then commit the new text.
@@ -205,31 +230,6 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     if (!config || !token) throw new Error('Connect Git storage first.')
     if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
     return deleteFile(siblingConfig(config, historyPath), token, commitMessage)
-  }
-
-  // Save only the chosen month's controls against the latest shared file; leave other shared settings untouched.
-  async function savePeriod(period: PeriodControl, expected?: PeriodControl) {
-    if (!config || !token) throw new Error('Connect Git storage first.')
-    if (!period.extensionReason?.trim()) throw new Error('Enter a reason for the period-control change.')
-    if (isSample) throw new Error('Synthetic sample data cannot be saved to shared storage.')
-    if ((await writeCheck.current) === false) throw new Error('The configured Git token is read-only. Contents: Read and write is required to save period controls.')
-    const file = await readPlanningFile(config, token)
-    const data = file.data ?? planningData(store.state)
-    const periods = replacePeriod(data.periods ?? normalizePeriods(store.state.periods), period, expected)
-    const next = { ...data, periods }
-    const result = await writePlanningFile(config, token, next, file.sha, `Update ${period.month} Plan/Actual controls: ${period.extensionReason}`)
-    sha.current = result.sha; setSynced(serializePlanning(next)); setCommitUrl(result.commitUrl)
-    store.update((draft) => { draft.periods = periods; return draft })
-    return result
-  }
-
-  async function listValidationDocuments() {
-    if (!config || !token) throw new Error('Connect Git storage first.')
-    return listPackage(config, token)
-  }
-  async function readValidationDocument(path: string) {
-    if (!config || !token) throw new Error('Connect Git storage first.')
-    return readPackage(config, token, path)
   }
   // The Monthly pack: its shared setup (monthly-pack-setup.json) and a month's text (monthly-pack/<YYYY-MM>.json),
   // read and saved like the shared Feature setup.

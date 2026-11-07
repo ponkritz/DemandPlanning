@@ -2,6 +2,15 @@ import type { AzureWorkItem } from './domain.ts'
 import { updateAzureWorkItem, type AzureConfig } from './azureDevOps.ts'
 import { closeFollowUp, closeStates, followUpQuestion, type CloseFollowUp } from './myWork.ts'
 
+// ATM-28: a User Story set to Active makes its Feature Active when the Feature is still New (no question asked: the
+// Feature's work has started). Returns the updated Feature, or null when nothing had to change.
+export async function activateFeatureOf(config: AzureConfig, pat: string, items: AzureWorkItem[], story: AzureWorkItem, write: (config: AzureConfig, pat: string, id: number, update: { state: string }) => Promise<AzureWorkItem> = updateAzureWorkItem): Promise<AzureWorkItem | null> {
+  if (story.workItemType !== 'User Story' || story.state.trim().toLowerCase() !== 'active' || story.parentId == null) return null
+  const feature = items.find((item) => item.id === story.parentId && item.workItemType === 'Feature' && item.organization === story.organization && item.project === story.project)
+  if (!feature || feature.state.trim().toLowerCase() !== 'new') return null
+  return write(config, pat, feature.id, { state: 'Active' })
+}
+
 // After an item is closed from Assigned to Me or a state check: ask the follow-up question (closeFollowUp) and, when
 // confirmed, close the related items one by one in the staged order (New → Active → Closed), each write read back as
 // usual. Items in a state that cannot be closed are reported, not written. Nothing is written without the confirmation.
