@@ -1,4 +1,6 @@
 import type { AzureWorkItem } from './domain'
+import { rulesOf } from './bucketRules.ts'
+import { defaultInsightThresholds, type InsightThresholds } from './insightThresholds.ts'
 import { capacityModel, defaultCapacitySettings, isNpraTask, sharedTimeOf, type CapacitySettings, type Region, type ResourceRole } from './capacity.ts'
 import { isMonthTask, timeWritingMonth } from './azureInsights.ts'
 
@@ -13,7 +15,7 @@ export type MonthStatus = 'elapsed' | 'partial' | 'future'
 export interface DashboardFilter { regions: Region[]; roles: ResourceRole[]; people: string[]; streams: string[] }
 export const noFilter: DashboardFilter = { regions: [], roles: [], people: [], streams: [] }
 export interface StreamHours { key: string; title: string; plan: number; actual: number }
-export interface PersonMonth { month: string; status: MonthStatus; person: string; region?: Region; role?: ResourceRole; plan: number; actual: number; capacity: number; absence: number; reserved: number; tasks: number; planLines: number; blankActuals: number; streams: StreamHours[] }
+export interface PersonMonth { month: string; status: MonthStatus; person: string; region?: Region; role?: ResourceRole; plan: number; actual: number; capacity: number; absence: number; reserved: number; tasks: number; contractual: number; work: number; training: number; npraOther: number; activities: number; planLines: number; blankActuals: number; streams: StreamHours[] }
 export interface Totals { plan: number; actual: number; capacity: number; absence: number; people: number; planUtil: number | null; actualUtil: number | null; gap: number; ratio: number | null }
 
 const ratio = (part: number, whole: number) => whole > 0 ? Math.round(part / whole * 1000) / 10 : null
@@ -58,7 +60,7 @@ export function personMonths(source: AzureWorkItem[], months: string[], today: s
     const lines = new Map<string, { planLines: number; blankActuals: number }>()
     for (const task of monthTasks) {
       if (task.state.trim().toLowerCase() === 'removed' || !(task.originalEstimate && task.originalEstimate > 0)) continue
-      if (epicOf(task)?.id === settings.absenceEpicId || sharedTimeOf(task, chainOf(task), settings) || isNpraTask(task, chainOf(task))) continue
+      if (epicOf(task)?.id === settings.absenceEpicId || sharedTimeOf(task, chainOf(task), settings) || isNpraTask(task, chainOf(task), rulesOf(settings))) continue
       const entry = lines.get(task.assignedTo) ?? { planLines: 0, blankActuals: 0 }
       entry.planLines++; if (task.completedWork == null) entry.blankActuals++
       lines.set(task.assignedTo, entry)
@@ -68,7 +70,9 @@ export function personMonths(source: AzureWorkItem[], months: string[], today: s
       const profile = profiles[person.name]
       rows.push({
         month, status: monthStatus(month, today), person: person.name, region: profile?.region, role: profile?.role,
-        plan: round(person.planned), actual: round(person.work), capacity: round(person.available), absence: round(person.absence), reserved: round(person.reserved), tasks: person.tasks,
+        plan: round(person.utilizedPlanned), actual: round(person.utilized), capacity: round(person.available), absence: round(person.absence), reserved: round(person.reserved), tasks: person.tasks + person.npraTasks,
+        // CAP-39: the CAP-38 split, for Workload by person.
+        contractual: round(person.funded), work: round(person.work), training: round(person.training), npraOther: round(person.npraOther), activities: round(person.reservedActual),
         planLines: lines.get(person.name)?.planLines ?? 0, blankActuals: lines.get(person.name)?.blankActuals ?? 0,
         streams: person.streams.map((stream) => ({ key: stream.key, title: stream.title, plan: round(stream.planned), actual: round(stream.work) })),
       })
@@ -85,7 +89,9 @@ export function applyFilter(rows: PersonMonth[], filter: DashboardFilter): Perso
     .flatMap((row) => {
       if (!filter.streams.length) return [row]
       const streams = row.streams.filter((entry) => filter.streams.includes(entry.key))
-      return streams.length ? [{ ...row, plan: round(streams.reduce((sum, entry) => sum + entry.plan, 0)), actual: round(streams.reduce((sum, entry) => sum + entry.actual, 0)), streams }] : []
+      // A stream keeps only its project work: no trainings, other NPRA or common activities.
+      const actual = round(streams.reduce((sum, entry) => sum + entry.actual, 0))
+      return streams.length ? [{ ...row, plan: round(streams.reduce((sum, entry) => sum + entry.plan, 0)), actual, work: actual, training: 0, npraOther: 0, activities: 0, streams }] : []
     })
 }
 
@@ -102,7 +108,8 @@ export function groupBy<K extends string>(rows: PersonMonth[], key: (row: Person
 
 // One utilization model for the whole Dashboard, from Settings → Capacity: overloaded at or above `overloadedAt` %
 // of capacity, spare below `availableBelow` %, balanced in between.
-export interface Bands { overloadedAt: number; availableBelow: number }
+// CAP-47: the insight thresholds travel with the utilization bands (built-in values when absent).
+export interface Bands { overloadedAt: number; availableBelow: number; thresholds?: InsightThresholds }
 export const defaultBands: Bands = { overloadedAt: 100, availableBelow: 80 }
 export type Band = 'over' | 'balanced' | 'spare'
 export function bandOf(utilization: number | null | undefined, bands: Bands = defaultBands): Band | null {
@@ -134,9 +141,9 @@ export function persistentOverload(rows: PersonMonth[], months: string[], measur
 }
 
 // Concentration: the top 20% of people (rounded up) by hours, their share of the hours and of the capacity.
-export function concentration(rows: PersonMonth[], measure: 'actual' | 'plan') {
+export function concentration(rows: PersonMonth[], measure: 'actual' | 'plan', bands: Bands = defaultBands) {
   const people = groupBy(rows, (row) => row.person).sort((a, b) => b[measure] - a[measure])
-  const all = totals(rows), top = people.slice(0, Math.ceil(people.length * 0.2))
+  const all = totals(rows), top = people.slice(0, Math.ceil(people.length * (bands.thresholds ?? defaultInsightThresholds).concentrationTop / 100))
   const hours = top.reduce((sum, person) => sum + person[measure], 0), capacity = top.reduce((sum, person) => sum + person.capacity, 0)
   const hoursShare = ratio(hours, all[measure]), capacityShare = ratio(capacity, all.capacity)
   return { top: top.map((person) => ({ name: person.name, hours: person[measure] })), of: people.length, hoursShare, capacityShare, alert: hoursShare != null && capacityShare != null && hoursShare - capacityShare >= 10 }

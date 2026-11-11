@@ -38,8 +38,8 @@ export function rowsUtilization(rows: { month: string; person: string; actual: n
 }
 
 export function packUtilization(items: AzureWorkItem[], month: string, settings: CapacitySettings): Utilization {
-  const people = (at: string) => { try { return capacityModel(items, at, settings).people.filter((person) => person.name !== 'Unassigned' && person.tasks) } catch { return [] } }
-  const sum = (list: { work: number; available: number }[]) => ratio(list.reduce((total, person) => total + person.work, 0), list.reduce((total, person) => total + person.available, 0))
+  const people = (at: string) => { try { return capacityModel(items, at, settings).people.filter((person) => person.name !== 'Unassigned' && person.utilization != null) } catch { return [] } }
+  const sum = (list: { utilized: number; available: number }[]) => ratio(list.reduce((total, person) => total + person.utilized, 0), list.reduce((total, person) => total + person.available, 0))
   const now = people(month)
   return { month: sum(now), ytd: sum(yearMonths(month).flatMap(people)), qeMonth: sum(now.filter((person) => settings.profiles?.[person.name]?.role === 'QE')) }
 }

@@ -1,6 +1,9 @@
 import type { AzureWorkItem } from './domain'
-import { isMonthTask, isTrainingWork, timeWritingMonth, workingDays } from './azureInsights.ts'
+import { isMonthTask, timeWritingMonth, workingDays } from './azureInsights.ts'
 import { isMine, type Me } from './myWork.ts'
+import { absenceKindBy, defaultBucketRules, isNpraTaskBy, isTrainingTaggedBy, isTrainingWorkBy, normalizeBucketRules, rulesOf, type BucketRules } from './bucketRules.ts'
+import { normalizeInsightThresholds, type InsightThresholds } from './insightThresholds.ts'
+import { activeFigureLock, addHours, applyProfile, defaultProfile, emptyCalcInputs, normalizeCalculationProfiles, normalizeFigureLocks, profileFormula, type BucketHours, type BucketKey, type CalcInputs, type CalculationProfile, type FigureLock } from './calculationProfiles.ts'
 
 // Capacity model for the selected month. Source rows are the Tasks whose title starts or ends with the month and year
 // ("October 2026 | …", any delimiter), under any story; absence is everything under the
@@ -37,12 +40,18 @@ export function normalizeStandardHours(value: unknown): StandardHourLine[] {
 }
 export const standardHoursTotal = (lines: StandardHourLine[] | undefined) => Math.round((lines ?? defaultStandardHours).reduce((sum, line) => sum + line.hours, 0) * 100) / 100
 export interface MonthLock { planOn?: string; actualsOn?: string; planLocked?: boolean; actualsLocked?: boolean; reason?: string; updatedAt?: string; updatedBy?: string }
-export interface CapacitySettings { planLockDay?: number; actualsLockDay?: number; monthLocks?: Record<string, MonthLock>; absenceEpicId: number; hoursPerDay: number; overloadedAt: number; availableBelow: number; npraHoursPerMonth: number; defaultJoinedOn?: string; sharedTime?: SharedTimeRule[]; standardHours?: StandardHourLine[]; oldCalcExcludedScopes?: SharedTimeScope[]; profiles?: Record<string, ResourceProfile> }
+export interface CapacitySettings { planLockDay?: number; actualsLockDay?: number; monthLocks?: Record<string, MonthLock>; absenceEpicId: number; hoursPerDay: number; overloadedAt: number; availableBelow: number; npraHoursPerMonth: number; defaultJoinedOn?: string; sharedTime?: SharedTimeRule[]; standardHours?: StandardHourLine[]; oldCalcExcludedScopes?: SharedTimeScope[]; profiles?: Record<string, ResourceProfile>
+  // CAP-41/42: custom calculation profiles and the default profile's id; CAP-43: the locked figures per month.
+  calculationProfiles?: CalculationProfile[]; defaultProfileId?: string; figureLocks?: Record<string, FigureLock[]>
+  // CAP-46: the words and tags that decide absence kinds, training and other NPRA (built-in ones when unset).
+  bucketRules?: BucketRules
+  // CAP-47: the insight thresholds of Team overview (built-in values when unset).
+  insightThresholds?: InsightThresholds }
 export const defaultCapacitySettings: CapacitySettings = { absenceEpicId: 37778, hoursPerDay: 8, overloadedAt: 100, availableBelow: 80, npraHoursPerMonth: 20, defaultJoinedOn: '2026-05-01' }
-export const npraTag = /^(npra|trainings?)\b/i
-export const isNpra = (item: Pick<AzureWorkItem, 'tags'>) => (item.tags ?? '').split(';').some((tag) => npraTag.test(tag.trim()))
 // An NPRA Task: tagged itself, or under a tagged Story / Feature / Epic (the absence Epic and mapped shared time win).
-export const isNpraTask = (task: AzureWorkItem, chain: AzureWorkItem[]) => [task, ...chain].some(isNpra)
+// CAP-46: the tags come from the bucket rules (built-in: NPRA, Training).
+export const isTrainingTagged = (task: AzureWorkItem, chain: AzureWorkItem[], rules: BucketRules = defaultBucketRules) => isTrainingTaggedBy(rules, task, chain)
+export const isNpraTask = (task: AzureWorkItem, chain: AzureWorkItem[], rules: BucketRules = defaultBucketRules) => isNpraTaskBy(rules, task, chain)
 export const regions = ['India', 'Netherlands', 'US'] as const
 export type Region = typeof regions[number]
 export type LoadStatus = 'Overloaded' | 'Balanced' | 'Has capacity' | 'No bookings'
@@ -108,6 +117,10 @@ export interface StreamLoad { key: string; epic?: AzureWorkItem; title: string; 
 export interface PersonLoad {
   name: string; employedDays: number; funded: number; absence: number; absenceByKind: Record<AbsenceKind, number>; reserved: number; available: number
   npra: number; npraPlanned: number; npraTasks: number; npraAllowance: number; npraOver: number; npraDeducted: number
+  // CAP-38: NPRA split into Trainings and Other NPRA; common activities planned / recorded; utilized = every hour that
+  // counts as used (work + trainings + other NPRA + common activities). npra = training + npraOther; npraDeducted is 0.
+  training: number; trainingPlanned: number; npraOther: number; npraOtherPlanned: number; reservedPlanned: number; reservedActual: number
+  utilized: number; utilizedPlanned: number
   work: number; planned: number; utilization: number | null; plannedUtilization: number | null; status: LoadStatus; tasks: number; streams: StreamLoad[]
   // CAP-35 (Old Calculation): every hour of the person — work, absence, holidays, training, NPRA and the shared time
   // that applies to them — planned (Original Estimate) and actual (Completed Work).
@@ -131,7 +144,14 @@ export function normalizeCapacitySettings(value: unknown): CapacitySettings {
   // CAP-37: the shared-time groups left out of the Old Calculation (kept only when some are).
   const excluded = (value as { oldCalcExcludedScopes?: unknown } | null)?.oldCalcExcludedScopes
   const oldCalcExcludedScopes = Array.isArray(excluded) ? sharedTimeScopes.filter((scope) => excluded.includes(scope)) : []
-  const withLocks = { ...settings, ...locks, ...(Array.isArray(standard) ? { standardHours: normalizeStandardHours(standard) } : {}), ...(oldCalcExcludedScopes.length ? { oldCalcExcludedScopes } : {}) }
+  // CAP-41…43: custom profiles, the default profile (a known id only) and the locked figures, each kept only once set.
+  const raw = (value ?? {}) as { calculationProfiles?: unknown; defaultProfileId?: unknown; figureLocks?: unknown; bucketRules?: unknown; insightThresholds?: unknown }
+  const insightThresholds = normalizeInsightThresholds(raw.insightThresholds)
+  const bucketRules = normalizeBucketRules(raw.bucketRules)
+  const calculationProfiles = normalizeCalculationProfiles(raw.calculationProfiles)
+  const defaultProfileId = typeof raw.defaultProfileId === 'string' && ['current-v4', 'old-calculation', ...calculationProfiles.map((profile) => profile.id)].includes(raw.defaultProfileId) && raw.defaultProfileId !== 'current-v4' ? raw.defaultProfileId : undefined
+  const figureLocks = normalizeFigureLocks(raw.figureLocks)
+  const withLocks = { ...settings, ...locks, ...(Array.isArray(standard) ? { standardHours: normalizeStandardHours(standard) } : {}), ...(oldCalcExcludedScopes.length ? { oldCalcExcludedScopes } : {}), ...(calculationProfiles.length ? { calculationProfiles } : {}), ...(defaultProfileId ? { defaultProfileId } : {}), ...(Object.keys(figureLocks).length ? { figureLocks } : {}), ...(bucketRules ? { bucketRules } : {}), ...(insightThresholds ? { insightThresholds } : {}) }
   return withLocks.availableBelow < withLocks.overloadedAt ? withLocks : { ...withLocks, availableBelow: defaultCapacitySettings.availableBelow, overloadedAt: defaultCapacitySettings.overloadedAt }
 }
 const lockDay = (value: unknown) => { const day = Number(value); return Number.isInteger(day) && day >= 1 && day <= 28 ? day : undefined }
@@ -189,13 +209,7 @@ export function capacityContext(state: { capacitySettings?: unknown; resourcePro
   return { ...normalizeCapacitySettings(state.capacitySettings), profiles: normalizeProfiles(state.resourceProfiles) }
 }
 
-export function absenceKind(titles: string[]): AbsenceKind {
-  const text = titles.join(' ').toLowerCase()
-  if (/\bunplanned\b|\bemergency\b/.test(text)) return 'Unplanned Leave'
-  if (/\bsick\b|\bmedical\b/.test(text)) return 'Sick Leave'
-  if (/\bpto\b|\bvacation\b|\bholiday\b|\bannual leave\b|\bplanned leave\b/.test(text)) return 'PTO'
-  return 'Other absence'
-}
+export const absenceKind = (titles: string[], rules: BucketRules = defaultBucketRules): AbsenceKind => absenceKindBy(rules, titles)
 
 export function loadStatus(utilization: number | null, settings: CapacitySettings): LoadStatus {
   if (utilization == null) return 'No bookings'
@@ -219,6 +233,7 @@ export function capacityModel(source: AzureWorkItem[], month: string, settings: 
   const monthlyTasks = items.filter(item => isMonthTask(item) && timeWritingMonth(item.title) === month)
   const funded = workingDays(month) * settings.hoursPerDay
   const profiles = settings.profiles ?? {}
+  const rules = rulesOf(settings)
   const outside = new Map<string, { name: string; tasks: number; hours: number; joinedOn?: string; leftOn?: string }>()
   const removedPeople = new Map<string, { name: string; tasks: number; hours: number }>()
   // A person's own Joined on wins; without one, the default Joined on of the settings applies.
@@ -226,6 +241,10 @@ export function capacityModel(source: AzureWorkItem[], month: string, settings: 
   // Settings read before the NPRA allowance existed (or built by hand) take the default allowance.
   const npraAllowance = typeof settings.npraHoursPerMonth === 'number' && Number.isFinite(settings.npraHoursPerMonth) && settings.npraHoursPerMonth >= 0 ? settings.npraHoursPerMonth : defaultCapacitySettings.npraHoursPerMonth
   const people = new Map<string, PersonLoad & { streamMap: Map<string, StreamLoad> }>()
+  // CAP-41: the hours of each bucket per person, for the calculation profile.
+  const calcs = new Map<string, CalcInputs>()
+  const calcOf = (name: string) => { const found = calcs.get(name); if (found) return found; const made = emptyCalcInputs(); calcs.set(name, made); return made }
+  const ownTask = (work: number, planned: number, deducted = work, tasks = 1): BucketHours => ({ estimate: planned, completed: work, estimateElseCompleted: planned || work, deducted, tasks })
   const streams = new Map<string, StreamSummary & { names: Set<string>; featureKeys: Set<string> }>()
   const emptyKinds = (): Record<AbsenceKind, number> => ({ 'PTO': 0, 'Sick Leave': 0, 'Unplanned Leave': 0, 'Public holiday': 0, 'Other absence': 0 })
   // Shared time (holidays, common activities): hours per mapped Epic / Feature, applied to the people in scope below.
@@ -239,7 +258,7 @@ export function capacityModel(source: AzureWorkItem[], month: string, settings: 
     const group = task.id < 0 && task.organization === 'history' ? /(?:^|;)\s*Shared:\s*(everyone|India|Netherlands|US)\s*(?:;|$)/.exec(task.tags)?.[1] as SharedTimeScope | undefined : undefined
     if (group) {
       const mapped = sharedTimeOf(task, chain, settings)
-      const kind: SharedTimeKind = mapped?.kind ?? (epic?.id === settings.absenceEpicId && !isTrainingWork(task, chain) ? 'holiday' : 'activity')
+      const kind: SharedTimeKind = mapped?.kind ?? (epic?.id === settings.absenceEpicId && !isTrainingWorkBy(rules, task, chain) ? 'holiday' : 'activity')
       const id = feature?.id ?? task.id, key = `history:${id}:${group}`
       const entry = shared.get(key) ?? { id, kind, scope: group, source: feature ?? task, hours: 0, actual: 0, tasks: 0 }
       entry.hours += hours(task.completedWork) || hours(task.originalEstimate); entry.actual += hours(task.completedWork); entry.tasks += 1
@@ -263,24 +282,35 @@ export function capacityModel(source: AzureWorkItem[], month: string, settings: 
     const days = employedDays(month, employment)
     if (!days) { const entry = outside.get(name) ?? { name, tasks: 0, hours: 0, joinedOn: employment.joinedOn, leftOn: employment.leftOn }; entry.tasks += 1; entry.hours += hours(task.completedWork); outside.set(name, entry); continue }
     const personFunded = days * settings.hoursPerDay
-    const person = people.get(name) ?? { name, employedDays: days, funded: personFunded, absence: 0, absenceByKind: emptyKinds(), available: personFunded, work: 0, planned: 0, utilization: null, plannedUtilization: null, status: 'No bookings' as LoadStatus, tasks: 0, streams: [], npra: 0, npraPlanned: 0, npraTasks: 0, npraAllowance, npraOver: 0, npraDeducted: 0, reserved: 0, allPlanned: 0, allActual: 0, sharedByScope: {}, streamMap: new Map() }
+    const person = people.get(name) ?? { name, employedDays: days, funded: personFunded, absence: 0, absenceByKind: emptyKinds(), available: personFunded, work: 0, planned: 0, utilization: null, plannedUtilization: null, status: 'No bookings' as LoadStatus, tasks: 0, streams: [], npra: 0, npraPlanned: 0, npraTasks: 0, npraAllowance, npraOver: 0, npraDeducted: 0, reserved: 0, allPlanned: 0, allActual: 0, sharedByScope: {}, training: 0, trainingPlanned: 0, npraOther: 0, npraOtherPlanned: 0, reservedPlanned: 0, reservedActual: 0, utilized: 0, utilizedPlanned: 0, streamMap: new Map() }
     people.set(name, person)
     const work = hours(task.completedWork), planned = hours(task.originalEstimate)
     person.allPlanned += planned; person.allActual += work
     if (ownShare) {
       const own = work || planned
-      if (ownShare.kind === 'holiday') { person.absence += own; person.absenceByKind['Public holiday'] += own } else person.reserved += own
+      // CAP-40: a holiday with no Original Estimate counts its Completed Work as planned in the Old Calculation.
+      if (ownShare.kind === 'holiday') { person.absence += own; person.absenceByKind['Public holiday'] += own; if (!planned) person.allPlanned += work } else { person.reserved += own; person.reservedPlanned += planned; person.reservedActual += work }
+      addHours(calcOf(name).own[ownShare.kind === 'holiday' ? 'absence' : 'common'], ownTask(work, planned, own, 0))
       continue
     }
     // Team Holidays and Training (CAP-16): leave is absence; training is NPRA.
-    const training = epic?.id === settings.absenceEpicId && isTrainingWork(task, chain)
+    const training = epic?.id === settings.absenceEpicId && isTrainingWorkBy(rules, task, chain)
     if (epic?.id === settings.absenceEpicId && !training) {
-      const kind = absenceKind([task.title, ...chain.filter(item => item.workItemType !== 'Epic').map(item => item.title)])
+      const kind = absenceKind([task.title, ...chain.filter(item => item.workItemType !== 'Epic').map(item => item.title)], rules)
       person.absence += work; person.absenceByKind[kind] += work
+      // CAP-40: absence with no Original Estimate counts its Completed Work as planned in the Old Calculation.
+      if (!planned) person.allPlanned += work
+      addHours(calcOf(name).own.absence, ownTask(work, planned))
       continue
     }
-    if (training || isNpraTask(task, chain)) { person.npra += work; person.npraPlanned += planned; person.npraTasks += 1; continue }
+    if (training || isNpraTask(task, chain, rules)) {
+      person.npra += work; person.npraPlanned += planned; person.npraTasks += 1
+      // CAP-38: a training (under the absence Epic, or tagged Training on the Task or above it) vs any other NPRA.
+      if (training || isTrainingTagged(task, chain, rules)) { person.training += work; person.trainingPlanned += planned; addHours(calcOf(name).own.training, ownTask(work, planned)) } else { person.npraOther += work; person.npraOtherPlanned += planned; addHours(calcOf(name).own.npraOther, ownTask(work, planned)) }
+      continue
+    }
     person.work += work; person.planned += planned; person.tasks += 1
+    addHours(calcOf(name).own.work, ownTask(work, planned))
     const key = epic?.key ?? 'unmapped', title = epic?.title ?? 'No Epic path'
     const personStream = person.streamMap.get(key) ?? { key, epic, title, work: 0, planned: 0, tasks: 0 }
     personStream.work += work; personStream.planned += planned; personStream.tasks += 1; person.streamMap.set(key, personStream)
@@ -291,32 +321,45 @@ export function capacityModel(source: AzureWorkItem[], month: string, settings: 
     const inside = [...people.values()].filter((person) => inScope(entry.scope, profiles[person.name]?.region))
     for (const person of inside) {
       if (entry.kind === 'holiday') { person.absence += entry.hours; person.absenceByKind['Public holiday'] += entry.hours }
-      else person.reserved += entry.hours
+      else { person.reserved += entry.hours; person.reservedPlanned += entry.hours; person.reservedActual += entry.actual }
       person.allPlanned += entry.hours; person.allActual += entry.actual
       const byScope = person.sharedByScope[entry.scope] ?? { planned: 0, actual: 0 }
       byScope.planned += entry.hours; byScope.actual += entry.actual; person.sharedByScope[entry.scope] = byScope
+      const calc = calcOf(person.name), bucket: BucketKey = entry.kind === 'holiday' ? 'absence' : 'common'
+      const part = (calc.shared[entry.scope] ??= {})[bucket] ??= { estimate: 0, completed: 0, estimateElseCompleted: 0, deducted: 0, tasks: 0 }
+      addHours(part, { estimate: entry.hours, completed: entry.actual, estimateElseCompleted: entry.hours, deducted: entry.hours })
     }
     const { source, actual: _actual, ...rule } = entry
     return { ...rule, title: rule.label || source.title, item: source, people: inside.length }
   }).sort((a, b) => a.kind.localeCompare(b.kind) || a.title.localeCompare(b.title))
   // Regional holidays by region (kept for the Resources summary).
   const holidays = regions.map((region) => ({ region, hours: sharedTime.filter((entry) => entry.kind === 'holiday' && entry.scope === region).reduce((sum, entry) => sum + entry.hours, 0), people: [...people.values()].filter(person => profiles[person.name]?.region === region).length })).filter((entry) => entry.hours > 0)
-  const totalWork = [...streams.values()].reduce((sum, stream) => sum + stream.work, 0)
-  const personList: PersonLoad[] = [...people.values()].map(person => {
-    // Only booked NPRA hours come off the funded hours; the allowance is the maximum they are checked against (0: none).
-    const npraOver = person.npraAllowance > 0 ? Math.max(0, person.npra - person.npraAllowance) : 0, npraDeducted = person.npra
-    const available = Math.max(0, person.funded - person.absence - person.reserved - npraDeducted)
-    const utilization = person.tasks ? percent(person.work, available) : null
+  // CAP-38 / CAP-41: the figures come from the default calculation profile. Its built-in "Current (v4)" is the CAP-38
+  // formula: Utilization = utilized hours ÷ (Contractual hours − Absence hours); Contractual = working days employed ×
+  // hours per day (funded); Absence = PTO + Sick Leave + Unplanned Leave + Public holidays + Other absence; Trainings,
+  // other NPRA and common activities count as utilized hours. The NPRA allowance is a check only.
+  const profile = defaultProfile(settings)
+  const livePeople: PersonLoad[] = [...people.values()].map(person => {
+    const npraOver = person.npraAllowance > 0 ? Math.max(0, person.npra - person.npraAllowance) : 0
+    const figures = applyProfile(person, calcs.get(person.name) ?? emptyCalcInputs(), profile, settings, workingDays(month))
     const { streamMap, ...rest } = person
-    return { ...rest, npraOver, npraDeducted, available, utilization, plannedUtilization: person.tasks ? percent(person.planned, available) : null, status: loadStatus(utilization, settings), streams: [...streamMap.values()].sort((a, b) => b.work - a.work) }
-  }).sort((a, b) => (b.utilization ?? -1) - (a.utilization ?? -1) || a.name.localeCompare(b.name))
+    return { ...rest, npraOver, ...figures, streams: [...streamMap.values()].sort((a, b) => b.work - a.work) }
+  })
+  // CAP-43: a month whose figures are locked shows the person figures as they were locked.
+  const lock = activeFigureLock(settings, month)
+  const personList: PersonLoad[] = (lock ? lock.people.map((person) => ({ ...person, streams: person.streams.map((stream) => ({ ...stream })) })) : livePeople)
+    .sort((a, b) => (b.utilization ?? -1) - (a.utilization ?? -1) || a.name.localeCompare(b.name))
+  const totalWork = [...streams.values()].reduce((sum, stream) => sum + stream.work, 0)
   const streamList: StreamSummary[] = [...streams.values()].map(({ names, featureKeys, ...stream }) => ({ ...stream, people: names.size, features: featureKeys.size, share: percent(stream.work, totalWork) })).sort((a, b) => b.work - a.work)
-  const totals = { funded: personList.reduce((sum, person) => sum + person.funded, 0), absence: personList.reduce((sum, person) => sum + person.absence, 0), reserved: personList.reduce((sum, person) => sum + person.reserved, 0), npra: personList.reduce((sum, person) => sum + person.npra, 0), npraDeducted: personList.reduce((sum, person) => sum + person.npraDeducted, 0), npraOver: personList.reduce((sum, person) => sum + person.npraOver, 0), work: totalWork, planned: personList.reduce((sum, person) => sum + person.planned, 0) }
-  const available = Math.max(0, totals.funded - totals.absence - totals.reserved - totals.npraDeducted)
+  // The team figure adds up the people (each person's available hours already at least 0).
+  type SumKey = 'funded' | 'absence' | 'reserved' | 'npra' | 'npraDeducted' | 'npraOver' | 'work' | 'planned' | 'available' | 'utilized' | 'utilizedPlanned' | 'training' | 'npraOther' | 'reservedActual' | 'reservedPlanned'
+  const sum = (key: SumKey) => personList.reduce((total, person) => total + person[key], 0)
+  const totals = { funded: sum('funded'), absence: sum('absence'), reserved: sum('reserved'), npra: sum('npra'), npraDeducted: sum('npraDeducted'), npraOver: sum('npraOver'), work: lock ? sum('work') : totalWork, planned: sum('planned') }
+  const available = sum('available'), utilized = sum('utilized'), utilizedPlanned = sum('utilizedPlanned')
   const absenceByKind = personList.reduce((kinds, person) => { for (const kind of absenceKinds) kinds[kind] += person.absenceByKind[kind]; return kinds }, emptyKinds())
   return {
-    month, settings, workingDays: workingDays(month), fundedPerPerson: funded, outsideEmployment: [...outside.values()], removed: [...removedPeople.values()], prorated: personList.filter((person) => person.employedDays < workingDays(month)).map((person) => ({ name: person.name, days: person.employedDays, funded: person.funded })), monthlyTasks, people: personList, streams: streamList, holidays, sharedTime,
-    totals: { ...totals, available, absenceByKind, utilization: personList.some(person => person.tasks) ? percent(totals.work, available) : null },
+    month, settings, workingDays: workingDays(month), fundedPerPerson: funded, profile: lock ? { name: lock.profileName, formula: lock.formula } : { name: profile.name, formula: profileFormula(profile, settings) }, locked: lock ? { lockedOn: lock.lockedOn, lockedBy: lock.lockedBy, profileName: lock.profileName } : undefined, outsideEmployment: [...outside.values()], removed: [...removedPeople.values()], prorated: personList.filter((person) => person.employedDays < workingDays(month)).map((person) => ({ name: person.name, days: person.employedDays, funded: person.funded })), monthlyTasks, people: personList, streams: streamList, holidays, sharedTime,
+    totals: { ...totals, available, utilized, utilizedPlanned, training: sum('training'), npraOther: sum('npraOther'), reservedActual: sum('reservedActual'), reservedPlanned: sum('reservedPlanned'), absenceByKind, utilization: personList.some(person => person.utilization != null) ? percent(utilized, available) : null, plannedUtilization: personList.some(person => person.plannedUtilization != null) ? percent(utilizedPlanned, available) : null },
     counts: { npraOver: personList.filter(person => person.npraOver > 0).length, overloaded: personList.filter(person => person.status === 'Overloaded').length, balanced: personList.filter(person => person.status === 'Balanced').length, hasCapacity: personList.filter(person => person.status === 'Has capacity').length, noBookings: personList.filter(person => person.status === 'No bookings').length },
   }
 }
@@ -330,13 +373,13 @@ export function monthlyHours(source: AzureWorkItem[], endMonth: string, span = 1
     const date = new Date(`${endMonth}-01T00:00:00Z`); date.setUTCMonth(date.getUTCMonth() - (span - 1 - index))
     const month = date.toISOString().slice(0, 7)
     const model = capacityModel(source, month, settings)
-    const booked = model.people.some((person) => person.tasks)
+    const booked = model.people.some((person) => person.utilization != null)
     return {
-      month, funded: model.people.length ? model.totals.funded : null, available: model.people.length ? model.totals.available : null, actual: booked ? model.totals.work : null, planned: booked ? model.totals.planned : null,
-      utilization: booked ? model.totals.utilization : null, plannedUtilization: booked ? percent(model.totals.planned, model.totals.available) : null,
+      month, funded: model.people.length ? model.totals.funded : null, available: model.people.length ? model.totals.available : null, actual: booked ? model.totals.utilized : null, planned: booked ? model.totals.utilizedPlanned : null,
+      utilization: booked ? model.totals.utilization : null, plannedUtilization: booked ? model.totals.plannedUtilization : null,
       absence: model.totals.absence, people: model.people.length, workingDays: model.workingDays,
       streams: model.streams.map((stream) => ({ key: stream.key, title: stream.title, work: stream.work, planned: stream.planned })),
-      byPerson: model.people.map((person) => ({ name: person.name, utilization: person.utilization, work: person.work, available: person.available, status: person.status })),
+      byPerson: model.people.map((person) => ({ name: person.name, utilization: person.utilization, work: person.utilized, available: person.available, status: person.status })),
     }
   })
 }
@@ -367,7 +410,7 @@ export function problemBreakdown(source: AzureWorkItem[], months: string[], sett
   }
   for (const task of tasks) {
     const chain = chainOf(task), epic = chain.find((item) => item.workItemType === 'Epic'), feature = chain.find((item) => item.workItemType === 'Feature')
-    if (epic?.id === settings.absenceEpicId || isNpraTask(task, chain)) continue
+    if (epic?.id === settings.absenceEpicId || isNpraTask(task, chain, rulesOf(settings))) continue
     const work = hours(task.completedWork)
     booked += work
     if (typeof task.originalEstimate === 'number' && task.originalEstimate > 0 && work > task.originalEstimate) add(overrun, epic, feature, work - task.originalEstimate)
@@ -388,7 +431,7 @@ export function azureResources(source: AzureWorkItem[], month: string, settings:
     for (const person of capacityModel(source, key, settings).people) {
       if (person.name === 'Unassigned') continue
       const entry = people.get(person.name) ?? { name: person.name, firstMonth: key, lastMonth: key, months: 0, tasks: 0, work: 0, absence: 0, status: 'No bookings' as LoadStatus, utilization: null, streamHours: new Map<string, number>() }
-      entry.lastMonth = key; entry.months += 1; entry.tasks += person.tasks; entry.work += person.work; entry.absence += person.absence
+      entry.lastMonth = key; entry.months += 1; entry.tasks += person.tasks + person.npraTasks; entry.work += person.utilized; entry.absence += person.absence
       for (const stream of person.streams) entry.streamHours.set(stream.title, (entry.streamHours.get(stream.title) ?? 0) + stream.work)
       if (key === month) { entry.status = person.status; entry.utilization = person.utilization }
       people.set(person.name, entry)
