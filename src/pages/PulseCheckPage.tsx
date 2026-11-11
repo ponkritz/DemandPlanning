@@ -15,6 +15,8 @@ import { ongoingWork, previousMonth, releaseComparison, workFlow } from '../puls
 import { periodComparison, periodKinds, periodStreams, periodWorkFlow, previousPeriod, recentPeriods, type PeriodKind } from '../pulsePeriods'
 import { timeWritingGaps, timeWritingMonth } from '../azureInsights'
 import { capacityContext, capacityModel, inTeam, itemsForPerson, itemsForTeam, teamFiltered } from '../capacity'
+import { withViewedProfile } from '../calculationProfiles'
+import { ProfilePicker } from '../components/CalculationProfilesPanel'
 import { isMine } from '../myWork'
 import { usePersonScope, useTeamFilter } from '../usePersonScope'
 import { EmptyState, Metric, Metrics, Page, Pill, TablePanel } from '../components/ui'
@@ -37,7 +39,7 @@ const change = (now: number, before: number) => now === before ? <span className
 // Pulse Check: the selected month's approved releases per stream (moved from the Dashboard), and Last month — the month
 // before the selected one: the Dashboard's "This month" picture for it, its releases next to the selected month's, the
 // Features and User Stories created and closed, and its Time Writing gaps.
-export function PulseCheckPage({ month, azure, store, my, navigate, windchill, openWindchill, git, pack, views }: { month: string; azure: AzureWorkspace; store: PageProps['store']; my: MyWork; navigate: (page: PageId) => void; windchill: WindchillWorkspace; openWindchill: (id: string) => void; git: GitStorage; pack: MonthlyPackStore; views?: PersonalViewsStore }) {
+export function PulseCheckPage({ month, azure, store, my, navigate, windchill, openWindchill, git, pack, views, canPickProfile = false }: { canPickProfile?: boolean; month: string; azure: AzureWorkspace; store: PageProps['store']; my: MyWork; navigate: (page: PageId) => void; windchill: WindchillWorkspace; openWindchill: (id: string) => void; git: GitStorage; pack: MonthlyPackStore; views?: PersonalViewsStore }) {
   const [tab, setTabState] = useState<Tab>(() => { try { const saved = localStorage.getItem(tabKey) as Tab; return tabKeys.includes(saved) ? saved : 'releases' } catch { return 'releases' } })
   const setTab = (next: Tab) => { setTabState(next); try { localStorage.setItem(tabKey, next) } catch { /* convenience only */ } }
   // QV-32: the DP Supported Releases list is folded by default (the Supported summary already names them); "Show list"
@@ -95,7 +97,7 @@ export function PulseCheckPage({ month, azure, store, my, navigate, windchill, o
     {periodBar}
     <div className="overview-tabs" role="tablist" aria-label="Pulse Check sections">{tabLabels.map(([key, label]) => <button key={key} type="button" role="tab" aria-selected={tab === key} className={`backlog-tab ${tab === key ? 'backlog-tab-active' : ''}`} onClick={() => setTab(key)}>{label}</button>)}</div>
     {tab === 'releases' && releases(lastStreams, last)}
-    {tab === 'last' && <LastMonth month={month} last={last} azure={azure} store={store} my={my} navigate={navigate} current={streams} />}
+    {tab === 'last' && <LastMonth month={month} last={last} azure={azure} store={store} my={my} navigate={navigate} current={streams} canPickProfile={canPickProfile} />}
     {tab === 'ongoing' && <Ongoing azure={azure} month={month} absenceEpicId={capacityContext(store.state).absenceEpicId} />}
     {tab === 'current' && releases(streams, month)}
     {tab === 'pack' && <MonthlyPackPanel month={last} azure={azure} store={store} git={git} pack={pack} windchill={windchill} />}
@@ -132,8 +134,11 @@ function Ongoing({ azure, month, absenceEpicId }: { azure: AzureWorkspace; month
   </>
 }
 
-function LastMonth({ month, last, azure, store, my, navigate, current }: { month: string; last: string; azure: AzureWorkspace; store: PageProps['store']; my: MyWork; navigate: (page: PageId) => void; current: ReleaseStream[] }) {
-  const settings = capacityContext(store.state)
+function LastMonth({ month, last, azure, store, my, navigate, current, canPickProfile }: { month: string; last: string; azure: AzureWorkspace; store: PageProps['store']; my: MyWork; navigate: (page: PageId) => void; current: ReleaseStream[]; canPickProfile: boolean }) {
+  const shared = capacityContext(store.state)
+  // CAP-44: an Admin can view Last month with another calculation profile (this page, this person only; not saved).
+  const [viewProfile, setViewProfile] = useState('')
+  const settings = canPickProfile ? withViewedProfile(shared, viewProfile) : shared
   // Same Team / Individual choice and team filter as the Dashboard (shared in this browser).
   const personScope = usePersonScope('demand-planning-overview-view-v1', 'team', my)
   const [teamFilter, setTeamFilter] = useTeamFilter()
@@ -149,6 +154,7 @@ function LastMonth({ month, last, azure, store, my, navigate, current }: { month
   return <>
     <ScopeSwitch scope={personScope} label="Last month for" note="Same choice as the Dashboard. Only this person’s Tasks and work items." />
     {!individual && <TeamFilterBar filter={teamFilter} onChange={setTeamFilter} />}
+    {canPickProfile && <ProfilePicker settings={shared} value={viewProfile} onChange={setViewProfile} />}
     {individual && !scope ? <EmptyState title="Choose whose last month to show." detail="Pick a person above, or set your Azure email on the Time Writing connection to make “Me” the default." /> : <>
       <CapacityMetrics model={model} settings={settings} label={`${individual ? who : teamLabel} utilization · ${lastName}`} />
       <TablePanel title={`Releases · ${lastName} vs ${monthLabel}`} info={<p>Releases and documents approved per Azure DevOps Server view under Release Details, in {lastName} and in the selected month {monthLabel}, with the change. A view counts when its documents carry “Release x.y.z” in their paths. DP counts from its own query: Completed Releases (DT, Design Transfer: DDT Done with its DDT Date in the month) and Supported Releases (DT, SFV = Start of Verification / Hardening, PRD = PRD Milestone and RPE = Release Planning Event, Done in the month — each release once) in place of documents. Not narrowed by Team / Individual.</p>} count={`${releases.length} stream${releases.length === 1 ? '' : 's'}`} empty={releases.length ? undefined : 'No release views fetched yet.'}>

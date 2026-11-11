@@ -79,11 +79,14 @@ function installedLicence(name, version) {
   if (!file || !existsSync(file)) return ''
   try { const pkg = JSON.parse(readFileSync(file, 'utf8')); return licenceOf(pkg.license) || licenceOf(pkg.licenses) } catch { return '' }
 }
+// oxlint publishes one MIT-licensed native binding per platform. pnpm installs only the binding for this platform,
+// so the other package manifests are unavailable locally even though they are locked for CI and the desktop build.
+const knownPlatformLicence = (name) => name.startsWith('@oxlint/binding-') ? 'MIT' : ''
 const purl = (name, version) => `pkg:npm/${name.startsWith('@') ? `%40${name.slice(1)}` : name}@${version}`
 const hexOf = (integrity) => { const found = /^sha512-(.+)$/.exec(integrity ?? ''); return found ? Buffer.from(found[1], 'base64').toString('hex') : '' }
 
 export function render(list, app, previous = new Map()) {
-  const rows = list.map((entry) => ({ ...entry, licence: installedLicence(entry.name, entry.version) || previous.get(`${entry.name}@${entry.version}`) || 'not recorded (package not installed on this computer)' }))
+  const rows = list.map((entry) => ({ ...entry, licence: installedLicence(entry.name, entry.version) || previous.get(`${entry.name}@${entry.version}`) || knownPlatformLicence(entry.name) || 'not recorded (package not installed on this computer)' }))
   const count = (scope) => rows.filter((row) => row.scope === scope).length
   const table = (subset) => ['| Component | Version | Licence | Scope | Direct |', '|---|---|---|---|---|', ...subset.map((row) => `| ${row.name} | ${row.version} | ${row.licence} | ${row.scope} | ${row.direct ? 'yes' : ''} |`)].join('\n')
   const licences = Object.entries(rows.reduce((all, row) => ({ ...all, [row.licence]: (all[row.licence] ?? 0) + 1 }), {})).sort((a, b) => b[1] - a[1])

@@ -377,3 +377,4 @@ body:has(.modal-backdrop){overflow:hidden}
 
 .standard-hours{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:6px 0 4px;font-size:12px}form.standard-hours{display:grid;gap:10px;max-width:640px}form.standard-hours .azure-table table{min-width:0}form.standard-hours td input{width:100%}
 .standard-hours .inline-check{display:inline-flex;flex-direction:row;align-items:center;gap:5px;font-weight:600}.standard-hours .inline-check input{width:auto}
+.profile-picker{display:grid;gap:4px}.profile-picker p{margin:0;max-width:440px;font-size:12px;text-transform:none;letter-spacing:0}

@@ -141,7 +141,8 @@ test('holidays and common activities: mapped Epics / Features apply their month 
   const model = capacityModel([...backlog, ...events], '2026-10', { ...settings, sharedTime, profiles })
   const ana = model.people.find((person) => person.name === 'Ana'), ben = model.people.find((person) => person.name === 'Ben')
   assert.deepEqual([ana.reserved, ben.reserved], [16, 16 + 8], 'PI Planning (16h: Original Estimate first) for everyone; the NL audit (no hours: one working day) for Ben only, by the nearer mapping')
-  assert.equal(ana.available, ana.funded - ana.absence - 16, 'reserved time lowers available capacity')
+  assert.equal(ana.available, ana.funded - ana.absence, 'CAP-38: common activities are not deducted')
+  assert.deepEqual([ana.reservedPlanned, ana.reservedActual, ana.utilized], [16, 12, 160 + 12], 'they count as utilized hours (recorded: the 12 h booked on PI Planning)')
   assert.equal(ana.absenceByKind['Public holiday'], 8, 'the India holiday Feature still applies by its name')
   assert.equal(ben.absenceByKind['Public holiday'], 0)
   assert.equal(ana.work, 160, 'the PI Planning Task assigned to Ana is not her booked work')
@@ -166,7 +167,7 @@ test('holidays and common activities: mapped Epics / Features apply their month 
 
 // NPRA: Tasks tagged NPRA (or under a tagged Feature) are not project work; only the booked NPRA hours come off the
 // available hours, and they are tracked against the per-person maximum (hours over it are flagged).
-test('NPRA: only booked hours are deducted; tracked against the per-person maximum, hours over it flagged', () => {
+test('CAP-38: Utilization = (work + trainings + other NPRA + common activities) ÷ (contractual − absence); NPRA split, checked against the maximum', () => {
   const withNpra = [...backlog,
     item(12, { workItemType: 'Feature', parentId: 2, title: 'Trainings', tags: 'NPRA Hours; Training' }), item(22, { parentId: 12 }),
     item(60, { workItemType: 'Task', parentId: 20, title: 'October 2026 | Stand-ups', assignedTo: 'Ana', tags: 'npra', originalEstimate: 10, completedWork: 12 }),
@@ -174,18 +175,21 @@ test('NPRA: only booked hours are deducted; tracked against the per-person maxim
   ]
   const model = capacityModel(withNpra, '2026-10', { ...settings, npraHoursPerMonth: 20 })
   const ana = model.people.find((person) => person.name === 'Ana'), ben = model.people.find((person) => person.name === 'Ben')
-  assert.deepEqual([ana.npra, ana.npraPlanned, ana.npraTasks, ana.npraAllowance, ana.npraOver, ana.npraDeducted], [12, 10, 1, 20, 0, 12], 'Ana: within the 20h maximum; only the 12h booked are deducted')
-  assert.equal(ana.available, 176 - 24 - 12); assert.equal(ana.work, 160, 'NPRA hours are not project work')
-  assert.deepEqual([ben.npra, ben.npraOver, ben.npraDeducted], [30, 10, 30], 'Ben: 10h over the maximum is flagged, the 30h booked come off the funded hours')
-  assert.equal(ben.available, 176 - 30); assert.equal(ben.work, 50)
-  assert.deepEqual([model.totals.npra, model.totals.npraDeducted, model.totals.npraOver, model.counts.npraOver], [42, 42, 10, 1])
-  assert.equal(model.totals.available, 176 * 2 - 24 - 42)
+  // Ana: contractual 176 − absence 24 (PTO 16 + sick 8) = 152; utilized 160 work + 12 other NPRA = 172.
+  assert.deepEqual([ana.npra, ana.training, ana.npraOther, ana.npraOtherPlanned, ana.npraOver, ana.npraDeducted], [12, 0, 12, 10, 0, 0], 'stand-ups tagged NPRA are Other NPRA, not deducted')
+  assert.deepEqual([ana.available, ana.utilized, ana.utilization, ana.utilizedPlanned, ana.plannedUtilization, ana.status], [152, 172, 113.16, 130, 85.53, 'Overloaded'])
+  assert.equal(ana.work, 160, 'NPRA hours are not project work (streams)')
+  // Ben: tagged Training on the Feature: a training; 10 h over the 20 h maximum is flagged only.
+  assert.deepEqual([ben.training, ben.trainingPlanned, ben.npraOther, ben.npraOver], [30, 20, 0, 10])
+  assert.deepEqual([ben.available, ben.utilized, ben.utilization], [176, 80, 45.45])
+  assert.deepEqual([model.totals.npra, model.totals.training, model.totals.npraOther, model.totals.npraDeducted, model.counts.npraOver], [42, 30, 12, 0, 1])
+  assert.deepEqual([model.totals.available, model.totals.utilized, model.totals.utilization], [328, 252, 76.83])
   assert.ok(!model.streams.some((stream) => stream.title === 'Trainings'), 'NPRA is not a stream')
-  const tracked = capacityModel(withNpra, '2026-10', { ...settings, npraHoursPerMonth: 0 })
-  const anaTracked = tracked.people.find((person) => person.name === 'Ana')
-  assert.deepEqual([anaTracked.npra, anaTracked.npraAllowance, anaTracked.npraOver, anaTracked.npraDeducted, anaTracked.available], [12, 0, 0, 12, 176 - 24 - 12], 'maximum 0: no maximum to exceed, booked NPRA hours still come off the available hours')
   assert.equal(capacityModel(withNpra, '2026-10', { absenceEpicId: 900, hoursPerDay: 8, overloadedAt: 100, availableBelow: 80 }).people.find((person) => person.name === 'Ana').npraAllowance, 20, 'settings without the field take the default 20h')
   assert.equal(normalizeCapacitySettings({ npraHoursPerMonth: -5 }).npraHoursPerMonth, 20); assert.equal(normalizeCapacitySettings({ npraHoursPerMonth: 0 }).npraHoursPerMonth, 0)
+  // The team figure adds up the people: a person with more absence than contractual hours counts 0, never less.
+  const over = capacityModel([...backlog, item(44, { workItemType: 'Task', parentId: 41, title: 'October 2026 | Ana - PTO', assignedTo: 'Ana', completedWork: 200 })], '2026-10', settings)
+  assert.deepEqual([over.people.find((person) => person.name === 'Ana').available, over.totals.available], [0, 176])
 })
 
 test('NPRA: nobody is charged for NPRA they did not book', () => {
@@ -278,10 +282,11 @@ test('CAP-35/36: Old Calculation — every hour (absence, holidays, NPRA include
   assert.equal(standardHours, 32, 'the default Standard Hours')
   assert.deepEqual(rows.map((row) => row.name), ['Ana', 'Ben'])
   const [ana, ben] = rows
-  // Ana: 22 days × 8 h − 32 h = 144; plan 100 + 20 + 8 holiday; actual 120 + 40 + 16 PTO + 8 sick + 8 holiday.
-  assert.deepEqual(ana, { name: 'Ana', funded: 176, netCapacity: 144, planned: 128, plannedUtilization: 88.89, available: 16, status: 'Balanced', actual: 192, actualUtilization: 133.33 })
+  // Ana: 22 days × 8 h − 32 h = 144; plan 100 + 20 + 8 holiday + 24 absence without an estimate (CAP-40: PTO 16 + sick 8
+  // counted at their Completed Work); actual 120 + 40 + 16 PTO + 8 sick + 8 holiday.
+  assert.deepEqual(ana, { name: 'Ana', funded: 176, netCapacity: 144, planned: 152, plannedUtilization: 105.56, available: -8, status: 'Overloaded', actual: 192, actualUtilization: 133.33 })
   assert.deepEqual([ben.planned, ben.actual, ben.available, ben.status], [68, 58, 76, 'Has capacity'])
-  assert.deepEqual([totals.funded, totals.netCapacity, totals.planned, totals.actual, totals.available, totals.plannedUtilization], [352, 288, 196, 250, 92, 68.06])
+  assert.deepEqual([totals.funded, totals.netCapacity, totals.planned, totals.actual, totals.available, totals.plannedUtilization], [352, 288, 220, 250, 68, 76.39])
   const over = oldCalculation(capacityModel([...backlog, item(70, { workItemType: 'Task', parentId: 20, title: 'October 2026 | Release 1', assignedTo: 'Ben', originalEstimate: 200 })], '2026-10', settings)).rows.find((row) => row.name === 'Ben')
   assert.deepEqual([over.planned, over.available, over.status], [260, -116, 'Overloaded'])
   // The breakup sets the total; an empty breakup is 0 h; never below 0.
@@ -298,12 +303,12 @@ test('CAP-37: Old Calculation — an unticked shared-time group (All, All-<Regio
   const base = { ...settings, profiles: { Ana: { region: 'India' }, Ben: { region: 'US' } }, sharedTime: [{ id: 60, kind: 'holiday', scope: 'India' }, { id: 63, kind: 'activity', scope: 'everyone' }] }
   const row = (extra) => oldCalculation(capacityModel([...backlog, ...holiday], '2026-10', { ...base, ...normalizeCapacitySettings({ ...base, ...extra }), profiles: base.profiles })).rows
   const all = row({})
-  // Ana: own plan 120 + All 16 + All-India 8; actual 184 + 12 + 8. Ben (US): own 60 + All 16; actual 50 + 12.
-  assert.deepEqual(all.map((entry) => [entry.name, entry.planned, entry.actual]), [['Ana', 144, 204], ['Ben', 76, 62]])
+  // Ana: own plan 120 + 24 absence without an estimate (CAP-40) + All 16 + All-India 8; actual 184 + 12 + 8. Ben (US): own 60 + All 16; actual 50 + 12.
+  assert.deepEqual(all.map((entry) => [entry.name, entry.planned, entry.actual]), [['Ana', 168, 204], ['Ben', 76, 62]])
   const noIndia = row({ oldCalcExcludedScopes: ['India'] })
-  assert.deepEqual(noIndia.map((entry) => [entry.name, entry.planned, entry.actual]), [['Ana', 136, 196], ['Ben', 76, 62]])
+  assert.deepEqual(noIndia.map((entry) => [entry.name, entry.planned, entry.actual]), [['Ana', 160, 196], ['Ben', 76, 62]])
   const none = row({ oldCalcExcludedScopes: ['everyone', 'India', 'Netherlands', 'US', 'Mars'] })
-  assert.deepEqual(none.map((entry) => [entry.name, entry.planned, entry.actual]), [['Ana', 120, 184], ['Ben', 60, 50]])
+  assert.deepEqual(none.map((entry) => [entry.name, entry.planned, entry.actual]), [['Ana', 144, 184], ['Ben', 60, 50]])
   assert.deepEqual(normalizeCapacitySettings({ oldCalcExcludedScopes: ['US', 'Mars', 'everyone'] }).oldCalcExcludedScopes, ['everyone', 'US'])
   assert.equal('oldCalcExcludedScopes' in normalizeCapacitySettings({ oldCalcExcludedScopes: [] }), false)
 })
