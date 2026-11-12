@@ -6,7 +6,9 @@ import { Notice, Panel, Pill } from './ui'
 
 // Settings → Access: who has which role, and what each role sees and may do. Shown to everyone; changed and saved to
 // Git (access.json) only by a role that may manage access, with a Git token that can write.
-export function AccessPanel({ access, git, people }: { access: Access; git: GitStorage; people: { email: string; name: string }[] }) {
+// CAP-49: on Settings → People & access the members (who has which role) are set in the People section with the rest
+// of each person's mapping; this panel then shows only the default role and what each role sees and may do.
+export function AccessPanel({ access, git, people, membersInPeople = false }: { access: Access; git: GitStorage; people: { email: string; name: string }[]; membersInPeople?: boolean }) {
   const [draft, setDraft] = useState<AccessPolicy | null>(null)
   const [newEmail, setNewEmail] = useState('')
   // The person picked by name from the QMS-0025 people (their email is stored), or 'other' to type an email.
@@ -56,6 +58,7 @@ export function AccessPanel({ access, git, people }: { access: Access; git: GitS
     {shown && <>
       {!editable && <p className="muted">{git.readOnly ? 'View only: your Git token can read but not save.' : 'View only: your role does not include “Manage access”.'}</p>}
       <fieldset className="plain-fieldset" disabled={!editable || busy}>
+        {membersInPeople ? <div className="query-toolbar"><label>Everyone else<select aria-label="Default role" value={shown.defaultRole ?? ''} onChange={(event) => change((policy) => { policy.defaultRole = (event.target.value || null) as Role | null })}><option value="">No role (Settings only)</option>{roles.map((role) => <option key={role}>{role}</option>)}</select></label><small className="muted">Each person's app access role is set in the People section above.</small></div> : <>
         <h3>Members</h3>
         <div className="query-toolbar">
           <input className="search" aria-label="Search members" placeholder="Search email or name" value={search} onChange={(event) => setSearch(event.target.value)} />
@@ -75,6 +78,7 @@ export function AccessPanel({ access, git, people }: { access: Access; git: GitS
           </tr>)}
           {!members.length && <tr><td colSpan={roles.length + 2} className="muted">{search ? 'No member matches.' : 'No members yet: everyone has the default role.'}</td></tr>}
         </tbody></table></div>
+        </>}
         <h3>What each role sees and may do</h3>
         <div className="azure-table"><table className="access-table"><thead><tr><th>Menu area / action</th>{roles.map((role) => <th key={role}>{role}</th>)}</tr></thead><tbody>
           {areas.map((area) => <tr key={area.key}><td>{area.label}</td>{roles.map((role) => <td key={role}><input type="checkbox" aria-label={`${role} sees ${area.label}`} checked={shown.roles[role].areas.includes(area.key)} onChange={() => change((policy) => { policy.roles[role].areas = toggle<Area>(policy.roles[role].areas, area.key) })} /></td>)}</tr>)}

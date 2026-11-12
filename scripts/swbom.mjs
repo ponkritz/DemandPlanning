@@ -79,9 +79,9 @@ function installedLicence(name, version) {
   if (!file || !existsSync(file)) return ''
   try { const pkg = JSON.parse(readFileSync(file, 'utf8')); return licenceOf(pkg.license) || licenceOf(pkg.licenses) } catch { return '' }
 }
-// oxlint publishes one MIT-licensed native binding per platform. pnpm installs only the binding for this platform,
-// so the other package manifests are unavailable locally even though they are locked for CI and the desktop build.
-const knownPlatformLicence = (name) => name.startsWith('@oxlint/binding-') ? 'MIT' : ''
+// oxlint and rolldown publish one MIT-licensed native binding per platform. pnpm installs only the binding for this
+// platform, so the other package manifests are unavailable locally even though they are locked for CI and the build.
+const knownPlatformLicence = (name) => name.startsWith('@oxlint/binding-') || name.startsWith('@rolldown/binding-') ? 'MIT' : ''
 const purl = (name, version) => `pkg:npm/${name.startsWith('@') ? `%40${name.slice(1)}` : name}@${version}`
 const hexOf = (integrity) => { const found = /^sha512-(.+)$/.exec(integrity ?? ''); return found ? Buffer.from(found[1], 'base64').toString('hex') : '' }
 

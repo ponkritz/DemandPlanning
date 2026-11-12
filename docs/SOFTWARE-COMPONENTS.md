@@ -86,6 +86,7 @@ This document lists every software component of the system: the in-house source 
 | CalculationProfilesPanel | `src/components/CalculationProfilesPanel.tsx` | Settings → Capacity & periods → Calculation profiles: list with formulas, copy, edit, delete and make default (CAP-41, CAP-42). | CAP, SET |
 | BucketRulesPanel | `src/components/BucketRulesPanel.tsx` | Settings → Capacity & periods → Bucket rules: the words and tags, edit with a check against the month, built-in words (CAP-46). | CAP, SET |
 | InsightThresholdsPanel | `src/components/InsightThresholdsPanel.tsx` | Settings → Capacity & periods → Insight thresholds: edit with ranges and built-in values (CAP-47). | CAP, SET |
+| CapacityRolesPanel | `src/components/CapacityRolesPanel.tsx` | Settings → People & access → Capacity roles: team roles and app access roles counted for capacity (CAP-50). | CAP, SET |
 | MultiSelect | `src/components/MultiSelect.tsx` | Multi-value checkbox filter button ("All", one value or "n selected"). | OVR, UI |
 | PersonPicker | `src/components/PersonPicker.tsx` | Typeable person list with "me" first and keyboard selection. | ATM, UI |
 | QueryView | `src/components/QueryView.tsx` | Read-only query results view: summary strip, query columns, sorting, filters, search and CSV export. | QV |
@@ -261,6 +262,7 @@ This document lists every software component of the system: the in-house source 
 | calculation-profiles.test | `tests/calculation-profiles.test.mjs` | Calculation profiles (built-ins, custom profiles, default, normaliser) and Lock figures (CAP-41…43). | CAP |
 | bucket-rules.test | `tests/bucket-rules.test.mjs` | Bucket rules: built-in words, custom rules moving Tasks between buckets, the normaliser (CAP-46). | CAP |
 | insight-thresholds.test | `tests/insight-thresholds.test.mjs` | Insight thresholds moving each insight, and the normaliser (CAP-47). | CAP, OVR |
+| people-access.test | `tests/people-access.test.mjs` | People & access: work email on the profile, capacity roles and who is counted (CAP-49, CAP-50). | CAP |
 | cloud-snapshots.test | `tests/cloud-snapshots.test.mjs` | Snapshot freezing, folder safety, verified upload, failures and history listing. | SNP |
 | connections.test | `tests/connections.test.mjs` | Connection URLs, roles, paged queries, on-prem servers, presets, desktop downloads and menu views. | CON, FET, DSK |
 | dashboard.test | `tests/dashboard.test.mjs` | Periods, person-month records, overload, concentration, rebalancing and bands. | OVR |
