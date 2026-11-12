@@ -46,7 +46,12 @@ export interface CapacitySettings { planLockDay?: number; actualsLockDay?: numbe
   // CAP-46: the words and tags that decide absence kinds, training and other NPRA (built-in ones when unset).
   bucketRules?: BucketRules
   // CAP-47: the insight thresholds of Team overview (built-in values when unset).
-  insightThresholds?: InsightThresholds }
+  insightThresholds?: InsightThresholds
+  // CAP-50: the team roles and app access roles left out of capacity (built-in: Lead, Manager; People Manager).
+  capacityRoles?: CapacityRoles
+  // CAP-50: each person's app access roles by email (from access.json at run time; never stored here).
+  accessRoles?: Record<string, string[]> }
+export interface CapacityRoles { excludedResourceRoles: ResourceRole[]; excludedAccessRoles: string[] }
 export const defaultCapacitySettings: CapacitySettings = { absenceEpicId: 37778, hoursPerDay: 8, overloadedAt: 100, availableBelow: 80, npraHoursPerMonth: 20, defaultJoinedOn: '2026-05-01' }
 // An NPRA Task: tagged itself, or under a tagged Story / Feature / Epic (the absence Epic and mapped shared time win).
 // CAP-46: the tags come from the bucket rules (built-in: NPRA, Training).
@@ -65,7 +70,8 @@ export const absenceKinds: AbsenceKind[] = ['PTO', 'Sick Leave', 'Unplanned Leav
 export const resourceRoles = ['QE', 'QMS', 'CAPA', 'Lead', 'Manager'] as const
 export type ResourceRole = typeof resourceRoles[number]
 // removed (CAP-33): taken out of Settings → Resources and out of every capacity figure (their hours too); restorable.
-export interface ResourceProfile { region?: Region; role?: ResourceRole; reportsTo?: string; peopleManager?: boolean; joinedOn?: string; leftOn?: string; listed?: 'team' | 'added'; removed?: boolean }
+// CAP-49: email links the person (Azure DevOps display name) to their app access (access.json is keyed by email).
+export interface ResourceProfile { region?: Region; role?: ResourceRole; reportsTo?: string; peopleManager?: boolean; joinedOn?: string; leftOn?: string; listed?: 'team' | 'added'; removed?: boolean; email?: string }
 const isDay = (value: unknown): value is string => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`)) && new Date(`${value}T00:00:00Z`).toISOString().startsWith(value)
 
 export function normalizeProfiles(value: unknown): Record<string, ResourceProfile> {
@@ -83,6 +89,7 @@ export function normalizeProfiles(value: unknown): Record<string, ResourceProfil
     if (isDay(input.leftOn) && !(profile.joinedOn && input.leftOn < profile.joinedOn)) profile.leftOn = input.leftOn
     if (input.listed === 'team' || input.listed === 'added') profile.listed = input.listed
     if (input.removed === true) profile.removed = true
+    if (typeof input.email === 'string' && /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/.test(input.email.trim())) profile.email = input.email.trim().toLowerCase()
     if (Object.keys(profile).length) result[name] = profile
   }
   return result
@@ -145,13 +152,14 @@ export function normalizeCapacitySettings(value: unknown): CapacitySettings {
   const excluded = (value as { oldCalcExcludedScopes?: unknown } | null)?.oldCalcExcludedScopes
   const oldCalcExcludedScopes = Array.isArray(excluded) ? sharedTimeScopes.filter((scope) => excluded.includes(scope)) : []
   // CAP-41…43: custom profiles, the default profile (a known id only) and the locked figures, each kept only once set.
-  const raw = (value ?? {}) as { calculationProfiles?: unknown; defaultProfileId?: unknown; figureLocks?: unknown; bucketRules?: unknown; insightThresholds?: unknown }
+  const raw = (value ?? {}) as { calculationProfiles?: unknown; defaultProfileId?: unknown; figureLocks?: unknown; bucketRules?: unknown; insightThresholds?: unknown; capacityRoles?: unknown }
+  const capacityRoles = normalizeCapacityRoles(raw.capacityRoles)
   const insightThresholds = normalizeInsightThresholds(raw.insightThresholds)
   const bucketRules = normalizeBucketRules(raw.bucketRules)
   const calculationProfiles = normalizeCalculationProfiles(raw.calculationProfiles)
   const defaultProfileId = typeof raw.defaultProfileId === 'string' && ['current-v4', 'old-calculation', ...calculationProfiles.map((profile) => profile.id)].includes(raw.defaultProfileId) && raw.defaultProfileId !== 'current-v4' ? raw.defaultProfileId : undefined
   const figureLocks = normalizeFigureLocks(raw.figureLocks)
-  const withLocks = { ...settings, ...locks, ...(Array.isArray(standard) ? { standardHours: normalizeStandardHours(standard) } : {}), ...(oldCalcExcludedScopes.length ? { oldCalcExcludedScopes } : {}), ...(calculationProfiles.length ? { calculationProfiles } : {}), ...(defaultProfileId ? { defaultProfileId } : {}), ...(Object.keys(figureLocks).length ? { figureLocks } : {}), ...(bucketRules ? { bucketRules } : {}), ...(insightThresholds ? { insightThresholds } : {}) }
+  const withLocks = { ...settings, ...locks, ...(Array.isArray(standard) ? { standardHours: normalizeStandardHours(standard) } : {}), ...(oldCalcExcludedScopes.length ? { oldCalcExcludedScopes } : {}), ...(calculationProfiles.length ? { calculationProfiles } : {}), ...(defaultProfileId ? { defaultProfileId } : {}), ...(Object.keys(figureLocks).length ? { figureLocks } : {}), ...(bucketRules ? { bucketRules } : {}), ...(insightThresholds ? { insightThresholds } : {}), ...(capacityRoles ? { capacityRoles } : {}) }
   return withLocks.availableBelow < withLocks.overloadedAt ? withLocks : { ...withLocks, availableBelow: defaultCapacitySettings.availableBelow, overloadedAt: defaultCapacitySettings.overloadedAt }
 }
 const lockDay = (value: unknown) => { const day = Number(value); return Number.isInteger(day) && day >= 1 && day <= 28 ? day : undefined }
@@ -205,8 +213,34 @@ export const sharedTimeScopes: SharedTimeScope[] = ['everyone', ...regions]
 export const sharedTimeScopeLabel = (scope: SharedTimeScope) => scope === 'everyone' ? 'All' : `All-${scope}`
 export const inScope = (scope: SharedTimeScope, region: Region | undefined) => scope === 'everyone' || scope === region
 
+// CAP-50: the app access roles by email, set by the app whenever access.json is loaded or saved, so every page counts
+// capacity with the same roles.
+let currentAccessRoles: Record<string, string[]> = {}
+export function setAccessRoles(members: Record<string, string[]> | undefined) { currentAccessRoles = Object.fromEntries(Object.entries(members ?? {}).map(([email, list]) => [email.toLowerCase(), [...list]])) }
 export function capacityContext(state: { capacitySettings?: unknown; resourceProfiles?: unknown }): CapacitySettings {
-  return { ...normalizeCapacitySettings(state.capacitySettings), profiles: normalizeProfiles(state.resourceProfiles) }
+  return { ...normalizeCapacitySettings(state.capacitySettings), profiles: normalizeProfiles(state.resourceProfiles), accessRoles: currentAccessRoles }
+}
+
+// CAP-50: which roles count for capacity. Built-in: Lead and Manager (team roles) and People Manager (app access role, or
+// the People manager tick in Resources) are left out. Stored only when it differs from the built-in choice.
+export const accessRoleNames = ['Admin', 'Product Owner', 'People Manager', 'Scrum Master', 'Team Member'] as const
+export const defaultCapacityRoles: CapacityRoles = { excludedResourceRoles: ['Lead', 'Manager'], excludedAccessRoles: ['People Manager'] }
+export function normalizeCapacityRoles(value: unknown): CapacityRoles | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const input = value as { excludedResourceRoles?: unknown; excludedAccessRoles?: unknown }
+  const pick = <T extends string>(list: unknown, allowed: readonly T[], fallback: T[]) => Array.isArray(list) ? allowed.filter((entry) => list.includes(entry)) : [...fallback]
+  const roles = { excludedResourceRoles: pick(input.excludedResourceRoles, resourceRoles, defaultCapacityRoles.excludedResourceRoles), excludedAccessRoles: pick(input.excludedAccessRoles, accessRoleNames, defaultCapacityRoles.excludedAccessRoles as typeof accessRoleNames[number][]) as string[] }
+  const same = (a: string[], b: string[]) => a.length === b.length && a.every((entry) => b.includes(entry))
+  return same(roles.excludedResourceRoles, defaultCapacityRoles.excludedResourceRoles) && same(roles.excludedAccessRoles, defaultCapacityRoles.excludedAccessRoles) ? undefined : roles
+}
+// Why a person is not counted for capacity because of a role (undefined when counted).
+export function roleExclusion(name: string, settings: CapacitySettings): string | undefined {
+  const roles = settings.capacityRoles ?? defaultCapacityRoles, profile = settings.profiles?.[name]
+  if (profile?.role && roles.excludedResourceRoles.includes(profile.role)) return `team role ${profile.role}`
+  if (profile?.peopleManager && roles.excludedAccessRoles.includes('People Manager')) return 'People manager'
+  const access = profile?.email ? settings.accessRoles?.[profile.email] ?? [] : []
+  const role = access.find((entry) => roles.excludedAccessRoles.includes(entry))
+  return role ? `app role ${role}` : undefined
 }
 
 export const absenceKind = (titles: string[], rules: BucketRules = defaultBucketRules): AbsenceKind => absenceKindBy(rules, titles)
@@ -236,6 +270,7 @@ export function capacityModel(source: AzureWorkItem[], month: string, settings: 
   const rules = rulesOf(settings)
   const outside = new Map<string, { name: string; tasks: number; hours: number; joinedOn?: string; leftOn?: string }>()
   const removedPeople = new Map<string, { name: string; tasks: number; hours: number }>()
+  const notCounted = new Map<string, { name: string; tasks: number; hours: number; reason: string }>()
   // A person's own Joined on wins; without one, the default Joined on of the settings applies.
   const employmentOf = (name: string) => ({ joinedOn: profiles[name]?.joinedOn ?? (settings.defaultJoinedOn || undefined), leftOn: profiles[name]?.leftOn })
   // Settings read before the NPRA allowance existed (or built by hand) take the default allowance.
@@ -276,6 +311,9 @@ export function capacityModel(source: AzureWorkItem[], month: string, settings: 
     const name = task.assignedTo || feature?.assignedTo || 'Unassigned'
     // CAP-33: a person removed in Settings → Resources is not counted — no capacity, no hours; listed apart.
     if (profiles[name]?.removed) { const entry = removedPeople.get(name) ?? { name, tasks: 0, hours: 0 }; entry.tasks += 1; entry.hours += hours(task.completedWork); removedPeople.set(name, entry); continue }
+    // CAP-50: a person in a role not counted for capacity (e.g. Lead, People Manager) is listed apart, hours too.
+    const excludedBy = roleExclusion(name, settings)
+    if (excludedBy) { const entry = notCounted.get(name) ?? { name, tasks: 0, hours: 0, reason: excludedBy }; entry.tasks += 1; entry.hours += hours(task.completedWork); notCounted.set(name, entry); continue }
     // Employed on no working day of the month (joined later or left earlier): no capacity, not counted; the hours
     // booked are listed apart (outsideEmployment) so they can be checked.
     const employment = employmentOf(name)
@@ -358,7 +396,7 @@ export function capacityModel(source: AzureWorkItem[], month: string, settings: 
   const available = sum('available'), utilized = sum('utilized'), utilizedPlanned = sum('utilizedPlanned')
   const absenceByKind = personList.reduce((kinds, person) => { for (const kind of absenceKinds) kinds[kind] += person.absenceByKind[kind]; return kinds }, emptyKinds())
   return {
-    month, settings, workingDays: workingDays(month), fundedPerPerson: funded, profile: lock ? { name: lock.profileName, formula: lock.formula } : { name: profile.name, formula: profileFormula(profile, settings) }, locked: lock ? { lockedOn: lock.lockedOn, lockedBy: lock.lockedBy, profileName: lock.profileName } : undefined, outsideEmployment: [...outside.values()], removed: [...removedPeople.values()], prorated: personList.filter((person) => person.employedDays < workingDays(month)).map((person) => ({ name: person.name, days: person.employedDays, funded: person.funded })), monthlyTasks, people: personList, streams: streamList, holidays, sharedTime,
+    month, settings, workingDays: workingDays(month), fundedPerPerson: funded, profile: lock ? { name: lock.profileName, formula: lock.formula } : { name: profile.name, formula: profileFormula(profile, settings) }, locked: lock ? { lockedOn: lock.lockedOn, lockedBy: lock.lockedBy, profileName: lock.profileName } : undefined, outsideEmployment: [...outside.values()], removed: [...removedPeople.values()], notCounted: [...notCounted.values()], prorated: personList.filter((person) => person.employedDays < workingDays(month)).map((person) => ({ name: person.name, days: person.employedDays, funded: person.funded })), monthlyTasks, people: personList, streams: streamList, holidays, sharedTime,
     totals: { ...totals, available, utilized, utilizedPlanned, training: sum('training'), npraOther: sum('npraOther'), reservedActual: sum('reservedActual'), reservedPlanned: sum('reservedPlanned'), absenceByKind, utilization: personList.some(person => person.utilization != null) ? percent(utilized, available) : null, plannedUtilization: personList.some(person => person.plannedUtilization != null) ? percent(utilizedPlanned, available) : null },
     counts: { npraOver: personList.filter(person => person.npraOver > 0).length, overloaded: personList.filter(person => person.status === 'Overloaded').length, balanced: personList.filter(person => person.status === 'Balanced').length, hasCapacity: personList.filter(person => person.status === 'Has capacity').length, noBookings: personList.filter(person => person.status === 'No bookings').length },
   }

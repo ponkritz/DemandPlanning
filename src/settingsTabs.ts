@@ -6,15 +6,16 @@ export const settingsSectionKey = 'demand-planning-settings-section-v1'
 
 // The pages in menu order; shared: only for roles with "Manage shared settings".
 export const settingsPages: { key: SettingsTab; label: string; shared?: boolean }[] = [
-  { key: 'connections', label: 'Azure DevOps' }, { key: 'storage', label: 'Storage' }, { key: 'access', label: 'Access' }, { key: 'features', label: 'Feature setup' },
-  { key: 'capacity', label: 'Capacity & periods', shared: true }, { key: 'resources', label: 'Resources', shared: true }, { key: 'masters', label: 'Master data', shared: true },
+  { key: 'connections', label: 'Azure DevOps' }, { key: 'storage', label: 'Storage' }, { key: 'features', label: 'Feature setup' },
+  { key: 'capacity', label: 'Capacity & periods', shared: true }, { key: 'resources', label: 'People & access' }, { key: 'masters', label: 'Master data', shared: true },
   { key: 'pack', label: 'Monthly pack', shared: true }, { key: 'tables', label: 'Table defaults', shared: true }, { key: 'history', label: 'Historical hours', shared: true }, { key: 'audit', label: 'Audit', shared: true },
 ]
 export const settingsPagesFor = (canManage: boolean) => settingsPages.filter((page) => canManage || !page.shared)
-export const settingsLabel = (key: SettingsTab) => settingsPages.find((page) => page.key === key)?.label ?? 'Settings'
+// CAP-49: Access is part of People & access; an old link to it opens that page.
+export const settingsLabel = (key: SettingsTab) => settingsPages.find((page) => page.key === (key === 'access' ? 'resources' : key))?.label ?? 'Settings'
 
 export function readSettingsTab(): SettingsTab {
-  try { const saved = localStorage.getItem(settingsTabKey); return settingsPages.some((page) => page.key === saved) ? saved as SettingsTab : 'connections' } catch { return 'connections' }
+  try { const stored = localStorage.getItem(settingsTabKey), saved = stored === 'access' ? 'resources' : stored; return settingsPages.some((page) => page.key === saved) ? saved as SettingsTab : 'connections' } catch { return 'connections' }
 }
 export function saveSettingsTab(key: SettingsTab) { try { localStorage.setItem(settingsTabKey, key) } catch { /* not remembered */ } }
 
