@@ -20,13 +20,42 @@ export interface KpiRow { id: string; label: string; epicId?: number; metric: Kp
 // department: the name before "| Performance Pulse update" in the title of the exported template (PCK-08).
 export interface MonthlyPackSetup { schema: 1; lines: PackLine[]; kpis: KpiRow[]; department?: string }
 // The slide text typed per month; blank until typed (suggestions are a later step).
-export const noteKeys = ['summary', 'overallStatus', 'keyTakeaways', 'nextSteps', 'decisionRequired', 'risks', 'mitigation', 'leadershipSupport', 'observations', 'focusAreas', 'supportRequested'] as const
+export const noteKeys = ['deliverables', 'summary', 'overallStatus', 'keyTakeaways', 'nextSteps', 'decisionRequired', 'risks', 'mitigation', 'leadershipSupport', 'observations', 'focusAreas', 'supportRequested'] as const
 export type NoteKey = typeof noteKeys[number]
 export const noteLabels: Record<NoteKey, string> = {
+  deliverables: 'Actions / deliverables realized (added)',
   summary: 'Summary', overallStatus: 'Overall status', keyTakeaways: 'Key takeaways (added)', nextSteps: 'Key next steps', decisionRequired: 'Decision required', risks: 'Risks (added)',
   mitigation: 'Proposed mitigation', leadershipSupport: 'Leadership support requested', observations: 'Observations, challenges & risks (added)', focusAreas: 'Focus areas for next months', supportRequested: 'Support requested / topics to highlight (added)',
 }
-export interface MonthlyPackNotes { schema: 1; month: string; text: Partial<Record<NoteKey, string>>; kpiValues: Record<string, string> }
+// anchors (PCK-10): for each typed line of a box, the generated bullet it follows (its index), or -1 for the end of the
+// box. Files without anchors (before v6.3.0) keep every typed line at the end.
+export interface MonthlyPackNotes { schema: 1; month: string; text: Partial<Record<NoteKey, string>>; kpiValues: Record<string, string>; anchors?: Partial<Record<NoteKey, number[]>> }
+// One typed bullet of a box: its text and the generated bullet it follows (-1: at the end of the box).
+export interface TypedBullet { text: string; after: number }
+const anchorOf = (value: unknown) => Number.isInteger(value) && (value as number) >= -1 && (value as number) < 1000 ? value as number : -1
+// The typed bullets of a box, in order (empty ones kept while editing).
+export function typedBullets(notes: MonthlyPackNotes, key: NoteKey): TypedBullet[] {
+  // No entry: no bullets. An empty string is one empty bullet being typed (never saved: see serializePackNotes).
+  const raw = notes.text[key]
+  if (raw == null) return []
+  const anchors = notes.anchors?.[key] ?? []
+  return raw.split('\n').map((line, index) => ({ text: line, after: anchorOf(anchors[index]) }))
+}
+// The notes with the typed bullets of one box replaced.
+export function withBullets(notes: MonthlyPackNotes, key: NoteKey, bullets: TypedBullet[]): MonthlyPackNotes {
+  const text = { ...notes.text }, anchors = { ...(notes.anchors ?? {}) }
+  if (bullets.length) text[key] = bullets.map((bullet) => bullet.text.replace(/\n/g, ' ')).join('\n'); else delete text[key]
+  // Anchors only where a bullet is not at the end, so notes without placed bullets keep their earlier shape.
+  if (bullets.some((bullet) => bullet.after !== -1)) anchors[key] = bullets.map((bullet) => bullet.after); else delete anchors[key]
+  const { anchors: _old, ...rest } = notes // eslint-disable-line @typescript-eslint/no-unused-vars
+  return { ...rest, text, ...(Object.keys(anchors).length ? { anchors } : {}) }
+}
+// The lines of a box: each generated bullet followed by the typed bullets placed after it, then those at the end.
+export function mergeBullets(generated: string[], bullets: TypedBullet[]): string[] {
+  const filled = bullets.map((bullet) => ({ ...bullet, text: bullet.text.trim() })).filter((bullet) => bullet.text)
+  const at = (index: number) => filled.filter((bullet) => bullet.after === index).map((bullet) => bullet.text)
+  return [...generated.flatMap((line, index) => [line, ...at(index)]), ...filled.filter((bullet) => bullet.after < 0 || bullet.after >= generated.length).map((bullet) => bullet.text)]
+}
 
 export const defaultPackSetup: MonthlyPackSetup = {
   schema: 1,
@@ -70,11 +99,23 @@ export function parsePackNotes(input: string, month: string): MonthlyPackNotes {
   const value = JSON.parse(input) as Partial<MonthlyPackNotes>
   if (!value || typeof value !== 'object' || value.schema !== 1) throw new Error(`${monthlyPackNotesPath(month)} is not a schema 1 file.`)
   const notes = emptyNotes(month)
-  for (const key of noteKeys) { const entry = text((value.text as Record<string, unknown> | undefined)?.[key], 20000); if (entry.trim()) notes.text[key] = entry }
+  const anchors = (value as { anchors?: Record<string, unknown> }).anchors ?? {}
+  for (const key of noteKeys) {
+    const entry = text((value.text as Record<string, unknown> | undefined)?.[key], 20000)
+    if (!entry.trim()) continue
+    const list = Array.isArray(anchors[key]) ? anchors[key] as unknown[] : []
+    const kept = entry.split('\n').map((line, index) => ({ text: line, after: anchorOf(list[index]) })).filter((bullet) => bullet.text.trim())
+    Object.assign(notes, withBullets(notes, key, kept))
+  }
   for (const [key, entry] of Object.entries(value.kpiValues ?? {})) if (/^[a-z0-9-]{1,40}$/i.test(key) && typeof entry === 'string' && entry.trim()) notes.kpiValues[key] = entry.slice(0, 200)
   return notes
 }
-export const serializePackNotes = (notes: MonthlyPackNotes) => `${JSON.stringify({ schema: 1, month: notes.month, text: Object.fromEntries(noteKeys.filter((key) => notes.text[key]?.trim()).map((key) => [key, notes.text[key]])), kpiValues: notes.kpiValues }, null, 2)}\n`
+// Empty typed lines are dropped with their anchors; anchors are written only for boxes with a bullet not at the end.
+export function serializePackNotes(notes: MonthlyPackNotes) {
+  const kept = noteKeys.map((key) => [key, typedBullets(notes, key).filter((bullet) => bullet.text.trim())] as const).filter(([, bullets]) => bullets.length)
+  const anchors = Object.fromEntries(kept.filter(([, bullets]) => bullets.some((bullet) => bullet.after !== -1)).map(([key, bullets]) => [key, bullets.map((bullet) => bullet.after)]))
+  return `${JSON.stringify({ schema: 1, month: notes.month, text: Object.fromEntries(kept.map(([key, bullets]) => [key, bullets.map((bullet) => bullet.text).join('\n')])), ...(Object.keys(anchors).length ? { anchors } : {}), kpiValues: notes.kpiValues }, null, 2)}\n`
+}
 
 // ---- Epic counts ----
 const finished = new Set(['closed', 'done', 'completed', 'resolved'])
@@ -180,16 +221,15 @@ export function yoyLine(pack: MonthlyPack) {
   return `YoY support change of ${signed(pack.overall.change)} overall${parts.length ? ` – with ${parts.join(', ')}` : ''} (${short(pack.month)} YTD vs. last year)`
 }
 export const supportedLine = (pack: MonthlyPack) => pack.lines.filter((line) => line.supported > 0).map((line) => `${line.label} = ${line.supported}`).join('; ')
-const noteLines = (notes: MonthlyPackNotes, key: NoteKey) => (notes.text[key] ?? '').split('\n').map((line) => line.trim()).filter(Boolean)
 
 export function packSlides(pack: MonthlyPack): Slide[] {
   const { notes } = pack
   const deliverables = pack.lines.filter((line) => line.releases.length).map((line) => `${line.label} - ${line.releases.join(', ')}`)
   const capacity = capacityLine(pack), yoy = yoyLine(pack), supported = supportedLine(pack)
-  const box = (key: string, title: string, generated: string[], note?: NoteKey): SlideBox => ({ key, title, generated, lines: [...generated, ...(note ? noteLines(notes, note) : [])], note })
+  const box = (key: string, title: string, generated: string[], note?: NoteKey): SlideBox => ({ key, title, generated, lines: note ? mergeBullets(generated, typedBullets(notes, note)) : generated, note })
   return [
     { title: '2x2', subtitle: monthLabel(pack.month), boxes: [
-      box('deliverables', 'Actions/Deliverables Realized', deliverables),
+      box('deliverables', 'Actions/Deliverables Realized', deliverables, 'deliverables'),
       box('observations', 'Observations, Challenges & Risks', capacity ? [capacity] : [], 'observations'),
       box('focus', 'Focus Areas for Next Months', [], 'focusAreas'),
       box('support', 'Support Requested / Topics to Highlight', capacity ? [`${capacity} – Stretched Resources.`] : [], 'supportRequested'),
