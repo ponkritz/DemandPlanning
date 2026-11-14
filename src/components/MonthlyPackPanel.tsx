@@ -1,10 +1,10 @@
-import { useDeferredValue, useMemo, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { GitStorage } from '../useGitStorage'
 import type { MonthlyPackStore } from '../useMonthlyPack'
 import type { WindchillWorkspace } from '../useWindchill'
 import type { PageProps } from '../pages/types'
-import { buildMonthlyPack, monthLabel, noteLabels, packFill, packSlides, slideText, type MonthlyPackNotes, type NoteKey, type Slide, type SlideBox, type StreamMonth, type Utilization } from '../monthlyPack'
+import { buildMonthlyPack, monthLabel, noteLabels, packFill, packSlides, serializePackNotes, slideText, typedBullets, withBullets, type MonthlyPackNotes, type NoteKey, type Slide, type SlideBox, type StreamMonth, type TypedBullet, type Utilization } from '../monthlyPack'
 import { packStreamsOf, packUtilization } from '../packInputs'
 import { capacityContext } from '../capacity'
 import { writePptx, type PptxSlide } from '../pptx'
@@ -28,7 +28,8 @@ export function MonthlyPackPanel({ month, azure, store, git, pack, windchill }: 
   const [seen, setSeen] = useState(pack.notes)
   if (pack.notes !== seen) { setSeen(pack.notes); setDraft(pack.notes); setStatus(null) }
   const editable = git.connected && !git.readOnly && !git.isSample
-  const dirty = JSON.stringify(draft) !== JSON.stringify(pack.notes)
+  // Empty bullets being typed are not saved, so they do not count as a change.
+  const dirty = serializePackNotes(draft) !== serializePackNotes(pack.notes)
 
   const streamsOf = useMemo(() => (at: string): StreamMonth[] => packStreamsOf(store.state, azure.connectionProfiles, windchill, at), [store.state, azure.connectionProfiles, windchill])
   const utilization = useMemo((): Utilization => packUtilization(azure.items, month, settings), [azure.items, month, settings])
@@ -38,6 +39,14 @@ export function MonthlyPackPanel({ month, azure, store, git, pack, windchill }: 
   const built = useMemo(() => buildMonthlyPack({ month, setup: pack.setup, notes: typed, items: azure.items, streamsOf, utilization }), [month, pack.setup, typed, azure.items, streamsOf, utilization])
   const slides = useMemo(() => packSlides(built), [built])
 
+  // PCK-10: every bullet of a box has a + that adds a typed bullet right below it; typed bullets are edited in place and
+  // removed with ✕; "+ Add bullet" adds one at the end. The new bullet's field takes the focus.
+  // The bullet to focus after the next render (a ref, so focusing needs no extra render).
+  const focusNext = useRef<string | null>(null)
+  const setFocus = (target: string) => { focusNext.current = target }
+  useEffect(() => { if (!focusNext.current) return; document.querySelector<HTMLInputElement>(`[data-bullet="${focusNext.current}"]`)?.focus(); focusNext.current = null })
+  const setBullets = (key: NoteKey, change: (bullets: TypedBullet[]) => TypedBullet[]) => setDraft((current) => withBullets(current, key, change(typedBullets(current, key))))
+  const addBullet = (key: NoteKey, at: number, after: number) => { setBullets(key, (bullets) => [...bullets.slice(0, at), { text: '', after }, ...bullets.slice(at)]); setFocus(`${key}:${at}`) }
   const setText = (key: NoteKey, value: string) => setDraft((current) => ({ ...current, text: { ...current.text, [key]: value } }))
   const setKpi = (id: string, value: string) => setDraft((current) => ({ ...current, kpiValues: { ...current.kpiValues, [id]: value } }))
   const copy = async (text: string, what: string) => { try { await navigator.clipboard.writeText(text); setStatus({ tone: 'success', text: `${what} copied.` }) } catch { setStatus({ tone: 'error', text: 'Copy failed: the browser refused clipboard access.' }) } }
@@ -78,12 +87,38 @@ export function MonthlyPackPanel({ month, azure, store, git, pack, windchill }: 
     downloadPptx(writePptx(deck), `pulse-check-${month}.pptx`)
   }
 
+  // The bullets of a box in slide order: each generated bullet (from the data) followed by the typed bullets placed after
+  // it, then the typed bullets at the end. Without a Git token that can save, the typed bullets are shown read-only.
+  const bulletList = (entry: SlideBox, key: NoteKey) => {
+    const bullets = typedBullets(draft, key)
+    const label = noteLabels[key]
+    const plus = (at: number, after: number, what: string) => editable && <button type="button" className="pack-plus" aria-label={`Add a bullet below ${what}`} title="Add a bullet below" disabled={busy} onClick={() => addBullet(key, at, after)}>+</button>
+    const typed = (index: number) => { const bullet = bullets[index]; return <li key={`t${index}`} className="pack-typed">
+      {editable ? <input data-bullet={`${key}:${index}`} aria-label={`${label}: bullet ${index + 1}`} value={bullet.text} maxLength={500} placeholder="Type the bullet…" disabled={busy} onChange={(event) => { const text = event.target.value; setBullets(key, (now) => now.map((item, at) => at === index ? { ...item, text } : item)) }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addBullet(key, index + 1, bullet.after) } else if (event.key === 'Backspace' && !bullet.text) { event.preventDefault(); setBullets(key, (now) => now.filter((_, at) => at !== index)); if (index > 0) setFocus(`${key}:${index - 1}`) } }} /> : <span>{bullet.text}</span>}
+      {editable && <button type="button" className="pack-remove" aria-label={`Remove ${label} bullet ${index + 1}`} title="Remove this bullet" disabled={busy} onClick={() => setBullets(key, (now) => now.filter((_, at) => at !== index))}>✕</button>}
+      {plus(index + 1, bullet.after, `${label} bullet ${index + 1}`)}
+    </li> }
+    const indexes = bullets.map((_, index) => index)
+    const after = (anchor: number) => indexes.filter((index) => bullets[index].after === anchor)
+    const atEnd = indexes.filter((index) => bullets[index].after < 0 || bullets[index].after >= entry.generated.length)
+    // + on a generated bullet: the new bullet goes right below it, before the typed bullets already placed there.
+    const insertAt = (anchor: number) => after(anchor)[0] ?? (indexes.find((index) => bullets[index].after > anchor || bullets[index].after < 0) ?? bullets.length)
+    return <>
+      <ul className="pack-bullets" aria-label={`${entry.title} bullets`}>
+        {entry.generated.map((line, anchor) => [<li key={`g${anchor}`} className="pack-gen"><span>{line}</span>{plus(insertAt(anchor), anchor, `“${line.slice(0, 40)}”`)}</li>, ...after(anchor).map(typed)])}
+        {atEnd.map(typed)}
+      </ul>
+      {!entry.generated.length && !bullets.length && <p className="muted pack-empty">No bullets yet.</p>}
+      {editable && <button type="button" className="ghost pack-add" disabled={busy} onClick={() => addBullet(key, bullets.length, -1)}>+ Add bullet</button>}
+    </>
+  }
+
   const box = (slide: Slide, entry: SlideBox) => <div key={entry.key} className="pack-box">
     <div className="pack-box-head"><h4>{entry.title}</h4><button type="button" className="text-button" onClick={() => void copy(entry.lines.map((line) => `• ${line}`).join('\n'), entry.title)}>Copy</button></div>
-    {entry.key !== 'kpi' && entry.generated.length > 0 && <ul className="pack-generated">{entry.generated.map((line, index) => <li key={index}>{line}</li>)}</ul>}
+    {entry.key !== 'kpi' && !entry.note && entry.generated.length > 0 && <ul className="pack-generated">{entry.generated.map((line, index) => <li key={index}>{line}</li>)}</ul>}
     {entry.key === 'kpi' && <table className="pack-kpi"><tbody>{built.kpis.map((row) => <tr key={row.id}><td>{row.label}</td><td><input aria-label={`${row.label} value`} value={draft.kpiValues[row.id] ?? ''} placeholder={row.computed || '—'} disabled={!editable || busy} onChange={(event) => setKpi(row.id, event.target.value)} />{!row.manual && <small className="muted pack-kpi-calc">{row.overridden ? <>Overridden · calculated {row.computed || '—'} <button type="button" className="text-button" disabled={!editable || busy} onClick={() => setKpi(row.id, '')}>Use calculated</button></> : `Calculated ${row.computed || '—'}; type to override`}</small>}</td></tr>)}</tbody></table>}
     {entry.key === 'status' && <select aria-label={`Overall status for ${monthLabel(month)}`} value={draft.text.overallStatus ?? ''} disabled={!editable || busy} onChange={(event) => setText('overallStatus', event.target.value)}><option value="">On Track (default)</option>{overallStatuses.map((value) => <option key={value} value={value}>{value}</option>)}</select>}
-    {entry.note && entry.key !== 'status' && <textarea aria-label={`${noteLabels[entry.note]} for ${monthLabel(month)}`} rows={3} placeholder={entry.generated.length ? 'Add lines (one per line)…' : 'One line per bullet…'} value={draft.text[entry.note] ?? ''} disabled={!editable || busy} onChange={(event) => setText(entry.note!, event.target.value)} />}
+    {entry.note && entry.key !== 'status' && bulletList(entry, entry.note)}
     {entry.key === 'kpi' && !editable && <small className="muted">Values are typed with a Git token that can save.</small>}
     {slide.title && null}
   </div>

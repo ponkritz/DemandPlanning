@@ -167,28 +167,40 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
     onClose()
   }
 
-  // BKL-28: a new Feature is created in four steps, in this order: 1 the Feature (Parent Epic, title, assignee, PI →
-  // Sprint, classification, target date), 2 its DoD, 3 its User Stories, 4 the estimates of the month Task. Next opens
-  // the following step only when this one is filled; Save is on the last step. Completing children has no steps.
+  // BKL-29: a new Feature is asked for on one page in four sections, in this order: 1 the Feature (Parent Epic, title,
+  // assignee, PI → Sprint, classification, target date), 2 its DoD, 3 its User Stories, 4 the estimates of the month
+  // Task. A section appears only when the sections before it are filled; the first one still to fill is highlighted
+  // and says what is missing; Save is at the bottom. Completing children shows everything at once.
   // The saved PAT is used silently; the field shows only when none is saved (or on "Use another token").
   const [showPat, setShowPat] = useState(!savedPat)
-  const [step, setStep] = useState(0)
   const childCount = epicSetup ? epicSetup.stories.length - skipStories.length + (reviewStory ? 1 : 0) + 2 : milestones.length + (reviewStory ? 1 : 0) + 2
   const pairLabel = (pair: { pi: AzureIteration; sprint: AzureIteration }) => `${pair.pi.name} → ${pair.sprint.name} (${pair.sprint.attributes?.startDate?.slice(5, 10)} – ${pair.sprint.attributes?.finishDate?.slice(5, 10)})`
   const steps = ['Feature', 'Definition of Done', 'User Stories', `Estimates for ${monthLabel}`]
   const featureMissing = [!parent && 'the Parent Epic', !(epicSetup ? title.trim() : plan) && (title.trim() ? 'a title in the form “Program | Service | Release”' : 'the title'), !sprintPath && 'the PI → Sprint'].filter(Boolean) as string[]
+  // Sections 2 and 3 count as done once the person has been in them and left (focus moved out of the section): the DoD
+  // usually starts filled and the stories are optional, so being filled cannot tell that they were looked at.
+  const [left, setLeft] = useState<number[]>([])
+  const leaveFrom = (index: number) => (event: React.FocusEvent<HTMLElement>) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setLeft((now) => now.includes(index) ? now : [...now, index]) }
   const stepMissing = [featureMissing, dod.trim() ? [] : ['the DoD'], [], []]
-  const ready = (index: number) => stepMissing.slice(0, index).every((missing) => !missing.length)
+  const done = (index: number) => !stepMissing[index].length && (index === 0 || left.includes(index))
+  const ready = (index: number) => [0, 1, 2].slice(0, index).every(done)
   const wizard = isNew
-  const shown = (index: number) => !wizard || step === index
+  const shown = (index: number) => !wizard || ready(index)
+  // The first section not done yet is the one to fill now; the last one (estimates) once the others are done.
+  const current = wizard ? [0, 1, 2].find((index) => !done(index)) ?? 3 : -1
+  const complete = !wizard || ready(3)
+  const sectionClass = (index: number) => `nf-step${wizard ? index === current ? ' nf-current' : index < 3 && done(index) ? ' nf-done' : '' : ''}`
+  const heading = (index: number) => wizard ? <h3 className="nf-section-title"><span aria-hidden="true">{index < 3 && done(index) ? '✓' : index + 1}</span>{steps[index]}{index === current && <small> — fill this in next</small>}</h3> : null
+  const goOn = ['', 'Check the DoD, then click outside this section to go on.', 'Choose the User Stories, then click outside this section to go on.', 'Enter the hours if you know them, then Save.']
+  const missingNote = (index: number) => wizard && index === current ? <p className="nf-missing" role="note">{stepMissing[index].length ? `To go on, fill in ${stepMissing[index].join(', ')}.` : goOn[index]}</p> : null
   function submit(event: React.FormEvent<HTMLFormElement>) {
-    // Enter in an earlier step moves on (when the step is filled) instead of creating the Feature.
-    if (wizard && step < steps.length - 1) { event.preventDefault(); if (!stepMissing[step].length) setStep(step + 1); return }
+    // Only Save creates the Feature (Enter in a field does not, see onKeyDown), and only when every section is filled.
+    if (wizard && !complete) { event.preventDefault(); return }
     void create(event)
   }
-  return <Modal title={resumeFeature ? 'Complete Feature children' : 'New Feature'} eyebrow="AZURE DEVOPS WRITE" onClose={closeEditor}><form onSubmit={submit} className="nf-form" noValidate={wizard && step < steps.length - 1}>
-      {wizard && <ol className="nf-steps" aria-label="New Feature steps">{steps.map((name, index) => <li key={name}><button type="button" aria-current={step === index ? 'step' : undefined} className={index < step ? 'done' : undefined} disabled={creating || !ready(index)} onClick={() => setStep(index)}><span>{index + 1}</span>{name}</button></li>)}</ol>}
-      <section className="nf-step" hidden={!shown(0)} aria-label={wizard ? 'Step 1: Feature' : undefined}>
+  return <Modal title={resumeFeature ? 'Complete Feature children' : 'New Feature'} eyebrow="AZURE DEVOPS WRITE" onClose={closeEditor}><form onSubmit={submit} className="nf-form" noValidate={wizard && !complete} onKeyDown={(event) => { if (wizard && event.key === 'Enter' && event.target instanceof HTMLInputElement) event.preventDefault() }}>
+      <section className={sectionClass(0)} hidden={!shown(0)} aria-label={wizard ? 'Section 1: Feature' : undefined}>
+        {heading(0)}
         {wizard && <p className="muted nf-hint">Start with the parent Epic: its setup decides the title fields, the DoD and the User Stories offered next.</p>}
         <div className="nf-head">
           <span className="nf-type">FEATURE</span>
@@ -212,17 +224,20 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
         </div>
         {showPat ? <label>PAT — Work Items: Read &amp; Write<input type="password" required autoComplete="off" value={pat} onChange={(event) => { setPat(event.target.value); setIterationChoices([]); setIterationPath(''); setSprintPath('') }} disabled={creating} /><small>Saved in this browser only. Enter it, then ↻ Reload the schedule.</small></label>
           : <p className="muted nf-pat">Using your saved Azure DevOps token. <button type="button" className="text-button" disabled={creating} onClick={() => setShowPat(true)}>Use another token</button></p>}
+        {missingNote(0)}
         {resumeFeature && <p className="muted">Adds the missing children of #{resumeFeature.id} without recreating the Feature. Existing children with the same title are reused.</p>}
       </section>
-      {isNew && <section className="nf-step" hidden={!shown(1)} aria-label="Step 2: Definition of Done">
+      {isNew && <section className={sectionClass(1)} hidden={!shown(1)} aria-label="Section 2: Definition of Done" tabIndex={-1} onBlur={leaveFrom(1)}>
+        {heading(1)}
         <p className="muted nf-hint">What has to be true for “{title.trim() || 'this Feature'}” to be done.</p>
         <label>Feature DoD (Definition of Done) — required<textarea required maxLength={100000} rows={6} value={dod} onChange={(event) => setDodText(event.target.value)} disabled={creating} placeholder="e.g. IQOQ finished and Checklist uploaded into the Feature." /><small>{dodText == null && epicSetup?.featureDoD.trim() ? `From the ${setupSource === 'personal' ? 'your own' : 'shared'} setup of Epic #${epicSetup.epicId}. ` : dodText == null ? 'The built-in DoD; change it as needed. ' : ''}Saved at the top of the Description.</small></label>
         <details className="nf-more"><summary>Description and acceptance criteria (optional)</summary>
           <label>Description<textarea name="description" maxLength={100000} value={description} onChange={(event) => setDescription(event.target.value)} disabled={creating} /></label>
           <label>Acceptance criteria<textarea name="acceptance" maxLength={100000} disabled={creating} /></label>
         </details>
+        {missingNote(1)}
       </section>}
-      <section className="nf-children nf-step" hidden={!shown(2)} aria-label={wizard ? 'Step 3: User Stories' : undefined}>{wizard ? <p className="muted nf-hint">Tick the User Stories to add under the Feature, and add one of your own if you need it. All are optional.</p> : null}<h4><strong>Child work items</strong> · {childCount} will be created or checked{epicSetup ? ` · ${setupSource === 'personal' ? 'your' : 'shared'} setup of Epic #${epicSetup.epicId}` : ''}</h4>
+      <section className={`nf-children ${sectionClass(2)}`} hidden={!shown(2)} aria-label={wizard ? 'Section 3: User Stories' : undefined} tabIndex={wizard ? -1 : undefined} onBlur={wizard ? leaveFrom(2) : undefined}>{heading(2)}{wizard ? <p className="muted nf-hint">Tick the User Stories to add under the Feature, and add one of your own if you need it. All are optional.</p> : null}<h4><strong>Child work items</strong> · {childCount} will be created or checked{epicSetup ? ` · ${setupSource === 'personal' ? 'your' : 'shared'} setup of Epic #${epicSetup.epicId}` : ''}</h4>
         {epicSetup && bothSetups && <p className="muted setup-source"><button type="button" className="text-button" disabled={creating} onClick={() => { setPreferShared(!preferShared); setSkipStories([]); setReviewChoice(null); setDodText(null) }}>{preferShared ? 'Use my own setup instead' : 'Use the shared setup instead'}</button></p>}
         {epicSetup ? <>
           <fieldset className="milestone-choices" disabled={creating}><legend>Optional User Stories</legend>
@@ -242,9 +257,11 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
           <label>Comment <small className="muted">(optional, added to its Discussion)</small><textarea value={ownStory.comment} rows={2} onChange={(event) => setOwnStory((current) => ({ ...current, comment: event.target.value }))} /></label>
           <small className="muted">Created under the new Feature in the Sprint chosen, assigned like the Feature.</small>
         </fieldset>}
+        {missingNote(2)}
         <p className="info-line"><Info label="Paths and assignment">Feature → {resumeFeature ? resumeFeature.iterationPath : iterationPath || 'the PI chosen'}. Optional User Stories → {sprintPath || 'the Sprint chosen'}. Time Writing story and Task → {config.project}, never the Sprint, in the Feature’s Area Path (the same on every page; an existing month Task of the person is reused). Area: the Feature and its User Stories take the Epic’s Area Path. Every new item is assigned to {assignee || 'the person chosen'}. {month ? `Time Writing month: ${monthLabel}.` : 'Current date uses India time.'}</Info></p>
       </section>
-      {isNew && <section className="nf-step" hidden={!shown(3)} aria-label={`Step 4: Estimates for ${monthLabel}`}>
+      {isNew && <section className={sectionClass(3)} hidden={!shown(3)} aria-label={`Section 4: Estimates for ${monthLabel}`}>
+        {heading(3)}
         <p className="muted nf-hint">The hours of the Time Writing Task “{monthLabel} | {title.trim() || '…'}”. Both are optional; you can change them later.</p>
         {lateTask && <p className="muted adhoc-note">Planning for {monthLabel} is locked: the new Task is tagged <code>ad-hoc</code>.</p>}
         <div className="nf-estimates">
@@ -252,12 +269,10 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
           <label>Completed Work (h)<input type="number" min="0" max="1000000" step="0.25" value={taskCompletedWork} onChange={(event) => setTaskCompletedWork(event.target.value)} disabled={creating} placeholder="Optional" /></label>
         </div>
         <dl className="nf-summary" aria-label="Summary"><dt>Feature</dt><dd>{title.trim()}</dd><dt>Parent Epic</dt><dd>{parent ? `#${parent.id} · ${parent.title}` : ''}</dd><dt>PI → Sprint</dt><dd>{sprintPath.split('\\').slice(-2).join(' → ')}</dd><dt>Children</dt><dd>{childCount} will be created or checked{ownStory.title.trim() ? ', plus your own User Story' : ''}</dd></dl>
+        {missingNote(3)}
       </section>}
-      {wizard && stepMissing[step].length > 0 && <p className="muted nf-missing" role="note">To go on, fill in {stepMissing[step].join(', ')}.</p>}
       {error && <div className="notice error" role="alert">{error}</div>}
       <div className="modal-actions"><button type="button" className="ghost" onClick={closeEditor} disabled={creating}>Cancel</button>
-        {wizard && step > 0 && <button type="button" className="ghost" onClick={() => setStep(step - 1)} disabled={creating}>Back</button>}
-        {wizard && step < steps.length - 1 ? <button key="next" type="button" className="primary" disabled={creating || stepMissing[step].length > 0} onClick={() => setStep(step + 1)}>Next</button>
-          : <button key="save" className="primary" title={needsDoD && !dod.trim() ? 'Enter the Feature DoD first' : undefined} disabled={creating || iterationLoading || (needsDoD && !dod.trim()) || (epicSetup ? !title.trim() : !plan) || !sprintPath}>{creating ? 'Creating and verifying…' : resumeFeature ? 'Complete missing children' : 'Save'}</button>}</div>
+        <button className="primary" title={needsDoD && !dod.trim() ? 'Enter the Feature DoD first' : undefined} disabled={creating || !complete || iterationLoading || (needsDoD && !dod.trim()) || (epicSetup ? !title.trim() : !plan) || !sprintPath}>{creating ? 'Creating and verifying…' : resumeFeature ? 'Complete missing children' : 'Save'}</button></div>
     </form></Modal>
 }

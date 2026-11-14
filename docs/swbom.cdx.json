@@ -6,7 +6,7 @@
     "component": {
       "type": "application",
       "name": "demandplanning",
-      "version": "3.3.0"
+      "version": "3.4.0"
     },
     "tools": [
       {
@@ -18,8 +18,8 @@
     {
       "type": "library",
       "name": "@azure/msal-browser",
-      "version": "5.29.0",
-      "purl": "pkg:npm/%40azure/msal-browser@5.29.0",
+      "version": "5.29.1",
+      "purl": "pkg:npm/%40azure/msal-browser@5.29.1",
       "scope": "required",
       "licenses": [
         {
@@ -31,7 +31,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "2a8fcebf0ea1f86bb7de6a7c7f4154c9d76bfca0d6cdb1b372047c1ca65a4f8c204d89632cf2893f5adc0eed111e3ee991de024768421cae755c5ce0beafd0e5"
+          "content": "f9332853fe21dca614bd02991fea75ffdfe20da7a90e554943b50c50007aabca6b3ec31fb0ea2a03d9b66a5a4fa8b510e3c069eec5ea376c1d840f6b3a0f6ad4"
         }
       ],
       "properties": [
@@ -48,8 +48,8 @@
     {
       "type": "library",
       "name": "@azure/msal-common",
-      "version": "16.16.1",
-      "purl": "pkg:npm/%40azure/msal-common@16.16.1",
+      "version": "16.16.2",
+      "purl": "pkg:npm/%40azure/msal-common@16.16.2",
       "scope": "required",
       "licenses": [
         {
@@ -61,7 +61,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "75229d2fd87f89eadc6f81ae9ac28587ec15bcb7b5a21b833e2be29258274151e763615835495b409dc4d50777eef9287fd09fada2bd050a425b58683a0d339d"
+          "content": "215a0f800ba9d219e9cf00bc7acc4fc6bae70c355ed27de698af9453725198a5b248ac4142b97e6b7d2d4cfde892627d59cedd87e220a0d6945e40b16f60c14a"
         }
       ],
       "properties": [
@@ -362,6 +362,96 @@
         {
           "alg": "SHA-512",
           "content": "75f65ea31eba02f74fb5bda50fc3ac208421d764e9d063424540df04720a1a96e6a2966da36fc0f274a96182e879d3c81e9aa479b959fe4f0e5741b2ecf62ec9"
+        }
+      ],
+      "properties": [
+        {
+          "name": "swbom:scope",
+          "value": "build / test"
+        },
+        {
+          "name": "swbom:direct",
+          "value": "false"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@emnapi/core",
+      "version": "2.0.0-beta.2",
+      "purl": "pkg:npm/%40emnapi/core@2.0.0-beta.2",
+      "scope": "excluded",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "333095a16b5c8383e6d81de37b998cbd832f8f732604ac3e7d4eef6ec25cf7f893f22a7afde6081e8fc3b26fe6afec2c1c1e92132243bb1074f58cbaafff3ee0"
+        }
+      ],
+      "properties": [
+        {
+          "name": "swbom:scope",
+          "value": "build / test"
+        },
+        {
+          "name": "swbom:direct",
+          "value": "false"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@emnapi/runtime",
+      "version": "2.0.0-beta.2",
+      "purl": "pkg:npm/%40emnapi/runtime@2.0.0-beta.2",
+      "scope": "excluded",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "25cad23f33ef66e359bc9a8f4c5f45c36e4b6ce27c6afcc556569fda0ae61f80a4bb4a063f8eed460a8f65a75c7e3dd8a1930790556709815b40cf08fa2e5013"
+        }
+      ],
+      "properties": [
+        {
+          "name": "swbom:scope",
+          "value": "build / test"
+        },
+        {
+          "name": "swbom:direct",
+          "value": "false"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@emnapi/wasi-threads",
+      "version": "2.2.0",
+      "purl": "pkg:npm/%40emnapi/wasi-threads@2.2.0",
+      "scope": "excluded",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "24fece607dfc43bfa9c9301ed78ada6472d020aec10ca6ddc238be5e2de971dffa424258407dd25f8c2ee84a651ab1895917a9a0dcde75f9b41b707d6787bd47"
         }
       ],
       "properties": [
@@ -692,6 +782,36 @@
         {
           "alg": "SHA-512",
           "content": "f503ad35f7dc385fdcd6c78c0839e37246f747d587706df8b64cbe147a4d28a096d3073fb1c60bc0cb4efa9b721947cc5b4fdbfe7e2a46200b95a14773d3a3ed"
+        }
+      ],
+      "properties": [
+        {
+          "name": "swbom:scope",
+          "value": "build / test"
+        },
+        {
+          "name": "swbom:direct",
+          "value": "false"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@napi-rs/wasm-runtime",
+      "version": "1.2.6",
+      "purl": "pkg:npm/%40napi-rs/wasm-runtime@1.2.6",
+      "scope": "excluded",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "991c83984c3dfdf0835c219f2f5b1b808c3f1942b43d5c515b863080f37ad45dcb43e7d2ca80456ab255ce01b2845ea447311067415e8c3aa6e162d749ea909b"
         }
       ],
       "properties": [
@@ -1458,8 +1578,8 @@
     {
       "type": "library",
       "name": "@rolldown/binding-android-arm-eabi",
-      "version": "1.2.18",
-      "purl": "pkg:npm/%40rolldown/binding-android-arm-eabi@1.2.18",
+      "version": "1.2.19",
+      "purl": "pkg:npm/%40rolldown/binding-android-arm-eabi@1.2.19",
       "scope": "excluded",
       "licenses": [
         {
@@ -1471,7 +1591,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "b9b4c6fb82a589dbe2a318ce15db1d11ad85e8954665bf26d81c8952a43b7d8cd4793d5c127d7de0f39cb10d743ca1f8a7ffead18427e120776294aecdc03562"
+          "content": "7be11b7b4593fbdb5b5e634a3c8882f18ad6007630ba0de6ea2e29deb6461ae95f66b8b58ed2381ec953f8e66715ffce207a30585ef50d3947c1704fd92880ec"
         }
       ],
       "properties": [
@@ -1488,8 +1608,8 @@
     {
       "type": "library",
       "name": "@rolldown/binding-android-arm64",
-      "version": "1.2.18",
-      "purl": "pkg:npm/%40rolldown/binding-android-arm64@1.2.18",
+      "version": "1.2.19",
+      "purl": "pkg:npm/%40rolldown/binding-android-arm64@1.2.19",
       "scope": "excluded",
       "licenses": [
         {
@@ -1501,7 +1621,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "d976b5b7f25e1464d99f94dbce03e9a5c09fb45f2c0959d336fac8be849d71986817302e572d4bdf1c50510e2c7d60edc15ce0d6ee988b54774a526e811355d9"
+          "content": "84ea266eb4c9faccedd9c884cd2ee8080efc94c3c1805e54310582248c8d7e7ac8ec62e5f0762816a0a7a4bda070f39a5ccaabc86094e44c5d40ac830dc0bec8"
         }
       ],
       "properties": [
@@ -1518,8 +1638,8 @@
     {
       "type": "library",
       "name": "@rolldown/binding-darwin-arm64",
-      "version": "1.2.18",
-      "purl": "pkg:npm/%40rolldown/binding-darwin-arm64@1.2.18",
+      "version": "1.2.19",
+      "purl": "pkg:npm/%40rolldown/binding-darwin-arm64@1.2.19",
       "scope": "excluded",
       "licenses": [
         {
@@ -1531,7 +1651,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "894cf0f47b2156fad6722f605578f1592eff33f21c2ef368ebbbeed9cff0f73281cf8848bcf462c5d529216fe209f86574b6aaf4447685e72c23d518e73d3fc8"
+          "content": "5e8300da9c022864d0cd48cf82d47091e747e1699785d20f293ea5ea83b17753d46cda1d188e837017a480dec40bfffec77a5f0585ffa8bd60366640aa2bf0e6"
         }
       ],
       "properties": [
@@ -1548,8 +1668,8 @@
     {
       "type": "library",
       "name": "@rolldown/binding-darwin-x64",
-      "version": "1.2.18",
-      "purl": "pkg:npm/%40rolldown/binding-darwin-x64@1.2.18",
+      "version": "1.2.19",
+      "purl": "pkg:npm/%40rolldown/binding-darwin-x64@1.2.19",
       "scope": "excluded",
       "licenses": [
         {
@@ -1561,7 +1681,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "5ee0c71736c512d665d101898bddbe7e61baeed7e7a75899f5539e0e4c1ab06c93ab6546dffe4f9c99ef02bf8c4f3161feb352709dd584df97a59cb21ac37b27"
+          "content": "ce8f04b124b0319098fdef9f46719a5f4d981a0bc90f4caf84d8bff61a463c0d8c27d645f1d3c2c3be5419fa48e8ea50fe6c91fdd2189a8811bea8990f44eb5e"
         }
       ],
       "properties": [
@@ -1578,8 +1698,8 @@
     {
       "type": "library",
       "name": "@rolldown/binding-freebsd-x64",
-      "version": "1.2.18",
-      "purl": "pkg:npm/%40rolldown/binding-freebsd-x64@1.2.18",
+      "version": "1.2.19",
+      "purl": "pkg:npm/%40rolldown/binding-freebsd-x64@1.2.19",
       "scope": "excluded",
       "licenses": [
         {
@@ -1591,7 +1711,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "30cf28a4b7ec2cad79a045c3cfa881734b776a1bbe7b0f63b009a16bea2f677de14b0620aa8ed89a94484ea1537d6ef103bd412c44378c9753b1a0a6841d5cf7"
+          "content": "3bc21200e7c8d678fb02e04f777d05485e3bcfb7fb973964e69a105468228a4bd0b86101158bd6f248be5049d3f9824f9cd1a34339f7d38925b783bd15413b98"
         }
       ],
       "properties": [
@@ -1608,8 +1728,8 @@
     {
       "type": "library",
       "name": "@rolldown/binding-linux-arm-gnueabihf",
-      "version": "1.2.18",
-      "purl": "pkg:npm/%40rolldown/binding-linux-arm-gnueabihf@1.2.18",
+      "version": "1.2.19",
+      "purl": "pkg:npm/%40rolldown/binding-linux-arm-gnueabihf@1.2.19",
       "scope": "excluded",
       "licenses": [
         {
@@ -1621,7 +1741,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "27a1280968b2e519c54331eb2b21d75debd9f65ba441f1a99dc857ff31bf93f582da773d3bd5f24b526003c908f55c4c16080c6c23e3a6fecb72292b8977de87"
+          "content": "fe56026dae4d3b4caae12d2318c1fc41306d92f431a178e8416cc5e41716a7d32307d8f15510f51900cda1f9158dc3a3df40d6ca12c837fe0e7bad092b368e37"
         }
       ],
       "properties": [
@@ -1638,8 +1758,8 @@
     {
       "type": "library",
       "name": "@rolldown/binding-linux-arm64-gnu",
-      "version": "1.2.18",
-      "purl": "pkg:npm/%40rolldown/binding-linux-arm64-gnu@1.2.18",
+      "version": "1.2.19",
+      "purl": "pkg:npm/%40rolldown/binding-linux-arm64-gnu@1.2.19",
       "scope": "excluded",
       "licenses": [
         {
@@ -1651,7 +1771,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "1c8905b8b17b09d0de922fb568264b2db2ead2193f3c79ed6fecf8fd8093a38ec96e4b130fa8c91042c8cfddad6113a60e6bccacda9432a062ef506424b0d1f8"
+          "content": "a66fdaa453019d26c56f73ba9c6e691ced62a87859ae31831448d29bea2df49d7b5d73ef1fd2fdd32e61fa381f1c213e41d96cbf2f2a284714e152b18230febc"
         }
       ],
       "properties": [
@@ -1668,8 +1788,8 @@
     {
       "type": "library",
       "name": "@rolldown/binding-linux-arm64-musl",
-      "version": "1.2.18",
-      "purl": "pkg:npm/%40rolldown/binding-linux-arm64-musl@1.2.18",
+      "version": "1.2.19",
+      "purl": "pkg:npm/%40rolldown/binding-linux-arm64-musl@1.2.19",
       "scope": "excluded",
       "licenses": [
         {
@@ -1681,7 +1801,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "e28a9622d2cb62dec871e3a712509cb7c4f67a4e69ecf983ecb374e134494571a8e5fdc7b4a4e0187e8f8584452b80b620292afcb3145340553efbe500a866f2"
+          "content": "2b54a6429dc51627219fca2aacd230bc5a19e7072f8c2ee0a01ce968c36f2dff4565cf9007f42f2e69e92598000061e20fdf34b4ff056599d79362bde2bbe5c6"
         }
       ],
       "properties": [
@@ -1698,8 +1818,8 @@
     {
       "type": "library",
       "name": "@rolldown/binding-linux-ppc64-gnu",
-      "version": "1.2.18",
-      "purl": "pkg:npm/%40rolldown/binding-linux-ppc64-gnu@1.2.18",
+      "version": "1.2.19",
+      "purl": "pkg:npm/%40rolldown/binding-linux-ppc64-gnu@1.2.19",
       "scope": "excluded",
       "licenses": [
         {
@@ -1711,7 +1831,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "f80911972e52ac21209cf84645fb9bee9b9c0126040b67d3b31660ed509c9e8ce9036f969ff802632d6decbb894baeffc7226effb9e86012677035246f0830d8"
+          "content": "234c700f9ee33ffdc0efee543d98a7db0f18ed71c4984339ceaa5864e710e39325356ead5095338b2995df246beeb2f8bf0c9f11c46c464b02e1aeca734f29e5"
         }
       ],
       "properties": [
@@ -1728,8 +1848,8 @@
     {
       "type": "library",
       "name": "@rolldown/binding-linux-s390x-gnu",
-      "version": "1.2.18",
-      "purl": "pkg:npm/%40rolldown/binding-linux-s390x-gnu@1.2.18",
+      "version": "1.2.19",
+      "purl": "pkg:npm/%40rolldown/binding-linux-s390x-gnu@1.2.19",
       "scope": "excluded",
       "licenses": [
         {
@@ -1741,7 +1861,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "4ed835afdbd5ca432742b13f1b060ef6270ab578ae88c7d17bfc3be312647a856ebe1446f96b53e8b10c39fe7c625eb7c9defb9611f33bc639e51f020b75c02c"
+          "content": "06bb441d3db848d5e3f47897ab2facfe45e24a2406b7a10a08f525462ac0a088a85712869db5c150491b6404807a2ee2649074fd89e6fb424fd34229c7b0274b"
         }
       ],
       "properties": [
@@ -1758,8 +1878,8 @@
     {
       "type": "library",
       "name": "@rolldown/binding-linux-x64-gnu",
-      "version": "1.2.18",
-      "purl": "pkg:npm/%40rolldown/binding-linux-x64-gnu@1.2.18",
+      "version": "1.2.19",
+      "purl": "pkg:npm/%40rolldown/binding-linux-x64-gnu@1.2.19",
       "scope": "excluded",
       "licenses": [
         {
@@ -1771,7 +1891,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "c57d53b78a398d43266b4bc9b17a79791640f673aeca281bd9d28930ccd9466cccc4b60613d3da28a4aa1cfccfbd242033c64e11a7124d0c0341cc167e1d3199"
+          "content": "ae6ef9ffd0e41ca794d969c0f30e17f785866202e50c21427e4402fb86e0b952660bf8ef0d1bf607edb02ce621c84d1f56ebfbfff0a4937f4ea0eb9fc82bbbe9"
         }
       ],
       "properties": [
@@ -1788,8 +1908,8 @@
     {
       "type": "library",
       "name": "@rolldown/binding-linux-x64-musl",
-      "version": "1.2.18",
-      "purl": "pkg:npm/%40rolldown/binding-linux-x64-musl@1.2.18",
+      "version": "1.2.19",
+      "purl": "pkg:npm/%40rolldown/binding-linux-x64-musl@1.2.19",
       "scope": "excluded",
       "licenses": [
         {
@@ -1801,7 +1921,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "e15565188e4ada4a1c899956de548df158c6dd35b9c9022501c7c27415cc8068c9c59965d7915ae287111d71ef215567c2589b0b0fcd41a8c9acd0e2aaaa628b"
+          "content": "8ab87fe3e89814ce06033a65b8312b823cfcf5b8fa343b6aa8c006ffa3b52c6dfc11ddcda7279bcc2a5c54d9055bcba1cbeff7fc1a1c52f9d70d1df709759ef4"
         }
       ],
       "properties": [
@@ -1818,8 +1938,8 @@
     {
       "type": "library",
       "name": "@rolldown/binding-openharmony-arm64",
-      "version": "1.2.18",
-      "purl": "pkg:npm/%40rolldown/binding-openharmony-arm64@1.2.18",
+      "version": "1.2.19",
+      "purl": "pkg:npm/%40rolldown/binding-openharmony-arm64@1.2.19",
       "scope": "excluded",
       "licenses": [
         {
@@ -1831,7 +1951,37 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "3c0a53b201f58cb62ecb2ded482cfd0def361aae6a5f08bbbc89956611334e05f50b8d79d02a7933665f2f7a4bbdb0af6c41cbd2825e0baa5dea9a1db6ff18e7"
+          "content": "f8a59358da0fb7e09f4aaf780a271e5aedf23c4f90ce4686fa984fcb3f46eb4b6664bc1f424700e007a4b1a7f3bc9030e29be0d6671de5ad53914a95bf4b3824"
+        }
+      ],
+      "properties": [
+        {
+          "name": "swbom:scope",
+          "value": "build / test"
+        },
+        {
+          "name": "swbom:direct",
+          "value": "false"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@rolldown/binding-wasm32-wasi",
+      "version": "1.2.19",
+      "purl": "pkg:npm/%40rolldown/binding-wasm32-wasi@1.2.19",
+      "scope": "excluded",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "ec41feb243ac979aa95a72b4bf36a68091613afd5cc31429b319bcb48f3cdcaf5fbabe5cdbba7cabcedfcc43ba05b04f69b036ffeb3fcd1eb7fe92dcd77ee23a"
         }
       ],
       "properties": [
@@ -1848,8 +1998,8 @@
     {
       "type": "library",
       "name": "@rolldown/binding-win32-arm64-msvc",
-      "version": "1.2.18",
-      "purl": "pkg:npm/%40rolldown/binding-win32-arm64-msvc@1.2.18",
+      "version": "1.2.19",
+      "purl": "pkg:npm/%40rolldown/binding-win32-arm64-msvc@1.2.19",
       "scope": "excluded",
       "licenses": [
         {
@@ -1861,7 +2011,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "2765e35a3c7f48ffb8c741f8afa773dd5cdbe5656483badee340e8f4aec7277b0adbfc5c999ad6c1a917952c1a32f3a4bebb8b2420f808bff7c2ab0847fb6182"
+          "content": "dd0d5883543bb44bc15a865fe6b16f1bf18a6503e0c1faeefa9e3005a8c37c9141b344870a92fef9d7d38d6f60c8029dd53ed9a4862f75a51ac7b3dafc884555"
         }
       ],
       "properties": [
@@ -1878,8 +2028,8 @@
     {
       "type": "library",
       "name": "@rolldown/binding-win32-x64-msvc",
-      "version": "1.2.18",
-      "purl": "pkg:npm/%40rolldown/binding-win32-x64-msvc@1.2.18",
+      "version": "1.2.19",
+      "purl": "pkg:npm/%40rolldown/binding-win32-x64-msvc@1.2.19",
       "scope": "excluded",
       "licenses": [
         {
@@ -1891,7 +2041,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "5f0449c5142f92e12d4b484822ddbd42ba8f27e27330948d607270e1a7bf99ceae11aadf446d5c7b28381e699688174bfd809bea0ecde412db4af9912516191f"
+          "content": "cbfb2a45173a77b8440b33857399f72d27aa72d988a7d98c8d8d4aab8b35e2e2cf77f2d9e33ee2d73ad6e9f32da7698f7ae4080b87ba50b31cc10ccca26a906a"
         }
       ],
       "properties": [
@@ -2012,6 +2162,36 @@
         {
           "alg": "SHA-512",
           "content": "e0101f7f29183a03bee67cc1598c04dd6f74b0180b26850f45659c2fcc25ca233c201f22a49cf750c27d29741dd512905e92a9f13bad9fcd0766d5acbb6bbbeb"
+        }
+      ],
+      "properties": [
+        {
+          "name": "swbom:scope",
+          "value": "build / test"
+        },
+        {
+          "name": "swbom:direct",
+          "value": "false"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@tybys/wasm-util",
+      "version": "0.10.4",
+      "purl": "pkg:npm/%40tybys/wasm-util@0.10.4",
+      "scope": "excluded",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "5b77388118a0152d13fcc6b8a88605dc60c07390107476f5c8be739c94f566fd58683f4a8adc7ae7ac018efaf5f6a6e2a2c9994fc9560cce4110cca752a5fae4"
         }
       ],
       "properties": [
@@ -4458,8 +4638,8 @@
     {
       "type": "library",
       "name": "electron",
-      "version": "44.11.1",
-      "purl": "pkg:npm/electron@44.11.1",
+      "version": "44.11.3",
+      "purl": "pkg:npm/electron@44.11.3",
       "scope": "required",
       "licenses": [
         {
@@ -4471,7 +4651,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "a50769dfe35a9f2c55431071747aa767f2a3f60281b3ca1e486b2609bd91d726855ae4fdd6f6e26d1d7da38a597699260580cc97cf74f84cedeea4fff7366300"
+          "content": "c95cc904033b85f2bf8240f72c7bc50f881f1cb8f57fa70bdf2620cd7f291d0c96cb3f14f454df4e3f56385770ccb8f9b5afbfa082830f806c0532d88856b64e"
         }
       ],
       "properties": [
@@ -5838,20 +6018,20 @@
     {
       "type": "library",
       "name": "graceful-fs",
-      "version": "4.2.11",
-      "purl": "pkg:npm/graceful-fs@4.2.11",
+      "version": "4.2.12",
+      "purl": "pkg:npm/graceful-fs@4.2.12",
       "scope": "excluded",
       "licenses": [
         {
           "license": {
-            "id": "ISC"
+            "id": "BlueOak-1.0.0"
           }
         }
       ],
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "45b279fe398570d342703579a3d7939c12c9fc7b33595d0fef76dcf857f89d2feb263f98692e881b288e2f45680585fe9755ab97793ade1fcaac7fa7849d17bd"
+          "content": "8aec86176138a1a7d07cfb11ac6db0b58d882eea4c86fb5dae1cebc41fb455c8ec3e948fb6da5f61d8e71851ac4e2e4c6891632358ce2873d0e944db4e3f5303"
         }
       ],
       "properties": [
@@ -9078,8 +9258,8 @@
     {
       "type": "library",
       "name": "rolldown",
-      "version": "1.2.18",
-      "purl": "pkg:npm/rolldown@1.2.18",
+      "version": "1.2.19",
+      "purl": "pkg:npm/rolldown@1.2.19",
       "scope": "excluded",
       "licenses": [
         {
@@ -9091,7 +9271,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "0b5bae4f7511eb449286e09a3d0140019c9e7c909666500a074d8157706e3c4d91b387debd1425b442a814edad5795bdfde261539462795eaf263ddebae95f35"
+          "content": "408895d49f5dd29ccde2379e4c7e2c8cfcb4019e9c032d9c1b41317a8135f94f11be3fa1477818928931d186de50d1a566a890249daeb5c1137b4a0a5f0cecb8"
         }
       ],
       "properties": [

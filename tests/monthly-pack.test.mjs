@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildMonthlyPack, capacityLine, defaultPackSetup, emptyNotes, epicDescendants, kpiValue, packSlides, parsePackNotes, parsePackSetup, sameMonthLastYear, serializePackNotes, serializePackSetup, slideText, supportedLine, yearMonths, yoyLine } from '../src/monthlyPack.ts'
+import { buildMonthlyPack, capacityLine, defaultPackSetup, emptyNotes, epicDescendants, kpiValue, mergeBullets, typedBullets, withBullets, packSlides, parsePackNotes, parsePackSetup, sameMonthLastYear, serializePackNotes, serializePackSetup, slideText, supportedLine, yearMonths, yoyLine } from '../src/monthlyPack.ts'
 import { writePptx } from '../src/pptx.ts'
 
 const item = (id, type, state, extra = {}) => ({ key: `o/p/${id}`, id, organization: 'o', project: 'p', title: `Item ${id}`, workItemType: type, state, assignedTo: '', areaPath: 'P', iterationPath: 'P', tags: '', url: '', syncedAt: '', ...extra })
@@ -14,6 +14,25 @@ test('setup and notes files: parse, clean and serialise (PCK-01, PCK-02)', () =>
   assert.throws(() => parsePackSetup('{"schema":2}'), /schema 1/)
   const notes = parsePackNotes(serializePackNotes({ ...emptyNotes('2026-10'), text: { summary: 'All good\r\nSecond', risks: '  ' }, kpiValues: { teds: '99%', 'bad key!': 'x' } }), '2026-10')
   assert.deepEqual(notes, { schema: 1, month: '2026-10', text: { summary: 'All good\nSecond' }, kpiValues: { teds: '99%' } }, 'blank text and bad keys are dropped, CRLF normalised')
+})
+
+test('PCK-10: typed bullets placed below a generated bullet round-trip through Git and keep their place on the slide', () => {
+  let notes = emptyNotes('2026-10')
+  notes = withBullets(notes, 'deliverables', [{ text: 'Hot-fix 4.1.1 shipped', after: 0 }, { text: '', after: 0 }, { text: 'Closing note', after: -1 }])
+  notes = withBullets(notes, 'focusAreas', [{ text: 'Plan PI 27', after: -1 }])
+  const saved = serializePackNotes(notes)
+  const json = JSON.parse(saved)
+  assert.deepEqual(json.text, { deliverables: 'Hot-fix 4.1.1 shipped\nClosing note', focusAreas: 'Plan PI 27' }, 'empty bullets are not saved')
+  assert.deepEqual(json.anchors, { deliverables: [0, -1] }, 'anchors only for a box with a bullet below a generated one')
+  const read = parsePackNotes(saved, '2026-10')
+  assert.deepEqual(typedBullets(read, 'deliverables'), [{ text: 'Hot-fix 4.1.1 shipped', after: 0 }, { text: 'Closing note', after: -1 }])
+  assert.deepEqual(mergeBullets(['DP - 4.1, 4.2', 'CP - 3.2'], typedBullets(read, 'deliverables')), ['DP - 4.1, 4.2', 'Hot-fix 4.1.1 shipped', 'CP - 3.2', 'Closing note'], 'below its generated bullet; the rest at the end')
+  assert.deepEqual(mergeBullets(['Only one'], [{ text: 'Was below line 3', after: 2 }]), ['Only one', 'Was below line 3'], 'a bullet whose generated line is gone goes to the end')
+  const old = parsePackNotes(JSON.stringify({ schema: 1, month: '2026-10', text: { risks: 'A\nB' }, kpiValues: {} }), '2026-10')
+  assert.deepEqual(typedBullets(old, 'risks'), [{ text: 'A', after: -1 }, { text: 'B', after: -1 }], 'files from before v6.3.0: every typed line at the end, as before')
+  assert.equal(old.anchors, undefined)
+  const pack = buildMonthlyPack({ month: '2026-10', setup: defaultPackSetup, notes: read, items: [], streamsOf: () => [], utilization: { month: null, ytd: null, qeMonth: null } })
+  assert.deepEqual(packSlides(pack)[0].boxes[0].lines, ['Hot-fix 4.1.1 shipped', 'Closing note'], 'no generated bullets this month: the typed ones still show')
 })
 
 test('Epic counts: descendants without Tasks, open / closed in month / closed YTD / closed share (PCK-04)', () => {
