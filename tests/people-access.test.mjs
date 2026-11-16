@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { capacityContext, capacityModel, defaultCapacitySettings, normalizeCapacityRoles, normalizeCapacitySettings, normalizeProfiles, roleExclusion, setAccessRoles } from '../src/capacity.ts'
+import { capacityContext, capacityModel, defaultCapacitySettings, normalizeCapacityRoles, normalizeCapacitySettings, normalizeProfiles, roleExclusion, setAccessRoles, setAzureEmails } from '../src/capacity.ts'
 import { settingsLabel, settingsPages } from '../src/settingsTabs.ts'
 
 const item = (id, extra = {}) => ({ key: `org/project/${id}`, id, title: 'Story', workItemType: 'User Story', state: 'Active', assignedTo: '', areaPath: '', iterationPath: '', tags: '', url: '', organization: 'org', project: 'project', syncedAt: '', ...extra })
@@ -46,4 +46,14 @@ test('CAP-50: capacity roles read from Git are checked; the built-in choice is n
   assert.deepEqual(capacityContext({}).accessRoles, { 'pat@example.com': ['People Manager'] })
   setAccessRoles(undefined)
   assert.deepEqual(capacityContext({}).accessRoles, {})
+})
+
+test('CAP-51: a person\'s work email comes from Azure DevOps (Assigned To); one saved in the profile is used only where Azure has none', () => {
+  const settings = { ...base, profiles: { Pat: { role: 'QE', email: 'old.pat@example.com' }, Kim: { role: 'QE', email: 'kim@example.com' } }, accessRoles: { 'pat@example.com': ['People Manager'], 'kim@example.com': ['People Manager'] } }
+  assert.equal(roleExclusion('Pat', settings), undefined, 'the old saved email has no access role')
+  assert.equal(roleExclusion('Pat', { ...settings, azureEmails: { Pat: 'pat@example.com' } }), 'app role People Manager', 'the Azure email links Pat to the People Manager role')
+  assert.equal(roleExclusion('Kim', { ...settings, azureEmails: {} }), 'app role People Manager', 'no Azure email: the saved one still applies')
+  setAzureEmails([{ assignedTo: 'Pat', assignedToEmail: 'Pat@Example.com' }, { assignedTo: 'Nobody' }, { assignedTo: '', assignedToEmail: 'x@example.com' }])
+  assert.deepEqual(capacityContext({}).azureEmails, { Pat: 'pat@example.com' }, 'read from the fetched work, lower case; never stored in the settings')
+  setAzureEmails([])
 })
