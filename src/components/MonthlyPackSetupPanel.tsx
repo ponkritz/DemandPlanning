@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { AzureWorkItem } from '../domain'
 import type { GitStorage } from '../useGitStorage'
 import type { MonthlyPackStore } from '../useMonthlyPack'
-import { kpiMetrics, type KpiMetric, type KpiRow, type MonthlyPackSetup, type PackLine } from '../monthlyPack'
+import { defaultCapabilitiesLabel, kpiMetrics, type KpiMetric, type KpiRow, type MonthlyPackSetup, type PackLine } from '../monthlyPack'
 import { defaultStreams } from '../streams'
 import { Notice, Panel } from './ui'
 import { checkTemplate, maxTemplateBytes } from '../pptxTemplate'
@@ -90,6 +90,14 @@ export function MonthlyPackSetupPanel({ pack, git, items }: { pack: MonthlyPackS
         </tr>)}
       </tbody></table></div>
       <div className="button-row"><button type="button" className="ghost" onClick={() => setDraft((current) => ({ ...current, lines: [...current.lines, { id: newId('line', current.lines.map((line) => line.id)), label: 'New line', streams: [], epicIds: [] }] }))}>＋ Add line</button></div>
+      {/* PCK-11: Capabilities (Projects & Services) — the unique Features under these Epics with hours recorded in the month. */}
+      <h3>Capabilities bullet</h3>
+      <p className="muted">One bullet in Actions/Deliverables Realized: the unique Features under these Epics that have hours recorded in the month (Completed Work on a month Time Writing Task under the Feature, from anyone), as “{draft.capabilities?.label || defaultCapabilitiesLabel} [n]: Feature, Feature, …”. No Epics: no bullet.</p>
+      <div className="pack-capabilities">
+        <label>Bullet label<input aria-label="Capabilities bullet label" value={draft.capabilities?.label ?? defaultCapabilitiesLabel} maxLength={80} onChange={(event) => setDraft((current) => ({ ...current, capabilities: { label: event.target.value, epicIds: current.capabilities?.epicIds ?? [] } }))} /></label>
+        <div>{(draft.capabilities?.epicIds ?? []).map((id) => <span key={id} className="milestone-chip">{epicName(id)} <button type="button" className="text-button" aria-label={`Remove ${epicName(id)} from Capabilities`} onClick={() => setDraft((current) => ({ ...current, capabilities: { label: current.capabilities?.label ?? defaultCapabilitiesLabel, epicIds: (current.capabilities?.epicIds ?? []).filter((entry) => entry !== id) } }))}>×</button></span>)}
+          <select aria-label="Add an Epic to Capabilities" value="" onChange={(event) => { const id = Number(event.target.value); if (id) setDraft((current) => ({ ...current, capabilities: { label: current.capabilities?.label ?? defaultCapabilitiesLabel, epicIds: [...(current.capabilities?.epicIds ?? []), id] } })) }}><option value="">Add Epic…</option>{epics.filter((epic) => !(draft.capabilities?.epicIds ?? []).includes(epic.id)).map((epic) => <option key={epic.id} value={epic.id}>#{epic.id} {epic.title}</option>)}</select></div>
+      </div>
       <h3>KPI Pulse rows</h3>
       <div className="azure-table"><table className="pack-setup"><thead><tr><th>KPI</th><th>Reads</th><th>Epic</th><th /></tr></thead><tbody>
         {draft.kpis.map((row) => <tr key={row.id}>

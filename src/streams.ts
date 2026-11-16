@@ -8,14 +8,15 @@ import type { AzureConnectionProfileSummary } from './azureCredentials.ts'
 // its documents; CP — Release containers of the release-folder tree query, Supported / Completed from QA/QE signatures
 // (cpReporting); the others keep the general path rule. DP and IOCC releases are matched to QMS-0025 Features by a
 // fuzzy match with a percentage.
-export type ReleaseRule = 'path' | 'dp' | 'iocc' | 'tool' | 'cp'
+// title (QV-52): every document is a release named by its Title (Content); no name and number from the paths.
+export type ReleaseRule = 'path' | 'dp' | 'iocc' | 'tool' | 'cp' | 'title'
 // aliases: earlier names of the stream; an export or connection named after one still belongs to it (QRE → ECP).
 export interface StreamDef { name: string; source: 'azure' | 'windchill'; rule: ReleaseRule; fuzzy: boolean; project?: boolean; aliases?: string[] }
 export const defaultStreams: StreamDef[] = [
   { name: 'DP', source: 'azure', rule: 'dp', fuzzy: true },
   { name: 'CP', source: 'azure', rule: 'cp', fuzzy: true },
   { name: 'IOCC', source: 'azure', rule: 'iocc', fuzzy: true },
-  { name: 'Content', source: 'azure', rule: 'path', fuzzy: false },
+  { name: 'Content', source: 'azure', rule: 'title', fuzzy: false },
   { name: 'Tool Validations', source: 'azure', rule: 'tool', fuzzy: false },
   { name: 'S&S IT', source: 'windchill', rule: 'path', fuzzy: false },
   // ECP (formerly QRE): projects "<number> <name>" from the Location's second folder (CON-83).

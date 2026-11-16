@@ -15,6 +15,7 @@ import { listValidationDocuments as listPackage, readValidationDocument as readP
 import type { PeriodControl } from './domain'
 import { normalizePeriods, replacePeriod } from './planningLock'
 import { personalViewsPath, viewsDefaultsPath } from './personalViews'
+import { changedFiles, fileLabel, watchedFolders, watchFocusGapMs, watchIntervalMs, type FolderEntry, type SeenVersions } from './gitWatch'
 
 export type GitStatus = 'off' | 'loading' | 'synced' | 'empty' | 'saving' | 'error' | 'conflict'
 
@@ -29,6 +30,13 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
   const [synced, setSynced] = useState<string | null>(null)
   const sha = useRef<string | null>(null)
   const started = useRef(false)
+  // GIT-15: the version of every shared file read or written here, to notice what others save while the app is open.
+  const seen = useRef<SeenVersions>({})
+  // Newer versions in Git not loaded here yet (path → version), named in the banner; reading or saving a file drops it.
+  const [remote, setRemote] = useState<Record<string, string | null>>({})
+  const remember = (path: string, version: string | null) => { seen.current[path] = version; setRemote((current) => path in current ? Object.fromEntries(Object.entries(current).filter(([key]) => key !== path)) : current) }
+  async function trackRead(target: GitConfig, key: string) { const read = await readTextFile(target, key); remember(target.path, read.sha); return read }
+  async function trackWrite(target: GitConfig, key: string, text: string, version: string | null, commitMessage: string) { const written = await writeTextFile(target, key, text, version, commitMessage); remember(target.path, written.sha); return written }
   const current = serializePlanning(planningData(store.state))
   const connected = Boolean(config && token)
   // A read-only token (e.g. the viewers' shared token): baselines are shown but not edited here.
@@ -48,15 +56,16 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
   const readOnly = connected && writable.key === accessKey && writable.value === false
   const dirty = connected && synced != null && current !== synced
 
-  const load = useCallback(async (target = config, key = token) => {
+  // quiet (GIT-15): a refresh while the app is open, without the loading state that makes other areas read again.
+  const load = useCallback(async (target = config, key = token, quiet = false) => {
     if (!target || !key) return
-    setStatus('loading'); setMessage(`Loading ${target.path} from ${target.owner}/${target.repo}…`)
+    if (!quiet) { setStatus('loading'); setMessage(`Loading ${target.path} from ${target.owner}/${target.repo}…`) }
     try {
       const file = await readPlanningFile(target, key)
-      sha.current = file.sha
+      sha.current = file.sha; remember(target.path, file.sha)
       if (!file.data) { setSynced(''); setStatus('empty'); setMessage(`${target.path} does not exist yet in ${target.owner}/${target.repo}. Save to create it from the data in this app.`); return }
       const data = file.data
-      store.update((draft) => { draft.baselineRules = data.baselineRules; draft.releaseScopes = data.releaseScopes; draft.resourceProfiles = data.resourceProfiles; if (data.capacitySettings) draft.capacitySettings = data.capacitySettings; if (data.periods) draft.periods = data.periods; draft.setupLinks = data.setupLinks; return draft })
+      store.update((draft) => { draft.baselineRules = data.baselineRules; draft.releaseScopes = data.releaseScopes; draft.resourceProfiles = data.resourceProfiles; if (data.capacitySettings) draft.capacitySettings = data.capacitySettings; if (data.periods) draft.periods = data.periods; draft.setupLinks = data.setupLinks; if (data.tableDefaults) draft.tableDefaults = data.tableDefaults; if (data.releaseSourceSettings) draft.releaseSourceSettings = data.releaseSourceSettings; return draft })
       setSynced(serializePlanning(data)); setCommitUrl(historyUrl(target)); setStatus('synced'); setMessage(`Loaded from ${target.owner}/${target.repo} · ${target.path}`)
     } catch (error) { setStatus('error'); setMessage(error instanceof Error ? error.message : String(error)) }
   }, [config, token, store])
@@ -66,6 +75,45 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     started.current = true
     void load()
   }, [store.ready, config, token, load])
+
+  // GIT-15: every 5 minutes, and when the window comes back (at most once a minute), the folders of the shared files
+  // are listed (no contents). Newer planning data is loaded at once unless this browser has unsaved changes to it;
+  // every other newer file (and planning data with unsaved changes) is named in a banner with Reload.
+  const lastCheck = useRef(0)
+  const latest = useRef({ dirty: false, status: 'off' as GitStatus })
+  const checkForUpdates = useRef<() => Promise<void>>(async () => {})
+  useEffect(() => { latest.current = { dirty, status } })
+  useEffect(() => { checkForUpdates.current = async () => {
+    if (!config || !token || isSample || document.visibilityState === 'hidden' || ['loading', 'saving'].includes(latest.current.status)) return
+    lastCheck.current = Date.now()
+    const tracked = { ...seen.current }
+    if (!Object.keys(tracked).length) return
+    const listings: Record<string, FolderEntry[]> = {}
+    for (const folder of watchedFolders(tracked)) {
+      try { listings[folder] = (await listFolder({ ...config, path: folder }, token)).map(({ path, sha: version }) => ({ path, sha: version })) } catch { /* tried again at the next check */ }
+    }
+    // A file read or saved here during the check is left to the next one.
+    const changed = changedFiles(tracked, listings).filter((path) => seen.current[path] === tracked[path])
+    if (!changed.length) return
+    const now = (path: string) => listings[path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '']?.find((entry) => entry.path === path)?.sha ?? null
+    let others = changed
+    if (changed.includes(config.path) && !latest.current.dirty) {
+      others = changed.filter((path) => path !== config.path)
+      await load(config, token, true)
+      setMessage(`Updated from Git at ${formatDateTime(new Date().toISOString())}: newer planning data saved by someone else was loaded.`)
+    }
+    if (others.length) setRemote((current) => ({ ...current, ...Object.fromEntries(others.map((path) => [path, now(path)])) }))
+  } })
+  useEffect(() => {
+    if (!config || !token || isSample) return
+    lastCheck.current = Date.now()
+    const run = () => { void checkForUpdates.current() }
+    const timer = window.setInterval(run, watchIntervalMs)
+    const back = () => { if (document.visibilityState !== 'hidden' && Date.now() - lastCheck.current >= watchFocusGapMs) run() }
+    window.addEventListener('focus', back); document.addEventListener('visibilitychange', back)
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', back); document.removeEventListener('visibilitychange', back) }
+  }, [config, token, isSample])
+  const remoteChanges = config ? Object.keys(remote).sort().map((path) => ({ path, label: fileLabel(path, config.path), planning: path === config.path })) : []
 
   async function connect(input: Partial<Record<keyof GitConfig, unknown>>, nextToken: string, remember: boolean) {
     let target: GitConfig
@@ -84,7 +132,7 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     try {
       const data = planningData(store.state)
       const result = await writePlanningFile(config, token, data, sha.current, commitMessage)
-      sha.current = result.sha
+      sha.current = result.sha; remember(config.path, result.sha)
       setSynced(serializePlanning(data)); setCommitUrl(result.commitUrl); setStatus('synced'); setMessage(`Saved to ${config.owner}/${config.repo} · ${config.path}`)
     } catch (error) {
       setStatus(error instanceof GitConflictError ? 'conflict' : 'error'); setMessage(error instanceof Error ? error.message : String(error))
@@ -120,7 +168,7 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
   const viewsConfig = config ? siblingConfig(config, 'azure-views.json') : null
   async function readViews() {
     if (!viewsConfig || !token) throw new Error('Connect Git storage first.')
-    return readTextFile(viewsConfig, token)
+    return trackRead(viewsConfig, token)
   }
   // At start: the shared connection setup in Git becomes this browser's default (connections changed here are kept).
   const [viewsSync, setViewsSync] = useState('')
@@ -142,9 +190,9 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
   async function writeViews(text: string, commitMessage: string) {
     if (!viewsConfig || !token) throw new Error('Connect Git storage first.')
     if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
-    const current = await readTextFile(viewsConfig, token)
+    const current = await trackRead(viewsConfig, token)
     if (current.text === text) return { changed: false, commitUrl: historyUrl(viewsConfig) }
-    return { changed: true, ...(await writeTextFile(viewsConfig, token, text, current.sha, commitMessage)) }
+    return { changed: true, ...(await trackWrite(viewsConfig, token, text, current.sha, commitMessage)) }
   }
 
   // Back up and clean up (CON-88). backupViews: the connection setup as it is now, as a new dated file in
@@ -175,38 +223,38 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
   const accessConfig = config ? siblingConfig(config, 'access.json') : null
   const readAccess = useCallback(async () => {
     if (!config || !token) throw new Error('Connect Git storage first.')
-    return readTextFile(siblingConfig(config, 'access.json'), token)
+    return trackRead(siblingConfig(config, 'access.json'), token)
   }, [config, token])
   // The per-Epic Feature setup (feature-setup.json): the same rules as the access file.
   const readFeatureSetup = useCallback(async () => {
     if (!config || !token) throw new Error('Connect Git storage first.')
-    return readTextFile(siblingConfig(config, 'feature-setup.json'), token)
+    return trackRead(siblingConfig(config, 'feature-setup.json'), token)
   }, [config, token])
   async function writeFeatureSetup(text: string, sha: string | null, commitMessage: string) {
     if (!config || !token) throw new Error('Connect Git storage first.')
     if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
-    return writeTextFile(siblingConfig(config, 'feature-setup.json'), token, text, sha, commitMessage)
+    return trackWrite(siblingConfig(config, 'feature-setup.json'), token, text, sha, commitMessage)
   }
   // The QE Mapping table (qe-mapping.json): read and saved like the shared Feature setup.
   const readQeMapping = useCallback(async () => {
     if (!config || !token) throw new Error('Connect Git storage first.')
-    return readTextFile(siblingConfig(config, 'qe-mapping.json'), token)
+    return trackRead(siblingConfig(config, 'qe-mapping.json'), token)
   }, [config, token])
   async function writeQeMapping(text: string, sha: string | null, commitMessage: string) {
     if (!config || !token) throw new Error('Connect Git storage first.')
     if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
-    return writeTextFile(siblingConfig(config, 'qe-mapping.json'), token, text, sha, commitMessage)
+    return trackWrite(siblingConfig(config, 'qe-mapping.json'), token, text, sha, commitMessage)
   }
   // Historical hours (HIS-04): the imported history (history-hours.json), read by everyone, saved or removed by roles
   // with Manage shared settings (checked on the page).
   const readHistory = useCallback(async () => {
     if (!config || !token) throw new Error('Connect Git storage first.')
-    return readTextFile(siblingConfig(config, historyPath), token)
+    return trackRead(siblingConfig(config, historyPath), token)
   }, [config, token])
   async function writeHistory(text: string, sha: string | null, commitMessage: string) {
     if (!config || !token) throw new Error('Connect Git storage first.')
     if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
-    return writeTextFile(siblingConfig(config, historyPath), token, text, sha, commitMessage)
+    return trackWrite(siblingConfig(config, historyPath), token, text, sha, commitMessage)
   }
   // The planning workbooks kept in the data repository (HIS-11): .xlsx files in its folder and in history/, read for the
   // import without downloading them first.
@@ -229,19 +277,19 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
   async function removeHistory(commitMessage: string) {
     if (!config || !token) throw new Error('Connect Git storage first.')
     if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
-    return deleteFile(siblingConfig(config, historyPath), token, commitMessage)
+    const removed = await deleteFile(siblingConfig(config, historyPath), token, commitMessage); remember(siblingConfig(config, historyPath).path, null); return removed
   }
   // The Monthly pack: its shared setup (monthly-pack-setup.json) and a month's text (monthly-pack/<YYYY-MM>.json),
   // read and saved like the shared Feature setup.
   const packPath = (name: string) => { if (!/^(?:monthly-pack-setup\.json|monthly-pack\/\d{4}-(?:0[1-9]|1[0-2])\.json)$/.test(name)) throw new Error('Not a Monthly pack file.'); return name }
   const readMonthlyPack = useCallback(async (name: string) => {
     if (!config || !token) throw new Error('Connect Git storage first.')
-    return readTextFile(siblingConfig(config, packPath(name)), token)
+    return trackRead(siblingConfig(config, packPath(name)), token)
   }, [config, token])
   async function writeMonthlyPack(name: string, text: string, sha: string | null, commitMessage: string) {
     if (!config || !token) throw new Error('Connect Git storage first.')
     if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
-    return writeTextFile(siblingConfig(config, packPath(name)), token, text, sha, commitMessage)
+    return trackWrite(siblingConfig(config, packPath(name)), token, text, sha, commitMessage)
   }
   // The Monthly pack's PowerPoint template (monthly-pack-template.pptx): kept only in this private data repository,
   // never in the app's source; read when the pack is exported, replaced or removed from Settings → Monthly pack.
@@ -261,43 +309,43 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     if (!config || !token) throw new Error('Connect Git storage first.')
     const path = personalSetupPath(email)
     if (!path) throw new Error('Set your email on the Time Writing connection to keep your own Feature setup.')
-    return readTextFile(siblingConfig(config, path), token)
+    return trackRead(siblingConfig(config, path), token)
   }, [config, token])
   // Personal views (MYD-06…MYD-09): personal-views/<email>.json per person, personal-views-defaults.json for everyone.
   const readPersonalViews = useCallback(async (email: string) => {
     if (!config || !token) throw new Error('Connect Git storage first.')
     const path = personalViewsPath(email)
     if (!path) throw new Error('Set your work email to keep your own views.')
-    return readTextFile(siblingConfig(config, path), token)
+    return trackRead(siblingConfig(config, path), token)
   }, [config, token])
   async function writePersonalViews(email: string, text: string, sha: string | null, commitMessage: string) {
     if (!config || !token) throw new Error('Connect Git storage first.')
     if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
     const path = personalViewsPath(email)
     if (!path) throw new Error('Set your work email to keep your own views.')
-    return writeTextFile(siblingConfig(config, path), token, text, sha, commitMessage)
+    return trackWrite(siblingConfig(config, path), token, text, sha, commitMessage)
   }
   const readViewsDefaults = useCallback(async () => {
     if (!config || !token) throw new Error('Connect Git storage first.')
-    return readTextFile(siblingConfig(config, viewsDefaultsPath), token)
+    return trackRead(siblingConfig(config, viewsDefaultsPath), token)
   }, [config, token])
   async function writeViewsDefaults(text: string, commitMessage: string) {
     if (!config || !token) throw new Error('Connect Git storage first.')
     if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
     const target = siblingConfig(config, viewsDefaultsPath)
-    return writeTextFile(target, token, text, await fileSha(target, token), commitMessage)
+    return trackWrite(target, token, text, await fileSha(target, token), commitMessage)
   }
   async function writePersonalFeatureSetup(email: string, text: string, sha: string | null, commitMessage: string) {
     if (!config || !token) throw new Error('Connect Git storage first.')
     if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
     const path = personalSetupPath(email)
     if (!path) throw new Error('Set your email on the Time Writing connection to keep your own Feature setup.')
-    return writeTextFile(siblingConfig(config, path), token, text, sha, commitMessage)
+    return trackWrite(siblingConfig(config, path), token, text, sha, commitMessage)
   }
   async function writeAccess(text: string, sha: string | null, commitMessage: string) {
     if (!accessConfig || !token) throw new Error('Connect Git storage first.')
     if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
-    return writeTextFile(accessConfig, token, text, sha, commitMessage)
+    return trackWrite(accessConfig, token, text, sha, commitMessage)
   }
 
   // Removes the data saved to Git for connections that no longer exist (azure-data/<connection>.json); returns how many.
@@ -438,6 +486,6 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     setConfig(null); setToken(''); setSynced(null); setStatus('off'); setMessage('Git storage disconnected in this browser. The data stays in the app and in the repository.'); sha.current = null
   }
 
-  return { readPersonalViews, writePersonalViews, readViewsDefaults, writeViewsDefaults, savePeriod, listValidationDocuments, readValidationDocument, backupViews, resetViews, readPackTemplate, writePackTemplate, packTemplateHistory: config ? historyUrl(siblingConfig(config, packTemplateFile)) : '', config, connected, readOnly, status, message, dirty, commitUrl, history: config ? historyUrl(config) : '', isSample, load: () => load(), connect, save, disconnect, viewsPath: viewsConfig?.path ?? '', viewsHistory: viewsConfig ? historyUrl(viewsConfig) : '', readViews, writeViews, syncViews, pushWindchillAnalysis, accessScope: accessConfig && token ? `${accessConfig.owner}/${accessConfig.repo}@${accessConfig.branch}:${accessConfig.path}` : '', accessPath: accessConfig?.path ?? '', accessHistory: accessConfig ? historyUrl(accessConfig) : '', readAccess, writeAccess, readFeatureSetup, writeFeatureSetup, readPersonalFeatureSetup, writePersonalFeatureSetup, featureSetupHistory: config ? historyUrl(siblingConfig(config, 'feature-setup.json')) : '', readQeMapping, writeQeMapping, readHistory, writeHistory, removeHistory, listWorkbooks, readWorkbook, historyFileHistory: config ? historyUrl(siblingConfig(config, historyPath)) : '', readMonthlyPack, writeMonthlyPack, monthlyPackHistory: (name: string) => config ? historyUrl(siblingConfig(config, name)) : '', qeMappingHistory: config ? historyUrl(siblingConfig(config, 'qe-mapping.json')) : '', removeSnapshots, viewsSync, snapshotNotes, pushSnapshot, pullSnapshot, pullSnapshots, pushWindchill, pullWindchill, pullWindchillOne, snapshotsHistory: config ? historyUrl(siblingConfig(config, snapshotFolder)) : '' }
+  return { readPersonalViews, writePersonalViews, readViewsDefaults, writeViewsDefaults, savePeriod, listValidationDocuments, readValidationDocument, backupViews, resetViews, readPackTemplate, writePackTemplate, packTemplateHistory: config ? historyUrl(siblingConfig(config, packTemplateFile)) : '', config, connected, readOnly, status, message, dirty, commitUrl, history: config ? historyUrl(config) : '', isSample, load: () => load(), connect, remoteChanges, save, disconnect, viewsPath: viewsConfig?.path ?? '', viewsHistory: viewsConfig ? historyUrl(viewsConfig) : '', readViews, writeViews, syncViews, pushWindchillAnalysis, accessScope: accessConfig && token ? `${accessConfig.owner}/${accessConfig.repo}@${accessConfig.branch}:${accessConfig.path}` : '', accessPath: accessConfig?.path ?? '', accessHistory: accessConfig ? historyUrl(accessConfig) : '', readAccess, writeAccess, readFeatureSetup, writeFeatureSetup, readPersonalFeatureSetup, writePersonalFeatureSetup, featureSetupHistory: config ? historyUrl(siblingConfig(config, 'feature-setup.json')) : '', readQeMapping, writeQeMapping, readHistory, writeHistory, removeHistory, listWorkbooks, readWorkbook, historyFileHistory: config ? historyUrl(siblingConfig(config, historyPath)) : '', readMonthlyPack, writeMonthlyPack, monthlyPackHistory: (name: string) => config ? historyUrl(siblingConfig(config, name)) : '', qeMappingHistory: config ? historyUrl(siblingConfig(config, 'qe-mapping.json')) : '', removeSnapshots, viewsSync, snapshotNotes, pushSnapshot, pullSnapshot, pullSnapshots, pushWindchill, pullWindchill, pullWindchillOne, snapshotsHistory: config ? historyUrl(siblingConfig(config, snapshotFolder)) : '' }
 }
 export type GitStorage = ReturnType<typeof useGitStorage>

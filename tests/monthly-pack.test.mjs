@@ -126,3 +126,34 @@ test('typing in the pack does not recount the data: releases and Epic counts are
   buildMonthlyPack({ ...inputs, items: [], notes: emptyNotes('2026-10') })
   assert.ok(calls > counted, 'new data is counted again')
 })
+
+test('PCK-11: Capabilities (Projects & Services) — unique Features under the chosen Epics with hours recorded in the month', async () => {
+  const { capabilityFeatures } = await import('../src/monthlyPack.ts')
+  const items = [
+    item(1, 'Epic', 'Active', { title: 'Projects' }), item(2, 'Epic', 'Active', { title: 'Services' }), item(3, 'Epic', 'Active', { title: 'Other' }),
+    item(10, 'Feature', 'Active', { parentId: 1, title: 'Alpha rollout' }), item(11, 'Feature', 'Active', { parentId: 2, title: 'Beta support' }),
+    item(12, 'Feature', 'Active', { parentId: 1, title: 'Gamma (no hours)' }), item(13, 'Feature', 'Active', { parentId: 3, title: 'Delta (other Epic)' }),
+    item(20, 'User Story', 'Active', { parentId: 10 }), item(21, 'User Story', 'Active', { parentId: 11 }), item(22, 'User Story', 'Active', { parentId: 12 }), item(23, 'User Story', 'Active', { parentId: 13 }),
+    item(30, 'Task', 'Active', { parentId: 20, title: 'October 2026 | Alpha rollout', completedWork: 6 }),
+    item(31, 'Task', 'Active', { parentId: 20, title: 'October 2026 | Alpha rollout', completedWork: 2 }),
+    item(32, 'Task', 'Active', { parentId: 21, title: 'October 2026 | Beta support', completedWork: 1.5 }),
+    item(33, 'Task', 'Active', { parentId: 22, title: 'October 2026 | Gamma', completedWork: 0, originalEstimate: 8 }),
+    item(34, 'Task', 'Active', { parentId: 22, title: 'September 2026 | Gamma', completedWork: 4 }),
+    item(35, 'Task', 'Active', { parentId: 23, title: 'October 2026 | Delta', completedWork: 3 }),
+  ]
+  assert.deepEqual(capabilityFeatures(items, [1, 2], '2026-10'), ['Alpha rollout', 'Beta support'], 'each Feature once; no hours or another month or another Epic: not counted')
+  assert.deepEqual(capabilityFeatures(items, [], '2026-10'), [])
+  const setup = parsePackSetup(JSON.stringify({ ...defaultPackSetup, capabilities: { label: '', epicIds: [1, 2, 2, -1] } }))
+  assert.deepEqual(setup.capabilities, { label: 'Capabilities (Projects & Services)', epicIds: [1, 2] }, 'checked; the default label when blank')
+  assert.equal(parsePackSetup(JSON.stringify({ ...defaultPackSetup, capabilities: { label: 'X', epicIds: [] } })).capabilities, undefined, 'no Epics: no bullet')
+  const pack = buildMonthlyPack({ month: '2026-10', setup, notes: emptyNotes('2026-10'), items, streamsOf: () => [], utilization: { month: null, ytd: null, qeMonth: null } })
+  assert.deepEqual(packSlides(pack)[0].boxes[0].generated, ['Capabilities (Projects & Services) [2]: Alpha rollout, Beta support'], 'in Actions/Deliverables Realized, after the release lines')
+})
+
+test('PCK-12: Key takeaways — the Capabilities count joins the Supported line', () => {
+  const pack = { month: '2026-10', lines: [{ label: 'Content', supported: 3 }, { label: 'IOCC', supported: 0 }], capabilities: { label: 'Capabilities (Projects & Services)', features: ['Alpha rollout', 'Beta support'] } }
+  assert.equal(supportedLine(pack), 'Content = 3; Capabilities (Projects & Services) = 2')
+  assert.equal(supportedLine({ ...pack, lines: [] }), 'Capabilities (Projects & Services) = 2', 'shown without release lines')
+  assert.equal(supportedLine({ ...pack, capabilities: { ...pack.capabilities, features: [] } }), 'Content = 3', 'no Feature with hours: no count')
+  assert.equal(supportedLine({ ...pack, capabilities: undefined }), 'Content = 3', 'no Epics set: no count')
+})
