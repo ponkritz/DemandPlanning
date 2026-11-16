@@ -1,4 +1,4 @@
-import { loadStatus, sharedTimeScopeLabel, sharedTimeScopes, standardHoursTotal, type AbsenceKind, type CapacitySettings, type LoadStatus, type PersonLoad, type SharedTimeScope, type StreamLoad } from './capacity.ts'
+import { absenceKinds, loadStatus, sharedTimeScopeLabel, sharedTimeScopes, standardHoursTotal, type AbsenceKind, type CapacitySettings, type LoadStatus, type PersonLoad, type SharedTimeScope, type StreamLoad } from './capacity.ts'
 
 // CAP-41…43: calculation profiles. A profile says, for each bucket of hours, whether it counts as utilized, comes off
 // the capacity or is ignored; which hours the plan uses; and how the capacity is built. The default profile drives every
@@ -7,6 +7,37 @@ import { loadStatus, sharedTimeScopeLabel, sharedTimeScopes, standardHoursTotal,
 export type BucketKey = 'work' | 'absence' | 'training' | 'npraOther' | 'common'
 export const bucketKeys: BucketKey[] = ['work', 'absence', 'training', 'npraOther', 'common']
 export const bucketLabel: Record<BucketKey, string> = { work: 'Project work', absence: 'Absence', training: 'Training', npraOther: 'Other NPRA', common: 'Common activities' }
+// CAP-52: the names of the figures (cards, columns, formula), set per calculation profile — built-in profiles included —
+// in Settings → Capacity & periods → Calculation profiles; without names of its own a profile uses these.
+export type TermKey = 'utilization' | 'funded' | 'absence' | 'npra' | 'available' | 'work'
+export const termKeys: TermKey[] = ['utilization', 'funded', 'absence', 'npra', 'available', 'work']
+export const defaultTerms: Record<TermKey, string> = { utilization: 'Utilization', funded: 'Funded Hours', absence: 'Absence', npra: 'NPRA Hours', available: 'Available hours', work: 'Project work' }
+export const termMeaning: Record<TermKey, string> = { utilization: 'Total actual ÷ available hours', funded: 'Working days × funded hours per day', absence: 'Holiday + PTO (all leave)', npra: 'Tagged NPRA hours (training included)', available: 'Funded hours − absence', work: 'Booked project hours' }
+const termText = /^[\p{L}\p{N}][\p{L}\p{N} ()&/+.%-]{0,39}$/u
+export type ProfileTerms = Record<string, Partial<Record<TermKey, string>>>
+// Read from the shared app data: profile ids checked, names 1–40 characters (letters, digits, spaces and ( ) & / + . % -),
+// a name equal to the built-in one is not stored. Undefined when nothing is left.
+export function normalizeProfileTerms(value: unknown): ProfileTerms | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const result: ProfileTerms = {}
+  for (const [id, raw] of Object.entries(value as Record<string, unknown>).slice(0, 30)) {
+    if (!/^[a-z0-9-]{1,60}$/.test(id) || !raw || typeof raw !== 'object') continue
+    const terms = Object.fromEntries(termKeys.flatMap((key) => { const name = typeof (raw as Record<string, unknown>)[key] === 'string' ? ((raw as Record<string, string>)[key]).trim().replace(/\s+/g, ' ') : ''; return name && termText.test(name) && name !== defaultTerms[key] ? [[key, name]] : [] }))
+    if (Object.keys(terms).length) result[id] = terms
+  }
+  return Object.keys(result).length ? result : undefined
+}
+export const termsOf = (settings: { profileTerms?: ProfileTerms }, profileId: string): Record<TermKey, string> => ({ ...defaultTerms, ...settings.profileTerms?.[profileId] })
+// The one-line formula under each card, in the profile's own capacity base and names.
+export function termHints(profile: CalculationProfile, settings: CapacitySettings): Record<'utilization' | 'funded' | 'absence' | 'npra', string> {
+  const terms = termsOf(settings, profile.id)
+  return {
+    utilization: `[Total actual ÷ ${terms.available}]`,
+    funded: profile.capacityBase === 'fixed' ? `[${profile.fixedHours ?? 0}h a month, pro rata to the days employed]` : `[Working days × Funded hrs per day (${settings.hoursPerDay}h)]`,
+    absence: `[${kindOrder.filter((kind) => absenceKindsOf(profile).includes(kind)).map((kind) => kindShort[kind]).join(' + ') || 'nothing'}]`,
+    npra: `[${npraPartsOf(profile).length === 2 ? 'Tagged NPRA hours, training included' : npraPartsOf(profile)[0] === 'npra' ? 'Tagged NPRA hours' : npraPartsOf(profile)[0] === 'training' ? 'Training hours' : 'nothing'}]`,
+  }
+}
 export type Treatment = 'count' | 'deduct' | 'ignore'
 export const treatments: Treatment[] = ['count', 'deduct', 'ignore']
 export const treatmentLabel: Record<Treatment, string> = { count: 'Count as utilized', deduct: 'Deduct from capacity', ignore: 'Ignore' }
@@ -21,15 +52,25 @@ export interface CalculationProfile {
   plannedSource: Record<BucketKey, PlannedSource>
   capacityBase: CapacityBase; fixedHours?: number; minusStandardHours: boolean
   excludedGroups: SharedTimeScope[]; statusFrom: 'actual' | 'planned'
+  // CAP-52: the leave kinds in the profile's Absence (the others are ignored, not deducted) and what its NPRA Hours
+  // include; undefined = all of them (the figures before v7.1.0).
+  absenceKinds?: AbsenceKind[]; npraIncludes?: NpraPart[]
 }
+export type NpraPart = 'npra' | 'training'
+export const npraParts: NpraPart[] = ['npra', 'training']
+export const npraPartLabel: Record<NpraPart, string> = { npra: 'NPRA-tagged hours', training: 'Training (tagged Training, or training under the absence Epic)' }
+const kindShort: Record<AbsenceKind, string> = { 'Public holiday': 'Holiday', 'PTO': 'PTO', 'Sick Leave': 'Sick', 'Unplanned Leave': 'Unplanned', 'Other absence': 'Other' }
+const kindOrder: AbsenceKind[] = ['Public holiday', 'PTO', 'Sick Leave', 'Unplanned Leave', 'Other absence']
+export const absenceKindsOf = (profile: Pick<CalculationProfile, 'absenceKinds'>): AbsenceKind[] => profile.absenceKinds ?? [...absenceKinds]
+export const npraPartsOf = (profile: Pick<CalculationProfile, 'npraIncludes'>): NpraPart[] => profile.npraIncludes ?? [...npraParts]
 
 // The hours of one bucket for one person: the plan in each source, the recorded hours, the hours that come off the
 // capacity when the bucket is deducted (as recorded today: Completed Work; imported and shared holidays and activities:
 // Original Estimate when nothing is recorded) and the number of the person's own Tasks in it.
 export interface BucketHours { estimate: number; completed: number; estimateElseCompleted: number; deducted: number; tasks: number }
-export interface CalcInputs { own: Record<BucketKey, BucketHours>; shared: Partial<Record<SharedTimeScope, Partial<Record<BucketKey, BucketHours>>>> }
+export interface CalcInputs { own: Record<BucketKey, BucketHours>; shared: Partial<Record<SharedTimeScope, Partial<Record<BucketKey, BucketHours>>>>; absenceByKind: Partial<Record<AbsenceKind, BucketHours>> }
 export const emptyBucket = (): BucketHours => ({ estimate: 0, completed: 0, estimateElseCompleted: 0, deducted: 0, tasks: 0 })
-export const emptyCalcInputs = (): CalcInputs => ({ own: { work: emptyBucket(), absence: emptyBucket(), training: emptyBucket(), npraOther: emptyBucket(), common: emptyBucket() }, shared: {} })
+export const emptyCalcInputs = (): CalcInputs => ({ own: { work: emptyBucket(), absence: emptyBucket(), training: emptyBucket(), npraOther: emptyBucket(), common: emptyBucket() }, shared: {}, absenceByKind: {} })
 export function addHours(target: BucketHours, add: Partial<BucketHours>) { for (const key of Object.keys(add) as (keyof BucketHours)[]) target[key] += add[key] ?? 0 }
 
 export const currentProfileId = 'current-v4', oldProfileId = 'old-calculation'
@@ -53,6 +94,13 @@ export const withViewedProfile = (settings: CapacitySettings, id: string): Capac
 
 const pick = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T => allowed.includes(value as T) ? value as T : fallback
 const text = (value: unknown, max: number) => typeof value === 'string' ? value.trim().slice(0, max) : ''
+// The leave kinds and NPRA parts of a profile read from the shared app data: known values only, stored only when not
+// every one is chosen.
+function kindsAndParts(entry: Record<string, unknown>): Pick<CalculationProfile, 'absenceKinds' | 'npraIncludes'> {
+  const kinds = Array.isArray(entry.absenceKinds) ? absenceKinds.filter((kind) => (entry.absenceKinds as unknown[]).includes(kind)) : [...absenceKinds]
+  const parts = Array.isArray(entry.npraIncludes) ? npraParts.filter((part) => (entry.npraIncludes as unknown[]).includes(part)) : [...npraParts]
+  return { ...(kinds.length < absenceKinds.length ? { absenceKinds: kinds } : {}), ...(parts.length < npraParts.length ? { npraIncludes: parts } : {}) }
+}
 // Custom profiles read from the shared app data: at most 20, ids unique and not a built-in's, every field checked; at
 // least one bucket must count, else the profile is dropped.
 export function normalizeCalculationProfiles(value: unknown): CalculationProfile[] {
@@ -72,7 +120,7 @@ export function normalizeCalculationProfiles(value: unknown): CalculationProfile
     if (capacityBase === 'fixed' && !(Number.isFinite(fixed) && fixed > 0 && fixed <= 744)) return []
     const groups = Array.isArray(entry.excludedGroups) ? entry.excludedGroups : []
     seen.add(id)
-    return [{ id, name: text(entry.name, 80) || 'Profile', treatment, plannedSource, capacityBase, ...(capacityBase === 'fixed' ? { fixedHours: fixed } : {}), minusStandardHours: entry.minusStandardHours === true, excludedGroups: sharedTimeScopes.filter((scope) => groups.includes(scope)), statusFrom: pick(entry.statusFrom, ['actual', 'planned'] as const, 'actual') }]
+    return [{ id, name: text(entry.name, 80) || 'Profile', treatment, plannedSource, capacityBase, ...(capacityBase === 'fixed' ? { fixedHours: fixed } : {}), minusStandardHours: entry.minusStandardHours === true, excludedGroups: sharedTimeScopes.filter((scope) => groups.includes(scope)), statusFrom: pick(entry.statusFrom, ['actual', 'planned'] as const, 'actual') , ...kindsAndParts(entry) }]
   })
 }
 
@@ -83,10 +131,13 @@ const percent = (numerator: number, denominator: number) => denominator > 0 ? Ma
 // hours pro rata to the days employed) − Standard Hours (when the profile says so) − the deducted buckets, never below
 // 0. Utilized = the counted buckets' recorded hours (Completed Work); planned = their plan in the profile's source.
 // A group left out (All, All-<Region>) leaves every bucket. Utilization is blank when nothing counted is booked.
-export function applyProfile(person: Pick<PersonLoad, 'funded' | 'employedDays'>, calc: CalcInputs, profile: CalculationProfile, settings: CapacitySettings, workingDays: number) {
+export function applyProfile(person: Pick<PersonLoad, 'funded' | 'employedDays'> & Partial<Pick<PersonLoad, 'absenceByKind' | 'training' | 'npraOther'>>, calc: CalcInputs, profile: CalculationProfile, settings: CapacitySettings, workingDays: number) {
+  // CAP-52: only the profile's leave kinds make up its absence; shared holidays are the Public holiday kind.
+  const kinds = absenceKindsOf(profile), allKinds = kinds.length === absenceKinds.length
   const totalOf = (key: BucketKey): BucketHours => {
-    const sum = { ...calc.own[key] }
-    for (const scope of sharedTimeScopes) { const part = calc.shared[scope]?.[key]; if (part && !profile.excludedGroups.includes(scope)) addHours(sum, part) }
+    let sum = { ...calc.own[key] }
+    if (key === 'absence' && !allKinds) { sum = emptyBucket(); for (const kind of kinds) { const part = calc.absenceByKind[kind]; if (part) addHours(sum, part) } }
+    for (const scope of sharedTimeScopes) { const part = calc.shared[scope]?.[key]; if (part && !profile.excludedGroups.includes(scope) && (key !== 'absence' || kinds.includes('Public holiday'))) addHours(sum, part) }
     return sum
   }
   const base = profile.capacityBase === 'fixed' && profile.fixedHours ? round(profile.fixedHours * (workingDays > 0 ? person.employedDays / workingDays : 0)) : person.funded
@@ -103,17 +154,23 @@ export function applyProfile(person: Pick<PersonLoad, 'funded' | 'employedDays'>
   const available = Math.max(0, base - (profile.minusStandardHours ? standardHoursTotal(settings.standardHours) : 0) - deducted)
   const utilization = booked ? percent(utilized, available) : null, plannedUtilization = booked ? percent(utilizedPlanned, available) : null
   const status: LoadStatus = loadStatus(profile.statusFrom === 'planned' ? plannedUtilization : utilization, settings)
-  return { available, utilized, utilizedPlanned, utilization, plannedUtilization, status, npraDeducted: (profile.treatment.training === 'deduct' ? parts.training.deducted : 0) + (profile.treatment.npraOther === 'deduct' ? parts.npraOther.deducted : 0) }
+  // The profile's Absence and NPRA Hours figures (CAP-52).
+  const figures = { ...(person.absenceByKind ? { absence: round(kinds.reduce((sum, kind) => sum + (person.absenceByKind![kind] ?? 0), 0)) } : {}), ...(person.training != null && person.npraOther != null ? { npra: round((npraPartsOf(profile).includes('training') ? person.training : 0) + (npraPartsOf(profile).includes('npra') ? person.npraOther : 0)) } : {}) }
+  return { ...figures, available, utilized, utilizedPlanned, utilization, plannedUtilization, status, npraDeducted: (profile.treatment.training === 'deduct' ? parts.training.deducted : 0) + (profile.treatment.npraOther === 'deduct' ? parts.npraOther.deducted : 0) }
 }
 
 // The formula of a profile in words, shown with every figure it produces.
 export function profileFormula(profile: CalculationProfile, settings: CapacitySettings) {
-  const labels = (treatment: Treatment) => bucketKeys.filter((key) => profile.treatment[key] === treatment).map((key) => bucketLabel[key])
-  const base = profile.capacityBase === 'fixed' ? `Contractual hours (${profile.fixedHours ?? 0}h a month, pro rata to the days employed)` : `Contractual hours (working days employed × Working hours per day, ${settings.hoursPerDay}h)`
-  const available = [base, ...(profile.minusStandardHours ? [`Standard Hours (${standardHoursTotal(settings.standardHours)}h)`] : []), ...labels('deduct').map((label) => `${label} hours`)].join(' − ')
-  const sources = bucketKeys.filter((key) => profile.treatment[key] === 'count' && profile.plannedSource[key] !== 'estimate').map((key) => `${bucketLabel[key]}: ${plannedSourceLabel[profile.plannedSource[key]]}`)
+  const terms = termsOf(settings, profile.id)
+  const name = (key: BucketKey) => key === 'work' ? terms.work : key === 'absence' ? terms.absence : bucketLabel[key]
+  const labels = (treatment: Treatment) => bucketKeys.filter((key) => profile.treatment[key] === treatment).map(name)
+  const base = profile.capacityBase === 'fixed' ? `${terms.funded} (${profile.fixedHours ?? 0}h a month, pro rata to the days employed)` : `${terms.funded} (working days employed × Funded hours per day, ${settings.hoursPerDay}h)`
+  const available = [base, ...(profile.minusStandardHours ? [`Standard Hours (${standardHoursTotal(settings.standardHours)}h)`] : []), ...labels('deduct').map((label) => /hours$/i.test(label) ? label : `${label} hours`)].join(' − ')
+  const sources = bucketKeys.filter((key) => profile.treatment[key] === 'count' && profile.plannedSource[key] !== 'estimate').map((key) => `${name(key)}: ${plannedSourceLabel[profile.plannedSource[key]]}`)
   const ignored = labels('ignore'), groups = profile.excludedGroups.map(sharedTimeScopeLabel)
-  return `Profile “${profile.name}”: Actual utilization = Total actual ÷ Available hours; Planned utilization = Total planned ÷ Available hours. Total actual = ${labels('count').join(' + ')} (Completed Work); Total planned = the same from Original Estimate${sources.length ? ` (${sources.join('; ')})` : ''}. Available hours = ${available} (never below 0 per person).${ignored.length ? ` Ignored: ${ignored.join(', ')}.` : ''}${groups.length ? ` Groups left out: ${groups.join(', ')}.` : ''} Status from the ${profile.statusFrom === 'planned' ? 'planned' : 'actual'} utilization.`
+  const kinds = absenceKindsOf(profile), parts = npraPartsOf(profile)
+  const definitions = `${kinds.length < absenceKinds.length ? ` ${terms.absence} = ${kindOrder.filter((kind) => kinds.includes(kind)).join(' + ') || 'nothing'} (other leave ignored).` : ''}${parts.length < npraParts.length ? ` ${terms.npra} = ${parts.map((part) => part === 'npra' ? 'NPRA-tagged hours' : 'Training').join(' + ') || 'nothing'}.` : ''}`
+  return `Profile “${profile.name}”: Actual utilization = Total actual ÷ ${terms.available}; Planned utilization = Total planned ÷ ${terms.available}. Total actual = ${labels('count').join(' + ')} (Completed Work); Total planned = the same from Original Estimate${sources.length ? ` (${sources.join('; ')})` : ''}. ${terms.available} = ${available} (never below 0 per person).${ignored.length ? ` Ignored: ${ignored.join(', ')}.` : ''}${groups.length ? ` Groups left out: ${groups.join(', ')}.` : ''} Status from the ${profile.statusFrom === 'planned' ? 'planned' : 'actual'} utilization.${definitions}`
 }
 
 // CAP-43 Lock figures: the person figures of a month as presented, kept in the shared app data so that later changes

@@ -617,3 +617,8 @@ details.act-leave{border:1px solid var(--line);border-radius:10px;padding:8px 12
 .pack-plus:hover,.pack-plus:focus-visible{color:#773b93;border-color:#773b93;opacity:1}
 .pack-remove:hover,.pack-remove:focus-visible{color:#c62828;border-color:#c62828;opacity:1}
 .pack-add{justify-self:start;font-size:12px;padding:3px 10px;min-height:0;line-height:1.4}.pack-empty{margin:0;font-size:12.5px}
+/* CAP-51: People & access — names and emails from Azure DevOps. */
+.people-source{align-items:flex-start;justify-content:space-between;flex-wrap:nowrap}.people-source>span{font-size:13px;max-width:70ch}
+.people-count{margin:0;font-size:13px}
+.resource-table td:first-child{min-width:190px}.resource-table td.person-email{white-space:nowrap}
+@media(max-width:760px){.people-source{flex-wrap:wrap}}

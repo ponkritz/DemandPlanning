@@ -31,7 +31,7 @@ test('CAP-41/42: the default profile is "Current (v4)" (CAP-38) until another on
   assert.deepEqual(allProfiles(settings).map((profile) => [profile.id, profile.name, profile.builtIn]), [['current-v4', 'Current (v4)', true], ['old-calculation', 'Old Calculation', true]])
   assert.equal(model.profile.name, 'Current (v4)')
   assert.deepEqual(figures(person(model, 'Ana')), [152, 160, 120, 105.26, 78.95, 'Overloaded'])
-  assert.match(model.profile.formula, /Actual utilization = Total actual ÷ Available hours; Planned utilization = Total planned ÷ Available hours\. Total actual = Project work \+ Training \+ Other NPRA \+ Common activities \(Completed Work\).*Available hours = Contractual hours \(working days employed × Working hours per day, 8h\) − Absence hours/)
+  assert.match(model.profile.formula, /Actual utilization = Total actual ÷ Available hours; Planned utilization = Total planned ÷ Available hours\. Total actual = Project work \+ Training \+ Other NPRA \+ Common activities \(Completed Work\).*Available hours = Funded Hours \(working days employed × Funded hours per day, 8h\) − Absence hours/)
 })
 
 test('CAP-41: the built-in "Old Calculation" profile gives the Old Calculation figures; status from the plan', () => {
@@ -56,7 +56,7 @@ test('CAP-41: a custom profile — fixed base, Standard Hours, a deducted, count
   assert.deepEqual(figures(person(model, 'Ben')), [98, 50, 50, 51.02, 51.02, 'Has capacity'])
   assert.deepEqual([model.totals.available, model.totals.utilized], [226, 222])
   assert.equal(model.profile.name, 'Finance view')
-  assert.equal(profileFormula(defaultProfile(custom), custom), 'Profile “Finance view”: Actual utilization = Total actual ÷ Available hours; Planned utilization = Total planned ÷ Available hours. Total actual = Project work + Other NPRA (Completed Work); Total planned = the same from Original Estimate (Project work: Completed Work). Available hours = Contractual hours (160h a month, pro rata to the days employed) − Standard Hours (32h) − Training hours (never below 0 per person). Ignored: Absence, Common activities. Status from the planned utilization.')
+  assert.equal(profileFormula(defaultProfile(custom), custom), 'Profile “Finance view”: Actual utilization = Total actual ÷ Available hours; Planned utilization = Total planned ÷ Available hours. Total actual = Project work + Other NPRA (Completed Work); Total planned = the same from Original Estimate (Project work: Completed Work). Available hours = Funded Hours (160h a month, pro rata to the days employed) − Standard Hours (32h) − Training hours (never below 0 per person). Ignored: Absence, Common activities. Status from the planned utilization.')
   // The fixed hours are pro rata to the days employed: Ben joins on 16 October (11 of 22 working days): 80 − 32 − 30.
   const joined = capacityModel(withNpra, '2026-10', { ...custom, profiles: { Ben: { joinedOn: '2026-10-16' } } })
   assert.equal(person(joined, 'Ben').available, 18)
@@ -130,4 +130,27 @@ test('CAP-44: viewing a page with another profile changes only the settings that
   const before = capacityModel(backlog, '2026-10', settings)
   const locked = normalizeCapacitySettings({ ...shared, figureLocks: { '2026-10': [{ lockedOn: '2026-11-09T10:00:00Z', lockedBy: 'A', profileName: 'Current (v4)', formula: 'f', people: lockedPeople(before.people) }] } })
   assert.deepEqual(capacityModel(backlog, '2026-10', withViewedProfile(locked, 'old-calculation')).people.map(figures), before.people.map(figures))
+})
+
+test('CAP-52: a profile chooses its Absence kinds and NPRA parts; the cards show its names and formulas', async () => {
+  const { termHints, termsOf, normalizeProfileTerms, normalizeCalculationProfiles } = await import('../src/calculationProfiles.ts')
+  const holidayPto = { ...allProfiles(settings)[0], id: 'holiday-pto', name: 'Holiday + PTO', builtIn: undefined, absenceKinds: ['PTO', 'Public holiday'], npraIncludes: ['npra'] }
+  const chosen = normalizeCapacitySettings({ ...settings, calculationProfiles: [holidayPto], defaultProfileId: 'holiday-pto', profileTerms: { 'holiday-pto': { funded: 'Contract hours', absence: 'Absence', npra: 'Bad<name>' } } })
+  assert.deepEqual(chosen.calculationProfiles[0].absenceKinds, ['PTO', 'Public holiday'], 'kept in the built-in order')
+  assert.deepEqual(chosen.profileTerms, { 'holiday-pto': { funded: 'Contract hours' } }, 'a built-in name and an unsafe one are not stored')
+  const ana = person(capacityModel(backlog, '2026-10', chosen), 'Ana')
+  assert.equal(ana.absence, 16, 'PTO only: the 8h sick leave is not in the Absence figure')
+  assert.equal(ana.available, 160, '176h funded − 16h PTO: sick leave is ignored, not deducted')
+  assert.equal(person(capacityModel(backlog, '2026-10', settings), 'Ana').available, 152, 'the default profile still deducts all leave')
+  const npra = capacityModel(withNpra, '2026-10', chosen)
+  assert.equal(person(npra, 'Ana').npra, 12, 'NPRA-tagged hours')
+  assert.equal(person(npra, 'Ben').npra, 0, 'training left out of NPRA Hours')
+  assert.equal(person(capacityModel(withNpra, '2026-10', settings), 'Ben').npra, 30, 'the default profile includes training')
+  assert.deepEqual(termHints(chosen.calculationProfiles[0], chosen), { utilization: '[Total actual ÷ Available hours]', funded: '[Working days × Funded hrs per day (8h)]', absence: '[Holiday + PTO]', npra: '[Tagged NPRA hours]' })
+  assert.deepEqual(termHints(allProfiles(settings)[0], settings).absence, '[Holiday + PTO + Sick + Unplanned + Other]')
+  assert.equal(termsOf(chosen, 'holiday-pto').funded, 'Contract hours')
+  assert.equal(termsOf(chosen, 'current-v4').funded, 'Funded Hours', 'other profiles keep the built-in names')
+  assert.match(capacityModel(backlog, '2026-10', chosen).profile.formula, /Available hours = Contract hours \(working days.*Absence = Public holiday \+ PTO \(other leave ignored\)\. NPRA Hours = NPRA-tagged hours\./)
+  assert.equal(normalizeProfileTerms({ 'Bad Id': { funded: 'X' } }), undefined)
+  assert.equal(normalizeCalculationProfiles([{ ...holidayPto, absenceKinds: ['PTO', 'Sick Leave', 'Unplanned Leave', 'Public holiday', 'Other absence'] }])[0].absenceKinds, undefined, 'all kinds: nothing stored')
 })

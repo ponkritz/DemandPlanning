@@ -6,7 +6,7 @@
     "component": {
       "type": "application",
       "name": "demandplanning",
-      "version": "3.4.0"
+      "version": "3.5.0"
     },
     "tools": [
       {
@@ -2058,8 +2058,8 @@
     {
       "type": "library",
       "name": "@rolldown/pluginutils",
-      "version": "1.1.0",
-      "purl": "pkg:npm/%40rolldown/pluginutils@1.1.0",
+      "version": "1.1.1",
+      "purl": "pkg:npm/%40rolldown/pluginutils@1.1.1",
       "scope": "excluded",
       "licenses": [
         {
@@ -2071,7 +2071,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "2be354d870c211e9b8b029601c7e19657c1d25e345909a3e851938efd0c8c1d22f8803cdda11491f52871f083c0b11d05ef8b43395d8e1d7935c835f222486eb"
+          "content": "825148243bcb343b49853f6aacc1562cf6ef4beb24c60b782f42bc122d98b6784fcac0099ec23b9f2c522712a3e000de297d0e2e30b89ed464c292cea12debc0"
         }
       ],
       "properties": [
@@ -8538,8 +8538,8 @@
     {
       "type": "library",
       "name": "postcss",
-      "version": "8.5.32",
-      "purl": "pkg:npm/postcss@8.5.32",
+      "version": "8.5.33",
+      "purl": "pkg:npm/postcss@8.5.33",
       "scope": "excluded",
       "licenses": [
         {
@@ -8551,7 +8551,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "2c994a08201414a3ae6718a951d630d4dcc821312c3dc832386f4b92f449bee2a3fdb4736ee458d00457bcbd29586a6c66f9fc8e4bbe2cc7a9d9e534b1e1e9f2"
+          "content": "4551c453dfcfa751678ebfcca4026c668003ba408a85f222d793ae9c46221a4b489182e43d5bc2d6c8a85a89460d2ed7072313c7d9bf2066eba3426cd77ce19d"
         }
       ],
       "properties": [

@@ -64,7 +64,7 @@ import { SetupGuide } from './components/SetupGuide'
 import { GitSyncBar } from './components/GitStorage'
 import { defaultGitRepository, normalizeSetupLinks, type SetupLinks } from './gitStorage'
 import { guideKey, requiredOpen, setupSteps } from './setupGuide'
-import { azureResources, capacityContext, setAccessRoles } from './capacity'
+import { azureResources, capacityContext, setAccessRoles, setAzureEmails } from './capacity'
 import { hasServerPat, serverKey } from './azureCredentials'
 
 export default function App() {
@@ -148,6 +148,7 @@ export default function App() {
   const access = useAccess(git, azure, viewAs)
   // CAP-50: capacity counts people by their app access roles too; every render uses the loaded access.json.
   setAccessRoles(access.policy?.members)
+  setAzureEmails(azure.items)
   const viewedPerson = access.viewingAs?.kind === 'person' ? access.viewingAs : undefined
   const my = useMyWork(azure, store, viewedPerson)
   // Settings → Storage: everything shared through Git, loaded now (as at start, plus the planning data, roles and

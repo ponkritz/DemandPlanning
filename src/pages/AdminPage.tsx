@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { useNow } from '../useNow'
 import { actualsLockDate, actualsLocked, defaultActualsLockDay, defaultPlanLockDay, planLockDate, planningLocked } from '../planningLock'
 import { groupOf } from '../history'
@@ -8,9 +8,9 @@ import type { HistoryStore } from '../useHistory'
 import { TableDefaultsPanel } from '../components/TableDefaultsPanel'
 import type { MasterValue } from '../domain'
 import type { SharePointConfig } from '../sharepoint'
-import { EmptyState, Info, Modal, Notice, Page, Panel, Pill, SettingsSummary, type Tone } from '../components/ui'
-import { formatDate, formatDateTime, formatHours, formatPercent, monthName } from '../format'
-import { azureResources, capacityContext, capacityModel, roleExclusion, type CapacityRoles, normalizeCapacitySettings, normalizeProfiles, regions, resourceRoles, resourceRows, type CapacitySettings, type LoadStatus, type MonthLock, type ResourceProfile, type SharedTimeRule } from '../capacity'
+import { EmptyState, Info, Modal, Notice, Page, Panel, Pill, SettingsSummary } from '../components/ui'
+import { formatDate, formatDateTime, formatHours, monthName } from '../format'
+import { azureResources, capacityContext, capacityModel, type CapacityRoles, normalizeCapacitySettings, normalizeProfiles, regions, resourceRoles, resourceRows, type CapacitySettings, type MonthLock, type ResourceProfile, type SharedTimeRule } from '../capacity'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { GitStorage } from '../useGitStorage'
 import { GitStoragePanel, GitSyncBar } from '../components/GitStorage'
@@ -21,12 +21,12 @@ import { FeatureSetupPanel } from '../components/FeatureSetupPanel'
 import { SharedTimePanel } from '../components/SharedTimePanel'
 import { CalculationProfilesPanel } from '../components/CalculationProfilesPanel'
 import { CapacityRolesPanel } from '../components/CapacityRolesPanel'
-import { defaultPolicy, isEmail, keepsManager, normalEmail, roles as accessRoles, type Role } from '../access'
+import { defaultPolicy, keepsManager, roles as accessRoles, type Role } from '../access'
 import { BucketRulesPanel } from '../components/BucketRulesPanel'
 import { InsightThresholdsPanel } from '../components/InsightThresholdsPanel'
 import type { InsightThresholds } from '../insightThresholds'
 import type { BucketRules } from '../bucketRules'
-import type { CalculationProfile } from '../calculationProfiles'
+import type { CalculationProfile, ProfileTerms } from '../calculationProfiles'
 import type { FeatureSetup } from '../useFeatureSetup'
 import type { Access } from '../useAccess'
 import type { PageProps } from './types'
@@ -35,7 +35,6 @@ import { SectionTabs } from '../components/SectionTabs'
 import { MonthlyPackSetupPanel } from '../components/MonthlyPackSetupPanel'
 import type { MonthlyPackStore } from '../useMonthlyPack'
 
-const statusTone: Record<LoadStatus, Tone> = { 'Overloaded': 'danger', 'Balanced': 'open', 'Has capacity': 'info', 'No bookings': 'neutral' }
 const shortMonthName = (month: string) => new Intl.DateTimeFormat('en', { month: 'short', year: 'numeric' }).format(new Date(`${month}-01T00:00:00`))
 
 // The Windchill host and views setup is hidden (Windchill exports are imported under Release Details instead).
@@ -53,30 +52,30 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, mont
   const profiles = capacity.profiles ?? {}
   // Resources (CAP-29…CAP-31): Time Writing people with their figures, plus everyone else who can be given a region and role.
   const historyPeople = history.file ? [...new Set(history.file.rows.filter((row) => !groupOf(row.person)).map((row) => history.file!.people[row.person] || row.person))] : []
-  const resources = resourceRows(azureResources(azure.items, month, capacity), [...new Set(azure.items.map((item) => item.assignedTo).filter(Boolean))], historyPeople, profiles)
-  const [teamStatus, setTeamStatus] = useState('')
-  async function addTeamMembers() {
-    setTeamStatus('Reading the team from Azure DevOps…')
-    try {
-      if (!azure.config) throw new Error('Set up and fetch the Time Writing connection first')
-      const team = azure.config.team
-      const members = await fetchTeamMembers(azure.config, azure.pat)
-      const known = new Set(resources.map((person) => person.name))
-      const added = members.filter((member) => !known.has(member.name))
-      if (added.length) store.update((draft) => {
-        const current = normalizeProfiles(draft.resourceProfiles)
-        draft.resourceProfiles = normalizeProfiles({ ...current, ...Object.fromEntries(added.map((member) => [member.name, { ...current[member.name], listed: 'team' }])) })
-        draft.audits.unshift({ id: crypto.randomUUID(), timestamp: new Date().toISOString(), actor: 'u-owner', action: 'Update', entity: 'Resource', entityId: 'team', detail: `Added ${added.length} team member${added.length === 1 ? '' : 's'} from Azure DevOps` })
-        return draft
-      })
-      setTeamStatus(`${members.length} team member${members.length === 1 ? '' : 's'} in ${team}; ${added.length} added to the list.`)
-    } catch (failure) { setTeamStatus(`Not read: ${failure instanceof Error ? failure.message : String(failure)}. The PAT needs Project and Team (Read) for the team list.`) }
-  }
+  const allResources = resourceRows(azureResources(azure.items, month, capacity), [...new Set(azure.items.map((item) => item.assignedTo).filter(Boolean))], historyPeople, profiles)
+  // CAP-51: the people come from Azure DevOps — the members of the Time Writing connection's team (read when People &
+  // access opens and after every Azure refresh) and everyone Assigned To a fetched work item; names and work emails are
+  // Azure's and are not typed here.
+  const [team, setTeam] = useState<{ key: string; members: { name: string; email?: string }[]; error?: string } | null>(null)
+  const [teamRead, setTeamRead] = useState(0)
+  const teamKey = azure.config && azure.pat && !azure.isSample ? `${azure.config.organization}/${azure.config.project}/${azure.config.team}|${azure.items.length}|${teamRead}` : ''
+  useEffect(() => {
+    if (!teamKey || requested !== 'resources' || !azure.config) return
+    let live = true
+    fetchTeamMembers(azure.config, azure.pat).then((members) => { if (live) setTeam({ key: teamKey, members }) }, (failure: unknown) => { if (live) setTeam({ key: teamKey, members: [], error: failure instanceof Error ? failure.message : String(failure) }) })
+    return () => { live = false }
+  }, [teamKey, requested]) // eslint-disable-line react-hooks/exhaustive-deps
+  const teamMembers = team?.members ?? []
+  const teamNames = new Set(teamMembers.map((member) => member.name))
+  // Listed: the team members and the people Assigned To in Azure DevOps (with their Time Writing, if any). Anyone else
+  // with settings (historical hours, added by name before v7.0.0) is shown apart, so nothing set for them is lost.
+  const fromAzure = (person: typeof allResources[number]) => teamNames.has(person.name) || person.sources.some((source) => source === 'time writing' || source === 'assigned' || source === 'team')
+  const resources = [...allResources.filter(fromAzure), ...teamMembers.filter((member) => !allResources.some((person) => person.name === member.name)).map((member) => ({ name: member.name, firstMonth: '', lastMonth: '', months: 0, tasks: 0, work: 0, absence: 0, streams: [], status: 'No bookings' as const, utilization: null, sources: ['team' as const] }))].sort((a, b) => a.name.localeCompare(b.name))
+  const notInAzure = allResources.filter((person) => !fromAzure(person) && !profiles[person.name]?.removed && profiles[person.name] && Object.keys(profiles[person.name]).some((key) => key !== 'listed'))
   const monthModel = capacityModel(azure.items, month, capacity)
   const holidays = monthModel.holidays
   // CAP-34: who counts in the month's capacity (a month Time Writing Task, employed that month, not removed) and how much.
   const counted = monthModel.people.filter((person) => person.name !== 'Unassigned')
-  const availableOf = new Map(counted.map((person) => [person.name, person.available]))
   const sumOf = (pick: (person: typeof counted[number]) => number) => counted.reduce((sum, person) => sum + pick(person), 0)
   const removedNames = Object.entries(profiles).filter(([, profile]) => profile.removed).map(([name]) => name).sort((a, b) => a.localeCompare(b))
   const unmapped = resources.filter((person) => !profiles[person.name]?.region).map((person) => person.name)
@@ -91,12 +90,13 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, mont
   // CAP-49: People & access — each person's email links them to their app access role (access.json, by email).
   const accessEditable = git.connected && !git.readOnly && !git.isSample && access.can('access.manage')
   const members = access.policy?.members ?? {}
-  const emailOfName = new Map(people.map((person) => [person.name, person.email]))
+  // The work email Azure DevOps gives for each name (team member, else Assigned To); an email saved before v7.0.0 is
+  // used only where Azure has none.
+  const emailOfName = new Map([...people.map((person) => [person.name, person.email] as const), ...teamMembers.flatMap((member) => member.email ? [[member.name, member.email] as const] : [])])
+  const emailOf = (name: string) => emailOfName.get(name) ?? profiles[name]?.email
   const appRoleOf = (email?: string) => email ? members[email]?.[0] : undefined
   const [peopleMessage, setPeopleMessage] = useState<{ tone: 'success' | 'error' | 'warning'; text: string } | null>(null)
   const [removeFor, setRemoveFor] = useState<{ name: string; kind: 'left' | 'not-team'; leftOn: string; revoke: boolean } | null>(null)
-  const emptyNew = { name: '', email: '', region: '', role: '', reportsTo: '', appRole: '' }
-  const [adding, setAdding] = useState<typeof emptyNew | null>(null)
   async function setAppRole(email: string, role: Role | '', who: string) {
     const policy = structuredClone(access.policy ?? defaultPolicy(access.email))
     if (role) policy.members[email] = [role]; else delete policy.members[email]
@@ -104,22 +104,13 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, mont
     try { await access.save(policy, `Access: ${who} (${email}) → ${role || 'no app access role'}`); setPeopleMessage({ tone: 'success', text: `${who}: app access role ${role || 'removed'}; saved to ${access.path}.` }); return true }
     catch (failure) { setPeopleMessage({ tone: 'error', text: failure instanceof Error ? failure.message : String(failure) }); return false }
   }
-  const missingOf = (name: string) => { const profile = profiles[name] ?? {}; return [!profile.email && 'email', !profile.region && 'region', !profile.role && 'role', !profile.reportsTo && 'reports to', !appRoleOf(profile.email) && 'app access role'].filter(Boolean) as string[] }
-  const mappedEmails = new Set(Object.values(profiles).map((profile) => profile.email).filter(Boolean))
+  const missingOf = (name: string) => { const profile = profiles[name] ?? {}; return [!emailOf(name) && 'email in Azure DevOps', !profile.region && 'region', !profile.role && 'role', !profile.reportsTo && 'reports to', !appRoleOf(emailOf(name)) && 'app access role'].filter(Boolean) as string[] }
+  const mappedEmails = new Set(resources.map((person) => emailOf(person.name)).filter(Boolean))
   const accessOnly = Object.entries(members).filter(([email]) => !mappedEmails.has(email)).sort(([a], [b]) => a.localeCompare(b))
-  async function addPerson(event: React.FormEvent) {
-    event.preventDefault()
-    if (!adding) return
-    const name = adding.name.trim(), email = normalEmail(adding.email)
-    if (!name || !isEmail(email) || !adding.region || !adding.role || !adding.reportsTo || !adding.appRole) { setPeopleMessage({ tone: 'error', text: 'Every field is needed: name, work email, region, role, reports to and app access role.' }); return }
-    setProfile(name, { listed: 'added', email, region: adding.region as ResourceProfile['region'], role: adding.role as ResourceProfile['role'], reportsTo: adding.reportsTo, removed: undefined })
-    if (accessEditable) await setAppRole(email, adding.appRole as Role, name); else setPeopleMessage({ tone: 'warning', text: `${name} added. Their app access role (${adding.appRole}) needs “Manage access” and a Git token that can write: it was not saved.` })
-    setAdding(null)
-  }
   async function confirmRemove(event: React.FormEvent) {
     event.preventDefault()
     if (!removeFor) return
-    const { name, kind, leftOn, revoke } = removeFor, email = profiles[name]?.email
+    const { name, kind, leftOn, revoke } = removeFor, email = emailOf(name)
     if (kind === 'left') { if (!leftOn) return; setProfile(name, { leftOn }) } else setProfile(name, { removed: true })
     if (revoke && email && members[email] && accessEditable) await setAppRole(email, '', name)
     setRemoveFor(null)
@@ -179,6 +170,15 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, mont
     store.update((draft) => {
       draft.capacitySettings = normalizeCapacitySettings({ ...normalizeCapacitySettings(draft.capacitySettings), calculationProfiles: profiles, defaultProfileId: defaultId })
       draft.audits.unshift({ id: crypto.randomUUID(), timestamp: new Date().toISOString(), actor: 'u-owner', action: 'Update', entity: 'CapacitySettings', entityId: 'calculation-profiles', detail: detail.slice(0, 2000) })
+      return draft
+    })
+  }
+
+  // CAP-52: the names of the figures per calculation profile, shared in Git and audited.
+  function saveProfileTerms(terms: ProfileTerms, detail: string) {
+    store.update((draft) => {
+      draft.capacitySettings = normalizeCapacitySettings({ ...normalizeCapacitySettings(draft.capacitySettings), profileTerms: terms })
+      draft.audits.unshift({ id: crypto.randomUUID(), timestamp: new Date().toISOString(), actor: 'u-owner', action: 'Update', entity: 'CapacitySettings', entityId: 'profile-terms', detail: detail.slice(0, 2000) })
       return draft
     })
   }
@@ -266,17 +266,17 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, mont
     {!shared && tab === 'resources' && <Notice tone="info">Capacity, periods, resources, master data and the shared connection setup are managed by roles with “Manage shared settings”.</Notice>}
     {tab === 'capacity' && <SectionTabs page="capacity" sections={[
       { key: 'capacity', label: 'Capacity and absence', node: <Panel eyebrow="CAPACITY" title="Capacity and absence" info="Used by the Dashboard to compute available hours and utilization. Saved with the planning data in Git (with the holidays and common activities), so everyone who loads from Git gets the same settings.">
-        <SettingsSummary rows={[['Team Holidays and Training Epic', `#${capacity.absenceEpicId}`], ['Working hours per day', `${capacity.hoursPerDay}h`], ['Overloaded at', `${capacity.overloadedAt}%`], ['Has capacity below', `${capacity.availableBelow}%`], ['NPRA maximum', `${capacity.npraHoursPerMonth}h per person per month`]]} />
+        <SettingsSummary rows={[['Team Holidays and Training Epic', `#${capacity.absenceEpicId}`], ['Funded hours per day', `${capacity.hoursPerDay}h`], ['Overloaded at', `${capacity.overloadedAt}%`], ['Has capacity below', `${capacity.availableBelow}%`], ['NPRA maximum', `${capacity.npraHoursPerMonth}h per person per month`]]} />
         <div className="button-row"><button type="button" className="ghost" onClick={() => setCapacityOpen(true)}>Edit capacity settings…</button></div>
         {capacityOpen && <Modal title="Capacity and absence" eyebrow="SETTINGS · CAPACITY" form onClose={() => setCapacityOpen(false)}><form onSubmit={(event) => { saveCapacity(event); setCapacityOpen(false) }}>
-          <div className="form-row"><label>Team Holidays and Training Epic ID<input name="absenceEpicId" type="number" min="1" step="1" required defaultValue={capacity.absenceEpicId} /><small>Leave under this Epic counts as absence (Feature and Task titles decide PTO, Sick Leave or Unplanned Leave); a Task, Story or Feature titled with "Training" counts as NPRA instead.</small></label><label>Working hours per day<input name="hoursPerDay" type="number" min="0.25" step="0.25" required defaultValue={capacity.hoursPerDay} /></label></div>
+          <div className="form-row"><label>Team Holidays and Training Epic ID<input name="absenceEpicId" type="number" min="1" step="1" required defaultValue={capacity.absenceEpicId} /><small>Leave under this Epic counts as absence (Feature and Task titles decide PTO, Sick Leave or Unplanned Leave); a Task, Story or Feature titled with "Training" counts as NPRA instead.</small></label><label>Funded hours per day<input name="hoursPerDay" type="number" min="0.25" step="0.25" required defaultValue={capacity.hoursPerDay} /></label></div>
           <div className="form-row"><label>Overloaded at or above (%)<input name="overloadedAt" type="number" min="1" step="1" required defaultValue={capacity.overloadedAt} /></label><label>Has capacity below (%)<input name="availableBelow" type="number" min="0" step="1" required defaultValue={capacity.availableBelow} /></label></div>
           <div className="form-row"><label>NPRA maximum per person per month (h)<input name="npraHoursPerMonth" type="number" min="0" step="0.5" required defaultValue={capacity.npraHoursPerMonth} /><small>Non-project related activities (internal meetings, trainings): Tasks tagged “NPRA”. Only the NPRA hours booked come off the available hours; they are tracked against this maximum and hours over it are flagged. 0 tracks without a maximum.</small></label></div>
           <div className="modal-actions"><button type="button" className="ghost" onClick={() => setCapacityOpen(false)}>Cancel</button><button className="primary">Save capacity settings</button></div>
         </form></Modal>}
         {capacityMessage && <Notice tone="success">{capacityMessage}</Notice>}
       </Panel> },
-      { key: 'profiles', label: 'Calculation profiles', node: <><div className="shared-time-panel"><GitSyncBar git={git} /></div><CalculationProfilesPanel settings={capacity} canEdit={shared} onSave={saveProfiles} /></> },
+      { key: 'profiles', label: 'Calculation profiles', node: <><div className="shared-time-panel"><GitSyncBar git={git} /></div><CalculationProfilesPanel settings={capacity} canEdit={shared} onSave={saveProfiles} onSaveTerms={saveProfileTerms} /></> },
       { key: 'rules', label: 'Bucket rules', node: <><div className="shared-time-panel"><GitSyncBar git={git} /></div><BucketRulesPanel settings={capacity} items={azure.items} month={month} canEdit={shared} onSave={saveBucketRules} /></> },
       { key: 'insights', label: 'Insight thresholds', node: <><div className="shared-time-panel"><GitSyncBar git={git} /></div><InsightThresholdsPanel settings={capacity} canEdit={shared} onSave={saveInsightThresholds} /></> },
       { key: 'time', label: 'Holidays and common activities', node: <><div className="shared-time-panel"><GitSyncBar git={git} /></div>
@@ -308,54 +308,42 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, mont
         {holidays.length ? `Regional holidays in ${monthName(month)}: ${holidays.map((item) => `${item.region} ${formatHours(item.hours)}h → ${item.people} ${item.people === 1 ? 'person' : 'people'}`).join(' · ')}.` : `No regional holidays in ${monthName(month)}. Add a Feature such as "Public Holidays - India" under absence Epic #${capacity.absenceEpicId} with a "… - Time Writing" story and "<Month YYYY> | <Holiday>" Tasks.`}
         {unmapped.length > 0 && ` No region yet for ${unmapped.join(', ')}; regional holidays are not applied to them.`}
       </Notice>}
-      <div className="button-row">
-        <button type="button" className="ghost" disabled={azure.isSample} onClick={() => void addTeamMembers()}>Add team members from Azure DevOps</button>
-        <button type="button" className="primary" onClick={() => { setPeopleMessage(null); setAdding(emptyNew) }}>Add a person…</button>
+      <div className="button-row people-source">
+        <span className="muted">Names and work emails come from Azure DevOps: the members of the team <strong>{azure.config?.team || '(Time Writing connection)'}</strong> and everyone Assigned To a work item. To add someone, add them to the Azure DevOps team (or assign them a work item), then refresh.</span>
+        <button type="button" className="ghost" disabled={azure.isSample || !azure.config || !azure.pat} onClick={() => setTeamRead((count) => count + 1)}>↻ Read the team again</button>
       </div>
-      {teamStatus && <Notice tone={teamStatus.startsWith('Not read') ? 'warning' : 'info'}>{teamStatus}</Notice>}
-      {adding && <form className="standard-hours add-person" aria-label="Add a person" onSubmit={(event) => void addPerson(event)}>
-        <div className="form-row">
-          <label>Name (as in Azure DevOps)<input list="people-names" value={adding.name} onChange={(event) => { const name = event.target.value; setAdding({ ...adding, name, email: adding.email || emailOfName.get(name) || '' }) }} /></label>
-          <label>Work email<input type="email" value={adding.email} onChange={(event) => setAdding({ ...adding, email: event.target.value })} /></label>
-          <label>Region<select aria-label="Region" value={adding.region} onChange={(event) => setAdding({ ...adding, region: event.target.value })}><option value="">Choose…</option>{regions.map((region) => <option key={region}>{region}</option>)}</select></label>
-        </div>
-        <div className="form-row">
-          <label>Role<select aria-label="Role" value={adding.role} onChange={(event) => setAdding({ ...adding, role: event.target.value })}><option value="">Choose…</option>{resourceRoles.map((role) => <option key={role}>{role}</option>)}</select></label>
-          <label>Reports to<input list="people-names" value={adding.reportsTo} onChange={(event) => setAdding({ ...adding, reportsTo: event.target.value })} /></label>
-          <label>App access role<select aria-label="App access role" value={adding.appRole} onChange={(event) => setAdding({ ...adding, appRole: event.target.value })}><option value="">Choose…</option>{accessRoles.map((role) => <option key={role}>{role}</option>)}</select></label>
-        </div>
-        <datalist id="people-names">{[...new Set([...names, ...people.map((person) => person.name)])].sort().map((name) => <option key={name} value={name} />)}</datalist>
-        <div className="button-row"><button type="submit" className="primary">Add person</button><button type="button" className="ghost" onClick={() => setAdding(null)}>Cancel</button></div>
-      </form>}
+      {azure.isSample ? <Notice tone="info">Sample data: the Azure DevOps team is not read; the people Assigned To in the sample are listed.</Notice>
+        : !azure.config || !azure.pat ? <Notice tone="info">Set up the Time Writing connection (Settings → Azure DevOps) to read the team; until then the people Assigned To in the fetched work are listed.</Notice>
+        : team?.error ? <Notice tone="warning">The team was not read: {team.error}. The PAT needs Project and Team (Read); the people Assigned To in the fetched work are listed.</Notice>
+        : team ? <p className="muted people-count">{team.members.length} team member{team.members.length === 1 ? '' : 's'} read from {azure.config.team}.</p> : <p className="muted people-count">Reading the team from Azure DevOps…</p>}
       {peopleMessage && <Notice tone={peopleMessage.tone}>{peopleMessage.text}</Notice>}
-      {accessOnly.length > 0 && <Notice tone="warning">App access without a person in this list (map them so region, role and reports to are known): {accessOnly.map(([email, assigned]) => <span key={email} className="access-only"> {email} ({assigned.join(', ') || 'no role'}) <button type="button" className="text-button" onClick={() => setAdding({ ...emptyNew, email, appRole: assigned[0] ?? '' })}>Add as person</button></span>)}</Notice>}
+      {accessOnly.length > 0 && <Notice tone="warning">App access for an email no one in Azure DevOps has (add the person to the team in Azure DevOps, or remove the access under Role rights): {accessOnly.map(([email, assigned]) => <span key={email} className="access-only"> {email} ({assigned.join(', ') || 'no role'}) </span>)}</Notice>}
       <label className="default-joined">Default Joined on (everyone without their own date; months before it count no capacity)<span className="button-row"><input type="date" aria-label="Default Joined on" value={capacity.defaultJoinedOn ?? ''} onChange={(event) => setDefaultJoined(event.target.value)} />{capacity.defaultJoinedOn && <button type="button" className="text-button" onClick={() => setDefaultJoined('')}>Clear</button>}</span></label>
-      {resources.length ? <div className="azure-table"><table className="resource-table"><thead><tr><th>Person</th><th>Work email</th><th>App access role</th><th>Region</th><th>Role</th><th>Reports to</th><th>Employed</th><th>Status in {shortMonthName(month)}</th><th>Actual utilization</th><th>Total actual (h)</th><th>Absence hours</th><th>Available hours {shortMonthName(month)}</th><th>Main streams</th></tr></thead><tbody>{resources.filter((person) => !profiles[person.name]?.removed).map((person) => {
+      {resources.length ? <div className="azure-table"><table className="resource-table"><thead><tr><th>Person (Azure DevOps)</th><th>Work email (Azure DevOps)</th><th>App access role</th><th>Region</th><th>Role</th><th>Reports to</th><th>Employed</th></tr></thead><tbody>{resources.filter((person) => !profiles[person.name]?.removed).map((person) => {
         const profile = profiles[person.name] ?? {}
         return <Fragment key={person.name}><tr>
           <td><strong>{person.name}</strong><button type="button" className="text-button danger-text resource-remove" aria-label={`Remove ${person.name}`} title="Left the team, or not part of the team" onClick={() => setRemoveFor({ name: person.name, kind: 'left', leftOn: new Date().toISOString().slice(0, 10), revoke: true })}>Remove</button>{missingOf(person.name).length > 0 && <small className="warning-text">Mapping incomplete: {missingOf(person.name).join(', ')}</small>}{person.months ? <small>{person.months} {person.months === 1 ? 'month' : 'months'} · {person.firstMonth === person.lastMonth ? shortMonthName(person.firstMonth) : `${shortMonthName(person.firstMonth)} – ${shortMonthName(person.lastMonth)}`}</small>
-            : <small>No Time Writing yet · {person.sources.map((source) => ({ 'time writing': 'Time Writing', assigned: 'assigned in Azure DevOps', history: 'historical hours', team: 'team member', added: 'added by name', profile: 'profile' })[source]).join(', ')}{(profile.listed && !person.sources.some((source) => source === 'assigned' || source === 'history')) && <> · <button type="button" className="text-button" onClick={() => setProfile(person.name, { listed: undefined })}>Remove</button></>}</small>}</td>
-          <td><input type="email" className="person-email" aria-label={`Work email of ${person.name}`} defaultValue={profile.email ?? ''} placeholder={emailOfName.get(person.name) ?? 'name@company.com'} key={profile.email ?? ''} onBlur={(event) => { const value = normalEmail(event.target.value); if (value === (profile.email ?? '')) return; if (value && !isEmail(value)) { setPeopleMessage({ tone: 'error', text: `${value} is not an email address.` }); return } setProfile(person.name, { email: value || undefined }) }} />{!profile.email && emailOfName.get(person.name) && <button type="button" className="text-button" onClick={() => setProfile(person.name, { email: emailOfName.get(person.name) })}>Use {emailOfName.get(person.name)}</button>}</td>
-          <td><select aria-label={`App access role of ${person.name}`} value={appRoleOf(profile.email) ?? ''} disabled={!profile.email || !accessEditable} title={!profile.email ? 'Set the work email first' : accessEditable ? undefined : 'Needs “Manage access” and a Git token that can write'} onChange={(event) => void setAppRole(profile.email!, event.target.value as Role | '', person.name)}><option value="">{access.policy?.defaultRole ? `Default (${access.policy.defaultRole})` : 'None'}</option>{accessRoles.map((role) => <option key={role}>{role}</option>)}</select></td>
+            : <small>{teamNames.has(person.name) || person.sources.includes('team') ? 'Team member' : 'Assigned To in Azure DevOps'} · no Time Writing yet</small>}</td>
+          <td className="person-email" aria-label={`Work email of ${person.name}`}>{emailOfName.get(person.name) ?? (profile.email ? <>{profile.email} <small className="muted">saved earlier; not in Azure DevOps</small></> : <small className="muted">No email in Azure DevOps</small>)}</td>
+          <td><select aria-label={`App access role of ${person.name}`} value={appRoleOf(emailOf(person.name)) ?? ''} disabled={!emailOf(person.name) || !accessEditable} title={!emailOf(person.name) ? 'Azure DevOps has no email for this person' : accessEditable ? undefined : 'Needs “Manage access” and a Git token that can write'} onChange={(event) => void setAppRole(emailOf(person.name)!, event.target.value as Role | '', person.name)}><option value="">{access.policy?.defaultRole ? `Default (${access.policy.defaultRole})` : 'None'}</option>{accessRoles.map((role) => <option key={role}>{role}</option>)}</select></td>
           <td><select aria-label={`Region for ${person.name}`} value={profile.region ?? ''} onChange={(event) => setProfile(person.name, { region: (event.target.value || undefined) as ResourceProfile['region'] })}><option value="">Not set</option>{regions.map((region) => <option key={region}>{region}</option>)}</select></td>
           <td><select aria-label={`Role for ${person.name}`} value={profile.role ?? ''} onChange={(event) => setProfile(person.name, { role: (event.target.value || undefined) as ResourceProfile['role'] })}><option value="">Not set</option>{resourceRoles.map((role) => <option key={role}>{role}</option>)}</select><label className="check"><input type="checkbox" checked={Boolean(profile.peopleManager)} onChange={(event) => setProfile(person.name, { peopleManager: event.target.checked || undefined })} />People manager</label></td>
           <td>{otherFor === person.name ? <form className="inline-form" onSubmit={(event) => { event.preventDefault(); const name = otherName.trim(); if (name && name !== person.name) setProfile(person.name, { reportsTo: name }); setOtherFor('') }}><input aria-label={`Manager of ${person.name}`} placeholder="Manager's name" value={otherName} autoFocus onChange={(event) => setOtherName(event.target.value)} /><button type="submit" className="ghost">OK</button><button type="button" className="text-button" onClick={() => setOtherFor('')}>Cancel</button></form>
             : <select aria-label={`${person.name} reports to`} value={profile.reportsTo ?? ''} onChange={(event) => { if (event.target.value === '__other') { setOtherFor(person.name); setOtherName('') } else setProfile(person.name, { reportsTo: event.target.value || undefined }) }}><option value="">—</option>{names.filter((name) => name !== person.name).map((name) => <option key={name}>{name}</option>)}{outside.length > 0 && <optgroup label="Not on the board">{outside.filter((name) => name !== person.name).map((name) => <option key={name}>{name}</option>)}</optgroup>}<option value="__other">Other (type a name)…</option></select>}</td>
           <td className="employment-dates"><label>Joined on<input type="date" aria-label={`${person.name} joined on`} value={profile.joinedOn ?? ''} max={profile.leftOn} onChange={(event) => setProfile(person.name, { joinedOn: event.target.value || undefined })} /></label><label>Left on<input type="date" aria-label={`${person.name} left on`} value={profile.leftOn ?? ''} min={profile.joinedOn} onChange={(event) => setProfile(person.name, { leftOn: event.target.value || undefined })} /></label></td>
-          <td><Pill tone={statusTone[person.status]}>{person.status}</Pill></td><td>{formatPercent(person.utilization)}</td><td>{formatHours(person.work)}</td><td>{formatHours(person.absence)}</td><td>{availableOf.has(person.name) ? formatHours(availableOf.get(person.name)!) : roleExclusion(person.name, capacity) ? <small className="muted" title="Not counted for capacity: role (People & access → Capacity roles)">not counted ({roleExclusion(person.name, capacity)})</small> : <small className="muted" title="Not counted: no Time Writing Task this month, or not employed this month">not counted</small>}</td>
-          <td>{person.streams.slice(0, 2).join(', ') || '—'}{person.streams.length > 2 && <small>+{person.streams.length - 2} more</small>}</td>
         </tr>
-        {removeFor?.name === person.name && <tr className="remove-row"><td colSpan={13}><form aria-label={`Remove ${person.name}`} onSubmit={(event) => void confirmRemove(event)}>
+        {removeFor?.name === person.name && <tr className="remove-row"><td colSpan={7}><form aria-label={`Remove ${person.name}`} onSubmit={(event) => void confirmRemove(event)}>
           <strong>Remove {person.name}: has {person.name} left the team, or are they not part of the team?</strong>
           <label className="inline-check"><input type="radio" name="remove-kind" checked={removeFor.kind === 'left'} onChange={() => setRemoveFor({ ...removeFor, kind: 'left' })} /> Left the team on <input type="date" aria-label="Left the team on" value={removeFor.leftOn} min={profile.joinedOn} onChange={(event) => setRemoveFor({ ...removeFor, leftOn: event.target.value })} /> <small className="muted">counted up to that day; earlier months unchanged</small></label>
           <label className="inline-check"><input type="radio" name="remove-kind" checked={removeFor.kind === 'not-team'} onChange={() => setRemoveFor({ ...removeFor, kind: 'not-team' })} /> Not part of the team <small className="muted">left out of every figure, every month (restorable)</small></label>
-          {profile.email && members[profile.email] && <label className="inline-check"><input type="checkbox" checked={removeFor.revoke} disabled={!accessEditable} onChange={(event) => setRemoveFor({ ...removeFor, revoke: event.target.checked })} /> Also remove their app access ({members[profile.email].join(', ')})</label>}
+          {emailOf(person.name) && members[emailOf(person.name)!] && <label className="inline-check"><input type="checkbox" checked={removeFor.revoke} disabled={!accessEditable} onChange={(event) => setRemoveFor({ ...removeFor, revoke: event.target.checked })} /> Also remove their app access ({members[emailOf(person.name)!].join(', ')})</label>}
           <div className="button-row"><button type="submit" className="primary" disabled={removeFor.kind === 'left' && !removeFor.leftOn}>Confirm</button><button type="button" className="ghost" onClick={() => setRemoveFor(null)}>Cancel</button></div>
         </form></td></tr>}
         </Fragment>
       })}</tbody></table></div>
         : <EmptyState title="No resources from Azure yet." detail="Refresh from Azure DevOps; people appear once they are Assigned To a Time Writing Task." />}
       {!resources.length && <div className="button-row"><button className="primary" onClick={() => onOpenTab('connections', 'servers')}>Go to Azure connections</button></div>}
+      {notInAzure.length > 0 && <details className="resource-removed resource-outside"><summary>Not in Azure DevOps ({notInAzure.length}) — settings kept, not listed above</summary><p className="muted">People with settings who are neither in the Azure DevOps team nor Assigned To in the fetched work (e.g. from the historical hours, or added by name before v7.0.0). Their region, role and dates still apply to their hours.</p><ul>{notInAzure.map((person) => <li key={person.name}>{person.name}{profiles[person.name]?.region ? ` · ${profiles[person.name]!.region}` : ''}{profiles[person.name]?.role ? ` · ${profiles[person.name]!.role}` : ''}</li>)}</ul></details>}
       {removedNames.length > 0 && <details className="resource-removed"><summary>Removed people ({removedNames.length}) — not counted anywhere</summary><ul>{removedNames.map((name) => <li key={name}>{name} <button type="button" className="text-button" onClick={() => setProfile(name, { removed: undefined })}>Restore</button></li>)}</ul></details>}
       {resources.some((person) => profiles[person.name]?.reportsTo) && <TeamTree names={names} profiles={profiles} />}
     </Panel> },
