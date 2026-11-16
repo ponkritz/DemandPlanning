@@ -888,6 +888,8 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-QV-32 Pulse Check opens without recalculating** — Req QV-51 — L1 `streams.test.mjs` ("Pulse Check is worked out once per data set: the same sources and month give the same streams; new data recalculates (QV-51, KB-27)"); browser check with the real DP, CP, IOCC and S&S IT data loaded: open Pulse Check, switch to Year and back, leave and reopen — the page opens without a pause after the first time; Refresh, then the figures follow the new data.
 
+**TC-QV-33 Content releases named by Title** — Req QV-52 — L1 `release-source.test.mjs` ("QV-52: Content releases are named by the Title — one per unique Title, no name and number from the paths"); browser check with the Content connection fetched: the Content page lists one release per Title (Title column, no Release column; no Name / Release columns in the query output); Pulse Check → Releases shows "Content [n] : <Title>, <Title>"; the Monthly pack Content line lists the same Titles.
+
 
 
 **TC-QV-24 CP releases from the asset Titles** — *(Retired — see TC-QV-25)* Req QV-40 — L1 `streams.test.mjs` ("CP: the release from the asset Title "[Release name] [Release No] [Asset name]", each release once; fuzzy QMS-0025 match (TC-QV-24)"); browser check with a CP query holding three assets of one release in both namings ("Care Pathways 3.1 Test Report", "Care Pathways 3.1.0 SRS", "Risk Analysis v3.1 (Care Pathways)") and one of another (3.2), and a QMS-0025 Feature "CP | Care Pathways | v3.1": Release Details → CP lists two releases (3 and 1 assets), 3.1 with its Feature and %, 3.2 with Create Feature opening the New Feature form titled "Care Pathways | v3.2" (release name and number only) under the CP Epic, and found after it is created; Pulse Check's Releases and Supported summary show "CP [2]"; no page errors. **UAT**
@@ -971,6 +973,10 @@ TC-OVR-01 to TC-OVR-03 tested the earlier Overview and are **retired** with OVR-
 
 **TC-CAP-24 Calculation profile terms and cards** — Req CAP-52, CAP-45, CAP-41 — L1 `calculation-profiles.test.mjs` ("CAP-52: a profile chooses its Absence kinds and NPRA parts; the cards show its names and formulas"); E2E `shell.e2e.mjs` ("TC-CAP-13: …": the four cards Utilization, Funded Hours, Absence, NPRA Hours with their bracketed formulas; Overloaded and Has capacity counted in the Who has capacity count; the Funded Hours / Absence column names); browser check with Git: copy Current (v4), untick Sick Leave, Unplanned Leave and Other absence and Training, make it the default — the Absence card reads [Holiday + PTO] and its hours drop, NPRA Hours read [Tagged NPRA hours], Available hours rise by the unticked leave; give the profile the name "Contract hours" for Funded Hours under Names — the card, the columns and the formula use it; Save to Git.
 
+**TC-CAP-25 Edit a built-in calculation profile** — Req CAP-53, CAP-41, CAP-52 — L1 `calculation-profiles.test.mjs` ("CAP-53: a built-in profile can be edited; it keeps its id and place, is marked changed, and reset brings the built-in back"; "CAP-41: profiles read from Git are checked; unknown defaults fall back to \"Current (v4)\""); E2E `shell.e2e.mjs` ("TC-CAP-25: a built-in calculation profile can be edited, shows as changed, drives the cards, and resets to the built-in one"); browser check with Git: edit Current (v4), Save to Git, reload in another browser — the change is there; lock a month first and check its figures stay.
+
+**TC-CAP-26 Utilization formula builder** — Req CAP-54, CAP-41 — L1 `calculation-profiles.test.mjs` ("CAP-54: the utilization formula as Top ÷ Bottom follows the profile and its names"); E2E `shell.e2e.mjs` ("TC-CAP-16: …" — ticks figures in the top and the bottom, checks the sentence and that a figure is never in both); browser check: in Settings → Calculation profiles edit a profile, untick Training in the top, tick it in the bottom — the sentence reads "… ÷ (Funded Hours − Absence − Training) × 100", Save, the Pulse Check cards follow.
+
 **TC-CAP-01 Capacity calculation** — Req CAP-01…09, OVR-09 — L1 `capacity.test.mjs`, `monthly-hours.test.mjs`, `azure-insights.test.mjs`. Plus L3 analysis (A) with one person in October 2026:
 - 22 working days × 8 = 176 h funded.
 - An India holiday of 8 h gives 168 h available.
@@ -1035,6 +1041,10 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 **TC-GIT-06 Default data repository prefilled** — Req GIT-13 — L1 `git-storage.test.mjs` ("the default data repository is a valid config: ponkritz/DemandPlanningStorage, main, planning-data.json"); E2E `shell.e2e.mjs` ("TC-GIT-06": Settings → Storage → Connect Git storage… shows Owner ponkritz, Repository DemandPlanningStorage, Branch main and Data file planning-data.json prefilled with the token empty; the Get started guide's Git step names the repository); browser check: with a connection saved to another repository, Change connection… shows that repository.
 
 **TC-GIT-05 Capacity settings and mappings in Git** — Req GIT-03, GIT-04, GIT-08, CAP-10 — L1 `git-storage.test.mjs` ("capacity settings, holidays and common activities travel in the Git planning file": round-trip without change, mappings sorted by ID, an older file without them loads as before and makes Save to Git appear, invalid mappings dropped); browser check: add a mapping on Settings → Capacity → the sync bar there says "Unsaved changes"; Save to Git; on a second browser Load latest shows the same mapping. **UAT**
+
+**TC-GIT-07 Table defaults and match threshold shared in Git** — Req GIT-14, UI-12 — L1 `git-storage.test.mjs` ("GIT-14: Table defaults and the release-source settings are shared in the planning file; an older file leaves them alone"); E2E `shell.e2e.mjs` ("TC-GIT-08 …": the planning file carries Table defaults); browser check with two browsers: change Settings → Table defaults to Compact and the fuzzy match threshold to 70 %, Save to Git; the other browser (Reload, or wait for GIT-15) shows Compact and 70 %.
+
+**TC-GIT-08 Changes saved by others reach an open app** — Req GIT-15 — L1 `git-watch.test.mjs` ("GIT-15: a check names the shared files whose version in Git is not the one loaded here"; "GIT-15: the banner names the shared files as people know them"); E2E `shell.e2e.mjs` ("TC-GIT-08: while the app is open, newer planning data in Git loads by itself and other newer shared files show a Reload banner"); browser check with two browsers: keep the app open in B; in A change a calculation profile and Save to Git — within 5 minutes (or when B's window is brought back) B shows the new profile and "Updated from Git at …"; in A save the Monthly pack setup — B shows the "Newer data in Git: Monthly pack setup" banner, and Reload shows it; with an unsaved change in B, newer planning data shows in the banner instead of loading.
 - L3 expected:
   - `my org` is rejected (owner).
   - `a..b` is rejected (branch).
@@ -1350,7 +1360,11 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-PCK-07 Typing stays responsive** — Req PCK-09 — L1 `monthly-pack.test.mjs` ("typing in the pack does not recount the data …"); browser check with the full team data: type a paragraph in Summary and in a KPI value.
 
-**TC-PCK-08 Bullets with + in the Monthly pack** — Req PCK-10 — L1 `monthly-pack.test.mjs` ("PCK-10: typed bullets placed below a generated bullet round-trip through Git and keep their place on the slide"); E2E `monthly-pack.e2e.mjs` ("TC-PCK-08: every Monthly pack box adds bullets with + (below a bullet) and + Add bullet (at the end); Enter adds one below, ✕ removes; Save to Git turns on"; "TC-PCK-04 …": read-only with the sample, no + and no text boxes); browser check with Git connected (writable token) and the team data: + on a generated release line of Actions/Deliverables Realized, type a bullet, Save to Git, reload — it is back below that line, and the .pptx and Copy slide as text show it there.
+**TC-PCK-08 Bullets with + in the Monthly pack** — Req PCK-10 — L1 `monthly-pack.test.mjs` ("PCK-10: typed bullets placed below a generated bullet round-trip through Git and keep their place on the slide"); E2E `monthly-pack.e2e.mjs` ("TC-PCK-08: every Monthly pack box adds bullets with + (below a bullet) and + Add bullet (at the end); Enter adds one below, ✕ removes; Save to Git turns on": a long bullet wraps and its field grows, KB-44; "TC-PCK-04 …": read-only with the sample, no + and no text boxes); browser check with Git connected (writable token) and the team data: + on a generated release line of Actions/Deliverables Realized, type a bullet, Save to Git, reload — it is back below that line, and the .pptx and Copy slide as text show it there.
+
+**TC-PCK-09 Capabilities (Projects & Services) bullet** — Req PCK-11 — L1 `monthly-pack.test.mjs` ("PCK-11: Capabilities (Projects & Services) — unique Features under the chosen Epics with hours recorded in the month"); E2E `monthly-pack.e2e.mjs` ("TC-PCK-04 …": Settings → Monthly pack shows the Capabilities bullet with its label); browser check with the team data and Git: choose the Projects and Services Epics, Save to Git — Pulse Check → Monthly pack shows "Capabilities (Projects & Services) [n]: …" with the Features booked that month, each once; a Feature with only Original Estimate or hours in another month is not listed; the .pptx carries the bullet.
+
+**TC-PCK-10 Capabilities count in Key takeaways** — Req PCK-12, PCK-11 — L1 `monthly-pack.test.mjs` ("PCK-12: Key takeaways — the Capabilities count joins the Supported line"); browser check with the team data: with the Capabilities Epics set, Pulse Check → Monthly pack → Key takeaways shows "Supported: … ; Capabilities (Projects & Services) = n" with n the number of Features in the Capabilities bullet; the .pptx carries it.
 - Expected: the characters appear as they are typed; no month of releases is read again while typing; the generated lines and KPIs follow the typed text.
 
 **TC-PCK-06 The pack in the team's PowerPoint template** — Req PCK-01, PCK-08 — L1 `pptx-template.test.mjs` (all tests, with a synthetic template — the real one is never in this repository); browser check with the team template:
@@ -1653,6 +1667,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | QV-49 | TC-QV-30 |
 | QV-50 | TC-QV-31 |
 | QV-51 | TC-QV-32 |
+| QV-52 | TC-QV-33 |
 | QV-38 | TC-CON-42 |
 | OVR-01…08 | retired (TC-OVR-01…03 retired) |
 | OV-11 | TC-OV-11 |
@@ -1688,6 +1703,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CAP-50 | TC-CAP-22 |
 | CAP-51 | TC-CAP-22, TC-CAP-23 |
 | CAP-52 | TC-CAP-24 |
+| CAP-53 | TC-CAP-25 |
+| CAP-54 | TC-CAP-26 |
 | BAS-01…04 | TC-BAS-01 |
 | BAS-05…07 | TC-BAS-02 |
 | BAS-08…10 | TC-BAS-03 |
@@ -1696,6 +1713,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | GIT-03, GIT-04, GIT-08 | TC-GIT-02, TC-GIT-05 |
 | GIT-02…04, GIT-06, GIT-08, GIT-12 | TC-GIT-02 |
 | GIT-13 | TC-GIT-06 |
+| GIT-14 | TC-GIT-07 |
+| GIT-15 | TC-GIT-08 |
 | GIT-05, GIT-07, GIT-11 | TC-GIT-03 |
 | GIT-09, GIT-10 | TC-GIT-04 |
 | SNP-01…03 | TC-SNP-01 |
@@ -1760,6 +1779,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | PCK-08 | TC-PCK-06 |
 | PCK-09 | TC-PCK-07 |
 | PCK-10 | TC-PCK-08 |
+| PCK-11 | TC-PCK-09 |
+| PCK-12 | TC-PCK-10 |
 | NFR-01 | TC-INS-04 |
 | WSP-01 | TC-WSP-05, TC-WSP-06 |
 | WSP-02 | TC-WSP-01, TC-WSP-06 |
@@ -1847,10 +1868,10 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-06 | TC-ATM-01…11, TC-ATM-21, TC-TWN-03, TC-CON-20, TC-CON-33, TC-CON-34, TC-CON-43 |
 | UC-07 | TC-BKL-01…09, TC-BKL-15, TC-BKL-16, TC-BKL-17, TC-BKL-18, TC-BKL-19, TC-NAV-36, TC-CON-23, TC-CON-25…27, TC-CON-29…32, TC-CON-35 |
 | UC-08 | TC-QV-01…05, TC-FET-07, TC-CON-08, TC-CON-11…16, TC-QV-08, TC-QV-09, TC-QV-10, TC-QV-11, TC-QV-12, TC-QV-13, TC-QV-14, TC-QV-15, TC-QV-16, TC-CON-37, TC-CON-38, TC-CON-39, TC-CON-40, TC-CON-41, TC-QV-18, TC-QV-19, TC-QV-20, TC-QV-21, TC-QV-22, TC-CON-42 |
-| UC-09 | TC-OV-11…14, TC-CAP-01, TC-CAP-02, TC-CAP-03, TC-CAP-08, TC-CAP-10, TC-CAP-11, TC-CAP-12, TC-CAP-13, TC-CAP-14, TC-CAP-15, TC-CAP-16, TC-CAP-17, TC-CAP-18, TC-CAP-19, TC-CAP-20, TC-CAP-21, TC-CAP-22, TC-CAP-23, TC-CAP-24, TC-QV-17, TC-CON-21, TC-QV-10, TC-QV-11, TC-QV-21 |
+| UC-09 | TC-OV-11…14, TC-CAP-01, TC-CAP-02, TC-CAP-03, TC-CAP-08, TC-CAP-10, TC-CAP-11, TC-CAP-12, TC-CAP-13, TC-CAP-14, TC-CAP-15, TC-CAP-16, TC-CAP-17, TC-CAP-18, TC-CAP-19, TC-CAP-20, TC-CAP-21, TC-CAP-22, TC-CAP-23, TC-CAP-24, TC-CAP-25, TC-CAP-26, TC-QV-17, TC-CON-21, TC-QV-10, TC-QV-11, TC-QV-21 |
 | UC-10 | TC-OV-11 (Months, Streams), TC-OV-13 |
 | UC-11 | TC-BAS-01…04 |
-| UC-12 | TC-GIT-01…04, TC-GIT-05, TC-GIT-06, TC-ACC-03…05 |
+| UC-12 | TC-GIT-01…04, TC-GIT-05, TC-GIT-06, TC-GIT-07, TC-GIT-08, TC-ACC-03…05 |
 | UC-13 | TC-SNP-01…03 |
 | UC-14 | TC-SET-01…05, TC-CAP-02, TC-CAP-03, TC-NAV-34, TC-CAP-07, TC-CAP-09 |
 | UC-15 | TC-STO-01…04, TC-SNP-04 |
@@ -1862,9 +1883,9 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-21 | TC-SCR-01 |
 | UC-22 | TC-ACC-01, TC-ACC-02 |
 | UC-23 | TC-QEM-01…08 |
-| UC-24 | TC-PCK-01…07 |
+| UC-24 | TC-PCK-01…10 |
 | UC-25 | TC-WSP-01…07 |
-| UC-26 | TC-MYD-01…05, TC-QV-31, TC-QV-32 |
+| UC-26 | TC-MYD-01…05, TC-QV-31, TC-QV-32, TC-QV-33 |
 | UC-27 | TC-HIS-01…11 |
 | UC-28 | TC-ACT-01…12, TC-BKL-16, TC-BKL-17, TC-BKL-18, TC-ATM-21 |
 | UC-29 | TC-OVW-01…03 |

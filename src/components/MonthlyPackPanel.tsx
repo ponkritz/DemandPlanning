@@ -44,7 +44,7 @@ export function MonthlyPackPanel({ month, azure, store, git, pack, windchill }: 
   // The bullet to focus after the next render (a ref, so focusing needs no extra render).
   const focusNext = useRef<string | null>(null)
   const setFocus = (target: string) => { focusNext.current = target }
-  useEffect(() => { if (!focusNext.current) return; document.querySelector<HTMLInputElement>(`[data-bullet="${focusNext.current}"]`)?.focus(); focusNext.current = null })
+  useEffect(() => { if (!focusNext.current) return; document.querySelector<HTMLTextAreaElement>(`[data-bullet="${focusNext.current}"]`)?.focus(); focusNext.current = null })
   const setBullets = (key: NoteKey, change: (bullets: TypedBullet[]) => TypedBullet[]) => setDraft((current) => withBullets(current, key, change(typedBullets(current, key))))
   const addBullet = (key: NoteKey, at: number, after: number) => { setBullets(key, (bullets) => [...bullets.slice(0, at), { text: '', after }, ...bullets.slice(at)]); setFocus(`${key}:${at}`) }
   const setText = (key: NoteKey, value: string) => setDraft((current) => ({ ...current, text: { ...current.text, [key]: value } }))
@@ -89,12 +89,14 @@ export function MonthlyPackPanel({ month, azure, store, git, pack, windchill }: 
 
   // The bullets of a box in slide order: each generated bullet (from the data) followed by the typed bullets placed after
   // it, then the typed bullets at the end. Without a Git token that can save, the typed bullets are shown read-only.
+  // PCK-10: a typed bullet wraps like the text around it and grows with it (one line per bullet: Enter adds the next).
+  const grow = (element: HTMLTextAreaElement | null) => { if (!element) return; element.style.height = 'auto'; element.style.height = `${element.scrollHeight + 2}px` }
   const bulletList = (entry: SlideBox, key: NoteKey) => {
     const bullets = typedBullets(draft, key)
     const label = noteLabels[key]
     const plus = (at: number, after: number, what: string) => editable && <button type="button" className="pack-plus" aria-label={`Add a bullet below ${what}`} title="Add a bullet below" disabled={busy} onClick={() => addBullet(key, at, after)}>+</button>
     const typed = (index: number) => { const bullet = bullets[index]; return <li key={`t${index}`} className="pack-typed">
-      {editable ? <input data-bullet={`${key}:${index}`} aria-label={`${label}: bullet ${index + 1}`} value={bullet.text} maxLength={500} placeholder="Type the bullet…" disabled={busy} onChange={(event) => { const text = event.target.value; setBullets(key, (now) => now.map((item, at) => at === index ? { ...item, text } : item)) }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addBullet(key, index + 1, bullet.after) } else if (event.key === 'Backspace' && !bullet.text) { event.preventDefault(); setBullets(key, (now) => now.filter((_, at) => at !== index)); if (index > 0) setFocus(`${key}:${index - 1}`) } }} /> : <span>{bullet.text}</span>}
+      {editable ? <textarea rows={1} ref={grow} data-bullet={`${key}:${index}`} aria-label={`${label}: bullet ${index + 1}`} value={bullet.text} maxLength={500} placeholder="Type the bullet…" disabled={busy} onChange={(event) => { const text = event.target.value.replace(/\n/g, ' '); grow(event.target); setBullets(key, (now) => now.map((item, at) => at === index ? { ...item, text } : item)) }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addBullet(key, index + 1, bullet.after) } else if (event.key === 'Backspace' && !bullet.text) { event.preventDefault(); setBullets(key, (now) => now.filter((_, at) => at !== index)); if (index > 0) setFocus(`${key}:${index - 1}`) } }} /> : <span>{bullet.text}</span>}
       {editable && <button type="button" className="pack-remove" aria-label={`Remove ${label} bullet ${index + 1}`} title="Remove this bullet" disabled={busy} onClick={() => setBullets(key, (now) => now.filter((_, at) => at !== index))}>✕</button>}
       {plus(index + 1, bullet.after, `${label} bullet ${index + 1}`)}
     </li> }

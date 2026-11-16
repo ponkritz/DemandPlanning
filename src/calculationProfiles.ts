@@ -48,6 +48,8 @@ export type CapacityBase = 'workingDays' | 'fixed'
 
 export interface CalculationProfile {
   id: string; name: string; builtIn?: boolean
+  // CAP-53: a built-in profile changed in Settings (its stored version replaces the built-in one until reset).
+  edited?: boolean
   treatment: Record<BucketKey, Treatment>
   plannedSource: Record<BucketKey, PlannedSource>
   capacityBase: CapacityBase; fixedHours?: number; minusStandardHours: boolean
@@ -82,7 +84,13 @@ export function builtInProfiles(settings: Pick<CapacitySettings, 'oldCalcExclude
     { id: oldProfileId, name: 'Old Calculation', builtIn: true, treatment: all<Treatment>('count'), plannedSource: { ...all<PlannedSource>('estimate'), absence: 'estimateElseCompleted' }, capacityBase: 'workingDays', minusStandardHours: true, excludedGroups: [...(settings.oldCalcExcludedScopes ?? [])], statusFrom: 'planned' },
   ]
 }
-export const allProfiles = (settings: CapacitySettings) => [...builtInProfiles(settings), ...(settings.calculationProfiles ?? [])]
+// CAP-53: a stored profile with a built-in id is the edited version of that built-in profile; it keeps the built-in's
+// place and id (so the default and the Old Calculation tab still find it) and is marked edited.
+const builtInIds = new Set([currentProfileId, oldProfileId])
+export const allProfiles = (settings: CapacitySettings): CalculationProfile[] => {
+  const stored = settings.calculationProfiles ?? []
+  return [...builtInProfiles(settings).map((profile) => { const edited = stored.find((entry) => entry.id === profile.id); return edited ? { ...edited, builtIn: true, edited: true } : profile }), ...stored.filter((entry) => !builtInIds.has(entry.id))]
+}
 export function defaultProfile(settings: CapacitySettings): CalculationProfile {
   const profiles = allProfiles(settings)
   return profiles.find((profile) => profile.id === settings.defaultProfileId) ?? profiles[0]
@@ -105,7 +113,7 @@ function kindsAndParts(entry: Record<string, unknown>): Pick<CalculationProfile,
 // least one bucket must count, else the profile is dropped.
 export function normalizeCalculationProfiles(value: unknown): CalculationProfile[] {
   if (!Array.isArray(value)) return []
-  const seen = new Set([currentProfileId, oldProfileId])
+  const seen = new Set<string>()
   return value.slice(0, 20).flatMap((raw) => {
     const entry = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
     const id = text(entry.id, 60)
@@ -157,6 +165,20 @@ export function applyProfile(person: Pick<PersonLoad, 'funded' | 'employedDays'>
   // The profile's Absence and NPRA Hours figures (CAP-52).
   const figures = { ...(person.absenceByKind ? { absence: round(kinds.reduce((sum, kind) => sum + (person.absenceByKind![kind] ?? 0), 0)) } : {}), ...(person.training != null && person.npraOther != null ? { npra: round((npraPartsOf(profile).includes('training') ? person.training : 0) + (npraPartsOf(profile).includes('npra') ? person.npraOther : 0)) } : {}) }
   return { ...figures, available, utilized, utilizedPlanned, utilization, plannedUtilization, status, npraDeducted: (profile.treatment.training === 'deduct' ? parts.training.deducted : 0) + (profile.treatment.npraOther === 'deduct' ? parts.npraOther.deducted : 0) }
+}
+
+// CAP-54: the utilization formula as Top ÷ Bottom, in the profile's names: Top = the counted figures (Total actual),
+// Bottom = Funded Hours − the deducted figures (and Standard Hours when the profile takes them off).
+export function formulaParts(profile: CalculationProfile, settings: CapacitySettings) {
+  const terms = termsOf(settings, profile.id)
+  const name = (key: BucketKey) => key === 'work' ? terms.work : key === 'absence' ? terms.absence : bucketLabel[key]
+  const top = bucketKeys.filter((key) => profile.treatment[key] === 'count').map(name)
+  const bottom = [...bucketKeys.filter((key) => profile.treatment[key] === 'deduct').map(name), ...(profile.minusStandardHours ? ['Standard Hours'] : [])]
+  return { utilization: terms.utilization, top, base: terms.funded, bottom }
+}
+export function formulaSentence(profile: CalculationProfile, settings: CapacitySettings) {
+  const { utilization, top, base, bottom } = formulaParts(profile, settings)
+  return `${utilization} = (${top.join(' + ') || 'nothing'}) ÷ (${[base, ...bottom].join(' − ')}) × 100`
 }
 
 // The formula of a profile in words, shown with every figure it produces.

@@ -183,3 +183,23 @@ test('tree and direct-links queries (FROM WorkItemLinks … MODE): every item on
   await assert.rejects(runWorkItemQuery({ organization: 'o', project: 'p' }, 'pat', tree, async () => ({ workItems: [] })), /no link list/)
   await assert.rejects(runWorkItemQuery({ organization: 'o', project: 'p' }, 'pat', tree, async () => ({ workItemRelations: Array.from({ length: 20000 }, (_, index) => ({ source: null, target: { id: index + 1 } })) })), /Narrow the query/)
 })
+
+test('QV-52: Content releases are named by the Title — one per unique Title, no name and number from the paths', async () => {
+  const { releaseFor } = await import('../src/releasePath.ts')
+  const { defaultStreams } = await import('../src/streams.ts')
+  const { tracksRelease } = await import('../src/releaseSource.ts')
+  assert.equal(defaultStreams.find((stream) => stream.name === 'Content').rule, 'title')
+  const docs = [
+    doc(1, 'DHFI\\Content\\Clinical Library\\Release 7.0', { title: 'Clinical Library  Oncology Update' }),
+    doc(2, 'DHFI\\Content\\Clinical Library\\Release 7.0', { title: 'Clinical Library Oncology Update' }),
+    doc(3, 'DHFI\\Content\\Clinical Library\\Release 7.0', { title: 'Cardiology Pathways 2026' }),
+    doc(4, 'DHFI\\Content', { title: '  ' }),
+  ]
+  assert.deepEqual(releaseFor(docs[0], 'title'), { name: 'Clinical Library Oncology Update', release: '' }, 'the Title, spaces tidied; the path release is not used')
+  assert.equal(releaseFor(docs[3], 'title'), undefined, 'no Title: no release')
+  const register = releaseRegister(docs, [{ ...doc(50, 'QMS', { title: 'Content | Cardiology Pathways 2026', workItemType: 'Feature', state: 'Active' }) }], { rule: 'title' })
+  assert.deepEqual(register.map((entry) => [entry.name, entry.release, entry.documents]), [['Cardiology Pathways 2026', '', 1], ['Clinical Library Oncology Update', '', 2]], 'one release per unique Title')
+  assert.deepEqual(register[0].features.map((feature) => feature.id), [50], 'the Feature whose title holds the Title is attached')
+  assert.equal(tracksRelease('Content | Cardiology Pathways 2026', 'Cardiology Pathways 2026', ''), true, 'a Feature whose title holds the Title tracks it')
+  assert.equal(tracksRelease('Content | Cardiology', 'Cardiology Pathways 2026', ''), false)
+})

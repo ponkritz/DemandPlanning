@@ -187,6 +187,8 @@ export function normalizeVersion(version: string) {
 }
 const versionToken = /(^|[^\d.])(?:v\.?\s*|rel(?:ease)?\s*[-_:.]?\s*)?(\d+(?:\.\d+)*)(?![\d.]*\d)/gi
 export function tracksRelease(title: string, name: string, release: string) {
+  // QV-52: a release named by a Title alone (Content) is tracked by a Feature whose title holds that Title.
+  if (name.trim() && !release.trim()) return words(title).includes(words(name))
   if (!name.trim() || !release.trim() || !words(title).includes(words(name))) return false
   const wanted = normalizeVersion(release)
   if (!/^\d+(\.\d+)*$/.test(wanted)) return new RegExp(`(^|[^\\d.])(?:v\\.?\\s*|rel(?:ease)?\\s*[-_:.]?\\s*)?${escapeRegExp(release.trim())}(?![\\d.]*\\d)`, 'i').test(title)

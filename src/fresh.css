@@ -609,8 +609,8 @@ details.act-leave{border:1px solid var(--line);border-radius:10px;padding:8px 12
 .pack-bullets li>span{flex:1;min-width:0;overflow-wrap:anywhere}
 .pack-gen{background:var(--surface)}
 .pack-typed{margin-left:12px}.pack-typed::before{content:'◦'!important;color:#773b93!important}
-.pack-typed input{flex:1;min-width:0;font:inherit;font-size:12.5px;padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface)}
-.pack-typed input:focus{border-color:#773b93;outline:none;box-shadow:0 0 0 2px color-mix(in srgb,#773b93 20%,transparent)}
+.pack-typed textarea{flex:1;min-width:0;font:inherit;font-size:12.5px;line-height:1.4;padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);resize:none;overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere;field-sizing:content;min-height:0}.pack-typed{align-items:flex-start!important}.pack-typed .pack-plus,.pack-typed .pack-remove{margin-top:3px}
+.pack-typed textarea:focus{border-color:#773b93;outline:none;box-shadow:0 0 0 2px color-mix(in srgb,#773b93 20%,transparent)}
 .pack-plus,.pack-remove{flex:none;display:inline-grid;place-items:center;width:22px;height:22px;padding:0;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--muted);font-size:14px;line-height:1;cursor:pointer;opacity:.55;transition:opacity .15s,color .15s,border-color .15s}
 .pack-remove{font-size:11px}
 .pack-bullets li:hover .pack-plus,.pack-bullets li:hover .pack-remove,.pack-bullets li:focus-within .pack-plus,.pack-bullets li:focus-within .pack-remove{opacity:1}
@@ -622,3 +622,16 @@ details.act-leave{border:1px solid var(--line);border-radius:10px;padding:8px 12
 .people-count{margin:0;font-size:13px}
 .resource-table td:first-child{min-width:190px}.resource-table td.person-email{white-space:nowrap}
 @media(max-width:760px){.people-source{flex-wrap:wrap}}
+.pack-capabilities{display:grid;gap:8px;max-width:760px}.pack-capabilities label{display:grid;gap:4px;max-width:420px}
+/* CAP-54: the utilization formula builder — Top ÷ Bottom. */
+.formula-builder{border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:grid;gap:8px}
+.formula-sentence{margin:0;font-weight:600;font-size:14px;padding:8px 10px;border-radius:8px;background:var(--surface-2)}
+.formula-parts{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:12px;align-items:start}
+.formula-parts>[role=group]{display:grid;gap:6px;min-width:0}.formula-parts small{display:block}
+.formula-divide{font-size:28px;color:var(--muted);align-self:center}
+.formula-term{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.formula-term select{font-size:12px}
+.formula-row{display:block;margin-bottom:2px}
+@media(max-width:760px){.formula-parts{grid-template-columns:1fr}.formula-divide{display:none}}
+.formula-term{flex-wrap:nowrap;justify-content:space-between}.formula-term input[type=checkbox]{flex:none;width:auto}
+.formula-term select{width:auto!important;max-width:220px;min-height:0;padding:2px 6px;font-size:12px;flex:none}
+label.formula-term{justify-content:flex-start}

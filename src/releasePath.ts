@@ -86,7 +86,9 @@ export function toolRelease(item: Pick<AzureWorkItem, 'areaPath' | 'iterationPat
   const name = title.replace(documentWord, '').replace(/\s*[|:_–-]\s*$/, '').trim() || title
   return { name, release }
 }
-export function releaseFor(item: Pick<AzureWorkItem, 'areaPath' | 'iterationPath' | 'title'>, rule: 'path' | 'dp' | 'iocc' | 'tool' | 'cp' = 'path'): StreamRelease | undefined {
+export function releaseFor(item: Pick<AzureWorkItem, 'areaPath' | 'iterationPath' | 'title'>, rule: 'path' | 'dp' | 'iocc' | 'tool' | 'cp' | 'title' = 'path'): StreamRelease | undefined {
+  // QV-52 Content: the document's Title is the release (no name and number from its paths).
+  if (rule === 'title') { const title = (item.title ?? '').replace(/\s+/g, ' ').trim(); return title ? { name: title, release: '' } : undefined }
   // CP is reported from its release-folder tree (cpReporting); read alone, its items follow the general path rule.
   return rule === 'dp' ? dpRelease(item) : rule === 'iocc' ? ioccRelease(item) : rule === 'tool' ? toolRelease(item) : releaseOf(item)
 }

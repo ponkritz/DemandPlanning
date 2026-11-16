@@ -76,7 +76,8 @@ test('CAP-41: profiles read from Git are checked; unknown defaults fall back to 
     { ...finance, id: 'current-v4' }, { ...finance, id: 'Bad Id' }, { id: 'none', treatment: { absence: 'deduct' } }, { ...finance, id: 'zero', fixedHours: 0 },
     { id: 'ok', name: '  Mine  ', treatment: { work: 'count', absence: 'bogus' }, plannedSource: { work: 'nope' }, excludedGroups: ['US', 'Mars'], statusFrom: 'x', minusStandardHours: 'yes' }, { ...finance, id: 'ok' },
   ], defaultProfileId: 'ok' })
-  assert.deepEqual(read.calculationProfiles, [{ id: 'ok', name: 'Mine', treatment: { work: 'count', absence: 'ignore', training: 'ignore', npraOther: 'ignore', common: 'ignore' }, plannedSource: { work: 'estimate', absence: 'estimate', training: 'estimate', npraOther: 'estimate', common: 'estimate' }, capacityBase: 'workingDays', minusStandardHours: false, excludedGroups: ['US'], statusFrom: 'actual' }])
+  assert.deepEqual(read.calculationProfiles.map((profile) => profile.id), ['current-v4', 'ok'], 'CAP-53: a profile with a built-in id is kept as the edited built-in')
+  assert.deepEqual(read.calculationProfiles.slice(1), [{ id: 'ok', name: 'Mine', treatment: { work: 'count', absence: 'ignore', training: 'ignore', npraOther: 'ignore', common: 'ignore' }, plannedSource: { work: 'estimate', absence: 'estimate', training: 'estimate', npraOther: 'estimate', common: 'estimate' }, capacityBase: 'workingDays', minusStandardHours: false, excludedGroups: ['US'], statusFrom: 'actual' }])
   assert.equal(read.defaultProfileId, 'ok')
   assert.equal('defaultProfileId' in normalizeCapacitySettings({ defaultProfileId: 'missing' }), false)
   assert.equal('defaultProfileId' in normalizeCapacitySettings({ defaultProfileId: 'current-v4' }), false, 'the built-in default needs no entry')
@@ -153,4 +154,28 @@ test('CAP-52: a profile chooses its Absence kinds and NPRA parts; the cards show
   assert.match(capacityModel(backlog, '2026-10', chosen).profile.formula, /Available hours = Contract hours \(working days.*Absence = Public holiday \+ PTO \(other leave ignored\)\. NPRA Hours = NPRA-tagged hours\./)
   assert.equal(normalizeProfileTerms({ 'Bad Id': { funded: 'X' } }), undefined)
   assert.equal(normalizeCalculationProfiles([{ ...holidayPto, absenceKinds: ['PTO', 'Sick Leave', 'Unplanned Leave', 'Public holiday', 'Other absence'] }])[0].absenceKinds, undefined, 'all kinds: nothing stored')
+})
+
+test('CAP-53: a built-in profile can be edited; it keeps its id and place, is marked changed, and reset brings the built-in back', () => {
+  const builtIn = allProfiles(settings)[0]
+  const edited = normalizeCapacitySettings({ ...settings, calculationProfiles: [{ ...builtIn, builtIn: true, name: 'Current (v4)', absenceKinds: ['PTO', 'Public holiday'] }] })
+  const profiles = allProfiles(edited)
+  assert.deepEqual(profiles.map((profile) => [profile.id, profile.builtIn, profile.edited ?? false]), [['current-v4', true, true], ['old-calculation', true, false]], 'no extra profile: the built-in is replaced in place')
+  assert.equal(defaultProfile(edited).id, 'current-v4')
+  assert.equal(person(capacityModel(backlog, '2026-10', edited), 'Ana').available, 160, 'the edited default profile drives the figures (sick leave ignored)')
+  const reset = normalizeCapacitySettings({ ...edited, calculationProfiles: [] })
+  assert.equal(allProfiles(reset)[0].edited, undefined)
+  assert.equal(person(capacityModel(backlog, '2026-10', reset), 'Ana').available, 152, 'reset: the built-in figures again')
+  assert.equal(normalizeCapacitySettings({ ...settings, calculationProfiles: [{ ...builtIn }, { ...builtIn, name: 'Twice' }] }).calculationProfiles.length, 1, 'one stored version per built-in')
+})
+
+test('CAP-54: the utilization formula as Top ÷ Bottom follows the profile and its names', async () => {
+  const { formulaSentence, formulaParts } = await import('../src/calculationProfiles.ts')
+  const [current, old] = allProfiles(settings)
+  assert.equal(formulaSentence(current, settings), 'Utilization = (Project work + Training + Other NPRA + Common activities) ÷ (Funded Hours − Absence) × 100')
+  assert.equal(formulaSentence(old, settings), 'Utilization = (Project work + Absence + Training + Other NPRA + Common activities) ÷ (Funded Hours − Standard Hours) × 100')
+  assert.equal(formulaSentence(finance, settings), 'Utilization = (Project work + Other NPRA) ÷ (Funded Hours − Training − Standard Hours) × 100', 'ignored figures are in neither part')
+  const named = normalizeCapacitySettings({ ...settings, profileTerms: { 'current-v4': { funded: 'Contract hours', utilization: 'Load' } } })
+  assert.deepEqual(formulaParts(current, named).base, 'Contract hours')
+  assert.match(formulaSentence(current, named), /^Load = .* ÷ \(Contract hours − Absence\) × 100$/, 'in the profile\'s own names')
 })

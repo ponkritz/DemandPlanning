@@ -169,6 +169,7 @@ This document lists every software component of the system: the in-house source 
 | store | `src/store.ts` | `useAppStore`: app state with IndexedDB persistence, SharePoint connection/sync, snapshots and audit. | STO, SNP |
 | browserState | `src/browserState.ts` | IndexedDB state repository: validation, legacy migration, backup validation and ordered serialized writes. | STO |
 | gitStorage | `src/gitStorage.ts` | GitHub-repo planning data file: config/token, serialise/parse, read/write/delete with conflict detection, folder listing. | GIT |
+| gitWatch | `src/gitWatch.ts` | Refresh while open: versions of the shared files read or saved, folders to list, the files changed in Git and their names for the banner. | GIT |
 | gitSnapshots | `src/gitSnapshots.ts` | On-prem read-only view fetches saved to Git (azure-data/) without PATs; parse, digest, apply. | GIT, FET |
 | sharepoint | `src/sharepoint.ts` | SharePoint client via MSAL and Microsoft Graph for remote app state. | SNP |
 | cloudSnapshots | `src/cloudSnapshots.ts` | Frozen whitelisted snapshot files uploaded to SharePoint with read-back verification; listing history. | SNP |
@@ -275,6 +276,7 @@ This document lists every software component of the system: the in-house source 
 | format.test | `tests/format.test.mjs` | Formatting helpers and page registry consistency. | UI, NAV |
 | git-snapshots.test | `tests/git-snapshots.test.mjs` | On-prem view snapshots via Git: no PATs, digests, helpers and validation. | GIT, FET |
 | git-storage.test | `tests/git-storage.test.mjs` | Git config, planning data round trip, read/write/conflict/write-check/delete. | GIT |
+| git-watch.test | `tests/git-watch.test.mjs` | Files changed in Git since they were read here; banner names. | GIT |
 | insights.test | `tests/insights.test.mjs` | Forecast, plan accuracy, momentum, resilience, anomalies and health score. | OVR |
 | markdown.test | `tests/markdown.test.mjs` | Markdown anchors, tables, lists, paragraphs, inline and link targets. | DOC |
 | monthly-hours.test | `tests/monthly-hours.test.mjs` | Monthly hours series, Epic colours and chart geometry (Pareto, donut). | CAP, OVR, MON |
@@ -311,7 +313,7 @@ The end-to-end suite (`pnpm test:e2e`, after `pnpm build:web`) drives the built 
 | Component | Path | Purpose | Requirement areas |
 |---|---|---|---|
 | helpers | `e2e/helpers.mjs` | Starts `vite preview` on a free port, opens Chromium pages with clean storage, records page errors, shared actions (navigate, load sample). | CI |
-| shell.e2e | `e2e/shell.e2e.mjs` | Sidebar groups and footer, header and month picker, Get started pop-up, synthetic sample, theme toggle, phone width, Force Update dialog, Git storage form defaults, manager not on the board (TC-GIT-06, TC-SET-05, TC-NAV-01, 03, 31, 33, TC-UI-01, TC-SMP-01, TC-UPD-02). | NAV, UI, SMP, UPD |
+| shell.e2e | `e2e/shell.e2e.mjs` | Sidebar groups and footer, header and month picker, Get started pop-up, synthetic sample, theme toggle, phone width, Force Update dialog, Git storage form defaults, refresh while open (TC-GIT-08), manager not on the board (TC-GIT-06, TC-SET-05, TC-NAV-01, 03, 31, 33, TC-UI-01, TC-SMP-01, TC-UPD-02). | NAV, UI, SMP, UPD |
 | documents-and-data.e2e | `e2e/documents-and-data.e2e.mjs` | Documentation tabs, links and download; Windchill export releases from names and from Location with the locations CSV; "＋ ECP" import named after the stream with the ECP CSV, Project No / Project Name columns, an ECP setup at the 3rd folder with the type-2 CSV (TC-CON-53, 54, 55); the table default on the Windchill raw data — move, hide, density, Excel export with dates, Settings → Table defaults (TC-UI-04, 05); My Work tree, Backlog Health and Baselines on the default (TC-UI-06); neutralised CSV; JSON backup without credentials (TC-DOC-01, 02, TC-CON-39, 40, 37, TC-STO-04, TC-INS-01); Windchill releases' QMS-0025 match column (TC-QV-23); auto-fit tables and Wrap text (TC-CON-42); the DP Supported Releases list in Pulse Check folded until Show list (TC-QV-17). | DOC, CON, STO, NFR, QV |
 | backlog.e2e | `e2e/backlog.e2e.mjs` | New User Story form from a Feature row of the Backlogs (TC-BKL-10); the Edit form from Feature, User Story and Task rows (TC-BKL-11). | CI, BKL |
 | monthly-pack.e2e | `e2e/monthly-pack.e2e.mjs` | Monthly pack tab with the synthetic sample, the .pptx download and the setup tab (TC-PCK-04). | CI |

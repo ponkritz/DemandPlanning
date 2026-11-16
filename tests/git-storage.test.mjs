@@ -116,3 +116,17 @@ test('monthly controls round-trip in shared planning data; old files without con
   assert.equal(parsePlanning(serializePlanning(planningData(state))).periods, undefined, 'older shared files do not erase local settings')
   assert.throws(() => parsePlanning(JSON.stringify({ ...data, periods: 'corrupt' })), /Period controls/)
 })
+
+test('GIT-14: Table defaults and the release-source settings are shared in the planning file; an older file leaves them alone', () => {
+  const state = { baselineRules: [], releaseScopes: [], resourceProfiles: {}, tableDefaults: { defaultDensity: 'compact', exportFormats: ['csv'], bogus: 1 }, releaseSourceSettings: { matchThreshold: 70, approvalDateField: 'Custom.Approved', streamSegment: 2 } }
+  const text = serializePlanning(planningData(state))
+  const back = parsePlanning(text)
+  assert.equal(back.tableDefaults.defaultDensity, 'compact')
+  assert.deepEqual(back.tableDefaults.exportFormats, ['csv'])
+  assert.equal('bogus' in back.tableDefaults, false, 'unknown values dropped')
+  assert.deepEqual(back.releaseSourceSettings, { approvalDateField: 'Custom.Approved', matchThreshold: 70 }, 'only the settings in use')
+  assert.equal(serializePlanning(planningData(back)), text, 'loading then saving does not change the file')
+  const old = parsePlanning(serializePlanning(planningData({ baselineRules: [], releaseScopes: [], resourceProfiles: {} })))
+  assert.equal('tableDefaults' in old, false); assert.equal('releaseSourceSettings' in old, false)
+  assert.equal('releaseSourceSettings' in parsePlanning(serializePlanning(planningData({ ...state, releaseSourceSettings: { matchThreshold: 500 } }))), false, 'an invalid threshold is not shared')
+})
