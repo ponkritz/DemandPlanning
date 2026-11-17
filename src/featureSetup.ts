@@ -18,7 +18,13 @@ export interface TimeWritingStoryTemplate { title: string; description: string; 
 export interface TitleField { label: string; source: string }
 // featureDoD: the Feature DoD (Definition of Done) a new Feature under the Epic starts with — mandatory in a setup.
 // titleFields: optional, at most maxTitleFields.
-export interface EpicSetup { epicId: number; epicTitle: string; featureDoD: string; stories: StoryTemplate[]; timeWritingStory: TimeWritingStoryTemplate; task: TaskTemplate; titleFields?: TitleField[] }
+// DPF-01…03 (DP, Epic 13946): the Feature DoD and default User Stories per release type — Release (Major, Minor) and
+// PU (MLD, Platform Update) — and which QE Mapping columns name the product and its QE. Used by Release Details → DP
+// (QE, possible QEs, Create Features); built-in values when the setup has none.
+export interface ReleaseTypeSetup { featureDoD: string; stories: StoryTemplate[] }
+export interface ReleaseTypeSetups { release: ReleaseTypeSetup; pu: ReleaseTypeSetup }
+export interface QeMapColumns { matchColumn: string; qeColumn: string }
+export interface EpicSetup { epicId: number; epicTitle: string; featureDoD: string; stories: StoryTemplate[]; timeWritingStory: TimeWritingStoryTemplate; task: TaskTemplate; titleFields?: TitleField[]; releaseTypes?: ReleaseTypeSetups; qeColumns?: QeMapColumns }
 export interface FeatureSetupFile { schema: 1; kind: 'feature-setup'; epics: EpicSetup[] }
 
 export const featureSetupFile = 'feature-setup.json'
@@ -35,6 +41,13 @@ export function featureDoD(kind: 'PU' | 'Release') {
 export const emptySetup = (epicId: number, epicTitle = ''): EpicSetup => ({ epicId, epicTitle, featureDoD: '', stories: [], timeWritingStory: { ...defaultTimeWritingStory }, task: { ...defaultTask } })
 
 export const maxTitleFields = 5
+export const dpEpicId = 13946
+const reviewStories = (milestones: string[]): StoryTemplate[] => milestones.map((milestone) => ({ title: `${milestone} : Review of Deliverables ({service} {version})`, description: '' }))
+export const dpReleaseTypeDefaults: ReleaseTypeSetups = {
+  release: { featureDoD: 'IQ/OQ is complete and Checklist is uploaded into the feature.', stories: reviewStories(['PRD', 'SFV', 'DT', 'IQ/OQ']) },
+  pu: { featureDoD: 'DT is finished.', stories: reviewStories(['SFV', 'DT', 'IQ/OQ']) },
+}
+export const releaseTypesOf = (setup?: Pick<EpicSetup, 'releaseTypes'>): ReleaseTypeSetups => setup?.releaseTypes ?? dpReleaseTypeDefaults
 // The placeholder key of a label: letters and digits in lower case ({Release Name} and {releasename} are the same).
 export const fieldKey = (label: string) => label.toLowerCase().replace(/[^a-z0-9]/g, '')
 // The values of the placeholders for a Feature title and month. With title fields, a title of exactly that many
@@ -89,12 +102,25 @@ export function cleanTitleFields(input: unknown): TitleField[] {
   return input.map((field: Partial<Record<keyof TitleField, unknown>>) => ({ label: text(field?.label, 60), source: text(field?.source, 255) }))
     .filter((field) => { const key = fieldKey(field.label); if (!key || seen.has(key)) return false; seen.add(key); return true }).slice(0, maxTitleFields)
 }
+const cleanStories = (input: unknown) => Array.isArray(input) ? input.map((story: Partial<Record<keyof StoryTemplate, unknown>>) => ({ title: text(story?.title, 255), description: text(story?.description, 100000) })).filter((story) => story.title).slice(0, 20) : []
+function cleanReleaseTypes(input: unknown): ReleaseTypeSetups | undefined {
+  if (!input || typeof input !== 'object') return undefined
+  const value = input as Record<string, Partial<Record<keyof ReleaseTypeSetup, unknown>> | undefined>
+  const one = (key: 'release' | 'pu'): ReleaseTypeSetup => ({ featureDoD: text(value[key]?.featureDoD, 100000) || dpReleaseTypeDefaults[key].featureDoD, stories: value[key]?.stories === undefined ? dpReleaseTypeDefaults[key].stories : cleanStories(value[key]?.stories) })
+  return { release: one('release'), pu: one('pu') }
+}
+function cleanQeColumns(input: unknown): QeMapColumns | undefined {
+  const value = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>
+  const matchColumn = text(value.matchColumn, 120), qeColumn = text(value.qeColumn, 120)
+  return matchColumn && qeColumn ? { matchColumn, qeColumn } : undefined
+}
 export function cleanSetup(input: Partial<Record<keyof EpicSetup, unknown>>): EpicSetup | null {
   const epicId = Number(input.epicId)
   if (!Number.isSafeInteger(epicId) || epicId < 1) return null
   const stories = Array.isArray(input.stories) ? input.stories.map((story: Partial<Record<keyof StoryTemplate, unknown>>) => ({ title: text(story?.title, 255), description: text(story?.description, 100000) })).filter((story) => story.title) : []
   const titleFields = cleanTitleFields(input.titleFields)
-  return { epicId, epicTitle: text(input.epicTitle, 255), featureDoD: text(input.featureDoD, 100000), stories, timeWritingStory: cleanTimeWritingStory(input.timeWritingStory as Partial<Record<keyof TimeWritingStoryTemplate, unknown>> | undefined), task: cleanTask(input.task as Partial<Record<keyof TaskTemplate, unknown>> | undefined), ...(titleFields.length ? { titleFields } : {}) }
+  const releaseTypes = cleanReleaseTypes(input.releaseTypes), qeColumns = cleanQeColumns(input.qeColumns)
+  return { epicId, epicTitle: text(input.epicTitle, 255), featureDoD: text(input.featureDoD, 100000), stories, timeWritingStory: cleanTimeWritingStory(input.timeWritingStory as Partial<Record<keyof TimeWritingStoryTemplate, unknown>> | undefined), task: cleanTask(input.task as Partial<Record<keyof TaskTemplate, unknown>> | undefined), ...(titleFields.length ? { titleFields } : {}), ...(releaseTypes ? { releaseTypes } : {}), ...(qeColumns ? { qeColumns } : {}) }
 }
 
 export function parseFeatureSetup(raw: string): FeatureSetupFile {

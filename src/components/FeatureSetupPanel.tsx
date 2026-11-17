@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { AzureWorkItem } from '../domain'
-import { maxTitleFields, builtinMilestones, builtinSetup, copySetup, emptySetup, fillTitle, missingValues, placeholders, removeSetup, editSetup, setupFor, setupsMissingDoD, defaultDoDFor, fillMissingDoD, missingDoD, sharedSetupRows, titleValues, type EpicSetup, type FeatureSetupFile } from '../featureSetup'
+import { dpEpicId, releaseTypesOf, maxTitleFields, builtinMilestones, builtinSetup, copySetup, emptySetup, fillTitle, missingValues, placeholders, removeSetup, editSetup, setupFor, setupsMissingDoD, defaultDoDFor, fillMissingDoD, missingDoD, sharedSetupRows, titleValues, type EpicSetup, type FeatureSetupFile } from '../featureSetup'
 import { currentIndiaMonth } from '../azureDevOps'
 import type { FeatureSetup } from '../useFeatureSetup'
 import type { GitStorage } from '../useGitStorage'
@@ -10,7 +10,7 @@ import { EmptyState, Modal, Notice, Panel, Info } from './ui'
 // by default) and the defaults of the month Time Writing Task. Two layers: "My setup" (feature-setup/<my email>.json,
 // used only when I create a Feature, before the shared one) and "Shared" (feature-setup.json, everyone). Anyone whose
 // Git token can write may edit either, and "Enable for everyone" copies my setup of an Epic into the shared one.
-export function FeatureSetupPanel({ setup, git, items }: { setup: FeatureSetup; git: GitStorage; items: AzureWorkItem[] }) {
+export function FeatureSetupPanel({ setup, git, items, qeColumnNames = [] }: { setup: FeatureSetup; git: GitStorage; items: AzureWorkItem[]; qeColumnNames?: string[] }) {
   const epics = items.filter((item) => item.workItemType === 'Epic' && item.state.toLowerCase() !== 'removed').sort((a, b) => a.title.localeCompare(b.title))
   const [draft, setDraft] = useState<FeatureSetupFile | null>(null)
   const [epicId, setEpicId] = useState(0)
@@ -189,6 +189,20 @@ export function FeatureSetupPanel({ setup, git, items }: { setup: FeatureSetup; 
           <div className="button-row"><button type="button" className="ghost" aria-label="Move up" disabled={index === 0} onClick={() => change((entry) => { [entry.stories[index - 1], entry.stories[index]] = [entry.stories[index], entry.stories[index - 1]] })}>↑</button><button type="button" className="ghost" aria-label="Move down" disabled={index === current.stories.length - 1} onClick={() => change((entry) => { [entry.stories[index + 1], entry.stories[index]] = [entry.stories[index], entry.stories[index + 1]] })}>↓</button><button type="button" className="text-button" onClick={() => change((entry) => { entry.stories.splice(index, 1) })}>Remove</button></div>
         </div>)}
         <button type="button" className="ghost" onClick={() => change((entry) => { entry.stories.push({ title: '', description: '' }) })}>＋ Add optional User Story</button>
+        {/* DPF-01…02: the DP Epic's sets per release type and the QE Mapping columns (Release Details → DP, Create Features). */}
+        {current && chosen === dpEpicId && <div className="setup-dp">
+          <h3>DP releases <Info>Release Details → DP reads the release type from the version x.y.z.a: X.0.0.0 Major and x.y.0.0 Minor use the Release set; x.y.z.0 MLD and x.y.z.a Platform Update use the PU set. Create Features uses that set's DoD and User Stories, and assigns everything to the release's QE from the QE Mapping.</Info></h3>
+          {(['release', 'pu'] as const).map((kind) => { const set = releaseTypesOf(current)[kind]; const edit = (update: (next: { featureDoD: string; stories: { title: string; description: string }[] }) => void) => change((entry) => { const types = structuredClone(releaseTypesOf(entry)); update(types[kind]); entry.releaseTypes = types }); return <div key={kind} className="setup-dp-type">
+            <h4>{kind === 'release' ? 'Release (Major, Minor)' : 'PU (MLD, Platform Update)'}</h4>
+            <label>Feature DoD<textarea rows={2} maxLength={100000} value={set.featureDoD} aria-label={`${kind === 'release' ? 'Release' : 'PU'} Feature DoD`} onChange={(event) => edit((next) => { next.featureDoD = event.target.value })} /></label>
+            <label>Default User Stories (one title per line)<textarea rows={4} aria-label={`${kind === 'release' ? 'Release' : 'PU'} default User Stories`} value={set.stories.map((story) => story.title).join('\n')} onChange={(event) => edit((next) => { next.stories = event.target.value.split('\n').map((title) => ({ title, description: next.stories.find((story) => story.title === title)?.description ?? '' })) })} /><small className="muted">→ {set.stories.filter((story) => story.title.trim()).map((story) => preview(story.title)).join(' · ') || 'none'}</small></label>
+          </div> })}
+          <div className="form-row">
+            <label>QE Mapping column with the Platform / Product / Project / Service{qeColumnNames.length ? <select aria-label="QE Mapping product column" value={current.qeColumns?.matchColumn ?? ''} onChange={(event) => change((entry) => { entry.qeColumns = { matchColumn: event.target.value, qeColumn: entry.qeColumns?.qeColumn ?? '' } })}><option value="">Choose…</option>{qeColumnNames.map((name) => <option key={name} value={name}>{name}</option>)}</select> : <input aria-label="QE Mapping product column" value={current.qeColumns?.matchColumn ?? ''} placeholder="e.g. Product" onChange={(event) => change((entry) => { entry.qeColumns = { matchColumn: event.target.value, qeColumn: entry.qeColumns?.qeColumn ?? '' } })} />}</label>
+            <label>QE Mapping column with the QE{qeColumnNames.length ? <select aria-label="QE Mapping QE column" value={current.qeColumns?.qeColumn ?? ''} onChange={(event) => change((entry) => { entry.qeColumns = { matchColumn: entry.qeColumns?.matchColumn ?? '', qeColumn: event.target.value } })}><option value="">Choose…</option>{qeColumnNames.map((name) => <option key={name} value={name}>{name}</option>)}</select> : <input aria-label="QE Mapping QE column" value={current.qeColumns?.qeColumn ?? ''} placeholder="e.g. QE Name" onChange={(event) => change((entry) => { entry.qeColumns = { matchColumn: entry.qeColumns?.matchColumn ?? '', qeColumn: event.target.value } })} />}</label>
+          </div>
+          {!qeColumnNames.length && <p className="muted">Open Data &amp; governance → QE Mapping once to list its columns here.</p>}
+        </div>}
         <h3>Time Writing <Info>The same for every Epic (BKL-28): the person's month Task “&lt;Month&gt; | &lt;Feature&gt;” under “&lt;Feature&gt; - Time Writing” (their own Time Writing story first), assigned to the person, in the Feature's Area Path and the project root iteration; an existing month Task of theirs is reused. Only the default planned hours are set per Epic.</Info></h3>
         <div className="form-row">
           <label>Default Original Estimate (hours) of a new month Task<input type="number" min="0" max="1000000" step="0.25" value={current?.task.originalEstimate ?? ''} placeholder="None" onChange={(event) => change((entry) => { const value = event.target.value.trim(); if (value === '') delete entry.task.originalEstimate; else if (Number.isFinite(Number(value)) && Number(value) >= 0) entry.task.originalEstimate = Number(value) })} /><small className="muted">Hours typed when creating win; an existing Task keeps its hours.</small></label>

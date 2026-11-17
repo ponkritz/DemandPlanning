@@ -1486,6 +1486,14 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-KPT-03 The read is saved to Git for everyone** — Req KPT-03, KPT-05 — L1 `kpi-tracker.test.mjs` ("KPT-03: the workbook is kept as text sheets within the limits; the Git copy is checked when read"); `git-watch.test.mjs` (labels); desktop check with Git: as an admin read the tracker — "Saved to Git"; kpi-tracker.json has one new commit; another browser with the app open shows "Newer data in Git: KPI tracker", Reload shows the new copy; as a Team member (or a read-only token) a read shows "not saved to Git"; with SharePoint unreachable (VPN off) the page still shows the Git copy.
 
+**TC-DPF-01 DP release type and its set** — Req DPF-01 — L1 `dp-bulk.test.mjs` ("DPF-01: the release type from x.y.z.a — Major and Minor are a Release, MLD and Platform Update a PU"; "DPF-01: Epic 13946 sets — Release: PRD, SFV, DT, IQ/OQ and the IQ/OQ DoD; PU: SFV, DT, IQ/OQ and the DT DoD; kept in the setup"); browser check: Settings → Feature setup, Epic 13946 shows "DP releases" with both sets; Release Details → DP shows Release type (5.0.0.0 Major, 5.2.0.0 Minor, 5.2.1.0 MLD, 5.2.1.3 PU).
+
+**TC-DPF-02 QE from the QE Mapping** — Req DPF-02 — L1 `dp-bulk.test.mjs` ("DPF-02: the QE comes from the QE Mapping row naming the product (PsName, else Program); columns chosen in the setup"); browser check: choose the product and QE columns in Feature setup → Epic 13946, Save to Git; the DP table’s QE column shows the mapped QE.
+
+**TC-DPF-03 Possible QEs** — Req DPF-03 — L1 `dp-bulk.test.mjs` ("DPF-03: possible QEs are the people on the earlier releases of the product, newest first, without the QE and the release's own assignee"); browser check with All months: a product with several releases lists the earlier releases’ assignees.
+
+**TC-DPF-04 Create Features in bulk** — Req DPF-04 — L1 `dp-bulk.test.mjs` ("DPF-04: the bulk plan — title, type, QE with email, or why a release is skipped"); browser check with QMS-0025 (a test Epic first): tick three DP releases (one PU, one Major, one with a Feature) → Create Features lists two to create and one skipped; Create → the top bar shows progress and "2 of 2 Features created"; each Feature has the type’s DoD and Release Classification, the type’s User Stories, the Time Writing story and Task, all assigned to the QE.
+
 ## 7. Requirements coverage matrix
 
 | Requirement | Test cases |
@@ -1866,6 +1874,10 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | KPT-03 | TC-KPT-03 |
 | KPT-04 | TC-KPT-01 |
 | KPT-05 | TC-KPT-03 |
+| DPF-01 | TC-DPF-01 |
+| DPF-02 | TC-DPF-02 |
+| DPF-03 | TC-DPF-03 |
+| DPF-04 | TC-DPF-04 |
 | IF-05 | TC-KPT-02 |
 | NFR-02 | TC-STO-01 |
 | NFR-03…05 | TC-DSK-02, TC-INS-01 |
@@ -1909,6 +1921,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-29 | TC-OVW-01…03 |
 | UC-30 | TC-CVA-01…03 |
 | UC-31 | TC-KPT-01…03 |
+| UC-32 | TC-DPF-01…04 |
 
 ## 8. Result record
 
