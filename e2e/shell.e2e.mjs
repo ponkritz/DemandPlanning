@@ -911,29 +911,12 @@ test('TC-GIT-08: while the app is open, newer planning data in Git loads by itse
   await context.close()
 })
 
-test('TC-KPT-01: the KPI tracker page shows the copy saved in Git, sheet by sheet, and says that reading live needs the desktop app', async () => {
-  const tracker = { schema: 1, fileUrl: 'https://example.sharepoint.com/sites/Quality/Shared Documents/KPI tracker.xlsx', fileName: 'KPI tracker.xlsx', readAt: '2026-11-16T09:30:00.000Z', readBy: 'Admin', sheets: [{ name: 'KPIs', rows: [['KPI', 'Target', 'Oct'], ['CAPA on time', '90%', '92%'], ['Audit findings closed', '100%', '97%']] }, { name: 'Notes', rows: [['Note'], ['Data from QMS']] }] }
-  const { page, context, errors } = await openPage(app, { init: () => {
-    localStorage.setItem('demand-planning-git-storage-v1', JSON.stringify({ owner: 'example', repo: 'storage', branch: 'main', path: 'planning-data.json' }))
-    localStorage.setItem('demand-planning-git-token-v1', 'test-token')
-  } })
-  await context.route('https://api.github.com/**', (route) => {
-    const url = new URL(route.request().url())
-    if (route.request().method() === 'GET' && url.pathname === '/repos/example/storage/contents/kpi-tracker.json') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ type: 'file', encoding: 'base64', content: Buffer.from(JSON.stringify(tracker)).toString('base64'), sha: 'k1' }) })
-    if (url.pathname === '/repos/example/storage') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ permissions: { push: false } }) })
-    return route.fulfill({ status: 404, contentType: 'application/json', body: '{"message":"Not Found"}' })
-  })
-  await page.reload()
-  await navigate(page, 'KPI tracker')
-  const view = page.locator('.kpi-tracker')
-  await view.getByText('CAPA on time').waitFor()
-  const body = await text(view)
-  assert.match(body, /Showing the copy saved in Git: read from SharePoint at .* by Admin\./)
-  assert.match(body, /Reading the file live from SharePoint needs the desktop app/, 'the browser has no SharePoint reader')
-  assert.equal(await view.getByRole('button', { name: /Read .*SharePoint/ }).count(), 0, 'no read button in the browser')
-  assert.match(body, /KPI\s+Target\s+Oct/i, "the header row"); assert.match(body, /Audit findings closed\s+100%\s+97%/)
-  await view.getByLabel('Sheet').selectOption({ label: 'Notes' })
-  await view.getByText('Data from QMS').waitFor()
+test('TC-KPT-01: the KPI tracker page is hidden from the menu (kept in the build)', async () => {
+  const { page, context, errors } = await openPage(app)
+  await page.locator('.sidebar nav').waitFor()
+  assert.equal(await page.locator('.sidebar nav button', { hasText: 'KPI tracker' }).count(), 0, 'not in the menu')
+  await page.getByRole('button', { name: 'Customize menu' }).click()
+  assert.equal(await page.getByText('KPI tracker', { exact: true }).count(), 0, 'not offered in Customize menu')
   assert.deepEqual(errors, [])
   await context.close()
 })
