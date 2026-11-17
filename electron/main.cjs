@@ -5,6 +5,7 @@ const { spawn } = require('child_process')
 const { requestAzureDevOps } = require('./azure-devops.cjs')
 const { checkForUpdate, downloadUpdate } = require('./desktop-update.cjs')
 const { windchillUrl, testWindchill, queryWindchill } = require('./windchill.cjs')
+const { sharePointFileUrl, readSharePointFile } = require('./sharepoint-file.cjs')
 const distDir = path.join(__dirname, '..', 'dist')
 const bundledUrl = pathToFileURL(path.join(distDir, 'index.html')).href
 const trustedSender = (event) => {
@@ -125,6 +126,74 @@ ipcMain.handle('windchill:sign-in', async (event, request) => {
 ipcMain.handle('windchill:sign-out', async (event) => {
   if (!trustedSender(event)) throw new Error('Untrusted request source.')
   const ses = windchillSession()
+  await ses.clearStorageData()
+  await ses.clearAuthCache()
+  return { ok: true }
+})
+
+// KPT-02: the KPI tracker's Excel file in SharePoint, read only (GET). Its own persistent session: Windows single sign-on
+// is offered only to the file's SharePoint host, and the company's web sign-in, completed in the sign-in window, leaves
+// its cookies there. The app never sees a password and never writes to SharePoint.
+const sharePointSession = () => session.fromPartition('persist:sharepoint')
+const sharePointFetch = (request) => {
+  const ses = sharePointSession()
+  ses.allowNTLMCredentialsForDomains(sharePointFileUrl(request).host.split(':')[0])
+  return (url, options) => ses.fetch(url, options)
+}
+
+ipcMain.handle('sharepoint-file:read', async (event, request) => {
+  if (!trustedSender(event)) throw new Error('Untrusted request source.')
+  return readSharePointFile(request, sharePointFetch(request))
+})
+
+// Sign-in window: opens the file's SharePoint site in the session (sandboxed, https only, no pop-ups). After each page
+// that loads on the SharePoint host the file is read; once that works, the window closes and the result is returned.
+let sharePointWindow = null
+ipcMain.handle('sharepoint-file:sign-in', async (event, request) => {
+  if (!trustedSender(event)) throw new Error('Untrusted request source.')
+  const file = sharePointFileUrl(request)
+  const fetch = sharePointFetch(request)
+  if (sharePointWindow && !sharePointWindow.isDestroyed()) { sharePointWindow.focus(); throw new Error('The SharePoint sign-in window is already open.') }
+  const window = new BrowserWindow({
+    parent: BrowserWindow.fromWebContents(event.sender) ?? undefined,
+    width: 960,
+    height: 760,
+    title: 'Sign in to SharePoint',
+    autoHideMenuBar: true,
+    webPreferences: { session: sharePointSession(), contextIsolation: true, nodeIntegration: false, sandbox: true },
+  })
+  sharePointWindow = window
+  window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  window.webContents.on('will-navigate', (navigation, target) => { if (!target.startsWith('https://')) navigation.preventDefault() })
+  window.webContents.on('will-redirect', (navigation, target) => { if (!target.startsWith('https://')) navigation.preventDefault() })
+  return new Promise((resolve) => {
+    let done = false, checking = false
+    const finish = (result) => {
+      if (done) return
+      done = true
+      clearTimeout(timer)
+      if (!window.isDestroyed()) window.close()
+      resolve(result)
+    }
+    const timer = setTimeout(() => finish({ ok: false, status: 0, message: 'The SharePoint sign-in was not completed within 10 minutes; try again.' }), 10 * 60 * 1000)
+    window.on('closed', () => { sharePointWindow = null; finish({ ok: false, status: 0, signIn: true, message: 'The sign-in window was closed before SharePoint gave the file.' }) })
+    window.webContents.on('did-finish-load', async () => {
+      let host = ''
+      try { host = new URL(window.webContents.getURL()).host } catch { /* not loaded */ }
+      if (checking || done || host.toLowerCase() !== file.host.toLowerCase()) return
+      checking = true
+      try {
+        const result = await readSharePointFile(request, fetch)
+        if (result.ok) finish({ ...result, message: `Signed in. ${result.message}` })
+      } catch { /* keep the window open */ } finally { checking = false }
+    })
+    window.loadURL(`${file.origin}${file.site}`).catch(() => { /* a redirect to the login page aborts the first load; the window stays */ })
+  })
+})
+
+ipcMain.handle('sharepoint-file:sign-out', async (event) => {
+  if (!trustedSender(event)) throw new Error('Untrusted request source.')
+  const ses = sharePointSession()
   await ses.clearStorageData()
   await ses.clearAuthCache()
   return { ok: true }

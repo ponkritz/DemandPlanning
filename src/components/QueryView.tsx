@@ -18,7 +18,8 @@ import { readLayout, saveLayout } from '../tableDefaults'
 // ← → in the chooser; the order is remembered per view too). extra: one more column after the query's (DP: the board match),
 // searched and exported with its text.
 export interface ExtraColumn { name: string; text: (item: AzureWorkItem) => string; cell: (item: AzureWorkItem) => ReactNode }
-export function QueryView({ name, items, columns, orderBy = [], unresolved = [], queryOnly = false, extra, summary: withSummary = true }: { name: string; items: AzureWorkItem[]; columns?: QueryColumn[]; orderBy?: QueryOrder[]; unresolved?: string[]; queryOnly?: boolean; choose?: boolean; extra?: ExtraColumn; summary?: boolean }) {
+const noMore: DataColumn<AzureWorkItem>[] = []
+export function QueryView({ name, items, columns, orderBy = [], unresolved = [], queryOnly = false, extra, more = noMore, summary: withSummary = true }: { name: string; items: AzureWorkItem[]; columns?: QueryColumn[]; orderBy?: QueryOrder[]; unresolved?: string[]; queryOnly?: boolean; choose?: boolean; extra?: ExtraColumn; more?: DataColumn<AzureWorkItem>[]; summary?: boolean }) {
   const base = columns?.length ? columns : defaultViewColumns.map((ref) => ({ ref, name: columnName(ref) }))
   const all = queryOnly ? base : withReleaseColumns(base, items, (ref) => ({ ref, name: columnName(ref) }))
   // The column choice and order kept before the table default (per view) carry over once to the table's own layout.
@@ -31,9 +32,9 @@ export function QueryView({ name, items, columns, orderBy = [], unresolved = [],
   const summary = useMemo(() => viewSummary(items, today), [items, today])
   const shown = useMemo(() => {
     const text = search.trim().toLowerCase()
-    const filtered = items.filter((item) => (!state || item.state === state) && (!type || item.workItemType === type) && (!text || all.some((column) => formatCell(cellValue(item, column.ref)).toLowerCase().includes(text)) || Boolean(extra?.text(item).toLowerCase().includes(text))))
+    const filtered = items.filter((item) => (!state || item.state === state) && (!type || item.workItemType === type) && (!text || all.some((column) => formatCell(cellValue(item, column.ref)).toLowerCase().includes(text)) || Boolean(extra?.text(item).toLowerCase().includes(text)) || more.some((column) => String(column.value?.(item) ?? '').toLowerCase().includes(text))))
     return sortItems(filtered, sort)
-  }, [items, state, type, search, sort, all, extra])
+  }, [items, state, type, search, sort, all, extra, more])
   const chips = (rows: [string, number][], active: string, pick: (value: string) => void, limit = 8) => rows.slice(0, limit).map(([label, count]) => <button key={label} type="button" className={`summary-chip ${active === label ? 'summary-chip-active' : ''}`} aria-pressed={active === label} onClick={() => pick(active === label ? '' : label)}><strong>{count}</strong> {label}</button>)
   // The query's columns (and the extra one) as table columns: shown formatted; sorted and exported with their values
   // (dates as date-times, numbers as numbers).
@@ -43,6 +44,8 @@ export function QueryView({ name, items, columns, orderBy = [], unresolved = [],
     title: (item: AzureWorkItem) => column.ref === 'System.Id' ? undefined : formatCell(cellValue(item, column.ref)) || undefined,
     render: (item: AzureWorkItem) => column.ref === 'System.Id' ? <a href={item.url} target="_blank" rel="noreferrer">{item.id}</a> : column.ref === 'System.Title' ? <a href={item.url} target="_blank" rel="noreferrer">{formatCell(cellValue(item, column.ref))}</a> : formatCell(cellValue(item, column.ref)),
   }))
+  // QV-53: computed columns after the query's (DP: Month & Year, Milestones), searched and exported like the others.
+  tableColumns.push(...more)
   if (extra) tableColumns.push({ id: extraColumnRef, label: extra.name, value: extra.text, render: extra.cell, sortable: false, className: 'extra-cell', title: extra.text })
   if (!items.length) return <EmptyState title={`“${name}” returned no work items.`} detail="Check the connection's query in Settings → Azure DevOps." />
   return <div className="query-view">

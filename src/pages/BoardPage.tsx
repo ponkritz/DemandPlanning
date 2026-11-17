@@ -1,5 +1,5 @@
 import type { FeatureSetups } from '../featureSetup'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { EmptyState, Page, Panel, Pill, Info } from '../components/ui'
 import { AzureWorkItemTree } from '../components/AzureWorkItemTree'
 import { QueryView } from '../components/QueryView'
@@ -11,7 +11,8 @@ import { useDpBoardColumn } from '../useDpBoardColumn'
 import { CpReportView } from '../components/CpReportView'
 import { cpReportFor } from '../releaseOverview'
 import type { AzureWorkItem } from '../domain'
-import { ddtMonthOf, dpMilestoneNames, dpMilestones } from '../dpMilestones'
+import { ddtMonthOf, dpMilestoneNames, dpMilestones, dpMilestoneText, dpMonthText } from '../dpMilestones'
+import type { DataColumn } from '../components/DataTable'
 import { formatDate, formatDateTime, monthName } from '../format'
 import { approvalDateFrom, viewMonthOf } from '../releaseSource'
 import { viewSource } from '../viewSources'
@@ -83,6 +84,11 @@ function ReadOnlyView({ id, name, role, azure, store, month, gitNote, onOpenConn
   const items = source ? allMonths || isCp ? source.items : source.items.filter((item) => (isDp ? ddtMonthOf(item) : viewMonthOf(item)) === month) : noItems
   // DP rows matched to the QMS-0025 board (Feature / User Story by SourceProgram + Title), with Create Feature.
   const boardColumn = useDpBoardColumn(isDp ? items : noItems, azure, threshold, assign, featureSetup)
+  // QV-53: DP's Month & Year (the DDT Date's month, which the list filters on) and every milestone's month and status.
+  const dpColumns = useMemo<DataColumn<AzureWorkItem>[]>(() => isDp ? [
+    { id: '@dp-month', label: 'Month & Year', value: (item) => dpMonthText(item), title: (item) => ddtMonthOf(item) ? 'The month of the DDT Date: the month this release is listed in' : 'No DDT Date: listed only with “All months”, never a Completed Release', sortable: false },
+    { id: '@dp-milestones', label: 'Milestones', value: (item) => dpMilestoneText(item), title: () => '✓ = Done with a date: counts as Supported in that month (DDT ✓ also as Completed)', sortable: false },
+  ] : [], [isDp])
   // Items without an approval date fall back to their Changed Date for the month filter; say how many.
   const undated = source ? source.items.filter((item) => isDp ? !ddtMonthOf(item) : !(item.approvalDate ?? approvalDateFrom(item.fields ?? {}))).length : 0
   // On-prem views with Git storage: Load from Git too; a fetch that cannot run falls back to it.
@@ -106,7 +112,7 @@ function ReadOnlyView({ id, name, role, azure, store, month, gitNote, onOpenConn
       {!azure.isSample && gitNote?.tone === 'error' && <div className="notice error" role="alert">{gitNote.text}</div>}
       {stale && !busy && <div className="notice warning" role="status">The saved data was fetched with different columns than the connection's query now has. Refresh from Azure to load every column's values.</div>}
       {source && config && !items.length && source.items.length ? isDp ? <><DpMonthCounts items={source.items} month={month} /><EmptyState title={`No release has its DDT Date in ${monthName(month)}.`} detail="Pick another month in the header, or tick “All months”. The counts above still include milestones Done in the month." /></> : <EmptyState title={`No items in ${monthName(month)}.`} detail={`${source.items.length} items have an approval date (else a changed date) in other months. Pick another month in the header, or tick “All months”.`} />
-        : source && config ? isDp ? <ResultTabs id={`azure:${id}`} rawCount={items.length} main={<><DpMonthCounts items={source.items} month={month} /><QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} queryOnly choose extra={boardColumn} /></>} raw={<QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} />} /> : isCp && cp ? <ResultTabs id={`azure:${id}`} mainLabel="CP report" rawCount={source.items.length} main={<CpReportView report={cp.report} azure={azure} assign={assign} featureSetup={featureSetup} threshold={threshold} enrichment={cp.enrichmentName} />} raw={<QueryView name={name} items={source.items} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} />} /> : role === 'release-source' || stream ? <ReleaseView name={name} items={items} backlog={azure.items} azure={azure} assign={assign} featureSetup={featureSetup} rule={stream?.rule} fuzzy={stream?.fuzzy} threshold={threshold} columns={viewColumns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} /> : <QueryView name={name} items={items} columns={viewColumns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} />
+        : source && config ? isDp ? <ResultTabs id={`azure:${id}`} rawCount={items.length} main={<><DpMonthCounts items={source.items} month={month} /><QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} queryOnly choose more={dpColumns} extra={boardColumn} /></>} raw={<QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} />} /> : isCp && cp ? <ResultTabs id={`azure:${id}`} mainLabel="CP report" rawCount={source.items.length} main={<CpReportView report={cp.report} azure={azure} assign={assign} featureSetup={featureSetup} threshold={threshold} enrichment={cp.enrichmentName} />} raw={<QueryView name={name} items={source.items} columns={columns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} />} /> : role === 'release-source' || stream ? <ReleaseView name={name} items={items} backlog={azure.items} azure={azure} assign={assign} featureSetup={featureSetup} rule={stream?.rule} fuzzy={stream?.fuzzy} threshold={threshold} columns={viewColumns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} /> : <QueryView name={name} items={items} columns={viewColumns} orderBy={orderBy} unresolved={stale ? current?.unresolved : source.unresolved} />
         : <><EmptyState title={config ? `“${name}” has not been fetched yet.` : `The connection for “${name}” is not saved in this browser.`} detail={config ? 'Fetch it read-only; nothing is written to Azure DevOps. Its items stay on this page and are not counted in Overview, My Activities or Assigned to Me.' : 'Add it again in Settings → Azure DevOps.'} /></>}
     </Panel>
   </Page>

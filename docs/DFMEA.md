@@ -137,13 +137,15 @@ An RPN ≥ 40, or S = 5 with D ≥ 3, needs an action. The **Residual RPN** is t
 | DF-90 | Capabilities count in Key takeaways (PCK-12) | The count differs from the Features listed in the Capabilities bullet | A wrong figure in the monthly call | Count computed separately from the list | 2 | 2 | 2 | 8 | The count is the length of the same Feature list the Capabilities bullet shows (TC-PCK-10) | 2×1×2 = 4 | TC-PCK-10 | — |
 | DF-91 | Share Table defaults and the match threshold (GIT-14) | Shared values not reaching others (the old gap) or a bad value from Git breaking tables or release matching | Users see different tables or Feature matches than the team agreed | Settings kept outside the planning file; a hand-edited file | 3 | 3 | 2 | 18 | Both in the planning file and part of the unsaved-changes check; checked on read (unknown values dropped, threshold 1–100); older files leave local values (TC-GIT-07) | 3×1×2 = 6 | TC-GIT-07 | — |
 | DF-92 | Pick up others' changes while open (GIT-15) | An open app keeps showing old shared data, or a refresh overwrites what the user is changing | Decisions on stale settings; lost unsaved edits | Load only at start; a refresh that reloads every area | 3 | 3 | 3 | 27 | Check every 5 min and on return to the window; planning data loaded only without unsaved changes and quietly (other areas not re-read); everything else only named in a banner, the user reloads; own saves ignored (TC-GIT-08) | 3×1×2 = 6 | TC-GIT-08 | — |
+| DF-93 | Read the KPI tracker from SharePoint (KPT-02) | The app changes or locks the file in SharePoint, or shows a sign-in page or another file as the tracker | Corrupted team KPI data; wrong KPIs shown | A write call; a link to another file; a login page taken as data | 4 | 2 | 3 | 24 | Only GET, to the file's REST content address on the link's host; link checked (https, site, .xlsx); the answer accepted only as an Excel file ≤ 20 MB, else "sign in" or "check the link"; the file name and read time shown (TC-KPT-02) | 4×1×2 = 8 | TC-KPT-02 | — |
+| DF-94 | Keep and show the Git copy (KPT-03, KPT-04) | The copy is stale, cut off, or replaced by a non-admin's read | Decisions on old or partial KPI figures | No read for a long time; a very large workbook; anyone saving | 3 | 3 | 2 | 18 | Read time, reader and the file's last change shown; "truncated" said when cut; only Manage shared settings with a write token save; every save is a commit; the Newer data banner (TC-KPT-01, TC-KPT-03) | 3×2×1 = 6 | TC-KPT-01, TC-KPT-03 | — |
 | DF-30 | Release the documents | The app shows documents that do not match its build | Wrong instructions or requirements | Documents published separately | 2 | 3 | 3 | 18 | Documents bundled at build time; the traceability matrix regenerated and checked in CI (DOC-02, DOC-10) | 2×1×1 = 2 | TC-DOC-01, TC-DOC-03 | — |
 
 ## 7. Summary
 
 | | Count |
 |---|---|
-| Failure modes analysed | 92 |
+| Failure modes analysed | 94 |
 | With S = 5 | 10 (DF-01…04, 06, 23, 24, 27, 28) — all with residual D = 1 |
 | Initial RPN ≥ 40 | 4 (DF-01, DF-02, DF-23, DF-59) — DF-01, DF-02, DF-23 reduced to 5, DF-59 to 12 |
 | Residual RPN ≥ 15 | 0 (DF-26 reduced to 12 by reading the Location column first; LIM-04 keeps the correction table as a further option) |

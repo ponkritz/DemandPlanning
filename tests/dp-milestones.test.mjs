@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { dpMonthCounts, ddtMonthOf, dpReleaseName, uniqueReleases } from '../src/dpMilestones.ts'
+import { dpMonthCounts, ddtMonthOf, dpReleaseName, uniqueReleases, dpMonthText, dpMilestoneText } from '../src/dpMilestones.ts'
 
 const item = (id, fields) => ({ key: `dp/${id}`, id, title: `Release ${id}`, workItemType: 'Release', state: 'Active', fields })
 const items = [
@@ -49,4 +49,12 @@ test('Supported Releases are unique by PsName + Release: two rows of the same re
   assert.deepEqual(counts.supported.map((entry) => [entry.item.id, entry.release, entry.milestones.length]), [[13, '3.1', 1], [14, '', 1], [15, '', 1], [11, '3.0.0.2', 2]])
   assert.equal(counts.completed.length, 1)
   assert.deepEqual(uniqueReleases([]), [])
+})
+
+test('QV-53: the DP table shows each release\'s Month & Year (its DDT Date) and every milestone\'s month and status', () => {
+  const item = { fields: { 'Custom.DDTDate': '2026-10-15T00:00:00Z', 'Custom.DDTStatus': 'Done', 'Custom.DRfHDate': '2026-09-03T00:00:00Z', 'Custom.DRfHStatus': 'In Progress', 'Custom.DRPCStatus': 'Done' } }
+  assert.equal(dpMonthText(item, 'UTC'), 'Oct 2026')
+  assert.equal(dpMilestoneText(item, 'UTC'), 'DT: Oct 2026 Done ✓ · SFV: Sep 2026 In Progress · PRD: no date Done · RPE: no date (no status)', 'a milestone counts (✓) only when Done with a date')
+  assert.equal(dpMonthText({ fields: {} }, 'UTC'), 'No DDT Date')
+  assert.equal(dpMonthText({ fields: { 'Custom.DDTDate': '2026-10-31T23:30:00Z' } }, 'Asia/Kolkata'), 'Nov 2026', 'in the viewer\'s time zone')
 })
