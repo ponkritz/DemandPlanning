@@ -62,5 +62,16 @@ export function dpMonthCounts(items: AzureWorkItem[], month: string, timeZone?: 
   return { completed, supported: uniqueReleases(supported), milestones: supported, byMilestone }
 }
 
+// QV-53: why a DP release is listed and counted in a month, for the DP table — the month of its DDT Date (what the list
+// filters on) and each milestone's month and status ("✓" when Done with a date, so it counts as Supported that month).
+const shortMonth = (month: string) => new Intl.DateTimeFormat('en', { month: 'short', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${month}-01T00:00:00Z`))
+export function dpMonthText(item: Pick<AzureWorkItem, 'fields'>, timeZone?: string) { const month = ddtMonthOf(item, timeZone); return month ? shortMonth(month) : 'No DDT Date' }
+export function dpMilestoneText(item: Pick<AzureWorkItem, 'fields'>, timeZone?: string) {
+  return dpMilestones.map(([milestone, dateField, statusField]) => {
+    const date = fieldOf(item, dateField), status = fieldOf(item, statusField)?.trim(), month = approvalMonthOf(date, timeZone)
+    return `${dpMilestoneLabel(milestone)}: ${month ? shortMonth(month) : 'no date'}${status ? ` ${status}` : ' (no status)'}${month && isDone(status) ? ' ✓' : ''}`
+  }).join(' · ')
+}
+
 // The release a DP row stands for: its PsName (else Title) and Release field.
 export const dpReleaseName = (item: AzureWorkItem) => ({ name: fieldOf(item, 'PsName') ?? item.title, release: fieldOf(item, 'Release') ?? '' })

@@ -52,6 +52,7 @@ This document lists every software component of the system: the in-house source 
 | MyDashboardPage | `src/pages/MyDashboardPage.tsx` | My dashboard: the person's hours against capacity, open work, streams and releases for the header month; the start page. | MYD |
 | PersonalLayout | `src/components/PersonalLayout.tsx` | Customize a page's sections (show, hide, order, reset, default for everyone) and the menu (pin, hide). | MYD |
 | QeMappingPage | `src/pages/QeMappingPage.tsx` | QE Mapping: upload Excel/CSV, edit cells/rows/columns, filter and group, then save to Git or export. | QEM |
+| KpiTrackerPage | `src/pages/KpiTrackerPage.tsx` | KPI tracker page: the Git copy or a live read in the desktop app, sheet choice, table, save to Git for admins. | KPT |
 | SnapshotsPage | `src/pages/SnapshotsPage.tsx` | Snapshots: SharePoint snapshot history, browser storage and backup recovery, legacy snapshot records. | SNP, STO |
 
 ### 1.2 UI components
@@ -149,6 +150,7 @@ This document lists every software component of the system: the in-house source 
 | personalViews | `src/personalViews.ts` | Personal views file: path per person, validated parse, defaults merge, section order. | MYD |
 | usePersonalViews | `src/usePersonalViews.ts` | Personal views state: browser cache, Git per person with retry, admin defaults, filters per page. | MYD, GIT |
 | qeMapping | `src/qeMapping.ts` | QE Mapping table model: sheets with stable column/row ids, edits, filter, group, CSV, Git file parse/serialise. | QEM |
+| kpiTracker | `src/kpiTracker.ts` | KPI tracker model: link check, workbook to text sheets within limits, Git file parse/serialise, sheet table. | KPT |
 | queryView | `src/queryView.ts` | Query-view layout from WIQL SELECT/ORDER BY (flat and tree / links queries), field resolution, cell formatting, sorting, summary, CSV, column order. | QV |
 | releaseOverview | `src/releaseOverview.ts` | Releases with documents approved in the month per stream (CP from QA/QE signatures, cpReporting), with counts and totals. | OVR, QV |
 | releasePath | `src/releasePath.ts` | Reads release name and number from Area/Iteration Paths; DP, IOCC and Tool Validations (one entry per tool) stream rules. | QV |
@@ -219,8 +221,9 @@ This document lists every software component of the system: the in-house source 
 
 | Component | Path | Purpose | Requirement areas |
 |---|---|---|---|
-| main | `electron/main.cjs` | Electron main process: window, IPC handlers for Azure DevOps proxy, Windchill test/query/sign-in, app reload and desktop update. | DSK, CON, UPD, NFR |
-| preload | `electron/preload.cjs` | Exposes azureDevOps, windchill, appUpdates and desktopUpdate IPC APIs to the renderer. | DSK |
+| main | `electron/main.cjs` | Electron main process: window, IPC handlers for Azure DevOps proxy, Windchill test/query/sign-in, the KPI tracker's SharePoint read/sign-in/sign-out, app reload and desktop update. | DSK, CON, UPD, NFR, KPT |
+| sharepoint-file | `electron/sharepoint-file.cjs` | KPI tracker: SharePoint link check, REST content address, read-only GET of the .xlsx with sign-in detection. | KPT, IF |
+| preload | `electron/preload.cjs` | Exposes azureDevOps, windchill, sharePointFile, appUpdates and desktopUpdate IPC APIs to the renderer. | DSK, KPT |
 | azure-devops | `electron/azure-devops.cjs` | Desktop Azure DevOps proxy: validated requests, writes only to dev.azure.com, constrained payload builders. | DSK, IF, NFR |
 | desktop-update | `electron/desktop-update.cjs` | Desktop self-update from the desktop-latest release: manifest check, download, SHA-256 verify, start installer. | DSK |
 | windchill | `electron/windchill.cjs` | Desktop Windchill read-only connection test with SSO and sign-in-window cookies. | CON, DSK |
@@ -288,6 +291,7 @@ This document lists every software component of the system: the in-house source 
 | nested-groups.test | `tests/nested-groups.test.mjs` | Nested grouping: levels, order, blank last, unique keys. | QV |
 | monthly-pack.test | `tests/monthly-pack.test.mjs` | Monthly pack files, Epic counts, lines, YoY, slide text and the .pptx writer. | PCK |
 | qe-mapping.test | `tests/qe-mapping.test.mjs` | xlsx/CSV read/write and QE Mapping editing and Git file handling. | QEM |
+| kpi-tracker.test | `tests/kpi-tracker.test.mjs` | SharePoint link and read (one GET, sign-in detection), the Git copy and its limits, sheet tables. | KPT, IF |
 | table-defaults.test | `tests/table-defaults.test.mjs` | The table design default: shared setting check, column layout and moves, and dates in Excel / CSV exports read back (TC-UI-04, TC-UI-05). | UI |
 | query-view.test | `tests/query-view.test.mjs` | Query layout, field resolution, sorting, summary, CSV and column order. | QV |
 | release-overview.test | `tests/release-overview.test.mjs` | Releases per stream approved in the month for Overview and Pulse Check. | OVR |
@@ -313,7 +317,7 @@ The end-to-end suite (`pnpm test:e2e`, after `pnpm build:web`) drives the built 
 | Component | Path | Purpose | Requirement areas |
 |---|---|---|---|
 | helpers | `e2e/helpers.mjs` | Starts `vite preview` on a free port, opens Chromium pages with clean storage, records page errors, shared actions (navigate, load sample). | CI |
-| shell.e2e | `e2e/shell.e2e.mjs` | Sidebar groups and footer, header and month picker, Get started pop-up, synthetic sample, theme toggle, phone width, Force Update dialog, Git storage form defaults, refresh while open (TC-GIT-08), manager not on the board (TC-GIT-06, TC-SET-05, TC-NAV-01, 03, 31, 33, TC-UI-01, TC-SMP-01, TC-UPD-02). | NAV, UI, SMP, UPD |
+| shell.e2e | `e2e/shell.e2e.mjs` | Sidebar groups and footer, header and month picker, Get started pop-up, synthetic sample, theme toggle, phone width, Force Update dialog, Git storage form defaults, refresh while open (TC-GIT-08), KPI tracker from Git (TC-KPT-01), manager not on the board (TC-GIT-06, TC-SET-05, TC-NAV-01, 03, 31, 33, TC-UI-01, TC-SMP-01, TC-UPD-02). | NAV, UI, SMP, UPD |
 | documents-and-data.e2e | `e2e/documents-and-data.e2e.mjs` | Documentation tabs, links and download; Windchill export releases from names and from Location with the locations CSV; "＋ ECP" import named after the stream with the ECP CSV, Project No / Project Name columns, an ECP setup at the 3rd folder with the type-2 CSV (TC-CON-53, 54, 55); the table default on the Windchill raw data — move, hide, density, Excel export with dates, Settings → Table defaults (TC-UI-04, 05); My Work tree, Backlog Health and Baselines on the default (TC-UI-06); neutralised CSV; JSON backup without credentials (TC-DOC-01, 02, TC-CON-39, 40, 37, TC-STO-04, TC-INS-01); Windchill releases' QMS-0025 match column (TC-QV-23); auto-fit tables and Wrap text (TC-CON-42); the DP Supported Releases list in Pulse Check folded until Show list (TC-QV-17). | DOC, CON, STO, NFR, QV |
 | backlog.e2e | `e2e/backlog.e2e.mjs` | New User Story form from a Feature row of the Backlogs (TC-BKL-10); the Edit form from Feature, User Story and Task rows (TC-BKL-11). | CI, BKL |
 | monthly-pack.e2e | `e2e/monthly-pack.e2e.mjs` | Monthly pack tab with the synthetic sample, the .pptx download and the setup tab (TC-PCK-04). | CI |

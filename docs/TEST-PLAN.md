@@ -890,6 +890,8 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-QV-33 Content releases named by Title** — Req QV-52 — L1 `release-source.test.mjs` ("QV-52: Content releases are named by the Title — one per unique Title, no name and number from the paths"); browser check with the Content connection fetched: the Content page lists one release per Title (Title column, no Release column; no Name / Release columns in the query output); Pulse Check → Releases shows "Content [n] : <Title>, <Title>"; the Monthly pack Content line lists the same Titles.
 
+**TC-QV-34 DP Month & Year and Milestones columns** — Req QV-53 — L1 `dp-milestones.test.mjs` ("QV-53: the DP table shows each release's Month & Year (its DDT Date) and every milestone's month and status"); browser check with the DP data: Release Details → DP shows Month & Year and Milestones after the query's columns; tick All months — releases without a DDT Date show "No DDT Date"; a release counted as Supported has a ✓ on a milestone in the header month; search "No DDT Date" finds them; Export carries both columns.
+
 
 
 **TC-QV-24 CP releases from the asset Titles** — *(Retired — see TC-QV-25)* Req QV-40 — L1 `streams.test.mjs` ("CP: the release from the asset Title "[Release name] [Release No] [Asset name]", each release once; fuzzy QMS-0025 match (TC-QV-24)"); browser check with a CP query holding three assets of one release in both namings ("Care Pathways 3.1 Test Report", "Care Pathways 3.1.0 SRS", "Risk Analysis v3.1 (Care Pathways)") and one of another (3.2), and a QMS-0025 Feature "CP | Care Pathways | v3.1": Release Details → CP lists two releases (3 and 1 assets), 3.1 with its Feature and %, 3.2 with Create Feature opening the New Feature form titled "Care Pathways | v3.2" (release name and number only) under the CP Epic, and found after it is created; Pulse Check's Releases and Supported summary show "CP [2]"; no page errors. **UAT**
@@ -1476,6 +1478,12 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-CVA-03 The page for admins** — Req CVA-01, CVA-03, CVA-06 — E2E `shell.e2e.mjs` ("TC-CVA-03: an Admin opens Capacity vs Actual with its tiles, chart and people"); browser check: 12 months on the chart, bars over capacity in red, hover and the table view give the same figures; on a phone the tiles stack; a Team Member does not see the page.
 
+**TC-KPT-01 KPI tracker from the Git copy** — Req KPT-01, KPT-04 — E2E `shell.e2e.mjs` ("TC-KPT-01: the KPI tracker page shows the copy saved in Git, sheet by sheet, and says that reading live needs the desktop app"); L1 `kpi-tracker.test.mjs` ("KPT-04: a sheet shows as a table — the first row with text is the header; blank and repeated headings get names"); browser check: in the browser, with Git storage connected and kpi-tracker.json saved, Data Insights → KPI tracker shows the table, the Sheet choice and "Showing the copy saved in Git …".
+
+**TC-KPT-02 Read the KPI tracker live in the desktop app** — Req KPT-02, IF-05 — L1 `kpi-tracker.test.mjs` ("KPT-02: the SharePoint link is checked — https, a site, an .xlsx file, no credentials; a \"/:x:/r/\" link works too"; "KPT-02: the desktop read is one GET; sign-in pages, refusals, a missing file and non-Excel answers are reported"); desktop check (needs SharePoint): paste the tracker's link (Copy path), Read from SharePoint → a sign-in message; Sign in to SharePoint → complete the company sign-in in the window → it closes and the table shows "Read live from SharePoint at …"; check in SharePoint that the file's version history has no new version; Sign out, read again → asked to sign in.
+
+**TC-KPT-03 The read is saved to Git for everyone** — Req KPT-03, KPT-05 — L1 `kpi-tracker.test.mjs` ("KPT-03: the workbook is kept as text sheets within the limits; the Git copy is checked when read"); `git-watch.test.mjs` (labels); desktop check with Git: as an admin read the tracker — "Saved to Git"; kpi-tracker.json has one new commit; another browser with the app open shows "Newer data in Git: KPI tracker", Reload shows the new copy; as a Team member (or a read-only token) a read shows "not saved to Git"; with SharePoint unreachable (VPN off) the page still shows the Git copy.
+
 ## 7. Requirements coverage matrix
 
 | Requirement | Test cases |
@@ -1668,6 +1676,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | QV-50 | TC-QV-31 |
 | QV-51 | TC-QV-32 |
 | QV-52 | TC-QV-33 |
+| QV-53 | TC-QV-34 |
 | QV-38 | TC-CON-42 |
 | OVR-01…08 | retired (TC-OVR-01…03 retired) |
 | OV-11 | TC-OV-11 |
@@ -1849,6 +1858,12 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CVA-04 | TC-CVA-01 |
 | CVA-05 | TC-CVA-01 |
 | CVA-06 | TC-CVA-03 |
+| KPT-01 | TC-KPT-01 |
+| KPT-02 | TC-KPT-02 |
+| KPT-03 | TC-KPT-03 |
+| KPT-04 | TC-KPT-01 |
+| KPT-05 | TC-KPT-03 |
+| IF-05 | TC-KPT-02 |
 | NFR-02 | TC-STO-01 |
 | NFR-03…05 | TC-DSK-02, TC-INS-01 |
 | NFR-06 | TC-INS-02 |
@@ -1885,11 +1900,12 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-23 | TC-QEM-01…08 |
 | UC-24 | TC-PCK-01…10 |
 | UC-25 | TC-WSP-01…07 |
-| UC-26 | TC-MYD-01…05, TC-QV-31, TC-QV-32, TC-QV-33 |
+| UC-26 | TC-MYD-01…05, TC-QV-31, TC-QV-32, TC-QV-33, TC-QV-34 |
 | UC-27 | TC-HIS-01…11 |
 | UC-28 | TC-ACT-01…12, TC-BKL-16, TC-BKL-17, TC-BKL-18, TC-ATM-21 |
 | UC-29 | TC-OVW-01…03 |
 | UC-30 | TC-CVA-01…03 |
+| UC-31 | TC-KPT-01…03 |
 
 ## 8. Result record
 

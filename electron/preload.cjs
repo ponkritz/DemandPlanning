@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('azureDevOps', {
   request: (request) => ipcRenderer.invoke('azure-devops:request', request),
 })
 contextBridge.exposeInMainWorld('windchill', { test: (request) => ipcRenderer.invoke('windchill:test', request), query: (request) => ipcRenderer.invoke('windchill:query', request), signIn: (request) => ipcRenderer.invoke('windchill:sign-in', request), signOut: () => ipcRenderer.invoke('windchill:sign-out') })
+contextBridge.exposeInMainWorld('sharePointFile', { read: (request) => ipcRenderer.invoke('sharepoint-file:read', request), signIn: (request) => ipcRenderer.invoke('sharepoint-file:sign-in', request), signOut: () => ipcRenderer.invoke('sharepoint-file:sign-out') })
 contextBridge.exposeInMainWorld('appUpdates', { reloadIgnoringCache: () => ipcRenderer.invoke('app-update:reload') })
 contextBridge.exposeInMainWorld('desktopUpdate', {
   check: () => ipcRenderer.invoke('desktop-update:check'),

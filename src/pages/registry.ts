@@ -1,5 +1,5 @@
 // Single source for navigation labels, header text and grouping so the sidebar and page header always agree.
-export type Page = 'mydash' | 'activities' | 'planover' | 'capactual' | 'overview' | 'pulse' | 'pireview' | 'mywork' | 'bulk' | 'baselines' | 'board' | 'health' | 'windchill' | 'brite' | 'snapshots' | 'qemapping' | 'admin' | 'docs'
+export type Page = 'mydash' | 'activities' | 'planover' | 'capactual' | 'overview' | 'pulse' | 'pireview' | 'mywork' | 'bulk' | 'baselines' | 'board' | 'health' | 'windchill' | 'brite' | 'snapshots' | 'qemapping' | 'kpitracker' | 'admin' | 'docs'
 export type PageGroup = 'Data Insights' | 'My Work' | 'Testing' | 'I&D Board' | 'Release Details' | 'Other views' | 'Data & governance' | 'Settings'
 
 // hidden: kept in the build but not offered in the menu.
@@ -10,6 +10,7 @@ export const pages: PageMeta[] = [
   { id: 'overview', label: 'Team overview', icon: '▦', group: 'Data Insights', detail: 'The team at a glance: six headline tiles, each opening its analysis — capacity and workload, streams, plan quality — for a period and filters.', usesMonth: false },
   { id: 'pulse', label: 'Pulse Check', icon: '◔', group: 'Data Insights', detail: 'Last month’s releases and analysis, ongoing activities, and the current month’s releases.', usesMonth: true },
   { id: 'pireview', label: 'PI Review', icon: '◈', group: 'Data Insights', detail: 'PI summary for the PI Review (planned).', usesMonth: false },
+  { id: 'kpitracker', label: 'KPI tracker', icon: '◫', group: 'Data Insights', detail: 'The team’s KPI tracker from SharePoint, read only: read live in the desktop app, with the copy saved in Git when SharePoint cannot be reached.', usesMonth: false },
   { id: 'activities', label: 'My Activities', icon: '✎', group: 'My Work', detail: 'Your activities for the month: add this month’s tasks, enter planned and actual hours, and see what is left before the deadline.', usesMonth: true },
   { id: 'planover', label: 'Planning Overview', icon: '▥', group: 'Testing', detail: 'The team’s month at a glance: workload against capacity, delivery against Target dates, baseline and capacity exceptions, health per Epic.', usesMonth: true },
   { id: 'capactual', label: 'Capacity vs Actual', icon: '◑', group: 'Testing', detail: 'What the team had — capacity after leave and holidays — against the hours it booked: tiles, 12 months, each person and where the hours went.', usesMonth: true },
