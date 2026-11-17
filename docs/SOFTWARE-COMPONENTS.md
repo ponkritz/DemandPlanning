@@ -53,6 +53,7 @@ This document lists every software component of the system: the in-house source 
 | PersonalLayout | `src/components/PersonalLayout.tsx` | Customize a page's sections (show, hide, order, reset, default for everyone) and the menu (pin, hide). | MYD |
 | QeMappingPage | `src/pages/QeMappingPage.tsx` | QE Mapping: upload Excel/CSV, edit cells/rows/columns, filter and group, then save to Git or export. | QEM |
 | KpiTrackerPage | `src/pages/KpiTrackerPage.tsx` | KPI tracker page: the Git copy or a live read in the desktop app, sheet choice, table, save to Git for admins. | KPT |
+| DpBulkCreate | `src/components/DpBulkCreate.tsx` | DP Create Features dialog: the plan per selected release, PI / Sprint, creation as a background job. | DPF |
 | SnapshotsPage | `src/pages/SnapshotsPage.tsx` | Snapshots: SharePoint snapshot history, browser storage and backup recovery, legacy snapshot records. | SNP, STO |
 
 ### 1.2 UI components
@@ -151,6 +152,7 @@ This document lists every software component of the system: the in-house source 
 | usePersonalViews | `src/usePersonalViews.ts` | Personal views state: browser cache, Git per person with retry, admin defaults, filters per page. | MYD, GIT |
 | qeMapping | `src/qeMapping.ts` | QE Mapping table model: sheets with stable column/row ids, edits, filter, group, CSV, Git file parse/serialise. | QEM |
 | kpiTracker | `src/kpiTracker.ts` | KPI tracker model: link check, workbook to text sheets within limits, Git file parse/serialise, sheet table. | KPT |
+| dpBulk | `src/dpBulk.ts` | DP releases: release type from x.y.z.a, QE from the QE Mapping, possible QEs, bulk Create Features plan. | DPF |
 | queryView | `src/queryView.ts` | Query-view layout from WIQL SELECT/ORDER BY (flat and tree / links queries), field resolution, cell formatting, sorting, summary, CSV, column order. | QV |
 | releaseOverview | `src/releaseOverview.ts` | Releases with documents approved in the month per stream (CP from QA/QE signatures, cpReporting), with counts and totals. | OVR, QV |
 | releasePath | `src/releasePath.ts` | Reads release name and number from Area/Iteration Paths; DP, IOCC and Tool Validations (one entry per tool) stream rules. | QV |
@@ -292,6 +294,7 @@ This document lists every software component of the system: the in-house source 
 | monthly-pack.test | `tests/monthly-pack.test.mjs` | Monthly pack files, Epic counts, lines, YoY, slide text and the .pptx writer. | PCK |
 | qe-mapping.test | `tests/qe-mapping.test.mjs` | xlsx/CSV read/write and QE Mapping editing and Git file handling. | QEM |
 | kpi-tracker.test | `tests/kpi-tracker.test.mjs` | SharePoint link and read (one GET, sign-in detection), the Git copy and its limits, sheet tables. | KPT, IF |
+| dp-bulk.test | `tests/dp-bulk.test.mjs` | DP release type and sets, QE match, possible QEs, bulk plan. | DPF |
 | table-defaults.test | `tests/table-defaults.test.mjs` | The table design default: shared setting check, column layout and moves, and dates in Excel / CSV exports read back (TC-UI-04, TC-UI-05). | UI |
 | query-view.test | `tests/query-view.test.mjs` | Query layout, field resolution, sorting, summary, CSV and column order. | QV |
 | release-overview.test | `tests/release-overview.test.mjs` | Releases per stream approved in the month for Overview and Pulse Check. | OVR |
