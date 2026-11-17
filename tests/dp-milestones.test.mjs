@@ -58,3 +58,17 @@ test('QV-53: the DP table shows each release\'s Month & Year (its DDT Date) and 
   assert.equal(dpMonthText({ fields: {} }, 'UTC'), 'No DDT Date')
   assert.equal(dpMonthText({ fields: { 'Custom.DDTDate': '2026-10-31T23:30:00Z' } }, 'Asia/Kolkata'), 'Nov 2026', 'in the viewer\'s time zone')
 })
+
+test('QV-54: a release without a DDT Date is listed in the months of its Planned / ToBePlanned milestones, but not counted', async () => {
+  const { dpListedIn, dpPlannedMilestones } = await import('../src/dpMilestones.ts')
+  const planned = { id: 7, fields: { 'Custom.PsName': 'Dose Planning', 'Custom.Release': '2.0', 'Custom.DRfHDate': '2026-10-05T00:00:00Z', 'Custom.DRfHStatus': 'Planned', 'Custom.DRPCDate': '2026-12-01T00:00:00Z', 'Custom.DRPCStatus': 'To Be Planned', 'Custom.DRPEDate': '2026-10-20T00:00:00Z', 'Custom.DRPEStatus': 'In Progress' } }
+  assert.deepEqual(dpPlannedMilestones(planned, 'UTC').map((entry) => [entry.milestone, entry.month]), [['DRfH', '2026-10'], ['DRPC', '2026-12']], 'Planned and ToBePlanned (spaces and case ignored) with a date; In Progress is not planned')
+  assert.equal(dpListedIn(planned, '2026-10', 'UTC'), true); assert.equal(dpListedIn(planned, '2026-12', 'UTC'), true); assert.equal(dpListedIn(planned, '2026-11', 'UTC'), false)
+  assert.equal(dpMonthText(planned, 'UTC'), 'Oct 2026 (SFV Planned), Dec 2026 (PRD To Be Planned) · planned, not counted')
+  const counts = dpMonthCounts([planned], '2026-10', 'UTC')
+  assert.deepEqual([counts.completed.length, counts.supported.length, counts.milestones.length], [0, 0, 0], 'not Supported, not Completed')
+  const withDdt = { id: 8, fields: { 'Custom.DDTDate': '2026-11-10T00:00:00Z', 'Custom.DDTStatus': 'Planned', 'Custom.DRfHDate': '2026-10-05T00:00:00Z', 'Custom.DRfHStatus': 'Planned' } }
+  assert.equal(dpListedIn(withDdt, '2026-11', 'UTC'), true, 'a DDT Date decides the month')
+  assert.equal(dpListedIn(withDdt, '2026-10', 'UTC'), false, 'planned milestones only place releases without a DDT Date')
+  assert.equal(dpMonthText({ fields: { 'Custom.DRfHStatus': 'Planned' } }, 'UTC'), 'No DDT Date', 'a planned milestone without a date places nothing')
+})

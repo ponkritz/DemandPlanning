@@ -65,7 +65,27 @@ export function dpMonthCounts(items: AzureWorkItem[], month: string, timeZone?: 
 // QV-53: why a DP release is listed and counted in a month, for the DP table — the month of its DDT Date (what the list
 // filters on) and each milestone's month and status ("✓" when Done with a date, so it counts as Supported that month).
 const shortMonth = (month: string) => new Intl.DateTimeFormat('en', { month: 'short', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${month}-01T00:00:00Z`))
-export function dpMonthText(item: Pick<AzureWorkItem, 'fields'>, timeZone?: string) { const month = ddtMonthOf(item, timeZone); return month ? shortMonth(month) : 'No DDT Date' }
+// QV-54: a release without a DDT Date is listed in the months of its planned milestones — status Planned or
+// ToBePlanned (case and spaces ignored) with a date — but never counted (Supported and Completed need Done).
+const isPlanned = (status: string | undefined) => ['planned', 'tobeplanned'].includes((status ?? '').replace(/\s+/g, '').toLowerCase())
+export function dpPlannedMilestones(item: Pick<AzureWorkItem, 'fields'>, timeZone?: string) {
+  if (ddtMonthOf(item, timeZone)) return []
+  return dpMilestones.flatMap(([milestone, dateField, statusField]) => {
+    const status = fieldOf(item, statusField)?.trim(), month = approvalMonthOf(fieldOf(item, dateField), timeZone)
+    return month && isPlanned(status) ? [{ milestone, month, status: status! }] : []
+  })
+}
+// Whether the DP list shows a release in the month: its DDT Date's month, else a planned milestone's month.
+export function dpListedIn(item: Pick<AzureWorkItem, 'fields'>, month: string, timeZone?: string) {
+  const ddt = ddtMonthOf(item, timeZone)
+  return ddt ? ddt === month : dpPlannedMilestones(item, timeZone).some((entry) => entry.month === month)
+}
+export function dpMonthText(item: Pick<AzureWorkItem, 'fields'>, timeZone?: string) {
+  const month = ddtMonthOf(item, timeZone)
+  if (month) return shortMonth(month)
+  const planned = dpPlannedMilestones(item, timeZone)
+  return planned.length ? `${planned.map((entry) => `${shortMonth(entry.month)} (${dpMilestoneLabel(entry.milestone)} ${entry.status})`).join(', ')} · planned, not counted` : 'No DDT Date'
+}
 export function dpMilestoneText(item: Pick<AzureWorkItem, 'fields'>, timeZone?: string) {
   return dpMilestones.map(([milestone, dateField, statusField]) => {
     const date = fieldOf(item, dateField), status = fieldOf(item, statusField)?.trim(), month = approvalMonthOf(date, timeZone)

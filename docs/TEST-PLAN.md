@@ -892,6 +892,8 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-QV-34 DP Month & Year and Milestones columns** — Req QV-53 — L1 `dp-milestones.test.mjs` ("QV-53: the DP table shows each release's Month & Year (its DDT Date) and every milestone's month and status"); browser check with the DP data: Release Details → DP shows Month & Year and Milestones after the query's columns; tick All months — releases without a DDT Date show "No DDT Date"; a release counted as Supported has a ✓ on a milestone in the header month; search "No DDT Date" finds them; Export carries both columns.
 
+**TC-QV-35 DP releases planned in the month** — Req QV-54 — L1 `dp-milestones.test.mjs` ("QV-54: a release without a DDT Date is listed in the months of its Planned / ToBePlanned milestones, but not counted"); browser check with the DP data: pick a month in which a release without a DDT Date has an SFV / PRD / RPE date with status Planned or ToBePlanned — it is listed with "… · planned, not counted" in Month & Year; the Completed and Supported Releases counts above the table do not change; the Month filter note names how many releases have neither.
+
 
 
 **TC-QV-24 CP releases from the asset Titles** — *(Retired — see TC-QV-25)* Req QV-40 — L1 `streams.test.mjs` ("CP: the release from the asset Title "[Release name] [Release No] [Asset name]", each release once; fuzzy QMS-0025 match (TC-QV-24)"); browser check with a CP query holding three assets of one release in both namings ("Care Pathways 3.1 Test Report", "Care Pathways 3.1.0 SRS", "Risk Analysis v3.1 (Care Pathways)") and one of another (3.2), and a QMS-0025 Feature "CP | Care Pathways | v3.1": Release Details → CP lists two releases (3 and 1 assets), 3.1 with its Feature and %, 3.2 with Create Feature opening the New Feature form titled "Care Pathways | v3.2" (release name and number only) under the CP Epic, and found after it is created; Pulse Check's Releases and Supported summary show "CP [2]"; no page errors. **UAT**
@@ -1478,7 +1480,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-CVA-03 The page for admins** — Req CVA-01, CVA-03, CVA-06 — E2E `shell.e2e.mjs` ("TC-CVA-03: an Admin opens Capacity vs Actual with its tiles, chart and people"); browser check: 12 months on the chart, bars over capacity in red, hover and the table view give the same figures; on a phone the tiles stack; a Team Member does not see the page.
 
-**TC-KPT-01 KPI tracker from the Git copy** — Req KPT-01, KPT-04 — E2E `shell.e2e.mjs` ("TC-KPT-01: the KPI tracker page shows the copy saved in Git, sheet by sheet, and says that reading live needs the desktop app"); L1 `kpi-tracker.test.mjs` ("KPT-04: a sheet shows as a table — the first row with text is the header; blank and repeated headings get names"); browser check: in the browser, with Git storage connected and kpi-tracker.json saved, Data Insights → KPI tracker shows the table, the Sheet choice and "Showing the copy saved in Git …".
+**TC-KPT-01 KPI tracker from the Git copy** — Req KPT-01, KPT-04 — E2E `shell.e2e.mjs` ("TC-KPT-01: the KPI tracker page is hidden from the menu (kept in the build)"); L1 `kpi-tracker.test.mjs` ("KPT-04: a sheet shows as a table — the first row with text is the header; blank and repeated headings get names"); browser check: Data Insights has no KPI tracker entry and Customize menu does not offer it (hidden since v7.11.0); once shown again: with Git storage connected and kpi-tracker.json saved, the page shows the table, the Sheet choice and "Showing the copy saved in Git …".
 
 **TC-KPT-02 Read the KPI tracker live in the desktop app** — Req KPT-02, IF-05 — L1 `kpi-tracker.test.mjs` ("KPT-02: the SharePoint link is checked — https, a site, an .xlsx file, no credentials; a \"/:x:/r/\" link works too"; "KPT-02: the desktop read is one GET; sign-in pages, refusals, a missing file and non-Excel answers are reported"); desktop check (needs SharePoint): paste the tracker's link (Copy path), Read from SharePoint → a sign-in message; Sign in to SharePoint → complete the company sign-in in the window → it closes and the table shows "Read live from SharePoint at …"; check in SharePoint that the file's version history has no new version; Sign out, read again → asked to sign in.
 
@@ -1677,6 +1679,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | QV-51 | TC-QV-32 |
 | QV-52 | TC-QV-33 |
 | QV-53 | TC-QV-34 |
+| QV-54 | TC-QV-35 |
 | QV-38 | TC-CON-42 |
 | OVR-01…08 | retired (TC-OVR-01…03 retired) |
 | OV-11 | TC-OV-11 |
@@ -1900,7 +1903,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-23 | TC-QEM-01…08 |
 | UC-24 | TC-PCK-01…10 |
 | UC-25 | TC-WSP-01…07 |
-| UC-26 | TC-MYD-01…05, TC-QV-31, TC-QV-32, TC-QV-33, TC-QV-34 |
+| UC-26 | TC-MYD-01…05, TC-QV-31, TC-QV-32, TC-QV-33, TC-QV-34, TC-QV-35 |
 | UC-27 | TC-HIS-01…11 |
 | UC-28 | TC-ACT-01…12, TC-BKL-16, TC-BKL-17, TC-BKL-18, TC-ATM-21 |
 | UC-29 | TC-OVW-01…03 |
