@@ -57,6 +57,7 @@ import { SprintCheckPage } from './pages/SprintCheckPage'
 import { DesktopDownload } from './components/DesktopDownload'
 import { exportStateJson } from './download'
 import { BuildStatus } from './components/BuildStatus'
+import { ZoomControl } from './components/ZoomControl'
 import { backlogViews, loadBacklogTab, otherMenuViews, saveBacklogTab, timeWritingView } from './backlogViews'
 import { detectWorkEmail, mergeAzureWorkItems } from './azureDevOps'
 import { formatDateTime, todayIso } from './format'
@@ -303,7 +304,7 @@ export default function App() {
           </div> : <div key={section.key} className="nav-items">{section.entries}</div>)}</div>
         </div>
       })}</nav>
-      <div className="sidebar-footer"><div className="sidebar-tools"><button type="button" className="download-link" onClick={() => setMenuEditor(true)}><span aria-hidden="true">☰</span>Customize menu</button>{access.canViewAs && <button type="button" className="download-link" onClick={() => setViewAsOpen(true)}><span aria-hidden="true">👁</span>View as…</button>}</div><DesktopDownload /><small className="storage-line" title="Where app data is saved">{storageLabel}</small>{buildStatus}</div>
+      <div className="sidebar-footer"><ZoomControl /><div className="sidebar-tools"><button type="button" className="download-link" onClick={() => setMenuEditor(true)}><span aria-hidden="true">☰</span>Customize menu</button>{access.canViewAs && <button type="button" className="download-link" onClick={() => setViewAsOpen(true)}><span aria-hidden="true">👁</span>View as…</button>}</div><DesktopDownload /><small className="storage-line" title="Where app data is saved">{storageLabel}</small>{buildStatus}</div>
     </aside>
     {menuEditor && <MenuCustomizer pages={pages.filter((item) => !item.hidden && item.id !== 'admin' && allowed(item.id)).map(({ id, label, group }) => ({ id, label, group }))} menu={personalViews.menu} onChange={personalViews.setMenu} onClose={() => setMenuEditor(false)} />}
     <main>
