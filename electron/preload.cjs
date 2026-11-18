@@ -5,6 +5,15 @@ contextBridge.exposeInMainWorld('azureDevOps', {
 })
 contextBridge.exposeInMainWorld('windchill', { test: (request) => ipcRenderer.invoke('windchill:test', request), query: (request) => ipcRenderer.invoke('windchill:query', request), signIn: (request) => ipcRenderer.invoke('windchill:sign-in', request), signOut: () => ipcRenderer.invoke('windchill:sign-out') })
 contextBridge.exposeInMainWorld('sharePointFile', { read: (request) => ipcRenderer.invoke('sharepoint-file:read', request), signIn: (request) => ipcRenderer.invoke('sharepoint-file:sign-in', request), signOut: () => ipcRenderer.invoke('sharepoint-file:sign-out') })
+contextBridge.exposeInMainWorld('desktopZoom', {
+  get: () => ipcRenderer.invoke('zoom:get'),
+  set: (factor) => ipcRenderer.invoke('zoom:set', factor),
+  onKey: (listener) => {
+    const handler = (_event, direction) => listener(direction)
+    ipcRenderer.on('zoom:key', handler)
+    return () => ipcRenderer.removeListener('zoom:key', handler)
+  },
+})
 contextBridge.exposeInMainWorld('appUpdates', { reloadIgnoringCache: () => ipcRenderer.invoke('app-update:reload') })
 contextBridge.exposeInMainWorld('desktopUpdate', {
   check: () => ipcRenderer.invoke('desktop-update:check'),

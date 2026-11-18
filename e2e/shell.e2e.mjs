@@ -983,3 +983,38 @@ test('TC-QV-37: Stream mapping → Release naming patterns — built-in Content 
   assert.deepEqual(errors, [])
   await context.close()
 })
+
+test('TC-UI-07: the desktop app zooms — Auto fits the window, − / + / 100% and Ctrl keys set it by hand and turn Auto off; the browser has no zoom control', async () => {
+  const browser = await openPage(app)
+  assert.equal(await browser.page.locator('.zoom-control').count(), 0, 'not in the browser')
+  await browser.context.close()
+  // A stand-in for the desktop bridge: records the zoom set and lets the test press Ctrl keys.
+  const { page, context, errors } = await openPage(app, { width: 1280, height: 720, init: () => {
+    window.__zoom = { factor: 1, calls: [], listeners: [] }
+    window.desktopZoom = {
+      get: async () => window.__zoom.factor,
+      set: async (factor) => { window.__zoom.factor = factor; window.__zoom.calls.push(factor); return factor },
+      onKey: (listener) => { window.__zoom.listeners.push(listener); return () => {} },
+    }
+  } })
+  const control = page.getByRole('group', { name: 'Zoom' })
+  await control.waitFor()
+  await page.waitForFunction(() => window.__zoom.factor === 0.8)
+  assert.equal(await text(control.locator('.zoom-value')), '80%', 'Auto: 1280 × 720 fits at 80%')
+  assert.equal(await control.getByRole('checkbox', { name: 'Auto' }).isChecked(), true)
+  await control.getByRole('button', { name: 'Zoom in' }).click()
+  await page.waitForFunction(() => window.__zoom.factor === 0.9)
+  assert.equal(await control.getByRole('checkbox', { name: 'Auto' }).isChecked(), false, 'a hand-set zoom turns Auto off')
+  await page.evaluate(() => window.__zoom.listeners.forEach((listener) => listener(-1)))
+  await page.waitForFunction(() => window.__zoom.factor === 0.8)
+  await page.evaluate(() => window.__zoom.listeners.forEach((listener) => listener(0)))
+  await page.waitForFunction(() => window.__zoom.factor === 1)
+  assert.equal(await text(control.locator('.zoom-value')), '100%', 'Ctrl 0: back to 100%')
+  await page.reload()
+  await page.getByRole('group', { name: 'Zoom' }).waitFor()
+  assert.equal(await page.getByRole('group', { name: 'Zoom' }).getByRole('checkbox', { name: 'Auto' }).isChecked(), false, 'kept after a reload')
+  await page.getByRole('group', { name: 'Zoom' }).getByRole('checkbox', { name: 'Auto' }).check()
+  await page.waitForFunction(() => window.__zoom.factor === 0.8)
+  assert.deepEqual(errors, [])
+  await context.close()
+})

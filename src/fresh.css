@@ -655,3 +655,7 @@ label.formula-term{justify-content:flex-start}
 .naming-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr) auto;gap:8px;align-items:end}
 .naming-row .naming-pattern{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 @media (max-width:640px){.naming-row{grid-template-columns:1fr}}
+/* UI-14: the desktop app's zoom control. */
+.zoom-control{display:flex;align-items:center;gap:6px;padding:4px 12px;font-size:13px}
+.zoom-control .text-button{min-width:28px;min-height:28px;font-size:15px}
+.zoom-control .zoom-value{min-width:48px;font-size:13px}

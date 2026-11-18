@@ -1293,6 +1293,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 **TC-UI-05 Dates exported as Excel date-times** — Req UI-10, UI-11 — L1 `table-defaults.test.mjs` ("export: dates become real date-times in Excel and CSV; numbers stay numbers; formulas neutralised (TC-UI-05)"); E2E `documents-and-data.e2e.mjs` (as TC-UI-04); browser check: export DP's query output as Excel and as CSV, open both in Excel — Changed Date / DDT Date are dates (right-aligned, formattable as Long Date and time), numbers are numbers, a cell starting with "=" stays text.
 
 **TC-UI-06 Page tables on the table default** — Req UI-13 — E2E `documents-and-data.e2e.mjs` ("TC-UI-06: the page tables follow the table default too — My Work keeps its tree, Backlog Health its lists, each with Columns and one Export"); browser check: on Pulse Check (Ongoing activities, Windchill exports, Supported Releases), CP, Baselines, Snapshots, Assigned to Me, Bulk actions, Monthly Time Writing and Backlog Health — every table has Columns, Wrap text, Comfortable / Compact and one Export ▾ (Excel / CSV); the summary tables — Dashboard, Pulse Check's release counts / last vs this month / work closed and opened, the capacity summaries, Insights, the Monthly pack KPI table and Documentation — stay plain, without that toolbar; open a Feature on Assigned to Me — its Stories and Tasks appear as rows under it; Backlog Health has no Export CSV or Columns dialog of its own; Monthly Time Writing's Original Estimate / Completed Work cells still edit.
+
+**TC-UI-07 Desktop zoom and Auto** — Req UI-14 — L1 `desktop-zoom.test.mjs` ("UI-14: Auto zoom fits the 1440 × 880 layout into the window, 67%–100% in 5% steps; − / + in 10% steps, 50%–200%"; "UI-14: the zoom setting is kept per computer — Auto on by default, a hand-set zoom turns it off"); E2E `shell.e2e.mjs` ("TC-UI-07: the desktop app zooms — Auto fits the window, − / + / 100% and Ctrl keys set it by hand and turn Auto off; the browser has no zoom control"); desktop check: on a 1366 × 768 screen (or a smaller window) the app opens zoomed out so the whole page fits; resize the window — the zoom follows; Ctrl + / Ctrl − / Ctrl + wheel change it and untick Auto; restart — the zoom is kept.
 - L3 steps:
   1. Click the toggle three times.
   2. Load `?theme=dark` and then reload without the parameter.
@@ -1787,6 +1789,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UI-11 | TC-UI-05 |
 | UI-12 | TC-UI-04 |
 | UI-13 | TC-UI-06 |
+| UI-14 | TC-UI-07 |
 | CI-01…04 | TC-INS-04, TC-CI-01 |
 | CI-05 | TC-UPD-01 |
 | CI-06 | TC-CI-02 |

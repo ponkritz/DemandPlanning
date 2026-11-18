@@ -199,6 +199,20 @@ ipcMain.handle('sharepoint-file:sign-out', async (event) => {
   return { ok: true }
 })
 
+// UI-14: zoom of the app window. The app sets it (Auto fit or − / +); Ctrl + / Ctrl − / Ctrl 0 and Ctrl + wheel are
+// passed to the app instead of zooming on their own, so its zoom control always shows the zoom and Auto turns off.
+const clampZoom = (value) => { const factor = Number(value); return Number.isFinite(factor) ? Math.round(Math.min(2, Math.max(0.5, factor)) * 100) / 100 : 1 }
+ipcMain.handle('zoom:get', (event) => {
+  if (!trustedSender(event)) throw new Error('Untrusted request source.')
+  return event.sender.getZoomFactor()
+})
+ipcMain.handle('zoom:set', (event, factor) => {
+  if (!trustedSender(event)) throw new Error('Untrusted request source.')
+  event.sender.setZoomFactor(clampZoom(factor))
+  return event.sender.getZoomFactor()
+})
+const zoomKeys = { '=': 1, '+': 1, '-': -1, '_': -1, '0': 0 }
+
 function createWindow() {
   const window = new BrowserWindow({
     width: 1440,
@@ -214,6 +228,11 @@ function createWindow() {
       sandbox: true,
     },
   })
+  window.webContents.on('before-input-event', (event, input) => {
+    const direction = zoomKeys[input.key]
+    if (input.type === 'keyDown' && (input.control || input.meta) && !input.alt && direction !== undefined) { event.preventDefault(); window.webContents.send('zoom:key', direction) }
+  })
+  window.webContents.on('zoom-changed', (_event, direction) => window.webContents.send('zoom:key', direction === 'in' ? 1 : -1))
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('https://')) shell.openExternal(url)
     return { action: 'deny' }
