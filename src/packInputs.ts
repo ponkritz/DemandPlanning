@@ -1,3 +1,4 @@
+import { defaultProfile, groupUtilization } from './calculationProfiles.ts'
 import type { AppState, AzureWorkItem } from './domain.ts'
 import type { AzureConnectionProfileSummary } from './azureCredentials.ts'
 import type { StreamMonth, Utilization } from './monthlyPack.ts'
@@ -39,7 +40,9 @@ export function rowsUtilization(rows: { month: string; person: string; actual: n
 
 export function packUtilization(items: AzureWorkItem[], month: string, settings: CapacitySettings): Utilization {
   const people = (at: string) => { try { return capacityModel(items, at, settings).people.filter((person) => person.name !== 'Unassigned' && person.utilization != null) } catch { return [] } }
-  const sum = (list: { utilized: number; available: number }[]) => ratio(list.reduce((total, person) => total + person.utilized, 0), list.reduce((total, person) => total + person.available, 0))
+  // CAP-55: a profile with a typed formula runs it on the people's figures added up.
+  const profile = defaultProfile(settings)
+  const sum = (list: Parameters<typeof groupUtilization>[0]) => { const value = groupUtilization(list, profile, ratio).actual; return value == null ? null : Math.round(value * 10) / 10 }
   const now = people(month)
   return { month: sum(now), ytd: sum(yearMonths(month).flatMap(people)), qeMonth: sum(now.filter((person) => settings.profiles?.[person.name]?.role === 'QE')) }
 }

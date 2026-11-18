@@ -179,3 +179,22 @@ test('CAP-54: the utilization formula as Top ÷ Bottom follows the profile and i
   assert.deepEqual(formulaParts(current, named).base, 'Contract hours')
   assert.match(formulaSentence(current, named), /^Load = .* ÷ \(Contract hours − Absence\) × 100$/, 'in the profile\'s own names')
 })
+
+test('CAP-55: a profile with a typed formula — the v4 formula typed gives the v4 figures; another formula drives person and team', async () => {
+  const { groupUtilization } = await import('../src/calculationProfiles.ts')
+  const ticks = capacityModel(backlog, '2026-10', settings)
+  const v4 = allProfiles(settings)[0]
+  const typed = normalizeCapacitySettings({ ...settings, calculationProfiles: [{ ...v4, formula: '=([Project work] + [Training] + [Other NPRA] + [Common activities]) / ([Funded Hours] - [Absence]) * 100' }] })
+  assert.ok(allProfiles(typed)[0].formula, 'kept as the edited built-in')
+  const model = capacityModel(backlog, '2026-10', typed)
+  for (const name of ['Ana', 'Ben']) assert.deepEqual(figures(person(model, name)), figures(person(ticks, name)), `${name}: same figures as the ticks`)
+  assert.equal(model.totals.utilization, ticks.totals.utilization, 'same team total')
+  assert.match(profileFormula(allProfiles(typed)[0], typed), /Utilization =\(\[Project work\].*typed formula/)
+  const workOnly = normalizeCapacitySettings({ ...settings, calculationProfiles: [{ ...v4, formula: '=[Project work] / [Funded Hours] * 100' }] })
+  const other = capacityModel(backlog, '2026-10', workOnly)
+  assert.equal(person(other, 'Ana').utilization, Math.round(160 / 176 * 10000) / 100, 'Ana: 160 h ÷ 22 days × 8 h')
+  assert.equal(person(other, 'Ana').plannedUtilization, Math.round(120 / 176 * 10000) / 100, 'planned: Original Estimate')
+  const people = other.people.filter((entry) => entry.formulaFigures)
+  assert.equal(groupUtilization(people, allProfiles(workOnly)[0]).actual, Math.round((160 + 50) / (176 * people.length) * 10000) / 100, 'the team: the formula on the figures added up')
+  assert.equal(normalizeCapacitySettings({ ...settings, calculationProfiles: [{ ...v4, id: 'x', formula: '=[Nope] / 2' }] }).calculationProfiles?.[0]?.formula, undefined, 'a formula that does not read is dropped')
+})

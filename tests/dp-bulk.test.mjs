@@ -46,19 +46,21 @@ test('DPF-03: possible QEs are the people on the earlier releases of the product
   assert.deepEqual(possibleQes(row(16, 'Dose Planning', '7.0.0.0', 'Zoe'), rows, 'Asha Rao'), ['Eve Ng', 'Cara Lim', 'Dev Shah'])
 })
 
-test('DPF-04: the bulk plan — title, type, QE with email, or why a release is skipped', () => {
+test('DPF-04 / BLK-01: the bulk plan — title, type, QE with email, or why a release is skipped; a 100% Feature match is never created', () => {
   const board = [{ id: 1, assignedTo: 'Asha Rao <asha@x.com>', assignedToEmail: 'asha@x.com' }]
   assert.equal(emailFor('asha rao', board), 'asha@x.com'); assert.equal(emailFor('ben@x.com', board), 'ben@x.com'); assert.equal(emailFor('Nobody', board), '')
   const setup = cleanSetup({ epicId: 13946, featureDoD: 'x', qeColumns: columns })
   const rows = [row(1, 'Dose Planning', '5.2.1.3'), row(2, 'Dose Planning', 'R1'), row(3, 'Treatment Planning System', '2.0'), row(4, 'Nothing', '1.0'), row(5, 'Dose Planning', '6.0')]
-  const plan = bulkPlan(rows, { setup, qeMapping: mapping, board, hasFeature: (item) => item.id === 5 })
+  const hits = { 5: { item: { id: 905 }, score: 100 }, 1: { item: { id: 901 }, score: 88 } }
+  const plan = bulkPlan(rows, { setup, qeMapping: mapping, board, featureMatch: (item) => hits[item.id] })
   assert.deepEqual(plan.map((line) => [line.type ?? '', line.qe, line.email, line.skip.split(' (')[0]]), [
     ['Platform Update', 'Asha Rao', 'asha@x.com', ''],
     ['', 'Asha Rao', 'asha@x.com', 'no release type from the version “R1”'],
     ['Major', 'Ben Ito', '', 'no email found for Ben Ito'],
     ['Major', '', '', 'no QE in the QE Mapping for this product'],
-    ['Major', 'Asha Rao', 'asha@x.com', 'already has a Feature on QMS-0025'],
+    ['Major', 'Asha Rao', 'asha@x.com', 'Feature #905 on QMS-0025 matches it 100%'],
   ])
   assert.equal(plan[0].title, 'DP | Dose Planning | 5.2.1.3'); assert.equal(plan[0].set.featureDoD, 'DT is finished.')
-  assert.match(bulkPlan([rows[0]], { setup: cleanSetup({ epicId: 13946, featureDoD: 'x' }), qeMapping: mapping, board, hasFeature: () => false })[0].skip, /QE Mapping columns are not set/)
+  assert.equal(plan[0].note, 'a similar Feature #901 (88%) exists', 'BLK-01: a match below 100% is named, the release is still created')
+  assert.match(bulkPlan([rows[0]], { setup: cleanSetup({ epicId: 13946, featureDoD: 'x' }), qeMapping: mapping, board, featureMatch: () => undefined })[0].skip, /QE Mapping columns are not set/)
 })

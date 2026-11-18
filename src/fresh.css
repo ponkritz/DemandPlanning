@@ -635,3 +635,23 @@ details.act-leave{border:1px solid var(--line);border-radius:10px;padding:8px 12
 .formula-term{flex-wrap:nowrap;justify-content:space-between}.formula-term input[type=checkbox]{flex:none;width:auto}
 .formula-term select{width:auto!important;max-width:220px;min-height:0;padding:2px 6px;font-size:12px;flex:none}
 label.formula-term{justify-content:flex-start}
+/* CAP-55: the fx bar of a calculation profile. */
+.fx{display:grid;gap:6px}
+.fx-toggle{font-weight:600}
+.fx-bar{display:flex;align-items:stretch;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
+.fx-bar:focus-within{outline:2px solid var(--accent);outline-offset:-1px}
+.fx-bar-error{border-color:var(--danger-line)}
+.fx-label{display:flex;align-items:center;padding:0 10px;border-right:1px solid var(--line);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-style:italic;font-weight:600;color:var(--muted, inherit)}
+.fx-bar input{flex:1;min-width:0;border:0;border-radius:0;padding:9px 12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;background:transparent}
+.fx-bar input:focus{outline:none}
+.fx-status{margin:0;font-size:13px}
+.fx-chips{display:flex;flex-wrap:wrap;gap:6px}
+.fx-chip{font-size:12px;padding:5px 9px;min-height:30px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--text);cursor:pointer}
+.fx-chip:hover{border-color:var(--accent)}
+.fx-op{border-radius:6px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;min-width:34px}
+.formula-sources{display:flex;flex-wrap:wrap;gap:8px 16px}
+/* QV-55: release naming patterns. */
+.naming-rows{display:grid;gap:8px}
+.naming-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr) auto;gap:8px;align-items:end}
+.naming-row .naming-pattern{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+@media (max-width:640px){.naming-row{grid-template-columns:1fr}}

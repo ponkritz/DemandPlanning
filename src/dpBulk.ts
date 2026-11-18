@@ -1,6 +1,6 @@
 import type { AzureWorkItem } from './domain'
 import { fieldOf } from './dpReleases.ts'
-import { dpFeatureTitle, dpProgramOf, dpVersionOf } from './dpBoardMatch.ts'
+import { dpFeatureTitle, dpProgramOf, dpVersionOf, type BoardHit } from './dpBoardMatch.ts'
 import { dpReleaseName } from './dpMilestones.ts'
 import { releaseTypesOf, type EpicSetup, type QeMapColumns, type ReleaseTypeSetup } from './featureSetup.ts'
 import type { QeMappingFile } from './qeMapping.ts'
@@ -79,17 +79,22 @@ export function emailFor(name: string, board: AzureWorkItem[]): string {
 }
 
 // DPF-04: what Create Features does for each selected release — or why it is skipped.
-export interface BulkLine { row: AzureWorkItem; title: string; version: string; type?: DpReleaseType; set?: ReleaseTypeSetup; qe: string; email: string; skip: string }
-export function bulkPlan(rows: AzureWorkItem[], options: { setup?: EpicSetup; qeMapping?: QeMappingFile | null; board: AzureWorkItem[]; hasFeature: (row: AzureWorkItem) => boolean }): BulkLine[] {
+// BLK-01: a release whose QMS-0025 Feature matches 100% cannot be selected (and is skipped if it is); a closer-than-the-
+// threshold but not exact Feature is named as a note, and the release is still created.
+export const fullMatch = (hit: BoardHit | undefined) => Boolean(hit && hit.score >= 100)
+export const similarNote = (hit: BoardHit | undefined) => hit && hit.score < 100 ? `a similar Feature #${hit.item.id} (${hit.score}%) exists` : ''
+export interface BulkLine { row: AzureWorkItem; title: string; version: string; type?: DpReleaseType; set?: ReleaseTypeSetup; qe: string; email: string; skip: string; note: string }
+export function bulkPlan(rows: AzureWorkItem[], options: { setup?: EpicSetup; qeMapping?: QeMappingFile | null; board: AzureWorkItem[]; featureMatch: (row: AzureWorkItem) => BoardHit | undefined }): BulkLine[] {
   const sets = releaseTypesOf(options.setup)
   return rows.map((row) => {
     const version = dpRowVersion(row), typed = dpReleaseType(version), found = qeFor(row, options.qeMapping, options.setup?.qeColumns)
     const qe = found?.qe ?? '', email = qe ? emailFor(qe, options.board) : ''
-    const skip = options.hasFeature(row) ? 'already has a Feature on QMS-0025'
+    const hit = options.featureMatch(row)
+    const skip = fullMatch(hit) ? `Feature #${hit!.item.id} on QMS-0025 matches it 100%`
       : !typed ? `no release type from the version “${version || '—'}” (x.y.z.a expected)`
       : !options.setup?.qeColumns ? 'the QE Mapping columns are not set (Feature setup → Epic 13946)'
       : !qe ? 'no QE in the QE Mapping for this product'
       : !email ? `no email found for ${qe} (not assigned anything on QMS-0025 yet)` : ''
-    return { row, title: dpFeatureTitle(row), version, ...(typed ? { type: typed.type, set: sets[typed.kind] } : {}), qe, email, skip }
+    return { row, title: dpFeatureTitle(row), version, ...(typed ? { type: typed.type, set: sets[typed.kind] } : {}), qe, email, skip, note: skip ? '' : similarNote(hit) }
   })
 }

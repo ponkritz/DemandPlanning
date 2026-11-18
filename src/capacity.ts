@@ -3,7 +3,7 @@ import { isMonthTask, timeWritingMonth, workingDays } from './azureInsights.ts'
 import { isMine, type Me } from './myWork.ts'
 import { absenceKindBy, defaultBucketRules, isNpraTaskBy, isTrainingTaggedBy, isTrainingWorkBy, normalizeBucketRules, rulesOf, type BucketRules } from './bucketRules.ts'
 import { normalizeInsightThresholds, type InsightThresholds } from './insightThresholds.ts'
-import { activeFigureLock, addHours, applyProfile, defaultProfile, emptyCalcInputs, normalizeCalculationProfiles, normalizeFigureLocks, normalizeProfileTerms, profileFormula, type ProfileTerms, type BucketHours, type BucketKey, type CalcInputs, type CalculationProfile, type FigureLock } from './calculationProfiles.ts'
+import { activeFigureLock, addHours, applyProfile, groupUtilization, type FormulaFigureSet, defaultProfile, emptyCalcInputs, normalizeCalculationProfiles, normalizeFigureLocks, normalizeProfileTerms, profileFormula, type ProfileTerms, type BucketHours, type BucketKey, type CalcInputs, type CalculationProfile, type FigureLock } from './calculationProfiles.ts'
 
 // Capacity model for the selected month. Source rows are the Tasks whose title starts or ends with the month and year
 // ("October 2026 | …", any delimiter), under any story; absence is everything under the
@@ -132,6 +132,8 @@ export interface PersonLoad {
   // counts as used (work + trainings + other NPRA + common activities). npra = training + npraOther; npraDeducted is 0.
   training: number; trainingPlanned: number; npraOther: number; npraOtherPlanned: number; reservedPlanned: number; reservedActual: number
   utilized: number; utilizedPlanned: number
+  // CAP-55: the figures a typed formula read for this person (group totals add them up).
+  formulaFigures?: FormulaFigureSet
   work: number; planned: number; utilization: number | null; plannedUtilization: number | null; status: LoadStatus; tasks: number; streams: StreamLoad[]
   // CAP-35 (Old Calculation): every hour of the person — work, absence, holidays, training, NPRA and the shared time
   // that applies to them — planned (Original Estimate) and actual (Completed Work).
@@ -406,10 +408,12 @@ export function capacityModel(source: AzureWorkItem[], month: string, settings: 
   const sum = (key: SumKey) => personList.reduce((total, person) => total + person[key], 0)
   const totals = { funded: sum('funded'), absence: sum('absence'), reserved: sum('reserved'), npra: sum('npra'), npraDeducted: sum('npraDeducted'), npraOver: sum('npraOver'), work: lock ? sum('work') : totalWork, planned: sum('planned') }
   const available = sum('available'), utilized = sum('utilized'), utilizedPlanned = sum('utilizedPlanned')
+  // CAP-55: a typed formula runs on the people's figures added up; a locked month keeps the hours ÷ capacity total.
+  const team = groupUtilization(personList, lock ? undefined : profile)
   const absenceByKind = personList.reduce((kinds, person) => { for (const kind of absenceKinds) kinds[kind] += person.absenceByKind[kind]; return kinds }, emptyKinds())
   return {
     month, settings, workingDays: workingDays(month), fundedPerPerson: funded, profile: lock ? { name: lock.profileName, formula: lock.formula, definition: profile } : { name: profile.name, formula: profileFormula(profile, settings), definition: profile }, locked: lock ? { lockedOn: lock.lockedOn, lockedBy: lock.lockedBy, profileName: lock.profileName } : undefined, outsideEmployment: [...outside.values()], removed: [...removedPeople.values()], notCounted: [...notCounted.values()], prorated: personList.filter((person) => person.employedDays < workingDays(month)).map((person) => ({ name: person.name, days: person.employedDays, funded: person.funded })), monthlyTasks, people: personList, streams: streamList, holidays, sharedTime,
-    totals: { ...totals, available, utilized, utilizedPlanned, training: sum('training'), npraOther: sum('npraOther'), reservedActual: sum('reservedActual'), reservedPlanned: sum('reservedPlanned'), absenceByKind, utilization: personList.some(person => person.utilization != null) ? percent(utilized, available) : null, plannedUtilization: personList.some(person => person.plannedUtilization != null) ? percent(utilizedPlanned, available) : null },
+    totals: { ...totals, available, utilized, utilizedPlanned, training: sum('training'), npraOther: sum('npraOther'), reservedActual: sum('reservedActual'), reservedPlanned: sum('reservedPlanned'), absenceByKind, utilization: personList.some(person => person.utilization != null) ? team.actual : null, plannedUtilization: personList.some(person => person.plannedUtilization != null) ? team.planned : null },
     counts: { npraOver: personList.filter(person => person.npraOver > 0).length, overloaded: personList.filter(person => person.status === 'Overloaded').length, balanced: personList.filter(person => person.status === 'Balanced').length, hasCapacity: personList.filter(person => person.status === 'Has capacity').length, noBookings: personList.filter(person => person.status === 'No bookings').length },
   }
 }
