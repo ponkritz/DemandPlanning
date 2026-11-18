@@ -13,6 +13,7 @@ import { viewSource } from '../viewSources'
 import type { PageProps } from '../pages/types'
 import type { GitStorage } from '../useGitStorage'
 import { GitSyncBar } from './GitStorage'
+import { NamingPatternsPanel } from './NamingPatternsPanel'
 import { markPendingShare, markViewsSynced, serializeViews, viewsFile } from '../viewDefinitions'
 
 const roleLabel: Record<AzureConnectionRole, string> = { 'time-tracking': 'Time Writing (read & write)', 'release-source': 'Releases · DHFI (read only)', documents: 'Documents · Vault (read only)', reference: 'Reference (read only)', 'backlog-view': 'Backlog view (read only)' }
@@ -237,6 +238,7 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
         </tr> })}
       </tbody></table></div>
     </Panel>}
+    {show('mapping') && <NamingPatternsPanel store={store} canManage={canManage} />}
     {show('views') && <Panel className="connection-panel" eyebrow="STEP 3" title="Other views" info="Any other Azure DevOps view: custom queries, backlog views and background sources such as the DHP release register (Pedestal). Each is saved as soon as it is fetched (an empty Time Writing result never replaces saved data without asking). Nothing is written to Azure DevOps when fetching. Connections on a server with a PAT need no PAT of their own."
       action={<div className="button-row"><button type="button" className="ghost" onClick={() => { setFormError(''); setForm(empty(connectionProfiles.some((profile) => profile.role === 'time-tracking') ? 'reference' : 'time-tracking')) }}>＋ Add connection</button><button type="button" className="primary" disabled={!connectionProfiles.length || fetchingAll || busy} onClick={() => { setFetchingAll(true); void azure.fetchAll().finally(() => setFetchingAll(false)) }}>{fetchingAll ? 'Fetching all…' : 'Fetch all'}</button></div>}>
       {otherPresets.length > 0 && <div className="preset-list">{otherPresets.map((preset) => <div className="preset-row" key={preset.key}>

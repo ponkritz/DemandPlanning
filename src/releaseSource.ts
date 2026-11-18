@@ -1,3 +1,4 @@
+import { normalizeNamingPatterns, patternsFor, type NamingPattern, type NamingPatterns } from './namingPatterns.ts'
 import type { AzureWorkItem } from './domain'
 import { mapAzureWorkItem, requestAzure, type AzureConfig, type AzureRequest } from './azureDevOps.ts'
 import { pickFields, queryLayout } from './queryView.ts'
@@ -8,19 +9,30 @@ import { isMonthTask, timeWritingStoryIds } from './azureInsights.ts'
 // Read-only release source: a second Azure project (e.g. DHFI) queried with a saved WIQL query.
 // Approved documents carry their release in the Area or Iteration Path ("…\Name\Release x.y.z", see releasePath).
 // matchThreshold: the % a fuzzy Feature match (DP, IOCC) needs to count as the release's Feature (default 80).
-export interface ReleaseSourceSettings { approvalDateField?: string; matchThreshold?: number }
+export interface ReleaseSourceSettings { approvalDateField?: string; matchThreshold?: number; namingPatterns?: NamingPatterns }
 export const defaultReleaseSourceSettings: ReleaseSourceSettings = {}
 export interface ReleaseSourceSnapshot { organization: string; project: string; query: string; fetchedAt: string; items: AzureWorkItem[]; columns?: { ref: string; name: string }[]; orderBy?: { ref: string; desc: boolean }[] }
 export interface ReleaseEntry { key: string; group?: string; match?: { feature: AzureWorkItem; score: number }; name: string; release: string; documents: number; items: AzureWorkItem[]; tracked: boolean; trackedBy: AzureWorkItem[]; features: AzureWorkItem[]; planned: number; booked: number; hourTasks: number; approvalDate?: string; approvalMonth?: string }
 
 type Transport = (request: AzureRequest) => Promise<unknown>
 
+// QV-55: a stream's naming patterns from the shared settings, the same list for the same settings object (so a table
+// is not worked out again on every render).
+const patternCache = new WeakMap<object, Map<string, NamingPattern[]>>()
+export function streamPatterns(settings: unknown, stream: string): NamingPattern[] {
+  if (!settings || typeof settings !== 'object') return patternsFor(undefined, stream)
+  let byStream = patternCache.get(settings)
+  if (!byStream) { byStream = new Map(); patternCache.set(settings, byStream) }
+  if (!byStream.has(stream)) byStream.set(stream, patternsFor(normalizeReleaseSourceSettings(settings).namingPatterns, stream))
+  return byStream.get(stream)!
+}
 // Earlier settings (stream segment, release pattern) are no longer used and are dropped.
 export function normalizeReleaseSourceSettings(value: unknown): ReleaseSourceSettings {
   const input = (value && typeof value === 'object' ? value : {}) as Partial<Record<keyof ReleaseSourceSettings, unknown>>
   const approvalDateField = typeof input.approvalDateField === 'string' && /^[\w.]{1,120}$/.test(input.approvalDateField.trim()) ? input.approvalDateField.trim() : undefined
   const threshold = Number(input.matchThreshold)
-  return { ...(approvalDateField ? { approvalDateField } : {}), ...(Number.isInteger(threshold) && threshold >= 1 && threshold <= 100 ? { matchThreshold: threshold } : {}) }
+  const namingPatterns = normalizeNamingPatterns((input as Record<string, unknown>).namingPatterns)
+  return { ...(approvalDateField ? { approvalDateField } : {}), ...(Number.isInteger(threshold) && threshold >= 1 && threshold <= 100 ? { matchThreshold: threshold } : {}), ...(namingPatterns ? { namingPatterns } : {}) }
 }
 
 // Accept a work-item query as pasted from Azure DevOps (Edit query → WIQL): a flat list (FROM WorkItems), or a tree or
@@ -262,11 +274,11 @@ export function matchScore(title: string | PreparedTitle, name: string | Prepare
 
 // rule: how the stream reads its releases (streams.ts); fuzzy: match Features by matchScore, the best one tracking the
 // release when it reaches the threshold (%), instead of the exact rule.
-export interface RegisterOptions { rule?: ReleaseRule; fuzzy?: boolean; threshold?: number }
+export interface RegisterOptions { rule?: ReleaseRule; fuzzy?: boolean; threshold?: number; patterns?: NamingPattern[] }
 export function releaseRegister(source: AzureWorkItem[] | undefined, backlog: AzureWorkItem[], options: RegisterOptions = {}): ReleaseEntry[] {
   const entries = new Map<string, ReleaseEntry>()
   for (const item of source ?? []) {
-    const found = releaseFor(item, options.rule)
+    const found = releaseFor(item, options.rule, options.patterns)
     if (!found) continue
     const key = `${found.group ?? ''}\u0000${found.name}\u0000${normalizeVersion(found.release)}`.toLowerCase()
     const entry = entries.get(key) ?? { key: [found.group, found.name, found.release].filter(Boolean).join(' '), ...(found.group ? { group: found.group } : {}), name: found.name, release: found.release, documents: 0, items: [], tracked: false, trackedBy: [], features: [], planned: 0, booked: 0, hourTasks: 0 }

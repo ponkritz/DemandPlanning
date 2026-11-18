@@ -1,4 +1,5 @@
 import { absenceKinds, loadStatus, sharedTimeScopeLabel, sharedTimeScopes, standardHoursTotal, type AbsenceKind, type CapacitySettings, type LoadStatus, type PersonLoad, type SharedTimeScope, type StreamLoad } from './capacity.ts'
+import { checkFormula, evaluateFormula, formulaFigures, maxFormulaLength, type FormulaFigure } from './formula.ts'
 
 // CAP-41…43: calculation profiles. A profile says, for each bucket of hours, whether it counts as utilized, comes off
 // the capacity or is ignored; which hours the plan uses; and how the capacity is built. The default profile drives every
@@ -57,6 +58,8 @@ export interface CalculationProfile {
   // CAP-52: the leave kinds in the profile's Absence (the others are ignored, not deducted) and what its NPRA Hours
   // include; undefined = all of them (the figures before v7.1.0).
   absenceKinds?: AbsenceKind[]; npraIncludes?: NpraPart[]
+  // CAP-55: a typed formula (fx) that gives Utilization and Planned utilization instead of the ticks (CAP-54).
+  formula?: string
 }
 export type NpraPart = 'npra' | 'training'
 export const npraParts: NpraPart[] = ['npra', 'training']
@@ -100,6 +103,8 @@ export function defaultProfile(settings: CapacitySettings): CalculationProfile {
 // default, else the shared settings unchanged. Nothing is saved.
 export const withViewedProfile = (settings: CapacitySettings, id: string): CapacitySettings => id && allProfiles(settings).some((profile) => profile.id === id) ? { ...settings, defaultProfileId: id } : settings
 
+// CAP-55: a typed formula is kept only when it reads (checked again on every read).
+const formulaOf = (value: unknown) => { const formula = typeof value === 'string' ? value.trim().slice(0, maxFormulaLength + 1) : ''; return formula && checkFormula(formula).ok ? { formula } : {} }
 const pick = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T => allowed.includes(value as T) ? value as T : fallback
 const text = (value: unknown, max: number) => typeof value === 'string' ? value.trim().slice(0, max) : ''
 // The leave kinds and NPRA parts of a profile read from the shared app data: known values only, stored only when not
@@ -121,14 +126,14 @@ export function normalizeCalculationProfiles(value: unknown): CalculationProfile
     const treatmentIn = (entry.treatment && typeof entry.treatment === 'object' ? entry.treatment : {}) as Record<string, unknown>
     const sourceIn = (entry.plannedSource && typeof entry.plannedSource === 'object' ? entry.plannedSource : {}) as Record<string, unknown>
     const treatment = Object.fromEntries(bucketKeys.map((key) => [key, pick(treatmentIn[key], treatments, 'ignore')])) as Record<BucketKey, Treatment>
-    if (!bucketKeys.some((key) => treatment[key] === 'count')) return []
+    if (!bucketKeys.some((key) => treatment[key] === 'count') && !('formula' in formulaOf(entry.formula))) return []
     const plannedSource = Object.fromEntries(bucketKeys.map((key) => [key, pick(sourceIn[key], plannedSources, 'estimate')])) as Record<BucketKey, PlannedSource>
     const capacityBase = pick(entry.capacityBase, ['workingDays', 'fixed'] as const, 'workingDays')
     const fixed = Number(entry.fixedHours)
     if (capacityBase === 'fixed' && !(Number.isFinite(fixed) && fixed > 0 && fixed <= 744)) return []
     const groups = Array.isArray(entry.excludedGroups) ? entry.excludedGroups : []
     seen.add(id)
-    return [{ id, name: text(entry.name, 80) || 'Profile', treatment, plannedSource, capacityBase, ...(capacityBase === 'fixed' ? { fixedHours: fixed } : {}), minusStandardHours: entry.minusStandardHours === true, excludedGroups: sharedTimeScopes.filter((scope) => groups.includes(scope)), statusFrom: pick(entry.statusFrom, ['actual', 'planned'] as const, 'actual') , ...kindsAndParts(entry) }]
+    return [{ id, name: text(entry.name, 80) || 'Profile', treatment, plannedSource, capacityBase, ...(capacityBase === 'fixed' ? { fixedHours: fixed } : {}), minusStandardHours: entry.minusStandardHours === true, excludedGroups: sharedTimeScopes.filter((scope) => groups.includes(scope)), statusFrom: pick(entry.statusFrom, ['actual', 'planned'] as const, 'actual') , ...kindsAndParts(entry), ...formulaOf(entry.formula) }]
   })
 }
 
@@ -160,11 +165,53 @@ export function applyProfile(person: Pick<PersonLoad, 'funded' | 'employedDays'>
     }
   }
   const available = Math.max(0, base - (profile.minusStandardHours ? standardHoursTotal(settings.standardHours) : 0) - deducted)
-  const utilization = booked ? percent(utilized, available) : null, plannedUtilization = booked ? percent(utilizedPlanned, available) : null
+  // CAP-55: with a typed formula, the figures go into it — recorded hours for Utilization, the planned source for
+  // Planned utilization (Absence as deducted from capacity in both); blank when none of its hour figures is booked.
+  const formulaFigures = profile.formula ? figuresOf(parts, profile, base, person.employedDays, settings) : undefined
+  const typed = profile.formula && formulaFigures ? typedUtilization(profile.formula, formulaFigures) : null
+  const utilization = typed ? typed.actual : booked ? percent(utilized, available) : null, plannedUtilization = typed ? typed.planned : booked ? percent(utilizedPlanned, available) : null
   const status: LoadStatus = loadStatus(profile.statusFrom === 'planned' ? plannedUtilization : utilization, settings)
   // The profile's Absence and NPRA Hours figures (CAP-52).
   const figures = { ...(person.absenceByKind ? { absence: round(kinds.reduce((sum, kind) => sum + (person.absenceByKind![kind] ?? 0), 0)) } : {}), ...(person.training != null && person.npraOther != null ? { npra: round((npraPartsOf(profile).includes('training') ? person.training : 0) + (npraPartsOf(profile).includes('npra') ? person.npraOther : 0)) } : {}) }
-  return { ...figures, available, utilized, utilizedPlanned, utilization, plannedUtilization, status, npraDeducted: (profile.treatment.training === 'deduct' ? parts.training.deducted : 0) + (profile.treatment.npraOther === 'deduct' ? parts.npraOther.deducted : 0) }
+  return { ...figures, ...(formulaFigures ? { formulaFigures } : {}), available, utilized, utilizedPlanned, utilization, plannedUtilization, status, npraDeducted: (profile.treatment.training === 'deduct' ? parts.training.deducted : 0) + (profile.treatment.npraOther === 'deduct' ? parts.npraOther.deducted : 0) }
+}
+
+// CAP-55: the figures a typed formula reads, recorded and planned, for one person (or summed for a group).
+export type FigureValues = Record<FormulaFigure, number>
+export interface FormulaFigureSet { actual: FigureValues; planned: FigureValues }
+const hourFigures: [FormulaFigure, BucketKey][] = [['Project work', 'work'], ['Absence', 'absence'], ['Training', 'training'], ['Other NPRA', 'npraOther'], ['Common activities', 'common']]
+function figuresOf(parts: Record<BucketKey, BucketHours>, profile: CalculationProfile, base: number, employedDays: number, settings: CapacitySettings): FormulaFigureSet & { booked: FormulaFigure[] } {
+  const fixed = { 'Funded Hours': base, 'Standard Hours': standardHoursTotal(settings.standardHours), 'Working days': employedDays, 'Hours per day': settings.hoursPerDay }
+  const actual = { ...fixed } as FigureValues, planned = { ...fixed } as FigureValues, booked: FormulaFigure[] = []
+  for (const [figure, key] of hourFigures) {
+    const hours = parts[key]
+    actual[figure] = round(key === 'absence' ? hours.deducted : hours.completed)
+    planned[figure] = round(key === 'absence' ? hours.deducted : hours[profile.plannedSource[key]])
+    if (hours.tasks > 0 || hours.estimate > 0 || hours.completed > 0) booked.push(figure)
+  }
+  return { actual, planned, booked }
+}
+function typedUtilization(formula: string, figures: FormulaFigureSet & { booked?: FormulaFigure[] }) {
+  try {
+    const actual = evaluateFormula(formula, figures.actual), planned = evaluateFormula(formula, figures.planned)
+    const hourUsed = actual.used.filter((figure) => hourFigures.some(([name]) => name === figure))
+    if (figures.booked && hourUsed.length && !hourUsed.some((figure) => figures.booked!.includes(figure))) return { actual: null, planned: null }
+    const two = (value: number | null) => value == null ? null : Math.round(value * 100) / 100
+    return { actual: two(actual.value), planned: two(planned.value) }
+  } catch { return { actual: null, planned: null } }
+}
+// A group's utilization (team, region, role): with a typed formula, the formula on the people's figures added up
+// (as Excel would on the column totals); else their utilized hours ÷ their available hours.
+export function groupUtilization(people: { utilized: number; utilizedPlanned: number; available: number; formulaFigures?: FormulaFigureSet }[], profile: Pick<CalculationProfile, 'formula'> | undefined, ratio: (part: number, whole: number) => number | null = percent) {
+  if (profile?.formula && people.length && people.every((person) => person.formulaFigures)) {
+    const sum = (side: 'actual' | 'planned') => Object.fromEntries(formulaFigures.map(([figure]) => [figure, people.reduce((total, person) => total + (person.formulaFigures![side][figure] ?? 0), 0)])) as FigureValues
+    const total = { actual: sum('actual'), planned: sum('planned') }
+    // Working days and hours per day are per person: the group keeps one person's value, not their sum.
+    for (const side of ['actual', 'planned'] as const) { total[side]['Working days'] = people[0].formulaFigures![side]['Working days']; total[side]['Hours per day'] = people[0].formulaFigures![side]['Hours per day'] }
+    return typedUtilization(profile.formula, total)
+  }
+  const utilized = people.reduce((total, person) => total + person.utilized, 0), planned = people.reduce((total, person) => total + person.utilizedPlanned, 0), available = people.reduce((total, person) => total + person.available, 0)
+  return { actual: ratio(utilized, available), planned: ratio(planned, available) }
 }
 
 // CAP-54: the utilization formula as Top ÷ Bottom, in the profile's names: Top = the counted figures (Total actual),
@@ -177,6 +224,7 @@ export function formulaParts(profile: CalculationProfile, settings: CapacitySett
   return { utilization: terms.utilization, top, base: terms.funded, bottom }
 }
 export function formulaSentence(profile: CalculationProfile, settings: CapacitySettings) {
+  if (profile.formula) return `${termsOf(settings, profile.id).utilization} ${profile.formula.trim().startsWith('=') ? '' : '= '}${profile.formula.trim()}`
   const { utilization, top, base, bottom } = formulaParts(profile, settings)
   return `${utilization} = (${top.join(' + ') || 'nothing'}) ÷ (${[base, ...bottom].join(' − ')}) × 100`
 }
@@ -192,6 +240,7 @@ export function profileFormula(profile: CalculationProfile, settings: CapacitySe
   const ignored = labels('ignore'), groups = profile.excludedGroups.map(sharedTimeScopeLabel)
   const kinds = absenceKindsOf(profile), parts = npraPartsOf(profile)
   const definitions = `${kinds.length < absenceKinds.length ? ` ${terms.absence} = ${kindOrder.filter((kind) => kinds.includes(kind)).join(' + ') || 'nothing'} (other leave ignored).` : ''}${parts.length < npraParts.length ? ` ${terms.npra} = ${parts.map((part) => part === 'npra' ? 'NPRA-tagged hours' : 'Training').join(' + ') || 'nothing'}.` : ''}`
+  if (profile.formula) return `Profile “${profile.name}”: ${terms.utilization} ${profile.formula.trim().startsWith('=') ? '' : '= '}${profile.formula.trim()} — typed formula: recorded hours (Completed Work) for Actual, the planned source for Planned; Absence as deducted from capacity; blank when none of its hour figures is booked.${definitions}`
   return `Profile “${profile.name}”: Actual utilization = Total actual ÷ ${terms.available}; Planned utilization = Total planned ÷ ${terms.available}. Total actual = ${labels('count').join(' + ')} (Completed Work); Total planned = the same from Original Estimate${sources.length ? ` (${sources.join('; ')})` : ''}. ${terms.available} = ${available} (never below 0 per person).${ignored.length ? ` Ignored: ${ignored.join(', ')}.` : ''}${groups.length ? ` Groups left out: ${groups.join(', ')}.` : ''} Status from the ${profile.statusFrom === 'planned' ? 'planned' : 'actual'} utilization.${definitions}`
 }
 

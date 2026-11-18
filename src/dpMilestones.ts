@@ -54,7 +54,9 @@ function doneMilestones(items: AzureWorkItem[], timeZone?: string) {
   return done
 }
 export function dpMonthCounts(items: AzureWorkItem[], month: string, timeZone?: string) {
-  const supported: CountedMilestone[] = doneMilestones(items, timeZone).filter((entry) => entry.month === month).map(({ item, milestone, date, status }) => ({ item, milestone, date, status }))
+  // QV-56: only the releases listed in the month (DDT Date in it, else a planned milestone in it, QV-54) count, so
+  // Supported is never more than the list; a release counts once however many of its milestones were Done.
+  const supported: CountedMilestone[] = doneMilestones(items, timeZone).filter((entry) => entry.month === month && dpListedIn(entry.item, month, timeZone)).map(({ item, milestone, date, status }) => ({ item, milestone, date, status }))
   supported.sort((a, b) => a.date.localeCompare(b.date) || a.item.id - b.item.id)
   // milestones: every milestone Done in the month; completed / supported: the unique releases behind them.
   const completed = uniqueReleases(supported.filter((entry) => entry.milestone === 'DDT'))

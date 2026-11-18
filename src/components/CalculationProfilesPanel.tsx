@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { Notice, Panel } from './ui'
+import { FormulaBar } from './FormulaBar'
+import { checkFormula, formulaFromParts } from '../formula'
 import { absenceKindsOf, allProfiles, bucketKeys, bucketLabel, defaultProfile, defaultTerms, npraPartLabel, npraParts, npraPartsOf, plannedSourceLabel, plannedSources, profileFormula, formulaSentence, termHints, termKeys, termMeaning, termsOf, type CalculationProfile, type ProfileTerms, type TermKey } from '../calculationProfiles'
 import { absenceKinds, sharedTimeScopeLabel, sharedTimeScopes, type CapacitySettings } from '../capacity'
 
@@ -46,7 +48,8 @@ function ProfileEditor({ draft, settings, onChange, onCancel, onSave }: { draft:
   const set = (change: Partial<CalculationProfile>) => onChange({ ...draft, ...change })
   const problems = [
     !draft.name.trim() && 'Give the profile a name.',
-    !bucketKeys.some((key) => draft.treatment[key] === 'count') && 'Tick at least one figure in the top of the formula.',
+    draft.formula === undefined && !bucketKeys.some((key) => draft.treatment[key] === 'count') && 'Tick at least one figure in the top of the formula.',
+    draft.formula !== undefined && (() => { const check = checkFormula(draft.formula); return check.ok ? false : `Formula: ${check.error}` })(),
     draft.capacityBase === 'fixed' && !(Number(draft.fixedHours) > 0 && Number(draft.fixedHours) <= 744) && 'Fixed hours must be between 0 and 744.',
   ].filter(Boolean) as string[]
   return <form className="standard-hours" aria-label="Edit calculation profile" onSubmit={(event) => { event.preventDefault(); if (!problems.length) onSave({ ...draft, name: draft.name.trim().slice(0, 80), ...(draft.capacityBase === 'fixed' ? { fixedHours: Number(draft.fixedHours) } : { fixedHours: undefined }) }) }}>
@@ -55,7 +58,13 @@ function ProfileEditor({ draft, settings, onChange, onCancel, onSave }: { draft:
         is in the top, in the bottom or in neither (ignored), never in both. */}
     <fieldset className="formula-builder"><legend>Utilization formula</legend>
       <p className="formula-sentence" role="status" aria-label="Formula">{formulaSentence(draft, settings)}</p>
-      <div className="formula-parts">
+      {/* CAP-55: or type the formula, as in Excel; the ticks below give the starting formula. */}
+      <label className="inline-check fx-toggle"><input type="checkbox" checked={draft.formula !== undefined} onChange={(event) => { if (event.target.checked) set({ formula: formulaFromParts(bucketKeys.filter((key) => draft.treatment[key] === 'count').map((key) => bucketLabel[key]), bucketKeys.filter((key) => draft.treatment[key] === 'deduct').map((key) => bucketLabel[key]), draft.minusStandardHours) }); else { const { formula: _formula, ...rest } = draft; onChange(rest) } }} />Type the formula (fx)</label>
+      {draft.formula !== undefined && <>
+        <FormulaBar value={draft.formula} onChange={(formula) => set({ formula })} />
+        <div className="formula-sources" role="group" aria-label="Planned hours">{(['work', 'training', 'npraOther', 'common'] as const).map((key) => <label key={key} className="inline-select">{bucketLabel[key]} planned<select aria-label={`${bucketLabel[key]} planned hours`} value={draft.plannedSource[key]} onChange={(event) => set({ plannedSource: { ...draft.plannedSource, [key]: event.target.value as typeof draft.plannedSource[typeof key] } })}>{plannedSources.map((value) => <option key={value} value={value}>{plannedSourceLabel[value]}</option>)}</select></label>)}</div>
+      </>}
+      <div className="formula-parts" hidden={draft.formula !== undefined}>
         <div role="group" aria-label="Top: counts as utilized"><strong>Top — counts as utilized</strong><small className="muted">Total actual (Completed Work); Total planned from the source chosen.</small>
           {bucketKeys.map((key) => <div key={key} className="formula-term"><label className="inline-check"><input type="checkbox" aria-label={`${bucketLabel[key]} in the top`} checked={draft.treatment[key] === 'count'} onChange={(event) => set({ treatment: { ...draft.treatment, [key]: event.target.checked ? 'count' : 'ignore' } })} /> {bucketLabel[key]}</label>
             {draft.treatment[key] === 'count' && <select aria-label={`${bucketLabel[key]} planned hours`} value={draft.plannedSource[key]} onChange={(event) => set({ plannedSource: { ...draft.plannedSource, [key]: event.target.value } })}>{plannedSources.map((value) => <option key={value} value={value}>Plan: {plannedSourceLabel[value]}</option>)}</select>}</div>)}

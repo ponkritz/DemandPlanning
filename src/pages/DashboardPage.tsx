@@ -18,7 +18,7 @@ import { CustomizableSections } from '../components/PersonalLayout'
 import { UtilizationTable } from '../components/MonthOverview'
 import { defaultInsightThresholds, thresholdsOf } from '../insightThresholds'
 const T = (bands: Bands) => bands.thresholds ?? defaultInsightThresholds
-import { activeFigureLock, defaultProfile, defaultTerms, lockedPeople, profileFormula, termsOf, withViewedProfile, type TermKey } from '../calculationProfiles'
+import { activeFigureLock, defaultProfile, groupUtilization, defaultTerms, lockedPeople, profileFormula, termsOf, withViewedProfile, type TermKey } from '../calculationProfiles'
 import { ProfilePicker } from '../components/CalculationProfilesPanel'
 
 // Dashboard: demand (planned hours), recorded hours and capacity per person and month, over a period, with one
@@ -541,6 +541,8 @@ function UtilizationTab({ items, months, headerMonth, settings, filter, profiles
   const people = model.people.filter((person) => person.name !== 'Unassigned' && has(filter.regions, profiles[person.name]?.region) && has(filter.roles, profiles[person.name]?.role) && has(filter.people, person.name))
   const available = people.reduce((total, person) => total + person.available, 0), utilized = people.reduce((total, person) => total + person.utilized, 0), planned = people.reduce((total, person) => total + person.utilizedPlanned, 0)
   const percentOf = (part: number) => available > 0 ? Math.round(part / available * 10000) / 100 : null
+  // CAP-55: with a typed formula the team figure is the formula on the people's figures added up.
+  const team = groupUtilization(people, model.locked ? undefined : model.profile.definition)
   const profileLine = (name: string) => [profiles[name]?.role, profiles[name]?.region].filter(Boolean).join(' · ')
   const info = `${model.profile.formula} ${monthName(chosen)} has ${model.workingDays} working days. Available = the capacity of the profile. The team figure adds up the people shown. Admins can lock the figures of a month (they then stay as locked whatever changes later) and unlock them with a reason.${filter.streams.length ? ' The stream filter does not apply here.' : ''}`
   const lock = model.locked, history = settings.figureLocks?.[chosen]?.filter((entry) => entry.unlockedOn) ?? []
@@ -557,7 +559,8 @@ function UtilizationTab({ items, months, headerMonth, settings, filter, profiles
       <div className="button-row"><button type="submit" className="primary" disabled={!unlockReason.trim()}>Unlock figures</button><button type="button" className="ghost" onClick={() => setUnlockReason(null)}>Cancel</button></div>
     </form>}
     {!people.length ? <EmptyState title={`No Time Writing data for ${monthName(chosen)}.`} detail="Choose another month or change the filters." /> : <>
-      <p className="muted" role="note">Team: <strong>{formatHours(utilized)}h total actual ÷ {formatHours(available)}h available hours = <Util value={percentOf(utilized)} bands={bands} /> actual utilization</strong> · {formatHours(planned)}h total planned = <Util value={percentOf(planned)} bands={bands} /> planned utilization</p>
+      {model.profile.definition.formula && !model.locked ? <p className="muted" role="note">Team (the profile’s typed formula on everyone’s figures added up): <strong><Util value={team.actual} bands={bands} /> actual utilization</strong> · <Util value={team.planned} bands={bands} /> planned utilization</p>
+        : <p className="muted" role="note">Team: <strong>{formatHours(utilized)}h total actual ÷ {formatHours(available)}h available hours = <Util value={percentOf(utilized)} bands={bands} /> actual utilization</strong> · {formatHours(planned)}h total planned = <Util value={percentOf(planned)} bands={bands} /> planned utilization</p>}
       <div className="azure-table"><UtilizationTable people={people} profileLine={profileLine} terms={termsOf(settings, defaultProfile(settings).id)} /></div>
     </>}
   </Section>

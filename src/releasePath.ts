@@ -1,3 +1,4 @@
+import { matchPatterns, type NamingPattern } from './namingPatterns.ts'
 import type { AzureWorkItem } from './domain'
 
 // Release information read from a work item's paths. A segment "Release x.y.z" gives the release.
@@ -86,7 +87,10 @@ export function toolRelease(item: Pick<AzureWorkItem, 'areaPath' | 'iterationPat
   const name = title.replace(documentWord, '').replace(/\s*[|:_–-]\s*$/, '').trim() || title
   return { name, release }
 }
-export function releaseFor(item: Pick<AzureWorkItem, 'areaPath' | 'iterationPath' | 'title'>, rule: 'path' | 'dp' | 'iocc' | 'tool' | 'cp' | 'title' = 'path'): StreamRelease | undefined {
+// patterns (QV-55): the stream's naming patterns, tried first on the Title; a Title none fits keeps the rule.
+export function releaseFor(item: Pick<AzureWorkItem, 'areaPath' | 'iterationPath' | 'title'>, rule: 'path' | 'dp' | 'iocc' | 'tool' | 'cp' | 'title' = 'path', patterns: NamingPattern[] = []): StreamRelease | undefined {
+  const matched = patterns.length ? matchPatterns(item.title ?? '', patterns) : undefined
+  if (matched) return { ...(matched.group ? { group: matched.group } : {}), name: matched.name, release: '' }
   // QV-52 Content: the document's Title is the release (no name and number from its paths).
   if (rule === 'title') { const title = (item.title ?? '').replace(/\s+/g, ' ').trim(); return title ? { name: title, release: '' } : undefined }
   // CP is reported from its release-folder tree (cpReporting); read alone, its items follow the general path rule.

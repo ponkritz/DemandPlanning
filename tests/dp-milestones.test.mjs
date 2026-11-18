@@ -11,13 +11,14 @@ const items = [
   item(5, { DRfHDate: '2026-10-10T00:00:00Z', DRfHStatus: 'Not done' }),
 ]
 
-test('DP counts for a month: Completed = releases with DDT Done in the month; Supported = unique releases with any milestone Done in the month', () => {
+test('DP counts for a month: Completed = releases with DDT Done in the month; Supported = unique listed releases with any milestone Done in the month (QV-56)', () => {
   const october = dpMonthCounts(items, '2026-10', 'UTC')
   assert.deepEqual(october.completed.map((entry) => entry.item.id), [1, 4])
-  assert.deepEqual(october.milestones.map((entry) => `${entry.item.id}:${entry.milestone}`), ['3:DRPE', '1:DRfH', '1:DDT', '2:DRPC', '4:DDT'], 'five milestones Done in October')
-  assert.deepEqual(october.supported.map((entry) => `${entry.item.id}:${entry.milestones.map((milestone) => milestone.milestone).join('+')}`), ['3:DRPE', '1:DRfH+DDT', '2:DRPC', '4:DDT'], 'four releases: #1 passed SFV and DT and counts once')
+  assert.deepEqual(october.milestones.map((entry) => `${entry.item.id}:${entry.milestone}`), ['1:DRfH', '1:DDT', '2:DRPC', '4:DDT'], 'four milestones Done in October of releases listed in October; #3 (DDT in September) is left out')
+  assert.deepEqual(october.supported.map((entry) => `${entry.item.id}:${entry.milestones.map((milestone) => milestone.milestone).join('+')}`), ['1:DRfH+DDT', '2:DRPC', '4:DDT'], 'three releases, never more than the list: #1 passed SFV and DT and counts once')
   assert.equal(october.supported.find((entry) => entry.item.id === 1).date, '2026-10-05T00:00:00Z', 'a release is dated by its latest milestone in the month')
-  assert.deepEqual(october.byMilestone, { DDT: 2, DRfH: 1, DRPC: 1, DRPE: 1 })
+  assert.deepEqual(october.byMilestone, { DDT: 2, DRfH: 1, DRPC: 1, DRPE: 0 })
+  assert.deepEqual(dpMonthCounts(items, '2026-09', 'UTC').supported.map((entry) => entry.item.id), [3], '#3 is Supported in its own month')
   assert.deepEqual(dpMonthCounts(items, '2026-09', 'UTC').completed.map((entry) => entry.item.id), [3])
   // In India (UTC+5:30) the DDT of #4 (31 Oct 22:00 UTC) is already 1 November.
   assert.deepEqual(dpMonthCounts(items, '2026-10', 'Asia/Kolkata').completed.map((entry) => entry.item.id), [1])
@@ -39,10 +40,10 @@ test('DP milestones carry the team names: DT, SFV, PRD, RPE', async () => {
 
 test('Supported Releases are unique by PsName + Release: two rows of the same release count once; rows without them by work item', () => {
   const rows = [
-    item(11, { PsName: 'RSGMS', Release: '3.0.0.2', DRfHDate: '2026-10-02T00:00:00Z', DRfHStatus: 'Done' }),
+    item(11, { DDTDate: '2026-10-20T00:00:00Z', PsName: 'RSGMS', Release: '3.0.0.2', DRfHDate: '2026-10-02T00:00:00Z', DRfHStatus: 'Done' }),
     item(12, { 'Custom.PsName': 'rsgms', 'Custom.Release': '3.0.0.2', DDTDate: '2026-10-09T00:00:00Z', DDTStatus: 'Done' }),
-    item(13, { PsName: 'RSGMS', Release: '3.1', DRPCDate: '2026-10-03T00:00:00Z', DRPCStatus: 'Done' }),
-    item(14, { DRPEDate: '2026-10-04T00:00:00Z', DRPEStatus: 'Done' }), item(15, { DRPEDate: '2026-10-05T00:00:00Z', DRPEStatus: 'Done' }),
+    item(13, { DDTDate: '2026-10-20T00:00:00Z', PsName: 'RSGMS', Release: '3.1', DRPCDate: '2026-10-03T00:00:00Z', DRPCStatus: 'Done' }),
+    item(14, { DDTDate: '2026-10-20T00:00:00Z', DRPEDate: '2026-10-04T00:00:00Z', DRPEStatus: 'Done' }), item(15, { DDTDate: '2026-10-20T00:00:00Z', DRPEDate: '2026-10-05T00:00:00Z', DRPEStatus: 'Done' }),
   ]
   const counts = dpMonthCounts(rows, '2026-10', 'UTC')
   assert.equal(counts.milestones.length, 5); assert.equal(counts.supported.length, 4)

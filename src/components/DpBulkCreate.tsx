@@ -5,6 +5,7 @@ import type { FeatureSetups } from '../featureSetup'
 import { chooseSetup, dpEpicId } from '../featureSetup'
 import type { QeMappingFile } from '../qeMapping'
 import { bulkPlan, dpTypeLabel } from '../dpBulk'
+import type { BoardHit } from '../dpBoardMatch'
 import { createFeatureFromSetup, currentIndiaMonth, currentIterationPairs, futureIterationPairs, readAzureIterations, withFeatureDoD, HierarchyCreationError, type AzureIteration } from '../azureDevOps'
 import { runInBackground } from '../backgroundJobs'
 import { adhocAfterLock } from '../planningLock'
@@ -15,9 +16,9 @@ import { Modal, Notice } from './ui'
 // Classification (Major, Minor, MLD, Platform Update), the Time Writing story and month Task, all assigned to the QE from
 // the QE Mapping, in the PI / Sprint chosen. One after another as a background job; releases that cannot be created
 // are listed with the reason and skipped.
-export function DpBulkCreate({ rows, azure, featureSetup, qeMapping, hasFeature, onClose }: { rows: AzureWorkItem[]; azure: AzureWorkspace; featureSetup?: FeatureSetups | null; qeMapping?: QeMappingFile | null; hasFeature: (row: AzureWorkItem) => boolean; onClose: () => void }) {
+export function DpBulkCreate({ rows, azure, featureSetup, qeMapping, featureMatch, onClose }: { rows: AzureWorkItem[]; azure: AzureWorkspace; featureSetup?: FeatureSetups | null; qeMapping?: QeMappingFile | null; featureMatch: (row: AzureWorkItem) => BoardHit | undefined; onClose: () => void }) {
   const setup = chooseSetup(featureSetup, dpEpicId, true).setup
-  const plan = bulkPlan(rows, { setup, qeMapping, board: azure.items, hasFeature })
+  const plan = bulkPlan(rows, { setup, qeMapping, board: azure.items, featureMatch })
   const ready = plan.filter((line) => !line.skip)
   const epic = azure.items.find((item) => item.id === dpEpicId && item.workItemType === 'Epic')
   const [pairs, setPairs] = useState<{ pi: AzureIteration; sprint: AzureIteration }[] | null>(null)
@@ -69,7 +70,7 @@ export function DpBulkCreate({ rows, azure, featureSetup, qeMapping, hasFeature,
           <td>{line.type ? `${dpTypeLabel(line.type)} (${line.set === undefined ? '' : line.type === 'Major' || line.type === 'Minor' ? 'Release set' : 'PU set'})` : '—'}</td>
           <td>{line.set ? line.set.stories.map((story) => story.title.split(' :')[0]).join(', ') || 'none' : '—'}</td>
           <td>{line.qe || '—'}{line.email && <small className="muted"> {line.email}</small>}</td>
-          <td>{line.skip ? <span className="warning-text">Skipped: {line.skip}</span> : 'Will be created'}</td>
+          <td>{line.skip ? <span className="warning-text">Skipped: {line.skip}</span> : <>Will be created{line.note && <small className="warning-text"> — {line.note}</small>}</>}</td>
         </tr>)}</tbody>
       </table></div>
       {pairs && pairs.length > 1 && <label className="inline-select">PI / Sprint<select aria-label="PI / Sprint" value={choice} onChange={(event) => setChoice(Number(event.target.value))}>{pairs.map((entry, index) => <option key={entry.sprint.path} value={index}>{entry.pi.name} / {entry.sprint.name}</option>)}</select></label>}

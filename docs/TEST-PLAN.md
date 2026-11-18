@@ -894,6 +894,10 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-QV-35 DP releases planned in the month** — Req QV-54 — L1 `dp-milestones.test.mjs` ("QV-54: a release without a DDT Date is listed in the months of its Planned / ToBePlanned milestones, but not counted"); browser check with the DP data: pick a month in which a release without a DDT Date has an SFV / PRD / RPE date with status Planned or ToBePlanned — it is listed with "… · planned, not counted" in Month & Year; the Completed and Supported Releases counts above the table do not change; the Month filter note names how many releases have neither.
 
+**TC-QV-36 DP Supported never more than the month's list** — Req QV-56 — L1 `dp-milestones.test.mjs` ("DP counts for a month: Completed = releases with DDT Done in the month; Supported = unique listed releases with any milestone Done in the month (QV-56)"); `streams.test.mjs` ("Pulse Check streams: the five Azure streams in order, not-set-up ones listed, each read with its rule"); browser check with the DP data: for a month, Supported Releases ≤ the rows listed for the month; a release with SFV Done this month but its DDT in a later month is not Supported this month.
+
+**TC-QV-37 Release naming patterns** — Req QV-55, QV-52 — L1 `naming-patterns.test.mjs` ("QV-55: wildcard patterns — * any text, {…} the release name; Content up to _RELEASE, IOCC after Conformance Verification / Test Tools"; "QV-55: patterns are shared settings — checked on read, per stream, built in when not saved; same list for the same settings"; "QV-55: Content documents are grouped under their release; IOCC by Conformance Verification and Test Tools names, others as before"); E2E `shell.e2e.mjs` ("TC-QV-37: Stream mapping → Release naming patterns — built-in Content and IOCC patterns, a Title tried, a pattern edited, applied and reset"); browser check with the Content and IOCC data: Release Details → Content shows one row per _RELEASE name with its documents under it; IOCC shows Conformance Verification and Test Tools groups; change a pattern, Apply, Save to Git — another browser shows the same names.
+
 
 
 **TC-QV-24 CP releases from the asset Titles** — *(Retired — see TC-QV-25)* Req QV-40 — L1 `streams.test.mjs` ("CP: the release from the asset Title "[Release name] [Release No] [Asset name]", each release once; fuzzy QMS-0025 match (TC-QV-24)"); browser check with a CP query holding three assets of one release in both namings ("Care Pathways 3.1 Test Report", "Care Pathways 3.1.0 SRS", "Risk Analysis v3.1 (Care Pathways)") and one of another (3.2), and a QMS-0025 Feature "CP | Care Pathways | v3.1": Release Details → CP lists two releases (3 and 1 assets), 3.1 with its Feature and %, 3.2 with Create Feature opening the New Feature form titled "Care Pathways | v3.2" (release name and number only) under the CP Epic, and found after it is created; Pulse Check's Releases and Supported summary show "CP [2]"; no page errors. **UAT**
@@ -980,6 +984,8 @@ TC-OVR-01 to TC-OVR-03 tested the earlier Overview and are **retired** with OVR-
 **TC-CAP-25 Edit a built-in calculation profile** — Req CAP-53, CAP-41, CAP-52 — L1 `calculation-profiles.test.mjs` ("CAP-53: a built-in profile can be edited; it keeps its id and place, is marked changed, and reset brings the built-in back"; "CAP-41: profiles read from Git are checked; unknown defaults fall back to \"Current (v4)\""); E2E `shell.e2e.mjs` ("TC-CAP-25: a built-in calculation profile can be edited, shows as changed, drives the cards, and resets to the built-in one"); browser check with Git: edit Current (v4), Save to Git, reload in another browser — the change is there; lock a month first and check its figures stay.
 
 **TC-CAP-26 Utilization formula builder** — Req CAP-54, CAP-41 — L1 `calculation-profiles.test.mjs` ("CAP-54: the utilization formula as Top ÷ Bottom follows the profile and its names"); E2E `shell.e2e.mjs` ("TC-CAP-16: …" — ticks figures in the top and the bottom, checks the sentence and that a figure is never in both); browser check: in Settings → Calculation profiles edit a profile, untick Training in the top, tick it in the bottom — the sentence reads "… ÷ (Funded Hours − Absence − Training) × 100", Save, the Pulse Check cards follow.
+
+**TC-CAP-27 Typed utilization formula (fx)** — Req CAP-55 — L1 `formula.test.mjs` ("CAP-55: a typed formula reads like Excel — figures in brackets, + - * / ( ), MAX, MIN, ROUND, IF; blank on / 0"; "CAP-55: a formula that does not read says why"); `calculation-profiles.test.mjs` ("CAP-55: a profile with a typed formula — the v4 formula typed gives the v4 figures; another formula drives person and team"); E2E `shell.e2e.mjs` ("TC-CAP-27: a calculation profile with a typed formula (fx) — starts from the ticks, is checked as typed, is saved and drives the figures"); browser check with the team data: make a copy of Current (v4) with fx on and its starting formula — every person's and the team's figures equal Current (v4); change it to =[Project work] / [Funded Hours] * 100, make it the default — Pulse Check cards, Team overview Utilization and the Monthly pack follow; Save to Git and reload in another browser.
 
 **TC-CAP-01 Capacity calculation** — Req CAP-01…09, OVR-09 — L1 `capacity.test.mjs`, `monthly-hours.test.mjs`, `azure-insights.test.mjs`. Plus L3 analysis (A) with one person in October 2026:
 - 22 working days × 8 = 176 h funded.
@@ -1492,7 +1498,11 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-DPF-03 Possible QEs** — Req DPF-03 — L1 `dp-bulk.test.mjs` ("DPF-03: possible QEs are the people on the earlier releases of the product, newest first, without the QE and the release's own assignee"); browser check with All months: a product with several releases lists the earlier releases’ assignees.
 
-**TC-DPF-04 Create Features in bulk** — Req DPF-04 — L1 `dp-bulk.test.mjs` ("DPF-04: the bulk plan — title, type, QE with email, or why a release is skipped"); browser check with QMS-0025 (a test Epic first): tick three DP releases (one PU, one Major, one with a Feature) → Create Features lists two to create and one skipped; Create → the top bar shows progress and "2 of 2 Features created"; each Feature has the type’s DoD and Release Classification, the type’s User Stories, the Time Writing story and Task, all assigned to the QE.
+**TC-DPF-04 Create Features in bulk** — Req DPF-04, DPF-05 — L1 `dp-bulk.test.mjs` ("DPF-04 / BLK-01: the bulk plan — title, type, QE with email, or why a release is skipped; a 100% Feature match is never created"); browser check with QMS-0025 (a test Epic first): a DP release with a Feature matching 100 % has its tick disabled (tooltip names the Feature) and Select all shown leaves it out; tick a PU and a Major release (one with a similar Feature below 100 %) → Create Features lists both, the second with "a similar Feature #… exists"; Create → the top bar shows progress and "2 of 2 Features created"; each Feature has the type’s DoD and Release Classification, the type’s User Stories, the Time Writing story and Task, all assigned to the QE.
+
+**TC-CNB-01 Content Features in bulk** — Req CNB-01, DPF-05 — L1 `content-bulk.test.mjs` ("CNB-01: Content bulk Features — Epic 22919, NA, the DoD, one Review of Deliverables story, 4 h; a 100% Feature match is never created, a closer one is named (BLK-01)"); browser check with QMS-0025 (a test Epic first): Release Details → Content: releases with a Feature matching 100 % cannot be ticked; Select all, Create Features → the list shows each Feature title, with similar Features named; after Create each Feature is under Epic 22919 with "Release Classification : NA", "Feature DoD: All Documents are approved", one "Review of Deliverables - <title>" story in the current Sprint and the month Task with 4 h Original Estimate.
+
+**TC-CNB-02 One person for all** — Req CNB-02 — L1 `content-bulk.test.mjs` ("CNB-02: the pop-up assigns to one person — a name on the board, "Name <email>" or an email"); browser check: Create stays disabled until a person is chosen; typing a board name shows its email; every Feature, story and Task made is assigned to that person.
 
 ## 7. Requirements coverage matrix
 
@@ -1688,6 +1698,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | QV-52 | TC-QV-33 |
 | QV-53 | TC-QV-34 |
 | QV-54 | TC-QV-35 |
+| QV-55 | TC-QV-37 |
+| QV-56 | TC-QV-36 |
 | QV-38 | TC-CON-42 |
 | OVR-01…08 | retired (TC-OVR-01…03 retired) |
 | OV-11 | TC-OV-11 |
@@ -1725,6 +1737,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CAP-52 | TC-CAP-24 |
 | CAP-53 | TC-CAP-25 |
 | CAP-54 | TC-CAP-26 |
+| CAP-55 | TC-CAP-27 |
 | BAS-01…04 | TC-BAS-01 |
 | BAS-05…07 | TC-BAS-02 |
 | BAS-08…10 | TC-BAS-03 |
@@ -1878,6 +1891,9 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | DPF-02 | TC-DPF-02 |
 | DPF-03 | TC-DPF-03 |
 | DPF-04 | TC-DPF-04 |
+| DPF-05 | TC-DPF-04, TC-CNB-01 |
+| CNB-01 | TC-CNB-01 |
+| CNB-02 | TC-CNB-02 |
 | IF-05 | TC-KPT-02 |
 | NFR-02 | TC-STO-01 |
 | NFR-03…05 | TC-DSK-02, TC-INS-01 |
@@ -1898,7 +1914,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-06 | TC-ATM-01…11, TC-ATM-21, TC-TWN-03, TC-CON-20, TC-CON-33, TC-CON-34, TC-CON-43 |
 | UC-07 | TC-BKL-01…09, TC-BKL-15, TC-BKL-16, TC-BKL-17, TC-BKL-18, TC-BKL-19, TC-NAV-36, TC-CON-23, TC-CON-25…27, TC-CON-29…32, TC-CON-35 |
 | UC-08 | TC-QV-01…05, TC-FET-07, TC-CON-08, TC-CON-11…16, TC-QV-08, TC-QV-09, TC-QV-10, TC-QV-11, TC-QV-12, TC-QV-13, TC-QV-14, TC-QV-15, TC-QV-16, TC-CON-37, TC-CON-38, TC-CON-39, TC-CON-40, TC-CON-41, TC-QV-18, TC-QV-19, TC-QV-20, TC-QV-21, TC-QV-22, TC-CON-42 |
-| UC-09 | TC-OV-11…14, TC-CAP-01, TC-CAP-02, TC-CAP-03, TC-CAP-08, TC-CAP-10, TC-CAP-11, TC-CAP-12, TC-CAP-13, TC-CAP-14, TC-CAP-15, TC-CAP-16, TC-CAP-17, TC-CAP-18, TC-CAP-19, TC-CAP-20, TC-CAP-21, TC-CAP-22, TC-CAP-23, TC-CAP-24, TC-CAP-25, TC-CAP-26, TC-QV-17, TC-CON-21, TC-QV-10, TC-QV-11, TC-QV-21 |
+| UC-09 | TC-OV-11…14, TC-CAP-01, TC-CAP-02, TC-CAP-03, TC-CAP-08, TC-CAP-10, TC-CAP-11, TC-CAP-12, TC-CAP-13, TC-CAP-14, TC-CAP-15, TC-CAP-16, TC-CAP-17, TC-CAP-18, TC-CAP-19, TC-CAP-20, TC-CAP-21, TC-CAP-22, TC-CAP-23, TC-CAP-24, TC-CAP-25, TC-CAP-26, TC-CAP-27, TC-QV-17, TC-CON-21, TC-QV-10, TC-QV-11, TC-QV-21 |
 | UC-10 | TC-OV-11 (Months, Streams), TC-OV-13 |
 | UC-11 | TC-BAS-01…04 |
 | UC-12 | TC-GIT-01…04, TC-GIT-05, TC-GIT-06, TC-GIT-07, TC-GIT-08, TC-ACC-03…05 |
@@ -1915,13 +1931,14 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-23 | TC-QEM-01…08 |
 | UC-24 | TC-PCK-01…10 |
 | UC-25 | TC-WSP-01…07 |
-| UC-26 | TC-MYD-01…05, TC-QV-31, TC-QV-32, TC-QV-33, TC-QV-34, TC-QV-35 |
+| UC-26 | TC-MYD-01…05, TC-QV-31, TC-QV-32, TC-QV-33, TC-QV-34, TC-QV-35, TC-QV-36, TC-QV-37 |
 | UC-27 | TC-HIS-01…11 |
 | UC-28 | TC-ACT-01…12, TC-BKL-16, TC-BKL-17, TC-BKL-18, TC-ATM-21 |
 | UC-29 | TC-OVW-01…03 |
 | UC-30 | TC-CVA-01…03 |
 | UC-31 | TC-KPT-01…03 |
 | UC-32 | TC-DPF-01…04 |
+| UC-33 | TC-CNB-01, TC-CNB-02 |
 
 ## 8. Result record
 

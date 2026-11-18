@@ -64,7 +64,7 @@ test('Pulse Check streams: the five Azure streams in order, not-set-up ones list
   assert.equal(streams[3].supported, undefined, 'other streams keep documents')
   // The Dashboard's delivery table: DP per month and over the period.
   const counts = streamCounts(state, profiles, ['2026-09', '2026-10'], 'UTC')
-  assert.deepEqual([counts[0].name, counts[0].months.map((entry) => [entry.month, entry.releases, entry.supported]), counts[0].releases, counts[0].supported], ['DP', [['2026-09', 0, 1], ['2026-10', 1, 1]], 1, 1], 'the same release supported in September and October counts once over the period')
+  assert.deepEqual([counts[0].name, counts[0].months.map((entry) => [entry.month, entry.releases, entry.supported]), counts[0].releases, counts[0].supported], ['DP', [['2026-09', 0, 0], ['2026-10', 1, 1]], 1, 1], 'QV-56: RPE Done in September does not count there (the release is listed in October, its DDT month); over the period the release counts once')
   assert.equal(counts[3].supported, undefined)
 })
 
