@@ -1,4 +1,5 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { useDeferredValue, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCan } from '../useCan'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { GitStorage } from '../useGitStorage'
 import type { MonthlyPackStore } from '../useMonthlyPack'
@@ -27,7 +28,9 @@ export function MonthlyPackPanel({ month, azure, store, git, pack, windchill }: 
   // When the month's text arrives from Git (or the month changes), the draft follows it.
   const [seen, setSeen] = useState(pack.notes)
   if (pack.notes !== seen) { setSeen(pack.notes); setDraft(pack.notes); setStatus(null) }
-  const editable = git.connected && !git.readOnly && !git.isSample
+  // CON-94: the text needs "Monthly pack: edit the text".
+  const can = useCan()
+  const editable = git.connected && !git.readOnly && !git.isSample && can('pack.text')
   // Empty bullets being typed are not saved, so they do not count as a change.
   const dirty = serializePackNotes(draft) !== serializePackNotes(pack.notes)
 
@@ -44,7 +47,9 @@ export function MonthlyPackPanel({ month, azure, store, git, pack, windchill }: 
   // The bullet to focus after the next render (a ref, so focusing needs no extra render).
   const focusNext = useRef<string | null>(null)
   const setFocus = (target: string) => { focusNext.current = target }
-  useEffect(() => { if (!focusNext.current) return; document.querySelector<HTMLTextAreaElement>(`[data-bullet="${focusNext.current}"]`)?.focus(); focusNext.current = null })
+  // Before paint (so typing right away lands in it), and kept until the bullet is on the page: with the deferred
+  // render the new bullet can appear one render later (KB-50).
+  useLayoutEffect(() => { if (!focusNext.current) return; const target = document.querySelector<HTMLTextAreaElement>(`[data-bullet="${focusNext.current}"]`); if (!target) return; target.focus(); focusNext.current = null })
   const setBullets = (key: NoteKey, change: (bullets: TypedBullet[]) => TypedBullet[]) => setDraft((current) => withBullets(current, key, change(typedBullets(current, key))))
   const addBullet = (key: NoteKey, at: number, after: number) => { setBullets(key, (bullets) => [...bullets.slice(0, at), { text: '', after }, ...bullets.slice(at)]); setFocus(`${key}:${at}`) }
   const setText = (key: NoteKey, value: string) => setDraft((current) => ({ ...current, text: { ...current.text, [key]: value } }))
@@ -135,7 +140,7 @@ export function MonthlyPackPanel({ month, azure, store, git, pack, windchill }: 
       {!pack.hasSetup && <Notice tone="info">No Monthly pack setup in Git yet: the default lines (Serviceability = S&S IT, Digital Platform = DP, Clinical Platform = CP, IOCC, PPU, Content, Tool validation) and KPI rows apply. Settings → Monthly pack maps streams and Epics to the slide lines.</Notice>}
       {pack.setupError && <Notice tone="warning">Monthly pack setup: {pack.setupError}</Notice>}
       {pack.notesError && <Notice tone="warning">Monthly pack text: {pack.notesError}</Notice>}
-      {!editable && <p className="muted">{git.isSample ? 'Synthetic sample data is loaded: the text cannot be saved.' : git.connected ? 'View only: your Git token can read but not save.' : 'Connect Git storage (Settings → Storage) to type and save the slide text.'}</p>}
+      {!editable && <p className="muted">{!can('pack.text') ? 'View only: your role is not allowed “Monthly pack: edit the text”.' : git.isSample ? 'Synthetic sample data is loaded: the text cannot be saved.' : git.connected ? 'View only: your Git token can read but not save.' : 'Connect Git storage (Settings → Storage) to type and save the slide text.'}</p>}
       {status && <Notice tone={status.tone === 'error' ? 'warning' : 'info'}><span role="status">{status.text}</span>{status.url && <> <a href={status.url} target="_blank" rel="noreferrer">View commit</a></>}</Notice>}
       {[...slides].reverse().map((slide) => <section key={slide.title} className="pack-slide" aria-label={slide.title}>
         <div className="pack-slide-head"><h3>{slide.title} <small className="muted">{slide.subtitle}</small></h3><button type="button" className="ghost" onClick={() => void copy(slideText(slide), slide.title)}>Copy slide as text</button></div>

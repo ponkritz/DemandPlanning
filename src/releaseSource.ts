@@ -1,3 +1,4 @@
+import { normalizeBulkEpics, type BulkStream } from './bulkEpics.ts'
 import { normalizeNamingPatterns, patternsFor, type NamingPattern, type NamingPatterns } from './namingPatterns.ts'
 import type { AzureWorkItem } from './domain'
 import { mapAzureWorkItem, requestAzure, type AzureConfig, type AzureRequest } from './azureDevOps.ts'
@@ -11,7 +12,10 @@ import { isMonthTask, timeWritingStoryIds } from './azureInsights.ts'
 // matchThreshold: the % a fuzzy Feature match (DP, IOCC) needs to count as the release's Feature (default 80).
 // featureEpics (QV-57): per stream, the QMS-0025 Epics whose Features (and User Stories) a release may be matched to;
 // a stream without an entry (or with an empty list) is matched across the whole board.
-export interface ReleaseSourceSettings { approvalDateField?: string; matchThreshold?: number; namingPatterns?: NamingPatterns; featureEpics?: Record<string, number[]> }
+// countOverrides (QV-58): Completed / Supported release counts entered by an Admin for CP, DP and IOCC per month, used
+// only while the stream has no data for the month (not set up or not fetched).
+export interface EnteredCounts { completed?: number; supported?: number }
+export interface ReleaseSourceSettings { approvalDateField?: string; matchThreshold?: number; namingPatterns?: NamingPatterns; featureEpics?: Record<string, number[]>; countOverrides?: Record<string, Record<string, EnteredCounts>>; bulkEpics?: Partial<Record<BulkStream, number>> }
 export const defaultReleaseSourceSettings: ReleaseSourceSettings = {}
 export interface ReleaseSourceSnapshot { organization: string; project: string; query: string; fetchedAt: string; items: AzureWorkItem[]; columns?: { ref: string; name: string }[]; orderBy?: { ref: string; desc: boolean }[] }
 export interface ReleaseEntry { key: string; group?: string; match?: { feature: AzureWorkItem; score: number }; name: string; release: string; documents: number; items: AzureWorkItem[]; tracked: boolean; trackedBy: AzureWorkItem[]; features: AzureWorkItem[]; planned: number; booked: number; hourTasks: number; approvalDate?: string; approvalMonth?: string }
@@ -35,7 +39,29 @@ export function normalizeReleaseSourceSettings(value: unknown): ReleaseSourceSet
   const threshold = Number(input.matchThreshold)
   const namingPatterns = normalizeNamingPatterns((input as Record<string, unknown>).namingPatterns)
   const featureEpics = normalizeFeatureEpics((input as Record<string, unknown>).featureEpics)
-  return { ...(approvalDateField ? { approvalDateField } : {}), ...(Number.isInteger(threshold) && threshold >= 1 && threshold <= 100 ? { matchThreshold: threshold } : {}), ...(namingPatterns ? { namingPatterns } : {}), ...(featureEpics ? { featureEpics } : {}) }
+  const countOverrides = normalizeCountOverrides((input as Record<string, unknown>).countOverrides)
+  const bulkEpics = normalizeBulkEpics((input as Record<string, unknown>).bulkEpics)
+  return { ...(approvalDateField ? { approvalDateField } : {}), ...(Number.isInteger(threshold) && threshold >= 1 && threshold <= 100 ? { matchThreshold: threshold } : {}), ...(namingPatterns ? { namingPatterns } : {}), ...(featureEpics ? { featureEpics } : {}), ...(countOverrides ? { countOverrides } : {}), ...(bulkEpics ? { bulkEpics } : {}) }
+}
+// QV-58: the streams whose release counts can be entered, and the entered counts read from the shared settings:
+// those streams only, months YYYY-MM, whole numbers 0–10,000; a month with neither count is dropped.
+export const countStreams = ['CP', 'DP', 'IOCC'] as const
+export function normalizeCountOverrides(value: unknown): Record<string, Record<string, EnteredCounts>> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const count = (raw: unknown) => { const number = typeof raw === 'string' && raw.trim() === '' ? NaN : Number(raw); return Number.isInteger(number) && number >= 0 && number <= 10000 ? number : undefined }
+  const result: Record<string, Record<string, EnteredCounts>> = {}
+  for (const [stream, months] of Object.entries(value as Record<string, unknown>)) {
+    const name = countStreams.find((entry) => entry.toLowerCase() === stream.trim().toLowerCase())
+    if (!name || !months || typeof months !== 'object' || Array.isArray(months)) continue
+    const byMonth: Record<string, EnteredCounts> = {}
+    for (const [month, raw] of Object.entries(months as Record<string, unknown>).slice(0, 240)) {
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || !raw || typeof raw !== 'object') continue
+      const entry = raw as Record<string, unknown>, completed = count(entry.completed), supported = count(entry.supported)
+      if (completed != null || supported != null) byMonth[month] = { ...(completed != null ? { completed } : {}), ...(supported != null ? { supported } : {}) }
+    }
+    if (Object.keys(byMonth).length) result[name] = byMonth
+  }
+  return Object.keys(result).length ? result : undefined
 }
 // QV-57: the streams whose releases are matched only in chosen Epics; others always search the whole board.
 export const epicMatchStreams = ['DP', 'CP', 'IOCC', 'Content'] as const

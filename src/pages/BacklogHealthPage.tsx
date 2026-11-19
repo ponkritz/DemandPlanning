@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { useCan } from '../useCan'
 import { DataTable } from '../components/DataTable'
 import { EmptyState, Metric, Metrics, Notice, Page, Pill, TablePanel, type Tone } from '../components/ui'
 import { readAzureIterations, type AzureIteration } from '../azureDevOps'
@@ -84,6 +85,7 @@ export function BacklogHealthPage({ azure, store }: { azure: AzureWorkspace; sto
       default: return healthValue(column, item, byId, dated) || none
     }
   }
+  const can = useCan()
   const exportAll = () => downloadCsv(lists.map((entry, index) => { const csv = healthCsv(rows[entry.key], azure.items, dated, entry.label, true); return index ? csv.split('\r\n').slice(1).join('\r\n') : csv }).filter(Boolean).join('\r\n'), `backlog-health-${todayIso()}.csv`)
 
   if (!azure.items.length) return <Page><EmptyState title="No backlog loaded yet." detail="Fetch the Time Writing (QMS-0025) connection first; this view reads its Features, User Stories and Tasks for everyone." /></Page>
@@ -103,7 +105,7 @@ export function BacklogHealthPage({ azure, store }: { azure: AzureWorkspace; sto
       <PersonPicker value={who} people={people} onChange={setPerson} meLabel="Everyone" label={unassigned ? 'Created or updated by' : 'Assigned to'} />
       {list === 'dod' && <label className="check"><input type="checkbox" checked={openOnly} onChange={(event) => setOpenOnly(event.target.checked)} />Open Features only</label>}
       <span className="muted">{shown.length} of {rows[list].length}</span>
-      <button type="button" className="ghost" onClick={exportAll}>Export all lists</button>
+      {can('data.export') && <button type="button" className="ghost" onClick={exportAll}>Export all lists</button>}
     </div>
     <TablePanel title={current.label} count={`${shown.length} items`} empty={shown.length ? undefined : list === 'sprints' && !iterations ? 'Waiting for the Sprint dates from Azure DevOps.' : 'Nothing here.'}>
       {/* UI-07: each list on the table default — its columns (the list's own first, the others ticked on in Columns), sort, layout and one Export. */}

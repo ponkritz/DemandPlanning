@@ -1,3 +1,4 @@
+import { ReleaseCountsPanel } from '../components/ReleaseCounts'
 import { SignedByMe } from '../components/SignedByMe'
 import { azureSignatures, isSignatureField, windchillSignatures } from '../mySignatures'
 import { streamPatterns } from '../releaseSource'
@@ -91,6 +92,7 @@ export function MyDashboardPage({ month, azure, store, my, navigate, views, canS
       </tbody></table></div>}
     </TablePanel>
       </> },
+      { id: 'releasecounts', label: 'Release counts', node: <ReleaseCountsPanel state={store.state} profiles={azure.connectionProfiles} month={month} /> },
       { id: 'signed', label: 'Signed by me', node: <SignedByMe signed={streamData.flatMap((entry) => entry.signed)} streams={streamData.map((entry) => entry.stream)} missing={streamData.filter((entry) => !entry.has).map((entry) => entry.stream)} month={month} /> },
     ]} />
   </Page>

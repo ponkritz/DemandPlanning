@@ -2,7 +2,7 @@ import { defaultProfile, groupUtilization } from './calculationProfiles.ts'
 import type { AppState, AzureWorkItem } from './domain.ts'
 import type { AzureConnectionProfileSummary } from './azureCredentials.ts'
 import type { StreamMonth, Utilization } from './monthlyPack.ts'
-import { defaultStreamReleases } from './releaseOverview.ts'
+import { completedCount, defaultStreamReleases, supportedCount } from './releaseOverview.ts'
 import { windchillOptionsForView, windchillStreamExports } from './streams.ts'
 import { windchillSupported } from './windchillReleases.ts'
 import { capacityModel, type CapacitySettings } from './capacity.ts'
@@ -18,7 +18,11 @@ const ratio = (work: number, available: number) => available > 0 ? Math.round(wo
 
 export function packStreamsOf(state: Pick<AppState, 'azureSources' | 'releaseSource'>, profiles: AzureConnectionProfileSummary[], windchill: WindchillData, at: string): StreamMonth[] {
   return [
-    ...defaultStreamReleases(state, profiles, at).map((stream) => ({ name: stream.name, releases: stream.releases.map(label), supported: stream.supported ?? stream.releases.length })),
+    // QV-58: a CP / DP / IOCC month without data takes the counts an Admin entered (marked as entered).
+    ...defaultStreamReleases(state, profiles, at).map((stream) => {
+      const completed = completedCount(stream), entered = Boolean(stream.noData && stream.entered)
+      return { name: stream.name, releases: entered ? (completed ? [`${completed} completed release${completed === 1 ? '' : 's'} (entered)`] : []) : stream.releases.map(label), supported: supportedCount(stream) ?? completed }
+    }),
     // S&S IT, then each ECP export on its own (CON-87).
     ...windchillStreamExports(windchill.views).map(({ name, view }) => {
       const source = view ? windchill.sources.find((entry) => entry.viewId === view.id) : undefined

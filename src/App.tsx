@@ -44,6 +44,7 @@ import { PulseCheckPage } from './pages/PulseCheckPage'
 import { PiReviewPage } from './pages/PiReviewPage'
 import { BritePage } from './pages/BritePage'
 import { KpiTrackerPage } from './pages/KpiTrackerPage'
+import { CanContext } from './useCan'
 import { QeMappingPage } from './pages/QeMappingPage'
 import { useAccess } from './useAccess'
 import { useFeatureSetup } from './useFeatureSetup'
@@ -250,7 +251,7 @@ export default function App() {
     gitConnected: git.connected, gitReadOnly: git.readOnly,
     timeWriting: Boolean(azure.config), email: azure.creatorEmail.trim(), pat: Boolean(azure.pat.trim()),
     fetched: azure.items.length > 0 && !azure.isSample, sample: azure.isSample,
-    region: my.me.name ? capacityContext(store.state).profiles?.[my.me.name]?.region : undefined, canManage: access.can('settings.manage'),
+    region: my.me.name ? capacityContext(store.state).profiles?.[my.me.name]?.region : undefined, canManage: access.can('people.edit'),
     streams: defaultStreams.filter((stream) => stream.source === 'azure').map((stream) => { const profile = profileForStream(stream, azure.connectionProfiles); return { name: stream.name, connected: Boolean(profile && hasServerPat(serverKey(profile))) } }),
     // DP's data sets count too: without them the DP releases and dates are incomplete.
     fetchProblem: azure.fetchProblem?.kind,
@@ -275,7 +276,7 @@ export default function App() {
   if (!store.ready) return <main className="content"><h1>I&amp;D Quality Demand Planning</h1>{store.loadError ? <Notice tone="error"><p>{store.loadError}</p><p>Do not clear browser data. If you still have an older tab open with unsaved changes, export its JSON backup first.</p><button className="primary" onClick={store.retryLoad}>Retry loading saved data</button></Notice> : <p role="status">Loading saved browser data…</p>}{buildStatus}</main>
 
   // UI-12: every table follows the shared design default.
-  return <TableDefaultsContext.Provider value={tableDesign}><ReleaseSettingsContext.Provider value={store.state.releaseSourceSettings}><HeaderSlot.Provider value={headerSlot}><div className={`app-shell${navOpen ? ' nav-open' : ''}${menuMini ? ' nav-mini' : ''}`}>
+  return <TableDefaultsContext.Provider value={tableDesign}><ReleaseSettingsContext.Provider value={store.state.releaseSourceSettings}><CanContext.Provider value={access.can}><HeaderSlot.Provider value={headerSlot}><div className={`app-shell${navOpen ? ' nav-open' : ''}${menuMini ? ' nav-mini' : ''}`}>
     {navOpen && <div className="nav-backdrop" onClick={() => setNavOpen(false)} aria-hidden="true" />}
     <aside className="sidebar" id="primary-navigation">
       <div className="brand" title="I&amp;D Quality Demand Planning"><div className="brand-mark"><BrandMark /></div><div><strong>I&amp;D Quality</strong><span>Demand Planning</span></div><button type="button" className="nav-mini-toggle" aria-pressed={menuMini} aria-label={menuMini ? 'Expand the menu' : 'Collapse the menu'} title={menuMini ? 'Show the menu with names' : 'Fold the menu to icons'} onClick={toggleMenuMini}>{menuMini ? '»' : '«'}</button></div>
@@ -296,7 +297,7 @@ export default function App() {
         ] : group === 'Other views' ? [{ key: group, entries: [
           ...others.azure.filter((entry) => access.sees(entry.onPrem ? 'release' : 'board')).map((entry) => navButton(`view:${entry.id}`, pageMeta('board').icon, entry.name, page === 'board' && view.id === entry.id, () => openView(entry.id))),
           ...(access.sees('release') ? others.windchill.map((entry) => navButton(entry.id, pageMeta('windchill').icon, entry.name, page === 'windchill' && windchillView?.id === entry.id, () => openWindchill(entry.id))) : []),
-        ] }] : group === 'Settings' ? [{ key: group, entries: settingsPagesFor(access.can('settings.manage')).map((entry) => navButton(`settings:${entry.key}`, pageMeta('admin').icon, entry.label, page === 'admin' && settingsTab === entry.key, () => openSettings(entry.key))) }] : [{ key: group, entries: pages.filter((item) => !personalViews.menu.hidden.includes(item.id) && item.group === group && !item.hidden).flatMap((item) => item.id === 'board' ? (access.sees('board') ? views.filter((entry) => !entry.readOnly).map((entry) => navButton(`view:${entry.id}`, item.icon, entry.name, page === 'board' && view.id === entry.id, () => openView(entry.id))) : []) : pageButton(item)) }]
+        ] }] : group === 'Settings' ? [{ key: group, entries: settingsPagesFor(access.can).map((entry) => navButton(`settings:${entry.key}`, pageMeta('admin').icon, entry.label, page === 'admin' && settingsTab === entry.key, () => openSettings(entry.key))) }] : [{ key: group, entries: pages.filter((item) => !personalViews.menu.hidden.includes(item.id) && item.group === group && !item.hidden).flatMap((item) => item.id === 'board' ? (access.sees('board') ? views.filter((entry) => !entry.readOnly).map((entry) => navButton(`view:${entry.id}`, item.icon, entry.name, page === 'board' && view.id === entry.id, () => openView(entry.id))) : []) : pageButton(item)) }]
         const shown = sections.filter((section) => section.entries.length)
         if (!shown.length) return null
         const open = !collapsed.includes(group)
@@ -318,16 +319,16 @@ export default function App() {
       {access.viewingAs && <div className="view-as-banner" role="status"><span>👁 Viewing as <strong>{viewAsLabel(access.viewingAs)}</strong>{access.viewingAs.kind === 'role' ? '' : access.rights.roles.length ? ` (${access.rights.roles.join(', ')})` : ' (default role)'} — read only: nothing is saved to Azure DevOps or Git.</span><button type="button" className="ghost" onClick={() => setViewAsOpen(true)}>Change</button><button type="button" className="primary" onClick={() => setViewAs(null)}>Exit View as</button></div>}
       {viewAsOpen && <ViewAsDialog current={access.viewingAs} people={viewAsPeople(azure.items, access.policy)} onStart={(next) => { setViewAs(next); setViewAsOpen(false); setPage('mydash') }} onClose={() => setViewAsOpen(false)} />}
       <DataNotices azure={azure} onOpenConnection={openConnection} />
-      {guideOpen && <SetupGuide steps={steps} busy={azure.busy} problem={azure.fetchProblem} links={setupLinks} linkDefaults={linkDefaults} editLinks={access.can('settings.manage') && git.connected && !git.readOnly && !azure.isSample ? { links: store.state.setupLinks ?? {}, onChange: (links) => store.update((draft) => { draft.setupLinks = links; return draft }), saveBar: <GitSyncBar git={git} /> } : undefined} inputs={{ connectGit: (token) => git.connect({ ...defaultGitRepository, ...git.config }, token, true), saveEmail: (email) => { azure.setCreatorEmail(email) }, savePat: (token) => { azure.rememberPat(token); azure.reloadConnectionProfiles() }, detectEmail: () => azure.config ? detectWorkEmail(azure.config, azure.pat) : Promise.reject(new Error('Set up the Time Writing connection first.')), gitMessage: git.status === 'error' ? git.message : undefined }} onClose={() => setGuideOpen(false)} onDismiss={dismissGuide} onOpenTab={(tab, section) => { openSettings(tab, section); setGuideOpen(false) }} onFetch={() => void azure.refresh()} />}
+      {guideOpen && <SetupGuide steps={steps} busy={azure.busy} problem={azure.fetchProblem} links={setupLinks} linkDefaults={linkDefaults} editLinks={access.can('layout.defaults') && git.connected && !git.readOnly && !azure.isSample ? { links: store.state.setupLinks ?? {}, onChange: (links) => store.update((draft) => { draft.setupLinks = links; return draft }), saveBar: <GitSyncBar git={git} /> } : undefined} inputs={{ connectGit: (token) => git.connect({ ...defaultGitRepository, ...git.config }, token, true), saveEmail: (email) => { azure.setCreatorEmail(email) }, savePat: (token) => { azure.rememberPat(token); azure.reloadConnectionProfiles() }, detectEmail: () => azure.config ? detectWorkEmail(azure.config, azure.pat) : Promise.reject(new Error('Set up the Time Writing connection first.')), gitMessage: git.status === 'error' ? git.message : undefined }} onClose={() => setGuideOpen(false)} onDismiss={dismissGuide} onOpenTab={(tab, section) => { openSettings(tab, section); setGuideOpen(false) }} onFetch={() => void azure.refresh()} />}
       {store.cache.status === 'error' && <Notice tone="error"><p>{store.cache.message}</p><div className="button-row"><button className="ghost" onClick={() => exportStateJson(store.state)}>Export JSON backup now</button><button className="primary" onClick={store.retrySave}>Retry browser save</button></div></Notice>}
       {store.connection.mode !== 'sharepoint' && store.connection.status === 'error' && <Notice tone="error">{store.connection.message}</Notice>}
       {git.remoteChanges.length > 0 && <Notice className="git-update-banner"><p><strong>Newer data in Git</strong>, saved by someone else since you opened the app: {git.remoteChanges.map((change) => change.label).join(', ')}.{git.remoteChanges.some((change) => change.planning) && git.dirty ? ' Reloading drops the planning changes you have not saved to Git here.' : ' Reload to see it.'}</p><div className="button-row"><button type="button" onClick={() => window.location.reload()}>Reload</button></div></Notice>}
-      {page === 'mydash' && <MyDashboardPage month={month} azure={reportAzure} store={store} my={my} navigate={setPage} views={personalViews} canSetDefault={access.can('settings.manage')} windchill={windchill} />}
-      {page === 'overview' && <DashboardPage month={month} azure={reportAzure} navigate={setPage} store={store} setMonth={setMonth} my={my} views={personalViews} canSetDefault={access.can('settings.manage')} canLock={access.rights.roles.includes('Admin')} />}
+      {page === 'mydash' && <MyDashboardPage month={month} azure={reportAzure} store={store} my={my} navigate={setPage} views={personalViews} canSetDefault={access.can('layout.defaults')} windchill={windchill} />}
+      {page === 'overview' && <DashboardPage month={month} azure={reportAzure} navigate={setPage} store={store} setMonth={setMonth} my={my} views={personalViews} canSetDefault={access.can('layout.defaults')} canLock={access.can('capacity.periods')} />}
       {page === 'pulse' && <PulseCheckPage month={month} azure={reportAzure} store={store} my={my} navigate={setPage} windchill={windchill} openWindchill={openWindchill} git={git} pack={monthlyPack} views={personalViews} canPickProfile={access.rights.roles.includes('Admin')} />}
       {page === 'pireview' && <PiReviewPage />}
       {page === 'brite' && <BritePage />}
-      {page === 'kpitracker' && <KpiTrackerPage git={git} canManage={access.can('settings.manage')} who={my.me.name || 'Admin'} />}
+      {page === 'kpitracker' && <KpiTrackerPage git={git} canManage={access.can('storage.shared')} who={my.me.name || 'Admin'} />}
       {page === 'qemapping' && <QeMappingPage git={git} store={qeMapping} resources={qeResources} />}
       {page === 'mywork' && <MyWorkPage azure={azure} store={store} my={my} month={month} onOpenActivities={() => setPage('activities')} assign={assign} featureSetup={featureSetup.setups} />}
       {page === 'bulk' && <SprintCheckPage azure={azure} store={store} my={my} />}
@@ -342,5 +343,5 @@ export default function App() {
       {page === 'admin' && <AdminPage key={`${settingsTab}:${settingsVisit}`} tab={settingsTab} onOpenTab={openSettings} {...pageProps} azure={azure} git={git} access={access} featureSetup={featureSetup} qeColumnNames={[...new Set((qeMapping.file?.sheets ?? []).flatMap((sheet) => sheet.columns.map((column) => column.name)))]} monthlyPack={monthlyPack} history={history} loadEverything={loadEverything} onOpenBoard={() => setPage('board')} />}
       {page === 'docs' && <DocsPage git={git} onConfigure={() => openSettings('storage', 'git')} />}
     </main>
-  </div></HeaderSlot.Provider></ReleaseSettingsContext.Provider></TableDefaultsContext.Provider>
+  </div></HeaderSlot.Provider></CanContext.Provider></ReleaseSettingsContext.Provider></TableDefaultsContext.Provider>
 }

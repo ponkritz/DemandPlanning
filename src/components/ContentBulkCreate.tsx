@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { ReleaseEntry } from '../releaseSource'
 import type { BoardHit } from '../dpBoardMatch'
-import { boardPeople, contentBulk, contentEpicId, contentPlan, personEmail } from '../contentBulk'
+import { boardPeople, contentBulk, contentPlan, personEmail } from '../contentBulk'
+import { useBulkEpic } from '../useStreamEpics'
 import { createFeatureFromSetup, currentIndiaMonth, currentIterationPairs, futureIterationPairs, readAzureIterations, withFeatureDoD, HierarchyCreationError, type AzureIteration } from '../azureDevOps'
 import { runInBackground } from '../backgroundJobs'
 import { adhocAfterLock } from '../planningLock'
@@ -11,6 +12,8 @@ import { Modal, Notice } from './ui'
 // CNB-01…02: Create Features for the selected Content releases — the pop-up asks for the one person they are all
 // assigned to, lists each Feature (or why it is skipped) and creates them one after another as a background job.
 export function ContentBulkCreate({ releases, featureTitle, featureMatch, azure, onClose }: { releases: ReleaseEntry[]; featureTitle: (release: ReleaseEntry) => string; featureMatch: (release: ReleaseEntry) => BoardHit | undefined; azure: AzureWorkspace; onClose: () => void }) {
+  // QV-59: the Content bulk Epic — mine, else shared, else built in (22919).
+  const contentEpicId = useBulkEpic('Content').epicId ?? 0
   const plan = contentPlan(releases, featureTitle, featureMatch)
   const ready = plan.filter((line) => !line.skip)
   const people = boardPeople(azure.items)

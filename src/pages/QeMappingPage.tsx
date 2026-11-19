@@ -1,4 +1,5 @@
 import { useColumnWidths } from '../components/columnWidths'
+import { useCan } from '../useCan'
 import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { EmptyState, Modal, Notice, Page, Panel } from '../components/ui'
 import { downloadCsv, downloadXlsx } from '../download'
@@ -40,7 +41,8 @@ export function QeMappingPage({ git, store, resources = [] }: { git: GitStorage;
   const [result, setResult] = useState<{ tone: 'success' | 'error' | 'info'; text: string; url?: string } | null>(null)
   const upload = useRef<HTMLInputElement>(null)
 
-  const editable = git.connected && !git.readOnly && !git.isSample
+  const can = useCan()
+  const editable = git.connected && !git.readOnly && !git.isSample && can('qemapping.edit')
   // Column widths dragged on the headings (QEM-09), kept per tab and column in this browser.
   const widths = useColumnWidths('qe-mapping')
   const widthKey = (id: string) => `${sheet?.id ?? ''}:${id}`
@@ -132,7 +134,7 @@ export function QeMappingPage({ git, store, resources = [] }: { git: GitStorage;
   })
 
   return <Page className="qe-mapping-page" intro="The QE Mapping as uploaded from Excel, shared through Git. Filter, edit cells, add or delete rows and columns, hide, move and group columns."
-    actions={<>{editable && <><input ref={upload} type="file" accept=".xlsx,.csv,.xls" hidden onChange={(event) => void onUpload(event.target.files?.[0])} /><button type="button" className="primary" onClick={() => upload.current?.click()}>{file ? 'Upload a new Excel…' : 'Upload Excel…'}</button></>}{file && <><button type="button" className="ghost" onClick={exportXlsx} title="Every tab with all its columns and rows">Export Excel</button><button type="button" className="ghost" onClick={exportCsv} title="This tab: the shown columns and the filtered rows">Export CSV</button></>}{git.connected && <button type="button" className="ghost" onClick={() => { if (draft && !window.confirm('Discard the unsaved changes?')) return; setDraft(null); setResult(null); void store.reload() }}>Reload from Git</button>}</>}>
+    actions={<>{editable && <><input ref={upload} type="file" accept=".xlsx,.csv,.xls" hidden onChange={(event) => void onUpload(event.target.files?.[0])} /><button type="button" className="primary" onClick={() => upload.current?.click()}>{file ? 'Upload a new Excel…' : 'Upload Excel…'}</button></>}{file && <>{can('data.export') && <button type="button" className="ghost" onClick={exportXlsx} title="Every tab with all its columns and rows">Export Excel</button>}{can('data.export') && <button type="button" className="ghost" onClick={exportCsv} title="This tab: the shown columns and the filtered rows">Export CSV</button>}</>}{git.connected && <button type="button" className="ghost" onClick={() => { if (draft && !window.confirm('Discard the unsaved changes?')) return; setDraft(null); setResult(null); void store.reload() }}>Reload from Git</button>}</>}>
     {!git.connected && <Notice tone="info">Connect Git storage (Settings → Storage) to upload and edit the QE Mapping; it is shared with everyone through Git.{store.file ? ' The mapping last loaded in this browser is shown.' : ''}</Notice>}
     {git.connected && git.readOnly && <Notice tone="info">View only: your Git token can read but not save.</Notice>}
     {git.isSample && <Notice tone="warning">Synthetic sample data is loaded: the QE Mapping cannot be changed.</Notice>}

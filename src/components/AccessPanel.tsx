@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { actions, areas, defaultPolicy, isEmail, keepsManager, normalEmail, roles, serializeAccess, type AccessPolicy, type Action, type Area, type Role } from '../access'
+import { Fragment, useState } from 'react'
+import { actionGroups, actions, areas, cellOf, defaultPolicy, explainAccess, setCell, type Cell, type Permission, isEmail, keepsManager, normalEmail, roles, serializeAccess, toolOwnerChange, type AccessPolicy, type Role } from '../access'
 import type { Access } from '../useAccess'
 import type { GitStorage } from '../useGitStorage'
 import { Notice, Panel, Pill } from './ui'
@@ -16,6 +16,9 @@ export function AccessPanel({ access, git, people, membersInPeople = false }: { 
   const [search, setSearch] = useState('')
   const [commit, setCommit] = useState('')
   const [busy, setBusy] = useState(false)
+  const [find, setFind] = useState('')
+  const [checkWho, setCheckWho] = useState('')
+  const [checkWhat, setCheckWhat] = useState<Permission>('azure.write')
   const [result, setResult] = useState<{ tone: 'success' | 'error'; text: string; url?: string } | null>(null)
   const editable = git.connected && !git.readOnly && !git.isSample && access.can('access.manage')
   const shown = draft ?? access.policy
@@ -25,6 +28,9 @@ export function AccessPanel({ access, git, people, membersInPeople = false }: { 
   const nameOf = (email: string) => people.find((person) => person.email === email)?.name
   // Two people with the same name are told apart by their email.
   const label = (person: { email: string; name: string }) => people.filter((entry) => entry.name === person.name).length > 1 ? `${person.name} (${person.email})` : person.name
+  // CON-94: the matrix rows: the menu areas, then each group of actions.
+  const matrixGroups: { label: string; rows: { key: Permission; label: string }[] }[] = [{ label: 'Menu areas (pages)', rows: areas.map((area) => ({ key: area.key, label: area.label })) }, ...actionGroups.map((group) => ({ label: group, rows: actions.filter((action) => action.group === group).map((action) => ({ key: action.key, label: action.label })) }))]
+  const checkPeople = [...people, ...Object.keys(shown?.members ?? {}).filter((email) => !people.some((person) => person.email === email)).map((email) => ({ email, name: email }))].sort((a, b) => a.name.localeCompare(b.name))
   const candidates = people.filter((person) => !shown?.members[person.email]).sort((a, b) => a.name.localeCompare(b.name))
   const members = Object.entries(shown?.members ?? {}).filter(([email]) => !search.trim() || `${email} ${nameOf(email) ?? ''}`.toLowerCase().includes(search.trim().toLowerCase())).sort(([a], [b]) => (nameOf(a) ?? a).localeCompare(nameOf(b) ?? b))
 
@@ -38,6 +44,9 @@ export function AccessPanel({ access, git, people, membersInPeople = false }: { 
   async function save(event: React.FormEvent) {
     event.preventDefault()
     if (!draft) return
+    // CON-93: only a Tool Owner changes who holds the stream mapping, and one must remain.
+    const ownerProblem = toolOwnerChange(access.policy, draft, access.email)
+    if (ownerProblem) { setResult({ tone: 'error', text: `Not saved: ${ownerProblem}` }); return }
     if (!keepsManager(draft, access.email)) { setResult({ tone: 'error', text: access.email ? `Not saved: ${access.email} would lose “Manage access”. Keep a role with it for yourself (e.g. Admin).` : 'Not saved: no email is set on your Time Writing connection, so the app cannot check that you keep “Manage access”.' }); return }
     setBusy(true)
     try {
@@ -79,13 +88,25 @@ export function AccessPanel({ access, git, people, membersInPeople = false }: { 
           {!members.length && <tr><td colSpan={roles.length + 2} className="muted">{search ? 'No member matches.' : 'No members yet: everyone has the default role.'}</td></tr>}
         </tbody></table></div>
         </>}
-        <h3>What each role sees and may do</h3>
-        <div className="azure-table"><table className="access-table"><thead><tr><th>Menu area / action</th>{roles.map((role) => <th key={role}>{role}</th>)}</tr></thead><tbody>
-          {areas.map((area) => <tr key={area.key}><td>{area.label}</td>{roles.map((role) => <td key={role}><input type="checkbox" aria-label={`${role} sees ${area.label}`} checked={shown.roles[role].areas.includes(area.key)} onChange={() => change((policy) => { policy.roles[role].areas = toggle<Area>(policy.roles[role].areas, area.key) })} /></td>)}</tr>)}
+      </fieldset>
+      <h3>What each role sees and may do</h3>
+      <p className="muted">Each cell is <strong>Allow</strong>, <strong>Deny</strong> or <strong>Not set</strong>. A person gets everything any of their roles allows, except what any of their roles denies: a denial wins. Not set means not allowed unless another role allows it.</p>
+      <div className="query-toolbar"><input className="search" aria-label="Search permissions" placeholder="Search permissions" value={find} onChange={(event) => setFind(event.target.value)} /></div>
+      <fieldset className="plain-fieldset" disabled={!editable || busy}>
+        <div className="azure-table"><table className="access-table access-matrix"><thead><tr><th>Permission</th>{roles.map((role) => <th key={role}>{role}</th>)}</tr></thead><tbody>
+          {matrixGroups.map((group) => { const rows = group.rows.filter((row) => !find.trim() || `${group.label} ${row.label}`.toLowerCase().includes(find.trim().toLowerCase())); return rows.length ? <Fragment key={group.label}>
+            <tr className="access-group"><th colSpan={roles.length + 1} scope="colgroup">{group.label}</th></tr>
+            {rows.map((row) => <tr key={row.key}><td>{row.label}</td>{roles.map((role) => { const cell = cellOf(shown.roles[role], row.key); return <td key={role}><select className={`access-cell access-${cell}`} aria-label={`${role}: ${row.label}`} value={cell} onChange={(event) => change((policy) => setCell(policy.roles[role], row.key, event.target.value as Cell))}><option value="allow">Allow</option><option value="deny">Deny</option><option value="unset">Not set</option></select></td> })}</tr>)}
+          </Fragment> : null })}
           <tr><td colSpan={roles.length + 1}><small className="muted">Settings is always there, for each person’s own connections and tokens.</small></td></tr>
-          {actions.map((action) => <tr key={action.key}><td>{action.label}</td>{roles.map((role) => <td key={role}><input type="checkbox" aria-label={`${role} may ${action.label}`} checked={shown.roles[role].actions.includes(action.key)} onChange={() => change((policy) => { policy.roles[role].actions = toggle<Action>(policy.roles[role].actions, action.key) })} /></td>)}</tr>)}
         </tbody></table></div>
       </fieldset>
+      <h3>Check access</h3>
+      <div className="query-toolbar access-check">
+        <select aria-label="Check access for" value={checkWho} onChange={(event) => setCheckWho(event.target.value)}><option value="">Choose a person…</option>{checkPeople.map((person) => <option key={person.email} value={person.email}>{label(person)}</option>)}</select>
+        <select aria-label="Check permission" value={checkWhat} onChange={(event) => setCheckWhat(event.target.value as Permission)}>{matrixGroups.map((group) => <optgroup key={group.label} label={group.label}>{group.rows.map((row) => <option key={row.key} value={row.key}>{row.label}</option>)}</optgroup>)}</select>
+        {checkWho && (() => { const answer = explainAccess(shown, checkWho, checkWhat); return <span role="status" className="access-answer">{answer.allowed ? <Pill tone="open">Allowed</Pill> : <Pill tone="danger">Not allowed</Pill>} {answer.deniedBy.length ? `Denied by ${answer.deniedBy.join(', ')}.` : answer.allowedBy.length ? `Allowed by ${answer.allowedBy.join(', ')}.` : answer.roles.length ? `None of ${answer.roles.join(', ')} allows it.` : 'No role (no default role either).'}{draft ? ' (unsaved changes included)' : ''}</span> })()}
+      </div>
       {editable && dirty && <form className="git-bar git-bar-dirty" onSubmit={save}>
         <span><strong>Unsaved access changes</strong> — not yet in Git</span>
         <input aria-label="Change description" value={commit} onChange={(event) => setCommit(event.target.value)} placeholder="Describe the change (e.g. Scrum Master role for …)" />

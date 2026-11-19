@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react'
+import { useCan } from '../useCan'
 import { useTableDefaults } from './tableDesign'
 import { compareCells, moveId, moveIdTo, orderedIds, readLayout, saveLayout, tableCsv, tableSheet, type CellValue, type ExportFormat, type TableDensity, type TableLayout } from '../tableDefaults'
 import { useColumnWidths } from './columnWidths'
@@ -129,7 +130,9 @@ export function DataTable<T>({ id, columns, rows, rowKey, exportName, toolbar, s
     if (format === 'csv') downloadCsv(tableCsv(exported.map((column) => column.label), exportRows()), `${file}.csv`)
     else downloadXlsx(writeXlsx([{ name: exportName.slice(0, 31), rows: tableSheet(exported.map((column) => column.label), exportRows()) }], defaults.excelDateFormat), `${file}.xlsx`)
   }
-  const formats = exportName ? defaults.exportFormats : []
+  // CON-94: export needs "Export tables".
+  const can = useCan()
+  const formats = exportName && can('data.export') ? defaults.exportFormats : []
   const changed = Boolean(layout.order?.length || layout.hidden?.length || layout.density || widths.resized)
 
   return <div className={`data-table data-table-${density} ${className}`}>

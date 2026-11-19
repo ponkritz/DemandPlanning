@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { accessFile, parseAccess, rightsFor, serializeAccess, type AccessPolicy, type Action, type Area } from './access'
+import { accessFile, canManageStreams, parseAccess, rightsFor, serializeAccess, type AccessPolicy, type Action, type Area } from './access'
 import { guardAzureWrites } from './azureDevOps'
 import { GitConflictError } from './gitStorage'
 import type { GitStorage } from './useGitStorage'
@@ -43,7 +43,7 @@ export function useAccess(git: GitStorage, azure: AzureWorkspace, viewAs: ViewAs
   const ownRights = rightsFor(current.policy, email)
   const active = viewAs && canViewAs(ownRights) ? viewAs : null
   const rights = active ? viewAsRights(current.policy, active) : ownRights
-  useEffect(() => { guardAzureWrites(() => rights.actions.has('azure.write')) })
+  useEffect(() => { guardAzureWrites((permission) => rights.actions.has(permission)) })
   useEffect(() => { setViewAsGuard(active ? viewAsLabel(active) : ''); return () => setViewAsGuard('') }, [active])
 
   async function save(policy: AccessPolicy, message: string) {
@@ -64,6 +64,8 @@ export function useAccess(git: GitStorage, azure: AzureWorkspace, viewAs: ViewAs
     rights, ownRights, canViewAs: canViewAs(ownRights), viewingAs: active,
     sees: (area: Area) => rights.areas.has(area),
     can: (action: Action) => rights.actions.has(action),
+    // CON-93: the stream mapping and its query logic: Tool Owners (or, while none exists, those who manage access).
+    canManageStreams: canManageStreams(current.policy, rights),
     reload: load, save,
   }
 }
