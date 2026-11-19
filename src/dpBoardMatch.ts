@@ -33,8 +33,12 @@ export function dpTitleScore(boardTitle: string | PreparedTitle, title: string, 
   return Math.max(0, ...names(title, program).map((name) => matchScore(ready, name, version)))
 }
 
-export function dpBoardCandidates(board: AzureWorkItem[]) {
-  return board.filter((item) => (item.workItemType === 'Feature' || item.workItemType === 'User Story') && item.state.trim().toLowerCase() !== 'removed' && !isTimeWritingStory(item)).map((item) => ({ item, ready: prepareTitle(item.title) }))
+// epicIds (QV-57): only Features and User Stories under these Epics are searched ([] = the whole board).
+export function dpBoardCandidates(board: AzureWorkItem[], epicIds: readonly number[] = []) {
+  const wanted = new Set(epicIds)
+  const byId = wanted.size ? new Map(board.map((item) => [item.id, item])) : undefined
+  const inEpics = (item: AzureWorkItem) => { if (!byId) return true; const seen = new Set<number>(); for (let current: AzureWorkItem | undefined = item; current && !seen.has(current.id); current = current.parentId == null ? undefined : byId.get(current.parentId)) { if (current.workItemType === 'Epic') return wanted.has(current.id); seen.add(current.id) } return false }
+  return board.filter((item) => (item.workItemType === 'Feature' || item.workItemType === 'User Story') && item.state.trim().toLowerCase() !== 'removed' && !isTimeWritingStory(item) && inEpics(item)).map((item) => ({ item, ready: prepareTitle(item.title) }))
 }
 export type DpBoardCandidates = ReturnType<typeof dpBoardCandidates>
 

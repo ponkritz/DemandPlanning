@@ -1,3 +1,4 @@
+import { useStreamEpics } from '../useStreamEpics'
 import { useMemo, useState } from 'react'
 import { releasesInMonth, windchillDateValue, windchillLocationsFile, windchillReleases, type ReleaseSource, type WindchillRelease } from '../windchillReleases'
 import { monthName } from '../format'
@@ -42,7 +43,8 @@ export function WindchillReleasesPanel({ view, rows, columns, git, month, board,
   const labels = isProject ? { name: 'Project Name', release: 'Project No' } : { name: 'Release name', release: 'Release' }
   const fileName = view.name.replace(/[^\w-]+/g, '-')
   const boardItems = board?.azure.items, stream = board?.stream ?? '', threshold = board?.threshold
-  const candidates = useMemo(() => boardItems ? dpBoardCandidates(boardItems) : [], [boardItems])
+  const epics = useStreamEpics(stream)
+  const candidates = useMemo(() => boardItems ? dpBoardCandidates(boardItems, epics) : [], [boardItems, epics])
   const matches = useMemo(() => new Map(boardItems ? result.releases.map((entry) => [entry.key, windchillBoardMatch(entry, stream, candidates, threshold)]) : []), [result.releases, boardItems, stream, threshold, candidates])
   // The list shown: the header month's releases (any document dated in it) unless "All months" is chosen; then the chosen sort.
   const inMonth = Boolean(month) && scope === 'month'

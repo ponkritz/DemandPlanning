@@ -13,6 +13,7 @@ import { ResultTabs } from './ResultTabs'
 import { EmptyState, Pill, TablePanel } from './ui'
 import type { QueryColumn, QueryOrder } from '../queryView'
 import { DataTable, type DataColumn } from './DataTable'
+import { useStreamEpics } from '../useStreamEpics'
 import { BoardMatchCell } from './DpBoardColumn'
 import { boardMatchText, dpBoardCandidates, releaseBoardMatch, type BoardMatch } from '../dpBoardMatch'
 import { nestGroups, nestedKeys, type GroupLevel, type NestedGroup } from '../nestedGroups'
@@ -51,7 +52,8 @@ function ReleaseTable({ name, title = 'Releases', detail, register, azure, assig
   // the release name (and, for IOCC, Type of Release + name) with its number, the stream as the program; a board title
   // equal to the Create Feature title is 100%. No match: the closest item and Create Feature, on every such release.
   const boardItems = azure?.items
-  const candidates = useMemo(() => boardItems ? dpBoardCandidates(boardItems) : [], [boardItems])
+  const epics = useStreamEpics(name)
+  const candidates = useMemo(() => boardItems ? dpBoardCandidates(boardItems, epics) : [], [boardItems, epics])
   const matches = useMemo(() => new Map<string, BoardMatch>(azure ? register.map((release) => [release.key, releaseBoardMatch(release, name, featureTitle(release), candidates, threshold)]) : []), [azure, register, name, candidates, threshold, featureTitle])
   // UI-07…12: the release table follows the shared design default; the documents of a release open under it.
   // CNB-01: Content releases are ticked for Create Features (all assigned to one person, chosen in the pop-up).

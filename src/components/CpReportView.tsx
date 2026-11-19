@@ -1,3 +1,4 @@
+import { useStreamEpics } from '../useStreamEpics'
 import { useMemo, useState } from 'react'
 import { DataTable } from './DataTable'
 import type { AzureWorkspace } from '../useAzureWorkspace'
@@ -19,7 +20,8 @@ const statusText: Record<string, string> = { candidate_from_title: 'name from ti
 
 export function CpReportView({ report, azure, assign, featureSetup, threshold, enrichment }: { report: CpMonthReport; azure: AzureWorkspace; assign?: { me: string; canChoose: boolean }; featureSetup?: FeatureSetups | null; threshold: number; enrichment?: string }) {
   const [open, setOpen] = useState('')
-  const candidates = useMemo(() => dpBoardCandidates(azure.items), [azure.items])
+  const epics = useStreamEpics('CP')
+  const candidates = useMemo(() => dpBoardCandidates(azure.items, epics), [azure.items, epics])
   const titleOf = (row: CpReleaseRow) => row.name.name && row.name.rawVersion ? releaseOnlyTitle(row.name.name, row.name.rawVersion) : row.container.title
   const matches = useMemo(() => new Map(report.rows.map((row) => [row.container.id, boardMatch({ names: [row.name.name ?? '', row.container.title], versions: [row.name.rawVersion ?? ''], created: titleOf(row) }, candidates, threshold)])), [report.rows, candidates, threshold])
   const month = monthName(report.month)

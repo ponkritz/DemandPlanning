@@ -711,3 +711,5 @@ label.formula-term{justify-content:flex-start}
 .act-header-tools{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap}
 .act-header-tools .act-add-open{width:auto;margin:0;padding:9px 16px;white-space:nowrap}
 .act-add-modal{display:grid;gap:12px}
+/* QV-57: Feature matching Epics — a scrollable list of the board's Epics. */
+.feature-epics-list{max-height:280px;overflow:auto;margin-top:8px}

@@ -1,6 +1,7 @@
 import { runInBackground } from './backgroundJobs'
 import { BrandMark } from './components/BrandMark'
 import { TableDefaultsContext } from './components/tableDesign'
+import { ReleaseSettingsContext } from './useStreamEpics'
 import { normalizeTableDefaults } from './tableDefaults'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
@@ -274,7 +275,7 @@ export default function App() {
   if (!store.ready) return <main className="content"><h1>I&amp;D Quality Demand Planning</h1>{store.loadError ? <Notice tone="error"><p>{store.loadError}</p><p>Do not clear browser data. If you still have an older tab open with unsaved changes, export its JSON backup first.</p><button className="primary" onClick={store.retryLoad}>Retry loading saved data</button></Notice> : <p role="status">Loading saved browser data…</p>}{buildStatus}</main>
 
   // UI-12: every table follows the shared design default.
-  return <TableDefaultsContext.Provider value={tableDesign}><HeaderSlot.Provider value={headerSlot}><div className={`app-shell${navOpen ? ' nav-open' : ''}${menuMini ? ' nav-mini' : ''}`}>
+  return <TableDefaultsContext.Provider value={tableDesign}><ReleaseSettingsContext.Provider value={store.state.releaseSourceSettings}><HeaderSlot.Provider value={headerSlot}><div className={`app-shell${navOpen ? ' nav-open' : ''}${menuMini ? ' nav-mini' : ''}`}>
     {navOpen && <div className="nav-backdrop" onClick={() => setNavOpen(false)} aria-hidden="true" />}
     <aside className="sidebar" id="primary-navigation">
       <div className="brand" title="I&amp;D Quality Demand Planning"><div className="brand-mark"><BrandMark /></div><div><strong>I&amp;D Quality</strong><span>Demand Planning</span></div><button type="button" className="nav-mini-toggle" aria-pressed={menuMini} aria-label={menuMini ? 'Expand the menu' : 'Collapse the menu'} title={menuMini ? 'Show the menu with names' : 'Fold the menu to icons'} onClick={toggleMenuMini}>{menuMini ? '»' : '«'}</button></div>
@@ -341,5 +342,5 @@ export default function App() {
       {page === 'admin' && <AdminPage key={`${settingsTab}:${settingsVisit}`} tab={settingsTab} onOpenTab={openSettings} {...pageProps} azure={azure} git={git} access={access} featureSetup={featureSetup} qeColumnNames={[...new Set((qeMapping.file?.sheets ?? []).flatMap((sheet) => sheet.columns.map((column) => column.name)))]} monthlyPack={monthlyPack} history={history} loadEverything={loadEverything} onOpenBoard={() => setPage('board')} />}
       {page === 'docs' && <DocsPage git={git} onConfigure={() => openSettings('storage', 'git')} />}
     </main>
-  </div></HeaderSlot.Provider></TableDefaultsContext.Provider>
+  </div></HeaderSlot.Provider></ReleaseSettingsContext.Provider></TableDefaultsContext.Provider>
 }

@@ -902,6 +902,8 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-QV-37 Release naming patterns** — Req QV-55, QV-52 — L1 `naming-patterns.test.mjs` ("QV-55: wildcard patterns — * any text, {…} the release name; Content up to _RELEASE, IOCC after Conformance Verification / Test Tools"; "QV-55: patterns are shared settings — checked on read, per stream, built in when not saved; same list for the same settings"; "QV-55: Content documents are grouped under their release; IOCC by Conformance Verification and Test Tools names, others as before"); E2E `shell.e2e.mjs` ("TC-QV-37: Stream mapping → Release naming patterns — built-in Content and IOCC patterns, a Title tried, a pattern edited, applied and reset"); browser check with the Content and IOCC data: Release Details → Content shows one row per _RELEASE name with its documents under it; IOCC shows Conformance Verification and Test Tools groups; change a pattern, Apply, Save to Git — another browser shows the same names.
 
+**TC-QV-38 Feature-matching Epics** — Req QV-57 — L1 `feature-epics.test.mjs` (only valid, unique Epic IDs for DP, CP, IOCC and Content are retained; matching searches the selected Epic hierarchies only). Browser check: in Settings → Azure DevOps → Stream mapping, select and save one or more board Epics for each stream. Their release tables and existing-Feature checks search only those Epics; a stream with no selection searches the whole board. Removed or missing selections are named, while Tool Validations and Windchill streams remain whole-board searches.
+
 
 
 **TC-QV-24 CP releases from the asset Titles** — *(Retired — see TC-QV-25)* Req QV-40 — L1 `streams.test.mjs` ("CP: the release from the asset Title "[Release name] [Release No] [Asset name]", each release once; fuzzy QMS-0025 match (TC-QV-24)"); browser check with a CP query holding three assets of one release in both namings ("Care Pathways 3.1 Test Report", "Care Pathways 3.1.0 SRS", "Risk Analysis v3.1 (Care Pathways)") and one of another (3.2), and a QMS-0025 Feature "CP | Care Pathways | v3.1": Release Details → CP lists two releases (3 and 1 assets), 3.1 with its Feature and %, 3.2 with Create Feature opening the New Feature form titled "Care Pathways | v3.2" (release name and number only) under the CP Epic, and found after it is created; Pulse Check's Releases and Supported summary show "CP [2]"; no page errors. **UAT**
@@ -1725,6 +1727,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | QV-53 | TC-QV-34 |
 | QV-54 | TC-QV-35 |
 | QV-55 | TC-QV-37 |
+| QV-57 | TC-QV-38 |
 | QV-56 | TC-QV-36 |
 | QV-38 | TC-CON-42 |
 | OVR-01…08 | retired (TC-OVR-01…03 retired) |
