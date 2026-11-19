@@ -189,8 +189,17 @@ export function assignablePeople(items: AzureWorkItem[]) {
 //  - an Active Feature should have at least one Active User Story;
 //  - a New Feature with an Active User Story should be Active (ATM-28).
 // Only items with children of that kind are judged; Removed children are ignored.
-export type StateCheckKind = 'close-feature' | 'close-story' | 'feature-needs-active-story' | 'activate-feature'
-export interface StateCheck { kind: StateCheckKind; item: AzureWorkItem; children: AzureWorkItem[] }
+export type StateCheckKind = 'close-feature' | 'close-story' | 'feature-needs-active-story' | 'activate-feature' | 'feature-old-pi'
+export interface StateCheck { kind: StateCheckKind; item: AzureWorkItem; children: AzureWorkItem[]; targetPi?: string }
+// ATM-30: the PI part of an Iteration Path — up to and including the first segment named PI or Program Increment
+// ("Quality\\PI 2026.4\\Sprint 2" → "Quality\\PI 2026.4"); undefined when the path has none.
+export function piPathOf(iterationPath: string | undefined) {
+  const parts = (iterationPath ?? '').split('\\')
+  const at = parts.findIndex((part) => /\b(?:pi|program\s*increment)\b/i.test(part))
+  return at < 0 ? undefined : parts.slice(0, at + 1).join('\\')
+}
+const piName = (path: string) => path.slice(path.lastIndexOf('\\') + 1)
+const laterPi = (a: string, b: string) => piName(a).localeCompare(piName(b), undefined, { numeric: true, sensitivity: 'base' }) > 0
 const stateIs = (item: Pick<AzureWorkItem, 'state'>, state: string) => item.state.trim().toLowerCase() === state
 export function stateChecks(items: AzureWorkItem[], me: Me, absenceEpicId?: number): StateCheck[] {
   const byId = new Map(items.map((item) => [item.id, item]))
@@ -204,6 +213,13 @@ export function stateChecks(items: AzureWorkItem[], me: Me, absenceEpicId?: numb
       if (stories.length && stories.every((story) => stateIs(story, 'closed'))) checks.push({ kind: 'close-feature', item, children: stories })
       else if (stateIs(item, 'active') && !stories.some((story) => stateIs(story, 'active'))) checks.push({ kind: 'feature-needs-active-story', item, children: stories })
       else if (stateIs(item, 'new') && stories.some((story) => stateIs(story, 'active'))) checks.push({ kind: 'activate-feature', item, children: stories.filter((story) => stateIs(story, 'active')) })
+      // ATM-30: an Active Feature left in an older PI while its Active User Stories sit in a later one.
+      if (stateIs(item, 'active')) {
+        const active = stories.filter((story) => stateIs(story, 'active'))
+        const target = active.map((story) => piPathOf(story.iterationPath)).filter((path): path is string => Boolean(path)).reduce<string | undefined>((latest, path) => !latest || laterPi(path, latest) ? path : latest, undefined)
+        const own = piPathOf(item.iterationPath)
+        if (target && (!own || laterPi(target, own))) checks.push({ kind: 'feature-old-pi', item, children: active.filter((story) => piPathOf(story.iterationPath)?.toLowerCase() === target.toLowerCase()), targetPi: target })
+      }
     } else if (item.workItemType === 'User Story') {
       const tasks = (children.get(item.id) ?? []).filter((child) => child.workItemType === 'Task')
       if (tasks.length && tasks.every((task) => stateIs(task, 'closed'))) checks.push({ kind: 'close-story', item, children: tasks })
@@ -319,3 +335,13 @@ export function stateCheckChildren(items: AzureWorkItem[], item: Pick<AzureWorkI
   return items.filter((child) => child.parentId === item.id && child.workItemType === type && child.organization === item.organization && child.project === item.project && !stateIs(child, 'removed')).sort((a, b) => a.id - b.id)
 }
 export const canActivateHere = (child: Pick<AzureWorkItem, 'workItemType' | 'state' | 'assignedTo' | 'assignedToEmail'>, me: Me) => child.workItemType === 'User Story' && stateIs(child, 'new') && isMine(child, me)
+
+// CAP-56: every name the person goes by on the board — the chosen / derived name and each Assigned To display name of
+// items carrying their work email (letter case ignored) — so their own figures are found whichever name Azure DevOps shows.
+export function myNames(items: Pick<AzureWorkItem, 'assignedTo' | 'assignedToEmail'>[], me: Me) {
+  const email = me.email?.trim().toLowerCase()
+  const names = new Set<string>(me.name?.trim() ? [me.name.trim()] : [])
+  if (email) for (const item of items) if (item.assignedTo && item.assignedToEmail?.trim().toLowerCase() === email) names.add(item.assignedTo)
+  return [...names]
+}
+

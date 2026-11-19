@@ -648,6 +648,8 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-ATM-22 Sprint Check state actions** — Req ATM-29 — L1 `my-work.test.mjs` (own New User Stories can be set Active and their New Feature follows); browser check with the Time Writing connection: open Sprint Check and confirm its Move panel spans the page; expand a State check and verify its children appear as a backlog tree with Removed work excluded; choose an own New User Story and confirm Set User Story to Active; it changes state and activates its New Feature. A colleague's story remains read-only; no write is offered with sample data or without a PAT.
 
+**TC-ATM-23 Sprint Check PI mismatch** — Req ATM-30 — L1 `my-work.test.mjs` (the latest Active User Story PI is identified numerically); browser check with the Time Writing connection: give an own Active Feature an older PI than its Active User Stories. Sprint Check names both PIs, expands to the matching stories, and offers Move Feature to the later PI. Confirming changes only the Feature Iteration Path and reads it back; sample data, no PAT and another person's Feature offer no write.
+
 **TC-ATM-03 Close an item** — Req ATM-06 — **UAT**
 - Steps:
   1. On a New User Story press Set User Story to Active, then Close User Story; on a New Feature press Set Feature to Active, then Close Feature. A Resolved story or Feature shows "Set to Active first".
@@ -988,6 +990,10 @@ TC-OVR-01 to TC-OVR-03 tested the earlier Overview and are **retired** with OVR-
 **TC-CAP-26 Utilization formula builder** — Req CAP-54, CAP-41 — L1 `calculation-profiles.test.mjs` ("CAP-54: the utilization formula as Top ÷ Bottom follows the profile and its names"); E2E `shell.e2e.mjs` ("TC-CAP-16: …" — ticks figures in the top and the bottom, checks the sentence and that a figure is never in both); browser check: in Settings → Calculation profiles edit a profile, untick Training in the top, tick it in the bottom — the sentence reads "… ÷ (Funded Hours − Absence − Training) × 100", Save, the Pulse Check cards follow.
 
 **TC-CAP-27 Typed utilization formula (fx)** — Req CAP-55 — L1 `formula.test.mjs` ("CAP-55: a typed formula reads like Excel — figures in brackets, + - * / ( ), MAX, MIN, ROUND, IF; blank on / 0"; "CAP-55: a formula that does not read says why"); `calculation-profiles.test.mjs` ("CAP-55: a profile with a typed formula — the v4 formula typed gives the v4 figures; another formula drives person and team"); E2E `shell.e2e.mjs` ("TC-CAP-27: a calculation profile with a typed formula (fx) — starts from the ticks, is checked as typed, is saved and drives the figures"); browser check with the team data: make a copy of Current (v4) with fx on and its starting formula — every person's and the team's figures equal Current (v4); change it to =[Project work] / [Funded Hours] * 100, make it the default — Pulse Check cards, Team overview Utilization and the Monthly pack follow; Save to Git and reload in another browser.
+
+**TC-CAP-28 Personal capacity names and reason** — Req CAP-56 — L1 `capacity.test.mjs` (work-email aliases resolve to the same person and the absence reason is explicit); browser check: use a work email whose Azure items have a different Assigned To display name. Time Writing and My dashboard show the same capacity and hours. Test each exclusion: removed, uncounted team role, outside Joined on/Left on dates and no month Task; each gives its specific explanation rather than bare 0h.
+
+**TC-CAP-29 Team role controls capacity** — Req CAP-57 — L1 `people-access.test.mjs` (only a team Role decides eligibility); browser check: a QE with People Manager access and ticked People manager counts; a Lead or Manager is excluded by default. Change the Capacity roles setting, save to Git and reload: the selected team role joins/leaves capacity and utilization while app access roles do not alter the result.
 
 **TC-CAP-01 Capacity calculation** — Req CAP-01…09, OVR-09 — L1 `capacity.test.mjs`, `monthly-hours.test.mjs`, `azure-insights.test.mjs`. Plus L3 analysis (A) with one person in October 2026:
 - 22 working days × 8 = 176 h funded.
@@ -1428,6 +1434,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-MYD-05 Team overview tiles and tabs** — Req MYD-10, MYD-11, MYD-12 — E2E `shell.e2e.mjs` ("TC-MYD-05: Team overview shows six headline tiles; each opens its analysis, with a trail back; Delivery opens Pulse Check"); unit tests of the calculations as before (`dashboard.test.mjs`, `insights.test.mjs`); inspection: the menu offers no Insights workspace and `src/workspace.ts` is gone.
 
+**TC-MYD-06 Signed by me** — Req MYD-13 — L1 `my-signatures.test.mjs` (author/reviewer/approver fields, identity matching, period and per-stream release/document totals); browser check: choose a period and quick picks on My dashboard. The totals and detail list include only documents signed by the current person's name or email, count a release once, exclude undated documents, and name streams without signature data.
+
 **TC-HIS-01 Historical hours page** — Req HIS-01 — E2E `shell.e2e.mjs` ("TC-HIS-01: Settings → Historical hours explains the import and needs Git storage to upload"); browser check with Git storage and the real planning workbook: Upload Excel… reads TransformedData; the counts (rows May–Sep 2026, people, recorded hours, rows not imported with their reasons) match the workbook; Save to Git writes `history-hours.json` to the data repository (not to the app's repository); the page shows the source, cut-off and the Azure DevOps Tasks left out; Remove history removes the file.
 
 **TC-HIS-02 Reading the workbook** — Req HIS-02, HIS-03 — L1 `history.test.mjs` ("historical hours: the TransformedData sheet read before the cut-off; every other row listed with its reason (HIS-02, HIS-03)").
@@ -1481,6 +1489,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 **TC-ACT-14 Close Features from Time Writing** — Req ACT-18 — L1 `close-feature.test.mjs` (children close first, items of other people remain open and failures preserve ancestors); browser check with the Time Writing connection: select Close mode, tick one own Feature and confirm the listed work. Only the tester's open Tasks and User Stories close before the Feature; another person's work stays open; closed month Tasks are read-only and their hours cannot be edited. Cancel, sample data, no PAT and another person's view make no write.
 
 **TC-ACT-15 Fold Add a new activity** — Req ACT-19 — browser check: Add a new activity begins folded; open it, reload, and confirm the selected state persists. Fold it again and verify the activities table uses the available full width.
+
+**TC-ACT-16 Add a new activity pop-up** — Req ACT-20 — browser check: select ＋ Add a new activity beside Activities of. The Time Writing task, User Story, Task and Feature choices are in a pop-up; messages remain there, and Open New Feature closes it before opening the New Feature form. The activities list uses the full page width.
 
 **TC-ACT-05 Suggestions by state, Add all** — Req ACT-09, ACT-10 — E2E `shell.e2e.mjs` ("TC-ACT-05: suggestions filter by Active / New / Both and Add all moves them into Your activities"); browser check with the Time Writing connection: with a New and an Active Feature of yours without a task, Active / New / Both narrow the suggestions; Add all puts the shown ones in Your activities and Save creates their tasks; the Features keep their state (ATM-28: a New Feature becomes Active only through an Active User Story).
 
@@ -1656,6 +1666,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | ATM-27 | TC-ATM-19 |
 | ATM-28 | TC-ATM-21 |
 | ATM-29 | TC-ATM-22 |
+| ATM-30 | TC-ATM-23 |
 | BKL-01…03, BKL-12 | TC-BKL-01 |
 | BKL-04…09, BKL-11 | TC-BKL-02 |
 | BKL-10 | TC-BKL-03, TC-ATM-11 |
@@ -1753,6 +1764,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CAP-53 | TC-CAP-25 |
 | CAP-54 | TC-CAP-26 |
 | CAP-55 | TC-CAP-27 |
+| CAP-56 | TC-CAP-28 |
+| CAP-57 | TC-CAP-29 |
 | BAS-01…04 | TC-BAS-01 |
 | BAS-05…07 | TC-BAS-02 |
 | BAS-08…10 | TC-BAS-03 |
@@ -1853,6 +1866,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | MYD-10 | TC-MYD-05 |
 | MYD-11 | TC-MYD-05 |
 | MYD-12 | TC-MYD-05 |
+| MYD-13 | TC-MYD-06 |
 | HIS-01 | TC-HIS-01 |
 | HIS-02 | TC-HIS-02 |
 | HIS-03 | TC-HIS-02 |
@@ -1889,6 +1903,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | ACT-17 | TC-ACT-13 |
 | ACT-18 | TC-ACT-14 |
 | ACT-19 | TC-ACT-15 |
+| ACT-20 | TC-ACT-16 |
 | OVW-01 | TC-OVW-01, TC-OVW-02, TC-OVW-03 |
 | OVW-02 | TC-OVW-02 |
 | OVW-03 | TC-OVW-01 |
