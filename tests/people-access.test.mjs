@@ -21,18 +21,16 @@ test('CAP-49: a person\'s work email is kept with their profile (checked, lower 
   assert.equal(settingsLabel('access'), 'People & access', 'an old link to Access opens People & access')
 })
 
-test('CAP-50: Lead, Manager and People Manager are not counted for capacity by default; the roles are configurable', () => {
-  const profiles = { Ana: { role: 'QE', email: 'ana@example.com' }, Lee: { role: 'Lead' }, Pat: { role: 'QE', email: 'pat@example.com' } }
-  const settings = { ...base, profiles, accessRoles: { 'pat@example.com': ['People Manager'] } }
+test('CAP-57: only the team Role decides capacity — Lead and Manager are not counted by default; app access roles and the People manager tick never count (TC-CAP-29)', () => {
+  const profiles = { Ana: { role: 'QE', email: 'ana@example.com' }, Lee: { role: 'Lead' }, Pat: { role: 'QE', email: 'pat@example.com', peopleManager: true } }
+  const settings = { ...base, profiles, accessRoles: { 'pat@example.com': ['People Manager', 'Admin'] } }
   assert.equal(roleExclusion('Ana', settings), undefined)
   assert.equal(roleExclusion('Lee', settings), 'team role Lead')
-  assert.equal(roleExclusion('Pat', settings), 'app role People Manager')
-  assert.equal(roleExclusion('Ana', { ...settings, profiles: { Ana: { role: 'QE', peopleManager: true } } }), 'People manager', 'the People manager tick counts as the People Manager role')
+  assert.equal(roleExclusion('Pat', settings), undefined, 'an Admin / People Manager with the team Role QE counts')
   const model = capacityModel(backlog, '2026-10', settings)
-  assert.deepEqual(model.people.map((person) => person.name), ['Ana'])
-  assert.deepEqual(model.notCounted, [{ name: 'Lee', tasks: 1, hours: 30, reason: 'team role Lead' }, { name: 'Pat', tasks: 1, hours: 20, reason: 'app role People Manager' }])
-  assert.equal(model.totals.funded, 176, 'only Ana\'s contractual hours')
-  // Counting Lead and People Manager again brings both back.
+  assert.deepEqual(model.people.map((person) => person.name).sort(), ['Ana', 'Pat'])
+  assert.deepEqual(model.notCounted, [{ name: 'Lee', tasks: 1, hours: 30, reason: 'team role Lead' }])
+  // Counting Lead again brings Lee back.
   const all = normalizeCapacitySettings({ ...base, capacityRoles: { excludedResourceRoles: [], excludedAccessRoles: [] } })
   assert.deepEqual(capacityModel(backlog, '2026-10', { ...all, profiles, accessRoles: settings.accessRoles }).people.map((person) => person.name).sort(), ['Ana', 'Lee', 'Pat'])
 })
@@ -49,10 +47,6 @@ test('CAP-50: capacity roles read from Git are checked; the built-in choice is n
 })
 
 test('CAP-51: a person\'s work email comes from Azure DevOps (Assigned To); one saved in the profile is used only where Azure has none', () => {
-  const settings = { ...base, profiles: { Pat: { role: 'QE', email: 'old.pat@example.com' }, Kim: { role: 'QE', email: 'kim@example.com' } }, accessRoles: { 'pat@example.com': ['People Manager'], 'kim@example.com': ['People Manager'] } }
-  assert.equal(roleExclusion('Pat', settings), undefined, 'the old saved email has no access role')
-  assert.equal(roleExclusion('Pat', { ...settings, azureEmails: { Pat: 'pat@example.com' } }), 'app role People Manager', 'the Azure email links Pat to the People Manager role')
-  assert.equal(roleExclusion('Kim', { ...settings, azureEmails: {} }), 'app role People Manager', 'no Azure email: the saved one still applies')
   setAzureEmails([{ assignedTo: 'Pat', assignedToEmail: 'Pat@Example.com' }, { assignedTo: 'Nobody' }, { assignedTo: '', assignedToEmail: 'x@example.com' }])
   assert.deepEqual(capacityContext({}).azureEmails, { Pat: 'pat@example.com' }, 'read from the fetched work, lower case; never stored in the settings')
   setAzureEmails([])

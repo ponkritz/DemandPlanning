@@ -554,3 +554,22 @@ test('ATM-29: State checks expand to the User Stories of a Feature or the Tasks 
   assert.equal(canActivateHere({ ...list[2], state: 'Active' }, me), false, 'already Active')
   assert.equal(canActivateHere(list[4], me), false, 'a Task')
 })
+
+test('ATM-30: an Active Feature left in an older PI than its Active User Stories is flagged with the PI to move to (TC-ATM-23)', async () => {
+  const { stateChecks, piPathOf } = await import('../src/myWork.ts')
+  assert.equal(piPathOf('Quality\\PI 2026.4\\Sprint 2'), 'Quality\\PI 2026.4')
+  assert.equal(piPathOf('Quality\\Release 3'), undefined)
+  const list = [
+    item(30, 'Feature', 'Old PI', { ...ana, iterationPath: 'Quality\\PI 2026.1' }),
+    item(31, 'User Story', 'Now', { parentId: 30, ...ana, iterationPath: 'Quality\\PI 2026.4\\Sprint 2' }),
+    item(32, 'User Story', 'Old', { parentId: 30, ...ana, state: 'Closed', iterationPath: 'Quality\\PI 2026.1\\Sprint 1' }),
+    item(40, 'Feature', 'Same PI', { ...ana, iterationPath: 'Quality\\PI 2026.4' }),
+    item(41, 'User Story', 'Now', { parentId: 40, ...ana, iterationPath: 'Quality\\PI 2026.4\\Sprint 2' }),
+    item(50, 'Feature', 'Later PI', { ...ana, iterationPath: 'Quality\\PI 2026.10' }),
+    item(51, 'User Story', 'Earlier', { parentId: 50, ...ana, iterationPath: 'Quality\\PI 2026.9\\Sprint 1' }),
+    item(60, 'Feature', 'New one', { ...ana, state: 'New', iterationPath: 'Quality\\PI 2026.1' }),
+    item(61, 'User Story', 'Now', { parentId: 60, ...ana, iterationPath: 'Quality\\PI 2026.4\\Sprint 2' }),
+  ]
+  const flagged = stateChecks(list, me).filter((check) => check.kind === 'feature-old-pi')
+  assert.deepEqual(flagged.map((check) => [check.item.id, check.targetPi, check.children.map((child) => child.id)]), [[30, 'Quality\\PI 2026.4', [31]]], 'only the Active Feature behind its Active stories; 2026.10 is later than 2026.9; a New Feature gets the Active check first')
+})

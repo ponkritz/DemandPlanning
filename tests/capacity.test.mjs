@@ -312,3 +312,17 @@ test('CAP-37: Old Calculation — an unticked shared-time group (All, All-<Regio
   assert.deepEqual(normalizeCapacitySettings({ oldCalcExcludedScopes: ['US', 'Mars', 'everyone'] }).oldCalcExcludedScopes, ['everyone', 'US'])
   assert.equal('oldCalcExcludedScopes' in normalizeCapacitySettings({ oldCalcExcludedScopes: [] }), false)
 })
+
+test('CAP-56: my capacity is found under every name my work email carries; when I am not counted the reason is given (TC-CAP-28)', async () => {
+  const { myNames } = await import('../src/myWork.ts')
+  const { capacityGap } = await import('../src/capacity.ts')
+  const items = [{ assignedTo: 'Costa, Ana', assignedToEmail: 'ana@x.com' }, { assignedTo: 'Ana Costa (Philips)', assignedToEmail: 'ANA@x.com' }, { assignedTo: 'Ben', assignedToEmail: 'ben@x.com' }]
+  assert.deepEqual(myNames(items, { email: 'Ana@X.com', name: 'Ana Costa' }), ['Ana Costa', 'Costa, Ana', 'Ana Costa (Philips)'])
+  assert.deepEqual(myNames(items, { name: 'Ben' }), ['Ben'], 'no email: the name only')
+  const empty = { people: [], removed: [], notCounted: [], outsideEmployment: [] }
+  assert.equal(capacityGap({ ...empty, people: [{ name: 'Costa, Ana' }] }, ['Ana Costa', 'Costa, Ana']), undefined, 'counted under one of the names')
+  assert.match(capacityGap({ ...empty, removed: [{ name: 'Ana Costa' }] }, ['Ana Costa']), /removed/)
+  assert.match(capacityGap({ ...empty, notCounted: [{ name: 'Ana Costa', reason: 'role Lead' }] }, ['Ana Costa']), /Not counted for capacity: role Lead/)
+  assert.match(capacityGap({ ...empty, outsideEmployment: [{ name: 'Ana Costa', joinedOn: '2026-12-01' }] }, ['Ana Costa']), /Joined on 2026-12-01/)
+  assert.match(capacityGap(empty, ['Ana Costa']), /No month Time Writing Task/)
+})

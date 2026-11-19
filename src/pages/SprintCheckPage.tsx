@@ -59,6 +59,7 @@ export function SprintCheckPage({ azure, store, my }: { azure: AzureWorkspace; s
     'close-feature': (check) => `All ${check.children.length} User Stor${check.children.length === 1 ? 'y is' : 'ies are'} Closed: the Feature should be Closed too.`,
     'close-story': (check) => `All ${check.children.length} Task${check.children.length === 1 ? ' is' : 's are'} Closed: the User Story should be Closed too.`,
     'activate-feature': (check) => `${check.children.length} of its User Stor${check.children.length === 1 ? 'y is' : 'ies are'} Active: the Feature should be Active too.`,
+    'feature-old-pi': (check) => `The Feature is in ${shortPath(check.item.iterationPath) || 'no PI'} but its Active User Stor${check.children.length === 1 ? 'y is' : 'ies are'} in ${shortPath(check.targetPi ?? '')}: move the Feature to that PI.`,
     'feature-needs-active-story': (check) => check.children.length ? `The Feature is Active but none of its ${check.children.length} User Stor${check.children.length === 1 ? 'y is' : 'ies are'} Active: set at least one to Active.` : 'The Feature is Active but has no User Story: add one and set it to Active.',
   }
   async function applyState(item: AzureWorkItem, state: string) {
@@ -70,6 +71,17 @@ export function SprintCheckPage({ azure, store, my }: { azure: AzureWorkspace; s
       if (state === 'Active' && updated.workItemType === 'User Story') { const feature = await activateFeatureOf(config, pat, azure.items, updated); if (feature) { azure.applyWorkItems([feature], 'State check', `#${feature.id} → ${feature.state}`); note({ tone: 'success', text: `Feature #${feature.id} is now ${feature.state} too.` }) } }
       // Closing the last open User Story offers to close its Feature too (closeChain).
       if (state === 'Closed') { const result = await closeRelated(config, pat, azure.items, updated, (question) => window.confirm(question)); if (result.closed.length) { azure.applyWorkItems(result.closed, 'State check', result.closed.map((entry) => `#${entry.id} → ${entry.state}`).join(', ')); note({ tone: 'success', text: `Also closed ${result.closed.map((entry) => `#${entry.id}`).join(', ')}.` }) } for (const text of [...result.skipped, ...result.failed]) note({ tone: result.failed.includes(text) ? 'error' : 'info', text }) }
+      note({ tone: 'info', text: 'Refreshing data…' }); await azure.refresh()
+    }
+    catch (failure) { note({ tone: 'error', text: `#${item.id}: ${failure instanceof Error ? failure.message : 'update failed'}` }) }
+    finally { setBusy('') }
+  }
+  // ATM-30: move a Feature to the PI of its Active User Stories (Iteration Path only; the state stays).
+  async function moveToPi(item: AzureWorkItem, pi: string) {
+    if (blocked || !config || !window.confirm(`Move Feature #${item.id} “${item.title}” to ${pi} in Azure DevOps?`)) return
+    setBusy(`check-${item.id}`)
+    try {
+      const updated = await updateAzureWorkItem(config, pat, item.id, { iterationPath: pi }); azure.applyWorkItems([updated], 'State check', `#${item.id} ${item.iterationPath} → ${updated.iterationPath}`); note({ tone: 'success', text: `#${item.id} is now in ${shortPath(updated.iterationPath)}.` })
       note({ tone: 'info', text: 'Refreshing data…' }); await azure.refresh()
     }
     catch (failure) { note({ tone: 'error', text: `#${item.id}: ${failure instanceof Error ? failure.message : 'update failed'}` }) }
@@ -131,13 +143,13 @@ export function SprintCheckPage({ azure, store, my }: { azure: AzureWorkspace; s
                 </>}
           </Panel>
         </div>
-        <Panel className="action-card state-checks" eyebrow="CHECK" title="State checks" info="Your Features and User Stories whose state does not match their children: all User Stories Closed → close the Feature; all Tasks Closed → close the User Story; an Active Feature needs at least one Active User Story. A Feature is closed only from Active.">
+        <Panel className="action-card state-checks" eyebrow="CHECK" title="State checks" info="Your Features and User Stories whose state does not match their children: all User Stories Closed → close the Feature; all Tasks Closed → close the User Story; an Active Feature needs at least one Active User Story; an Active Feature still in an older PI than its Active User Stories is moved to their PI. A Feature is closed only from Active.">
           {checks.length ? <div className="backlog-table-scroll"><table className="backlog-table state-tree" aria-label="State checks">
             <thead><tr><th style={{ width: 70 }}>ID</th><th>Title</th><th style={{ width: 110 }}>State</th><th style={{ width: 150 }}>Assigned To</th><th>Check</th><th style={{ width: 200 }} aria-label="Action" /></tr></thead>
             <tbody>{checks.map((check) => {
               const item = check.item, expanded = open.has(item.id)
               const below = stateCheckChildren(azure.items, item)
-              const next = check.kind === 'feature-needs-active-story' ? null : nextStateFor(item, azure.items)
+              const next = check.kind === 'feature-needs-active-story' || check.kind === 'feature-old-pi' ? null : nextStateFor(item, azure.items)
               const saving = busy === `check-${item.id}`
               return [<tr key={`${check.kind}-${item.id}`} className="state-tree-row">
                 <td><ItemLink item={item} /></td>
@@ -145,7 +157,8 @@ export function SprintCheckPage({ azure, store, my }: { azure: AzureWorkspace; s
                 <td><StateDot state={item.state} /></td>
                 <td>{item.assignedTo || 'Unassigned'}</td>
                 <td><span className={`state-check-text${check.kind === 'feature-needs-active-story' ? ' warning-text' : ''}`}>{checkText[check.kind](check)}</span></td>
-                <td>{next ? <button type="button" className="backlog-action" disabled={Boolean(blocked) || saving} onClick={() => void applyState(item, next.state)}>{saving ? 'Saving…' : next.label}</button>
+                <td>{check.kind === 'feature-old-pi' && check.targetPi ? <button type="button" className="backlog-action" disabled={Boolean(blocked) || saving} onClick={() => void moveToPi(item, check.targetPi!)}>{saving ? 'Saving…' : `Move Feature to ${shortPath(check.targetPi)}`}</button>
+                  : next ? <button type="button" className="backlog-action" disabled={Boolean(blocked) || saving} onClick={() => void applyState(item, next.state)}>{saving ? 'Saving…' : next.label}</button>
                   : check.kind === 'feature-needs-active-story' && below.length ? <button type="button" className="backlog-action" aria-expanded={expanded} onClick={() => toggle(item.id)}>{expanded ? 'Hide User Stories' : 'Choose a User Story'}</button>
                   : <a href={item.url} target="_blank" rel="noreferrer">Open in Azure DevOps</a>}</td>
               </tr>, ...(expanded ? below.map((child) => {
