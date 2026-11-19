@@ -13,7 +13,7 @@ export function TableDefaultsPanel({ store, git, canEdit }: { store: ReturnType<
     draft.audits.unshift({ id: crypto.randomUUID(), timestamp: new Date().toISOString(), actor: 'u-owner', action: 'Update', entity: 'TableDefaults', entityId: 'tables', detail })
     return draft
   })
-  const flag = (key: 'resize' | 'reorder' | 'chooseColumns' | 'wrapToggle' | 'densityToggle' | 'defaultWrap', label: string, hint: string) =>
+  const flag = (key: 'resize' | 'reorder' | 'chooseColumns' | 'wrapToggle' | 'densityToggle' | 'defaultWrap' | 'chartDataLabels', label: string, hint: string) =>
     <label className="check" key={key}><input type="checkbox" disabled={!canEdit} checked={current[key]} onChange={(event) => change({ [key]: event.target.checked }, `${label} = ${event.target.checked ? 'on' : 'off'}`)} /><span><strong>{label}</strong> <small className="muted">{hint}</small></span></label>
   const format = (entry: ExportFormat, label: string) => <label className="check" key={entry}><input type="checkbox" disabled={!canEdit} checked={current.exportFormats.includes(entry)} onChange={(event) => change({ exportFormats: event.target.checked ? [...current.exportFormats, entry] : current.exportFormats.filter((item) => item !== entry) }, `Export ${label} = ${event.target.checked ? 'on' : 'off'}`)} />{label}</label>
   return <Panel className="admin-section" eyebrow="SHARED" title="Table defaults" info="The design default of every table: what each table offers and how it starts. Changing it here changes every table for everyone (after Save to Git). Each person's own widths, column order, hidden columns, wrap and density per table stay in their browser.">
@@ -34,6 +34,9 @@ export function TableDefaultsPanel({ store, git, canEdit }: { store: ReturnType<
       <fieldset><legend>A table starts</legend>
         <label>Row density<select disabled={!canEdit} value={current.defaultDensity} onChange={(event) => change({ defaultDensity: event.target.value as TableDefaults['defaultDensity'] }, `Default density = ${event.target.value}`)}><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label>
         {flag('defaultWrap', 'Wrapped', 'text wraps until someone switches it off for a table')}
+      </fieldset>
+      <fieldset><legend>Charts</legend>
+        {flag('chartDataLabels', 'Data labels', 'every chart shows its values on the bars, lines and slices; each chart has its own Data labels box, kept per computer')}
       </fieldset>
       {canEdit && <div className="button-row"><button type="button" className="ghost" onClick={() => change(tableDefaults, 'Reset to the built-in defaults')}>Reset to the built-in defaults</button></div>}
     </div>

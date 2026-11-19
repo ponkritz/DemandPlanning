@@ -1,12 +1,11 @@
 import { listJobs, runInBackground, subscribeJobs } from '../backgroundJobs'
-import { DataTable } from '../components/DataTable'
 import { useState, useSyncExternalStore } from 'react'
 import { PersonPicker } from '../components/PersonPicker'
 import { EmptyState, Notice, Page, Panel, Pill } from '../components/ui'
 import { currentIterationPairs, readAzureIterations, updateAzureWorkItem, type AzureIteration } from '../azureDevOps'
 import { capacityContext } from '../capacity'
-import { moveCandidates, nextStateFor, stateChecks, type MoveStates, type StateCheck } from '../myWork'
-import { closeRelated } from '../closeChain'
+import { canActivateHere, isMine, moveCandidates, stateCheckChildren, nextStateFor, stateChecks, type MoveStates, type StateCheck } from '../myWork'
+import { activateFeatureOf, closeRelated } from '../closeChain'
 import type { AzureWorkItem } from '../domain'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { MyWork } from '../useMyWork'
@@ -18,12 +17,22 @@ const shortPath = (path: string) => path.split('\\').slice(1).join(' › ') || p
 
 // Sprint check (ATM-07…ATM-09, ATM-20; formerly Bulk actions): move my pending User Stories from past Sprints to the current
 // one, and the state checks of my Features and User Stories. Each asks for confirmation; after it the data is refreshed.
-// Month Time Writing tasks are added on My Activities.
+// Month Time Writing tasks are added on Time Writing.
 // assign: who is creating (their email) and whether they may assign new work to someone else.
 // The item's number as a link to it in Azure DevOps (new tab); plain text when no address is known.
 function ItemLink({ item }: { item: Pick<AzureWorkItem, 'id' | 'url' | 'workItemType' | 'title'> }) {
   return item.url ? <a className="item-link" href={item.url} target="_blank" rel="noreferrer" title={`Open ${item.workItemType} #${item.id} in Azure DevOps`}>#{item.id}</a> : <>#{item.id}</>
 }
+
+// ATM-29: the backlog tree's look — a ⌄ / › toggle, the type icon and the linked title, indented by depth.
+function TreeTitle({ item, depth, toggle }: { item: AzureWorkItem; depth: number; toggle?: { open: boolean; onClick: () => void } }) {
+  return <div className="backlog-title" style={{ paddingLeft: depth * 20 }}>
+    {toggle ? <button type="button" className="tree-toggle" aria-label={`${toggle.open ? 'Collapse' : 'Expand'} ${item.workItemType} ${item.id}`} aria-expanded={toggle.open} onClick={toggle.onClick}>{toggle.open ? '⌄' : '›'}</button> : <span className="tree-toggle" />}
+    <span className={`backlog-type-icon backlog-type-${item.workItemType.toLowerCase().replaceAll(' ', '-')}`} aria-hidden="true">{item.workItemType === 'Feature' ? '♜' : item.workItemType === 'Task' ? '☑' : '▣'}</span>
+    <a href={item.url} target="_blank" rel="noreferrer" title={item.title}>{item.title}</a>
+  </div>
+}
+const StateDot = ({ state }: { state: string }) => <span className="backlog-state"><i className={`state-dot state-${state.toLowerCase().replaceAll(' ', '-')}`} />{state}</span>
 
 export function SprintCheckPage({ azure, store, my }: { azure: AzureWorkspace; store: PageProps['store']; my: MyWork }) {
   const [busy, setBusy] = useState('')
@@ -36,6 +45,9 @@ export function SprintCheckPage({ azure, store, my }: { azure: AzureWorkspace; s
   const [skipMove, setSkipMove] = useState<Set<number>>(new Set())
   const [iterations, setIterations] = useState<AzureIteration[]>([])
   const [moveStates, setMoveStates] = useState<MoveStates>('both')
+  // ATM-29: State checks as a backlog tree — each row expands to the items below it.
+  const [open, setOpen] = useState<Set<number>>(new Set())
+  const toggle = (id: number) => setOpen((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next })
   const { config, pat } = azure
   const absenceEpicId = capacityContext(store.state).absenceEpicId
   const blocked = azure.isSample ? 'Synthetic sample data is loaded: changes to Azure DevOps are disabled.' : !config || !pat.trim() ? 'Connect the Time Writing connection (with its PAT) to change items in Azure DevOps.' : ''
@@ -54,6 +66,8 @@ export function SprintCheckPage({ azure, store, my }: { azure: AzureWorkspace; s
     setBusy(`check-${item.id}`)
     try {
       const updated = await updateAzureWorkItem(config, pat, item.id, { state }); azure.applyWorkItems([updated], 'State check', `#${item.id} ${item.state} → ${updated.state}`); note({ tone: 'success', text: `#${item.id} is now ${updated.state}.` })
+      // ATM-28: a User Story set Active makes its New Feature Active too.
+      if (state === 'Active' && updated.workItemType === 'User Story') { const feature = await activateFeatureOf(config, pat, azure.items, updated); if (feature) { azure.applyWorkItems([feature], 'State check', `#${feature.id} → ${feature.state}`); note({ tone: 'success', text: `Feature #${feature.id} is now ${feature.state} too.` }) } }
       // Closing the last open User Story offers to close its Feature too (closeChain).
       if (state === 'Closed') { const result = await closeRelated(config, pat, azure.items, updated, (question) => window.confirm(question)); if (result.closed.length) { azure.applyWorkItems(result.closed, 'State check', result.closed.map((entry) => `#${entry.id} → ${entry.state}`).join(', ')); note({ tone: 'success', text: `Also closed ${result.closed.map((entry) => `#${entry.id}`).join(', ')}.` }) } for (const text of [...result.skipped, ...result.failed]) note({ tone: result.failed.includes(text) ? 'error' : 'info', text }) }
       note({ tone: 'info', text: 'Refreshing data…' }); await azure.refresh()
@@ -105,7 +119,7 @@ export function SprintCheckPage({ azure, store, my }: { azure: AzureWorkspace; s
       : <>
         {blocked && <Notice tone="warning">{blocked}</Notice>}
         {log.map((entry, index) => <Notice key={index} tone={entry.tone}>{entry.text}</Notice>)}
-        <div className="action-grid">
+        <div className="sprint-full">
           <Panel className="action-card" eyebrow="SPRINT" title="Move to current PI + Sprint" info="Finds today’s Sprint (and its PI) from the team’s iteration dates, then moves your User Stories in the chosen states (New, Active or both) that are still in a past Sprint. Stories already in the current or a future Sprint, and Features and Tasks, are not touched.">
             {!pairs ? <button type="button" className="primary" disabled={Boolean(blocked) || busy === 'sprint'} onClick={() => void findSprint()}>{busy === 'sprint' ? 'Reading iterations…' : 'Find current Sprint'}</button>
               : !pairs.length ? <EmptyState title="No current Sprint found." detail="Check the team’s iteration dates in Azure DevOps." />
@@ -118,12 +132,36 @@ export function SprintCheckPage({ azure, store, my }: { azure: AzureWorkspace; s
           </Panel>
         </div>
         <Panel className="action-card state-checks" eyebrow="CHECK" title="State checks" info="Your Features and User Stories whose state does not match their children: all User Stories Closed → close the Feature; all Tasks Closed → close the User Story; an Active Feature needs at least one Active User Story. A Feature is closed only from Active.">
-          {checks.length ? <DataTable id="bulk:state-checks" rows={checks} rowKey={(check) => `${check.kind}-${check.item.id}`} exportName="State checks" columns={[
-            { id: 'item', label: 'Work item', value: (check) => `#${check.item.id} ${check.item.title}`, render: (check) => <><ItemLink item={check.item} /> {check.item.title}<small>{check.item.workItemType}</small></> },
-            { id: 'state', label: 'State', value: (check) => check.item.state, render: (check) => <Pill tone={check.kind === 'feature-needs-active-story' ? 'warning' : 'danger'}>{check.item.state}</Pill> },
-            { id: 'check', label: 'Check', value: (check) => String(checkText[check.kind](check)) },
-            { id: 'action', label: '', sortable: false, export: false, render: (check) => { const next = check.kind === 'feature-needs-active-story' ? null : nextStateFor(check.item, azure.items); return next ? <button type="button" className="ghost" disabled={Boolean(blocked) || busy === `check-${check.item.id}`} onClick={() => void applyState(check.item, next.state)}>{busy === `check-${check.item.id}` ? 'Saving…' : next.label}</button> : check.kind === 'feature-needs-active-story' ? <a href={check.item.url} target="_blank" rel="noreferrer">Open in Azure DevOps</a> : null } },
-          ]} /> : <EmptyState title="Nothing to fix." detail="Every Feature and User Story matches the state of its children." />}
+          {checks.length ? <div className="backlog-table-scroll"><table className="backlog-table state-tree" aria-label="State checks">
+            <thead><tr><th style={{ width: 70 }}>ID</th><th>Title</th><th style={{ width: 110 }}>State</th><th style={{ width: 150 }}>Assigned To</th><th>Check</th><th style={{ width: 200 }} aria-label="Action" /></tr></thead>
+            <tbody>{checks.map((check) => {
+              const item = check.item, expanded = open.has(item.id)
+              const below = stateCheckChildren(azure.items, item)
+              const next = check.kind === 'feature-needs-active-story' ? null : nextStateFor(item, azure.items)
+              const saving = busy === `check-${item.id}`
+              return [<tr key={`${check.kind}-${item.id}`} className="state-tree-row">
+                <td><ItemLink item={item} /></td>
+                <td><TreeTitle item={item} depth={0} toggle={below.length ? { open: expanded, onClick: () => toggle(item.id) } : undefined} /></td>
+                <td><StateDot state={item.state} /></td>
+                <td>{item.assignedTo || 'Unassigned'}</td>
+                <td><span className={`state-check-text${check.kind === 'feature-needs-active-story' ? ' warning-text' : ''}`}>{checkText[check.kind](check)}</span></td>
+                <td>{next ? <button type="button" className="backlog-action" disabled={Boolean(blocked) || saving} onClick={() => void applyState(item, next.state)}>{saving ? 'Saving…' : next.label}</button>
+                  : check.kind === 'feature-needs-active-story' && below.length ? <button type="button" className="backlog-action" aria-expanded={expanded} onClick={() => toggle(item.id)}>{expanded ? 'Hide User Stories' : 'Choose a User Story'}</button>
+                  : <a href={item.url} target="_blank" rel="noreferrer">Open in Azure DevOps</a>}</td>
+              </tr>, ...(expanded ? below.map((child) => {
+                const mine = isMine(child, my.me), childSaving = busy === `check-${child.id}`
+                const activate = canActivateHere(child, my.me)
+                return <tr key={`${check.kind}-${item.id}-${child.id}`} className="state-tree-child">
+                  <td><ItemLink item={child} /></td>
+                  <td><TreeTitle item={child} depth={1} /></td>
+                  <td><StateDot state={child.state} /></td>
+                  <td>{child.assignedTo || 'Unassigned'}</td>
+                  <td className="muted">{child.workItemType === 'User Story' && child.state.trim().toLowerCase() === 'new' && !mine ? 'Not yours: set it Active in Azure DevOps or ask its owner.' : ''}</td>
+                  <td>{activate && <button type="button" className="backlog-action" disabled={Boolean(blocked) || childSaving} onClick={() => void applyState(child, 'Active')}>{childSaving ? 'Saving…' : 'Set User Story to Active'}</button>}</td>
+                </tr>
+              }) : [])]
+            })}</tbody>
+          </table></div> : <EmptyState title="Nothing to fix." detail="Every Feature and User Story matches the state of its children." />}
         </Panel>
       </>}
   </Page>

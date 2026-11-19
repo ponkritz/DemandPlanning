@@ -13,7 +13,7 @@ test('TC-NAV-01 / TC-NAV-17: the sidebar shows the groups in order, with Documen
   const groups = await page.locator('.sidebar nav .nav-group').allInnerTexts()
   assert.deepEqual(groups.map((group) => group.replace(/^[▾▸]\s*/, '').trim().toLowerCase()), ['data insights', 'my work', 'i&d board', 'release details', 'data & governance', 'settings'])
   const entries = (await page.locator('.sidebar nav .nav-items button').allInnerTexts()).map((entry) => entry.replace(/\s+/g, ' ').trim())
-  for (const entry of ['My dashboard', 'Team overview', 'Pulse Check', 'Assigned to Me', 'My Activities', 'Sprint check', 'Backlog Health', 'Azure DevOps', 'Storage', 'People & access', 'Feature setup', 'Documentation']) assert.ok(entries.some((item) => item.endsWith(entry)), `${entry} is in the menu`)
+  for (const entry of ['My dashboard', 'Team overview', 'Pulse Check', 'My Tasks [Board]', 'Time Writing', 'Sprint check', 'Backlog Health', 'Azure DevOps', 'Storage', 'People & access', 'Feature setup', 'Documentation']) assert.ok(entries.some((item) => item.endsWith(entry)), `${entry} is in the menu`)
   assert.match(await text(page.locator('.sidebar-footer')), /v\d+\.\d+\.\d+/, 'the footer shows the version (NAV-15)')
   assert.deepEqual(errors, [])
   await context.close()
@@ -27,13 +27,13 @@ test('TC-NAV-37: Expand all and Collapse all open and close every menu heading, 
   await collapseAll.click()
   assert.ok((await states()).every((state) => state === 'false'), 'every heading collapsed')
   assert.ok(await collapseAll.isDisabled())
-  assert.ok(!(await page.locator('.sidebar nav button', { hasText: 'Assigned to Me' }).isVisible()), 'pages are hidden')
+  assert.ok(!(await page.locator('.sidebar nav button', { hasText: 'My Tasks [Board]' }).isVisible()), 'pages are hidden')
   await page.reload()
   await page.locator('.sidebar nav').waitFor()
   assert.ok((await states()).every((state) => state === 'false'), 'still collapsed after a reload')
   await expandAll.click()
   assert.ok((await states()).every((state) => state === 'true'), 'every heading open')
-  assert.ok(await page.locator('.sidebar nav button', { hasText: 'Assigned to Me' }).isVisible(), 'pages are shown again')
+  assert.ok(await page.locator('.sidebar nav button', { hasText: 'My Tasks [Board]' }).isVisible(), 'pages are shown again')
   assert.ok(await expandAll.isDisabled())
   assert.deepEqual(errors, [])
   await context.close()
@@ -597,8 +597,8 @@ test('TC-MYD-01: My dashboard is the start page: my hours, my open work and my s
   const shown = await text(content)
   assert.match(shown, /Ana Costa/)
   assert.match(shown, /My hours.*Planned.*Recorded.*Utilization.*My open work.*Ready to close.*My streams and releases/s)
-  await content.getByRole('button', { name: 'Assigned to Me →' }).first().click()
-  assert.equal(await text(page.locator('header.topbar h1')), 'Assigned to Me', 'a count leads to its detail')
+  await content.getByRole('button', { name: 'My Tasks [Board] →' }).first().click()
+  assert.equal(await text(page.locator('header.topbar h1')), 'My Tasks [Board]', 'a count leads to its detail')
   // Pulse Check: Quarter shows the quarter against the one before.
   await navigate(page, 'Pulse Check')
   await page.locator('.pulse-period select').first().selectOption('quarter')
@@ -688,15 +688,15 @@ test('TC-MYD-05: Team overview shows six headline tiles; each opens its analysis
 // An access policy cached in this browser with the given default role (no Git storage in the test).
 const policyFor = (defaultRole) => JSON.stringify({ schema: 1, defaultRole, roles: { 'Admin': { areas: ['overview', 'insights', 'mywork', 'monthly', 'bulk', 'board', 'health', 'release', 'baselines', 'qemapping', 'snapshots', 'docs'], actions: ['azure.write', 'settings.manage', 'access.manage'] }, 'Product Owner': { areas: [], actions: [] }, 'People Manager': { areas: [], actions: [] }, 'Scrum Master': { areas: [], actions: [] }, 'Team Member': { areas: ['overview', 'mywork', 'monthly', 'docs'], actions: [] } }, members: {} })
 
-test('TC-ACT-01: My Activities is under My Work for everyone; the Testing heading is for the Admin role only', async () => {
+test('TC-ACT-01: Time Writing is under My Work for everyone; the Testing heading is for the Admin role only', async () => {
   const admin = await openPage(app, { init: (text) => localStorage.setItem('demand-planning-access-v1', text), initArg: policyFor('Admin') })
-  assert.match(await text(admin.page.locator('.sidebar nav')), /MY WORK.*My Activities.*Assigned to Me.*Sprint check.*TESTING.*Planning Overview/s)
+  assert.match(await text(admin.page.locator('.sidebar nav')), /MY WORK.*Time Writing.*My Tasks \[Board\].*Sprint check.*TESTING.*Planning Overview/s)
   assert.deepEqual(admin.errors, [])
   await admin.context.close()
   const member = await openPage(app, { init: (text) => localStorage.setItem('demand-planning-access-v1', text), initArg: policyFor('Team Member') })
   const menu = await text(member.page.locator('.sidebar nav'))
   assert.ok(!/TESTING|Planning Overview/.test(menu), 'a Team Member has no Testing heading')
-  assert.match(menu, /My Activities/, 'My Activities is in My Work for them too')
+  assert.match(menu, /Time Writing/, 'Time Writing is in My Work for them too')
   assert.ok(!/Monthly Time Writing|Bulk actions/.test(menu), 'Monthly Time Writing and Bulk actions are gone')
   await member.context.close()
   const open = await openPage(app)
@@ -704,10 +704,10 @@ test('TC-ACT-01: My Activities is under My Work for everyone; the Testing headin
   await open.context.close()
 })
 
-test('TC-ACT-02: My Activities shows the person\'s KPI cards, month tasks, hours and deadline', async () => {
+test('TC-ACT-02: Time Writing shows the person\'s KPI cards, month tasks, hours and deadline', async () => {
   const { page, context, errors } = await openPage(app, { init: ([text, name]) => { localStorage.setItem('demand-planning-access-v1', text); localStorage.setItem('demand-planning-my-name-v1', name) }, initArg: [policyFor('Admin'), 'Ana Costa'] })
   await loadSample(page)
-  await navigate(page, 'My Activities')
+  await navigate(page, 'Time Writing')
   const content = page.locator('.content')
   await content.getByRole('heading', { name: /Your activities for/ }).waitFor()
   assert.ok(await content.locator('.act-table tbody tr').count() > 0, 'the month tasks are listed')
@@ -727,6 +727,19 @@ test('TC-ACT-02: My Activities shows the person\'s KPI cards, month tasks, hours
   assert.equal(await content.locator('.act-card-head').getByRole('button', { name: /^Save \d+ activit|^Nothing to save/ }).count(), 1, 'Save is next to the heading')
   // Suggested missing items sit below Your activities, in the first column.
   assert.equal(await content.locator('.act-main #act-copy').count(), 1)
+  // ACT-18: Close Features — a check box next to Save; ticked, the Feature rows get tick boxes and Save becomes Close.
+  await content.getByRole('checkbox', { name: 'Close Features' }).check()
+  assert.ok(await content.getByRole('button', { name: 'Tick Features to close' }).isDisabled(), 'nothing ticked, nothing to close')
+  await content.locator('.act-table').first().getByRole('checkbox', { name: /^Close / }).first().check()
+  await content.getByRole('button', { name: 'Close 1 Feature' }).click()
+  assert.match(await text(content.locator('.act-message')), /Synthetic sample data/, 'nothing is written with sample data')
+  await content.getByRole('checkbox', { name: 'Close Features' }).uncheck()
+  assert.equal(await content.locator('.act-table').first().getByRole('checkbox', { name: /^Close / }).count(), 0, 'the tick boxes go with Close mode')
+  // ACT-19: Add a new activity is folded to its heading until opened; folded, the activities take the full width.
+  const fold = content.getByRole('button', { name: 'Add a new activity' })
+  assert.equal(await fold.getAttribute('aria-expanded'), 'false')
+  assert.equal(await content.locator('.act-grid.act-add-folded').count(), 1)
+  await fold.click()
   // The Feature list is a drop-down you type into: only my Features, narrowed as I type.
   const feature = content.getByRole('combobox', { name: 'Feature' })
   const listed = async () => page.getByRole('listbox', { name: 'Feature' }).getByRole('option').count()
@@ -754,7 +767,7 @@ test('TC-ACT-02: My Activities shows the person\'s KPI cards, month tasks, hours
   // BKL-26: a new Feature opens the same New Feature form as every other page (no short form of its own); with the
   // synthetic sample nothing can be written, so the button says why.
   await content.getByRole('radio', { name: 'Feature' }).check()
-  assert.equal(await content.getByRole('textbox', { name: /^Feature title/ }).count(), 0, 'no separate Feature form in My Activities')
+  assert.equal(await content.getByRole('textbox', { name: /^Feature title/ }).count(), 0, 'no separate Feature form in Time Writing')
   const openFeature = content.getByRole('button', { name: 'Open New Feature' })
   assert.match(await text(content.locator('.act-side')), /same form and rules as New Feature/)
   assert.ok(await openFeature.isDisabled(), 'sample data: nothing is written')
@@ -799,7 +812,7 @@ test('TC-CVA-03: an Admin opens Capacity vs Actual with its tiles, chart and peo
 test('TC-ACT-05: suggestions filter by Active / New / Both and Add all moves them into Your activities', async () => {
   const { page, context, errors } = await openPage(app, { init: ([text, name]) => { localStorage.setItem('demand-planning-access-v1', text); localStorage.setItem('demand-planning-my-name-v1', name) }, initArg: [policyFor('Admin'), 'Fatima Zahra'] })
   await loadSample(page)
-  await navigate(page, 'My Activities')
+  await navigate(page, 'Time Writing')
   const content = page.locator('.content')
   const states = content.getByRole('group', { name: 'Feature state' })
   await states.waitFor()
@@ -838,10 +851,10 @@ test('TC-FET-09: the start-up fetch does not wait for slow Git and shows in the 
   await context.close()
 })
 
-test('TC-ACT-10: My Activities can show another person, chosen at the top right', async () => {
+test('TC-ACT-10: Time Writing can show another person, chosen at the top right', async () => {
   const { page, context, errors } = await openPage(app, { init: ([text, name]) => { localStorage.setItem('demand-planning-access-v1', text); localStorage.setItem('demand-planning-my-name-v1', name) }, initArg: [policyFor('Admin'), 'Ana Costa'] })
   await loadSample(page)
-  await navigate(page, 'My Activities')
+  await navigate(page, 'Time Writing')
   const content = page.locator('.content')
   await content.getByRole('heading', { name: /Your activities for/ }).waitFor()
   const picker = content.locator('.act-header').getByRole('combobox', { name: 'Activities of' })
@@ -865,7 +878,12 @@ test('TC-ATM-20: Sprint check offers the move to the current PI + Sprint and the
   const content = page.locator('.content')
   await content.getByRole('heading', { name: /Move to current PI \+ Sprint/ }).waitFor()
   await content.getByRole('heading', { name: /State checks/ }).waitFor()
-  assert.equal(await content.getByRole('heading', { name: /Time Writing tasks/ }).count(), 0, 'month tasks are on My Activities')
+  assert.equal(await content.getByRole('heading', { name: /Time Writing tasks/ }).count(), 0, 'month tasks are on Time Writing')
+  // ATM-29: the Sprint panel spans the page; State checks is a backlog tree whose rows expand to the items below them.
+  const [sprintWidth, pageWidth] = await content.evaluate((node) => [node.querySelector('.sprint-full .action-card').getBoundingClientRect().width, node.querySelector('.sprint-full').getBoundingClientRect().width])
+  assert.ok(sprintWidth >= pageWidth - 2, `full width: ${sprintWidth} of ${pageWidth}`)
+  // The sample data has no state mismatch for Ana: the panel says so (the tree and its ▸ rows: TC-ATM-22).
+  assert.match(await text(content.locator('.state-checks')), /Nothing to fix/)
   assert.deepEqual(errors, [])
   await context.close()
 })
@@ -1015,6 +1033,39 @@ test('TC-UI-07: the desktop app zooms — Auto fits the window, − / + / 100% a
   assert.equal(await page.getByRole('group', { name: 'Zoom' }).getByRole('checkbox', { name: 'Auto' }).isChecked(), false, 'kept after a reload')
   await page.getByRole('group', { name: 'Zoom' }).getByRole('checkbox', { name: 'Auto' }).check()
   await page.waitForFunction(() => window.__zoom.factor === 0.8)
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
+test('TC-UI-09: the side menu folds to icons and back, names on hover, kept after a reload', async () => {
+  const { page, context, errors } = await openPage(app, { width: 1440, height: 900 })
+  const sidebar = page.locator('.sidebar')
+  const wide = await sidebar.evaluate((node) => node.getBoundingClientRect().width)
+  await page.getByRole('button', { name: 'Collapse the menu' }).click()
+  const narrow = await sidebar.evaluate((node) => node.getBoundingClientRect().width)
+  assert.ok(narrow < 100 && narrow < wide, `folded to icons: ${wide} → ${narrow}`)
+  assert.ok(await page.locator('.sidebar nav button[title="Time Writing"]').count() > 0, 'the name shows on hover')
+  await page.reload()
+  await page.getByRole('button', { name: 'Expand the menu' }).click()
+  assert.ok(await sidebar.evaluate((node) => node.getBoundingClientRect().width) > 150, 'shown with names again')
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
+test('TC-UI-10: charts name their axes and show values when Data labels is ticked, kept per chart', async () => {
+  const { page, context, errors } = await openPage(app)
+  await loadSample(page)
+  await navigate(page, 'Team overview')
+  const chart = page.locator('.content svg:has(.viz-axis-title)').first()
+  await chart.waitFor({ state: 'attached' })
+  assert.deepEqual(await chart.locator('.viz-axis-title').allTextContents(), ['Month', 'Hours'], 'X and Y axis names')
+  const box = page.locator('.content').getByRole('checkbox', { name: 'Data labels' }).first()
+  assert.equal(await box.isChecked(), false, 'off by default')
+  assert.equal(await chart.locator('.viz-data-label').count(), 0)
+  await box.check()
+  assert.ok(await chart.locator('.viz-data-label').count() > 0, 'values written on the chart')
+  const saved = JSON.parse(await page.evaluate(() => localStorage.getItem('demand-planning-chart-labels-v1')))
+  assert.ok(Object.values(saved).includes(true), 'kept per chart on this computer')
   assert.deepEqual(errors, [])
   await context.close()
 })

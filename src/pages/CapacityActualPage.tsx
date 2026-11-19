@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react'
+import { AxisTitles, DataLabelsToggle } from '../components/chartLabels'
+import { useDataLabels } from '../useDataLabels'
 import { capacityContext } from '../capacity'
 import { allCva, capacityVsActual, type CvaFilter } from '../capacityActual'
 import { EmptyState, Page } from '../components/ui'
@@ -20,6 +22,7 @@ function Delta({ value, unit, goodWhenUp }: { value: number | null; unit: string
 export function CapacityActualPage({ azure, store, month }: { azure: AzureWorkspace; store: PageProps['store']; month: string }) {
   const [filter, setFilter] = useState<CvaFilter>(allCva)
   const [hover, setHover] = useState<number | null>(null)
+  const [labels, setLabels] = useDataLabels('capacity-actual-trend')
   const settings = capacityContext(store.state)
   const model = useMemo(() => capacityVsActual({ items: azure.items, month, today: todayIso(), settings }, filter), [azure.items, month, settings, filter])
   if (!azure.items.length) return <Page><EmptyState title="No work items yet" detail="Fetch the Time Writing data from Azure DevOps (Settings → Azure DevOps), or load the synthetic sample, to compare capacity with actual hours." /></Page>
@@ -29,7 +32,7 @@ export function CapacityActualPage({ azure, store, month }: { azure: AzureWorksp
 
   // Chart: actual hours (bars) against capacity (line), one hours axis.
   const top = Math.max(1, ...trend.flatMap((entry) => [entry.capacity, entry.actual]))
-  const width = 1100, height = 240, left = 48, bottom = 24, plotW = width - left - 8, plotH = height - bottom - 10
+  const width = 1100, height = 258, left = 66, bottom = 42, plotW = width - left - 8, plotH = height - bottom - 10
   const step = plotW / trend.length, bar = Math.min(26, step / 2.2)
   const y = (value: number) => 10 + plotH - (value / top) * plotH
   const ticks = [0, 0.25, 0.5, 0.75, 1].map((share) => Math.round(top * share))
@@ -54,15 +57,18 @@ export function CapacityActualPage({ azure, store, month }: { azure: AzureWorksp
 
     <section className="act-card ovw-trend" aria-labelledby="cva-trend">
       <div className="ovw-head"><h3 id="cva-trend">Capacity vs actual · last 12 months</h3>
-        <ul className="ovw-legend"><li><i className="ovw-k-actual" />Actual</li><li><i className="ovw-k-cap" />Capacity</li></ul></div>
+        <ul className="ovw-legend"><li><i className="ovw-k-actual" />Actual</li><li><i className="ovw-k-cap" />Capacity</li></ul><DataLabelsToggle on={labels} set={setLabels} /></div>
       <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Actual hours against capacity per month" className="ovw-chart" onMouseLeave={() => setHover(null)}>
         {ticks.map((tick) => <g key={tick}><line x1={left} x2={width - 8} y1={y(tick)} y2={y(tick)} className="ovw-grid" /><text x={left - 6} y={y(tick) + 4} textAnchor="end" className="ovw-axis">{formatHours(tick)}</text></g>)}
         {trend.map((entry, index) => { const x = left + step * index + step / 2; return <g key={entry.month} onMouseEnter={() => setHover(index)}>
           <rect x={x - step / 2} y={10} width={step} height={plotH} fill="transparent" />
           <rect x={x - bar / 2} y={y(entry.actual)} width={bar} height={Math.max(0, 10 + plotH - y(entry.actual))} rx={3} className={entry.capacity > 0 && entry.actual > entry.capacity ? 'cva-over' : 'ovw-actual'} />
-          <text x={x} y={height - 6} textAnchor="middle" className="ovw-axis">{shortMonth(entry.month)}</text></g> })}
+          {labels && entry.actual > 0 && <text x={x} y={y(entry.actual) - 4} textAnchor="middle" className="viz-data-label">{formatHours(entry.actual)}</text>}
+          <text x={x} y={10 + plotH + 16} textAnchor="middle" className="ovw-axis">{shortMonth(entry.month)}</text></g> })}
         <path d={line} className="ovw-cap" />
         {trend.map((entry, index) => <circle key={entry.month} cx={left + step * index + step / 2} cy={y(entry.capacity)} r={4} className="ovw-cap-dot" />)}
+        {labels && trend.map((entry, index) => entry.capacity > 0 && <text key={entry.month} x={left + step * index + step / 2 + 7} y={y(entry.capacity) - 7} className="viz-data-label viz-data-label-muted">{formatHours(entry.capacity)}</text>)}
+        <AxisTitles x="Month" y="Hours" left={left} right={width - 8} bottom={height - 4} height={20 + plotH} />
       </svg>
       {hover != null && <p className="ovw-tip" role="status"><strong>{monthName(trend[hover].month)}</strong> · Capacity {formatHours(trend[hover].capacity)}h · Actual {formatHours(trend[hover].actual)}h{trend[hover].used != null ? ` · ${Math.round(trend[hover].used!)}% used` : ''}</p>}
       <p className="act-sub">Bars over the capacity line are drawn in red.</p>

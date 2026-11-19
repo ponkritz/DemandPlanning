@@ -86,7 +86,7 @@ export function MonthSections({ items, month, settings, navigate, utilizationOnl
     {model.locked && <p>The figures of {monthName(month)} are locked: they stay as they were on {formatDateTime(model.locked.lockedOn)} whatever changes later (Team overview → Utilization).</p>}
     <p>Status: overloaded at ≥ {settings.overloadedAt}%; has capacity below {settings.availableBelow}%.</p>
     <p className="muted">Tasks are matched to the month when their title starts or ends with the month and year (e.g. “{monthName(month)} | …” or “… | {monthName(month)}”, any delimiter). Thresholds and the absence Epic are set under Settings → Capacity and absence.</p>
-    <div className="button-row"><button className="text-button" onClick={() => navigate('activities')}>Open My Activities →</button><button className="text-button" onClick={() => navigate('admin')}>Capacity settings →</button></div>
+    <div className="button-row"><button className="text-button" onClick={() => navigate('activities')}>Open Time Writing →</button><button className="text-button" onClick={() => navigate('admin')}>Capacity settings →</button></div>
   </Info></div>
   </>
 }

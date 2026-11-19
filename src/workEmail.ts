@@ -1,7 +1,7 @@
 import { listAzureConnectionProfiles, loadAzureConnectionProfile } from './azureCredentials.ts'
 
 // Your work email (CON-82): a personal setting of its own on this computer — not part of any connection, the stream
-// mapping or the shared setup in Git. It says who "me" is: the access role, Assigned to Me / My Work, the assignee of
+// mapping or the shared setup in Git. It says who "me" is: the access role, My Tasks [Board] / My Work, the assignee of
 // new Features and the Time Writing prompts. Connections, Git syncs and app updates never change it.
 export const workEmailKey = 'demand-planning-work-email-v1'
 // Set once the shared-email clean-up of CON-80 has run on this computer (an email kept on a connection is then the

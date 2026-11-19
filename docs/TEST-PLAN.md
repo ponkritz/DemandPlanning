@@ -646,6 +646,8 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-ATM-21 A Feature becomes Active only through an Active User Story** — Req ATM-28 — L1 `my-work.test.mjs` ("ATM-28: a Feature becomes Active only when one of its User Stories is Active"); browser check with the Time Writing connection: create a Feature — it stays New, also after its month Task is added on My Activities; on Assigned to Me the New Feature shows "Set a User Story to Active first"; set one of its User Stories to Active — the Feature becomes Active and the result says so; in Edit, choosing Active for a Feature without an Active User Story is refused with the reason; a New Feature whose User Story was set Active in Azure DevOps is listed under Sprint check → State checks with Set Feature to Active.
 
+**TC-ATM-22 Sprint Check state actions** — Req ATM-29 — L1 `my-work.test.mjs` (own New User Stories can be set Active and their New Feature follows); browser check with the Time Writing connection: open Sprint Check and confirm its Move panel spans the page; expand a State check and verify its children appear as a backlog tree with Removed work excluded; choose an own New User Story and confirm Set User Story to Active; it changes state and activates its New Feature. A colleague's story remains read-only; no write is offered with sample data or without a PAT.
+
 **TC-ATM-03 Close an item** — Req ATM-06 — **UAT**
 - Steps:
   1. On a New User Story press Set User Story to Active, then Close User Story; on a New Feature press Set Feature to Active, then Close Feature. A Resolved story or Feature shows "Set to Active first".
@@ -1295,6 +1297,12 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 **TC-UI-06 Page tables on the table default** — Req UI-13 — E2E `documents-and-data.e2e.mjs` ("TC-UI-06: the page tables follow the table default too — My Work keeps its tree, Backlog Health its lists, each with Columns and one Export"); browser check: on Pulse Check (Ongoing activities, Windchill exports, Supported Releases), CP, Baselines, Snapshots, Assigned to Me, Bulk actions, Monthly Time Writing and Backlog Health — every table has Columns, Wrap text, Comfortable / Compact and one Export ▾ (Excel / CSV); the summary tables — Dashboard, Pulse Check's release counts / last vs this month / work closed and opened, the capacity summaries, Insights, the Monthly pack KPI table and Documentation — stay plain, without that toolbar; open a Feature on Assigned to Me — its Stories and Tasks appear as rows under it; Backlog Health has no Export CSV or Columns dialog of its own; Monthly Time Writing's Original Estimate / Completed Work cells still edit.
 
 **TC-UI-07 Desktop zoom and Auto** — Req UI-14 — L1 `desktop-zoom.test.mjs` ("UI-14: Auto zoom fits the 1440 × 880 layout into the window, 67%–100% in 5% steps; − / + in 10% steps, 50%–200%"; "UI-14: the zoom setting is kept per computer — Auto on by default, a hand-set zoom turns it off"); E2E `shell.e2e.mjs` ("TC-UI-07: the desktop app zooms — Auto fits the window, − / + / 100% and Ctrl keys set it by hand and turn Auto off; the browser has no zoom control"); desktop check: on a 1366 × 768 screen (or a smaller window) the app opens zoomed out so the whole page fits; resize the window — the zoom follows; Ctrl + / Ctrl − / Ctrl + wheel change it and untick Auto; restart — the zoom is kept.
+
+**TC-UI-08 Work naming** — Req UI-15 — browser check: the navigation, page headings, access labels and links read Time Writing and My Tasks [Board]; existing personal settings remain usable.
+
+**TC-UI-09 Folded navigation** — Req UI-16 — browser check: on a wide screen use the menu fold control: icons remain visible, their tooltips identify pages, zoom controls are hidden and expanding restores names. Reload and verify the choice persists; narrow screens retain their icon rail.
+
+**TC-UI-10 Chart axes and data labels** — Req UI-17 — L1 `chart-labels.test.mjs` (shared default and a per-chart override); browser check: on each applicable chart verify meaningful X and Y labels; the donut chart has no axes. Set the shared Charts data-label default in Settings → Table defaults, then verify it applies to the listed charts. Toggle one chart's Data labels and reload: its local choice overrides the shared default and persists.
 - L3 steps:
   1. Click the toggle three times.
   2. Load `?theme=dark` and then reload without the parameter.
@@ -1470,6 +1478,10 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-ACT-13 A work Task from My Activities** — Req ACT-17, BKL-27 — L1 `my-work.test.mjs` ("ACT-17: addTask — a work Task under a User Story by the User Story rules; never a Time Writing Task") ; E2E `shell.e2e.mjs` ("TC-ACT-02: My Activities shows the person's KPI cards, month tasks, hours and deadline": the Task choice asks for the User Story, Title, Description and Comment, and Add Task stays disabled without a title); browser check with the Time Writing connection: Add a new activity → Task, pick a Feature and one of its User Stories, enter a title, description, Sprint and comment → Add Task creates the Task under that story, assigned to the person, in the story's Area Path and the chosen Sprint, with the comment in its Discussion.
 
+**TC-ACT-14 Close Features from Time Writing** — Req ACT-18 — L1 `close-feature.test.mjs` (children close first, items of other people remain open and failures preserve ancestors); browser check with the Time Writing connection: select Close mode, tick one own Feature and confirm the listed work. Only the tester's open Tasks and User Stories close before the Feature; another person's work stays open; closed month Tasks are read-only and their hours cannot be edited. Cancel, sample data, no PAT and another person's view make no write.
+
+**TC-ACT-15 Fold Add a new activity** — Req ACT-19 — browser check: Add a new activity begins folded; open it, reload, and confirm the selected state persists. Fold it again and verify the activities table uses the available full width.
+
 **TC-ACT-05 Suggestions by state, Add all** — Req ACT-09, ACT-10 — E2E `shell.e2e.mjs` ("TC-ACT-05: suggestions filter by Active / New / Both and Add all moves them into Your activities"); browser check with the Time Writing connection: with a New and an Active Feature of yours without a task, Active / New / Both narrow the suggestions; Add all puts the shown ones in Your activities and Save creates their tasks; the Features keep their state (ATM-28: a New Feature becomes Active only through an Active User Story).
 
 ### 6.26 Planning Overview
@@ -1643,6 +1655,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | ATM-26 | TC-ATM-18 |
 | ATM-27 | TC-ATM-19 |
 | ATM-28 | TC-ATM-21 |
+| ATM-29 | TC-ATM-22 |
 | BKL-01…03, BKL-12 | TC-BKL-01 |
 | BKL-04…09, BKL-11 | TC-BKL-02 |
 | BKL-10 | TC-BKL-03, TC-ATM-11 |
@@ -1790,6 +1803,9 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UI-12 | TC-UI-04 |
 | UI-13 | TC-UI-06 |
 | UI-14 | TC-UI-07 |
+| UI-15 | TC-UI-08 |
+| UI-16 | TC-UI-09 |
+| UI-17 | TC-UI-10 |
 | CI-01…04 | TC-INS-04, TC-CI-01 |
 | CI-05 | TC-UPD-01 |
 | CI-06 | TC-CI-02 |
@@ -1871,6 +1887,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | ACT-15 | TC-ACT-11 |
 | ACT-16 | TC-ACT-12 |
 | ACT-17 | TC-ACT-13 |
+| ACT-18 | TC-ACT-14 |
+| ACT-19 | TC-ACT-15 |
 | OVW-01 | TC-OVW-01, TC-OVW-02, TC-OVW-03 |
 | OVW-02 | TC-OVW-02 |
 | OVW-03 | TC-OVW-01 |

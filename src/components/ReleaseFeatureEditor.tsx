@@ -5,7 +5,7 @@ import type { AzureWorkspace } from '../useAzureWorkspace'
 import { FeatureEditor } from './FeatureEditor'
 
 // Create Feature from Release Details (DP rows, CP / IOCC / … releases): always the one default Create Feature form
-// (FeatureEditor, as on the QMS-0025 board and Assigned to Me), pre-filled with the release's title and the Epic named
+// (FeatureEditor, as on the QMS-0025 board and My Tasks [Board]), pre-filled with the release's title and the Epic named
 // like the stream (else the first Epic). items: the release's on-prem work items, which fill the Epic setup's title
 // fields. The button says why it is disabled.
 export function ReleaseFeatureButton({ stream, title, items, azure, assign, featureSetup, onCreated }: { stream: string; title: string; items?: AzureWorkItem[]; azure: AzureWorkspace; assign?: { me: string; canChoose: boolean }; featureSetup?: FeatureSetups | null; onCreated?: () => void }) {

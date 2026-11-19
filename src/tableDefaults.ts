@@ -19,8 +19,9 @@ export interface TableDefaults {
   defaultDensity: TableDensity
   defaultWrap: boolean
   excelDateFormat: ExcelDateFormat // how dates are shown in an Excel export (they are real date-times either way)
+  chartDataLabels: boolean // UI-17: charts start with their values written on them (each chart can switch its own)
 }
-export const tableDefaults: TableDefaults = { resize: true, reorder: true, chooseColumns: true, wrapToggle: true, densityToggle: true, exportFormats: ['xlsx', 'csv'], defaultDensity: 'comfortable', defaultWrap: false, excelDateFormat: 'yyyy-mm-dd hh:mm' }
+export const tableDefaults: TableDefaults = { resize: true, reorder: true, chooseColumns: true, wrapToggle: true, densityToggle: true, exportFormats: ['xlsx', 'csv'], defaultDensity: 'comfortable', defaultWrap: false, excelDateFormat: 'yyyy-mm-dd hh:mm', chartDataLabels: false }
 
 // Only known values are kept (a shared setting read from Git is checked like any other input).
 export function normalizeTableDefaults(raw: unknown): TableDefaults {
@@ -28,7 +29,7 @@ export function normalizeTableDefaults(raw: unknown): TableDefaults {
   const flag = (key: keyof TableDefaults) => typeof value[key] === 'boolean' ? value[key] as boolean : tableDefaults[key] as boolean
   const formats = Array.isArray(value.exportFormats) ? [...new Set(value.exportFormats.filter((entry): entry is ExportFormat => entry === 'xlsx' || entry === 'csv'))] : tableDefaults.exportFormats
   return {
-    resize: flag('resize'), reorder: flag('reorder'), chooseColumns: flag('chooseColumns'), wrapToggle: flag('wrapToggle'), densityToggle: flag('densityToggle'), defaultWrap: flag('defaultWrap'),
+    resize: flag('resize'), reorder: flag('reorder'), chooseColumns: flag('chooseColumns'), wrapToggle: flag('wrapToggle'), densityToggle: flag('densityToggle'), defaultWrap: flag('defaultWrap'), chartDataLabels: flag('chartDataLabels'),
     exportFormats: formats,
     defaultDensity: value.defaultDensity === 'compact' || value.defaultDensity === 'comfortable' ? value.defaultDensity : tableDefaults.defaultDensity,
     excelDateFormat: (excelDateFormats as readonly string[]).includes(value.excelDateFormat as string) ? value.excelDateFormat as ExcelDateFormat : tableDefaults.excelDateFormat,

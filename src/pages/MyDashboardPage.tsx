@@ -13,7 +13,7 @@ import { CustomizableSections } from '../components/PersonalLayout'
 // My dashboard (MYD-01…MYD-04): every user's start page — their own hours against their capacity, their open work and
 // their streams and releases, for the header month. Each count opens the page with the detail.
 export function MyDashboardPage({ month, azure, store, my, navigate, views, canSetDefault = false }: { month: string; azure: AzureWorkspace; store: PageProps['store']; my: MyWork; navigate: (page: PageId) => void; views: PersonalViewsStore; canSetDefault?: boolean }) {
-  if (!my.known) return <Page><EmptyState title="Who are you in Azure DevOps?" detail="Set your work email in Settings → Azure DevOps → Your work email, or choose your name on Assigned to Me. My dashboard then shows your own hours and work." /></Page>
+  if (!my.known) return <Page><EmptyState title="Who are you in Azure DevOps?" detail="Set your work email in Settings → Azure DevOps → Your work email, or choose your name on My Tasks [Board]. My dashboard then shows your own hours and work." /></Page>
   const settings = capacityContext(store.state)
   const today = todayIso()
   const name = my.me.name ?? ''
@@ -34,7 +34,7 @@ export function MyDashboardPage({ month, azure, store, my, navigate, views, canS
     <p className="muted">{name || my.me.email} · {label}</p>
     <CustomizableSections page="mydash" views={views} canSetDefault={canSetDefault} sections={[
       { id: 'hours', label: 'My hours', node: <>
-    <TablePanel title={`My hours · ${label}`} info={<ul><li>Planned = Original Estimate and recorded = Completed Work of your month Time Writing Tasks; capacity = your working days less absence, as on the Dashboard.</li><li>Overrun = hours recorded above the estimate; ad-hoc = hours on Tasks tagged ad-hoc.</li></ul>} action={open('activities', 'My Activities')}>
+    <TablePanel title={`My hours · ${label}`} info={<ul><li>Planned = Original Estimate and recorded = Completed Work of your month Time Writing Tasks; capacity = your working days less absence, as on the Dashboard.</li><li>Overrun = hours recorded above the estimate; ad-hoc = hours on Tasks tagged ad-hoc.</li></ul>} action={open('activities', 'Time Writing')}>
       <Metrics>
         <Metric label="Planned" value={`${formatHours(now.plan)}h`} hint={`Capacity ${formatHours(now.capacity)}h`} />
         <Metric label="Recorded" value={`${formatHours(now.actual)}h`} hint={now.absence ? `${formatHours(now.absence)}h absence` : 'No absence booked'} />
@@ -43,11 +43,11 @@ export function MyDashboardPage({ month, azure, store, my, navigate, views, canS
       </Metrics>
       {rows.length > 0 ? <div className="azure-table"><table><thead><tr><th>Month</th><th>Planned</th><th>Recorded</th><th>Capacity</th><th>Utilization</th></tr></thead><tbody>
         {months.slice().reverse().map((entry) => { const row = totals(rows.filter((item) => item.month === entry)); return <tr key={entry} className={entry === month ? 'row-current' : ''}><td>{monthName(entry)}</td><td>{formatHours(row.plan)}h</td><td>{formatHours(row.actual)}h</td><td>{formatHours(row.capacity)}h</td><td>{formatPercent(row.actualUtil ?? row.planUtil)}</td></tr> })}
-      </tbody></table></div> : <EmptyState title="No Time Writing hours for you yet." detail="Refresh Time Writing from Azure, or check that your name on Assigned to Me matches your Tasks." />}
+      </tbody></table></div> : <EmptyState title="No Time Writing hours for you yet." detail="Refresh Time Writing from Azure, or check that your name on My Tasks [Board] matches your Tasks." />}
     </TablePanel>
       </> },
       { id: 'work', label: 'My open work', node: <>
-    <TablePanel title="My open work" info="Your New and Active work items (work under the absence Epic left out), and the state checks of Sprint check." action={open('mywork', 'Assigned to Me')}>
+    <TablePanel title="My open work" info="Your New and Active work items (work under the absence Epic left out), and the state checks of Sprint check." action={open('mywork', 'My Tasks [Board]')}>
       <Metrics>
         <Metric label="Features" value={count('Feature')} hint="open, assigned to you" />
         <Metric label="User Stories" value={count('User Story')} hint={`${count('Task')} Tasks, ${count('Bug')} Bugs`} />

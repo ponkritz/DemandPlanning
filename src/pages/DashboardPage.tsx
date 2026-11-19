@@ -1,6 +1,8 @@
 import { useState, type ReactNode } from 'react'
 import { EmptyState, Info, Metric, Metrics, Notice, Page, Panel, Pill, TablePanel } from '../components/ui'
 import { EpicMixChart, ParetoChart } from '../components/WorkloadCharts'
+import { AxisTitles, DataLabelsToggle } from '../components/chartLabels'
+import { useDataLabels } from '../useDataLabels'
 import { epicColors, shortFeatureTitle } from '../chartUtils'
 import { capacityContext, capacityModel, defaultStandardHours, monthlyHours, normalizeCapacitySettings, oldCalculation, sharedTimeScopeLabel, sharedTimeScopes, standardHoursTotal, type SharedTimeScope, type StandardHourLine, problemBreakdown, regions, resourceRoles, type Region, type ResourceRole } from '../capacity'
 import { applyFilter, bandOf, byPerson, byRole, byStream, change, concentration, groupBy, noFilter, periodMonths, persistentOverload, personMonths, plannedOverload, quarterOf, rebalancing, streamTotals, totals, type Bands, type Dimension, type Period, type PersonMonth, type DashboardFilter } from '../dashboard'
@@ -203,21 +205,29 @@ function NoHours({ children, rows, title = 'Nothing planned or recorded for this
 // Planned and actual bars per month with the capacity as a dashed line; partial and future months shaded.
 export function DemandChart({ rows, months }: { rows: PersonMonth[]; months: string[] }) {
   const series = monthSeries(rows, months)
+  const [labels, setLabels] = useDataLabels('dashboard-demand')
   const max = Math.max(1, ...series.flatMap((point) => [point.plan, point.actual, point.capacity]))
-  const width = Math.max(480, months.length * 70), height = 240, top = 16, bottom = 210, slot = width / months.length, bar = Math.min(22, slot / 4)
+  // UI-17: room on the left and below for the axis names.
+  const shift = 26, plotWidth = Math.max(480, months.length * 70), width = plotWidth + shift, height = 258, top = 16, bottom = 210, slot = plotWidth / months.length, bar = Math.min(22, slot / 4)
   const y = (value: number) => bottom - value / max * (bottom - top)
   const line = series.map((point, index) => `${index ? 'L' : 'M'}${index * slot + slot / 2},${y(point.capacity)}`).join(' ')
   return <div className="dash-chart">
-    <div className="legend"><span><i className="dash-dot dash-plan" />Planned</span><span><i className="dash-dot dash-actual" />Recorded</span><span><i className="dash-dot dash-cap" />Net capacity</span></div>
+    <div className="legend"><span><i className="dash-dot dash-plan" />Planned</span><span><i className="dash-dot dash-actual" />Recorded</span><span><i className="dash-dot dash-cap" />Net capacity</span><DataLabelsToggle on={labels} set={setLabels} /></div>
     <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Planned and recorded hours against capacity by month">
+      <g transform={`translate(${shift} 0)`}>
       {series.map((point, index) => <g key={point.month}>
         {point.status !== 'elapsed' && <rect x={index * slot} y={top} width={slot} height={bottom - top} className="dash-shade" />}
         <rect x={index * slot + slot / 2 - bar - 1} y={y(point.plan)} width={bar} height={bottom - y(point.plan)} className="dash-plan"><title>{`${monthName(point.month)}: ${formatHours(point.plan)}h planned`}</title></rect>
         <rect x={index * slot + slot / 2 + 1} y={y(point.actual)} width={bar} height={bottom - y(point.actual)} className="dash-actual"><title>{`${monthName(point.month)}: ${formatHours(point.actual)}h recorded`}</title></rect>
-        <text x={index * slot + slot / 2} y={height - 10} textAnchor="middle">{short(point.month)}</text>
+        {labels && point.plan > 0 && <text className="viz-data-label" x={index * slot + slot / 2 - bar / 2 - 1} y={y(point.plan) - 4} textAnchor="middle">{formatHours(point.plan)}</text>}
+        {labels && point.actual > 0 && <text className="viz-data-label" x={index * slot + slot / 2 + bar / 2 + 1} y={y(point.actual) - 4} textAnchor="middle">{formatHours(point.actual)}</text>}
+        <text x={index * slot + slot / 2} y={bottom + 20} textAnchor="middle">{short(point.month)}</text>
       </g>)}
       <path d={line} className="dash-cap-line" />
       {series.map((point, index) => <circle key={point.month} cx={index * slot + slot / 2} cy={y(point.capacity)} r={3} className="dash-cap-dot"><title>{`${monthName(point.month)}: ${formatHours(point.capacity)}h capacity`}</title></circle>)}
+      {labels && series.map((point, index) => point.capacity > 0 && <text key={point.month} className="viz-data-label viz-data-label-muted" x={index * slot + slot / 2 + 6} y={y(point.capacity) - 6}>{formatHours(point.capacity)}</text>)}
+      </g>
+      <AxisTitles x="Month" y="Hours" left={shift} right={width} bottom={height - 4} height={top + bottom} />
     </svg>
     <small className="muted">Shaded: partial and future months.</small>
   </div>

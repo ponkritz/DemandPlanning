@@ -18,11 +18,11 @@ import { markPendingShare, markViewsSynced, serializeViews, viewsFile } from '..
 
 const roleLabel: Record<AzureConnectionRole, string> = { 'time-tracking': 'Time Writing (read & write)', 'release-source': 'Releases · DHFI (read only)', documents: 'Documents · Vault (read only)', reference: 'Reference (read only)', 'backlog-view': 'Backlog view (read only)' }
 const roleUse: Record<AzureConnectionRole, string> = {
-  'time-tracking': 'Feeds the Overview, My Activities and Baselines. Without a query the team’s Epic backlog is read; with a query its results plus their parents are read. Refreshed data is saved automatically. One Time Writing connection is active at a time.',
+  'time-tracking': 'Feeds the Overview, Time Writing and Baselines. Without a query the team’s Epic backlog is read; with a query its results plus their parents are read. Refreshed data is saved automatically. One Time Writing connection is active at a time.',
   'release-source': 'Approved documents whose Area Path carries the release identifier; can be shown in the Azure DevOps menu as a read-only view.',
   documents: 'Document source such as Vault; fetched read-only and kept for document counts per release.',
   reference: 'Any other read-only data: fetched and listed with its count.',
-  'backlog-view': 'Shown as its own view in the Azure DevOps menu (Epic → Feature → User Story → Task), read only. Without a query the team’s Epic backlog is read; with a query its results plus their parents. Not counted in Overview, My Activities or Assigned to Me.',
+  'backlog-view': 'Shown as its own view in the Azure DevOps menu (Epic → Feature → User Story → Task), read only. Without a query the team’s Epic backlog is read; with a query its results plus their parents. Not counted in Overview, Time Writing or My Tasks [Board].',
 }
 const queryPlaceholder: Record<AzureConnectionRole, string> = { 'time-tracking': 'Optional. Leave empty to read the team Epic backlog.', 'release-source': defaultReleaseQuery, documents: projectQuery, reference: projectQuery, 'backlog-view': 'Optional. Leave empty to read the team Epic backlog.' }
 const empty = (role: AzureConnectionRole = 'time-tracking'): ConnectionInput => ({ name: '', viewName: '', showInMenu: defaultShowInMenu(role), role, serverUrl: '', organization: '', project: '', team: '', pat: '', query: '', creatorEmail: '', apiVersion: '' })
@@ -303,7 +303,7 @@ function WorkEmailPanel({ email, onSave }: { email: string; onSave: (email: stri
     event.preventDefault()
     try { const saved = onSave(value); setValue(saved); setNote({ tone: 'success', text: saved ? `Saved: ${saved}. It stays on this computer through updates and Git syncs.` : 'Removed.' }) } catch (failure) { setNote({ tone: 'error', text: failure instanceof Error ? failure.message : String(failure) }) }
   }
-  return <Panel className="connection-panel" eyebrow="YOU" title="Your work email" info="The email Azure DevOps shows for you. It tells the app who you are: your access role, Assigned to Me, the Time Writing prompts and who new Features are assigned to. It is kept on this computer only — never in a connection, the stream mapping or the shared setup in Git — so updates, Force Update and Git syncs do not change it.">
+  return <Panel className="connection-panel" eyebrow="YOU" title="Your work email" info="The email Azure DevOps shows for you. It tells the app who you are: your access role, My Tasks [Board], the Time Writing prompts and who new Features are assigned to. It is kept on this computer only — never in a connection, the stream mapping or the shared setup in Git — so updates, Force Update and Git syncs do not change it.">
     {!email && <Notice tone="warning">Not set yet: enter your work email so the app knows which work is yours.</Notice>}
     <form className="inline-form" onSubmit={save}><label>Work email<input type="email" autoComplete="email" required value={value} onChange={(event) => setValue(event.target.value)} placeholder="name@company.com" /></label><button type="submit" className="primary" disabled={value.trim().toLowerCase() === email}>Save</button></form>
     {note && <Notice tone={note.tone}>{note.text}</Notice>}
