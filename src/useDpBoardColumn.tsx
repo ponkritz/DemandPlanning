@@ -1,3 +1,4 @@
+import { useStreamEpics } from './useStreamEpics'
 import { useMemo } from 'react'
 import type { AzureWorkItem } from './domain'
 import type { AzureWorkspace } from './useAzureWorkspace'
@@ -9,7 +10,8 @@ import type { ExtraColumn } from './components/QueryView'
 // The DP table's "QMS-0025 match" column: each row's Feature / User Story on the Time Writing board (dpBoardMatch),
 // searched and exported by its text, with Create Feature when nothing matches.
 export function useDpBoardColumn(rows: AzureWorkItem[], azure: AzureWorkspace, threshold: number, assign?: { me: string; canChoose: boolean }, featureSetup?: FeatureSetups | null): ExtraColumn {
-  const candidates = useMemo(() => dpBoardCandidates(azure.items), [azure.items])
+  const epics = useStreamEpics('DP')
+  const candidates = useMemo(() => dpBoardCandidates(azure.items, epics), [azure.items, epics])
   const matches = useMemo(() => new Map(rows.map((row) => [row.id, dpBoardMatch(row, candidates, threshold)])), [rows, candidates, threshold])
   return useMemo(() => ({
     name: 'QMS-0025 match',

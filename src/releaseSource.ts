@@ -9,7 +9,9 @@ import { isMonthTask, timeWritingStoryIds } from './azureInsights.ts'
 // Read-only release source: a second Azure project (e.g. DHFI) queried with a saved WIQL query.
 // Approved documents carry their release in the Area or Iteration Path ("…\Name\Release x.y.z", see releasePath).
 // matchThreshold: the % a fuzzy Feature match (DP, IOCC) needs to count as the release's Feature (default 80).
-export interface ReleaseSourceSettings { approvalDateField?: string; matchThreshold?: number; namingPatterns?: NamingPatterns }
+// featureEpics (QV-57): per stream, the QMS-0025 Epics whose Features (and User Stories) a release may be matched to;
+// a stream without an entry (or with an empty list) is matched across the whole board.
+export interface ReleaseSourceSettings { approvalDateField?: string; matchThreshold?: number; namingPatterns?: NamingPatterns; featureEpics?: Record<string, number[]> }
 export const defaultReleaseSourceSettings: ReleaseSourceSettings = {}
 export interface ReleaseSourceSnapshot { organization: string; project: string; query: string; fetchedAt: string; items: AzureWorkItem[]; columns?: { ref: string; name: string }[]; orderBy?: { ref: string; desc: boolean }[] }
 export interface ReleaseEntry { key: string; group?: string; match?: { feature: AzureWorkItem; score: number }; name: string; release: string; documents: number; items: AzureWorkItem[]; tracked: boolean; trackedBy: AzureWorkItem[]; features: AzureWorkItem[]; planned: number; booked: number; hourTasks: number; approvalDate?: string; approvalMonth?: string }
@@ -32,7 +34,32 @@ export function normalizeReleaseSourceSettings(value: unknown): ReleaseSourceSet
   const approvalDateField = typeof input.approvalDateField === 'string' && /^[\w.]{1,120}$/.test(input.approvalDateField.trim()) ? input.approvalDateField.trim() : undefined
   const threshold = Number(input.matchThreshold)
   const namingPatterns = normalizeNamingPatterns((input as Record<string, unknown>).namingPatterns)
-  return { ...(approvalDateField ? { approvalDateField } : {}), ...(Number.isInteger(threshold) && threshold >= 1 && threshold <= 100 ? { matchThreshold: threshold } : {}), ...(namingPatterns ? { namingPatterns } : {}) }
+  const featureEpics = normalizeFeatureEpics((input as Record<string, unknown>).featureEpics)
+  return { ...(approvalDateField ? { approvalDateField } : {}), ...(Number.isInteger(threshold) && threshold >= 1 && threshold <= 100 ? { matchThreshold: threshold } : {}), ...(namingPatterns ? { namingPatterns } : {}), ...(featureEpics ? { featureEpics } : {}) }
+}
+// QV-57: the streams whose releases are matched only in chosen Epics; others always search the whole board.
+export const epicMatchStreams = ['DP', 'CP', 'IOCC', 'Content'] as const
+// QV-57: read from the shared settings: those streams only, each up to 100 Epic IDs.
+export function normalizeFeatureEpics(value: unknown): Record<string, number[]> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const result: Record<string, number[]> = {}
+  for (const [stream, list] of Object.entries(value as Record<string, unknown>).slice(0, 30)) {
+    const name = epicMatchStreams.find((entry) => entry.toLowerCase() === stream.trim().toLowerCase())
+    if (!name || !Array.isArray(list)) continue
+    const ids = [...new Set(list.map(Number).filter((id) => Number.isSafeInteger(id) && id > 0))].slice(0, 100)
+    if (ids.length) result[name] = ids
+  }
+  return Object.keys(result).length ? result : undefined
+}
+// QV-57: the Epics a stream's releases are matched in ([] = the whole board), the same list for the same settings.
+const epicCache = new WeakMap<object, Map<string, number[]>>()
+const noEpics: number[] = []
+export function streamEpics(settings: unknown, stream: string): number[] {
+  if (!settings || typeof settings !== 'object' || !stream) return noEpics
+  let byStream = epicCache.get(settings)
+  if (!byStream) { byStream = new Map(); epicCache.set(settings, byStream) }
+  if (!byStream.has(stream)) { const saved = normalizeReleaseSourceSettings(settings).featureEpics ?? {}; const key = Object.keys(saved).find((entry) => entry.toLowerCase() === stream.toLowerCase()); byStream.set(stream, key ? saved[key] : noEpics) }
+  return byStream.get(stream)!
 }
 
 // Accept a work-item query as pasted from Azure DevOps (Edit query → WIQL): a flat list (FROM WorkItems), or a tree or

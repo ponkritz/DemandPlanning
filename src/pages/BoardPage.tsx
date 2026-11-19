@@ -1,3 +1,4 @@
+import { useStreamEpics } from '../useStreamEpics'
 import type { FeatureSetups } from '../featureSetup'
 import { useMemo, useState } from 'react'
 import { EmptyState, Page, Panel, Pill, Info } from '../components/ui'
@@ -97,7 +98,8 @@ function ReadOnlyView({ id, name, role, azure, store, month, gitNote, onOpenConn
   const [picked, setPicked] = useState<number[]>([])
   const [bulkOpen, setBulkOpen] = useState(false)
   const dpSetup = useMemo(() => chooseSetup(featureSetup, dpEpicId, true).setup, [featureSetup])
-  const dpCandidates = useMemo(() => isDp ? dpBoardCandidates(azure.items) : null, [isDp, azure.items])
+  const dpEpics = useStreamEpics('DP')
+  const dpCandidates = useMemo(() => isDp ? dpBoardCandidates(azure.items, dpEpics) : null, [isDp, azure.items, dpEpics])
   const featureMatch = useMemo(() => (row: AzureWorkItem) => dpCandidates ? dpBoardMatch(row, dpCandidates, threshold).feature : undefined, [dpCandidates, threshold])
   const allDp = source?.items ?? noItems
   const dpColumns: DataColumn<AzureWorkItem>[] = isDp ? [

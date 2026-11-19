@@ -152,13 +152,14 @@ An RPN ≥ 40, or S = 5 with D ≥ 3, needs an action. The **Residual RPN** is t
 | DF-105 | Set a User Story Active from State checks (ATM-29) | Someone else's User Story is set Active, or the wrong story is chosen | Work shown as started that is not | Expanded rows of a shared Feature | 3 | 2 | 2 | 12 | Only the person's own New stories have the button; a confirmation names the item; the write is read back and audited (TC-ATM-22) | 3×1×2 = 6 | TC-ATM-22 | — |
 | DF-106 | Signed by me on My dashboard (MYD-13) | A document is counted for the wrong person, or one signed by the person is missed | Wrong personal figures reported | A shared name; a field named differently; a document without a date | 3 | 3 | 3 | 27 | All words of one of the person's names, or their work email, must be in the field; only Author / Reviewer / Approver fields; streams without such fields are named; undated documents are counted and shown apart; the documents behind the figures are listed (TC-MYD-06) | 3×2×2 = 12 | TC-MYD-06 | — |
 | DF-107 | Move a Feature to its stories' PI from State checks (ATM-30) | The Feature is moved to the wrong PI, or one rightly kept in its PI is moved | PI reports and planning show it in the wrong increment | PI names that do not sort by number; stories of several PIs | 3 | 2 | 2 | 12 | Only Active Features of the person; the latest PI of its Active stories, compared by number; both PIs named on the row and in the confirmation; the write is read back and audited (TC-ATM-23) | 3×1×2 = 6 | TC-ATM-23 | — |
+| DF-108 | Epics to match Features in (QV-57) | A release's Feature lies outside the chosen Epics, so it shows as not on the board and a duplicate Feature is created | Duplicate Features; releases shown untracked | An Epic missing from the choice; a Feature moved to another Epic | 3 | 3 | 3 | 27 | None chosen = the whole board (as before); the count of chosen Epics shown per stream; Epics no longer on the board named; Create Feature still asks before writing (TC-QV-38) | 3×2×2 = 12 | TC-QV-38 | — |
 | DF-30 | Release the documents | The app shows documents that do not match its build | Wrong instructions or requirements | Documents published separately | 2 | 3 | 3 | 18 | Documents bundled at build time; the traceability matrix regenerated and checked in CI (DOC-02, DOC-10) | 2×1×1 = 2 | TC-DOC-01, TC-DOC-03 | — |
 
 ## 7. Summary
 
 | | Count |
 |---|---|
-| Failure modes analysed | 107 |
+| Failure modes analysed | 108 |
 | With S = 5 | 10 (DF-01…04, 06, 23, 24, 27, 28) — all with residual D = 1 |
 | Initial RPN ≥ 40 | 4 (DF-01, DF-02, DF-23, DF-59) — DF-01, DF-02, DF-23 reduced to 5, DF-59 to 12 |
 | Residual RPN ≥ 15 | 0 (DF-26 reduced to 12 by reading the Location column first; LIM-04 keeps the correction table as a further option) |
