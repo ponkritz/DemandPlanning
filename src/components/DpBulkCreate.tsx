@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import type { AzureWorkItem } from '../domain'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { FeatureSetups } from '../featureSetup'
-import { chooseSetup, dpEpicId } from '../featureSetup'
+import { chooseSetup } from '../featureSetup'
+import { useBulkEpic } from '../useStreamEpics'
 import type { QeMappingFile } from '../qeMapping'
 import { bulkPlan, dpTypeLabel } from '../dpBulk'
 import type { BoardHit } from '../dpBoardMatch'
@@ -17,6 +18,8 @@ import { Modal, Notice } from './ui'
 // the QE Mapping, in the PI / Sprint chosen. One after another as a background job; releases that cannot be created
 // are listed with the reason and skipped.
 export function DpBulkCreate({ rows, azure, featureSetup, qeMapping, featureMatch, onClose }: { rows: AzureWorkItem[]; azure: AzureWorkspace; featureSetup?: FeatureSetups | null; qeMapping?: QeMappingFile | null; featureMatch: (row: AzureWorkItem) => BoardHit | undefined; onClose: () => void }) {
+  // QV-59: the DP bulk Epic — mine, else shared, else built in (13946).
+  const dpEpicId = useBulkEpic('DP').epicId ?? 0
   const setup = chooseSetup(featureSetup, dpEpicId, true).setup
   const plan = bulkPlan(rows, { setup, qeMapping, board: azure.items, featureMatch })
   const ready = plan.filter((line) => !line.skip)

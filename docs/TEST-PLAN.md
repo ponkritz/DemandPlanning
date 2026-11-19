@@ -776,6 +776,10 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-CON-56 Back up and clean up the connections** — Req CON-88 — L1 `view-definitions.test.mjs` ("back up and clean up: every connection removed, PATs kept per server, the reset applied once per computer (TC-CON-56)"); E2E `shell.e2e.mjs` ("TC-CON-56: Storage → Shared setup in Git offers Back up and clean up; removing all needs Git storage that can save"); browser check (admin, Git storage that can save): Back up and remove all… downloads the backup, adds `azure-views-backups/azure-views-<time>.json` and `azure-views-reset.json` in Git, empties `azure-views.json` and `azure-data/`, and Settings → Azure DevOps lists no connections while the server PATs stay; a second computer started afterwards shows no old connections, then the ones the admin added.
 
+**TC-CON-57 Stream mapping locked to the Tool Owner** — Req CON-93, CON-42 — L1 `access.test.mjs` ("CON-93: the Tool Owner role alone changes the stream mapping; while none exists, those who manage access may; only a Tool Owner changes who holds it (TC-CON-57)"); browser check with access.json in Git: as an Admin without the Tool Owner role, Settings → Azure DevOps → Stream mapping shows the mapping read-only (no Edit, no Save stream mapping to Git, naming patterns read-only); give yourself Tool Owner in Role rights while no Tool Owner exists — saved; as that Tool Owner the mapping is editable; as an Admin, adding another Tool Owner is refused; removing the last Tool Owner is refused.
+
+**TC-CON-58 Role rights as a permission matrix** — Req CON-94, CON-42, CON-89 — L1 `access.test.mjs` ("CON-94: every permission is Allow, Deny or Not set per role; a denial wins; older files keep what they allowed; Check access explains (TC-CON-58)"); E2E `shell.e2e.mjs` ("TC-CON-58: Role rights is a matrix of Allow, Deny and Not set per permission, grouped and searchable; a denial hides what it denies and Check access explains why"); browser check with access.json in Git: Settings → People & access → Role rights shows each permission with Allow / Deny / Not set per role in groups; set Deny on *Export tables* for one of your roles while another allows it — after Save to Git the Export buttons are gone; Check access names the denying role; an access.json saved before v7.27.0 keeps every person's rights.
+
 
 **TC-CON-44 DP and DHFI defaults** — Req CON-76 — L1 `connections.test.mjs` ("pre-filled connections from the shared setup …": DP reads the Release work items of DHP with DDTDate, SourceProgram, PsName and Release; DHFI [Approved] reads the DHP.Vault documents, hidden from the menu); browser check in a fresh browser with only the on-prem PAT: Settings → Azure DevOps → Stream mapping → Set up DP, Pedestal and DHFI from their defaults; Release Details → DP lists Release items for the DDT month; Get started shows the release streams step done.
 
@@ -903,6 +907,10 @@ Cases marked **UAT** are also run in acceptance testing.
 **TC-QV-37 Release naming patterns** — Req QV-55, QV-52 — L1 `naming-patterns.test.mjs` ("QV-55: wildcard patterns — * any text, {…} the release name; Content up to _RELEASE, IOCC after Conformance Verification / Test Tools"; "QV-55: patterns are shared settings — checked on read, per stream, built in when not saved; same list for the same settings"; "QV-55: Content documents are grouped under their release; IOCC by Conformance Verification and Test Tools names, others as before"); E2E `shell.e2e.mjs` ("TC-QV-37: Stream mapping → Release naming patterns — built-in Content and IOCC patterns, a Title tried, a pattern edited, applied and reset"); browser check with the Content and IOCC data: Release Details → Content shows one row per _RELEASE name with its documents under it; IOCC shows Conformance Verification and Test Tools groups; change a pattern, Apply, Save to Git — another browser shows the same names.
 
 **TC-QV-38 Feature-matching Epics** — Req QV-57 — L1 `feature-epics.test.mjs` (only valid, unique Epic IDs for DP, CP, IOCC and Content are retained; matching searches the selected Epic hierarchies only). Browser check: in Settings → Azure DevOps → Stream mapping, select and save one or more board Epics for each stream. Their release tables and existing-Feature checks search only those Epics; a stream with no selection searches the whole board. Removed or missing selections are named, while Tool Validations and Windchill streams remain whole-board searches.
+
+**TC-QV-39 Release counts with entered placeholders** — Req QV-58 — L1 `release-counts.test.mjs` ("QV-58: entered release counts — CP, DP and IOCC only, months YYYY-MM, whole numbers (TC-QV-39)"; "QV-58: a stream without data takes the entered counts, marked; without them it is a placeholder; data always wins (TC-QV-39)"); E2E `shell.e2e.mjs` ("TC-QV-39: an Admin enters CP release counts for a month without data; My dashboard shows them as entered, the others as placeholders"); browser check: with CP not fetched, enter CP Completed 3 / Supported 5 for the month — My dashboard, the CP page, Pulse Check and the Monthly pack show 3 / 5 as entered; fetch CP — its real counts replace them; DP without data and without entered counts shows — and the reason.
+
+**TC-QV-40 IOCC bulk Features and bulk creation Epics** — Req QV-59 — L1 `bulk-epics.test.mjs` ("QV-59: the bulk creation Epic per stream — mine over shared over built in; IOCC has none built in (TC-QV-40)"; "QV-59: IOCC releases in bulk by the DP rules — type from the number, set from the Epic setup, QE by the release name (TC-QV-40)"); E2E `shell.e2e.mjs` ("TC-QV-40: Stream mapping → Bulk creation Epics — shared and my own Epic per stream, mine used"); browser check with the QMS-0025 board and IOCC: set the IOCC bulk Epic (shared), its Feature setup (Release / PU sets, QE Mapping columns), tick IOCC releases, Create Features — each Feature is created under that Epic with its set's DoD and stories, assigned to the mapped QE; set my own DP Epic — DP's Create Features uses it, others keep the shared one.
 
 
 
@@ -1428,7 +1436,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-MYD-01 My dashboard as the start page** — Req MYD-01…MYD-04 — E2E `shell.e2e.mjs` ("TC-MYD-01: My dashboard is the start page: my hours, my open work and my streams; Pulse Check offers quarter, half-year and year"); browser check: without a work email or chosen name it asks who you are; with one, the hours match Monthly Time Writing for the month and the counts match Assigned to Me.
 
-**TC-MYD-02 Team insights for selected roles** — Req MYD-05 — L1 `access.test.mjs` ("Team insights: My dashboard for every role, the team insights for Admin and People Manager; older files keep them for those two (MYD-05, TC-MYD-02)"); browser check (Git storage with access.json): a Team Member sees My dashboard but not the Dashboard or Pulse Check; a People Manager sees both; ticking Team insights for Scrum Master in Settings → Access shows them to Scrum Masters.
+**TC-MYD-02 Team insights for selected roles** — Req MYD-05 — L1 `access.test.mjs` ("Team insights: My dashboard for every role, the team insights for Tool Owner, Admin and People Manager; older files keep them for those three (MYD-05, TC-MYD-02)"); browser check (Git storage with access.json): a Team Member sees My dashboard but not the Dashboard or Pulse Check; a People Manager sees both; ticking Team insights for Scrum Master in Settings → Access shows them to Scrum Masters.
 
 **TC-MYD-03 Personal views model** — Req MYD-06, MYD-09 — L1 `personal-views.test.mjs` ("personal views: a file per person, only known shapes kept, defaults under my own changes (MYD-06…MYD-09, TC-MYD-03)"; "sections in my order: removed sections dropped, new ones placed after their neighbour, hidden apart (MYD-06, TC-MYD-03)").
 
@@ -1605,6 +1613,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CON-90 | TC-ACC-05 |
 | CON-91 | TC-ACC-04 |
 | CON-92 | TC-ACC-04, TC-ACC-05 |
+| CON-93 | TC-CON-57 |
+| CON-94 | TC-CON-58 |
 | QV-20 | TC-QV-06 |
 | QV-21 | TC-QV-07 |
 | CON-21, CON-22 | TC-CON-08 |
@@ -1729,6 +1739,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | QV-55 | TC-QV-37 |
 | QV-57 | TC-QV-38 |
 | QV-56 | TC-QV-36 |
+| QV-58 | TC-QV-39 |
+| QV-59 | TC-QV-40 |
 | QV-38 | TC-CON-42 |
 | OVR-01…08 | retired (TC-OVR-01…03 retired) |
 | OV-11 | TC-OV-11 |
@@ -1945,8 +1957,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 | Use case | Test cases |
 |---|---|
-| UC-01 | TC-NAV-01…06, TC-NAV-33, TC-NAV-37, TC-UI-01, TC-UI-02, TC-UI-03, TC-CON-36, TC-CON-38, TC-NAV-38, TC-NAV-39, TC-NAV-40, TC-NAV-41 |
-| UC-02 | TC-CON-01…07, TC-CON-17…19, TC-CON-44, TC-CON-28, TC-NAV-02, TC-NAV-34, TC-QV-14, TC-QV-16, TC-QV-23, TC-QV-24, TC-CON-46, TC-QV-25, TC-CON-47 |
+| UC-01 | TC-NAV-01…06, TC-NAV-33, TC-NAV-37, TC-UI-01, TC-UI-02, TC-UI-03, TC-CON-36, TC-CON-38, TC-NAV-38, TC-NAV-39, TC-NAV-40, TC-NAV-41, TC-UI-09, TC-UI-10 |
+| UC-02 | TC-CON-01…07, TC-CON-17…19, TC-CON-44, TC-CON-28, TC-NAV-02, TC-NAV-34, TC-QV-14, TC-QV-16, TC-QV-23, TC-QV-24, TC-CON-46, TC-QV-25, TC-CON-47, TC-QV-38, TC-QV-39, TC-QV-40 |
 | UC-03 | TC-CON-03, TC-FET-01…06, TC-FET-09 |
 | UC-04 | TC-TWN-01, TC-TWN-02, TC-MON-01…06, TC-MON-09, TC-MON-10, TC-ATM-19, TC-BKL-18 |
 | UC-05 | TC-MON-07 |
@@ -1966,7 +1978,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-19 | TC-INS-04, TC-CI-01, TC-CI-02, TC-CI-03, TC-DOC-03 |
 | UC-20 | TC-DOC-01, TC-DOC-02, TC-DOC-03 |
 | UC-21 | TC-SCR-01 |
-| UC-22 | TC-ACC-01, TC-ACC-02 |
+| UC-22 | TC-ACC-01, TC-ACC-02, TC-CON-57, TC-CON-58 |
 | UC-23 | TC-QEM-01…08 |
 | UC-24 | TC-PCK-01…10 |
 | UC-25 | TC-WSP-01…07 |

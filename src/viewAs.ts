@@ -6,14 +6,14 @@ import type { AzureWorkItem } from './domain'
 // change reaches Azure DevOps or Git storage while it is on.
 export type ViewAs = { kind: 'person'; name: string; email?: string } | { kind: 'role'; role: Role }
 
-// Only people holding the Admin role in the access policy (a policy must exist: without one nothing is restricted).
-export const canViewAs = (rights: Rights) => rights.restricted && rights.roles.includes('Admin')
+// CON-94: only people allowed "View as another person or role" (a policy must exist: without one nothing is restricted).
+export const canViewAs = (rights: Rights) => rights.restricted && rights.actions.has('access.viewAs')
 
 export function viewAsRights(policy: AccessPolicy | null, viewAs: ViewAs): Rights {
   if (viewAs.kind === 'person') return rightsFor(policy, viewAs.email ?? '')
   if (!policy) return rightsFor(null, '')
-  const rights = policy.roles[viewAs.role]
-  return { areas: new Set(rights.areas), actions: new Set(rights.actions), roles: [viewAs.role], restricted: true }
+  const rights = policy.roles[viewAs.role], denied = new Set(rights.deny ?? [])
+  return { areas: new Set(rights.areas.filter((area) => !denied.has(area))), actions: new Set(rights.actions.filter((action) => !denied.has(action))), roles: [viewAs.role], restricted: true }
 }
 
 export const viewAsLabel = (viewAs: ViewAs) => viewAs.kind === 'role' ? `the role ${viewAs.role}` : viewAs.name || viewAs.email || 'a person'

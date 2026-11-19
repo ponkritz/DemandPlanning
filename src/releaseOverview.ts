@@ -4,7 +4,7 @@ import type { AzureConnectionProfileSummary } from './azureCredentials.ts'
 import { releaseFor, releaseOf } from './releasePath.ts'
 import { defaultStreams, profileForStream, profilesForStream, streamOfProfile, type ReleaseRule } from './streams.ts'
 import { cpMonthReport, cpNameIndex, cpSignatures, fieldReader } from './cpReporting.ts'
-import { releaseRegister, streamPatterns, viewMonthOf } from './releaseSource.ts'
+import { countStreams, normalizeReleaseSourceSettings, releaseRegister, streamPatterns, viewMonthOf, type EnteredCounts } from './releaseSource.ts'
 import { viewSource } from './viewSources.ts'
 import { dpMilestoneLabel, dpMonthCounts, type SupportedRelease } from './dpMilestones.ts'
 import { ioccDocumentNames, ioccMonthCounts } from './ioccMilestones.ts'
@@ -20,7 +20,9 @@ export interface StreamDocument { id: number; title: string; url: string; releas
 // milestones the milestones Done behind them.
 // supportedEntries: the Supported Releases of a stream counted like DP (DP, IOCC), each once: key and label.
 export interface SupportedEntry { key: string; label: string }
-export interface ReleaseStream { id: string; name: string; fetchedAt: string; releases: StreamRelease[]; documents: number; titles: StreamDocument[]; notSetUp?: boolean; supported?: number; supportedReleases?: SupportedRelease[]; supportedEntries?: SupportedEntry[]; milestones?: number }
+// QV-58: noData — CP, DP or IOCC has no data for the month (not set up, or its view not fetched); entered — the counts an
+// Admin entered for that month, used instead (completedCount, supportedCount).
+export interface ReleaseStream { noData?: string; entered?: EnteredCounts; id: string; name: string; fetchedAt: string; releases: StreamRelease[]; documents: number; titles: StreamDocument[]; notSetUp?: boolean; supported?: number; supportedReleases?: SupportedRelease[]; supportedEntries?: SupportedEntry[]; milestones?: number }
 
 // One view's releases in the month, read with its stream's rule (streams.ts; others use the general path rule).
 function streamOf(state: Pick<AppState, 'azureSources' | 'releaseSource'> & Partial<Pick<AppState, 'releaseSourceSettings'>>, profile: AzureConnectionProfileSummary, releaseConnections: number, month: string, timeZone?: string, rule: ReleaseRule = 'path', patterns: NamingPattern[] = []): ReleaseStream {
@@ -124,6 +126,19 @@ export function defaultStreamReleases(state: Pick<AppState, 'azureSources' | 're
   return streams
 }
 function computeStreams(state: Pick<AppState, 'azureSources' | 'releaseSource'> & Partial<Pick<AppState, 'releaseSourceSettings'>>, profiles: AzureConnectionProfileSummary[], month: string, timeZone?: string): ReleaseStream[] {
+  const overrides = normalizeReleaseSourceSettings(state.releaseSourceSettings).countOverrides ?? {}
+  return computeStreamsOnly(state, profiles, month, timeZone).map((stream) => {
+    if (!(countStreams as readonly string[]).includes(stream.name)) return stream
+    const noData = stream.notSetUp ? 'not set up' : !stream.fetchedAt ? 'not fetched yet' : ''
+    if (!noData) return stream
+    const entered = overrides[stream.name]?.[month]
+    return { ...stream, noData, ...(entered ? { entered } : {}) }
+  })
+}
+// QV-58: the Completed and Supported counts of a stream in a month — its data, else the counts an Admin entered.
+export const completedCount = (stream: Pick<ReleaseStream, 'releases' | 'entered' | 'noData'>) => stream.noData && stream.entered?.completed != null ? stream.entered.completed : stream.releases.length
+export const supportedCount = (stream: Pick<ReleaseStream, 'supported' | 'entered' | 'noData'>) => stream.noData && stream.entered?.supported != null ? stream.entered.supported : stream.supported
+function computeStreamsOnly(state: Pick<AppState, 'azureSources' | 'releaseSource'> & Partial<Pick<AppState, 'releaseSourceSettings'>>, profiles: AzureConnectionProfileSummary[], month: string, timeZone?: string): ReleaseStream[] {
   const releaseConnections = profiles.filter((profile) => profile.role === 'release-source').length
   return defaultStreams.filter((stream) => stream.source === 'azure').map((stream) => {
     const profile = profileForStream(stream, profiles)
@@ -155,9 +170,12 @@ export interface StreamCounts { id: string; name: string; notSetUp: boolean; mon
 export function streamCounts(state: Pick<AppState, 'azureSources' | 'releaseSource'> & Partial<Pick<AppState, 'releaseSourceSettings'>>, profiles: AzureConnectionProfileSummary[], months: string[], timeZone?: string): StreamCounts[] {
   const perMonth = months.map((month) => defaultStreamReleases(state, profiles, month, timeZone))
   return (perMonth[0] ?? defaultStreamReleases(state, profiles, months[0] ?? '', timeZone)).map((stream, index) => {
-    const entries = months.map((month, at) => { const found = perMonth[at][index]; return { month, releases: found?.releases.length ?? 0, documents: found?.documents ?? 0, ...(found?.supported != null ? { supported: found.supported } : {}) } })
+    const entries = months.map((month, at) => { const found = perMonth[at][index]; const supported = found ? supportedCount(found) : undefined; return { month, releases: found ? completedCount(found) : 0, documents: found?.documents ?? 0, ...(supported != null ? { supported } : {}) } })
     // DP: the period's Supported Releases are unique too — a release supported in two months counts once.
-    const supported = stream.supported != null ? { supported: new Set(perMonth.flatMap((streams) => streams[index]?.supportedEntries?.map((entry) => entry.key) ?? [])).size } : {}
+    // QV-58: months without data add the Supported count an Admin entered for them.
+    const enteredSupported = perMonth.reduce((sum, streams) => { const found = streams[index]; return sum + (found?.noData && found.entered?.supported != null ? found.entered.supported : 0) }, 0)
+    const hasSupported = stream.supported != null || perMonth.some((streams) => streams[index]?.entered?.supported != null)
+    const supported = hasSupported ? { supported: new Set(perMonth.flatMap((streams) => streams[index]?.supportedEntries?.map((entry) => entry.key) ?? [])).size + enteredSupported } : {}
     return { id: stream.id, name: stream.name, notSetUp: Boolean(stream.notSetUp), months: entries, releases: entries.reduce((sum, entry) => sum + entry.releases, 0), documents: entries.reduce((sum, entry) => sum + entry.documents, 0), ...supported }
   })
 }

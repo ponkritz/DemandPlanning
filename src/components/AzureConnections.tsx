@@ -1,3 +1,4 @@
+import { todayIso } from '../format'
 import { useState } from 'react'
 import { EmptyState, Modal, Notice, Panel, Pill, type Tone, Info } from './ui'
 import { formatDateTime } from '../format'
@@ -15,6 +16,8 @@ import type { GitStorage } from '../useGitStorage'
 import { GitSyncBar } from './GitStorage'
 import { NamingPatternsPanel } from './NamingPatternsPanel'
 import { FeatureEpicsPanel } from './FeatureEpicsPanel'
+import { ReleaseCountsAdmin } from './ReleaseCounts'
+import { BulkEpicsPanel } from './BulkEpicsPanel'
 import { markPendingShare, markViewsSynced, serializeViews, viewsFile } from '../viewDefinitions'
 
 const roleLabel: Record<AzureConnectionRole, string> = { 'time-tracking': 'Time Writing (read & write)', 'release-source': 'Releases · DHFI (read only)', documents: 'Documents · Vault (read only)', reference: 'Reference (read only)', 'backlog-view': 'Backlog view (read only)' }
@@ -31,7 +34,7 @@ const empty = (role: AzureConnectionRole = 'time-tracking'): ConnectionInput => 
 // Azure DevOps connection setup, shown as the first section of Settings.
 // section: the one part to show (SET-14: Servers and PATs, Stream mapping, Other views, Read-only sources, Synthetic
 // sample); without it, every part.
-export function AzureConnections({ azure, store, git, onOpenBoard, canManage = true, section }: { azure: AzureWorkspace; store: PageProps['store']; git?: GitStorage; onOpenBoard: () => void; canManage?: boolean; section?: 'email' | 'servers' | 'mapping' | 'views' | 'sources' | 'sample' }) {
+export function AzureConnections({ azure, store, git, onOpenBoard, canManage = true, canManageStreams = canManage, canEnterCounts = canManage, section }: { azure: AzureWorkspace; store: PageProps['store']; git?: GitStorage; onOpenBoard: () => void; canManage?: boolean; canManageStreams?: boolean; canEnterCounts?: boolean; section?: 'email' | 'servers' | 'mapping' | 'views' | 'sources' | 'sample' }) {
   const show = (part: string) => !section || section === part
   const threshold = normalizeReleaseSourceSettings(store.state.releaseSourceSettings).matchThreshold ?? defaultMatchThreshold
   const { connectionProfiles, connectionStatus, activeConnectionProfileId, busy } = azure
@@ -92,7 +95,7 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
   // has), and Git's stream mapping is enforced on every other user at their next start. A change that cannot be saved
   // to Git is kept here until it is (Save stream mapping to Git), so the next sync does not undo it.
   async function shareMapping(name: string, id?: string) {
-    if (!canManage || azure.isSample) return
+    if (!canManageStreams || azure.isSample) return
     if (!git?.connected || git.readOnly) { if (id) markPendingShare([id], true); setCleanup({ tone: 'warning', text: `“${name}” saved here only: ${!git?.connected ? 'connect Git storage' : 'your Git token is read-only'} to share the stream mapping with everyone.` }); return }
     try { const list = listAzureConnectionProfiles(); await git.writeViews(serializeViews(viewsFile(list)), `Stream mapping: ${name}`); markViewsSynced(list); markPendingShare(list.map((profile) => profile.id), false); setCleanup({ tone: 'success', text: `“${name}” saved to the shared setup in Git; it applies to every user at their next start.` }) }
     catch (failure) { if (id) markPendingShare([id], true); setCleanup({ tone: 'warning', text: `“${name}” saved here, but not to Git: ${failure instanceof Error ? failure.message : String(failure)}. Use “Save stream mapping to Git” to retry.` }) }
@@ -219,10 +222,10 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
       </form></Modal>}
     </Panel>}
     {show('mapping') && <Panel className="connection-panel" eyebrow="STEP 2" title="Stream mapping" info={<ul><li>Which server, project and query feed each stream. Time Writing (QMS-0025) is the team's backlog; DP, CP, IOCC, Content and Tool Validations are queries on the on-prem DHP.Vault project; S&amp;S IT comes from the Windchill export named like it (ECP will follow). Pedestal (the DHP release register) and DHFI are DP's two data sets: with both mapped, DP lists every Pedestal Release, dated by the DHFI documents whose Title names it.</li><li>Release rules: DP — name from the Area Path, number from the Iteration Path. IOCC — Type of Release from the Area Path segment after “IOCC”, name from the Title. Others — a “Release x.y.z” path segment. DP and IOCC are matched to QMS-0025 Features fuzzily; the best Feature counts at the threshold.</li><li>The mapping is shared with everyone through Git (azure-views.json); roles with “Manage shared settings” change it. Everyone else only enters their PAT per server.</li></ul>}
-      action={<div className="button-row">{canManage && git?.connected && !git.readOnly && !azure.isSample && <button type="button" className="ghost" title="Write this browser's stream mapping to the shared setup in Git now; every other user gets it at their next start" onClick={() => void shareMapping('stream mapping')}>Save stream mapping to Git</button>}{mapping.some((row) => !row.profile && row.preset && !row.timeWriting && presetHasPat(row.preset)) && <button type="button" className="primary" onClick={() => { for (const row of mapping) if (!row.profile && row.preset && !row.timeWriting && presetHasPat(row.preset)) setUpStream(row.preset) }}>Set up all with saved PATs</button>}<label className="inline-select">Fuzzy match threshold<input type="number" min={1} max={100} step={1} value={threshold} disabled={!canManage} aria-label="Fuzzy match threshold (%)" onChange={(event) => { const value = Math.round(Number(event.target.value)); if (value >= 1 && value <= 100) store.update((draft) => { draft.releaseSourceSettings = { ...normalizeReleaseSourceSettings(draft.releaseSourceSettings), matchThreshold: value }; return draft }) }} />%</label></div>}>
-      {canManage && git?.connected && git.dirty && <GitSyncBar git={git} />}
-      {!canManage && <Notice tone="info">The stream mapping (servers, projects and queries of DP, CP, IOCC, Content, Tool Validations and DP's data sets) is set by roles with “Manage shared settings” and comes from Git: changes made here are replaced by the shared mapping at the next start. Enter your PAT per server above.</Notice>}
-      {canManage && <Notice tone="info">Changes you make to the stream mapping are saved to the shared setup in Git right away and replace every other user's mapping at their next start.</Notice>}
+      action={<div className="button-row">{canManageStreams && git?.connected && !git.readOnly && !azure.isSample && <button type="button" className="ghost" title="Write this browser's stream mapping to the shared setup in Git now; every other user gets it at their next start" onClick={() => void shareMapping('stream mapping')}>Save stream mapping to Git</button>}{mapping.some((row) => !row.profile && row.preset && !row.timeWriting && presetHasPat(row.preset)) && <button type="button" className="primary" onClick={() => { for (const row of mapping) if (!row.profile && row.preset && !row.timeWriting && presetHasPat(row.preset)) setUpStream(row.preset) }}>Set up all with saved PATs</button>}<label className="inline-select">Fuzzy match threshold<input type="number" min={1} max={100} step={1} value={threshold} disabled={!canManage} aria-label="Fuzzy match threshold (%)" onChange={(event) => { const value = Math.round(Number(event.target.value)); if (value >= 1 && value <= 100) store.update((draft) => { draft.releaseSourceSettings = { ...normalizeReleaseSourceSettings(draft.releaseSourceSettings), matchThreshold: value }; return draft }) }} />%</label></div>}>
+      {canManageStreams && git?.connected && git.dirty && <GitSyncBar git={git} />}
+      {!canManageStreams && <Notice tone="info">The stream mapping (servers, projects and queries of DP, CP, IOCC, Content, Tool Validations and DP's data sets) is set by the Tool Owner (CON-93) and comes from Git: changes made here are replaced by the shared mapping at the next start. Enter your PAT per server above.</Notice>}
+      {canManageStreams && <Notice tone="info">Changes you make to the stream mapping are saved to the shared setup in Git right away and replace every other user's mapping at their next start.</Notice>}
       <div className="azure-table"><table><thead><tr><th>Stream</th><th>Server · project</th><th>Query</th><th>Rule</th><th>Status</th><th /></tr></thead><tbody>
         {mapping.map((row) => { const [tone, label] = row.profile ? statusTone(row.profile) : ['warning' as Tone, row.windchill ? 'Windchill export' : 'Not mapped']; const status = row.profile ? connectionStatus[row.profile.id] : undefined; return <tr key={row.name}>
           <td><strong>{row.name}</strong>{row.profile && <small>{viewNameOf(row.profile)}</small>}{row.timeWriting && row.profile && !azure.creatorEmail && <small className="warning-text">Work email missing: set it under Your work email</small>}</td>
@@ -232,15 +235,17 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
           <td>{row.windchill ? <small className="muted">Import on the Windchill page</small> : <><Pill tone={tone}>{label}</Pill>{status?.message && <small>{status.message}</small>}</>}</td>
           <td><div className="button-row nowrap">
             {!row.windchill && !row.profile && row.preset && <button type="button" className="primary" onClick={() => setUpStream(row.preset!)}>Set up</button>}
-            {!row.windchill && !row.profile && !row.preset && canManage && <button type="button" className="primary" onClick={() => { setFormError(''); setForm('dataSet' in row && row.dataSet ? { ...empty('reference'), name: row.name, viewName: row.name, showInMenu: false } : { ...empty('release-source'), name: row.name, viewName: row.name, showInMenu: true }) }}>Add query</button>}
+            {!row.windchill && !row.profile && !row.preset && canManageStreams && <button type="button" className="primary" onClick={() => { setFormError(''); setForm('dataSet' in row && row.dataSet ? { ...empty('reference'), name: row.name, viewName: row.name, showInMenu: false } : { ...empty('release-source'), name: row.name, viewName: row.name, showInMenu: true }) }}>Add query</button>}
             {row.profile && <button type="button" className="ghost" disabled={status?.state === 'busy' || fetchingAll} onClick={() => void azure.fetchConnection(row.profile!.id)}>Fetch</button>}
-            {row.profile && (canManage || row.timeWriting) && <button type="button" className="ghost" onClick={() => edit(row.profile!)}>Edit</button>}
+            {row.profile && (canManageStreams || row.timeWriting) && <button type="button" className="ghost" onClick={() => edit(row.profile!)}>Edit</button>}
           </div></td>
         </tr> })}
       </tbody></table></div>
     </Panel>}
-    {show('mapping') && <NamingPatternsPanel store={store} canManage={canManage} />}
+    {show('mapping') && <NamingPatternsPanel store={store} canManage={canManageStreams} />}
     {show('mapping') && <FeatureEpicsPanel store={store} items={azure.items} canManage={canManage} />}
+    {show('mapping') && <BulkEpicsPanel store={store} items={azure.items} canManage={canManage} />}
+    {show('mapping') && <ReleaseCountsAdmin store={store} canManage={canEnterCounts} month={todayIso().slice(0, 7)} />}
     {show('views') && <Panel className="connection-panel" eyebrow="STEP 3" title="Other views" info="Any other Azure DevOps view: custom queries, backlog views and background sources such as the DHP release register (Pedestal). Each is saved as soon as it is fetched (an empty Time Writing result never replaces saved data without asking). Nothing is written to Azure DevOps when fetching. Connections on a server with a PAT need no PAT of their own."
       action={<div className="button-row"><button type="button" className="ghost" onClick={() => { setFormError(''); setForm(empty(connectionProfiles.some((profile) => profile.role === 'time-tracking') ? 'reference' : 'time-tracking')) }}>＋ Add connection</button><button type="button" className="primary" disabled={!connectionProfiles.length || fetchingAll || busy} onClick={() => { setFetchingAll(true); void azure.fetchAll().finally(() => setFetchingAll(false)) }}>{fetchingAll ? 'Fetching all…' : 'Fetch all'}</button></div>}>
       {otherPresets.length > 0 && <div className="preset-list">{otherPresets.map((preset) => <div className="preset-row" key={preset.key}>

@@ -233,7 +233,7 @@ export function capacityContext(state: { capacitySettings?: unknown; resourcePro
 
 // CAP-50: which roles count for capacity. Built-in: Lead and Manager (team roles) and People Manager (app access role, or
 // the People manager tick in Resources) are left out. Stored only when it differs from the built-in choice.
-export const accessRoleNames = ['Admin', 'Product Owner', 'People Manager', 'Scrum Master', 'Team Member'] as const
+export const accessRoleNames = ['Tool Owner', 'Admin', 'Product Owner', 'People Manager', 'Scrum Master', 'Team Member'] as const
 export const defaultCapacityRoles: CapacityRoles = { excludedResourceRoles: ['Lead', 'Manager'], excludedAccessRoles: ['People Manager'] }
 export function normalizeCapacityRoles(value: unknown): CapacityRoles | undefined {
   if (!value || typeof value !== 'object') return undefined

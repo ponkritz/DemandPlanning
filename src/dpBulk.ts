@@ -1,4 +1,5 @@
 import type { AzureWorkItem } from './domain'
+import type { ReleaseEntry } from './releaseSource.ts'
 import { fieldOf } from './dpReleases.ts'
 import { dpFeatureTitle, dpProgramOf, dpVersionOf, type BoardHit } from './dpBoardMatch.ts'
 import { dpReleaseName } from './dpMilestones.ts'
@@ -48,6 +49,33 @@ export function qeFor(row: AzureWorkItem, file: QeMappingFile | null | undefined
   return null
 }
 
+// QV-59: the QE of a release named by its product name only (IOCC): the same rule as qeFor on that name.
+export function qeForName(name: string, file: QeMappingFile | null | undefined, columns: QeMapColumns | undefined): { qe: string; product: string } | null {
+  const found = qeColumnsOf(file, columns)
+  const wanted = norm(name)
+  if (!found || !wanted) return null
+  const rows = found.sheet.rows.map((entry) => ({ product: (entry.cells[found.match.id] ?? '').trim(), qe: (entry.cells[found.qe.id] ?? '').trim() })).filter((entry) => entry.product && entry.qe)
+  return rows.find((entry) => norm(entry.product) === wanted) ?? rows.find((entry) => holds(norm(entry.product), wanted) || holds(wanted, norm(entry.product))) ?? null
+}
+// QV-59: IOCC releases in bulk, by the DP rules: the release type from the release number (x.y.z.a), its set (Release or
+// PU) from the bulk Epic's Feature setup, the QE from the QE Mapping by the release name, a 100% match skipped.
+export interface IoccLine { release: ReleaseEntry; title: string; type?: DpReleaseType; set?: ReleaseTypeSetup; qe: string; email: string; skip: string; note: string }
+export function ioccPlan(releases: ReleaseEntry[], options: { setup?: EpicSetup; qeMapping?: QeMappingFile | null; board: AzureWorkItem[]; featureTitle: (release: ReleaseEntry) => string; featureMatch: (release: ReleaseEntry) => BoardHit | undefined; epicId?: number }): IoccLine[] {
+  const sets = releaseTypesOf(options.setup)
+  return releases.map((release) => {
+    const typed = dpReleaseType(release.release), found = qeForName(release.name, options.qeMapping, options.setup?.qeColumns)
+    const qe = found?.qe ?? '', email = qe ? emailFor(qe, options.board) : ''
+    const hit = options.featureMatch(release)
+    const skip = !options.epicId ? 'no IOCC bulk Epic is set (Settings → Stream mapping → Bulk creation Epics)'
+      : fullMatch(hit) ? `Feature #${hit!.item.id} on QMS-0025 matches it 100%`
+      : !typed ? `no release type from the release number “${release.release || '—'}” (x.y.z.a expected)`
+      : !options.setup?.qeColumns ? 'the QE Mapping columns are not set (Feature setup of the IOCC bulk Epic)'
+      : !qe ? 'no QE in the QE Mapping for this release name'
+      : !email ? `no email found for ${qe} (not assigned anything on QMS-0025 yet)` : ''
+    return { release, title: options.featureTitle(release), ...(typed ? { type: typed.type, set: sets[typed.kind] } : {}), qe, email, skip, note: skip ? '' : similarNote(hit) }
+  })
+}
+
 // DPF-03: the possible QEs of a release — the people assigned to the earlier releases of the same product (same PsName)
 // in the DP data, newest release first, without the mapped QE and without the release's own Assigned To; at most 5.
 const versionParts = (version: string) => version.replace(/^v/i, '').split('.').map((part) => Number(part) || 0)
@@ -92,7 +120,7 @@ export function bulkPlan(rows: AzureWorkItem[], options: { setup?: EpicSetup; qe
     const hit = options.featureMatch(row)
     const skip = fullMatch(hit) ? `Feature #${hit!.item.id} on QMS-0025 matches it 100%`
       : !typed ? `no release type from the version “${version || '—'}” (x.y.z.a expected)`
-      : !options.setup?.qeColumns ? 'the QE Mapping columns are not set (Feature setup → Epic 13946)'
+      : !options.setup?.qeColumns ? 'the QE Mapping columns are not set (Feature setup of the bulk Epic)'
       : !qe ? 'no QE in the QE Mapping for this product'
       : !email ? `no email found for ${qe} (not assigned anything on QMS-0025 yet)` : ''
     return { row, title: dpFeatureTitle(row), version, ...(typed ? { type: typed.type, set: sets[typed.kind] } : {}), qe, email, skip, note: skip ? '' : similarNote(hit) }

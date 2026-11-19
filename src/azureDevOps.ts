@@ -904,8 +904,20 @@ export function versionsToTry(config: Pick<AzureConfig, 'apiVersion' | 'organiza
 export const isApiVersionError = (text: string) => /api[- ]?version|version of the api|VssVersionOutOfRange|out of range/i.test(text) && /version/i.test(text)
 
 // Set by the app from the viewer's access roles; while it returns false, nothing is changed in Azure DevOps.
-let writesAllowed: () => boolean = () => true
-export function guardAzureWrites(check: () => boolean) { writesAllowed = check }
+// CON-94: each change needs its own permission (a request that changes the state and the iteration needs both).
+let writesAllowed: (permission: AzureWritePermission) => boolean = () => true
+export function guardAzureWrites(check: (permission: AzureWritePermission) => boolean) { writesAllowed = check }
+export type AzureWritePermission = 'azure.write' | 'work.edit' | 'work.state' | 'work.move' | 'work.hours' | 'work.comment'
+export function writePermissions(request: Pick<AzureRequest, 'operation' | 'state' | 'iterationPath'>): AzureWritePermission[] {
+  switch (request.operation) {
+    case 'create-feature': case 'create-child': return ['azure.write']
+    case 'edit-work-item': return ['work.edit']
+    case 'update-time-writing-effort': return ['work.hours']
+    case 'add-comment': return ['work.comment']
+    case 'update-work-item': return [...(request.state ? ['work.state' as const] : []), ...(request.iterationPath || !request.state ? ['work.move' as const] : [])]
+    default: return []
+  }
+}
 export const changesAzure = (operation: AzureRequest['operation']) => operation === 'create-feature' || operation === 'create-child' || operation === 'update-time-writing-effort' || operation === 'update-work-item' || operation === 'edit-work-item' || operation === 'add-comment'
 
 // Writes go to Azure DevOps Services (dev.azure.com) only: on-premises servers are read-only, whatever the connection's
@@ -915,7 +927,7 @@ export function assertWritableBase(config: Pick<AzureConfig, 'organization' | 'b
 }
 export async function requestAzure(request: AzureRequest): Promise<unknown> {
   if (changesAzure(request.operation)) assertNotViewingAs()
-  if (changesAzure(request.operation) && !writesAllowed()) throw new Error('Your role does not allow changes in Azure DevOps. An Admin can change this in Settings → Access.')
+  if (changesAzure(request.operation) && !writePermissions(request).every((permission) => writesAllowed(permission))) throw new Error('Your role does not allow this change in Azure DevOps. An Admin can change this in Settings → People & access → Role rights.')
   assertWritableBase(request, request.operation)
   if ((request.operation === 'create-feature' || request.operation === 'create-child') && !isAssignee(request.feature?.assignedTo)) throw new Error('A new work item must be assigned to someone (an email). Nothing was created.')
   const storyProblem = storyFieldsProblem(request.feature, request.operation === 'create-child' && request.workItemType === 'User Story')

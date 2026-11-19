@@ -1,3 +1,6 @@
+import { IoccBulkCreate } from './IoccBulkCreate'
+import { useCan } from '../useCan'
+import type { QeMappingFile } from '../qeMapping'
 import { useMemo, useState, type ReactNode } from 'react'
 import { ContentBulkCreate } from './ContentBulkCreate'
 import type { NamingPattern } from '../namingPatterns'
@@ -27,18 +30,18 @@ const releaseLevels: GroupLevel<ReleaseEntry>[] = [
 
 // Release source view, one page: the releases found in the documents' paths (see releasePath: release from the
 // Iteration Path with the name from the Area Path, else "…\Name\Release x.y.z" in the Area Path) as a flat list — no grouping by stream — and below it the documents with the query's columns.
-export function ReleaseView({ name, items, backlog, columns, orderBy, unresolved, azure, assign, featureSetup, rule, fuzzy = false, threshold = 80, patterns }: { patterns?: NamingPattern[]; featureSetup?: FeatureSetups | null; name: string; items: AzureWorkItem[]; backlog: AzureWorkItem[]; columns?: QueryColumn[]; orderBy?: QueryOrder[]; unresolved?: string[]; azure?: AzureWorkspace; assign?: { me: string; canChoose: boolean }; rule?: ReleaseRule; fuzzy?: boolean; threshold?: number }) {
+export function ReleaseView({ name, items, backlog, columns, orderBy, unresolved, azure, assign, featureSetup, qeMapping, rule, fuzzy = false, threshold = 80, patterns }: { patterns?: NamingPattern[]; featureSetup?: FeatureSetups | null; qeMapping?: QeMappingFile | null; name: string; items: AzureWorkItem[]; backlog: AzureWorkItem[]; columns?: QueryColumn[]; orderBy?: QueryOrder[]; unresolved?: string[]; azure?: AzureWorkspace; assign?: { me: string; canChoose: boolean }; rule?: ReleaseRule; fuzzy?: boolean; threshold?: number }) {
   const register = useMemo(() => releaseRegister(items, backlog, { rule, fuzzy, threshold, patterns }), [items, backlog, rule, fuzzy, threshold, patterns])
   const info = rule === 'title' ? 'Content: a release is named by the naming patterns (Settings → Azure DevOps → Stream mapping; built in: the Title up to and including _RELEASE, the rest is the document), its documents grouped under it; a Title no pattern fits is a release of its own (QV-52, QV-55). The Time Writing Feature is the one whose title holds that name.' : rule === 'dp' ? `DP: release name from the Area Path (last segment), release number from the Iteration Path (a “Release x.y.z” segment, else a segment with a version). Time Writing Feature = the best fuzzy match among QMS-0025 Features (name 60%, version 40%); it counts — with its planned and booked hours — at ${threshold}% or more (Settings → Azure DevOps → Stream mapping). Map the Pedestal and DHFI data sets there to list the Pedestal Releases with their DHFI dates instead.` : rule === 'iocc' ? `IOCC: the Area Path segment after “IOCC” is the Type of Release; the release name comes from the document Title, with its version as the release number. Time Writing Feature = the best fuzzy match among QMS-0025 Features (name 60%, version 40%); it counts — with its planned and booked hours — at ${threshold}% or more (Settings → Azure DevOps → Stream mapping).` : 'Releases are read from the documents’ paths: a “Release x.y.z” segment with the name in the segment above it (Iteration Path first, else Area Path). Time Writing Feature = the QMS-0025 Feature whose title names the release exactly (name as whole words and the exact version, in any order); a Feature matching several releases goes to the longest name. Planned and booked hours are the Time Writing Tasks under that Feature.'
   // QV-47: the releases and the query output are two tabs of the page.
   return <ResultTabs id={`azure:${name}`} rawCount={items.length} main={
-    <ReleaseTable name={name} register={register} azure={azure} assign={assign} featureSetup={featureSetup} threshold={threshold} typed={rule === 'iocc'} titled={rule === 'title'} info={info} empty={<EmptyState title="No releases found in the documents' paths." detail="A release is read from a path segment “Release x.y.z”, with the name in the segment above it." />} />
+    <ReleaseTable name={name} register={register} azure={azure} assign={assign} featureSetup={featureSetup} qeMapping={qeMapping} threshold={threshold} typed={rule === 'iocc'} titled={rule === 'title'} info={info} empty={<EmptyState title="No releases found in the documents' paths." detail="A release is read from a path segment “Release x.y.z”, with the name in the segment above it." />} />
 } raw={<QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={unresolved} summary={rule !== 'tool'} queryOnly={rule === 'title'} />} />
 }
 
 // The release table shared by the views: one row per release with its documents, Feature match and hours; with
 // typed, the IOCC Type of Release column and nested grouping (Group by … then by …, Collapse all / Expand all).
-function ReleaseTable({ name, title = 'Releases', detail, register, azure, assign, featureSetup, threshold = 80, typed, titled = false, info, action, empty, featureTitle = (release) => releaseFeatureTitle(name, [release.group, release.name].filter(Boolean).join(' '), release.release) }: { featureTitle?: (release: ReleaseEntry) => string; name: string; title?: string; detail?: string; register: ReleaseEntry[]; featureSetup?: FeatureSetups | null; azure?: AzureWorkspace; assign?: { me: string; canChoose: boolean }; fuzzy?: boolean; threshold?: number; typed?: boolean; titled?: boolean; info?: ReactNode; action?: ReactNode; empty?: ReactNode }) {
+function ReleaseTable({ name, title = 'Releases', detail, register, azure, assign, featureSetup, qeMapping, threshold = 80, typed, titled = false, info, action, empty, featureTitle = (release) => releaseFeatureTitle(name, [release.group, release.name].filter(Boolean).join(' '), release.release) }: { featureTitle?: (release: ReleaseEntry) => string; name: string; title?: string; detail?: string; register: ReleaseEntry[]; featureSetup?: FeatureSetups | null; qeMapping?: QeMappingFile | null; azure?: AzureWorkspace; assign?: { me: string; canChoose: boolean }; fuzzy?: boolean; threshold?: number; typed?: boolean; titled?: boolean; info?: ReactNode; action?: ReactNode; empty?: ReactNode }) {
   const [open, setOpen] = useState('')
   const [groupBy, setGroupBy] = useState<string[]>(typed ? ['type'] : [])
   const [collapsed, setCollapsed] = useState<string[]>([])
@@ -57,7 +60,10 @@ function ReleaseTable({ name, title = 'Releases', detail, register, azure, assig
   const matches = useMemo(() => new Map<string, BoardMatch>(azure ? register.map((release) => [release.key, releaseBoardMatch(release, name, featureTitle(release), candidates, threshold)]) : []), [azure, register, name, candidates, threshold, featureTitle])
   // UI-07…12: the release table follows the shared design default; the documents of a release open under it.
   // CNB-01: Content releases are ticked for Create Features (all assigned to one person, chosen in the pop-up).
-  const bulk = titled && Boolean(azure)
+  // QV-59: IOCC releases too, by the DP rules (IoccBulkCreate).
+  // CON-94: bulk creation needs "Bulk create Features".
+  const can = useCan()
+  const bulk = (titled || Boolean(typed)) && Boolean(azure) && can('work.bulk')
   const [picked, setPicked] = useState<string[]>([])
   const [bulkOpen, setBulkOpen] = useState(false)
   const featureMatch = (release: ReleaseEntry) => matches.get(release.key)?.feature
@@ -86,7 +92,7 @@ function ReleaseTable({ name, title = 'Releases', detail, register, azure, assig
     {groupKeys.length > 1 && <><button type="button" className="ghost" disabled={groupKeys.every((key) => collapsed.includes(key))} onClick={() => setCollapsed(groupKeys)}>Collapse all</button><button type="button" className="ghost" disabled={!collapsed.length} onClick={() => setCollapsed([])}>Expand all</button></>}
   </> : null
   return <TablePanel title={title} detail={detail} info={info} action={action}>
-      {bulkOpen && azure && <ContentBulkCreate releases={register.filter((release) => picked.includes(release.key))} featureTitle={featureTitle} featureMatch={featureMatch} azure={azure} onClose={() => { setBulkOpen(false); setPicked([]) }} />}
+      {bulkOpen && azure && (typed ? <IoccBulkCreate releases={register.filter((release) => picked.includes(release.key))} featureTitle={featureTitle} featureMatch={featureMatch} azure={azure} featureSetup={featureSetup} qeMapping={qeMapping} onClose={() => { setBulkOpen(false); setPicked([]) }} /> : <ContentBulkCreate releases={register.filter((release) => picked.includes(release.key))} featureTitle={featureTitle} featureMatch={featureMatch} azure={azure} onClose={() => { setBulkOpen(false); setPicked([]) }} />)}
       {register.length ? <DataTable id={`releases:${name}:${title}`} className="release-register" columns={columns} rows={register} rowKey={(release) => release.key} exportName={`${name} ${title}`} toolbar={bulk ? <><span className="muted">{picked.length} selected</span><button type="button" className="ghost" disabled={!register.length} onClick={() => setPicked(register.filter((release) => !fullMatch(featureMatch(release))).map((release) => release.key))}>Select all</button><button type="button" className="ghost" disabled={!picked.length} onClick={() => setPicked([])}>Clear</button><button type="button" className="primary" disabled={!picked.length || !assign?.canChoose} title={assign?.canChoose ? 'Create a Feature for each selected release, all assigned to one person' : 'Needs the right to create work items for other people (Settings → Access)'} onClick={() => setBulkOpen(true)}>Create Features ({picked.length})</button></> : grouping} expand={documents} group={groups ? (_, row, span) => groupLines(groups, row, span) : undefined} /> : empty ?? <EmptyState title="No releases." />}
     </TablePanel>
 }

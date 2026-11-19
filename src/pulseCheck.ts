@@ -1,5 +1,5 @@
 import type { AzureWorkItem } from './domain'
-import type { ReleaseStream } from './releaseOverview.ts'
+import { completedCount, supportedCount, type ReleaseStream } from './releaseOverview.ts'
 import { approvalMonthOf } from './releaseSource.ts'
 
 // Pulse Check → Last month: the month before the one picked in the header, compared with it.
@@ -15,8 +15,10 @@ export function releaseComparison(current: ReleaseStream[], previous: ReleaseStr
   const names = [...new Set([...current, ...previous].map((stream) => stream.name))].sort((a, b) => a.localeCompare(b))
   return names.map((name) => {
     const now = current.find((stream) => stream.name === name), before = previous.find((stream) => stream.name === name)
-    const supported = now?.supported != null || before?.supported != null ? { supported: now?.supported ?? 0, previousSupported: before?.supported ?? 0 } : {}
-    return { name, releases: now?.releases.length ?? 0, documents: now?.documents ?? 0, previousReleases: before?.releases.length ?? 0, previousDocuments: before?.documents ?? 0, ...supported }
+    // QV-58: a month without data counts what an Admin entered for it.
+    const nowSupported = now ? supportedCount(now) : undefined, beforeSupported = before ? supportedCount(before) : undefined
+    const supported = nowSupported != null || beforeSupported != null ? { supported: nowSupported ?? 0, previousSupported: beforeSupported ?? 0 } : {}
+    return { name, releases: now ? completedCount(now) : 0, documents: now?.documents ?? 0, previousReleases: before ? completedCount(before) : 0, previousDocuments: before?.documents ?? 0, ...supported }
   })
 }
 
