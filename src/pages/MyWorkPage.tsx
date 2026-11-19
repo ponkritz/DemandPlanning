@@ -86,9 +86,9 @@ export function MyWorkPage({ azure, store, my, month: headerMonth, onOpenActivit
           <Metric label="Pending work" value={pending.length} hint="New or active items assigned to you" />
           <Metric label="Features" value={counts.Feature ?? 0} hint={`${counts['User Story'] ?? 0} stories · ${counts.Bug ?? 0} bugs`} />
           <Metric label="Tasks" value={counts.Task ?? 0} hint="Including Time Writing tasks" />
-          <Metric label={`${month} tasks missing`} value={missing.length} hint={<>{candidates.length - missing.length} of {candidates.length} Features covered · <button type="button" className="text-button" onClick={onOpenActivities}>My Activities →</button></>} tone={missing.length ? 'negative' : undefined} />
+          <Metric label={`${month} tasks missing`} value={missing.length} hint={<>{candidates.length - missing.length} of {candidates.length} Features covered · <button type="button" className="text-button" onClick={onOpenActivities}>Time Writing →</button></>} tone={missing.length ? 'negative' : undefined} />
         </Metrics>
-        {sharedMissing.length > 0 && <Notice tone="info">You work on {sharedMissing.length} shared Feature{sharedMissing.length === 1 ? '' : 's'} owned by someone else without your {month} task: {sharedMissing.map((row) => `${row.feature.id} (owner ${row.shared!.owner})`).join(', ')}. <button type="button" className="text-button" onClick={onOpenActivities}>Add in My Activities →</button></Notice>}
+        {sharedMissing.length > 0 && <Notice tone="info">You work on {sharedMissing.length} shared Feature{sharedMissing.length === 1 ? '' : 's'} owned by someone else without your {month} task: {sharedMissing.map((row) => `${row.feature.id} (owner ${row.shared!.owner})`).join(', ')}. <button type="button" className="text-button" onClick={onOpenActivities}>Add in Time Writing →</button></Notice>}
         {blocked && <Notice tone="warning">{blocked}</Notice>}
         {log.map((entry, index) => <Notice key={index} tone={entry.tone}>{entry.text}</Notice>)}
         <TablePanel title="Pending work" info={<ul>

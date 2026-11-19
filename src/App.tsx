@@ -68,6 +68,8 @@ import { defaultGitRepository, normalizeSetupLinks, type SetupLinks } from './gi
 import { guideKey, requiredOpen, setupSteps } from './setupGuide'
 import { azureResources, capacityContext, setAccessRoles, setAzureEmails } from './capacity'
 import { hasServerPat, serverKey } from './azureCredentials'
+const menuMiniKey = 'demand-planning-menu-mini-v1'
+
 
 export default function App() {
   const store = useAppStore()
@@ -222,6 +224,9 @@ export default function App() {
   // Menu headings and sub-lists can be collapsed; which ones are closed is remembered in this browser.
   // Phones: the sidebar is an off-canvas menu opened from the top bar; it closes on a choice, on Escape or on the backdrop.
   const [navOpen, setNavOpen] = useState(false)
+  // UI-16: the side menu folded to icons on wide screens (« / »), kept per computer.
+  const [menuMini, setMenuMini] = useState(() => { try { return localStorage.getItem(menuMiniKey) === '1' } catch { return false } })
+  const toggleMenuMini = () => setMenuMini((current) => { const next = !current; try { localStorage.setItem(menuMiniKey, next ? '1' : '0') } catch { /* this visit only */ } return next })
   useEffect(() => { setNavOpen(false) }, [page, viewId, windchillId])
   useEffect(() => { if (!navOpen) return; const close = (event: KeyboardEvent) => { if (event.key === 'Escape') setNavOpen(false) }; window.addEventListener('keydown', close); return () => window.removeEventListener('keydown', close) }, [navOpen])
   const [collapsed, setCollapsed] = useState<string[]>(() => { try { const saved = JSON.parse(localStorage.getItem('demand-planning-nav-collapsed-v1') ?? '[]'); return Array.isArray(saved) ? saved.filter((key): key is string => typeof key === 'string') : [] } catch { return [] } })
@@ -230,7 +235,7 @@ export default function App() {
   // Expand all / Collapse all (NAV-37): every heading and both Release Details lists at once.
   const navKeys = [...pageGroups, 'release:ads', 'release:windchill']
   const allCollapsed = navKeys.every((key) => collapsed.includes(key))
-  const navButton = (key: string, icon: string, label: string, active: boolean, onClick: () => void) => <button key={key} className={active ? 'nav-active' : ''} aria-current={active ? 'page' : undefined} onClick={onClick}><span className="nav-icon">{icon}</span>{label}</button>
+  const navButton = (key: string, icon: string, label: string, active: boolean, onClick: () => void) => <button key={key} title={menuMini ? label : undefined} className={active ? 'nav-active' : ''} aria-current={active ? 'page' : undefined} onClick={onClick}><span className="nav-icon">{icon}</span>{label}</button>
   // Settings pages (SET-14): one menu entry each; opening one on a given section (e.g. Stream mapping) shows that
   // section. The page is remounted so it picks up the section asked for.
   const [settingsTab, setSettingsTab] = useState<SettingsTab>(readSettingsTab)
@@ -269,13 +274,13 @@ export default function App() {
   if (!store.ready) return <main className="content"><h1>I&amp;D Quality Demand Planning</h1>{store.loadError ? <Notice tone="error"><p>{store.loadError}</p><p>Do not clear browser data. If you still have an older tab open with unsaved changes, export its JSON backup first.</p><button className="primary" onClick={store.retryLoad}>Retry loading saved data</button></Notice> : <p role="status">Loading saved browser data…</p>}{buildStatus}</main>
 
   // UI-12: every table follows the shared design default.
-  return <TableDefaultsContext.Provider value={tableDesign}><HeaderSlot.Provider value={headerSlot}><div className={`app-shell${navOpen ? ' nav-open' : ''}`}>
+  return <TableDefaultsContext.Provider value={tableDesign}><HeaderSlot.Provider value={headerSlot}><div className={`app-shell${navOpen ? ' nav-open' : ''}${menuMini ? ' nav-mini' : ''}`}>
     {navOpen && <div className="nav-backdrop" onClick={() => setNavOpen(false)} aria-hidden="true" />}
     <aside className="sidebar" id="primary-navigation">
-      <div className="brand" title="I&amp;D Quality Demand Planning"><div className="brand-mark"><BrandMark /></div><div><strong>I&amp;D Quality</strong><span>Demand Planning</span></div></div>
+      <div className="brand" title="I&amp;D Quality Demand Planning"><div className="brand-mark"><BrandMark /></div><div><strong>I&amp;D Quality</strong><span>Demand Planning</span></div><button type="button" className="nav-mini-toggle" aria-pressed={menuMini} aria-label={menuMini ? 'Expand the menu' : 'Collapse the menu'} title={menuMini ? 'Show the menu with names' : 'Fold the menu to icons'} onClick={toggleMenuMini}>{menuMini ? '»' : '«'}</button></div>
       <div className="nav-fold" role="group" aria-label="Menu headings"><button type="button" className="text-button" disabled={!collapsed.length} onClick={() => setCollapsed(saveCollapsed([]))}>Expand all</button><button type="button" className="text-button" disabled={allCollapsed} onClick={() => setCollapsed(saveCollapsed(navKeys))}>Collapse all</button></div>
       <nav aria-label="Primary navigation">{(() => { const pinned = personalViews.menu.pinned.map((id) => pages.find((item) => item.id === id)).filter((item): item is typeof pages[number] => Boolean(item && !item.hidden && allowed(item.id))); return pinned.length ? <div className="nav-section nav-pinned"><span className="nav-group">PINNED</span><div className="nav-items">{pinned.map((item) => <button key={`pin:${item.id}`} className={page === item.id ? 'nav-active' : ''} aria-current={page === item.id ? 'page' : undefined} onClick={() => setPage(item.id)}><span className="nav-icon">{item.icon}</span>{item.label}</button>)}</div></div> : null })()}{pageGroups.map((group) => {
-        const pageButton = (item: typeof pages[number]) => !allowed(item.id) ? [] : [<button key={item.id} className={page === item.id ? 'nav-active' : ''} aria-current={page === item.id ? 'page' : undefined} onClick={() => setPage(item.id)}><span className="nav-icon">{item.icon}</span>{item.label}{item.id === 'mywork' && my.pending.length > 0 && <span className="nav-badge" aria-label={`${my.pending.length} pending`}>{my.pending.length}</span>}</button>]
+        const pageButton = (item: typeof pages[number]) => !allowed(item.id) ? [] : [<button key={item.id} title={menuMini ? item.label : undefined} className={page === item.id ? 'nav-active' : ''} aria-current={page === item.id ? 'page' : undefined} onClick={() => setPage(item.id)}><span className="nav-icon">{item.icon}</span>{item.label}{item.id === 'mywork' && my.pending.length > 0 && <span className="nav-badge" aria-label={`${my.pending.length} pending`}>{my.pending.length}</span>}</button>]
         const windchillMeta = pageMeta('windchill')
         // Release Details has two sub-lists: the default Azure streams (DP, CP, IOCC, Content, Tool Validations) and the
         // Windchill streams (S&S IT; ECP later), each in a fixed order. Other connections and exports go under "Other views".

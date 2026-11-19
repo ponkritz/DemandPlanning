@@ -483,7 +483,7 @@ export async function addChildWorkItem(config: AzureConfig, pat: string, parentI
   return createChildItem(config, pat, parent, type, clean, iterationPath?.trim() || parent.iterationPath, assignedTo.trim().toLowerCase(), transport)
 }
 
-// ＋ User Story under a Feature (Backlogs, Assigned to Me), the New Feature form's counterpart: title, Description,
+// ＋ User Story under a Feature (Backlogs, My Tasks [Board]), the New Feature form's counterpart: title, Description,
 // Acceptance criteria, the Sprint chosen and optional Story Points; the Feature is re-read first and the story takes its
 // Area Path. Assigned to the person chosen (an email), never blank; read back and verified.
 export interface StoryInput extends StoryFields { parentId: number; title: string; description: string; acceptanceCriteria: string; iterationPath: string; assignedTo: string }
@@ -514,7 +514,7 @@ export async function createUserStory(config: AzureConfig, pat: string, input: S
   return item
 }
 
-// BKL-27: the one way the app adds a User Story (New User Story form, My Activities, Your own User Story on New Feature):
+// BKL-27: the one way the app adds a User Story (New User Story form, Time Writing, Your own User Story on New Feature):
 // the Sprint must be a current or future one of the team's schedule (checked fresh, nothing written otherwise), the
 // story is created under the Feature in the Feature's Area Path (createUserStory) and the optional comment is added to
 // its Discussion; a comment that fails is reported in commentError without undoing the story.

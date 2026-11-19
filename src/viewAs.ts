@@ -2,7 +2,7 @@ import { normalEmail, rightsFor, type AccessPolicy, type Rights, type Role } fro
 import type { AzureWorkItem } from './domain'
 
 // View as (CON-89…CON-92): an Admin sees the app as a person — their roles' menu and pages, their My dashboard,
-// Assigned to Me and Monthly — or as a role alone, read-only. Kept for this page load only; nothing is stored, and no
+// My Tasks [Board] and Monthly — or as a role alone, read-only. Kept for this page load only; nothing is stored, and no
 // change reaches Azure DevOps or Git storage while it is on.
 export type ViewAs = { kind: 'person'; name: string; email?: string } | { kind: 'role'; role: Role }
 

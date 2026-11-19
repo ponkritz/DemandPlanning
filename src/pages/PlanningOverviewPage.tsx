@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react'
+import { AxisTitles, DataLabelsToggle } from '../components/chartLabels'
+import { useDataLabels } from '../useDataLabels'
 import { normalizeRules, normalizeScopes } from '../baseline'
 import { capacityContext } from '../capacity'
 import { EmptyState, Page } from '../components/ui'
@@ -25,6 +27,7 @@ export function PlanningOverviewPage({ azure, store, month, onOpenPack }: { azur
   const [filter, setFilter] = useState<OverviewFilter>(allFilter)
   const [kind, setKind] = useState<ExceptionKind | 'all'>('all')
   const [hover, setHover] = useState<number | null>(null)
+  const [labels, setLabels] = useDataLabels('overview-trend')
   const settings = capacityContext(store.state)
   const model = useMemo(() => planningOverview({ items: azure.items, month, today: todayIso(), settings, rules: normalizeRules(store.state.baselineRules), scopes: normalizeScopes(store.state.releaseScopes) }, filter),
     [azure.items, month, settings, store.state.baselineRules, store.state.releaseScopes, filter])
@@ -37,7 +40,7 @@ export function PlanningOverviewPage({ azure, store, month, onOpenPack }: { azur
 
   // Workload chart: planned and actual hours (bars) against capacity (line), one axis in hours.
   const top = Math.max(1, ...trend.flatMap((entry) => [entry.plan, entry.actual, entry.capacity]))
-  const width = 1100, height = 240, left = 48, bottom = 24, plotW = width - left - 8, plotH = height - bottom - 10
+  const width = 1100, height = 258, left = 66, bottom = 42, plotW = width - left - 8, plotH = height - bottom - 10
   const step = plotW / trend.length, bar = Math.min(16, step / 3)
   const y = (value: number) => 10 + plotH - (value / top) * plotH
   const ticks = [0, 0.25, 0.5, 0.75, 1].map((share) => Math.round(top * share))
@@ -63,16 +66,20 @@ export function PlanningOverviewPage({ azure, store, month, onOpenPack }: { azur
 
     <section className="act-card ovw-trend" aria-labelledby="ovw-trend">
       <div className="ovw-head"><h3 id="ovw-trend">Workload and capacity · last 12 months</h3>
-        <ul className="ovw-legend"><li><i className="ovw-k-plan" />Planned</li><li><i className="ovw-k-actual" />Actual</li><li><i className="ovw-k-cap" />Capacity</li></ul></div>
+        <ul className="ovw-legend"><li><i className="ovw-k-plan" />Planned</li><li><i className="ovw-k-actual" />Actual</li><li><i className="ovw-k-cap" />Capacity</li></ul><DataLabelsToggle on={labels} set={setLabels} /></div>
       <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Planned and actual hours against capacity per month" className="ovw-chart" onMouseLeave={() => setHover(null)}>
         {ticks.map((tick) => <g key={tick}><line x1={left} x2={width - 8} y1={y(tick)} y2={y(tick)} className="ovw-grid" /><text x={left - 6} y={y(tick) + 4} textAnchor="end" className="ovw-axis">{formatHours(tick)}</text></g>)}
         {trend.map((entry, index) => { const x = left + step * index + step / 2; return <g key={entry.month} onMouseEnter={() => setHover(index)}>
           <rect x={x - step / 2} y={10} width={step} height={plotH} fill="transparent" />
           <rect x={x - bar - 1} y={y(entry.plan)} width={bar} height={Math.max(0, 10 + plotH - y(entry.plan))} rx={3} className="ovw-plan" />
           <rect x={x + 1} y={y(entry.actual)} width={bar} height={Math.max(0, 10 + plotH - y(entry.actual))} rx={3} className="ovw-actual" />
-          <text x={x} y={height - 6} textAnchor="middle" className="ovw-axis">{shortMonth(entry.month)}</text></g> })}
+          {labels && entry.plan > 0 && <text x={x - bar / 2 - 1} y={y(entry.plan) - 4} textAnchor="middle" className="viz-data-label">{formatHours(entry.plan)}</text>}
+          {labels && entry.actual > 0 && <text x={x + bar / 2 + 1} y={y(entry.actual) - 4} textAnchor="middle" className="viz-data-label">{formatHours(entry.actual)}</text>}
+          <text x={x} y={10 + plotH + 16} textAnchor="middle" className="ovw-axis">{shortMonth(entry.month)}</text></g> })}
         <path d={line} className="ovw-cap" />
         {trend.map((entry, index) => <circle key={entry.month} cx={left + step * index + step / 2} cy={y(entry.capacity)} r={4} className="ovw-cap-dot" />)}
+        {labels && trend.map((entry, index) => entry.capacity > 0 && <text key={entry.month} x={left + step * index + step / 2 + 7} y={y(entry.capacity) - 7} className="viz-data-label viz-data-label-muted">{formatHours(entry.capacity)}</text>)}
+        <AxisTitles x="Month" y="Hours" left={left} right={width - 8} bottom={height - 4} height={20 + plotH} />
       </svg>
       {hover != null && <p className="ovw-tip" role="status"><strong>{monthName(trend[hover].month)}</strong> · Planned {formatHours(trend[hover].plan)}h · Actual {formatHours(trend[hover].actual)}h · Capacity {formatHours(trend[hover].capacity)}h{trend[hover].planUtil != null ? ` · ${Math.round(trend[hover].planUtil!)}% planned` : ''}</p>}
       <details className="ovw-table"><summary>Show as a table</summary><table><thead><tr><th>Month</th><th>Planned (h)</th><th>Actual (h)</th><th>Capacity (h)</th></tr></thead><tbody>{trend.map((entry) => <tr key={entry.month}><td>{monthName(entry.month)}</td><td>{formatHours(entry.plan)}</td><td>{formatHours(entry.actual)}</td><td>{formatHours(entry.capacity)}</td></tr>)}</tbody></table></details>

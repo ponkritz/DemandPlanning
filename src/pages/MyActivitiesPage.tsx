@@ -3,6 +3,7 @@ import { isRunning, runInBackground, subscribeJobs } from '../backgroundJobs'
 import { addTask, addUserStory, currentIterationPairs, ensureAbsenceStoryMonthTask, ensureMonthTask, ensureStoryMonthTask, futureIterationPairs, readAzureIterations, updateAzureTimeWritingEffort, type AzureIteration } from '../azureDevOps'
 import { azureInsights, isTimeWritingStory, timeWritingMonth } from '../azureInsights'
 import { capacityContext } from '../capacity'
+import { closeFeatureItems, featureClosePlan, featureCloseQuestion } from '../closeChain'
 import { FeatureEditor } from '../components/FeatureEditor'
 import { PersonPicker } from '../components/PersonPicker'
 import { SearchSelect } from '../components/SearchSelect'
@@ -11,14 +12,14 @@ import { personMonths, totals } from '../dashboard'
 import type { AzureWorkItem } from '../domain'
 import { setupHours, type FeatureSetups } from '../featureSetup'
 import { formatDate, formatHours, monthName, todayIso } from '../format'
-import { absenceStoryType, assignablePeople, isMine, leaveTaskCandidates, monthTaskCandidates, type MonthTaskCandidate } from '../myWork'
+import { absenceStoryType, assignablePeople, isMine, isPending, leaveTaskCandidates, monthTaskCandidates, type MonthTaskCandidate } from '../myWork'
 import { actualsLockDate, actualsLocked as isActualsLocked, planLockDate, planningLocked as isPlanningLocked } from '../planningLock'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { MyWork } from '../useMyWork'
 import { useNow } from '../useNow'
 import type { PageProps } from './types'
 
-// My Activities (ACT-02…ACT-07): one page for a person's month — this month's activities with their planned and actual
+// Time Writing (ACT-02…ACT-07): one page for a person's month — this month's activities with their planned and actual
 // hours (the ones still to add ticked, like copying last month's), a new activity under a stream and Feature, and the
 // month's progress with the deadline. Every write uses the existing month-task rules (no duplicates, the lock days, the
 // person's own stories) and goes to Azure DevOps only.
@@ -34,8 +35,11 @@ type Row = {
   // The item the row's ID links to in Azure DevOps (its Feature, or a leave / training story).
   link?: AzureWorkItem
 }
+const addOpenKey = 'demand-planning-activities-add-open-v1'
 const hoursText = (value?: number) => value == null ? '' : String(value)
 const validHours = (text: string) => text.trim() === '' || (Number.isFinite(Number(text)) && Number(text) >= 0 && Number(text) <= 1000)
+// ACT-18: a closed month Task is read-only here.
+const closedTask = (row: { task?: AzureWorkItem }) => Boolean(row.task && !isPending(row.task))
 const adhocTask = (task: AzureWorkItem) => task.tags.split(';').some((tag) => tag.trim().toLowerCase() === 'ad-hoc')
 
 export function MyActivitiesPage({ azure, store, my, month, assign, featureSetup, onOpen }: { azure: AzureWorkspace; store: PageProps['store']; my: MyWork; month: string; assign?: { me: string; canChoose: boolean }; featureSetup?: FeatureSetups | null; onOpen: (page: 'mywork' | 'bulk') => void }) {
@@ -64,6 +68,12 @@ export function MyActivitiesPage({ azure, store, my, month, assign, featureSetup
   }, [addKind, iterations, azure.config, azure.pat, azure.isSample])
   // Suggestions by the Feature's state (ACT-09): Active, New or both.
   const [suggestState, setSuggestState] = useState<'both' | 'active' | 'new'>('both')
+  // ACT-18: Close mode — tick Features in the list and close them with one confirmation (no space taken until ticked).
+  const [closeMode, setCloseMode] = useState(false)
+  const [closing, setClosing] = useState<Record<string, boolean>>({})
+  // ACT-19: Add a new activity folds to its heading (folded unless opened), kept per computer.
+  const [addOpen, setAddOpen] = useState(() => { try { return localStorage.getItem(addOpenKey) === '1' } catch { return false } })
+  const toggleAdd = (open: boolean) => { setAddOpen(open); try { localStorage.setItem(addOpenKey, open ? '1' : '0') } catch { /* this visit only */ } }
   const [message, setMessage] = useState<{ tone: 'success' | 'error' | 'info'; text: string } | null>(null)
   const saving = useSyncExternalStore(subscribeJobs, () => isRunning('activities:save'))
   const label = monthName(month)
@@ -244,7 +254,40 @@ export function MyActivitiesPage({ azure, store, my, month, assign, featureSetup
     if (!started) setMessage({ tone: 'info', text: 'Your activities are already being saved (see the top bar).' })
   }
 
-
+  // ACT-18: Close Feature — for each ticked Feature, the person's own open Tasks, User Stories and the Feature itself
+  // closed in Azure DevOps (children first) after one confirmation that lists them; the month Task is closed with them
+  // and its hours become read-only. Only for the person themselves, with the rows' hours saved first.
+  const closable = (row: Row) => row.kind === 'work' && row.link?.workItemType === 'Feature' && isPending(row.link)
+  const closingRows = closeMode ? existing.filter((row) => closable(row) && closing[row.key]) : []
+  function closeFeatures() {
+    if (blocked) { setMessage({ tone: 'info', text: blocked }); return }
+    if (!self) { setMessage({ tone: 'info', text: 'Close Features closes only your own items: choose “Me” first.' }); return }
+    const unsavedRows = closingRows.filter((row) => changedExisting.some((entry) => entry.key === row.key))
+    if (unsavedRows.length) { setMessage({ tone: 'info', text: `Save your hours first: ${unsavedRows.map((row) => row.title).join(', ')}.` }); return }
+    const plans = closingRows.map((row) => featureClosePlan(azure.items, row.link!.id, my.me)).filter((plan): plan is NonNullable<typeof plan> => Boolean(plan))
+    const work = plans.filter((plan) => plan.close.length)
+    const keptText = plans.flatMap((plan) => plan.kept.map((entry) => `#${entry.item.id} stays open — ${entry.reason}`))
+    if (!work.length) { setMessage({ tone: 'info', text: `Nothing of yours is open under the ticked Feature${plans.length === 1 ? '' : 's'}.${keptText.length ? ` ${keptText.join(' · ')}` : ''}` }); return }
+    if (!window.confirm(work.map(featureCloseQuestion).join('\n\n'))) return
+    const config = azure.config!, pat = azure.pat
+    const total = work.reduce((sum, plan) => sum + plan.close.length, 0)
+    const started = runInBackground('activities:save', `Close ${work.length} Feature${work.length === 1 ? '' : 's'}`, async (progress) => {
+      let done = 0
+      const open: string[] = []
+      for (const [index, plan] of work.entries()) {
+        const result = await closeFeatureItems(config, pat, plan, undefined, (text) => progress(`Feature ${index + 1} of ${work.length}: ${text}`))
+        azure.applyWorkItems(result.closed, 'Close Feature', result.closed.map((entry) => `#${entry.id} → ${entry.state}`).join(', '))
+        done += result.closed.length
+        open.push(...result.failed, ...result.skipped)
+      }
+      setClosing({}); setCloseMode(false)
+      const failed = open.length > 0
+      const text = `${done} of ${total} item${total === 1 ? '' : 's'} closed under ${work.map((plan) => `#${plan.feature.id}`).join(', ')}.${[...open, ...keptText].length ? ` ${[...open, ...keptText].join(' · ')}` : ''}`
+      setMessage({ tone: failed ? 'error' : 'success', text })
+      return { text, failed }
+    })
+    if (!started) setMessage({ tone: 'info', text: 'Your activities are already being saved (see the top bar).' })
+  }
 
   function saveNew() {
     if (blocked) { setMessage({ tone: 'info', text: blocked }); return }
@@ -315,20 +358,23 @@ export function MyActivitiesPage({ azure, store, my, month, assign, featureSetup
       {unsaved > 0 && <Metric label="Unsaved changes" value={unsaved} hint="Saved with Save" tone="negative" />}
     </Metrics>
     </div>
-    <div className="act-grid">
+    <div className={`act-grid${addOpen ? '' : ' act-add-folded'}`}>
       <div className="act-main">
       <section className="act-card" aria-labelledby="act-copy">
-        <div className="act-card-head"><h3 id="act-copy">Your activities for {label}</h3><button type="button" className="act-primary act-save-top" disabled={!pendingCount || saving} onClick={saveAll}>{saving ? 'Saving…' : pendingCount ? `Save ${pendingCount} activit${pendingCount === 1 ? 'y' : 'ies'}` : 'Nothing to save'}</button></div>
+        <div className="act-card-head"><h3 id="act-copy">Your activities for {label}</h3>
+          <label className="act-close-mode" title="Tick Features in the list to close your open Tasks and User Stories under them (and the Feature when nothing else is open); their month Tasks become read-only"><input type="checkbox" checked={closeMode} disabled={saving} onChange={(event) => { setCloseMode(event.target.checked); setClosing({}) }} />Close Features</label>
+          {closeMode ? <button type="button" className="act-primary act-save-top" disabled={!closingRows.length || saving} onClick={closeFeatures}>{closingRows.length ? `Close ${closingRows.length} Feature${closingRows.length === 1 ? '' : 's'}` : 'Tick Features to close'}</button>
+            : <button type="button" className="act-primary act-save-top" disabled={!pendingCount || saving} onClick={saveAll}>{saving ? 'Saving…' : pendingCount ? `Save ${pendingCount} activit${pendingCount === 1 ? 'y' : 'ies'}` : 'Nothing to save'}</button>}</div>
         <p className="act-sub">Your {label} tasks with their hours. Activities you add from the suggestions appear here until you save; enter or change hours and save once.</p>
         <table className="act-table">
           <thead><tr><th aria-label="Add" /><th className="act-stream">Epic</th><th>Activity</th><th>Planned</th><th>Actual</th></tr></thead>
           <tbody>
             {existing.map((row) => <tr key={row.key}>
-              <td><span className="act-done" title="Already added for this month" aria-label="Added">✓</span></td>
+              <td>{closeMode && closable(row) ? <input type="checkbox" aria-label={`Close ${row.title}`} checked={closing[row.key] ?? false} disabled={saving} onChange={(event) => setClosing((current) => ({ ...current, [row.key]: event.target.checked }))} /> : <span className="act-done" title={closedTask(row) ? 'Closed' : 'Already added for this month'} aria-label={closedTask(row) ? 'Closed' : 'Added'}>✓</span>}</td>
               <td className="act-stream">{row.stream}</td>
-              <td><strong>{idLink(row.link)}{row.title}</strong>{kindPill(row.kind)}<small><span className="act-stream-inline">{row.stream} · </span>Added{adhocTask(row.task!) ? ' · ad-hoc' : ''}</small></td>
-              <td>{hourInput(row, 'planned', planLocked || adhocTask(row.task!))}</td>
-              <td>{hourInput(row, 'actual', actualLocked)}</td>
+              <td><strong>{idLink(row.link)}{row.title}</strong>{kindPill(row.kind)}<small><span className="act-stream-inline">{row.stream} · </span>{closedTask(row) ? 'Closed · read-only' : 'Added'}{adhocTask(row.task!) ? ' · ad-hoc' : ''}</small></td>
+              <td>{hourInput(row, 'planned', planLocked || adhocTask(row.task!) || closedTask(row))}</td>
+              <td>{hourInput(row, 'actual', actualLocked || closedTask(row))}</td>
             </tr>)}
             {toAdd.filter((row) => row.kind === 'work' && isTicked(row)).map((row) => <tr key={row.key}>
               <td><input type="checkbox" aria-label={`Add ${row.title}`} checked={isTicked(row)} disabled={saving} onChange={(event) => setTicked((current) => ({ ...current, [row.key]: event.target.checked }))} /></td>
@@ -367,7 +413,8 @@ export function MyActivitiesPage({ azure, store, my, month, assign, featureSetup
       <div className="act-side">
 
         <section className="act-card" aria-labelledby="act-new">
-          <h3 id="act-new">Add a new activity</h3>
+          <h3 id="act-new"><button type="button" className="act-fold" aria-expanded={addOpen} onClick={() => toggleAdd(!addOpen)}><span aria-hidden="true">{addOpen ? '▾' : '▸'}</span>Add a new activity</button></h3>
+          {addOpen && <>
           <div className="segmented" role="radiogroup" aria-label="What to add">
             <label className={addKind === 'task' ? 'active' : undefined}><input type="radio" name="act-add-kind" checked={addKind === 'task'} onChange={() => setAddKind('task')} />Time Writing task</label>
             <label className={addKind === 'story' ? 'active' : undefined}><input type="radio" name="act-add-kind" checked={addKind === 'story'} onChange={() => setAddKind('story')} />User Story</label>
@@ -403,6 +450,7 @@ export function MyActivitiesPage({ azure, store, my, month, assign, featureSetup
             </>}
             {addKind !== 'feature' && <p className="act-sub">Feature not listed? <button type="button" className="act-link" onClick={() => setAddKind('feature')}>Create a new Feature</button></p>}
           </div>
+          </>}
         </section>
       </div>
     </div></>}

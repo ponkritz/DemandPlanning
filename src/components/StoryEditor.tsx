@@ -6,7 +6,7 @@ import { PersonPicker } from './PersonPicker'
 import { assignablePeople } from '../myWork'
 import { runInBackground } from '../backgroundJobs'
 
-// ＋ User Story under a Feature (Backlogs and Assigned to Me), kept minimal: the title, the Feature it goes under (can
+// ＋ User Story under a Feature (Backlogs and My Tasks [Board]), kept minimal: the title, the Feature it goes under (can
 // be changed), one row with Assigned to, Sprint, Story Points and Priority, then Description and Acceptance criteria;
 // Risk and Value area are folded under "More fields" (defaults: not set, Business). State is New and the Area Path is
 // always the Feature's (createUserStory re-reads it): neither is shown or editable. Save runs as a background job: the form closes and the top bar shows the result.

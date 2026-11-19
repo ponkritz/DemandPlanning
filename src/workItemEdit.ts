@@ -1,6 +1,6 @@
 import { timeWritingMonth, isTimeWritingStory } from './azureInsights.ts'
 
-// Editing an existing Feature, User Story or Task (the Edit form on Backlogs and Assigned to Me). Only these fields can
+// Editing an existing Feature, User Story or Task (the Edit form on Backlogs and My Tasks [Board]). Only these fields can
 // change; Work Item Type, Parent and Area Path never do (the Area Path stays the parent's), the Time Writing story and
 // a month Task stay where they are (the project root), and a month Task keeps the month in its title. Every edit is
 // sent with the revision it was read at, so a change made in Azure DevOps meanwhile is never overwritten.

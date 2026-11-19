@@ -272,7 +272,7 @@ test('TC-UI-04 / TC-UI-05: every table follows the table default — move, hide,
 test('TC-UI-06: the page tables follow the table default too — My Work keeps its tree, Backlog Health its lists, each with Columns and one Export', async () => {
   const { page, context, errors } = await openPage(app)
   await page.getByRole('button', { name: 'Load synthetic sample' }).click()
-  await navigate(page, 'Assigned to Me')
+  await navigate(page, 'My Tasks [Board]')
   const pick = page.locator('input[placeholder^="Choose a person"]').first()
   await pick.click(); await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter')
   const work = page.locator('.data-table').first()

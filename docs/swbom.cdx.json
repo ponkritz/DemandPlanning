@@ -6,7 +6,7 @@
     "component": {
       "type": "application",
       "name": "demandplanning",
-      "version": "3.11.0"
+      "version": "3.12.0"
     },
     "tools": [
       {
@@ -4638,8 +4638,8 @@
     {
       "type": "library",
       "name": "electron",
-      "version": "44.11.3",
-      "purl": "pkg:npm/electron@44.11.3",
+      "version": "44.11.4",
+      "purl": "pkg:npm/electron@44.11.4",
       "scope": "required",
       "licenses": [
         {
@@ -4651,7 +4651,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "c95cc904033b85f2bf8240f72c7bc50f881f1cb8f57fa70bdf2620cd7f291d0c96cb3f14f454df4e3f56385770ccb8f9b5afbfa082830f806c0532d88856b64e"
+          "content": "00946bd1bd05f8ab7e8aa99d1462cd52196e54785c3547c50a6e8015763f97d4e652bf9f13a856e0759569a2467612a466289527b6606c0a36bd0a962750b88d"
         }
       ],
       "properties": [

@@ -12,7 +12,7 @@ import { runInBackground } from '../backgroundJobs'
 import { formatDateTime } from '../format'
 import { usePlanningClock } from '../usePlanningClock'
 
-// Edit a Feature, User Story or Task (Backlogs, Assigned to Me): the title; Assigned to, State and Iteration (Feature:
+// Edit a Feature, User Story or Task (Backlogs, My Tasks [Board]): the title; Assigned to, State and Iteration (Feature:
 // a PI; story / Task: a Sprint, current or future); the type's own fields (Feature: DoD, Target date; story: Story
 // Points, Priority, Risk, Value area; Task: Original Estimate, Completed Work under the Monthly lock rules);
 // Description and Acceptance criteria; and the Discussion (read, and add a comment). Locked and not shown: Type, Parent

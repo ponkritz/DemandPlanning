@@ -262,7 +262,7 @@ td small{color:var(--text-3)}
 .dash-section .panel-heading .chip-row{margin:0}
 .dash-grid-2>*,.dash-grid-wide>*{min-width:0}.dash-grid-2 .azure-table{margin-top:8px}
 .dash-stack{display:grid;gap:18px;margin-bottom:18px}.dash-stack>*{min-width:0}
-/* Assigned to Me: Features expand to their User Stories, Bugs and Tasks. */
+/* My Tasks [Board]: Features expand to their User Stories, Bugs and Tasks. */
 .work-toggle{background:none;border:0;padding:0;margin-right:6px;width:18px;color:var(--text-2);cursor:pointer;font-size:14px;line-height:1}.work-toggle-empty{display:inline-block;text-align:center;cursor:default}
 .work-open td{border-bottom-color:transparent}.work-child td{background:var(--surface-2)}.work-child .work-indent{display:inline-block;width:26px}.work-depth-2 .work-indent{width:52px}.work-child strong.inline{font-weight:500}
 /* Create Feature: the title's three parts (Program · Service · Release / Platform · Name · Release). */
@@ -490,7 +490,7 @@ table.resizable.wrap th,table.resizable.wrap td{white-space:pre-wrap;overflow-wr
 .segmented label{display:flex;align-items:center;gap:6px;padding:7px 14px;border-radius:7px;font-size:12.5px;cursor:pointer;color:var(--text-2)}
 .segmented label.active{background:var(--surface);color:var(--text);box-shadow:0 1px 3px var(--shadow)}.segmented input{width:auto;margin:0}
 @media(max-width:1000px){.sidebar-tools .download-link{font-size:0;justify-content:center}.sidebar-tools .download-link span{font-size:16px}}
-/* My Activities (ACT-02…ACT-07): three clean cards — your activities, add a new one, your monthly update. */
+/* Time Writing (ACT-02…ACT-07): three clean cards — your activities, add a new one, your monthly update. */
 .activities-page{max-width:1500px}
 .act-header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:18px}.act-header h2{margin:0;font-size:28px;color:var(--navy)}.act-header p{margin:6px 0 0;color:var(--muted);font-size:14px}
 .act-person{min-width:240px}
@@ -520,7 +520,7 @@ details.act-leave{border:1px solid var(--line);border-radius:10px;padding:8px 12
 @media(max-width:800px){.act-grid{grid-template-columns:1fr}.act-header{flex-direction:column;align-items:flex-start}}
 .act-stream-inline{display:none}.act-table td.act-stream,.act-table th.act-stream{width:22%}
 @media(max-width:800px){.act-table .act-stream{display:none}.act-stream-inline{display:inline}.act-hours{width:58px}.act-card{padding:16px}}
-/* My Activities: two columns — your activities on the left; your monthly update with Add a new activity below it on the right. */
+/* Time Writing: two columns — your activities on the left; your monthly update with Add a new activity below it on the right. */
 .act-grid{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)}.act-side{display:grid;gap:18px;min-width:0;align-content:start}
 @media(max-width:1250px){.act-grid{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr)}.act-summary{grid-column:auto}}
 @media(max-width:800px){.act-grid{grid-template-columns:1fr}}
@@ -659,3 +659,47 @@ label.formula-term{justify-content:flex-start}
 .zoom-control{display:flex;align-items:center;gap:6px;padding:4px 12px;font-size:13px}
 .zoom-control .text-button{min-width:28px;min-height:28px;font-size:15px}
 .zoom-control .zoom-value{min-width:48px;font-size:13px}
+/* UI-16: the side menu folded to icons on wide screens (« / »); names show on hover. Narrower screens already use the
+   icon rail, so the toggle is hidden there. */
+.sidebar .brand{position:relative}
+.nav-mini-toggle{margin-left:auto;background:transparent;border:1px solid #ffffff33;color:var(--sidebar-text);border-radius:6px;font-size:13px;line-height:1;padding:3px 7px;cursor:pointer}
+.nav-mini-toggle:hover{background:var(--sidebar-hover);color:#fff}
+@media(max-width:1000px){.nav-mini-toggle{display:none}}
+@media(min-width:1001px){
+  .app-shell.nav-mini{grid-template-columns:72px 1fr}
+  .nav-mini .sidebar{padding:14px 8px;overflow-x:hidden}
+  .nav-mini .sidebar .brand{flex-direction:column;align-items:center;gap:8px;padding:0 0 14px}
+  .nav-mini .sidebar .brand>div:nth-child(2),.nav-mini .nav-fold,.nav-mini .zoom-control{display:none}
+  .nav-mini .nav-mini-toggle{margin-left:0}
+  .nav-mini .nav-collapsed{display:block}
+  .nav-mini .sidebar nav button,.nav-mini .sidebar nav button:not(.nav-active),.nav-mini .sidebar nav .nav-items button.nav-missing{font-size:0!important;display:grid;justify-items:center;padding:10px 4px;width:100%;position:relative}
+  .nav-mini .sidebar nav button.nav-group,.nav-mini .sidebar nav button.nav-subgroup{display:none}
+  .nav-mini .sidebar nav .nav-section+.nav-section{border-top:0;padding-top:0}
+  .nav-mini .sidebar nav .nav-subsection>.nav-items{margin-left:0;padding-left:0;border-left:0}
+  .nav-mini .nav-icon{font-size:18px}
+  .nav-mini .nav-badge{position:absolute;top:2px;right:4px;font-size:9px}
+  .nav-mini .sidebar-footer{font-size:0}
+  .nav-mini .sidebar-footer small{display:none}
+  .nav-mini .sidebar-tools .download-link{font-size:0;justify-content:center}.nav-mini .sidebar-tools .download-link span{font-size:16px}
+}
+/* ACT-18 / ACT-19: Close mode in the activities card head; Add a new activity folds to its heading, and while folded
+   the activities table takes the full width. */
+.act-card-head{gap:12px}
+.act-close-mode{display:inline-flex;align-items:center;gap:6px;margin-left:auto;font-size:12.5px;font-weight:600;color:var(--muted);white-space:nowrap}
+.act-close-mode+.act-save-top{margin-left:0}
+.act-fold{background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer;display:inline-flex;gap:8px;align-items:center}
+.act-grid.act-add-folded{grid-template-columns:minmax(0,1fr)}
+/* UI-17: axis names and data labels on every chart; the Data labels box sits in each chart's legend row. */
+.viz-axis-title{fill:var(--muted);font-size:11.5px;font-weight:600;letter-spacing:.2px}
+.viz-data-label{fill:var(--text);font-size:10.5px;font-weight:600;font-variant-numeric:tabular-nums;pointer-events:none}
+.viz-data-label-muted{fill:var(--muted);font-weight:500}
+.viz-slice-label{fill:#fff;font-size:11px;font-weight:700;pointer-events:none;paint-order:stroke;stroke:#0006;stroke-width:2px}
+.viz-labels-toggle{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);white-space:nowrap;margin-left:auto}
+.viz-toolbar .viz-labels-toggle+button{margin-left:8px}
+.ovw-head .viz-labels-toggle,.dash-chart .legend .viz-labels-toggle{margin-left:12px}
+/* ATM-29: Sprint check — the Sprint panel takes the full width; State checks look like the backlog tree. */
+.sprint-full{display:grid;gap:18px;margin-bottom:18px}
+.backlog-table.state-tree{width:100%;table-layout:auto}
+.state-tree td{vertical-align:middle}
+.state-tree .state-tree-child td{background:var(--surface-2)}
+.state-check-text{font-size:12.5px}

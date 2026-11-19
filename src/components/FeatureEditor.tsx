@@ -13,7 +13,7 @@ import { chooseSetup, defaultDoDFor, fieldKey, fieldLines, fieldPlaceholders, fi
 // children of an existing Feature. The Feature and every new child are assigned to the person chosen, else to me.
 // initialTitle: the Feature title to start from (Release Details: "Program | Service | Release" of the release).
 // releaseItems: the on-prem work items of that release; they fill the Epic setup's title fields (their source field).
-// month: the Time Writing month of the new Task (My Activities: the month shown); default the current month (India).
+// month: the Time Writing month of the new Task (Time Writing: the month shown); default the current month (India).
 // Every new Feature, from any page, is created here (BKL-26): the Epic's setup (else the built-in rules), the Epic's
 // Area Path, the PI chosen (the current one preselected) and the stories in its Sprint.
 export type FeatureEditorMode = { parent: AzureWorkItem; resume?: undefined } | { resume: AzureWorkItem; parent?: undefined }

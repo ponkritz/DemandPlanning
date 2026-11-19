@@ -34,7 +34,7 @@ export function myPendingWork(items: AzureWorkItem[], me: Me, absenceEpicId?: nu
   return pending.sort((a, b) => rank(a.item.workItemType) - rank(b.item.workItemType) || a.item.id - b.item.id)
 }
 
-// Search on Assigned to Me: every word must appear (any case) in the ID, title, type, state, Feature, Epic, Area Path,
+// Search on My Tasks [Board]: every word must appear (any case) in the ID, title, type, state, Feature, Epic, Area Path,
 // Iteration Path or tags. A blank search matches everything.
 export function matchesWork(row: { item: AzureWorkItem; feature?: AzureWorkItem; epic?: AzureWorkItem }, query: string) {
   const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean).map((word) => word.replace(/^#(?=\d)/, ''))
@@ -212,7 +212,7 @@ export function stateChecks(items: AzureWorkItem[], me: Me, absenceEpicId?: numb
   return checks
 }
 
-// What may be done to an item from Assigned to Me: a New Feature or User Story is set to Active; only an Active one
+// What may be done to an item from My Tasks [Board]: a New Feature or User Story is set to Active; only an Active one
 // is Closed (nothing in any other state). Tasks and Bugs are closed directly.
 // ATM-28: a Feature becomes Active only when one of its User Stories (any, Removed ones aside) is Active.
 export const hasActiveStory = (items: Pick<AzureWorkItem, 'parentId' | 'workItemType' | 'state'>[], featureId: number) => items.some((entry) => entry.parentId === featureId && entry.workItemType === 'User Story' && stateIs(entry, 'active'))
@@ -252,7 +252,7 @@ export function followUpQuestion(follow: NonNullable<CloseFollowUp>) {
   return `#${follow.story.id} was the last open User Story of Feature #${follow.feature.id} “${follow.feature.title}” (${follow.feature.state}). Also close the Feature in Azure DevOps?`
 }
 
-// The work under a Feature on Assigned to Me: its direct children (User Stories, Bugs, Tasks; any state but Removed)
+// The work under a Feature on My Tasks [Board]: its direct children (User Stories, Bugs, Tasks; any state but Removed)
 // in ascending ID order, each with its own children the same way. Items of other people are included: the point is
 // to see the whole Feature.
 export interface FeatureChild { item: AzureWorkItem; children: AzureWorkItem[] }
@@ -311,3 +311,11 @@ export function featureOf(items: AzureWorkItem[], item: AzureWorkItem): AzureWor
   for (let up = item.parentId == null ? undefined : byId.get(item.parentId); up && !seen.has(up.id); up = up.parentId == null ? undefined : byId.get(up.parentId)) { if (up.workItemType === 'Feature') return up; seen.add(up.id) }
   return undefined
 }
+
+// ATM-29: State checks as a tree — the items shown below a check's row (a Feature's User Stories, a User Story's Tasks;
+// Removed ones left out) and whether a row below may be set Active there (only the person's own New User Stories).
+export function stateCheckChildren(items: AzureWorkItem[], item: Pick<AzureWorkItem, 'id' | 'workItemType' | 'organization' | 'project'>) {
+  const type = item.workItemType === 'Feature' ? 'User Story' : item.workItemType === 'User Story' ? 'Task' : ''
+  return items.filter((child) => child.parentId === item.id && child.workItemType === type && child.organization === item.organization && child.project === item.project && !stateIs(child, 'removed')).sort((a, b) => a.id - b.id)
+}
+export const canActivateHere = (child: Pick<AzureWorkItem, 'workItemType' | 'state' | 'assignedTo' | 'assignedToEmail'>, me: Me) => child.workItemType === 'User Story' && stateIs(child, 'new') && isMine(child, me)

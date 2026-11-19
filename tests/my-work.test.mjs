@@ -213,7 +213,7 @@ test('state checks: closed stories close the Feature, closed tasks close the sto
     [{ state: 'Active', label: 'Set User Story to Active' }, { state: 'Closed', label: 'Close User Story' }, null, { state: 'Closed', label: 'Close Bug' }], 'User Stories follow the Feature logic; Bugs and Tasks close directly')
 })
 
-test('Assigned to Me search: every word must match, across ID, title, type, state, Feature, Epic, paths and tags', () => {
+test('My Tasks [Board] search: every word must match, across ID, title, type, state, Feature, Epic, paths and tags', () => {
   const rows = myPendingWork(items, me)
   const find = (query) => rows.filter((row) => matchesWork(row, query)).map(({ item }) => item.id)
   assert.deepEqual(find(''), rows.map(({ item }) => item.id), 'blank search shows everything')
@@ -471,7 +471,7 @@ test('ATM-28: a Feature becomes Active only when one of its User Stories is Acti
   const me = { email: 'ana@x.com' }
   const mine = (id, type, state, parentId) => item(id, type, `${type} ${id}`, { state, parentId, assignedTo: 'Ana', assignedToEmail: 'ana@x.com' })
   const items = [mine(1, 'Feature', 'New'), mine(11, 'User Story', 'New', 1), mine(2, 'Feature', 'New'), mine(21, 'User Story', 'Active', 2), mine(22, 'User Story', 'Removed', 2)]
-  // Offered on Assigned to Me only with an Active story; the state check flags a New Feature with one.
+  // Offered on My Tasks [Board] only with an Active story; the state check flags a New Feature with one.
   assert.equal(nextStateFor(items[0], items), null, 'no Active User Story: not offered')
   assert.deepEqual(nextStateFor(items[2], items), { state: 'Active', label: 'Set Feature to Active' })
   assert.deepEqual(stateChecks(items, me).map((check) => [check.kind, check.item.id, check.children.map((child) => child.id)]), [['activate-feature', 2, [21]]])
@@ -535,4 +535,22 @@ test('ACT-17: addTask — a work Task under a User Story by the User Story rules
   await assert.rejects(addTask(config, 'pat', { ...input, title: 'November 2026 | Review' }, transport), /Time Writing Task/)
   await assert.rejects(addTask(config, 'pat', { ...input, storyId: 6 }, transport), /Time Writing story/)
   await assert.rejects(addTask(config, 'pat', { ...input, iterationPath: 'Quality\\PI 0\\Sprint 1' }, transport), /no longer current/)
+})
+
+test('ATM-29: State checks expand to the User Stories of a Feature or the Tasks of a User Story; only my New User Stories can be set Active there (TC-ATM-22)', async () => {
+  const { stateCheckChildren, canActivateHere } = await import('../src/myWork.ts')
+  const list = [
+    item(20, 'Feature', 'F', { ...ana }),
+    item(22, 'User Story', 'B', { parentId: 20, ...ben, state: 'New' }),
+    item(21, 'User Story', 'A', { parentId: 20, ...ana, state: 'New' }),
+    item(23, 'User Story', 'Gone', { parentId: 20, ...ana, state: 'Removed' }),
+    item(24, 'Task', 'T', { parentId: 21, ...ana }),
+    item(25, 'Task', 'Other project', { parentId: 20, ...ana, project: 'Other' }),
+  ]
+  assert.deepEqual(stateCheckChildren(list, list[0]).map((entry) => entry.id), [21, 22], 'User Stories of the Feature, in ID order, Removed ones left out')
+  assert.deepEqual(stateCheckChildren(list, list[2]).map((entry) => entry.id), [24], 'Tasks of the User Story')
+  assert.equal(canActivateHere(list[2], me), true, 'my New User Story')
+  assert.equal(canActivateHere(list[1], me), false, 'not mine')
+  assert.equal(canActivateHere({ ...list[2], state: 'Active' }, me), false, 'already Active')
+  assert.equal(canActivateHere(list[4], me), false, 'a Task')
 })
