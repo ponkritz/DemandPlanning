@@ -13,7 +13,10 @@ export type FieldInto = 'description' | 'title' | 'both'
 export interface EpicField { label: string; type: FieldType; list?: string; ifEmpty: IfEmpty; into: FieldInto; source?: string }
 export interface EpicFields { epicId: number; epicTitle: string; fields: EpicField[]; titlePattern?: string }
 export interface ValueList { id: string; name: string; values: string[] }
-export interface EpicSetupFile { schema: 1; kind: 'epic-setup'; lists: ValueList[]; epics: EpicFields[] }
+// STT-01: a User Story template — its title (placeholders allowed) and description — tagged with the Epics and Release
+// Classification values it is offered for (none = any). Stories of the Feature setup link to it by id (STT-02).
+export interface StoryTemplateItem { id: string; title: string; description: string; epics: number[]; classes: string[] }
+export interface EpicSetupFile { schema: 1; kind: 'epic-setup'; lists: ValueList[]; epics: EpicFields[]; storyTemplates?: StoryTemplateItem[] }
 
 export const epicSetupFile = 'epic-setup.json'
 export const maxEpicFields = 12
@@ -26,6 +29,15 @@ const text = (value: unknown, max: number) => typeof value === 'string' ? value.
 const oneOf = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T => allowed.includes(value as T) ? value as T : fallback
 const listId = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60)
 
+export const maxStoryTemplates = 200
+export function cleanStoryTemplate(input: Partial<Record<keyof StoryTemplateItem, unknown>> | undefined): StoryTemplateItem | null {
+  const title = text(input?.title, 255), id = text(input?.id, 60)
+  if (!title || !/^[a-z0-9-]{1,60}$/.test(id)) return null
+  const epics = Array.isArray(input?.epics) ? [...new Set(input.epics.map(Number).filter((epic) => Number.isSafeInteger(epic) && epic > 0))].slice(0, 200) : []
+  const classes: string[] = []
+  for (const value of Array.isArray(input?.classes) ? input.classes : []) { const item = text(value, 100); if (item && !classes.some((known) => known.toLowerCase() === item.toLowerCase())) classes.push(item) }
+  return { id, title, description: text(input?.description, 100000), epics, classes: classes.slice(0, 50) }
+}
 export function cleanList(input: Partial<Record<keyof ValueList, unknown>> | undefined): ValueList | null {
   const name = text(input?.name, 60)
   const id = text(input?.id, 60) || listId(name)
@@ -58,11 +70,12 @@ export function parseEpicSetup(raw: string): EpicSetupFile {
   if (!file || file.schema !== 1 || file.kind !== 'epic-setup') throw new Error(`${epicSetupFile} is not an Epic setup file.`)
   const lists = [...new Map((Array.isArray(file.lists) ? file.lists : []).map(cleanList).filter((entry): entry is ValueList => Boolean(entry)).map((entry) => [entry.id, entry])).values()]
   const epics = [...new Map((Array.isArray(file.epics) ? file.epics : []).map((entry) => cleanEpicFields(entry, lists)).filter((entry): entry is EpicFields => Boolean(entry)).map((entry) => [entry.epicId, entry])).values()]
-  return { schema: 1, kind: 'epic-setup', lists, epics }
+  const storyTemplates = [...new Map((Array.isArray(file.storyTemplates) ? file.storyTemplates : []).map(cleanStoryTemplate).filter((entry): entry is StoryTemplateItem => Boolean(entry)).map((entry) => [entry.id, entry])).values()].slice(0, maxStoryTemplates)
+  return { schema: 1, kind: 'epic-setup', lists, epics, ...(storyTemplates.length ? { storyTemplates } : {}) }
 }
 export const serializeEpicSetup = (file: EpicSetupFile) => {
   const clean = parseEpicSetup(JSON.stringify(file))
-  return `${JSON.stringify({ ...clean, lists: [...clean.lists].sort((a, b) => a.name.localeCompare(b.name)), epics: [...clean.epics].sort((a, b) => a.epicId - b.epicId) }, null, 2)}\n`
+  return `${JSON.stringify({ ...clean, lists: [...clean.lists].sort((a, b) => a.name.localeCompare(b.name)), epics: [...clean.epics].sort((a, b) => a.epicId - b.epicId), ...(clean.storyTemplates ? { storyTemplates: [...clean.storyTemplates].sort((a, b) => a.title.localeCompare(b.title) || a.id.localeCompare(b.id)) } : {}) }, null, 2)}\n`
 }
 export const epicFieldsFor = (file: EpicSetupFile | null | undefined, epicId: number | undefined) => epicId == null ? undefined : file?.epics.find((entry) => entry.epicId === epicId && entry.fields.length > 0)
 export const listOf = (file: EpicSetupFile | null | undefined, id: string | undefined) => id ? file?.lists.find((entry) => entry.id === id) : undefined
@@ -133,3 +146,14 @@ export function classificationOf(file: EpicSetupFile | null | undefined, epicId:
 }
 /** The value of the release type read from the release number (Major, Minor, MLD, Platform Update) in an Epic's list. */
 export const classificationFromType = (values: string[], type: string | undefined) => type ? values.find((value) => value.trim().toLowerCase() === type.toLowerCase()) ?? '' : ''
+
+// STT-01: the templates offered for an Epic and Release Classification value ('' = the Epic default): a template whose
+// Epic tags are empty or name the Epic, and whose value tags are empty or (for a value) name it.
+export function templatesFor(file: EpicSetupFile | null | undefined, epicId: number, value = ''): StoryTemplateItem[] {
+  const wanted = value.trim().toLowerCase()
+  return (file?.storyTemplates ?? []).filter((item) => (!item.epics.length || item.epics.includes(epicId)) && (!item.classes.length || (wanted !== '' && item.classes.some((tag) => tag.toLowerCase() === wanted))))
+}
+export function upsertStoryTemplate(file: EpicSetupFile, item: StoryTemplateItem): EpicSetupFile {
+  return { ...file, storyTemplates: [...(file.storyTemplates ?? []).filter((entry) => entry.id !== item.id), item] }
+}
+export const newStoryTemplateId = (file: EpicSetupFile, title: string) => { const base = `t-${listId(title).slice(0, 50) || 'story'}`; let id = base, n = 2; while ((file.storyTemplates ?? []).some((entry) => entry.id === id)) id = `${base}-${n++}`; return id }

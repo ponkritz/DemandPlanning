@@ -1570,6 +1570,10 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 **TC-ADM-01 Overview checks and settings search** — Req ADM-01, ADM-03 — L1 `admin-overview.test.mjs` ("Admin overview: open Get started steps and shared-setup checks, required first, each with its fix (ADM-01, TC-ADM-01)"; "Search settings: by name or what it affects, every page reachable (ADM-03, TC-ADM-01)").
 
 **TC-ADM-02 Overview, Ctrl K and History** — Req ADM-01…04 — E2E `shell.e2e.mjs` ("TC-ADM-02: Admin → Overview lists what to set up with links; Ctrl K finds a setting and opens it; History filters the changes"); browser check with Git storage: change a capacity setting — the ADMIN heading shows 1 and the Overview shows Unsaved shared changes with Save to Git; Save to Git clears both; Ctrl K → "dod" offers Feature setup; History → choose an area and type part of a change.
+
+**TC-STT-01 User Story templates: library, tags and linked stories** — Req STT-01, STT-02 — **UAT** — L1 `story-templates.test.mjs` ("STT-01: a User Story template is cleaned and kept with the Epic setup (TC-STT-01)", "STT-01: the templates offered follow their Epic and Release Classification tags (TC-STT-01)"); E2E `backlog.e2e.mjs` ("TC-STT-01: a User Story template, linked in an Epic’s setup, gives New Feature its current title, ticked; Admin lists it with its tags"); UAT: save a story of an Epic's setup as a template, tag it to a second Epic and a Release Classification value, add it there with ＋ Add from templates, Save to Git, change the template's title and check that New Feature under both Epics offers the new title, ticked.
+
+**TC-STT-02 Linked stories follow the template** — Req STT-02 — L1 `story-templates.test.mjs` ("STT-02: a linked story takes the template’s current title and description everywhere; a removed one keeps its copy (TC-STT-02)"); browser check: in Setup per Epic with Git storage that can save, Save as template marks the story Template; ＋ Add from templates adds a linked one; Unlink turns it back into an editable copy.
 ## 7. Requirements coverage matrix
 
 | Requirement | Test cases |
@@ -2003,6 +2007,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | ADM-02 | TC-ADM-02 |
 | ADM-03 | TC-ADM-01, TC-ADM-02 |
 | ADM-04 | TC-ADM-02 |
+| STT-01 | TC-STT-01 |
+| STT-02 | TC-STT-01, TC-STT-02 |
 | IF-05 | TC-KPT-02 |
 | NFR-02 | TC-STO-01 |
 | NFR-03…05 | TC-DSK-02, TC-INS-01 |
@@ -2050,6 +2056,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-33 | TC-CNB-01, TC-CNB-02 |
 | UC-34 | TC-EPS-01, TC-EPS-02, TC-EPS-03, TC-EPS-04, TC-EPS-05, TC-EPS-06 |
 | UC-35 | TC-ADM-01, TC-ADM-02 |
+| UC-36 | TC-STT-01, TC-STT-02 |
 
 ## 8. Result record
 

@@ -37,6 +37,7 @@ export const settingsIndex: SettingsEntry[] = [
   { tab: 'epics', section: 'setup', page: 'Epic & Feature setup', label: 'Setup per Epic', words: 'list every epic all epics defaults overview' },
   { tab: 'epics', section: 'setup', page: 'Epic & Feature setup', label: 'Feature fields per Epic', words: 'program platform title pattern master data fields copy to epics' },
   { tab: 'epics', section: 'lists', page: 'Epic & Feature setup', label: 'Value lists', words: 'drop-down dropdown master data values' },
+  { tab: 'epics', section: 'templates', page: 'Epic & Feature setup', label: 'User Story templates', words: 'story stories template reuse library tag' },
   { tab: 'resources', section: 'people', page: 'People & roles', label: 'People', words: 'region role reports to joined left team' },
   { tab: 'resources', section: 'capacity-roles', page: 'People & roles', label: 'Capacity roles', words: 'qe lead manager counted capacity' },
   { tab: 'resources', section: 'rights', page: 'People & roles', label: 'Role rights', words: 'access permissions allow deny tool owner admin scrum master check access' },

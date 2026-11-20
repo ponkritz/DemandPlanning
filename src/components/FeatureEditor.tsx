@@ -10,7 +10,7 @@ import { featureMonths, isFutureMonth } from '../featureMonths'
 import { useEpicSetupFile } from '../useEpicSetup'
 import { onPremValues, useOnPremSources } from '../onPremValues'
 import { asTitleFields, epicFieldsFor, featureFromFields, listOf, offList } from '../epicSetup'
-import { chooseSetup, setForClass, defaultDoDFor, fieldKey, fieldLines, fieldPlaceholders, fieldTitle, fieldsFromItems, fieldsFromTitle, fillTitle, missingValues, reviewStoryTitle, setupFor, titleValues, type FeatureSetups } from '../featureSetup'
+import { chooseSetup, setForClass, withLinkedStories, defaultDoDFor, fieldKey, fieldLines, fieldPlaceholders, fieldTitle, fieldsFromItems, fieldsFromTitle, fillTitle, missingValues, reviewStoryTitle, setupFor, titleValues, type FeatureSetups } from '../featureSetup'
 
 // The "Add Feature under an Epic" / "Complete Feature children" modal, shared by the QMS-0025 board and Assigned to
 // Me. mode.parent: create a Feature (the Epic can still be changed) with its children; mode.resume: add the missing
@@ -80,10 +80,12 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
   // My own setup of the Epic first, else the shared one; the switch below picks the shared one instead.
   const [preferShared, setPreferShared] = useState(false)
   const epicId = parent?.id ?? resumeFeature?.parentId
-  const { setup: baseSetup, source: setupSource } = chooseSetup(featureSetup, epicId, preferShared)
+  const { setup: unlinkedSetup, source: setupSource } = chooseSetup(featureSetup, epicId, preferShared)
   // EPS-02: the Epic setup's fields (Admin → Epic & Feature setup) apply to every new Feature under the Epic and take the place
   // of the Feature setup's title fields.
   const epicFile = useEpicSetupFile()
+  // STT-02: stories linked to a User Story template take its current title and description.
+  const baseSetup = withLinkedStories(unlinkedSetup, epicFile?.storyTemplates)
   const onPremSources = useOnPremSources()
   const epicEntry = resumeFeature ? undefined : epicFieldsFor(epicFile, epicId)
   const titleFields = resumeFeature || !epicEntry ? [] : asTitleFields(epicEntry.fields)

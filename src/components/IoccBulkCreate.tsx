@@ -6,7 +6,7 @@ import { useEpicSetupFile } from '../useEpicSetup'
 import type { ReleaseEntry } from '../releaseSource'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { FeatureSetups } from '../featureSetup'
-import { chooseSetup } from '../featureSetup'
+import { chooseSetup, withLinkedStories } from '../featureSetup'
 import { useBulkEpic } from '../useStreamEpics'
 import type { QeMappingFile } from '../qeMapping'
 import { dpTypeLabel, ioccPlan, pickQe } from '../dpBulk'
@@ -22,13 +22,15 @@ import { Modal, Notice } from './ui'
 // all assigned to the QE from the QE Mapping (by the release name), in the PI / Sprint chosen; a background job.
 export function IoccBulkCreate({ releases, azure, featureSetup, qeMapping, featureTitle, featureMatch, onClose }: { releases: ReleaseEntry[]; azure: AzureWorkspace; featureSetup?: FeatureSetups | null; qeMapping?: QeMappingFile | null; featureTitle: (release: ReleaseEntry) => string; featureMatch: (release: ReleaseEntry) => BoardHit | undefined; onClose: () => void }) {
   const epicId = useBulkEpic('IOCC').epicId ?? 0
-  const setup = epicId ? chooseSetup(featureSetup, epicId, true).setup : undefined
+  const unlinked = epicId ? chooseSetup(featureSetup, epicId, true).setup : undefined
+  const epicFile = useEpicSetupFile()
+  // STT-02: stories linked to a User Story template take its current title and description.
+  const setup = withLinkedStories(unlinked, epicFile?.storyTemplates)
   // DPF-06: the QE picked per release in the pop-up (email by release), in place of the QE Mapping's.
   const [picks, setPicks] = useState<Record<string, string>>({})
   const people = boardPeople(azure.items)
   // DPF-08: the Release Classification per row, from the Epic's list (prefilled from the release number), decides
   // the DoD and User Stories (DPF-07).
-  const epicFile = useEpicSetupFile()
   const classes = classificationOf(epicFile, epicId)
   const [classPicks, setClassPicks] = useState<Record<string, string>>({})
   const mappedPlan = ioccPlan(releases, { setup, qeMapping, board: azure.items, featureTitle, featureMatch, epicId, classes: classPicks, classValues: classes.values })

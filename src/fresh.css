@@ -816,3 +816,19 @@ kbd{font-size:11px;border:1px solid var(--accent-line);border-radius:4px;padding
 .efe-epics .efe-epic{flex:none}
 @media(max-width:860px){.efe-epics{position:static;max-width:none;max-height:320px}}
 .efe-epics{scrollbar-color:var(--muted) transparent}
+/* STT-01 / STT-02: User Story templates — the library and linked stories in Setup per Epic. */
+.efe-story{display:flex;flex-direction:column;gap:4px}
+.efe-linked{flex:1;display:flex;align-items:center;gap:8px;min-height:40px;padding:6px 10px;border:1px dashed var(--accent-line);border-radius:8px;min-width:0}
+.efe-linked>span{overflow:hidden;text-overflow:ellipsis}
+.efe-desc{margin-left:32px;font-size:12px}.efe-desc summary{cursor:pointer;color:var(--muted)}.efe-desc textarea{width:100%;margin-top:4px}
+.efe-desc-text{margin:0 0 0 32px;font-size:12px;white-space:pre-wrap}
+.stt-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
+.stt-card{display:flex;flex-direction:column;gap:8px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface,#fff)}
+.stt-card label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+.stt-tags{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stt-tagpicker{display:flex;flex-direction:column;gap:4px;font-size:12px}.stt-tagpicker>small{color:var(--muted)}
+.stt-chips{display:flex;flex-wrap:wrap;gap:4px;min-height:24px;align-items:center}
+.stt-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;background:var(--surface-2);font-size:12px}
+.stt-chip button{border:0;background:transparent;cursor:pointer;color:inherit;padding:0 2px}
+.stt-foot{display:flex;justify-content:space-between;align-items:center;gap:8px}
+@media(max-width:560px){.stt-tags{grid-template-columns:1fr}}
