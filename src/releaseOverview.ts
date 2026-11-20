@@ -1,4 +1,5 @@
 import type { NamingPattern } from './namingPatterns.ts'
+import { myPatternsVersion } from './myNamingPatterns.ts'
 import type { AppState, AzureWorkItem } from './domain'
 import type { AzureConnectionProfileSummary } from './azureCredentials.ts'
 import { releaseFor, releaseOf } from './releasePath.ts'
@@ -118,7 +119,8 @@ export function defaultStreamReleases(state: Pick<AppState, 'azureSources' | 're
   // QV-55: changed naming patterns (a new settings object) work the streams out again.
   let byMonth = bySettings.get(state.releaseSourceSettings ?? none)
   if (!byMonth) { byMonth = new Map(); bySettings.set(state.releaseSourceSettings ?? none, byMonth) }
-  const key = `${month}\u0000${timeZone ?? ''}`
+  // QV-60: my own naming patterns changing works the streams out again.
+  const key = `${month}\u0000${timeZone ?? ''}\u0000${myPatternsVersion()}`
   const cached = byMonth.get(key)
   if (cached) return cached
   const streams = computeStreams(state, profiles, month, timeZone)

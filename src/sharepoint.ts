@@ -2,6 +2,7 @@ import { InteractionRequiredAuthError, PublicClientApplication, type AccountInfo
 import type { AppState } from './domain'
 import { freezeSnapshot, listSnapshots, snapshotFolder, uploadSnapshot } from './cloudSnapshots'
 import type { Snapshot } from './domain'
+import { withoutMyViews } from './myViews'
 
 export interface SharePointConfig {
   tenantId: string
@@ -68,7 +69,7 @@ export class SharePointStateClient {
     const itemPath = encodeGraphPath(this.config.stateFilePath)
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     if (etag) headers['If-Match'] = etag
-    const response = await this.authorizedFetch(`${graphRoot}/sites/${this.siteId}/drive/root:/${itemPath}:/content`, { method: 'PUT', headers, body: JSON.stringify(state, null, 2) })
+    const response = await this.authorizedFetch(`${graphRoot}/sites/${this.siteId}/drive/root:/${itemPath}:/content`, { method: 'PUT', headers, body: JSON.stringify(withoutMyViews(state), null, 2) })
     if (response.status === 412) throw new Error('SYNC_CONFLICT')
     if (!response.ok) throw new Error(`Unable to save SharePoint data (${response.status}).`)
     const item = await response.json()
@@ -79,7 +80,7 @@ export class SharePointStateClient {
 
   async saveSnapshot(state: AppState, type: Snapshot['type'], month: string, build: unknown) {
     if (!this.account || !this.siteId) throw new Error('Connect to SharePoint in Settings first.')
-    const snapshot = freezeSnapshot(state, type, month, this.account.username, build)
+    const snapshot = freezeSnapshot(withoutMyViews(state), type, month, this.account.username, build)
     const folder = this.getSnapshotFolder()
     await this.ensureParentFolders(`${folder}/snapshot.json`)
     return uploadSnapshot(this.snapshotRequest, folder, snapshot)

@@ -83,7 +83,7 @@ export function MyActivitiesPage({ azure, store, my, month, assign, featureSetup
   const self = !my.chosenName || Boolean(my.me.email) || !(assign?.me || azure.creatorEmail).trim()
   const otherEmail = self ? '' : assignablePeople(azure.items).find((person) => person.name === my.me.name)?.email ?? ''
   const assignee = (self ? assign?.me || azure.creatorEmail : assign?.canChoose ? otherEmail : '').trim().toLowerCase()
-  const blocked = azure.isSample ? 'Synthetic sample data is loaded: nothing is saved to Azure DevOps.' : !azure.config || !azure.pat.trim() ? 'Connect the Time Writing connection (with its PAT) to save to Azure DevOps.' : !self && !assign?.canChoose ? `You are viewing ${my.me.name}'s activities: saving for another person needs the right to create work for others.` : !self && !assignee ? `No work email is known for ${my.me.name}, so nothing can be assigned to them.` : !assignee ? 'Set your work email (Settings → Azure DevOps) so new tasks are assigned to you.' : ''
+  const blocked = azure.isSample ? 'Synthetic sample data is loaded: nothing is saved to Azure DevOps.' : !azure.config || !azure.pat.trim() ? 'Connect the Time Writing connection (with its PAT) to save to Azure DevOps.' : !self && !assign?.canChoose ? `You are viewing ${my.me.name}'s activities: saving for another person needs the right to create work for others.` : !self && !assignee ? `No work email is known for ${my.me.name}, so nothing can be assigned to them.` : !assignee ? 'Set your work email (My settings → Servers and PATs) so new tasks are assigned to you.' : ''
 
   // The parent chain of an item, nearest first.
   const byId = new Map(azure.items.map((item) => [item.id, item]))
@@ -320,7 +320,7 @@ export function MyActivitiesPage({ azure, store, my, month, assign, featureSetup
     if (!started) setMessage({ tone: 'info', text: 'Your activities are already being saved (see the top bar).' })
   }
 
-  if (!azure.items.length) return <Page><EmptyState title="No work items yet" detail="Fetch your Time Writing data from Azure DevOps (Settings → Azure DevOps), or load the synthetic sample, to see your activities." /></Page>
+  if (!azure.items.length) return <Page><EmptyState title="No work items yet" detail="Fetch your Time Writing data from Azure DevOps (Admin → Streams), or load the synthetic sample, to see your activities." /></Page>
 
   const kindPill = (kind: Row['kind']) => kind === 'work' ? null : <span className={`act-kind act-${kind}`}>{kind === 'training' ? 'Training' : 'Leave'}</span>
   const hourInput = (row: Row, field: keyof Hours, disabled: boolean) => <input className="act-hours" aria-label={`${field === 'planned' ? 'Planned' : 'Actual'} hours for ${row.title}`} inputMode="decimal" placeholder="0" disabled={disabled || saving} value={valueOf(row, field)} onChange={(event) => setValue(row, field, event.target.value)} />
@@ -340,7 +340,7 @@ export function MyActivitiesPage({ azure, store, my, month, assign, featureSetup
     </header>
     {!self && my.known && <div className="act-message act-info" role="status">Showing {my.me.name}'s activities. {assignee ? `What you save here is written for ${my.me.name} (assigned to them).` : 'Saving is not available for another person here.'} Choose “Me” to go back.</div>}
     {message && <div className={`act-message act-${message.tone}`} role="status">{message.text}<button type="button" className="icon-button" aria-label="Dismiss" onClick={() => setMessage(null)}>×</button></div>}
-    {!my.known ? <EmptyState title="Who are you in Azure DevOps?" detail="Set your work email in Settings → Azure DevOps, or choose your name above, to see your activities." /> : <>
+    {!my.known ? <EmptyState title="Who are you in Azure DevOps?" detail="Set your work email in Admin → Streams, or choose your name above, to see your activities." /> : <>
     {/* One row of equal tiles (ACT-11, ACT-05): the hours, the tasks, the monthly update and the last day. */}
     <div className="act-top">
     <Metrics>

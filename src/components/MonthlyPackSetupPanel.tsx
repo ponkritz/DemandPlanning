@@ -7,7 +7,7 @@ import { defaultStreams } from '../streams'
 import { Notice, Panel } from './ui'
 import { checkTemplate, maxTemplateBytes } from '../pptxTemplate'
 
-// Settings → Monthly pack: which streams and Epics feed each slide line, and which Epic (with which metric) each KPI
+// Admin → Reports → Monthly pack: which streams and Epics feed each slide line, and which Epic (with which metric) each KPI
 // row reads. Shared in Git as monthly-pack-setup.json. Also the department name of the exported title and the team's
 // PowerPoint template (PCK-08), kept only in Storage as monthly-pack-template.pptx — never in the app's source.
 const streamNames = defaultStreams.map((stream) => stream.name)

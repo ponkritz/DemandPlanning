@@ -1,5 +1,6 @@
 import type { AppState } from './domain'
 import { csvSafe } from './csv'
+import { withoutMyViews } from './myViews'
 
 function saveBlob(contents: BlobPart, mime: string, filename: string) {
   const url = URL.createObjectURL(new Blob([contents], { type: mime }))
@@ -25,7 +26,8 @@ export function exportEffortCsv(state: AppState, month?: string) {
 }
 
 export function exportStateJson(state: AppState) {
-  saveBlob(JSON.stringify(state, null, 2), 'application/json', `demand-planning-backup-${new Date().toISOString().slice(0, 10)}.json`)
+  // SET-17: the data of My views stays on this computer.
+  saveBlob(JSON.stringify(withoutMyViews(state), null, 2), 'application/json', `demand-planning-backup-${new Date().toISOString().slice(0, 10)}.json`)
 }
 
 

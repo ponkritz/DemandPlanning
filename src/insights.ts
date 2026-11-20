@@ -26,7 +26,7 @@ export function elapsedShare(month: string, today: string) {
 
 // Month-end forecast for one month (meant for the current, partial month): the actual hours so far, scaled by the
 // share of the month's weekdays gone, project where each person lands. On track = within ±10% of the plan; ahead and
-// behind are beyond that; over capacity = the projection reaches the overloaded threshold (Settings → Capacity);
+// behind are beyond that; over capacity = the projection reaches the overloaded threshold (Admin → Capacity & time);
 // no data = nothing recorded yet.
 export type ForecastStatus = 'ahead' | 'on-track' | 'behind' | 'over-capacity' | 'no-data'
 export interface Forecast { person: string; role?: string; plan: number; capacity: number; actual: number; projected: number; vsPlan: number; status: ForecastStatus }
@@ -142,7 +142,7 @@ export function anomalies(rows: PersonMonth[], bands: Bands = defaultBands): Ano
 }
 
 // Health score, 0–100 per month and overall: the average of the components that have data.
-// - Balance: share of people whose planned utilization is in the balanced band (Settings → Capacity: at least
+// - Balance: share of people whose planned utilization is in the balanced band (Admin → Capacity & time: at least
 //   availableBelow %, below overloadedAt %).
 // - Recording (elapsed months): share of planned month Tasks with a recorded actual.
 // - Resilience: share of streams not resting on one person (elapsed months, see resilience()).

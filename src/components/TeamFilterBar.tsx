@@ -12,6 +12,6 @@ export function TeamFilterBar({ filter, onChange }: { filter: TeamFilter; onChan
       <button type="button" aria-pressed={!filter.roles.length} onClick={() => onChange({ ...filter, roles: [] })}>All</button>
       {resourceRoles.map((role) => <button key={role} type="button" aria-pressed={filter.roles.includes(role)} onClick={() => toggleRole(role)}>{role}</button>)}
     </div></div>
-    {(filter.region || filter.roles.length > 0) && <small className="muted">Only people mapped to this region / role (Settings → Resources) and the region’s public holidays.</small>}
+    {(filter.region || filter.roles.length > 0) && <small className="muted">Only people mapped to this region / role (Admin → People & roles → People) and the region’s public holidays.</small>}
   </div>
 }

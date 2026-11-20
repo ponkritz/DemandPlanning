@@ -620,7 +620,7 @@ export async function ensureMonthTask(config: AzureConfig, pat: string, featureI
 export async function ensureStoryMonthTask(config: AzureConfig, pat: string, storyId: number, assignee: string, monthLabel = currentIndiaMonth(), transport: AzureTransport = requestAzure, adhoc = false, defaultHours?: number): Promise<MonthTaskResult> {
   if (!pat.trim()) throw new Error('Enter a Work Items (Read & Write) PAT.')
   const email = assignee.trim().toLowerCase()
-  if (!isAssignee(email)) throw new Error('Choose who the month Task is assigned to (an email), or set your work email (Settings → Azure DevOps → Your work email).')
+  if (!isAssignee(email)) throw new Error('Choose who the month Task is assigned to (an email), or set your work email (Admin → Streams → Your work email).')
   const source = await transport({ ...config, pat, operation: 'items', ids: [storyId] }) as { value?: RawItem[] }
   const raw = source.value?.find((item) => item.id === storyId)
   if (!raw || raw.fields['System.WorkItemType'] !== 'User Story') throw new Error(`#${storyId} is not an accessible User Story.`)
@@ -641,7 +641,7 @@ export async function ensureStoryMonthTask(config: AzureConfig, pat: string, sto
 export async function ensureAbsenceStoryMonthTask(config: AzureConfig, pat: string, featureId: number, kind: string, storyTitle: string, typeOf: (story: AzureWorkItem) => string | undefined, assignee: string, monthLabel = currentIndiaMonth(), transport: AzureTransport = requestAzure, adhoc = false): Promise<MonthTaskResult> {
   if (!pat.trim()) throw new Error('Enter a Work Items (Read & Write) PAT.')
   const email = assignee.trim().toLowerCase()
-  if (!isAssignee(email)) throw new Error('Choose who the month Task is assigned to (an email), or set your work email (Settings → Azure DevOps → Your work email).')
+  if (!isAssignee(email)) throw new Error('Choose who the month Task is assigned to (an email), or set your work email (Admin → Streams → Your work email).')
   if (!storyTitle.trim() || storyTitle.length > 200) throw new Error(`#${featureId}: the story title is empty or too long.`)
   const source = await transport({ ...config, pat, operation: 'items', ids: [featureId] }) as { value?: RawItem[] }
   const raw = source.value?.find((item) => item.id === featureId)
@@ -927,7 +927,7 @@ export function assertWritableBase(config: Pick<AzureConfig, 'organization' | 'b
 }
 export async function requestAzure(request: AzureRequest): Promise<unknown> {
   if (changesAzure(request.operation)) assertNotViewingAs()
-  if (changesAzure(request.operation) && !writePermissions(request).every((permission) => writesAllowed(permission))) throw new Error('Your role does not allow this change in Azure DevOps. An Admin can change this in Settings → People & access → Role rights.')
+  if (changesAzure(request.operation) && !writePermissions(request).every((permission) => writesAllowed(permission))) throw new Error('Your role does not allow this change in Azure DevOps. An Admin can change this in Admin → People & roles → Role rights.')
   assertWritableBase(request, request.operation)
   if ((request.operation === 'create-feature' || request.operation === 'create-child') && !isAssignee(request.feature?.assignedTo)) throw new Error('A new work item must be assigned to someone (an email). Nothing was created.')
   const storyProblem = storyFieldsProblem(request.feature, request.operation === 'create-child' && request.workItemType === 'User Story')
@@ -996,7 +996,7 @@ export async function readFieldNames(config: AzureConfig, pat: string, transport
   } catch { return {} }
 }
 
-// The members of the connection's team (CAP-30): read only, for Settings → Resources. Needs a PAT that may read the
+// The members of the connection's team (CAP-30): read only, for Admin → People & roles → People. Needs a PAT that may read the
 // project's teams (Project and Team, Read); names and emails only.
 export async function fetchTeamMembers(config: AzureConfig, pat: string, transport: AzureTransport = requestAzure) {
   if (!config.organization || !config.project || !config.team) throw new Error('The Time Writing connection needs an organization, project and team.')

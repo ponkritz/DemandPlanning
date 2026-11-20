@@ -1,0 +1,118 @@
+import type { AzureWorkItem } from './domain'
+import { fieldKey, fieldsFromItems, fillTitle, type TitleField } from './featureSetup.ts'
+
+// Epic setup (EPS-01…): per Epic, the extra fields a new Feature under it carries — Program for DP, Platform for CP, … —
+// shared for everyone in Git (epic-setup.json). It replaces Master data: the drop-downs come from a shared library of
+// value lists. A field goes into the Feature's Description ("Label : value"), its Title, or both; the Title can follow
+// a pattern of the fields' placeholders. An empty field is Optional, Warn (created, and listed) or Block (not created).
+// The fields apply to every new Feature under the Epic — New Feature and bulk creation — with or without a Feature setup.
+
+export type FieldType = 'text' | 'list' | 'number' | 'date'
+export type IfEmpty = 'optional' | 'warn' | 'block'
+export type FieldInto = 'description' | 'title' | 'both'
+export interface EpicField { label: string; type: FieldType; list?: string; ifEmpty: IfEmpty; into: FieldInto; source?: string }
+export interface EpicFields { epicId: number; epicTitle: string; fields: EpicField[]; titlePattern?: string }
+export interface ValueList { id: string; name: string; values: string[] }
+export interface EpicSetupFile { schema: 1; kind: 'epic-setup'; lists: ValueList[]; epics: EpicFields[] }
+
+export const epicSetupFile = 'epic-setup.json'
+export const maxEpicFields = 12
+export const fieldTypes: { key: FieldType; label: string }[] = [{ key: 'text', label: 'Text' }, { key: 'list', label: 'List' }, { key: 'number', label: 'Number' }, { key: 'date', label: 'Date' }]
+export const ifEmptyOptions: { key: IfEmpty; label: string }[] = [{ key: 'optional', label: 'Optional' }, { key: 'warn', label: 'Warn' }, { key: 'block', label: 'Block' }]
+export const intoOptions: { key: FieldInto; label: string }[] = [{ key: 'description', label: 'Description' }, { key: 'title', label: 'Title' }, { key: 'both', label: 'Title and Description' }]
+export const emptyEpicSetup = (): EpicSetupFile => ({ schema: 1, kind: 'epic-setup', lists: [], epics: [] })
+
+const text = (value: unknown, max: number) => typeof value === 'string' ? value.trim().slice(0, max) : ''
+const oneOf = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T => allowed.includes(value as T) ? value as T : fallback
+const listId = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60)
+
+export function cleanList(input: Partial<Record<keyof ValueList, unknown>> | undefined): ValueList | null {
+  const name = text(input?.name, 60)
+  const id = text(input?.id, 60) || listId(name)
+  if (!name || !/^[a-z0-9-]{1,60}$/.test(id)) return null
+  const values = Array.isArray(input?.values) ? [...new Set(input.values.map((value) => text(value, 255)).filter(Boolean))].slice(0, 500) : []
+  return { id, name, values }
+}
+// Labels unique by placeholder key (and not {feature} or {month}); a list field without a known list becomes text.
+export function cleanFields(input: unknown, lists: ValueList[]): EpicField[] {
+  if (!Array.isArray(input)) return []
+  const seen = new Set<string>(['feature', 'month'])
+  return input.map((field: Partial<Record<keyof EpicField, unknown>>) => {
+    const type = oneOf(field?.type, ['text', 'list', 'number', 'date'] as const, 'text')
+    const list = text(field?.list, 60)
+    const known = type === 'list' && lists.some((entry) => entry.id === list)
+    const source = text(field?.source, 255)
+    return { label: text(field?.label, 60), type: type === 'list' && !known ? 'text' as const : type, ...(known ? { list } : {}), ifEmpty: oneOf(field?.ifEmpty, ['optional', 'warn', 'block'] as const, 'optional'), into: oneOf(field?.into, ['description', 'title', 'both'] as const, 'description'), ...(source ? { source } : {}) }
+  }).filter((field) => { const key = fieldKey(field.label); if (!key || seen.has(key)) return false; seen.add(key); return true }).slice(0, maxEpicFields)
+}
+export function cleanEpicFields(input: Partial<Record<keyof EpicFields, unknown>> | undefined, lists: ValueList[]): EpicFields | null {
+  const epicId = Number(input?.epicId)
+  if (!Number.isSafeInteger(epicId) || epicId < 1) return null
+  const titlePattern = text(input?.titlePattern, 255)
+  return { epicId, epicTitle: text(input?.epicTitle, 255), fields: cleanFields(input?.fields, lists), ...(titlePattern ? { titlePattern } : {}) }
+}
+export function parseEpicSetup(raw: string): EpicSetupFile {
+  let value: unknown
+  try { value = JSON.parse(raw) } catch { throw new Error(`${epicSetupFile} is not valid JSON.`) }
+  const file = value as Partial<Record<keyof EpicSetupFile, unknown>> | null
+  if (!file || file.schema !== 1 || file.kind !== 'epic-setup') throw new Error(`${epicSetupFile} is not an Epic setup file.`)
+  const lists = [...new Map((Array.isArray(file.lists) ? file.lists : []).map(cleanList).filter((entry): entry is ValueList => Boolean(entry)).map((entry) => [entry.id, entry])).values()]
+  const epics = [...new Map((Array.isArray(file.epics) ? file.epics : []).map((entry) => cleanEpicFields(entry, lists)).filter((entry): entry is EpicFields => Boolean(entry)).map((entry) => [entry.epicId, entry])).values()]
+  return { schema: 1, kind: 'epic-setup', lists, epics }
+}
+export const serializeEpicSetup = (file: EpicSetupFile) => {
+  const clean = parseEpicSetup(JSON.stringify(file))
+  return `${JSON.stringify({ ...clean, lists: [...clean.lists].sort((a, b) => a.name.localeCompare(b.name)), epics: [...clean.epics].sort((a, b) => a.epicId - b.epicId) }, null, 2)}\n`
+}
+export const epicFieldsFor = (file: EpicSetupFile | null | undefined, epicId: number | undefined) => epicId == null ? undefined : file?.epics.find((entry) => entry.epicId === epicId && entry.fields.length > 0)
+export const listOf = (file: EpicSetupFile | null | undefined, id: string | undefined) => id ? file?.lists.find((entry) => entry.id === id) : undefined
+export const asTitleFields = (fields: EpicField[]): TitleField[] => fields.map((field) => ({ label: field.label, source: field.source ?? '' }))
+
+// The Feature from the values typed (in field order): its Title — the pattern filled, else the Title fields joined
+// with " | ", else the title given — its Description lines, and the empty fields that block or warn.
+export interface FeatureFromFields { title: string; lines: string[]; blocked: string[]; warned: string[] }
+export function featureFromFields(entry: EpicFields, values: string[], fallbackTitle = ''): FeatureFromFields {
+  const value = (index: number) => (values[index] ?? '').trim()
+  const placeholders: Record<string, string> = { feature: fallbackTitle.trim(), ...Object.fromEntries(entry.fields.map((field, index) => [fieldKey(field.label), value(index)])) }
+  const titled = entry.fields.map((field, index) => field.into === 'description' ? '' : value(index)).filter(Boolean)
+  const title = entry.titlePattern ? fillTitle(entry.titlePattern, placeholders).replace(/(\s*\|\s*)+$/, '').replace(/^(\s*\|\s*)+/, '').replace(/(\s*\|\s*){2,}/g, ' | ') : titled.length ? titled.join(' | ') : fallbackTitle.trim()
+  const lines = entry.fields.flatMap((field, index) => field.into === 'title' ? [] : [`${field.label} : ${value(index)}`.trimEnd()])
+  const empty = (kind: IfEmpty) => entry.fields.filter((field, index) => field.ifEmpty === kind && !value(index)).map((field) => field.label)
+  return { title, lines, blocked: empty('block'), warned: empty('warn') }
+}
+// A list value not in its list (e.g. typed before the list changed) is flagged, not dropped.
+export function offList(entry: EpicFields, values: string[], file: EpicSetupFile | null | undefined) {
+  return entry.fields.flatMap((field, index) => { const list = field.type === 'list' ? listOf(file, field.list) : undefined; const value = (values[index] ?? '').trim(); return list && value && !list.values.includes(value) ? [field.label] : [] })
+}
+
+// Copy to Epics: one Epic's fields and title pattern to others (e.g. the six ECP Epics), replacing theirs.
+export function copyEpicFields(file: EpicSetupFile, fromEpicId: number, to: { id: number; title: string }[]): EpicSetupFile {
+  const source = file.epics.find((entry) => entry.epicId === fromEpicId)
+  if (!source) return file
+  const targets = to.filter((epic) => epic.id !== fromEpicId)
+  return { ...file, epics: [...file.epics.filter((entry) => !targets.some((epic) => epic.id === entry.epicId)), ...targets.map((epic) => ({ ...structuredClone(source), epicId: epic.id, epicTitle: epic.title }))] }
+}
+export function upsertEpicFields(file: EpicSetupFile, entry: EpicFields): EpicSetupFile {
+  return { ...file, epics: [...file.epics.filter((item) => item.epicId !== entry.epicId), entry] }
+}
+export function upsertList(file: EpicSetupFile, list: ValueList): EpicSetupFile {
+  return { ...file, lists: [...file.lists.filter((item) => item.id !== list.id), list] }
+}
+// A list still used by a field cannot be removed.
+export const listUsedBy = (file: EpicSetupFile, id: string) => file.epics.filter((entry) => entry.fields.some((field) => field.type === 'list' && field.list === id)).map((entry) => entry.epicId)
+export const newListId = (file: EpicSetupFile, name: string) => { const base = listId(name) || 'list'; let id = base, n = 2; while (file.lists.some((entry) => entry.id === id)) id = `${base}-${n++}`; return id }
+
+// EPS-03 bulk creation: each release's values come from its on-prem items (the fields' On-prem field). An empty Block
+// field skips the release; an empty Warn field creates it and is listed. A title pattern sets the Title (with
+// {feature} as the title the stream gives); without one the stream's title is kept. The Description gets the lines.
+export interface WithFields { title: string; skip?: string; fieldLines: string[]; warned: string[] }
+export function withEpicFields<L extends { title: string; skip?: string }>(plan: L[], entry: EpicFields | undefined, itemsOf: (line: L) => Pick<AzureWorkItem, 'fields'>[]): (L & WithFields)[] {
+  if (!entry) return plan.map((line) => ({ ...line, fieldLines: [], warned: [] }))
+  const titleFields = asTitleFields(entry.fields)
+  return plan.map((line) => {
+    const values = fieldsFromItems(titleFields, itemsOf(line))
+    const result = featureFromFields(entry, values, line.title)
+    const blocked = result.blocked.length ? `empty ${result.blocked.join(', ')} (Epic setup of #${entry.epicId})` : undefined
+    return { ...line, title: entry.titlePattern ? result.title : line.title, ...(line.skip || blocked ? { skip: line.skip ?? blocked } : {}), fieldLines: result.lines, warned: result.warned }
+  })
+}

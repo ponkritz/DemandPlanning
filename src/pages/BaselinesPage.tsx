@@ -53,7 +53,7 @@ export function BaselinesPage({ azure, month, store, git, onOpenSettings, canEdi
   }
 
   return <Page>
-    {canEdit ? <GitSyncBar git={git} onOpenSettings={onOpenSettings} /> : <Notice tone="info" className="git-bar">View only: your role does not include editing baselines. An Admin can change this in Settings → Access.</Notice>}
+    {canEdit ? <GitSyncBar git={git} onOpenSettings={onOpenSettings} /> : <Notice tone="info" className="git-bar">View only: your role does not include editing baselines. An Admin can change this in Admin → People & roles → Role rights.</Notice>}
     <Metrics>
       <Metric label="Releases with a baseline" value={`${scoped.length} / ${releases.length}`} hint={`Features under ${rules.length} stream${rules.length === 1 ? '' : 's'} with estimation rules`} />
       <Metric label="Baseline" value={`${formatHours(totals.baseline)}h`} hint="Current scope × estimation rules" />

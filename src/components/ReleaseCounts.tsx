@@ -12,7 +12,7 @@ import { Panel, TablePanel } from './ui'
 export function ReleaseCountsPanel({ state, profiles, month, only, title }: { state: PageProps['store']['state']; profiles: AzureConnectionProfileSummary[]; month: string; only?: string; title?: string }) {
   const streams = defaultStreamReleases(state, profiles, month).filter((stream) => only ? stream.name === only : (countStreams as readonly string[]).includes(stream.name))
   const cell = (value: number | undefined, stream: (typeof streams)[number]) => stream.noData && !stream.entered ? '—' : value ?? '—'
-  return <TablePanel title={title ?? `Release counts · ${monthName(month)}`} info={<ul><li>Completed and Supported releases in the month, as Pulse Check counts them: DP — DT Done / DT, SFV, PRD or RPE Done; CP — main Release Notes / any document signed by QA/QE; IOCC — Release Notes or Verification Report / Release Plan, Release Notes or Verification Report signed.</li><li>A stream without data for the month (not set up or not fetched) shows the counts an Admin entered (Settings → Azure DevOps → Stream mapping → Release counts), else —.</li></ul>}>
+  return <TablePanel title={title ?? `Release counts · ${monthName(month)}`} info={<ul><li>Completed and Supported releases in the month, as Pulse Check counts them: DP — DT Done / DT, SFV, PRD or RPE Done; CP — main Release Notes / any document signed by QA/QE; IOCC — Release Notes or Verification Report / Release Plan, Release Notes or Verification Report signed.</li><li>A stream without data for the month (not set up or not fetched) shows the counts an Admin entered (Admin → Streams → Stream mapping → Release counts), else —.</li></ul>}>
     <div className="azure-table"><table aria-label="Release counts"><thead><tr><th>Stream</th><th>Completed</th><th>Supported</th><th>Source</th></tr></thead><tbody>
       {streams.map((stream) => <tr key={stream.name}><td>{stream.name}</td><td>{cell(completedCount(stream), stream)}</td><td>{cell(supportedCount(stream), stream)}</td>
         <td>{!stream.noData ? 'Data' : stream.entered ? <span className="muted">Entered by an Admin · no data ({stream.noData})</span> : <span className="warning-text">No data ({stream.noData}) — placeholder</span>}</td></tr>)}
@@ -20,7 +20,7 @@ export function ReleaseCountsPanel({ state, profiles, month, only, title }: { st
   </TablePanel>
 }
 
-// QV-58: Settings → Azure DevOps → Stream mapping → Release counts. An Admin enters Completed / Supported per stream and
+// QV-58: Admin → Streams → Stream mapping → Release counts. An Admin enters Completed / Supported per stream and
 // month; they are used only while the stream has no data for that month. Shared in planning-data.json, audited.
 export function ReleaseCountsAdmin({ store, canManage, month }: { store: PageProps['store']; canManage: boolean; month: string }) {
   const saved = normalizeReleaseSourceSettings(store.state.releaseSourceSettings).countOverrides ?? {}

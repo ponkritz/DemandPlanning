@@ -5,7 +5,7 @@ import { checkFormula, formulaFromParts } from '../formula'
 import { absenceKindsOf, allProfiles, bucketKeys, bucketLabel, defaultProfile, defaultTerms, npraPartLabel, npraParts, npraPartsOf, plannedSourceLabel, plannedSources, profileFormula, formulaSentence, termHints, termKeys, termMeaning, termsOf, type CalculationProfile, type ProfileTerms, type TermKey } from '../calculationProfiles'
 import { absenceKinds, sharedTimeScopeLabel, sharedTimeScopes, type CapacitySettings } from '../capacity'
 
-// CAP-41/42: Settings → Capacity → Calculation profiles. Every profile can be copied and edited (built-ins too, CAP-53, with Reset to built-in); custom
+// CAP-41/42: Admin → Capacity & time → Calculation profiles. Every profile can be copied and edited (built-ins too, CAP-53, with Reset to built-in); custom
 // profiles are edited here by roles that manage shared settings. One profile is the default for every page.
 export function CalculationProfilesPanel({ settings, canEdit, onSave, onSaveTerms }: { settings: CapacitySettings; canEdit: boolean; onSave: (profiles: CalculationProfile[], defaultId: string, detail: string) => void; onSaveTerms: (terms: ProfileTerms, detail: string) => void }) {
   const profiles = allProfiles(settings), custom = settings.calculationProfiles ?? [], current = defaultProfile(settings)

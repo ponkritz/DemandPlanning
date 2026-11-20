@@ -21,7 +21,7 @@ function clean(view: AzureConnectionProfileSummary): AzureConnectionProfileSumma
   return out as unknown as AzureConnectionProfileSummary
 }
 
-export const viewsFile = (views: AzureConnectionProfileSummary[]): ViewsFile => ({ schema: 1, kind, views: views.map(clean).sort((a, b) => a.id.localeCompare(b.id)) })
+export const viewsFile = (views: AzureConnectionProfileSummary[]): ViewsFile => ({ schema: 1, kind, views: views.filter((view) => !view.mine).map(clean).sort((a, b) => a.id.localeCompare(b.id)) })
 export const serializeViews = (file: ViewsFile) => `${JSON.stringify(file, null, 2)}\n`
 
 export function parseViews(text: string): AzureConnectionProfileSummary[] {
@@ -212,7 +212,8 @@ export function parseViewsReset(text: string | null): string | null {
 // The backup file name: azure-views-backups/azure-views-2026-11-02T17-05-00Z.json (UTC, no colons).
 export const viewsBackupName = (at: Date) => `azure-views-${at.toISOString().replace(/\.\d+Z$/, 'Z').replace(/:/g, '-')}.json`
 export function removeAllConnections(storage: Pick<Storage, 'getItem' | 'setItem'> = localStorage): AzureConnectionProfileSummary[] {
-  const removed = listAzureConnectionProfiles(storage)
+  // My views (SET-17) are not part of the shared setup: a reset keeps them.
+  const removed = listAzureConnectionProfiles(storage).filter((profile) => !profile.mine)
   for (const profile of removed) {
     const full = loadAzureConnectionProfile(profile.id, storage)
     const key = serverKey(profile)

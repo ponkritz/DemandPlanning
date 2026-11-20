@@ -140,7 +140,7 @@ function pedestalOf(source: Parameters<typeof pedestalItems>[0] extends (infer T
 }
 const none: AzureWorkItem[] = []
 
-// The DP data sets among the fetched views: the Pedestal register and the DHFI documents (Settings → Stream mapping).
+// The DP data sets among the fetched views: the Pedestal register and the DHFI documents (Admin → Streams).
 export function dpDataSets(state: Pick<AppState, 'azureSources' | 'releaseSource'>, profiles: AzureConnectionProfileSummary[]) {
   const releaseConnections = profiles.filter((profile) => profile.role === 'release-source').length
   const dhfiProfile = profileForDataSet('DHFI', profiles), pedestalProfile = profileForDataSet('Pedestal', profiles)

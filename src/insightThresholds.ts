@@ -1,5 +1,5 @@
 // CAP-47 Insight thresholds: the limits the Team overview insights use (forecast, plan accuracy, stream momentum,
-// resilience, unusual months, plan health, persistent overload, concentration). Set in Settings → Capacity & periods →
+// resilience, unusual months, plan health, persistent overload, concentration). Set in Admin → Capacity & time →
 // Insight thresholds by roles that manage shared settings and shared in Git; without them the built-in values apply.
 export interface InsightThresholds {
   forecastOnTrack: number; accuracyReliable: number; accuracyBias: number

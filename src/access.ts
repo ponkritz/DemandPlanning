@@ -45,6 +45,9 @@ export const actions = [
   { key: 'streams.manage', group: 'Streams', label: 'Change the stream mapping and its query logic: servers, projects and queries of the streams, their data sets, release naming (Tool Owner)', legacy: 'streams.manage' },
   { key: 'streams.options', group: 'Streams', label: 'Stream options: Epics to match Features in, shared bulk creation Epics', legacy: 'settings.manage' },
   { key: 'setup.feature', group: 'Setup', label: 'Edit the shared Feature setup', legacy: '*' },
+  // EPS-04 (permissions 3): the Epic setup's fields and its value lists.
+  { key: 'setup.epic', group: 'Setup', label: 'Edit the Epic setup (Feature fields per Epic, title pattern, Copy to Epics)', legacy: 'settings.manage', since: 3 },
+  { key: 'setup.values', group: 'Setup', label: 'Edit Epic setup value lists', legacy: 'settings.manage', since: 3 },
   { key: 'capacity.settings', group: 'Capacity and time', label: 'Capacity and absence, calculation profiles', legacy: 'settings.manage' },
   { key: 'capacity.rules', group: 'Capacity and time', label: 'Bucket rules and insight thresholds', legacy: 'settings.manage' },
   { key: 'capacity.time', group: 'Capacity and time', label: 'Holidays and common activities', legacy: 'settings.manage' },
@@ -75,7 +78,7 @@ export const accessFile = 'access.json'
 export const isEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
 export const normalEmail = (value: string) => value.trim().toLowerCase()
 
-// The starting matrix (editable in Settings → Access): Backlog Health only for Scrum Masters, Product Owners and Admins.
+// The starting matrix (editable in Admin → People & roles → Role rights): Backlog Health only for Scrum Masters, Product Owners and Admins.
 const workActions: Action[] = ['azure.write', 'work.edit', 'work.state', 'work.move', 'work.hours', 'work.comment']
 export function defaultPolicy(adminEmail = ''): AccessPolicy {
   return inOrder({
@@ -87,7 +90,7 @@ export function defaultPolicy(adminEmail = ''): AccessPolicy {
       // CON-94: the starting matrix; each cell can be set to Allow, Deny or Not set in Role rights.
       'Product Owner': { areas: ['overview', 'board', 'health', 'release', 'baselines', 'qemapping', 'docs'], actions: [...workActions, 'work.bulk', 'azure.createForOthers', 'baselines.edit', 'qemapping.edit', 'data.export', 'pack.text'] },
       'People Manager': { areas: ['overview', 'insights', ...myWork, 'board', 'release', 'baselines', 'qemapping', 'snapshots', 'docs'], actions: [...workActions, 'work.bulk', 'azure.createForOthers', 'baselines.edit', 'qemapping.edit', 'data.export', 'pack.text'] },
-      'Scrum Master': { areas: ['overview', ...myWork, 'board', 'health', 'release', 'docs'], actions: [...workActions, 'azure.createForOthers', 'data.export', 'setup.feature'] },
+      'Scrum Master': { areas: ['overview', ...myWork, 'board', 'health', 'release', 'docs'], actions: [...workActions, 'azure.createForOthers', 'data.export', 'setup.feature', 'setup.epic'] },
       'Team Member': { areas: ['overview', ...myWork, 'board', 'release', 'docs'], actions: [...workActions, 'data.export'] },
     },
     members: isEmail(adminEmail) ? { [normalEmail(adminEmail)]: ['Admin'] } : {},
@@ -103,7 +106,7 @@ function inOrder(policy: AccessPolicy): AccessPolicy {
 
 const pick = <T extends string>(value: unknown, allowed: readonly T[]) => Array.isArray(value) ? allowed.filter((entry) => value.includes(entry)) : []
 // The permissions that did not exist before CON-94 (their presence marks a file written with the split permissions).
-const newKeys = new Set<Action>(['work.edit', 'work.state', 'work.move', 'work.hours', 'work.comment', 'work.bulk', 'release.counts', 'qemapping.edit', 'data.export', 'streams.options', 'setup.feature', 'capacity.settings', 'capacity.rules', 'capacity.time', 'capacity.periods', 'capacity.history', 'people.edit', 'people.capacityRoles', 'access.viewAs', 'pack.text', 'pack.setup', 'layout.defaults', 'storage.shared'])
+const newKeys = new Set<Action>(['setup.epic', 'setup.values', 'work.edit', 'work.state', 'work.move', 'work.hours', 'work.comment', 'work.bulk', 'release.counts', 'qemapping.edit', 'data.export', 'streams.options', 'setup.feature', 'capacity.settings', 'capacity.rules', 'capacity.time', 'capacity.periods', 'capacity.history', 'people.edit', 'people.capacityRoles', 'access.viewAs', 'pack.text', 'pack.setup', 'layout.defaults', 'storage.shared'])
 
 // Reads access.json: unknown roles, areas, actions and invalid emails are dropped; a role missing from the file has no
 // rights. Throws on anything that is not an access policy, so a broken file is reported rather than ignored.
@@ -124,11 +127,15 @@ export function parseAccess(text: string): AccessPolicy {
   const areasOf = (role: Role) => { const listed = pick(rolesIn[role]?.areas, allAreas); return before && listed.includes('overview') && (role === 'Tool Owner' || role === 'Admin' || role === 'People Manager') ? allAreas.filter((area) => listed.includes(area) || area === 'insights') : listed }
   // CON-94: a file written before the permissions were split lists only the old actions: each new permission is
   // allowed where its old action was (or for everyone, where the app had no check), so nothing changes for anyone.
-  // permissions: 2 marks a file saved by this version (so a role left with old keys only is not migrated again).
-  const split = (input as { permissions?: unknown }).permissions === 2 || Object.values(rolesIn).some((role) => Array.isArray(role?.actions) && role.actions.some((key) => newKeys.has(key as Action)))
-  const actionsOf = (raw: unknown) => {
+  // permissions: 2 or 3 marks a file saved with the split permissions (so a role left with old keys only is not
+  // migrated again). A permission added after the file's version (since) starts as in the starting matrix.
+  const version = Number((input as { permissions?: unknown }).permissions) || 0
+  const split = version >= 2 || Object.values(rolesIn).some((role) => Array.isArray(role?.actions) && role.actions.some((key) => newKeys.has(key as Action)))
+  const starting = defaultPolicy()
+  const sinceOf = (key: Action) => (actions.find((entry) => entry.key === key) as { since?: number }).since ?? 0
+  const actionsOf = (raw: unknown, role: Role) => {
     const listed = Array.isArray(raw) ? raw as string[] : []
-    if (split) return pick(listed, allActions)
+    if (split) return allActions.filter((key) => listed.includes(key) || (version >= 2 && sinceOf(key) > version && starting.roles[role].actions.includes(key)))
     return allActions.filter((key) => { const legacy = actions.find((entry) => entry.key === key)!.legacy; return listed.includes(key) || legacy === '*' || listed.includes(legacy) })
   }
   const denyOf = (raw: unknown): Partial<RoleRights> => { const denied = pick(raw, [...allAreas, ...allActions] as Permission[]); return denied.length ? { deny: denied } : {} }
@@ -136,14 +143,14 @@ export function parseAccess(text: string): AccessPolicy {
     schema: 1,
     defaultRole: roles.includes(input.defaultRole as Role) ? input.defaultRole as Role : null,
     // CON-93: a file written before the Tool Owner role keeps its roles; Tool Owner gets every right until it is set.
-    roles: Object.fromEntries(roles.map((role) => [role, role === 'Tool Owner' && !rolesIn[role] ? { areas: [...allAreas], actions: [...allActions] } : { areas: areasOf(role), actions: actionsOf(rolesIn[role]?.actions), ...denyOf(rolesIn[role]?.deny) }])) as Record<Role, RoleRights>,
+    roles: Object.fromEntries(roles.map((role) => [role, role === 'Tool Owner' && !rolesIn[role] ? { areas: [...allAreas], actions: [...allActions] } : { areas: areasOf(role), actions: actionsOf(rolesIn[role]?.actions, role), ...denyOf(rolesIn[role]?.deny) }])) as Record<Role, RoleRights>,
     members,
   }
 }
 
 export function serializeAccess(policy: AccessPolicy) {
   const members = Object.fromEntries(Object.entries(policy.members).filter(([email, assigned]) => isEmail(email) && assigned.length).sort(([a], [b]) => a.localeCompare(b)).map(([email, assigned]) => [normalEmail(email), roles.filter((role) => assigned.includes(role))]))
-  return `${JSON.stringify({ schema: 1, permissions: 2, defaultRole: policy.defaultRole, roles: Object.fromEntries(roles.map((role) => [role, { areas: allAreas.filter((area) => policy.roles[role].areas.includes(area)), actions: allActions.filter((action) => policy.roles[role].actions.includes(action)), ...(policy.roles[role].deny?.length ? { deny: ([...allAreas, ...allActions] as Permission[]).filter((key) => policy.roles[role].deny!.includes(key)) } : {}) }])), members }, null, 2)}\n`
+  return `${JSON.stringify({ schema: 1, permissions: 3, defaultRole: policy.defaultRole, roles: Object.fromEntries(roles.map((role) => [role, { areas: allAreas.filter((area) => policy.roles[role].areas.includes(area)), actions: allActions.filter((action) => policy.roles[role].actions.includes(action)), ...(policy.roles[role].deny?.length ? { deny: ([...allAreas, ...allActions] as Permission[]).filter((key) => policy.roles[role].deny!.includes(key)) } : {}) }])), members }, null, 2)}\n`
 }
 
 // A person's rights: the union of their roles, or the default role when their email is not listed (or not known yet).

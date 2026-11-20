@@ -1,4 +1,5 @@
 import { normalizeBulkEpics, type BulkStream } from './bulkEpics.ts'
+import { myPatternsFor } from './myNamingPatterns.ts'
 import { normalizeNamingPatterns, patternsFor, type NamingPattern, type NamingPatterns } from './namingPatterns.ts'
 import type { AzureWorkItem } from './domain'
 import { mapAzureWorkItem, requestAzure, type AzureConfig, type AzureRequest } from './azureDevOps.ts'
@@ -26,6 +27,9 @@ type Transport = (request: AzureRequest) => Promise<unknown>
 // is not worked out again on every render).
 const patternCache = new WeakMap<object, Map<string, NamingPattern[]>>()
 export function streamPatterns(settings: unknown, stream: string): NamingPattern[] {
+  // QV-60: my own patterns of the stream (IOCC, Content, Tool Validations), where I set them, win for me.
+  const own = myPatternsFor(stream)
+  if (own) return own
   if (!settings || typeof settings !== 'object') return patternsFor(undefined, stream)
   let byStream = patternCache.get(settings)
   if (!byStream) { byStream = new Map(); patternCache.set(settings, byStream) }

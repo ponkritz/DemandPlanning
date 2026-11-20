@@ -20,7 +20,7 @@ import { CustomizableSections } from '../components/PersonalLayout'
 // My dashboard (MYD-01…MYD-04): every user's start page — their own hours against their capacity, their open work and
 // their streams and releases, for the header month. Each count opens the page with the detail.
 export function MyDashboardPage({ month, azure, store, my, navigate, views, canSetDefault = false, windchill }: { month: string; azure: AzureWorkspace; store: PageProps['store']; my: MyWork; navigate: (page: PageId) => void; views: PersonalViewsStore; canSetDefault?: boolean; windchill?: Pick<WindchillWorkspace, 'views' | 'sources'> }) {
-  if (!my.known) return <Page><EmptyState title="Who are you in Azure DevOps?" detail="Set your work email in Settings → Azure DevOps → Your work email, or choose your name on My Tasks [Board]. My dashboard then shows your own hours and work." /></Page>
+  if (!my.known) return <Page><EmptyState title="Who are you in Azure DevOps?" detail="Set your work email in Admin → Streams → Your work email, or choose your name on My Tasks [Board]. My dashboard then shows your own hours and work." /></Page>
   const settings = capacityContext(store.state)
   const today = todayIso()
   const name = my.me.name ?? ''

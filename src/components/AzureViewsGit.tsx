@@ -63,7 +63,7 @@ export function AzureViewsGitPanel({ git, azure }: { git: GitStorage; azure: Azu
   }
   async function cleanUp() {
     const list = listAzureConnectionProfiles()
-    if (!window.confirm(`Back up and remove all ${list.length} connection${list.length === 1 ? '' : 's'}?\n\n1. A backup is downloaded and saved to Git (${viewsBackupFolder}/).\n2. Every connection and its saved data is removed here and from the shared setup in Git (azure-views.json and azure-data/). Every other computer removes its connections at its next start.\n3. PATs stay, per server.\n\nThen add the correct connections in Settings → Azure DevOps (Stream mapping, Other views).`)) return
+    if (!window.confirm(`Back up and remove all ${list.length} connection${list.length === 1 ? '' : 's'}?\n\n1. A backup is downloaded and saved to Git (${viewsBackupFolder}/).\n2. Every connection and its saved data is removed here and from the shared setup in Git (azure-views.json and azure-data/). Every other computer removes its connections at its next start.\n3. PATs stay, per server.\n\nThen add the correct connections in My settings → Servers and PATs (Stream mapping, Other views).`)) return
     setBusy('clean'); setNotice(null)
     const at = new Date(), name = viewsBackupName(at), text = backupText()
     let backup = ''
@@ -72,7 +72,7 @@ export function AzureViewsGitPanel({ git, azure }: { git: GitStorage; azure: Azu
       backup = (await git.backupViews(text, name, `Backup before clean-up: ${list.length} connection${list.length === 1 ? '' : 's'}`)).path
       const result = await git.resetViews(at.toISOString(), `Clean up the connections (backup: ${backup})`)
       const removed = azure.removeAllConnectionsHere(at.toISOString())
-      setNotice({ tone: 'success', text: `Backed up to ${backup} and downloaded. Removed ${removed.length} connection${removed.length === 1 ? '' : 's'} here, emptied the shared setup in Git and removed ${result.dataFiles} on-prem data file${result.dataFiles === 1 ? '' : 's'}. Every other computer removes its connections at its next start. Add the correct connections now in Settings → Azure DevOps; each stream you set up is saved to Git, and “Save connections to Git” here saves the others.` })
+      setNotice({ tone: 'success', text: `Backed up to ${backup} and downloaded. Removed ${removed.length} connection${removed.length === 1 ? '' : 's'} here, emptied the shared setup in Git and removed ${result.dataFiles} on-prem data file${result.dataFiles === 1 ? '' : 's'}. Every other computer removes its connections at its next start. Add the correct connections now in Admin → Streams; each stream you set up is saved to Git, and “Save connections to Git” here saves the others.` })
     } catch (failure) {
       const reason = failure instanceof Error ? failure.message : String(failure)
       setNotice({ tone: 'error', text: backup ? `The clean-up stopped: ${reason}. The backup is in Git (${backup}) and downloaded; the connections here were not removed. Try again.` : `Nothing was removed: the backup could not be saved to Git (${reason}). The downloaded file has the connections.` })

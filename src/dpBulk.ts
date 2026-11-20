@@ -3,7 +3,7 @@ import type { ReleaseEntry } from './releaseSource.ts'
 import { fieldOf } from './dpReleases.ts'
 import { dpFeatureTitle, dpProgramOf, dpVersionOf, type BoardHit } from './dpBoardMatch.ts'
 import { dpReleaseName } from './dpMilestones.ts'
-import { releaseTypesOf, type EpicSetup, type QeMapColumns, type ReleaseTypeSetup } from './featureSetup.ts'
+import { ioccSetsOf, releaseTypesOf, type EpicSetup, type QeMapColumns, type ReleaseTypeSetup } from './featureSetup.ts'
 import type { QeMappingFile } from './qeMapping.ts'
 
 // DP releases (Release Details → DP, Epic 13946): the release type from the version, the QE from the QE Mapping, the
@@ -59,20 +59,21 @@ export function qeForName(name: string, file: QeMappingFile | null | undefined, 
 }
 // QV-59: IOCC releases in bulk, by the DP rules: the release type from the release number (x.y.z.a), its set (Release or
 // PU) from the bulk Epic's Feature setup, the QE from the QE Mapping by the release name, a 100% match skipped.
-export interface IoccLine { release: ReleaseEntry; title: string; type?: DpReleaseType; set?: ReleaseTypeSetup; qe: string; email: string; skip: string; note: string }
+export interface IoccLine { release: ReleaseEntry; title: string; type?: DpReleaseType; set?: ReleaseTypeSetup; qe: string; email: string; skip: string; baseSkip: string; note: string }
 export function ioccPlan(releases: ReleaseEntry[], options: { setup?: EpicSetup; qeMapping?: QeMappingFile | null; board: AzureWorkItem[]; featureTitle: (release: ReleaseEntry) => string; featureMatch: (release: ReleaseEntry) => BoardHit | undefined; epicId?: number }): IoccLine[] {
-  const sets = releaseTypesOf(options.setup)
+  const sets = ioccSetsOf(options.setup)
   return releases.map((release) => {
     const typed = dpReleaseType(release.release), found = qeForName(release.name, options.qeMapping, options.setup?.qeColumns)
     const qe = found?.qe ?? '', email = qe ? emailFor(qe, options.board) : ''
     const hit = options.featureMatch(release)
-    const skip = !options.epicId ? 'no IOCC bulk Epic is set (Settings → Stream mapping → Bulk creation Epics)'
+    const baseSkip = !options.epicId ? 'no IOCC bulk Epic is set (Admin → Stream options → Bulk creation Epics)'
       : fullMatch(hit) ? `Feature #${hit!.item.id} on QMS-0025 matches it 100%`
-      : !typed ? `no release type from the release number “${release.release || '—'}” (x.y.z.a expected)`
-      : !options.setup?.qeColumns ? 'the QE Mapping columns are not set (Feature setup of the IOCC bulk Epic)'
+      : !typed ? `no release type from the release number “${release.release || '—'}” (x.y.z.a expected)` : ''
+    const qeSkip = !options.setup?.qeColumns ? 'the QE Mapping columns are not set (Feature setup of the IOCC bulk Epic)'
       : !qe ? 'no QE in the QE Mapping for this release name'
       : !email ? `no email found for ${qe} (not assigned anything on QMS-0025 yet)` : ''
-    return { release, title: options.featureTitle(release), ...(typed ? { type: typed.type, set: sets[typed.kind] } : {}), qe, email, skip, note: skip ? '' : similarNote(hit) }
+    const skip = baseSkip || qeSkip
+    return { release, title: options.featureTitle(release), ...(typed ? { type: typed.type, set: sets[typed.kind] } : {}), qe, email, skip, baseSkip, note: baseSkip ? '' : similarNote(hit) }
   })
 }
 
@@ -111,18 +112,30 @@ export function emailFor(name: string, board: AzureWorkItem[]): string {
 // threshold but not exact Feature is named as a note, and the release is still created.
 export const fullMatch = (hit: BoardHit | undefined) => Boolean(hit && hit.score >= 100)
 export const similarNote = (hit: BoardHit | undefined) => hit && hit.score < 100 ? `a similar Feature #${hit.item.id} (${hit.score}%) exists` : ''
-export interface BulkLine { row: AzureWorkItem; title: string; version: string; type?: DpReleaseType; set?: ReleaseTypeSetup; qe: string; email: string; skip: string; note: string }
+export interface BulkLine { row: AzureWorkItem; title: string; version: string; type?: DpReleaseType; set?: ReleaseTypeSetup; qe: string; email: string; skip: string; baseSkip: string; note: string }
 export function bulkPlan(rows: AzureWorkItem[], options: { setup?: EpicSetup; qeMapping?: QeMappingFile | null; board: AzureWorkItem[]; featureMatch: (row: AzureWorkItem) => BoardHit | undefined }): BulkLine[] {
   const sets = releaseTypesOf(options.setup)
   return rows.map((row) => {
     const version = dpRowVersion(row), typed = dpReleaseType(version), found = qeFor(row, options.qeMapping, options.setup?.qeColumns)
     const qe = found?.qe ?? '', email = qe ? emailFor(qe, options.board) : ''
     const hit = options.featureMatch(row)
-    const skip = fullMatch(hit) ? `Feature #${hit!.item.id} on QMS-0025 matches it 100%`
-      : !typed ? `no release type from the version “${version || '—'}” (x.y.z.a expected)`
-      : !options.setup?.qeColumns ? 'the QE Mapping columns are not set (Feature setup of the bulk Epic)'
+    const baseSkip = fullMatch(hit) ? `Feature #${hit!.item.id} on QMS-0025 matches it 100%`
+      : !typed ? `no release type from the version “${version || '—'}” (x.y.z.a expected)` : ''
+    const qeSkip = !options.setup?.qeColumns ? 'the QE Mapping columns are not set (Feature setup of the bulk Epic)'
       : !qe ? 'no QE in the QE Mapping for this product'
       : !email ? `no email found for ${qe} (not assigned anything on QMS-0025 yet)` : ''
-    return { row, title: dpFeatureTitle(row), version, ...(typed ? { type: typed.type, set: sets[typed.kind] } : {}), qe, email, skip, note: skip ? '' : similarNote(hit) }
+    const skip = baseSkip || qeSkip
+    return { row, title: dpFeatureTitle(row), version, ...(typed ? { type: typed.type, set: sets[typed.kind] } : {}), qe, email, skip, baseSkip, note: baseSkip ? '' : similarNote(hit) }
+  })
+}
+
+// DPF-06: the QE chosen in the pop-up for a release (its email), in place of the QE Mapping's: the release is then
+// created for that person, even when the QE Mapping had none for it; a reason other than the QE still skips it.
+export function pickQe<L extends { qe: string; email: string; skip: string; baseSkip: string }>(plan: L[], picks: Record<string, string>, keyOf: (line: L) => string, people: { name: string; email: string }[]): (L & { picked: boolean })[] {
+  return plan.map((line) => {
+    const email = picks[keyOf(line)]?.trim().toLowerCase()
+    if (!email || email === line.email) return { ...line, picked: false }
+    const name = people.find((person) => person.email === email)?.name ?? email
+    return { ...line, qe: name, email, skip: line.baseSkip, picked: true }
   })
 }

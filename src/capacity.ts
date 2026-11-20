@@ -10,7 +10,7 @@ import { activeFigureLock, addHours, applyProfile, groupUtilization, type Formul
 // configured absence Epic, where each person has a Feature for PTO / Sick Leave / Unplanned Leave.
 // Shared time: an Epic or Feature (by ID) whose month Tasks apply to many people at once instead of to the assignee —
 // regional or company holidays (absence) and common activities such as PI Planning or an audit (reserved time). The
-// scope is everyone or the people mapped to one region (Settings → Resources). Hours per Task: Original Estimate, else
+// scope is everyone or the people mapped to one region (Admin → People & roles → People). Hours per Task: Original Estimate, else
 // Completed Work, else one working day.
 export type SharedTimeKind = 'holiday' | 'activity'
 export type SharedTimeScope = 'everyone' | Region
@@ -73,7 +73,7 @@ export const absenceKinds: AbsenceKind[] = ['PTO', 'Sick Leave', 'Unplanned Leav
 // after leaving gives them no capacity and leaves them out of the head-count; a month they join or leave in is prorated.
 export const resourceRoles = ['QE', 'QMS', 'CAPA', 'Lead', 'Manager'] as const
 export type ResourceRole = typeof resourceRoles[number]
-// removed (CAP-33): taken out of Settings → Resources and out of every capacity figure (their hours too); restorable.
+// removed (CAP-33): taken out of Admin → People & roles → People and out of every capacity figure (their hours too); restorable.
 // CAP-49: email links the person (Azure DevOps display name) to their app access (access.json is keyed by email).
 export interface ResourceProfile { region?: Region; role?: ResourceRole; reportsTo?: string; peopleManager?: boolean; joinedOn?: string; leftOn?: string; listed?: 'team' | 'added'; removed?: boolean; email?: string }
 const isDay = (value: unknown): value is string => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`)) && new Date(`${value}T00:00:00Z`).toISOString().startsWith(value)
@@ -317,7 +317,7 @@ export function capacityModel(source: AzureWorkItem[], month: string, settings: 
       shared.set(rule.id, entry); continue
     }
     const name = task.assignedTo || feature?.assignedTo || 'Unassigned'
-    // CAP-33: a person removed in Settings → Resources is not counted — no capacity, no hours; listed apart.
+    // CAP-33: a person removed in Admin → People & roles → People is not counted — no capacity, no hours; listed apart.
     if (profiles[name]?.removed) { const entry = removedPeople.get(name) ?? { name, tasks: 0, hours: 0 }; entry.tasks += 1; entry.hours += hours(task.completedWork); removedPeople.set(name, entry); continue }
     // CAP-50: a person in a role not counted for capacity (e.g. Lead, People Manager) is listed apart, hours too.
     const excludedBy = roleExclusion(name, settings)
@@ -528,7 +528,7 @@ export function itemsForTeam(source: AzureWorkItem[], filter: TeamFilter, settin
   })
 }
 
-// Settings → Resources (CAP-29…CAP-31): everyone whose region, role and dates can be set — the people with Time Writing
+// Admin → People & roles → People (CAP-29…CAP-31): everyone whose region, role and dates can be set — the people with Time Writing
 // (their figures), everyone else Assigned To fetched work, the people of the historical hours (leavers included), the
 // Azure DevOps team members and people added by name (kept in their profile as listed), and anyone with a profile.
 export type ResourceSource = 'time writing' | 'assigned' | 'history' | 'team' | 'added' | 'profile'
@@ -576,7 +576,7 @@ export function oldCalculation(model: CapacityModel): { rows: OldCalculationRow[
 export function capacityGap(model: Pick<CapacityModel, 'people' | 'removed' | 'notCounted' | 'outsideEmployment'>, names: string[]): string | undefined {
   const named = (entry: { name: string }) => names.includes(entry.name)
   if (model.people.some(named)) return undefined
-  if (model.removed.some(named)) return 'Marked removed in Settings → Resources'
+  if (model.removed.some(named)) return 'Marked removed in Admin → People & roles → People'
   const excluded = model.notCounted.find(named)
   if (excluded) return `Not counted for capacity: ${excluded.reason}`
   const outside = model.outsideEmployment.find(named)

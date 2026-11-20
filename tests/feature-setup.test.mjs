@@ -118,7 +118,7 @@ test('title fields per Epic: up to five, unique names, saved with the setup; tit
   const cp = [{ label: 'Platform', source: 'Custom.Platform' }, { label: 'Release Name', source: 'ReleaseName' }, { label: 'Number', source: '' }]
   assert.deepEqual(cleanTitleFields([...cp, { label: ' platform ', source: '' }, { label: '', source: 'X' }, { label: 'Month', source: '' }, { label: 'A', source: '' }, { label: 'B', source: '' }, { label: 'C', source: '' }]).map((field) => field.label), ['Platform', 'Release Name', 'Number', 'A', 'B'], 'at most five; blank, repeated and built-in names dropped')
   const saved = parseFeatureSetup(serializeFeatureSetup(file({ ...emptySetup(7, 'CP'), featureDoD: 'DT finished', titleFields: cp })))
-  assert.deepEqual(setupFor(saved, 7).titleFields, cp, 'kept through save')
+  assert.equal(setupFor(saved, 7).titleFields, undefined, 'EPS-07: the old title fields are no longer kept (the Epic setup holds the Feature fields)')
   assert.equal(setupFor(parseFeatureSetup(serializeFeatureSetup(file({ ...emptySetup(8), featureDoD: 'x' }))), 8).titleFields, undefined, 'a setup without fields is written as before')
   assert.equal(fieldKey('Release Name'), 'releasename')
   assert.equal(fieldTitle(['CP 2', ' Atlas ', '4.1']), 'CP 2 | Atlas | 4.1')

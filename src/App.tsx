@@ -3,7 +3,7 @@ import { BrandMark } from './components/BrandMark'
 import { TableDefaultsContext } from './components/tableDesign'
 import { ReleaseSettingsContext } from './useStreamEpics'
 import { normalizeTableDefaults } from './tableDefaults'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import './App.css'
 import './fresh.css'
 import { useAppStore } from './store'
@@ -22,7 +22,7 @@ import { CapacityActualPage } from './pages/CapacityActualPage'
 import { BaselinesPage } from './pages/BaselinesPage'
 import { SnapshotsPage } from './pages/SnapshotsPage'
 import { AdminPage } from './pages/AdminPage'
-import { readSettingsTab, saveSettingsSection, saveSettingsTab, settingsLabel, settingsPagesFor, type SettingsTab } from './settingsTabs'
+import { mySettingsLabel, readSettingsTab, resolveSettings, saveSettingsSection, saveSettingsTab, settingsLabel, settingsPagesFor, type SettingsTab } from './settingsTabs'
 import { normalizeReleaseSourceSettings } from './releaseSource'
 import { dataSets, defaultMatchThreshold, defaultStreams, profileForDataSet, profileForStream, windchillStreamExports } from './streams'
 import { connectionPresets } from './connectionPresets'
@@ -45,6 +45,10 @@ import { PiReviewPage } from './pages/PiReviewPage'
 import { BritePage } from './pages/BritePage'
 import { KpiTrackerPage } from './pages/KpiTrackerPage'
 import { CanContext } from './useCan'
+import { SettingsSearch } from './components/SettingsSearch'
+import { EpicSetupContext, useEpicSetup } from './useEpicSetup'
+import { OnPremContext } from './onPremValues'
+import { myPatternsVersion, subscribeMyPatterns } from './myNamingPatterns'
 import { QeMappingPage } from './pages/QeMappingPage'
 import { useAccess } from './useAccess'
 import { useFeatureSetup } from './useFeatureSetup'
@@ -144,7 +148,7 @@ export default function App() {
     runInBackground('startup:fetch', 'Fetch Azure DevOps at start', async (progress) => {
       progress('Fetching the Time Writing connection…')
       const result = await azure.fetchCloud()
-      const text = result.skipped || (result.targets ? `${result.ok} of ${result.targets} connection${result.targets === 1 ? '' : 's'} fetched and saved.${result.ok < result.targets ? ' See Settings → Azure DevOps for the one that failed.' : ''}` : 'Nothing to fetch.')
+      const text = result.skipped || (result.targets ? `${result.ok} of ${result.targets} connection${result.targets === 1 ? '' : 's'} fetched and saved.${result.ok < result.targets ? ' See Admin → Streams for the one that failed.' : ''}` : 'Nothing to fetch.')
       return { text, failed: Boolean(result.skipped) || result.ok < result.targets }
     })
   }, [store.ready, azure, git.connected, setupSynced, gitWaitOver])
@@ -157,7 +161,7 @@ export default function App() {
   setAzureEmails(azure.items)
   const viewedPerson = access.viewingAs?.kind === 'person' ? access.viewingAs : undefined
   const my = useMyWork(azure, store, viewedPerson)
-  // Settings → Storage: everything shared through Git, loaded now (as at start, plus the planning data, roles and
+  // Admin → Data & sharing: everything shared through Git, loaded now (as at start, plus the planning data, roles and
   // Feature setup); each part reports separately so one failure does not hide the rest.
   async function loadEverything() {
     const loaded: string[] = [], failed: string[] = []
@@ -177,7 +181,15 @@ export default function App() {
   const history = useHistory(git)
   const reportAzure = useMemo(() => history.file ? { ...azure, items: withHistory(azure.items, history.file).items } : azure, [azure, history.file])
   const [menuEditor, setMenuEditor] = useState(false)
+  // ADM-03: Search settings, from Ctrl K / ⌘ K anywhere.
+  const [searchOpen, setSearchOpen] = useState(false)
+  useEffect(() => { const onKey = (event: KeyboardEvent) => { if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'k') { event.preventDefault(); setSearchOpen(true) } }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey) }, [])
   const featureSetup = useFeatureSetup(git, azure.creatorEmail)
+  const epicSetup = useEpicSetup(git)
+  // EPS-06: the fetched on-prem data, for the drop-downs of Feature fields that name an on-prem field.
+  const onPremSources = useMemo(() => [...(store.state.releaseSource ? [store.state.releaseSource] : []), ...(store.state.azureSources ?? [])], [store.state.releaseSource, store.state.azureSources])
+  // QV-60: my own naming patterns changing redraws the figures.
+  useSyncExternalStore(subscribeMyPatterns, myPatternsVersion)
   const qeMapping = useQeMapping(git)
   // Who creates new work items (the email on the Time Writing connection) and whether they may assign them to others.
   const assign = { me: azure.creatorEmail.trim().toLowerCase(), canChoose: access.can('azure.createForOthers') }
@@ -215,7 +227,7 @@ export default function App() {
   const windchillView = windchillViews.find((entry) => entry.id === windchillId)
   // "＋ ECP" / "＋ S&S IT" (not imported yet) open the import named after that stream, so the export lands on it (CON-85).
   const [windchillFor, setWindchillFor] = useState('')
-  // QE Mapping (QEM-12): the QE Name of a new row is picked from the Resources list (Settings → Resources): everyone with
+  // QE Mapping (QEM-12): the QE Name of a new row is picked from the Resources list (Admin → People & roles → People): everyone with
   // Time Writing Tasks, and the people with a resource profile.
   const qeResources = useMemo(() => page !== 'qemapping' ? [] : (() => { const capacity = capacityContext(store.state); return [...new Set([...azureResources(azure.items, month, capacity).map((person) => person.name), ...Object.keys(capacity.profiles ?? {})])].filter(Boolean).sort((a, b) => a.localeCompare(b)) })(), [page, azure.items, month, store.state])
   const tableDesign = useMemo(() => normalizeTableDefaults(store.state.tableDefaults), [store.state.tableDefaults])
@@ -242,8 +254,9 @@ export default function App() {
   // section. The page is remounted so it picks up the section asked for.
   const [settingsTab, setSettingsTab] = useState<SettingsTab>(readSettingsTab)
   const [settingsVisit, setSettingsVisit] = useState(0)
-  const openSettings = (tab: SettingsTab, section?: string) => { if (section) saveSettingsSection(tab, section); saveSettingsTab(tab); setSettingsTab(tab); setSettingsVisit((visit) => visit + 1); setPage('admin') }
-  // Azure DevOps connections: the Stream mapping section of Settings → Azure DevOps.
+  // SET-15: an older page or section opens where it lives now.
+  const openSettings = (asked: SettingsTab, askedSection?: string) => { const { tab, section } = resolveSettings(asked, askedSection); if (section) saveSettingsSection(tab, section); saveSettingsTab(tab); setSettingsTab(tab); setSettingsVisit((visit) => visit + 1); setPage('admin') }
+  // Azure DevOps connections: the Stream mapping section of Admin → Streams.
   const openConnection = () => openSettings('connections', 'mapping')
   // Get started: the setup steps with their live status; the pop-up opens by itself while a required step is open,
   // unless dismissed in this browser. The Setup button in the top bar reopens it.
@@ -276,7 +289,7 @@ export default function App() {
   if (!store.ready) return <main className="content"><h1>I&amp;D Quality Demand Planning</h1>{store.loadError ? <Notice tone="error"><p>{store.loadError}</p><p>Do not clear browser data. If you still have an older tab open with unsaved changes, export its JSON backup first.</p><button className="primary" onClick={store.retryLoad}>Retry loading saved data</button></Notice> : <p role="status">Loading saved browser data…</p>}{buildStatus}</main>
 
   // UI-12: every table follows the shared design default.
-  return <TableDefaultsContext.Provider value={tableDesign}><ReleaseSettingsContext.Provider value={store.state.releaseSourceSettings}><CanContext.Provider value={access.can}><HeaderSlot.Provider value={headerSlot}><div className={`app-shell${navOpen ? ' nav-open' : ''}${menuMini ? ' nav-mini' : ''}`}>
+  return <TableDefaultsContext.Provider value={tableDesign}><ReleaseSettingsContext.Provider value={store.state.releaseSourceSettings}><CanContext.Provider value={access.can}><EpicSetupContext.Provider value={epicSetup.file}><OnPremContext.Provider value={onPremSources}><HeaderSlot.Provider value={headerSlot}><div className={`app-shell${navOpen ? ' nav-open' : ''}${menuMini ? ' nav-mini' : ''}`}>
     {navOpen && <div className="nav-backdrop" onClick={() => setNavOpen(false)} aria-hidden="true" />}
     <aside className="sidebar" id="primary-navigation">
       <div className="brand" title="I&amp;D Quality Demand Planning"><div className="brand-mark"><BrandMark /></div><div><strong>I&amp;D Quality</strong><span>Demand Planning</span></div><button type="button" className="nav-mini-toggle" aria-pressed={menuMini} aria-label={menuMini ? 'Expand the menu' : 'Collapse the menu'} title={menuMini ? 'Show the menu with names' : 'Fold the menu to icons'} onClick={toggleMenuMini}>{menuMini ? '»' : '«'}</button></div>
@@ -303,7 +316,7 @@ export default function App() {
         const open = !collapsed.includes(group)
         const holdsActive = group === (isOther ? 'Other views' : page === 'board' ? (view.onPrem ? 'Release Details' : 'I&D Board') : meta.group)
         return <div key={group} className="nav-section">
-          <button type="button" className={`nav-group${holdsActive && !open ? ' nav-group-active' : ''}`} aria-expanded={open} onClick={() => toggleNav(group)}><span aria-hidden="true">{open ? '▾' : '▸'}</span>{group.toUpperCase()}</button>
+          <button type="button" className={`nav-group${holdsActive && !open ? ' nav-group-active' : ''}`} aria-expanded={open} onClick={() => toggleNav(group)}><span aria-hidden="true">{open ? '▾' : '▸'}</span>{group === 'Settings' ? <>ADMIN{git.dirty && <span className="nav-badge" title="Shared changes not yet saved to Git" aria-label="1 unsaved shared change">1</span>}</> : group.toUpperCase()}</button>
           {/* Collapsed lists stay in the page but are hidden on wide screens only: the narrow sidebar has no headings. */}
           <div className={`nav-items${open ? '' : ' nav-collapsed'}`}>{shown.map((section) => section.label ? <div key={section.key} className="nav-subsection">
             <button type="button" className="nav-subgroup" aria-expanded={!collapsed.includes(section.key)} onClick={() => toggleNav(section.key)}><span aria-hidden="true">{collapsed.includes(section.key) ? '▸' : '▾'}</span>{section.label}</button>
@@ -311,8 +324,9 @@ export default function App() {
           </div> : <div key={section.key} className="nav-items">{section.entries}</div>)}</div>
         </div>
       })}</nav>
-      <div className="sidebar-footer"><ZoomControl /><div className="sidebar-tools"><button type="button" className="download-link" onClick={() => setMenuEditor(true)}><span aria-hidden="true">☰</span>Customize menu</button>{access.canViewAs && <button type="button" className="download-link" onClick={() => setViewAsOpen(true)}><span aria-hidden="true">👁</span>View as…</button>}</div><DesktopDownload /><small className="storage-line" title="Where app data is saved">{storageLabel}</small>{buildStatus}</div>
+      <div className="sidebar-footer"><button type="button" className={`my-settings-button${page === 'admin' && settingsTab === 'my' ? ' active' : ''}`} title={mySettingsLabel} aria-label={`${mySettingsLabel}${my.me.name ? ` (${my.me.name})` : ''}`} onClick={() => { openSettings('my'); setNavOpen(false) }}><span className="my-settings-avatar" aria-hidden="true">{(my.me.name || azure.creatorEmail || '?').trim().charAt(0).toUpperCase()}</span><span className="my-settings-name">{my.me.name || azure.creatorEmail.trim() || mySettingsLabel}<small>{mySettingsLabel}</small></span></button><ZoomControl /><div className="sidebar-tools"><button type="button" className="download-link" onClick={() => setMenuEditor(true)}><span aria-hidden="true">☰</span>Customize menu</button><button type="button" className="download-link" title="Ctrl K" onClick={() => setSearchOpen(true)}><span aria-hidden="true">⌕</span>Search settings</button>{access.canViewAs && <button type="button" className="download-link" onClick={() => setViewAsOpen(true)}><span aria-hidden="true">👁</span>View as…</button>}</div><DesktopDownload /><small className="storage-line" title="Where app data is saved">{storageLabel}</small>{buildStatus}</div>
     </aside>
+    {searchOpen && <SettingsSearch allowed={(entry) => entry.tab === 'my' || settingsPagesFor(access.can).some((item) => item.key === entry.tab)} onOpen={openSettings} onClose={() => setSearchOpen(false)} />}
     {menuEditor && <MenuCustomizer pages={pages.filter((item) => !item.hidden && item.id !== 'admin' && allowed(item.id)).map(({ id, label, group }) => ({ id, label, group }))} menu={personalViews.menu} onChange={personalViews.setMenu} onClose={() => setMenuEditor(false)} />}
     <main>
       <header className="topbar"><button type="button" className="menu-button" aria-label={navOpen ? 'Close menu' : 'Open menu'} aria-expanded={navOpen} aria-controls="primary-navigation" onClick={() => setNavOpen((open) => !open)}>{navOpen ? '✕' : '☰'}</button><h1 title={meta.detail}>{page === 'board' ? view.name : page === 'windchill' && windchillView ? windchillView.name : page === 'admin' ? settingsLabel(settingsTab) : meta.label}</h1><div className="topbar-slot" ref={setHeaderSlot} /><div className="topbar-actions">{openSteps > 0 && <button type="button" className="ghost setup-button" title="What to configure and how" onClick={() => setGuideOpen(true)}>Setup · {steps.filter((step) => step.required && step.state === 'done').length}/{steps.filter((step) => step.required).length}</button>}<JobsIndicator /><DataStatus azure={azure} />{(meta.usesMonth || (page === 'board' && view.readOnly)) && <label className="month-picker"><span className="sr-only">Month</span><input type="month" aria-label="Month" value={month} onChange={(event) => /^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value) && setMonth(event.target.value)} /></label>}<ThemeToggle /></div></header>
@@ -333,15 +347,15 @@ export default function App() {
       {page === 'mywork' && <MyWorkPage azure={azure} store={store} my={my} month={month} onOpenActivities={() => setPage('activities')} assign={assign} featureSetup={featureSetup.setups} />}
       {page === 'bulk' && <SprintCheckPage azure={azure} store={store} my={my} />}
       {page === 'capactual' && <CapacityActualPage azure={reportAzure} store={store} month={month} />}
-      {page === 'planover' && <PlanningOverviewPage azure={reportAzure} store={store} month={month} onOpenPack={() => openSettings('pack')} />}
+      {page === 'planover' && <PlanningOverviewPage azure={reportAzure} store={store} month={month} onOpenPack={() => openSettings('pack', 'pack')} />}
       {page === 'activities' && <MyActivitiesPage azure={azure} store={store} my={my} month={month} assign={assign} featureSetup={featureSetup.setups} onOpen={setPage} />}
       {page === 'baselines' && <BaselinesPage azure={azure} month={month} store={store} git={git} onOpenSettings={() => openSettings('storage', 'git')} canEdit={access.can('baselines.edit')} />}
-      {page === 'windchill' && (windchillView ? <WindchillPage view={windchillView} windchill={windchill} git={git} gitNote={git.snapshotNotes[`wc:${windchillView.id}`]} month={month} board={{ azure, stream: windchillStreamExports(windchillViews).find((entry) => entry.view?.id === windchillView.id)?.stream.name ?? windchillView.name, threshold: normalizeReleaseSourceSettings(store.state.releaseSourceSettings).matchThreshold ?? defaultMatchThreshold, assign, featureSetup: featureSetup.setups }} /> : access.can('windchill.import') ? <WindchillExportImport key={windchillFor} stream={windchillFor} windchill={windchill} git={git} onImported={(id) => openWindchill(id)} /> : <Notice tone="info">Your role does not include importing Windchill exports. Open an export from the menu; an Admin can change this in Settings → Access.</Notice>)}
+      {page === 'windchill' && (windchillView ? <WindchillPage view={windchillView} windchill={windchill} git={git} gitNote={git.snapshotNotes[`wc:${windchillView.id}`]} month={month} board={{ azure, stream: windchillStreamExports(windchillViews).find((entry) => entry.view?.id === windchillView.id)?.stream.name ?? windchillView.name, threshold: normalizeReleaseSourceSettings(store.state.releaseSourceSettings).matchThreshold ?? defaultMatchThreshold, assign, featureSetup: featureSetup.setups }} /> : access.can('windchill.import') ? <WindchillExportImport key={windchillFor} stream={windchillFor} windchill={windchill} git={git} onImported={(id) => openWindchill(id)} /> : <Notice tone="info">Your role does not include importing Windchill exports. Open an export from the menu; an Admin can change this in Admin → People & roles → Role rights.</Notice>)}
       {page === 'health' && <BacklogHealthPage azure={azure} store={store} />}
       {page === 'board' && <BoardPage azure={azure} store={store} current={view} month={month} git={git} onOpenConnection={openConnection} assign={assign} featureSetup={featureSetup.setups} qeMapping={qeMapping.file} />}
       {page === 'snapshots' && <SnapshotsPage {...pageProps} />}
-      {page === 'admin' && <AdminPage key={`${settingsTab}:${settingsVisit}`} tab={settingsTab} onOpenTab={openSettings} {...pageProps} azure={azure} git={git} access={access} featureSetup={featureSetup} qeColumnNames={[...new Set((qeMapping.file?.sheets ?? []).flatMap((sheet) => sheet.columns.map((column) => column.name)))]} monthlyPack={monthlyPack} history={history} loadEverything={loadEverything} onOpenBoard={() => setPage('board')} />}
-      {page === 'docs' && <DocsPage git={git} onConfigure={() => openSettings('storage', 'git')} />}
+      {page === 'admin' && <AdminPage key={`${settingsTab}:${settingsVisit}`} tab={settingsTab} onOpenTab={openSettings} {...pageProps} azure={azure} git={git} access={access} featureSetup={featureSetup} epicSetup={epicSetup} setupSteps={steps} onSearch={() => setSearchOpen(true)} qeColumnNames={[...new Set((qeMapping.file?.sheets ?? []).flatMap((sheet) => sheet.columns.map((column) => column.name)))]} monthlyPack={monthlyPack} history={history} loadEverything={loadEverything} onOpenBoard={() => setPage('board')} />}
+      {page === 'docs' && <DocsPage />}
     </main>
-  </div></HeaderSlot.Provider></CanContext.Provider></ReleaseSettingsContext.Provider></TableDefaultsContext.Provider>
+  </div></HeaderSlot.Provider></OnPremContext.Provider></EpicSetupContext.Provider></CanContext.Provider></ReleaseSettingsContext.Provider></TableDefaultsContext.Provider>
 }

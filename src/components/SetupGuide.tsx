@@ -8,7 +8,7 @@ import type { SettingsTab } from '../settingsTabs'
 // in its ⓘ (NAV-40), a link to where the token is created, and a button that opens the right place. Dismissing it keeps it closed in this browser; the top-bar button reopens it.
 // NAV-38: the values a step needs (the Git token, your work email, your Azure DevOps PAT) can be entered right here;
 // each is saved exactly as its Settings page saves it (tokens in this browser only, never in Git). The email field
-// lets the browser suggest the address it has saved (autocomplete "email"), as Settings → Your work email does.
+// lets the browser suggest the address it has saved (autocomplete "email"), as My settings → Your work email does.
 // detectEmail (NAV-39): reads the token owner's email from their work items; the found email fills the field and is saved
 // only when the user presses Save email.
 export interface SetupInputs { connectGit: (token: string) => Promise<void>; saveEmail: (email: string) => void; savePat: (pat: string) => void; detectEmail?: () => Promise<{ email: string; name: string; via: string } | null>; gitMessage?: string }

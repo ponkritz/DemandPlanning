@@ -350,7 +350,7 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
   // Load from Git: the view's data saved to Git by the desktop app. Also the fallback when a fetch cannot run.
   async function loadFromGit(id: string, reason = '') {
     const source = gitData?.current
-    if (!source?.available(id)) { setConnectionStatus((current) => ({ ...current, [id]: { state: 'error', message: 'Load from Git needs Git storage connected (Settings → Storage) and an on-prem view.' } })); return false }
+    if (!source?.available(id)) { setConnectionStatus((current) => ({ ...current, [id]: { state: 'error', message: 'Load from Git needs Git storage connected (Admin → Data & sharing) and an on-prem view.' } })); return false }
     setConnectionStatus((current) => ({ ...current, [id]: { state: 'busy', message: 'Loading from Git…' } }))
     try {
       const done = await source.load(id)
@@ -401,7 +401,7 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
     for (const profile of targets) if (await fetchConnection(profile.id)) ok += 1
     // Why the Time Writing connection was not fetched, if it was not (shown with the start-up fetch in the top bar).
     const main = connectionProfiles.find((profile) => profile.id === timeWriting)
-    const skipped = !main ? 'No Time Writing connection is set up here (Settings → Azure DevOps).' : !cloud(main.baseUrl) ? 'The Time Writing connection is on-premises: use Fetch in Settings → Azure DevOps (VPN).' : !loadAzureConnectionProfile(main.id)?.token?.trim() ? 'No PAT in this browser for the Time Writing connection: add it in Settings → Azure DevOps.' : ''
+    const skipped = !main ? 'No Time Writing connection is set up here (My settings → Servers and PATs).' : !cloud(main.baseUrl) ? 'The Time Writing connection is on-premises: use Fetch in My settings → Servers and PATs (VPN).' : !loadAzureConnectionProfile(main.id)?.token?.trim() ? 'No PAT in this browser for the Time Writing connection: add it in My settings → Servers and PATs.' : ''
     if (skipped.startsWith('No PAT')) setFetchProblem(skipped)
     return { targets: targets.length, ok, skipped }
   }

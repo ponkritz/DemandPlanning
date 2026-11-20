@@ -5,7 +5,7 @@ import { normalizeReleaseSourceSettings } from '../releaseSource'
 import type { PageProps } from '../pages/types'
 import { Panel } from './ui'
 
-// QV-59: Settings → Azure DevOps → Stream mapping → Bulk creation Epics. Per stream (DP, IOCC, Content), the Epic its
+// QV-59: Admin → Streams → Stream mapping → Bulk creation Epics. Per stream (DP, IOCC, Content), the Epic its
 // Create Features works under: a shared default (managers; saved to Git with the planning data) and each person's own
 // choice (this browser), which wins. The Feature setup of that Epic gives the DoD, sets, stories and QE columns.
 export function BulkEpicsPanel({ store, items, canManage }: { store: PageProps['store']; items: AzureWorkItem[]; canManage: boolean }) {
