@@ -3,7 +3,7 @@ import { Notice, Panel } from './ui'
 import { defaultInsightThresholds, normalizeInsightThresholds, thresholdFields, thresholdsOf, validThreshold, type InsightThresholds, type ThresholdKey } from '../insightThresholds'
 import type { CapacitySettings } from '../capacity'
 
-// CAP-47: Settings → Capacity & periods → Insight thresholds. The limits behind the Team overview insights, changed by
+// CAP-47: Admin → Capacity & time → Insight thresholds. The limits behind the Team overview insights, changed by
 // roles that manage shared settings, shared in Git and audited.
 export function InsightThresholdsPanel({ settings, canEdit, onSave }: { settings: CapacitySettings; canEdit: boolean; onSave: (thresholds: InsightThresholds | undefined, detail: string) => void }) {
   const saved = thresholdsOf(settings)

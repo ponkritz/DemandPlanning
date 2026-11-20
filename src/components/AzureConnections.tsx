@@ -34,7 +34,7 @@ const empty = (role: AzureConnectionRole = 'time-tracking'): ConnectionInput => 
 // Azure DevOps connection setup, shown as the first section of Settings.
 // section: the one part to show (SET-14: Servers and PATs, Stream mapping, Other views, Read-only sources, Synthetic
 // sample); without it, every part.
-export function AzureConnections({ azure, store, git, onOpenBoard, canManage = true, canManageStreams = canManage, canEnterCounts = canManage, section }: { azure: AzureWorkspace; store: PageProps['store']; git?: GitStorage; onOpenBoard: () => void; canManage?: boolean; canManageStreams?: boolean; canEnterCounts?: boolean; section?: 'email' | 'servers' | 'mapping' | 'views' | 'sources' | 'sample' }) {
+export function AzureConnections({ azure, store, git, onOpenBoard, canManage = true, canManageStreams = canManage, canEnterCounts = canManage, section }: { azure: AzureWorkspace; store: PageProps['store']; git?: GitStorage; onOpenBoard: () => void; canManage?: boolean; canManageStreams?: boolean; canEnterCounts?: boolean; section?: 'email' | 'servers' | 'mapping' | 'epics' | 'bulk' | 'counts' | 'views' | 'sources' | 'sample' }) {
   const show = (part: string) => !section || section === part
   const threshold = normalizeReleaseSourceSettings(store.state.releaseSourceSettings).matchThreshold ?? defaultMatchThreshold
   const { connectionProfiles, connectionStatus, activeConnectionProfileId, busy } = azure
@@ -83,7 +83,8 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
     ...defaultStreams.map((stream) => { const profile = profileForStream(stream, connectionProfiles), preset = stream.source === 'azure' ? presetFor(stream.name) : undefined; return { name: stream.name, timeWriting: false, windchill: stream.source === 'windchill', profile, preset, rule: stream.source === 'windchill' ? 'Windchill export' : ruleLabel[stream.rule], where: profile ? whereOf(profile) : preset ? whereOf(placeOf(preset)) : '', query: profile?.query ?? preset?.query ?? '' } }),
   ]
   const mapped = new Set(mapping.flatMap((row) => row.profile ? [row.profile.id] : []))
-  const others = connectionProfiles.filter((profile) => !mapped.has(profile.id))
+  // My views (SET-17) are listed in My settings only.
+  const others = connectionProfiles.filter((profile) => !mapped.has(profile.id) && !profile.mine)
   const otherPresets = presets.filter((preset) => preset.role !== 'time-tracking' && !streamOfProfile({ viewName: preset.viewName, reason: preset.name, role: preset.role }) && !dataSets.some((set) => set.presetKey === preset.key))
   // Set up a default: saved and fetched right away when its server already has a PAT, otherwise the form asks for one.
   function setUpStream(preset: Omit<ConnectionInput, 'pat'>) {
@@ -243,9 +244,9 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
       </tbody></table></div>
     </Panel>}
     {show('mapping') && <NamingPatternsPanel store={store} canManage={canManageStreams} />}
-    {show('mapping') && <FeatureEpicsPanel store={store} items={azure.items} canManage={canManage} />}
-    {show('mapping') && <BulkEpicsPanel store={store} items={azure.items} canManage={canManage} />}
-    {show('mapping') && <ReleaseCountsAdmin store={store} canManage={canEnterCounts} month={todayIso().slice(0, 7)} />}
+    {show('epics') && <FeatureEpicsPanel store={store} items={azure.items} canManage={canManage} />}
+    {show('bulk') && <BulkEpicsPanel store={store} items={azure.items} canManage={canManage} />}
+    {show('counts') && <ReleaseCountsAdmin store={store} canManage={canEnterCounts} month={todayIso().slice(0, 7)} />}
     {show('views') && <Panel className="connection-panel" eyebrow="STEP 3" title="Other views" info="Any other Azure DevOps view: custom queries, backlog views and background sources such as the DHP release register (Pedestal). Each is saved as soon as it is fetched (an empty Time Writing result never replaces saved data without asking). Nothing is written to Azure DevOps when fetching. Connections on a server with a PAT need no PAT of their own."
       action={<div className="button-row"><button type="button" className="ghost" onClick={() => { setFormError(''); setForm(empty(connectionProfiles.some((profile) => profile.role === 'time-tracking') ? 'reference' : 'time-tracking')) }}>＋ Add connection</button><button type="button" className="primary" disabled={!connectionProfiles.length || fetchingAll || busy} onClick={() => { setFetchingAll(true); void azure.fetchAll().finally(() => setFetchingAll(false)) }}>{fetchingAll ? 'Fetching all…' : 'Fetch all'}</button></div>}>
       {otherPresets.length > 0 && <div className="preset-list">{otherPresets.map((preset) => <div className="preset-row" key={preset.key}>
@@ -292,7 +293,7 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
           {(form.role === 'time-tracking' || form.role === 'backlog-view') && <label>Team{form.query.trim() ? ' (optional with a query)' : ''}<input value={form.team} onChange={(event) => setForm({ ...form, team: event.target.value })} placeholder="Team whose Epic backlog is read" /></label>}
           <label>API version (optional)<input value={form.apiVersion} onChange={(event) => setForm({ ...form, apiVersion: event.target.value })} placeholder="Automatic" /><small>Leave empty to detect it: 7.1, then 6.0 and 5.0 for older Azure DevOps Server.</small></label>
           <label>PAT for this server<input type="password" autoComplete="off" required={!formServerPat && (form.id ? !loadAzureConnectionProfile(form.id)?.token : !(form.cloneOf && loadAzureConnectionProfile(form.cloneOf)?.token))} value={form.pat} onChange={(event) => setForm({ ...form, pat: event.target.value })} placeholder={form.role === 'time-tracking' ? 'Work Items (Read & Write)' : 'Work Items (Read)'} /><small>{formServerPat ? 'Leave empty: the saved server PAT is used. ' : form.id ? 'Leave empty to keep the saved one. ' : clonedFrom ? `Leave empty to use the PAT of “${clonedFrom}”. ` : ''}One PAT per server: it is used by every connection on the same server.</small></label>
-          {form.role === 'time-tracking' && <p className="muted">Your work email is set on its own under Settings → Azure DevOps → <strong>Your work email</strong>{azure.creatorEmail ? <> (now {azure.creatorEmail})</> : ' — not set yet'}.</p>}
+          {form.role === 'time-tracking' && <p className="muted">Your work email is set on its own under Admin → Streams → <strong>Your work email</strong>{azure.creatorEmail ? <> (now {azure.creatorEmail})</> : ' — not set yet'}.</p>}
           <label className="query-field">Query (optional, WIQL)<textarea rows={4} spellCheck={false} value={form.query} onChange={(event) => setForm({ ...form, query: event.target.value })} placeholder={queryPlaceholder[form.role]} /><small>A flat query: SELECT … FROM WorkItems WHERE …. Only the WHERE clause is used; results are read in pages. {form.role === 'time-tracking' || form.role === 'backlog-view' ? '' : 'Empty uses the default shown.'}</small></label>
         </div>
         <Notice>{roleUse[form.role]}</Notice>

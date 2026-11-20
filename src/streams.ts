@@ -47,10 +47,10 @@ export function profileForStream<P extends AzureConnectionProfileSummary>(stream
 // release names (cpReporting).
 export function profilesForStream<P extends AzureConnectionProfileSummary>(stream: StreamDef, profiles: P[]): P[] {
   if (stream.source !== 'azure') return []
-  return profiles.filter((profile) => profile.role !== 'time-tracking' && (namesStream(profile.viewName, stream.name) || namesStream(profile.reason, stream.name)))
+  return profiles.filter((profile) => profile.role !== 'time-tracking' && !profile.mine && (namesStream(profile.viewName, stream.name) || namesStream(profile.reason, stream.name)))
 }
 // The stream a connection belongs to, if any.
-export const streamOfProfile = (profile: Pick<AzureConnectionProfileSummary, 'viewName' | 'reason' | 'role'>) => profile.role === 'time-tracking' ? undefined : defaultStreams.find((stream) => stream.source === 'azure' && (namesStream(profile.viewName, stream.name) || namesStream(profile.reason, stream.name)))
+export const streamOfProfile = (profile: Pick<AzureConnectionProfileSummary, 'viewName' | 'reason' | 'role' | 'mine'>) => profile.role === 'time-tracking' || profile.mine ? undefined : defaultStreams.find((stream) => stream.source === 'azure' && (namesStream(profile.viewName, stream.name) || namesStream(profile.reason, stream.name)))
 // The Windchill export of a Windchill stream, by its name.
 export function exportForStream<T extends { name: string; exportFile?: string }>(stream: StreamDef, views: T[]) {
   if (stream.source !== 'windchill') return undefined
@@ -72,7 +72,7 @@ export function profileForDataSet(name: string, profiles: AzureConnectionProfile
   if (!set) return undefined
   return profiles.find((profile) => profile.role !== 'time-tracking' && (profile.id === set.presetId || namesDataSet(profile.viewName, set) || namesDataSet(profile.reason, set)))
 }
-export const dataSetOfProfile = (profile: Pick<AzureConnectionProfileSummary, 'id' | 'viewName' | 'reason' | 'role'>) => profile.role === 'time-tracking' ? undefined : dataSets.find((set) => profile.id === set.presetId || namesDataSet(profile.viewName, set) || namesDataSet(profile.reason, set))
+export const dataSetOfProfile = (profile: Pick<AzureConnectionProfileSummary, 'id' | 'viewName' | 'reason' | 'role' | 'mine'>) => profile.role === 'time-tracking' || profile.mine ? undefined : dataSets.find((set) => profile.id === set.presetId || namesDataSet(profile.viewName, set) || namesDataSet(profile.reason, set))
 
 // How a Windchill export is read (CON-83, CON-87): an export set up with the ECP logic (or, without a setup, one named
 // ECP / QRE) by project at its project folder (2nd by default); the others by release (S&S IT's rules).

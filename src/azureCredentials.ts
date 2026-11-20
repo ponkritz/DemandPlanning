@@ -10,9 +10,11 @@ export interface AzurePatProfileSummary { id: string; purpose: string }
 // read-only backlog view shown as its own tab on the Backlogs page.
 export type AzureConnectionRole = 'time-tracking' | 'release-source' | 'documents' | 'reference' | 'backlog-view'
 export const azureConnectionRoles: AzureConnectionRole[] = ['time-tracking', 'backlog-view', 'release-source', 'documents', 'reference']
-export interface AzureConnectionProfile { id: string; url: string; reason: string; creatorEmail?: string; role?: AzureConnectionRole; query?: string; baseUrl?: string; apiVersion?: string; viewName?: string; showInMenu?: boolean; token: string }
+export interface AzureConnectionProfile { id: string; url: string; reason: string; creatorEmail?: string; role?: AzureConnectionRole; query?: string; baseUrl?: string; apiVersion?: string; viewName?: string; showInMenu?: boolean; mine?: boolean; token: string }
 // shared: the connection is part of the shared connection setup in Git (read here, never written to Git).
-export interface AzureConnectionProfileSummary { id: string; url: string; reason: string; creatorEmail?: string; role: AzureConnectionRole; query?: string; baseUrl?: string; apiVersion?: string; viewName?: string; showInMenu?: boolean; shared?: boolean }
+// mine (SET-17): one of My views — a person's own read-only view, kept on this computer only: never written to Git,
+// backups or SharePoint, never a stream's connection, and kept when the shared setup is reset.
+export interface AzureConnectionProfileSummary { id: string; url: string; reason: string; creatorEmail?: string; role: AzureConnectionRole; query?: string; baseUrl?: string; apiVersion?: string; viewName?: string; showInMenu?: boolean; shared?: boolean; mine?: boolean }
 const connectionProfilesKey = 'demand-planning-azure-connection-profiles-v1'
 const valid = (profile: unknown): profile is AzurePatProfile => Boolean(profile && typeof profile === 'object' && typeof (profile as AzurePatProfile).id === 'string' && /^[a-zA-Z0-9_-]{1,80}$/.test((profile as AzurePatProfile).id) && typeof (profile as AzurePatProfile).purpose === 'string' && (profile as AzurePatProfile).purpose.trim().length > 0 && typeof (profile as AzurePatProfile).token === 'string' && (profile as AzurePatProfile).token.trim().length > 0)
 const validConnection = (profile: unknown): profile is AzureConnectionProfile => {
@@ -37,7 +39,7 @@ export const viewsBaselineKey = 'demand-planning-views-git-baseline-v1'
 function sharedIds(storage: Pick<Storage, 'getItem'>) { try { const raw = JSON.parse(storage.getItem(viewsBaselineKey) ?? '{}') as unknown; return new Set(raw && typeof raw === 'object' ? Object.keys(raw) : []) } catch { return new Set<string>() } }
 export function listAzureConnectionProfiles(storage: Pick<Storage, 'getItem'> = localStorage): AzureConnectionProfileSummary[] {
   const shared = sharedIds(storage)
-  try { const raw = JSON.parse(storage.getItem(connectionProfilesKey) ?? '[]'); return Array.isArray(raw) ? raw.filter(validConnection).map(({ id, url, reason, creatorEmail, role, query, baseUrl, apiVersion, viewName, showInMenu }) => ({ id, url, reason, role: role ?? 'time-tracking', ...(shared.has(id) ? { shared: true } : {}), ...(viewName?.trim() ? { viewName: viewName.trim() } : {}), ...(showInMenu != null ? { showInMenu } : {}), ...(creatorEmail?.trim() ? { creatorEmail: creatorEmail.trim() } : {}), ...(query?.trim() ? { query: query.trim() } : {}), ...(baseUrl ? { baseUrl } : {}), ...(apiVersion ? { apiVersion } : {}) })) : [] } catch { return [] }
+  try { const raw = JSON.parse(storage.getItem(connectionProfilesKey) ?? '[]'); return Array.isArray(raw) ? raw.filter(validConnection).map(({ id, url, reason, creatorEmail, role, query, baseUrl, apiVersion, viewName, showInMenu, mine }) => ({ id, url, reason, role: role ?? 'time-tracking', ...(mine === true ? { mine: true } : {}), ...(shared.has(id) ? { shared: true } : {}), ...(viewName?.trim() ? { viewName: viewName.trim() } : {}), ...(showInMenu != null ? { showInMenu } : {}), ...(creatorEmail?.trim() ? { creatorEmail: creatorEmail.trim() } : {}), ...(query?.trim() ? { query: query.trim() } : {}), ...(baseUrl ? { baseUrl } : {}), ...(apiVersion ? { apiVersion } : {}) })) : [] } catch { return [] }
 }
 // One PAT per server: an on-prem collection (its base URL) or a cloud organization (dev.azure.com/<org>). Every
 // connection on the server uses it, so it is entered once; a connection's own PAT is only a fallback (older setups).

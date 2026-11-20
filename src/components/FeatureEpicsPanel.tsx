@@ -4,7 +4,7 @@ import { epicMatchStreams, normalizeReleaseSourceSettings } from '../releaseSour
 import type { PageProps } from '../pages/types'
 import { Panel } from './ui'
 
-// QV-57: Settings → Azure DevOps → Stream mapping → Feature matching Epics. Per stream (DP, CP, IOCC, Content), the QMS-0025 Epics whose
+// QV-57: Admin → Streams → Stream mapping → Feature matching Epics. Per stream (DP, CP, IOCC, Content), the QMS-0025 Epics whose
 // Features (and User Stories) its releases are matched to — the Board column, Create Feature's existing-match check
 // and the 100% rule; none chosen: the whole board. Applied to the shared settings and saved to Git with the planning data.
 export function FeatureEpicsPanel({ store, items, canManage }: { store: PageProps['store']; items: AzureWorkItem[]; canManage: boolean }) {

@@ -25,7 +25,7 @@ export function CapacityActualPage({ azure, store, month }: { azure: AzureWorksp
   const [labels, setLabels] = useDataLabels('capacity-actual-trend')
   const settings = capacityContext(store.state)
   const model = useMemo(() => capacityVsActual({ items: azure.items, month, today: todayIso(), settings }, filter), [azure.items, month, settings, filter])
-  if (!azure.items.length) return <Page><EmptyState title="No work items yet" detail="Fetch the Time Writing data from Azure DevOps (Settings → Azure DevOps), or load the synthetic sample, to compare capacity with actual hours." /></Page>
+  if (!azure.items.length) return <Page><EmptyState title="No work items yet" detail="Fetch the Time Writing data from Azure DevOps (Admin → Streams), or load the synthetic sample, to compare capacity with actual hours." /></Page>
   const set = (key: keyof CvaFilter) => (value: string) => setFilter((current) => ({ ...current, [key]: value }))
   const { tiles, trend } = model
   const usedNow = tiles.used.now
@@ -78,7 +78,7 @@ export function CapacityActualPage({ azure, store, month }: { azure: AzureWorksp
     <div className="ovw-bottom">
       <section className="act-card" aria-labelledby="cva-people">
         <h3 id="cva-people">By person · {monthName(month)}</h3>
-        <p className="act-sub">Over above {settings.overloadedAt}%, under below {settings.availableBelow}% (Settings → Capacity & periods).</p>
+        <p className="act-sub">Over above {settings.overloadedAt}%, under below {settings.availableBelow}% (Admin → Capacity & time).</p>
         {model.people.length ? <div className="ovw-scroll"><table className="ovw-queue"><thead><tr><th>Person</th><th>Capacity</th><th>Actual</th><th>Planned</th><th>Used</th><th>Status</th></tr></thead><tbody>
           {model.people.map((row) => <tr key={row.person}><td>{row.person}{row.region || row.role ? <small>{[row.region, row.role].filter(Boolean).join(' · ')}</small> : null}</td><td>{formatHours(row.capacity)}h</td><td>{formatHours(row.actual)}h</td><td>{formatHours(row.plan)}h</td>
             <td><div className="cva-meter" aria-hidden="true"><i className={`cva-${row.band === 'Over' ? 'over' : row.band === 'Under' ? 'under' : 'ok'}`} style={{ width: `${Math.min(100, row.used ?? 0)}%` }} /></div>{row.used == null ? '—' : `${Math.round(row.used)}%`}</td>

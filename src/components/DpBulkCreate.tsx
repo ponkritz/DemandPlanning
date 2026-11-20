@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react'
+import { QePick } from './QePick'
+import { boardPeople } from '../contentBulk'
+import { epicFieldsFor, withEpicFields } from '../epicSetup'
+import { useEpicSetupFile } from '../useEpicSetup'
 import type { AzureWorkItem } from '../domain'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { FeatureSetups } from '../featureSetup'
 import { chooseSetup } from '../featureSetup'
 import { useBulkEpic } from '../useStreamEpics'
 import type { QeMappingFile } from '../qeMapping'
-import { bulkPlan, dpTypeLabel } from '../dpBulk'
+import { bulkPlan, dpTypeLabel, pickQe } from '../dpBulk'
 import type { BoardHit } from '../dpBoardMatch'
 import { createFeatureFromSetup, currentIndiaMonth, currentIterationPairs, futureIterationPairs, readAzureIterations, withFeatureDoD, HierarchyCreationError, type AzureIteration } from '../azureDevOps'
 import { runInBackground } from '../backgroundJobs'
@@ -21,7 +25,13 @@ export function DpBulkCreate({ rows, azure, featureSetup, qeMapping, featureMatc
   // QV-59: the DP bulk Epic — mine, else shared, else built in (13946).
   const dpEpicId = useBulkEpic('DP').epicId ?? 0
   const setup = chooseSetup(featureSetup, dpEpicId, true).setup
-  const plan = bulkPlan(rows, { setup, qeMapping, board: azure.items, featureMatch })
+  // DPF-06: the QE picked per release in the pop-up (email by release), in place of the QE Mapping's.
+  const [picks, setPicks] = useState<Record<string, string>>({})
+  const people = boardPeople(azure.items)
+  const mappedPlan = bulkPlan(rows, { setup, qeMapping, board: azure.items, featureMatch })
+  const rawPlan = pickQe(mappedPlan, picks, (line) => String(line.row.id), people)
+  // EPS-03: the Epic setup's fields of the bulk Epic.
+  const plan = withEpicFields(rawPlan, epicFieldsFor(useEpicSetupFile(), dpEpicId), (line) => [line.row])
   const ready = plan.filter((line) => !line.skip)
   const epic = azure.items.find((item) => item.id === dpEpicId && item.workItemType === 'Epic')
   const [pairs, setPairs] = useState<{ pi: AzureIteration; sprint: AzureIteration }[] | null>(null)
@@ -38,7 +48,7 @@ export function DpBulkCreate({ rows, azure, featureSetup, qeMapping, featureMatc
     return () => { active = false }
   }, [azure.config, azure.pat])
   const pair = pairs?.[choice]
-  const blocked = azure.isSample ? 'Synthetic sample data is loaded: creating in Azure DevOps is disabled.' : !azure.config || !azure.pat ? 'Connect the QMS-0025 Time Writing connection with a PAT first (Settings → Azure DevOps).' : !epic ? `Epic #${dpEpicId} is not on the loaded QMS-0025 board: load the board first.` : !pair ? (error || 'Loading the PI / Sprint…') : !ready.length ? 'None of the selected releases can be created (see the reasons).' : ''
+  const blocked = azure.isSample ? 'Synthetic sample data is loaded: creating in Azure DevOps is disabled.' : !azure.config || !azure.pat ? 'Connect the QMS-0025 Time Writing connection with a PAT first (My settings → Servers and PATs).' : !epic ? `Epic #${dpEpicId} is not on the loaded QMS-0025 board: load the board first.` : !pair ? (error || 'Loading the PI / Sprint…') : !ready.length ? 'None of the selected releases can be created (see the reasons).' : ''
 
   function create() {
     if (blocked || !azure.config || !epic || !pair) return
@@ -48,10 +58,10 @@ export function DpBulkCreate({ rows, azure, featureSetup, qeMapping, featureMatc
       for (const [index, line] of ready.entries()) {
         progress(`${index + 1} of ${ready.length}: ${line.title}…`)
         try {
-          const feature = { parentId: epic.id, title: line.title, description: withFeatureDoD(line.set!.featureDoD, '', line.type), acceptanceCriteria: '', areaPath: epic.areaPath, iterationPath: pair.pi.path, storyIterationPath: pair.sprint.path, assignedTo: line.email }
+          const feature = { parentId: epic.id, title: line.title, description: withFeatureDoD(line.set!.featureDoD, '', line.type, line.fieldLines), acceptanceCriteria: '', areaPath: epic.areaPath, iterationPath: pair.pi.path, storyIterationPath: pair.sprint.path, assignedTo: line.email }
           const bundle = await createFeatureFromSetup(config, token, feature, { stories: line.set!.stories, reviewStory: false, ...(setup?.timeWritingStory ? { timeWritingStory: setup.timeWritingStory } : {}), task: { ...(setup?.task ?? { title: '{month} | {feature}', description: '', assignedTo: '', areaPath: '', iterationPath: '' }), assignedTo: line.email } }, month, undefined, adhoc)
           azure.featureCreated([epic, ...bundle.items])
-          done.push(`#${bundle.feature.id} ${line.title} → ${line.qe}`)
+          done.push(`#${bundle.feature.id} ${line.title} → ${line.qe}${line.warned.length ? ` (empty: ${line.warned.join(', ')})` : ''}`)
         } catch (failure) {
           if (failure instanceof HierarchyCreationError && failure.createdItems.length) azure.featureCreated([epic, ...failure.createdItems])
           failed.push(`${line.title}: ${failure instanceof Error ? failure.message : 'failed'}`)
@@ -72,8 +82,8 @@ export function DpBulkCreate({ rows, azure, featureSetup, qeMapping, featureMatc
           <td>{line.title}</td>
           <td>{line.type ? `${dpTypeLabel(line.type)} (${line.set === undefined ? '' : line.type === 'Major' || line.type === 'Minor' ? 'Release set' : 'PU set'})` : '—'}</td>
           <td>{line.set ? line.set.stories.map((story) => story.title.split(' :')[0]).join(', ') || 'none' : '—'}</td>
-          <td>{line.qe || '—'}{line.email && <small className="muted"> {line.email}</small>}</td>
-          <td>{line.skip ? <span className="warning-text">Skipped: {line.skip}</span> : <>Will be created{line.note && <small className="warning-text"> — {line.note}</small>}</>}</td>
+          <td>{line.baseSkip ? (line.qe || '—') : <QePick label={line.title} email={line.email} mapped={mappedPlan.find((entry) => String(entry.row.id) === String(line.row.id))?.qe} people={people} onPick={(email) => setPicks((current) => ({ ...current, [String(line.row.id)]: email }))} />}</td>
+          <td>{line.skip ? <span className="warning-text">Skipped: {line.skip}</span> : <>Will be created{line.note && <small className="warning-text"> — {line.note}</small>}{line.warned.length > 0 && <small className="warning-text"> — empty {line.warned.join(', ')}</small>}</>}</td>
         </tr>)}</tbody>
       </table></div>
       {pairs && pairs.length > 1 && <label className="inline-select">PI / Sprint<select aria-label="PI / Sprint" value={choice} onChange={(event) => setChoice(Number(event.target.value))}>{pairs.map((entry, index) => <option key={entry.sprint.path} value={index}>{entry.pi.name} / {entry.sprint.name}</option>)}</select></label>}

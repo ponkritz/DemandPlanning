@@ -16,7 +16,7 @@ export function ReleaseFeatureButton({ stream, title, items, azure, assign, feat
   const word = new RegExp(`(^|[^a-z0-9])${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^a-z0-9]|$)`)
   const epic = epics.find((item) => item.title.trim().toLowerCase() === key) ?? epics.find((item) => word.test(item.title.toLowerCase())) ?? epics[0]
   const me = (assign?.me || azure.creatorEmail).trim().toLowerCase()
-  const blocked = azure.isSample ? 'Synthetic sample data is loaded: creating in Azure DevOps is disabled.' : !azure.config ? 'Connect the QMS-0025 Time Writing connection first (Settings → Azure DevOps).' : !epic ? 'Load the QMS-0025 board first: no Epic to put the Feature under.' : ''
+  const blocked = azure.isSample ? 'Synthetic sample data is loaded: creating in Azure DevOps is disabled.' : !azure.config ? 'Connect the QMS-0025 Time Writing connection first (Admin → Streams).' : !epic ? 'Load the QMS-0025 board first: no Epic to put the Feature under.' : ''
   return <>
     <button type="button" className="ghost small" disabled={Boolean(blocked)} title={blocked || `Create a Feature “${title}” on QMS-0025`} onClick={() => { setNote(''); setOpen(true) }}>Create Feature</button>
     {blocked && <small className="muted">{blocked}</small>}

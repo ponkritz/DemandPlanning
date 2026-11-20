@@ -18,7 +18,7 @@ export function ViewAsDialog({ current, people, onStart, onClose }: { current: V
       </div>
       {kind === 'person' ? <label>Person<select value={person} onChange={(event) => setPerson(event.target.value)}><option value="">Choose…</option>{people.map((entry) => <option key={entry.email || entry.name} value={entry.email || entry.name}>{entry.name}{entry.email && entry.email !== entry.name ? ` · ${entry.email}` : ''}</option>)}</select></label>
         : <label>Role<select value={role} onChange={(event) => setRole(event.target.value as Role)}>{roles.map((entry) => <option key={entry}>{entry}</option>)}</select></label>}
-      <small className="muted">{kind === 'person' ? 'Their menu and pages follow the roles of their work email in Settings → Access (the default role when they have none or no email is known); My dashboard, My Tasks [Board] and Monthly show their own work.' : 'The menu and pages of that role; My dashboard and My Tasks [Board] stay yours.'}</small>
+      <small className="muted">{kind === 'person' ? 'Their menu and pages follow the roles of their work email in Admin → People & roles → Role rights (the default role when they have none or no email is known); My dashboard, My Tasks [Board] and Monthly show their own work.' : 'The menu and pages of that role; My dashboard and My Tasks [Board] stay yours.'}</small>
     </div>
     <div className="modal-actions"><button type="button" className="ghost" onClick={onClose}>Cancel</button><button type="button" className="primary" disabled={kind === 'person' && !chosen} onClick={() => onStart(kind === 'role' ? { kind: 'role', role } : { kind: 'person', name: chosen!.name, ...(chosen!.email ? { email: chosen!.email } : {}) })}>View as</button></div>
   </Modal>

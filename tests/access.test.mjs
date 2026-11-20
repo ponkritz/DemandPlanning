@@ -121,7 +121,7 @@ test('CON-94: every permission is Allow, Deny or Not set per role; a denial wins
   // A file saved by this version is never migrated again, even when its roles list old keys only.
   const saved = defaultPolicy('lead@example.com'); saved.roles['Team Member'].actions = ['azure.write']
   for (const rights of Object.values(saved.roles)) if (rights !== saved.roles['Team Member']) rights.actions = []
-  assert.match(serializeAccess(saved), /"permissions": ?2/)
+  assert.match(serializeAccess(saved), /"permissions": ?3/)
   assert.deepEqual(parseAccess(serializeAccess(saved)).roles['Team Member'].actions, ['azure.write'], 'Not set stays Not set')
 
   // Deny wins over another role's allow, for actions and areas alike; it round-trips through the file.
@@ -149,7 +149,7 @@ test('CON-94: every permission is Allow, Deny or Not set per role; a denial wins
   // Settings pages and View as follow their own permissions.
   const pages = (rights) => settingsPagesFor((key) => rights.actions.has(key)).map((page) => page.key)
   const smOnly = defaultPolicy('lead@example.com'); smOnly.members['sm@example.com'] = ['Scrum Master']
-  assert.deepEqual(pages(rightsFor(smOnly, 'sm@example.com')), ['connections', 'storage', 'features', 'resources'])
+  assert.deepEqual(pages(rightsFor(smOnly, 'sm@example.com')), ['home', 'connections', 'options', 'epics', 'resources', 'storage'])
   setCell(smOnly.roles['Scrum Master'], 'capacity.periods', 'allow')
   assert.ok(pages(rightsFor(smOnly, 'sm@example.com')).includes('capacity'), 'one capacity permission opens the page')
   assert.ok(canViewAs(rightsFor(smOnly, 'lead@example.com')) && !canViewAs(rightsFor(smOnly, 'sm@example.com')))
@@ -175,4 +175,28 @@ test('CON-94: every permission is Allow, Deny or Not set per role; a denial wins
     await assert.rejects(requestAzure({ organization: 'o', project: 'p', team: 't', pat: 'x', operation: 'add-comment', workItemId: 1, comment: 'hi' }), /does not allow this change/)
     assert.equal(sent.length, 0, 'refused before anything is sent')
   } finally { guardAzureWrites(() => true); delete globalThis.window; globalThis.fetch = original }
+})
+
+test('EPS-04: Edit Epic setup and its value lists — Tool Owner, Admin (and Scrum Master for the fields) by default; a file of v7.27 gets them as in the starting matrix (TC-EPS-04)', () => {
+  const policy = defaultPolicy('lead@example.com')
+  policy.members['sm@example.com'] = ['Scrum Master']
+  const sm = rightsFor(policy, 'sm@example.com'), admin = rightsFor(policy, 'lead@example.com'), member = rightsFor(policy, 'x@example.com')
+  assert.ok(sm.actions.has('setup.epic') && !sm.actions.has('setup.values'))
+  assert.ok(admin.actions.has('setup.epic') && admin.actions.has('setup.values'))
+  assert.ok(!member.actions.has('setup.epic') && !member.actions.has('setup.values'))
+  // A file saved by v7.27 (permissions 2) knew neither permission: they start as in the matrix above.
+  const v2 = JSON.parse(serializeAccess(defaultPolicy('lead@example.com')))
+  v2.permissions = 2
+  for (const rights of Object.values(v2.roles)) rights.actions = rights.actions.filter((key) => key !== 'setup.epic' && key !== 'setup.values')
+  v2.roles['Scrum Master'].actions = ['work.hours']
+  const read = parseAccess(JSON.stringify(v2))
+  assert.ok(read.roles.Admin.actions.includes('setup.values') && read.roles['Scrum Master'].actions.includes('setup.epic'))
+  assert.ok(!read.roles['Scrum Master'].actions.includes('setup.feature'), 'other permissions of the file are kept as saved')
+  // Saved again (permissions 3), a permission set to Not set stays so.
+  read.roles['Scrum Master'].actions = ['work.hours']
+  assert.deepEqual(parseAccess(serializeAccess(read)).roles['Scrum Master'].actions, ['work.hours'])
+  // An older file (before the split): the holders of the old shared settings right get both.
+  const old = parseAccess(JSON.stringify({ schema: 1, defaultRole: null, roles: { Admin: { areas: [], actions: ['settings.manage'] }, 'Scrum Master': { areas: [], actions: [] } }, members: {} }))
+  assert.ok(old.roles.Admin.actions.includes('setup.epic') && old.roles.Admin.actions.includes('setup.values'))
+  assert.ok(!old.roles['Scrum Master'].actions.includes('setup.epic'))
 })

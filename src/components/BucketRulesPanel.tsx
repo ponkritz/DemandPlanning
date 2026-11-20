@@ -5,7 +5,7 @@ import { capacityModel, type CapacitySettings } from '../capacity'
 import type { AzureWorkItem } from '../domain'
 import { formatHours, monthName } from '../format'
 
-// CAP-46: Settings → Capacity & periods → Bucket rules. The words and tags that put a month Time Writing Task in Absence
+// CAP-46: Admin → Capacity & time → Bucket rules. The words and tags that put a month Time Writing Task in Absence
 // (PTO, Sick Leave, Unplanned Leave), Training or Other NPRA; changed by roles that manage shared settings, shared in Git
 // and audited. The check below shows what the draft does to the selected month before it is saved.
 const hint: Record<BucketRuleKey, string> = {

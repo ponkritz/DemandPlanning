@@ -4,7 +4,7 @@ import { parseHistoryFile, serializeHistory, type HistoryFile } from './history'
 import type { GitStorage } from './useGitStorage'
 
 // The imported historical hours (HIS-04): read from the Git data repository when Git storage is connected, saved or
-// removed from Settings → Historical hours. Without Git storage there is no history (it is shared team data).
+// removed from Admin → Capacity & time → Historical hours. Without Git storage there is no history (it is shared team data).
 export function useHistory(git: GitStorage) {
   const [file, setFile] = useState<HistoryFile | null>(null)
   const [sha, setSha] = useState<string | null>(null)

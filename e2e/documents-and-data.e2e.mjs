@@ -258,8 +258,9 @@ test('TC-UI-04 / TC-UI-05: every table follows the table default — move, hide,
   const [sheet] = await readXlsx(new Uint8Array(readFileSync(await xlsx.path())))
   assert.deepEqual(sheet.rows[0], ['Name', 'Number', 'Last Modified'], 'the export follows the shown columns and order')
   assert.match(sheet.rows[1][2], /^\d{4}-\d{2}-\d{2}/, 'the date cell is a real date in the workbook (read back as a date)')
-  // Settings → Table defaults: without CSV, every Export offers Excel only.
-  await navigate(page, 'Table defaults')
+  // Admin → Reports → Table and chart defaults: without CSV, every Export offers Excel only.
+  await navigate(page, 'Reports')
+  await page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'Table and chart defaults' }).click()
   await page.getByRole('checkbox', { name: 'CSV (.csv)' }).uncheck()
   await navigate(page, 'Import Windchill export')
   await page.locator('nav button', { hasText: /windchill-export/ }).first().click().catch(() => {})

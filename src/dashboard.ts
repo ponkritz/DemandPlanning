@@ -106,7 +106,7 @@ export function groupBy<K extends string>(rows: PersonMonth[], key: (row: Person
   return [...groups].map(([name, entries]) => ({ name, rows: entries, ...totals(entries) }))
 }
 
-// One utilization model for the whole Dashboard, from Settings → Capacity: overloaded at or above `overloadedAt` %
+// One utilization model for the whole Dashboard, from Admin → Capacity & time: overloaded at or above `overloadedAt` %
 // of capacity, spare below `availableBelow` %, balanced in between.
 // CAP-47: the insight thresholds travel with the utilization bands (built-in values when absent).
 export interface Bands { overloadedAt: number; availableBelow: number; thresholds?: InsightThresholds }
@@ -152,7 +152,7 @@ export function concentration(rows: PersonMonth[], measure: 'actual' | 'plan', b
 // Rebalancing within the same role and month: overload (plan above capacity) can only move to headroom of that role
 // in that month. People without a role are left out.
 // Overload (plan above capacity) can move only to headroom of the same role in the same month, and only in current or
-// future months. People without a role (Settings → Resources) are left out of the moves — not listed as relief needs or
+// future months. People without a role (Admin → People & roles → People) are left out of the moves — not listed as relief needs or
 // receivers — and counted apart so the Overview can say so; gross overload and headroom still count everyone.
 export function rebalancing(rows: PersonMonth[]) {
   let overload = 0, headroom = 0, movable = 0

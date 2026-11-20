@@ -3,7 +3,7 @@ import type { PeriodControl } from './domain.ts'
 import { timeWritingMonth } from './azureInsights.ts'
 
 // Month locks (MON-06, MON-07, MON-21…MON-24): every month M has its own plan lock date and actuals lock date — by
-// default the plan lock day of M (5th) and the actuals lock day of M+1 (4th), both set in Settings → Capacity &
+// default the plan lock day of M (5th) and the actuals lock day of M+1 (4th), both set in Admin → Capacity & time &
 // periods — and Settings can move either date for one month or lock it early. The day itself is still open; the lock
 // starts at the end of that day, in the viewer's local time. Everything is kept with the capacity settings in Git, so
 // every computer sees the same locks, and each is worked out from the current time, so a new month starts open. The

@@ -9,7 +9,7 @@ export type BucketKey = 'work' | 'absence' | 'training' | 'npraOther' | 'common'
 export const bucketKeys: BucketKey[] = ['work', 'absence', 'training', 'npraOther', 'common']
 export const bucketLabel: Record<BucketKey, string> = { work: 'Project work', absence: 'Absence', training: 'Training', npraOther: 'Other NPRA', common: 'Common activities' }
 // CAP-52: the names of the figures (cards, columns, formula), set per calculation profile — built-in profiles included —
-// in Settings → Capacity & periods → Calculation profiles; without names of its own a profile uses these.
+// in Admin → Capacity & time → Calculation profiles; without names of its own a profile uses these.
 export type TermKey = 'utilization' | 'funded' | 'absence' | 'npra' | 'available' | 'work'
 export const termKeys: TermKey[] = ['utilization', 'funded', 'absence', 'npra', 'available', 'work']
 export const defaultTerms: Record<TermKey, string> = { utilization: 'Utilization', funded: 'Funded Hours', absence: 'Absence', npra: 'NPRA Hours', available: 'Available hours', work: 'Project work' }

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { bulkPlan, dpReleaseType, emailFor, possibleQes, qeFor } from '../src/dpBulk.ts'
+import { bulkPlan, dpReleaseType, emailFor, pickQe, possibleQes, qeFor } from '../src/dpBulk.ts'
 import { cleanSetup, dpReleaseTypeDefaults, releaseTypesOf } from '../src/featureSetup.ts'
 
 const row = (id, psName, release, assignedTo = '', program = 'DP') => ({ key: `dp/${id}`, id, title: `${psName} ${release}`, workItemType: 'Release', state: 'Active', assignedTo, fields: { 'Custom.PsName': psName, 'Custom.Release': release, 'Custom.SourceProgram': program } })
@@ -63,4 +63,19 @@ test('DPF-04 / BLK-01: the bulk plan — title, type, QE with email, or why a re
   assert.equal(plan[0].title, 'DP | Dose Planning | 5.2.1.3'); assert.equal(plan[0].set.featureDoD, 'DT is finished.')
   assert.equal(plan[0].note, 'a similar Feature #901 (88%) exists', 'BLK-01: a match below 100% is named, the release is still created')
   assert.match(bulkPlan([rows[0]], { setup: cleanSetup({ epicId: 13946, featureDoD: 'x' }), qeMapping: mapping, board, featureMatch: () => undefined })[0].skip, /QE Mapping columns are not set/)
+})
+
+test('DPF-06: the QE picked in the pop-up replaces the QE Mapping\'s and lets a release without one be created; other reasons still skip it (TC-DPF-05)', () => {
+  const board = [{ id: 1, assignedTo: 'Asha Rao <asha@x.com>', assignedToEmail: 'asha@x.com' }, { id: 2, assignedTo: 'Cara Lim <cara@x.com>', assignedToEmail: 'cara@x.com' }]
+  const people = [{ name: 'Asha Rao', email: 'asha@x.com' }, { name: 'Cara Lim', email: 'cara@x.com' }]
+  const setup = cleanSetup({ epicId: 13946, featureDoD: 'x', qeColumns: columns })
+  const rows = [row(1, 'Dose Planning', '5.2.1.3'), row(2, 'Dose Planning', 'R1'), row(4, 'Nothing', '1.0')]
+  const plan = bulkPlan(rows, { setup, qeMapping: mapping, board, featureMatch: () => undefined })
+  const picked = pickQe(plan, { 1: 'cara@x.com', 2: 'cara@x.com', 4: 'CARA@x.com' }, (line) => String(line.row.id), people)
+  assert.deepEqual(picked.map((line) => [line.qe, line.email, line.skip.split(' (')[0], line.picked]), [
+    ['Cara Lim', 'cara@x.com', '', true],
+    ['Cara Lim', 'cara@x.com', 'no release type from the version “R1”', true],
+    ['Cara Lim', 'cara@x.com', '', true],
+  ], 'a release without a QE in the mapping is created for the person picked')
+  assert.deepEqual(pickQe(plan, { 1: 'asha@x.com' }, (line) => String(line.row.id), people).map((line) => line.picked), [false, false, false], 'picking the mapped QE changes nothing')
 })

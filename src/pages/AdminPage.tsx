@@ -1,4 +1,13 @@
 import { Fragment, useEffect, useState } from 'react'
+import { EpicFeatureEditor } from '../components/EpicFeatureEditor'
+import { AdminOverview } from '../components/AdminOverview'
+import type { SetupStep } from '../setupGuide'
+import { useBulkEpic } from '../useStreamEpics'
+import { NamingPatternsPanel } from '../components/NamingPatternsPanel'
+import { EpicSetupPanel } from '../components/EpicSetupPanel'
+import type { EpicSetupStore } from '../useEpicSetup'
+import { ScopeChip } from '../components/ScopeChip'
+import { MyViewsPanel } from '../components/MyViewsPanel'
 import { useNow } from '../useNow'
 import { actualsLockDate, actualsLocked, defaultActualsLockDay, defaultPlanLockDay, planLockDate, planningLocked } from '../planningLock'
 import { groupOf } from '../history'
@@ -6,7 +15,6 @@ import { fetchTeamMembers } from '../azureDevOps'
 import { HistoryPanel } from '../components/HistoryPanel'
 import type { HistoryStore } from '../useHistory'
 import { TableDefaultsPanel } from '../components/TableDefaultsPanel'
-import type { MasterValue } from '../domain'
 import type { SharePointConfig } from '../sharepoint'
 import { EmptyState, Info, Modal, Notice, Page, Panel, Pill, SettingsSummary } from '../components/ui'
 import { formatDate, formatDateTime, formatHours, monthName } from '../format'
@@ -17,11 +25,10 @@ import { GitStoragePanel, GitSyncBar } from '../components/GitStorage'
 import { AzureViewsGitPanel } from '../components/AzureViewsGit'
 import { AzureConnections } from '../components/AzureConnections'
 import { AccessPanel } from '../components/AccessPanel'
-import { FeatureSetupPanel } from '../components/FeatureSetupPanel'
 import { SharedTimePanel } from '../components/SharedTimePanel'
 import { CalculationProfilesPanel } from '../components/CalculationProfilesPanel'
 import { CapacityRolesPanel } from '../components/CapacityRolesPanel'
-import { defaultPolicy, keepsManager, roles as accessRoles, type Action, type Role } from '../access'
+import { defaultPolicy, keepsManager, roles as accessRoles, toolOwnerExists, type Action, type Role } from '../access'
 import { BucketRulesPanel } from '../components/BucketRulesPanel'
 import { InsightThresholdsPanel } from '../components/InsightThresholdsPanel'
 import type { InsightThresholds } from '../insightThresholds'
@@ -30,7 +37,7 @@ import type { CalculationProfile, ProfileTerms } from '../calculationProfiles'
 import type { FeatureSetup } from '../useFeatureSetup'
 import type { Access } from '../useAccess'
 import type { PageProps } from './types'
-import { settingsPagesFor, type SettingsTab } from '../settingsTabs'
+import { resolveSettings, settingsPagesFor, type SettingsTab } from '../settingsTabs'
 import { SectionTabs } from '../components/SectionTabs'
 import { MonthlyPackSetupPanel } from '../components/MonthlyPackSetupPanel'
 import type { MonthlyPackStore } from '../useMonthlyPack'
@@ -39,12 +46,12 @@ const shortMonthName = (month: string) => new Intl.DateTimeFormat('en', { month:
 
 // The Windchill host and views setup is hidden (Windchill exports are imported under Release Details instead).
 // Everyone sets up their own connections and tokens here; the shared sections need the role right to manage them.
-export function AdminPage({ store, month, azure, git, access, featureSetup, qeColumnNames = [], monthlyPack, history, loadEverything, onOpenBoard, tab: requested, onOpenTab }: PageProps & { tab: SettingsTab; onOpenTab: (tab: SettingsTab, section?: string) => void; azure: AzureWorkspace; git: GitStorage; access: Access; featureSetup: FeatureSetup; qeColumnNames?: string[]; monthlyPack: MonthlyPackStore; history: HistoryStore; loadEverything: () => Promise<{ loaded: string[]; failed: string[] }>; onOpenBoard: () => void }) {
+export function AdminPage({ store, month, azure, git, access, featureSetup, epicSetup, setupSteps = [], onSearch = () => undefined, qeColumnNames = [], monthlyPack, history, loadEverything, onOpenBoard, tab: requested, onOpenTab }: PageProps & { tab: SettingsTab; onOpenTab: (tab: SettingsTab, section?: string) => void; azure: AzureWorkspace; git: GitStorage; access: Access; featureSetup: FeatureSetup; epicSetup: EpicSetupStore; setupSteps?: SetupStep[]; onSearch?: () => void; qeColumnNames?: string[]; monthlyPack: MonthlyPackStore; history: HistoryStore; loadEverything: () => Promise<{ loaded: string[]; failed: string[] }>; onOpenBoard: () => void }) {
   const [everything, setEverything] = useState<{ busy: boolean; loaded?: string[]; failed?: string[] }>({ busy: false })
   // CON-94: each shared section needs its own permission.
   const can = access.can
   const peopleShared = can('people.edit') || can('people.capacityRoles')
-  const capacityNeeds: Record<string, Action> = { capacity: 'capacity.settings', profiles: 'capacity.settings', rules: 'capacity.rules', insights: 'capacity.rules', time: 'capacity.time', period: 'capacity.periods' }
+  const capacityNeeds: Record<string, Action> = { history: 'capacity.history', capacity: 'capacity.settings', profiles: 'capacity.settings', rules: 'capacity.rules', insights: 'capacity.rules', time: 'capacity.time', period: 'capacity.periods' }
   const [reason, setReason] = useState('Approved operational extension')
   const [capacityMessage, setCapacityMessage] = useState('')
   const [sharePointConfig, setSharePointConfig] = useState<SharePointConfig>(() => store.getSavedSharePointConfig())
@@ -125,7 +132,7 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, qeCo
       return draft
     })
   }
-  // The default Joined on (Settings → Resources) of everyone without their own; '' clears it.
+  // The default Joined on (Admin → People & roles → People) of everyone without their own; '' clears it.
   function setDefaultJoined(value: string) {
     store.update((draft) => {
       draft.capacitySettings = normalizeCapacitySettings({ ...normalizeCapacitySettings(draft.capacitySettings), defaultJoinedOn: value })
@@ -160,12 +167,6 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, qeCo
       for (const key of Object.keys(patch) as (keyof MonthLock)[]) if (patch[key] === undefined) delete next[key]
       return { ...settings, monthLocks: { ...(settings.monthLocks ?? {}), [month]: next } }
     }, detail)
-  }
-
-  function addMaster(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault(); const form = event.currentTarget; const data = new FormData(form)
-    store.update((draft) => { draft.masters.push({ id: crypto.randomUUID(), type: data.get('type') as MasterValue['type'], value: String(data.get('value')), sortOrder: draft.masters.length + 1, active: true }); return draft })
-    form.reset()
   }
 
   // CAP-41/42: the custom calculation profiles and the default profile, shared in Git and audited.
@@ -237,35 +238,54 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, qeCo
 
   const connectionFailed = store.connection.status === 'error' || store.connection.status === 'conflict'
   // One Settings page at a time (chosen in the menu, SET-14); the shared pages only for roles that manage shared settings.
-  const tab = settingsPagesFor(can).some((page) => page.key === requested) ? requested : 'connections'
+  // SET-15: My settings for everyone; an older page key opens the page it moved to.
+  const asked = resolveSettings(requested).tab
+  const tab = asked === 'my' || settingsPagesFor(can).some((page) => page.key === asked) ? asked : 'connections'
+  // ADM-01: the Overview's shared-setup checks.
+  const ioccBulk = useBulkEpic('IOCC').epicId
+  const facts = { policy: Boolean(access.policy), toolOwner: toolOwnerExists(access.policy), epicSetups: epicSetup.file?.epics.filter((entry) => entry.fields.length).length ?? 0, sharedFeatureSetups: featureSetup.shared?.epics.length ?? 0, ioccBulkEpic: Boolean(ioccBulk), unsaved: git.dirty, gitConnected: git.connected, gitReadOnly: git.readOnly }
+  // ADM-04: History, filtered by area and text.
+  const [auditFilter, setAuditFilter] = useState({ entity: '', text: '' })
+  const auditEntities = [...new Set(store.state.audits.map((item) => item.entity))].sort()
+  const auditShown = store.state.audits.filter((item) => (!auditFilter.entity || item.entity === auditFilter.entity) && (!auditFilter.text.trim() || `${item.entity} ${item.detail} ${item.action}`.toLowerCase().includes(auditFilter.text.trim().toLowerCase())))
   return <Page>
+    {tab === 'home' && <AdminOverview steps={setupSteps} facts={facts} git={git} audits={store.state.audits} onOpenTab={onOpenTab} onSearch={onSearch} />}
+    {tab === 'my' && <SectionTabs page="my" sections={[
+      { key: 'email', label: 'Your work email', scope: 'you', node: <AzureConnections section="email" azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={can('streams.options')} /> },
+      { key: 'servers', label: 'Servers and PATs', scope: 'you', node: <AzureConnections section="servers" azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={can('streams.options')} canManageStreams={access.canManageStreams} /> },
+      { key: 'myviews', label: 'My views', scope: 'you', node: <MyViewsPanel azure={azure} /> },
+      { key: 'patterns', label: 'My naming patterns', scope: 'you', node: <NamingPatternsPanel store={store} canManage mode="mine" /> },
+    ]} />}
     {tab === 'connections' && <SectionTabs page="connections" sections={[
-      { key: 'email', label: 'Your work email', node: <AzureConnections section="email" azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={can('streams.options')} /> },
-      { key: 'servers', label: 'Servers and PATs', node: <AzureConnections section="servers" azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={can('streams.options')} canManageStreams={access.canManageStreams} /> },
-      { key: 'mapping', label: 'Stream mapping', node: <AzureConnections section="mapping" azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={can('streams.options')} canEnterCounts={can('release.counts')} canManageStreams={access.canManageStreams} /> },
-      { key: 'views', label: 'Other views', node: <AzureConnections section="views" azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={can('streams.options')} /> },
-      ...((store.state.azureSources ?? []).length ? [{ key: 'sources', label: 'Read-only sources', node: <AzureConnections section="sources" azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={can('streams.options')} /> }] : []),
-      { key: 'sample', label: 'Synthetic sample', node: <AzureConnections section="sample" azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={can('streams.options')} /> },
+      { key: 'mapping', label: 'Stream mapping', scope: 'tool-owner', node: <AzureConnections section="mapping" azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={can('streams.options')} canEnterCounts={can('release.counts')} canManageStreams={access.canManageStreams} /> },
+    ]} />}
+    {tab === 'options' && <SectionTabs page="options" sections={[
+      { key: 'epics', label: 'Epics to match Features in', scope: 'everyone', node: <AzureConnections section="epics" azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={can('streams.options')} /> },
+      { key: 'bulk', label: 'Bulk creation Epics', scope: 'both', node: <AzureConnections section="bulk" azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={can('streams.options')} /> },
+      { key: 'counts', label: 'Release counts', scope: 'everyone', node: <AzureConnections section="counts" azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={can('streams.options')} canEnterCounts={can('release.counts')} /> },
     ]} />}
     {tab === 'storage' && <SectionTabs page="storage" sections={[
-      { key: 'git', label: 'Git storage', node: <GitStoragePanel git={git} /> },
-      ...(git.connected ? [{ key: 'load', label: 'Load from Git', node: <Panel className="connection-panel" eyebrow="GIT" title="Load everything from Git" info="Loads everything shared through Git at once: planning data, the connection setup, on-prem view data, Windchill exports, access roles and the Feature setup. Data here is replaced only by newer data from Git; connections you changed here are kept."
+      { key: 'git', label: 'Git storage', scope: 'computer', node: <GitStoragePanel git={git} /> },
+      ...(git.connected ? [{ key: 'load', label: 'Load from Git', scope: 'computer' as const, node: <Panel className="connection-panel" eyebrow="GIT" title="Load everything from Git" info="Loads everything shared through Git at once: planning data, the connection setup, on-prem view data, Windchill exports, access roles and the Feature setup. Data here is replaced only by newer data from Git; connections you changed here are kept."
         action={<button type="button" className="primary" disabled={everything.busy || git.isSample} onClick={() => { setEverything({ busy: true }); void loadEverything().then((result) => setEverything({ busy: false, ...result })) }}>{everything.busy ? 'Loading…' : 'Load everything from Git'}</button>}>
         {git.isSample && <Notice tone="warning">Synthetic sample data is loaded: loading from Git is disabled.</Notice>}
         {everything.loaded && <Notice tone={everything.failed?.length ? 'warning' : 'success'}>Loaded: {everything.loaded.join('; ') || 'nothing'}.{everything.failed?.length ? ` Not loaded — ${everything.failed.join(' · ')}` : ''}</Notice>}
       </Panel> }] : []),
-      ...(can('storage.shared') ? [{ key: 'shared', label: 'Shared setup in Git', node: <AzureViewsGitPanel git={git} azure={azure} /> }] : []),
-      { key: 'sharepoint', label: 'SharePoint', node: <Panel className="connection-panel" eyebrow="CENTRAL DATA" title="SharePoint connection" info="Uses Microsoft sign-in and stores one versioned JSON data file in the I&D Quality document library. No client secret is stored in the browser." action={<Pill tone={store.connection.mode === 'sharepoint' ? 'open' : connectionFailed ? 'danger' : 'neutral'}>{store.connection.status}</Pill>}>
+      ...(can('storage.shared') ? [{ key: 'shared', label: 'Shared setup in Git', scope: 'tool-owner' as const, node: <AzureViewsGitPanel git={git} azure={azure} /> }] : []),
+      { key: 'sharepoint', label: 'SharePoint', scope: 'computer', node: <Panel className="connection-panel" eyebrow="CENTRAL DATA" title="SharePoint connection" info="Uses Microsoft sign-in and stores one versioned JSON data file in the I&D Quality document library. No client secret is stored in the browser." action={<Pill tone={store.connection.mode === 'sharepoint' ? 'open' : connectionFailed ? 'danger' : 'neutral'}>{store.connection.status}</Pill>}>
         <SettingsSummary rows={[['Host', sharePointConfig.hostname], ['Site', sharePointConfig.sitePath], ['Data file', sharePointConfig.stateFilePath], ['Application ID', sharePointConfig.clientId ? 'Set' : '']]} />
         <div className="button-row"><button type="button" className={store.connection.mode === 'sharepoint' ? 'ghost' : 'primary'} onClick={() => setSharePointOpen(true)}>{store.connection.mode === 'sharepoint' ? 'Change connection…' : 'Connect to SharePoint…'}</button>{store.connection.mode === 'empty' && <button type="button" className="primary" onClick={() => void store.initializeSharePoint()}>Initialize central data</button>}{store.connection.mode === 'sharepoint' && <><button type="button" className="ghost" onClick={() => void store.pullSharePoint()}>Pull latest</button><button type="button" className="ghost" onClick={store.disconnectSharePoint}>Disconnect</button></>}</div>
         {sharePointOpen && <Modal title="SharePoint connection" eyebrow="SETTINGS · STORAGE" wide form onClose={() => setSharePointOpen(false)}><form className="connection-form" onSubmit={(event) => { setSharePointOpen(false); void connectSharePoint(event) }}><label>Tenant ID (optional)<input value={sharePointConfig.tenantId} onChange={(event) => setSharePointConfig({ ...sharePointConfig, tenantId: event.target.value })} placeholder="Auto-detect from work sign-in" /></label><label>Application (client) ID<input required value={sharePointConfig.clientId} onChange={(event) => setSharePointConfig({ ...sharePointConfig, clientId: event.target.value })} placeholder="Registered SPA client ID" /></label><label>SharePoint host<input required value={sharePointConfig.hostname} onChange={(event) => setSharePointConfig({ ...sharePointConfig, hostname: event.target.value })} /></label><label>Site path<input required value={sharePointConfig.sitePath} onChange={(event) => setSharePointConfig({ ...sharePointConfig, sitePath: event.target.value })} /></label><label className="wide-field">Central data file<input required value={sharePointConfig.stateFilePath} onChange={(event) => setSharePointConfig({ ...sharePointConfig, stateFilePath: event.target.value })} /></label><div className="connection-actions"><button className="primary" disabled={store.connection.status === 'connecting'}>{store.connection.status === 'connecting' ? 'Connecting…' : 'Connect to SharePoint'}</button><button type="button" className="ghost" onClick={() => setSharePointOpen(false)}>Cancel</button></div></form></Modal>}
         {store.connection.message && <Notice tone={connectionFailed ? 'error' : 'info'}>{store.connection.message}{store.connection.account ? ` Signed in as ${store.connection.account}.` : ''}</Notice>}
       </Panel> },
+      { key: 'views', label: 'Other views', scope: 'both', node: <AzureConnections section="views" azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={can('streams.options')} /> },
+      ...((store.state.azureSources ?? []).length ? [{ key: 'sources', label: 'Read-only sources', scope: 'computer' as const, node: <AzureConnections section="sources" azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={can('streams.options')} /> }] : []),
+      { key: 'sample', label: 'Synthetic sample', scope: 'computer', node: <AzureConnections section="sample" azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={can('streams.options')} /> },
     ]} />}
-    {tab === 'features' && <FeatureSetupPanel setup={featureSetup} git={git} items={azure.items} qeColumnNames={qeColumnNames} />}
-    {tab === 'pack' && can('pack.setup') && <MonthlyPackSetupPanel pack={monthlyPack} git={git} items={azure.items} />}
-    {tab === 'history' && can('capacity.history') && <HistoryPanel history={history} git={git} items={azure.items} profileNames={Object.keys(capacityContext(store.state).profiles ?? {})} editable={git.connected && !git.readOnly && !git.isSample} importedBy={access.email} />}
-    {tab === 'tables' && <TableDefaultsPanel store={store} git={git} canEdit={can('layout.defaults')} />}
+    {tab === 'pack' && <SectionTabs page="pack" sections={[
+      ...(can('pack.setup') ? [{ key: 'pack', label: 'Monthly pack', scope: 'everyone' as const, node: <MonthlyPackSetupPanel pack={monthlyPack} git={git} items={azure.items} /> }] : []),
+      ...(can('layout.defaults') ? [{ key: 'tables', label: 'Table and chart defaults', scope: 'everyone' as const, node: <TableDefaultsPanel store={store} git={git} canEdit={can('layout.defaults')} /> }] : []),
+    ]} />}
     {!peopleShared && tab === 'resources' && <Notice tone="info">People and capacity roles are edited by roles allowed “Edit people” or “Capacity roles” (Role rights).</Notice>}
     {tab === 'capacity' && <SectionTabs page="capacity" sections={[
       { key: 'capacity', label: 'Capacity and absence', node: <Panel eyebrow="CAPACITY" title="Capacity and absence" info="Used by the Dashboard to compute available hours and utilization. Saved with the planning data in Git (with the holidays and common activities), so everyone who loads from Git gets the same settings.">
@@ -301,7 +321,8 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, qeCo
           </div>
         })}
       </Panel> },
-    ].filter((section) => can(capacityNeeds[section.key]))} />}
+      { key: 'history', label: 'Historical hours', node: <HistoryPanel history={history} git={git} items={azure.items} profileNames={Object.keys(capacityContext(store.state).profiles ?? {})} editable={git.connected && !git.readOnly && !git.isSample} importedBy={access.email} /> },
+    ].filter((section) => can(capacityNeeds[section.key])).map((section) => ({ ...section, scope: 'everyone' as const }))} />}
     {tab === 'resources' && !peopleShared && <AccessPanel access={access} git={git} people={people} membersInPeople />}
     {tab === 'resources' && peopleShared && <SectionTabs page="resources" sections={[
       { key: 'people', label: 'People', node: <Panel className="admin-section" eyebrow="PEOPLE & ACCESS" title="People" info="Everyone whose region, role and dates can be set: the people with Time Writing Tasks (with their figures), everyone else Assigned To fetched work, the people of the historical hours (leavers included), the Azure DevOps team members (Add team members) and people added by name. Region, role and reporting line are saved with the planning data in Git (see Git storage above). Region decides which regional holidays apply. Joined on / Left on (both days worked) limit a person's funded hours to the working days they are employed: a month they join or leave in is prorated, and in a month before joining or after leaving they have no capacity and are not counted." action={<Pill tone={resources.length ? 'open' : 'neutral'}>{resources.length} {resources.length === 1 ? 'person' : 'people'}</Pill>}>
@@ -316,7 +337,7 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, qeCo
         <button type="button" className="ghost" disabled={azure.isSample || !azure.config || !azure.pat} onClick={() => setTeamRead((count) => count + 1)}>↻ Read the team again</button>
       </div>
       {azure.isSample ? <Notice tone="info">Sample data: the Azure DevOps team is not read; the people Assigned To in the sample are listed.</Notice>
-        : !azure.config || !azure.pat ? <Notice tone="info">Set up the Time Writing connection (Settings → Azure DevOps) to read the team; until then the people Assigned To in the fetched work are listed.</Notice>
+        : !azure.config || !azure.pat ? <Notice tone="info">Set up the Time Writing connection (Admin → Streams) to read the team; until then the people Assigned To in the fetched work are listed.</Notice>
         : team?.error ? <Notice tone="warning">The team was not read: {team.error}. The PAT needs Project and Team (Read); the people Assigned To in the fetched work are listed.</Notice>
         : team ? <p className="muted people-count">{team.members.length} team member{team.members.length === 1 ? '' : 's'} read from {azure.config.team}.</p> : <p className="muted people-count">Reading the team from Azure DevOps…</p>}
       {peopleMessage && <Notice tone={peopleMessage.tone}>{peopleMessage.text}</Notice>}
@@ -352,13 +373,15 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, qeCo
     </Panel> },
       { key: 'capacity-roles', label: 'Capacity roles', node: <><div className="shared-time-panel"><GitSyncBar git={git} /></div><CapacityRolesPanel settings={capacity} canEdit={can('people.capacityRoles')} onSave={saveCapacityRoles} /></> },
       { key: 'rights', label: 'Role rights', node: <AccessPanel access={access} git={git} people={people} membersInPeople /> },
-    ].filter((section) => section.key === 'people' ? can('people.edit') : section.key === 'capacity-roles' ? can('people.capacityRoles') : true)} />}
-    {tab === 'masters' && <Panel className="admin-section" eyebrow="MASTER DATA" title="Admin-controlled dropdowns">
-        <form className="inline-form" onSubmit={addMaster}><select name="type"><option>Release Type</option><option>Activity Type</option><option>Status</option><option>Resource Band</option><option>Complexity</option></select><input name="value" required placeholder="New value" /><button className="primary">Add</button></form>
-        {store.state.masters.map((item) => <div className="master-row" key={item.id}><span>{item.type}</span><strong>{item.value}</strong><Pill tone={item.active ? 'open' : 'neutral'}>{item.active ? 'Active' : 'Inactive'}</Pill></div>)}
-    </Panel>}
-    {tab === 'audit' && <Panel eyebrow="AUDIT" title="Recent changes">
-      {store.state.audits.slice(0, 8).map((item) => <div className="audit-row" key={item.id}><span>{item.action}</span><div><strong>{item.entity}</strong><small>{item.detail}</small></div><time>{formatDateTime(item.timestamp)}</time></div>)}
+    ].filter((section) => section.key === 'people' ? can('people.edit') : section.key === 'capacity-roles' ? can('people.capacityRoles') : true).map((section) => ({ ...section, scope: 'everyone' as const }))} />}
+    {tab === 'audit' && <div className="scope-line"><ScopeChip scope="everyone" /></div>}
+    {tab === 'epics' && <SectionTabs page="epics" sections={[
+      { key: 'setup', label: 'Setup per Epic', scope: 'both', node: <EpicFeatureEditor setup={featureSetup} epicSetup={epicSetup} git={git} items={azure.items} qeColumnNames={qeColumnNames} /> },
+      { key: 'lists', label: 'Value lists', scope: 'everyone', node: <EpicSetupPanel section="lists" setup={epicSetup} git={git} items={azure.items} canEdit={can('setup.epic')} canEditLists={can('setup.values')} /> },
+    ]} />}
+    {tab === 'audit' && <Panel eyebrow="HISTORY" title="Changes" info="The changes made to the shared planning data, newest first, with who and what. Filter by area or text.">
+      <div className="query-toolbar"><select aria-label="Area" value={auditFilter.entity} onChange={(event) => setAuditFilter({ ...auditFilter, entity: event.target.value })}><option value="">All areas</option>{auditEntities.map((entity) => <option key={entity}>{entity}</option>)}</select><input className="search" aria-label="Search changes" placeholder="Search changes" value={auditFilter.text} onChange={(event) => setAuditFilter({ ...auditFilter, text: event.target.value })} /><small className="muted">{auditShown.length} of {store.state.audits.length}</small></div>
+      {auditShown.slice(0, 200).map((item) => <div className="audit-row" key={item.id}><span>{item.action}</span><div><strong>{item.entity}</strong><small>{item.detail}</small></div><time>{formatDateTime(item.timestamp)}</time></div>)}
       {!store.state.audits.length && <EmptyState title="No changes recorded yet." detail="Changes made in the app will appear here." />}
       <button className="danger-button" onClick={store.reset}>Reset synthetic MVP data</button>
     </Panel>}

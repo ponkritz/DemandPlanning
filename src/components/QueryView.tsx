@@ -47,7 +47,7 @@ export function QueryView({ name, items, columns, orderBy = [], unresolved = [],
   // QV-53: computed columns after the query's (DP: Month & Year, Milestones), searched and exported like the others.
   tableColumns.push(...more)
   if (extra) tableColumns.push({ id: extraColumnRef, label: extra.name, value: extra.text, render: extra.cell, sortable: false, className: 'extra-cell', title: extra.text })
-  if (!items.length) return <EmptyState title={`“${name}” returned no work items.`} detail="Check the connection's query in Settings → Azure DevOps." />
+  if (!items.length) return <EmptyState title={`“${name}” returned no work items.`} detail="Check the connection's query in Admin → Streams." />
   return <div className="query-view">
     {unresolved.length > 0 && <div className="notice warning" role="status">{columns?.length ? "Not shown" : "Showing the default columns"}: {unresolved.map((entry) => `“${entry}”`).join(", ")} {unresolved.length === 1 ? "is" : "are"} not a field of this project. Check the spelling in the query (reference name such as System.Title, or the field name such as Assigned To), then refresh.</div>}
     {withSummary && <div className="view-summary">

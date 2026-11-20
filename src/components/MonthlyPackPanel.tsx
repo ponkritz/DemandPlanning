@@ -70,7 +70,7 @@ export function MonthlyPackPanel({ month, azure, store, git, pack, windchill }: 
         if (template) {
           const filled = await fillTemplate(template, packFill(built, pack.setup.department ?? ''))
           downloadPptx(filled.bytes, `pulse-check-${month}.pptx`)
-          setStatus(filled.missing.length ? { tone: 'error', text: `Downloaded in the template, but the template has no place for: ${filled.missing.join(', ')}.` } : { tone: 'success', text: 'Downloaded in the team template (Settings → Monthly pack).' })
+          setStatus(filled.missing.length ? { tone: 'error', text: `Downloaded in the template, but the template has no place for: ${filled.missing.join(', ')}.` } : { tone: 'success', text: 'Downloaded in the team template (Admin → Reports → Monthly pack).' })
           return
         }
         setStatus(null)
@@ -131,16 +131,16 @@ export function MonthlyPackPanel({ month, azure, store, git, pack, windchill }: 
   </div>
 
   return <>
-    <Panel className="pack-panel" eyebrow="MONTHLY PACK" title={`${monthLabel(month)} · two slides`} info={<p>The slides for the month before the header month, as presented in the following month's call. Generated lines come from the data in the app: releases per slide line (Settings → Monthly pack decides which streams and Epics feed each line), actual utilisation of the month and this year (QE apart), the year-on-year change of the supported releases, and the KPI rows read from Epics. Everything else is typed here per month and saved to the Git data repository (monthly-pack/{month}.json), so the team sees the same text. Copy a box or a slide as text into the PowerPoint template, or download both slides as .pptx and restyle them there.</p>}
+    <Panel className="pack-panel" eyebrow="MONTHLY PACK" title={`${monthLabel(month)} · two slides`} info={<p>The slides for the month before the header month, as presented in the following month's call. Generated lines come from the data in the app: releases per slide line (Admin → Reports → Monthly pack decides which streams and Epics feed each line), actual utilisation of the month and this year (QE apart), the year-on-year change of the supported releases, and the KPI rows read from Epics. Everything else is typed here per month and saved to the Git data repository (monthly-pack/{month}.json), so the team sees the same text. Copy a box or a slide as text into the PowerPoint template, or download both slides as .pptx and restyle them there.</p>}
       action={<div className="button-row">
         <button type="button" className="ghost" onClick={() => void download()}>Download .pptx</button>
         {editable && <button type="button" className="primary" disabled={!dirty || busy} onClick={() => void save()}>Save to Git</button>}
         {pack.notesHistory && <a className="text-button" href={pack.notesHistory} target="_blank" rel="noreferrer">History</a>}
       </div>}>
-      {!pack.hasSetup && <Notice tone="info">No Monthly pack setup in Git yet: the default lines (Serviceability = S&S IT, Digital Platform = DP, Clinical Platform = CP, IOCC, PPU, Content, Tool validation) and KPI rows apply. Settings → Monthly pack maps streams and Epics to the slide lines.</Notice>}
+      {!pack.hasSetup && <Notice tone="info">No Monthly pack setup in Git yet: the default lines (Serviceability = S&S IT, Digital Platform = DP, Clinical Platform = CP, IOCC, PPU, Content, Tool validation) and KPI rows apply. Admin → Reports → Monthly pack maps streams and Epics to the slide lines.</Notice>}
       {pack.setupError && <Notice tone="warning">Monthly pack setup: {pack.setupError}</Notice>}
       {pack.notesError && <Notice tone="warning">Monthly pack text: {pack.notesError}</Notice>}
-      {!editable && <p className="muted">{!can('pack.text') ? 'View only: your role is not allowed “Monthly pack: edit the text”.' : git.isSample ? 'Synthetic sample data is loaded: the text cannot be saved.' : git.connected ? 'View only: your Git token can read but not save.' : 'Connect Git storage (Settings → Storage) to type and save the slide text.'}</p>}
+      {!editable && <p className="muted">{!can('pack.text') ? 'View only: your role is not allowed “Monthly pack: edit the text”.' : git.isSample ? 'Synthetic sample data is loaded: the text cannot be saved.' : git.connected ? 'View only: your Git token can read but not save.' : 'Connect Git storage (Admin → Data & sharing) to type and save the slide text.'}</p>}
       {status && <Notice tone={status.tone === 'error' ? 'warning' : 'info'}><span role="status">{status.text}</span>{status.url && <> <a href={status.url} target="_blank" rel="noreferrer">View commit</a></>}</Notice>}
       {[...slides].reverse().map((slide) => <section key={slide.title} className="pack-slide" aria-label={slide.title}>
         <div className="pack-slide-head"><h3>{slide.title} <small className="muted">{slide.subtitle}</small></h3><button type="button" className="ghost" onClick={() => void copy(slideText(slide), slide.title)}>Copy slide as text</button></div>

@@ -2,7 +2,7 @@ import { csvCell } from './csv.ts'
 import type { XlsxCell } from './xlsx.ts'
 
 // The design default of every table (UI-07…12): what a table offers and how it starts. One shared setting
-// (Settings → Table defaults, saved with the shared app data); every table built on DataTable reads it, so a change
+// (Admin → Reports → Table and chart defaults, saved with the shared app data); every table built on DataTable reads it, so a change
 // here changes them all. Each viewer's own choices per table — widths, column order, hidden columns, wrap, density —
 // are kept in their browser.
 export type TableDensity = 'compact' | 'comfortable'

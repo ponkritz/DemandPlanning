@@ -4,9 +4,9 @@ import type { Access } from '../useAccess'
 import type { GitStorage } from '../useGitStorage'
 import { Notice, Panel, Pill } from './ui'
 
-// Settings → Access: who has which role, and what each role sees and may do. Shown to everyone; changed and saved to
+// Admin → People & roles → Role rights: who has which role, and what each role sees and may do. Shown to everyone; changed and saved to
 // Git (access.json) only by a role that may manage access, with a Git token that can write.
-// CAP-49: on Settings → People & access the members (who has which role) are set in the People section with the rest
+// CAP-49: on Admin → People & roles the members (who has which role) are set in the People section with the rest
 // of each person's mapping; this panel then shows only the default role and what each role sees and may do.
 export function AccessPanel({ access, git, people, membersInPeople = false }: { access: Access; git: GitStorage; people: { email: string; name: string }[]; membersInPeople?: boolean }) {
   const [draft, setDraft] = useState<AccessPolicy | null>(null)
@@ -57,11 +57,11 @@ export function AccessPanel({ access, git, people, membersInPeople = false }: { 
   }
 
   const you = access.email ? <>You are <strong>{access.email}</strong> (the email on your Time Writing connection){access.policy ? <> · {access.rights.roles.length ? access.rights.roles.map((role) => <Pill key={role} tone="info">{role}</Pill>) : <Pill tone="danger">no role</Pill>}{access.policy.members[access.email] ? '' : ' (default role)'}</> : ''}.</>
-    : <>Your roles follow the email on your Time Writing connection (Settings → Azure DevOps → the connection's email field). None is set{access.policy ? ', so the default role applies' : ''}.</>
+    : <>Your roles follow the email on your Time Writing connection (Admin → Streams → the connection's email field). None is set{access.policy ? ', so the default role applies' : ''}.</>
   return <Panel className="admin-section" eyebrow="ACCESS" title="Roles and access" info={<>Which menu areas each role sees and what it may do, and who has which role (by the email on their Time Writing connection). Stored in Git as {access.path || 'access.json'}, so only people who can write to the data repository can change it. Roles decide what this app shows and does; what each person can read or change in Azure DevOps and GitHub is still decided by their own tokens and project permissions.{access.history && <> <a href={access.history} target="_blank" rel="noreferrer">History</a></>}</>}
     action={access.policy && editable ? <button type="button" className="ghost" onClick={() => { setDraft(null); setResult(null); void access.reload() }}>Reload from Git</button> : undefined}>
     <Notice tone={access.email ? 'info' : 'warning'}>{you}</Notice>
-    {!git.connected && <Notice tone="info">Connect Git storage (Storage tab) to use access roles. {access.policy ? 'The roles last loaded in this browser still apply.' : 'Without them, everyone sees every page.'}</Notice>}
+    {!git.connected && <Notice tone="info">Connect Git storage (Admin → Data & sharing) to use access roles. {access.policy ? 'The roles last loaded in this browser still apply.' : 'Without them, everyone sees every page.'}</Notice>}
     {access.error && <Notice tone="error">{access.path}: {access.error}</Notice>}
     {git.connected && access.loaded && !shown && <Notice tone="info">No access roles yet: everyone sees every page and may do everything. {editable ? <button type="button" className="text-button" onClick={() => setDraft(defaultPolicy(access.email))}>Set up roles →</button> : 'Someone who can write to the data repository can set them up here.'}</Notice>}
     {shown && <>

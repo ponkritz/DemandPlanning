@@ -19,7 +19,7 @@ export function AssigneeConfirm({ title, summary, people, me, initial = '', canC
         ? <label>Assigned to<PersonPicker label="Assigned to" value={name} people={people.filter((person) => person.email !== me).map((person) => person.name)} onChange={setName} meLabel={me ? `Me (${me})` : 'Choose a person…'} /></label>
         : <p><strong>Assigned to:</strong> {me || '—'} <small className="muted">(you; creating work for others needs the “Create work items for other people” right)</small></p>}
       {chosen && <small className="muted">Assigned To in Azure DevOps: {chosen}</small>}
-      {!chosen && <Notice tone="warning">{me ? 'Choose who the work is assigned to.' : 'Your email is not known: set the Feature creator email on the Time Writing connection (Settings → Azure DevOps).'}</Notice>}
+      {!chosen && <Notice tone="warning">{me ? 'Choose who the work is assigned to.' : 'Your email is not known: set the Feature creator email on the Time Writing connection (Admin → Streams).'}</Notice>}
       <div className="modal-actions"><button type="button" className="ghost" disabled={busy} onClick={onCancel}>Cancel</button><button type="button" className="primary" disabled={busy || !chosen} onClick={() => onConfirm(chosen)}>{busy ? 'Creating…' : confirmLabel}</button></div>
     </div>
   </Modal>

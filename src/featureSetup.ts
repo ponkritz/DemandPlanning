@@ -24,8 +24,13 @@ export interface TitleField { label: string; source: string }
 export interface ReleaseTypeSetup { featureDoD: string; stories: StoryTemplate[] }
 export interface ReleaseTypeSetups { release: ReleaseTypeSetup; pu: ReleaseTypeSetup }
 export interface QeMapColumns { matchColumn: string; qeColumn: string }
-export interface EpicSetup { epicId: number; epicTitle: string; featureDoD: string; stories: StoryTemplate[]; timeWritingStory: TimeWritingStoryTemplate; task: TaskTemplate; titleFields?: TitleField[]; releaseTypes?: ReleaseTypeSetups; qeColumns?: QeMapColumns }
-export interface FeatureSetupFile { schema: 1; kind: 'feature-setup'; epics: EpicSetup[] }
+export interface EpicSetup { epicId: number; epicTitle: string; inherits?: InheritField[]; featureDoD: string; stories: StoryTemplate[]; timeWritingStory: TimeWritingStoryTemplate; task: TaskTemplate; titleFields?: TitleField[]; releaseTypes?: ReleaseTypeSetups; qeColumns?: QeMapColumns }
+// CON-95: the shared file may hold defaults for all Epics; an Epic's setup (shared or mine) may leave fields to the
+// layer above (inherits): Built in → All Epics → Epic (shared) → Mine.
+export type InheritField = 'featureDoD' | 'stories' | 'estimate'
+export const inheritFields: InheritField[] = ['featureDoD', 'stories', 'estimate']
+export interface SetupDefaults { featureDoD?: string; stories?: StoryTemplate[]; originalEstimate?: number }
+export interface FeatureSetupFile { schema: 1; kind: 'feature-setup'; epics: EpicSetup[]; defaults?: SetupDefaults }
 
 export const featureSetupFile = 'feature-setup.json'
 export const placeholders = ['feature', 'program', 'service', 'version', 'month'] as const
@@ -48,6 +53,14 @@ export const dpReleaseTypeDefaults: ReleaseTypeSetups = {
   pu: { featureDoD: 'DT is finished.', stories: reviewStories(['SFV', 'DT', 'IQ/OQ']) },
 }
 export const releaseTypesOf = (setup?: Pick<EpicSetup, 'releaseTypes'>): ReleaseTypeSetups => setup?.releaseTypes ?? dpReleaseTypeDefaults
+// QV-61: IOCC releases use the IOCC bulk Epic's own Release / PU sets when they are set, else that Epic's Feature setup
+// itself (its DoD and User Stories, for every release type) — never DP's built-in sets while the Epic has a setup.
+export const ioccSetsOf = (setup?: Pick<EpicSetup, 'releaseTypes' | 'featureDoD' | 'stories'>): ReleaseTypeSetups => {
+  if (setup?.releaseTypes) return setup.releaseTypes
+  if (!setup) return dpReleaseTypeDefaults
+  const own = { featureDoD: setup.featureDoD, stories: structuredClone(setup.stories) }
+  return { release: own, pu: structuredClone(own) }
+}
 // The placeholder key of a label: letters and digits in lower case ({Release Name} and {releasename} are the same).
 export const fieldKey = (label: string) => label.toLowerCase().replace(/[^a-z0-9]/g, '')
 // The values of the placeholders for a Feature title and month. With title fields, a title of exactly that many
@@ -118,9 +131,10 @@ export function cleanSetup(input: Partial<Record<keyof EpicSetup, unknown>>): Ep
   const epicId = Number(input.epicId)
   if (!Number.isSafeInteger(epicId) || epicId < 1) return null
   const stories = Array.isArray(input.stories) ? input.stories.map((story: Partial<Record<keyof StoryTemplate, unknown>>) => ({ title: text(story?.title, 255), description: text(story?.description, 100000) })).filter((story) => story.title) : []
-  const titleFields = cleanTitleFields(input.titleFields)
+  // EPS-07: the Feature fields moved to the Epic setup; the old title fields are no longer read or saved.
   const releaseTypes = cleanReleaseTypes(input.releaseTypes), qeColumns = cleanQeColumns(input.qeColumns)
-  return { epicId, epicTitle: text(input.epicTitle, 255), featureDoD: text(input.featureDoD, 100000), stories, timeWritingStory: cleanTimeWritingStory(input.timeWritingStory as Partial<Record<keyof TimeWritingStoryTemplate, unknown>> | undefined), task: cleanTask(input.task as Partial<Record<keyof TaskTemplate, unknown>> | undefined), ...(titleFields.length ? { titleFields } : {}), ...(releaseTypes ? { releaseTypes } : {}), ...(qeColumns ? { qeColumns } : {}) }
+  const inherits = Array.isArray(input.inherits) ? inheritFields.filter((field) => (input.inherits as unknown[]).includes(field)) : []
+  return { epicId, epicTitle: text(input.epicTitle, 255), ...(inherits.length ? { inherits } : {}), featureDoD: text(input.featureDoD, 100000), stories, timeWritingStory: cleanTimeWritingStory(input.timeWritingStory as Partial<Record<keyof TimeWritingStoryTemplate, unknown>> | undefined), task: cleanTask(input.task as Partial<Record<keyof TaskTemplate, unknown>> | undefined), ...(releaseTypes ? { releaseTypes } : {}), ...(qeColumns ? { qeColumns } : {}) }
 }
 
 export function parseFeatureSetup(raw: string): FeatureSetupFile {
@@ -130,10 +144,20 @@ export function parseFeatureSetup(raw: string): FeatureSetupFile {
   if (!file || file.schema !== 1 || file.kind !== 'feature-setup' || !Array.isArray(file.epics)) throw new Error(`${featureSetupFile} is not a Feature setup file.`)
   const epics = new Map<number, EpicSetup>()
   for (const entry of file.epics) { const setup = cleanSetup(entry as Partial<Record<keyof EpicSetup, unknown>>); if (setup) epics.set(setup.epicId, setup) }
-  return { schema: 1, kind: 'feature-setup', epics: [...epics.values()].sort((a, b) => a.epicId - b.epicId) }
+  const defaults = cleanDefaults(file.defaults)
+  return { schema: 1, kind: 'feature-setup', epics: [...epics.values()].sort((a, b) => a.epicId - b.epicId), ...(defaults ? { defaults } : {}) }
+}
+function cleanDefaults(input: unknown): SetupDefaults | undefined {
+  if (!input || typeof input !== 'object') return undefined
+  const value = input as Record<string, unknown>
+  const featureDoD = text(value.featureDoD, 100000)
+  const stories = Array.isArray(value.stories) ? value.stories.map((story: Partial<Record<keyof StoryTemplate, unknown>>) => ({ title: text(story?.title, 255), description: text(story?.description, 100000) })).filter((story) => story.title) : undefined
+  const estimate = typeof value.originalEstimate === 'number' && Number.isFinite(value.originalEstimate) && value.originalEstimate >= 0 && value.originalEstimate <= 1000000 ? value.originalEstimate : undefined
+  const out: SetupDefaults = { ...(featureDoD ? { featureDoD } : {}), ...(stories ? { stories } : {}), ...(estimate != null ? { originalEstimate: estimate } : {}) }
+  return Object.keys(out).length ? out : undefined
 }
 // Written clean: blank User Stories dropped, values trimmed, one entry per Epic in Epic order.
-export const serializeFeatureSetup = (file: FeatureSetupFile) => `${JSON.stringify({ schema: 1, kind: 'feature-setup', epics: [...new Map(file.epics.map(cleanSetup).filter((entry): entry is EpicSetup => Boolean(entry)).map((entry) => [entry.epicId, entry])).values()].sort((a, b) => a.epicId - b.epicId) }, null, 2)}\n`
+export const serializeFeatureSetup = (file: FeatureSetupFile) => { const defaults = cleanDefaults(file.defaults); return `${JSON.stringify({ schema: 1, kind: 'feature-setup', ...(defaults ? { defaults } : {}), epics: [...new Map(file.epics.map(cleanSetup).filter((entry): entry is EpicSetup => Boolean(entry)).map((entry) => [entry.epicId, entry])).values()].sort((a, b) => a.epicId - b.epicId) }, null, 2)}\n` }
 export const setupFor = (file: FeatureSetupFile | null, epicId: number | undefined) => epicId == null ? undefined : file?.epics.find((entry) => entry.epicId === epicId)
 
 // The personal setup file of a person, next to the shared one: feature-setup/<email>.json (lower case; characters
@@ -145,12 +169,43 @@ export function personalSetupPath(email: string) {
 export interface FeatureSetups { shared: FeatureSetupFile | null; personal: FeatureSetupFile | null }
 // BKL-28: the only Time Writing setting of an Epic setup — the default Original Estimate of a new month Task.
 export function setupHours(setups: FeatureSetups | null | undefined, epicId: number | undefined): number | undefined { return chooseSetup(setups, epicId).setup?.task.originalEstimate }
-export type SetupSource = 'personal' | 'shared'
+export type SetupSource = 'personal' | 'shared' | 'defaults'
 // The setup used for an Epic: my own first, else the shared one; preferShared skips mine when a shared one exists.
-export function chooseSetup(setups: FeatureSetups | null | undefined, epicId: number | undefined, preferShared = false): { setup?: EpicSetup; source?: SetupSource } {
+// CON-95: an Epic with a setup (mine or shared) gets each inheritable field from the nearest layer that sets it —
+// Mine, then the Epic's shared setup, then All Epics, then Built in (the default DoD of its stories, no stories, no
+// estimate); its other settings come from the setup used. An Epic with no setup of its own keeps the built-in
+// milestones of the New Feature form (All Epics does not apply to it).
+export type SetupOrigin = 'mine' | 'epic' | 'all' | 'builtin'
+export function chooseSetup(setups: FeatureSetups | null | undefined, epicId: number | undefined, preferShared = false): { setup?: EpicSetup; source?: SetupSource; origin?: Record<InheritField, SetupOrigin> } {
   const personal = setupFor(setups?.personal ?? null, epicId), shared = setupFor(setups?.shared ?? null, epicId)
-  if (personal && !(preferShared && shared)) return { setup: personal, source: 'personal' }
-  return shared ? { setup: shared, source: 'shared' } : {}
+  const useMine = Boolean(personal && !(preferShared && shared))
+  // CON-97: an Epic without a setup of its own uses All Epics when All Epics has anything set.
+  const defaults = setups?.shared?.defaults
+  const base = useMine ? personal : shared ?? (epicId != null && defaults && Object.keys(defaults).length ? { ...emptySetup(epicId), inherits: [...inheritFields] } : undefined)
+  if (!base) return {}
+  const layers = [...(useMine ? [{ entry: personal!, origin: 'mine' as const }] : []), ...(shared ? [{ entry: shared, origin: 'epic' as const }] : base && !useMine ? [{ entry: base, origin: 'epic' as const }] : [])]
+  const resolved = resolveFields(layers, setups?.shared?.defaults)
+  const setup: EpicSetup = { ...structuredClone(base), featureDoD: resolved.featureDoD, stories: resolved.stories, task: { ...base.task, ...(resolved.originalEstimate != null ? { originalEstimate: resolved.originalEstimate } : {}) } }
+  if (resolved.originalEstimate == null) delete setup.task.originalEstimate
+  delete setup.inherits
+  return { setup, source: useMine ? 'personal' : shared ? 'shared' : 'defaults', origin: resolved.origin }
+}
+// The value of each inheritable field and where it comes from, through the given layers (nearest first).
+export function resolveFields(layers: { entry: EpicSetup; origin: SetupOrigin }[], defaults: SetupDefaults | undefined) {
+  const set = (entry: EpicSetup, field: InheritField) => !(entry.inherits ?? []).includes(field)
+  const pick = <T>(field: InheritField, own: (entry: EpicSetup) => T, fromDefaults: T | undefined): { value: T | undefined; origin: SetupOrigin } => {
+    const layer = layers.find((item) => set(item.entry, field))
+    if (layer) return { value: own(layer.entry), origin: layer.origin }
+    return fromDefaults !== undefined ? { value: fromDefaults, origin: 'all' } : { value: undefined, origin: 'builtin' }
+  }
+  const stories = pick('stories', (entry) => structuredClone(entry.stories), defaults?.stories ? structuredClone(defaults.stories) : undefined)
+  const dod = pick('featureDoD', (entry) => entry.featureDoD, defaults?.featureDoD)
+  const estimate = pick('estimate', (entry) => entry.task.originalEstimate, defaults?.originalEstimate)
+  const storyList = stories.value ?? []
+  return {
+    stories: storyList, featureDoD: dod.value ?? (dod.origin === 'builtin' ? defaultDoDFor({ stories: storyList }) : ''), originalEstimate: estimate.value,
+    origin: { stories: stories.origin, featureDoD: dod.origin, estimate: estimate.origin } as Record<InheritField, SetupOrigin>,
+  }
 }
 // Every shared setup at a glance, by Epic number: what a Feature under the Epic gets, and whether my own setup of the
 // Epic replaces it for me.
@@ -166,7 +221,7 @@ export function sharedSetupRows(setups: FeatureSetups | null | undefined): Share
 // Enable for everyone: the shared file with this Epic's entry replaced by (a copy of) the given one.
 export function publishSetup(shared: FeatureSetupFile | null, entry: EpicSetup): FeatureSetupFile {
   const epics = (shared?.epics ?? []).filter((item) => item.epicId !== entry.epicId)
-  return { schema: 1, kind: 'feature-setup', epics: [...epics, structuredClone(entry)].sort((a, b) => a.epicId - b.epicId) }
+  return { schema: 1, kind: 'feature-setup', epics: [...epics, structuredClone(entry)].sort((a, b) => a.epicId - b.epicId), ...(shared?.defaults ? { defaults: shared.defaults } : {}) }
 }
 
 // The built-in milestone stories (used when an Epic has no setup) as an editable setup: PU = SFV, DT, IQOQ; Full
@@ -197,12 +252,12 @@ export const removeSetup = (file: FeatureSetupFile, epicId: number): FeatureSetu
 // A setup is saved only with its Feature DoD: the Epics of a draft that are new or changed against the saved file and
 // have none (unchanged older entries without one do not block saving).
 export function setupsMissingDoD(draft: FeatureSetupFile, saved: FeatureSetupFile | null): number[] {
-  return draft.epics.filter((entry) => !(entry.featureDoD ?? '').trim() && JSON.stringify(entry) !== JSON.stringify(setupFor(saved, entry.epicId) ?? null)).map((entry) => entry.epicId).sort((a, b) => a - b)
+  return draft.epics.filter((entry) => !(entry.inherits ?? []).includes('featureDoD') && !(entry.featureDoD ?? '').trim() && JSON.stringify(entry) !== JSON.stringify(setupFor(saved, entry.epicId) ?? null)).map((entry) => entry.epicId).sort((a, b) => a - b)
 }
 // The default Feature DoD for a setup that has none: Full Release when it has a PRD story (only Full Releases do),
 // else PU. Only a pre-fill — it is reviewed and saved by the user.
 export const defaultDoDFor = (entry: Pick<EpicSetup, 'stories'>) => featureDoD(entry.stories.some((story) => /\bPRD\b/i.test(story.title)) ? 'Release' : 'PU')
-export const missingDoD = (entry: Pick<EpicSetup, 'featureDoD'>) => !(entry.featureDoD ?? '').trim()
+export const missingDoD = (entry: Pick<EpicSetup, 'featureDoD' | 'inherits'>) => !(entry.inherits ?? []).includes('featureDoD') && !(entry.featureDoD ?? '').trim()
 export function fillMissingDoD(file: FeatureSetupFile): { file: FeatureSetupFile; filled: number[] } {
   const filled = file.epics.filter(missingDoD).map((entry) => entry.epicId)
   if (!filled.length) return { file, filled }

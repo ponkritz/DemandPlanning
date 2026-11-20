@@ -37,3 +37,16 @@ test('QV-59: IOCC releases in bulk by the DP rules — type from the number, set
   assert.match(ioccPlan([release('Spectral CT', '2.1')], { setup, qeMapping, board, featureTitle: () => 't', featureMatch: () => undefined })[0].skip, /no IOCC bulk Epic is set/)
   assert.match(ioccPlan([release('Spectral CT', '2.1')], { setup, qeMapping, board, epicId: 21000, featureTitle: () => 't', featureMatch: () => ({ item: { id: 9 }, score: 100 }) })[0].skip, /matches it 100%/)
 })
+
+test('QV-61: IOCC bulk creation uses the IOCC Epic\'s own Feature setup (DoD and User Stories) when it has no Release / PU sets; DP\'s built-in sets only without a setup (TC-QV-42)', async () => {
+  const { ioccSetsOf, dpReleaseTypeDefaults } = await import('../src/featureSetup.ts')
+  const qeMapping = { sheets: [{ name: 'Map', columns: [{ id: 'a', name: 'Product' }, { id: 'b', name: 'QE' }], rows: [{ cells: { a: 'Spectral CT', b: 'Ana Costa' } }] }] }
+  const own = { epicId: 21000, featureDoD: 'IOCC DoD', stories: [{ title: 'IOCC review', description: '' }], qeColumns: { matchColumn: 'Product', qeColumn: 'QE' } }
+  const board = [{ id: 1, workItemType: 'Task', title: 't', assignedTo: 'Ana Costa', assignedToEmail: 'ana@x.com', state: 'Active' }]
+  const release = (number) => ({ key: number, name: 'Spectral CT', release: number, documents: 1, items: [], tracked: false, trackedBy: [], features: [] })
+  const plan = ioccPlan([release('2.0.0.0'), release('2.1.0.3')], { setup: own, qeMapping, board, epicId: 21000, featureTitle: () => 't', featureMatch: () => undefined })
+  assert.deepEqual(plan.map((line) => [line.type, line.set.featureDoD, line.set.stories.map((story) => story.title)]), [['Major', 'IOCC DoD', ['IOCC review']], ['Platform Update', 'IOCC DoD', ['IOCC review']]])
+  assert.equal(ioccSetsOf(undefined), dpReleaseTypeDefaults, 'no setup: the built-in sets')
+  const typed = { ...own, releaseTypes: { release: { featureDoD: 'R', stories: [] }, pu: { featureDoD: 'P', stories: [] } } }
+  assert.equal(ioccSetsOf(typed), typed.releaseTypes, 'Release / PU sets of the Epic win when set')
+})
