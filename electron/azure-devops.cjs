@@ -58,6 +58,7 @@ function azureFeatureRequest(input) {
   // Every created work item is assigned to someone (an email); never blank.
   if (typeof feature.assignedTo !== 'string' || feature.assignedTo.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(feature.assignedTo.trim())) throw new Error('A new work item must be assigned to someone (an email). Nothing was created.')
   if (feature.targetDate && !/^\d{4}-\d{2}-\d{2}$/.test(feature.targetDate)) throw new Error('Invalid target date.')
+  if (feature.startDate && (type !== 'Feature' || !/^\d{4}-\d{2}-\d{2}$/.test(feature.startDate))) throw new Error('Invalid start date.')
   if (feature.iterationPath != null && (typeof feature.iterationPath !== 'string' || feature.iterationPath.length > 4096)) throw new Error('Invalid iteration path.')
   for (const field of ['taskOriginalEstimate', 'taskCompletedWork']) if (feature[field] != null && (!Number.isFinite(feature[field]) || feature[field] < 0 || feature[field] > 1000000)) throw new Error('Invalid Task effort.')
   // The only tag a new work item can carry: 'ad-hoc' on a Time Writing Task created after planning has locked.
@@ -80,6 +81,7 @@ function azureFeatureRequest(input) {
   if (feature.acceptanceCriteria.trim()) patch.push({ op: 'add', path: '/fields/Microsoft.VSTS.Common.AcceptanceCriteria', value: htmlText(feature.acceptanceCriteria) })
   if (feature.iterationPath) patch.push({ op: 'add', path: '/fields/System.IterationPath', value: feature.iterationPath })
   if (feature.assignedTo?.trim()) patch.push({ op: 'add', path: '/fields/System.AssignedTo', value: feature.assignedTo.trim() })
+  if (feature.startDate) patch.push({ op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.StartDate', value: `${feature.startDate}T00:00:00Z` })
   if (feature.targetDate) patch.push({ op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.TargetDate', value: `${feature.targetDate}T00:00:00Z` })
   if (feature.adhoc === true) patch.push({ op: 'add', path: '/fields/System.Tags', value: 'ad-hoc' })
   if (feature.storyPoints != null) patch.push({ op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.StoryPoints', value: feature.storyPoints })

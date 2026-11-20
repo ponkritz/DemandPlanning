@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { QePick } from './QePick'
 import { boardPeople } from '../contentBulk'
-import { epicFieldsFor, withEpicFields } from '../epicSetup'
+import { classificationOf, epicFieldsFor, withEpicFields } from '../epicSetup'
 import { useEpicSetupFile } from '../useEpicSetup'
 import type { AzureWorkItem } from '../domain'
 import type { AzureWorkspace } from '../useAzureWorkspace'
@@ -28,10 +28,15 @@ export function DpBulkCreate({ rows, azure, featureSetup, qeMapping, featureMatc
   // DPF-06: the QE picked per release in the pop-up (email by release), in place of the QE Mapping's.
   const [picks, setPicks] = useState<Record<string, string>>({})
   const people = boardPeople(azure.items)
-  const mappedPlan = bulkPlan(rows, { setup, qeMapping, board: azure.items, featureMatch })
+  // DPF-08: the Release Classification per row, from the Epic's list (prefilled from the release number), decides
+  // the DoD and User Stories (DPF-07).
+  const epicFile = useEpicSetupFile()
+  const classes = classificationOf(epicFile, dpEpicId)
+  const [classPicks, setClassPicks] = useState<Record<string, string>>({})
+  const mappedPlan = bulkPlan(rows, { setup, qeMapping, board: azure.items, featureMatch, classes: classPicks, classValues: classes.values })
   const rawPlan = pickQe(mappedPlan, picks, (line) => String(line.row.id), people)
   // EPS-03: the Epic setup's fields of the bulk Epic.
-  const plan = withEpicFields(rawPlan, epicFieldsFor(useEpicSetupFile(), dpEpicId), (line) => [line.row])
+  const plan = withEpicFields(rawPlan, epicFieldsFor(epicFile, dpEpicId), (line) => [line.row], { index: classes.fieldIndex, of: (line) => line.classification })
   const ready = plan.filter((line) => !line.skip)
   const epic = azure.items.find((item) => item.id === dpEpicId && item.workItemType === 'Epic')
   const [pairs, setPairs] = useState<{ pi: AzureIteration; sprint: AzureIteration }[] | null>(null)
@@ -58,7 +63,7 @@ export function DpBulkCreate({ rows, azure, featureSetup, qeMapping, featureMatc
       for (const [index, line] of ready.entries()) {
         progress(`${index + 1} of ${ready.length}: ${line.title}…`)
         try {
-          const feature = { parentId: epic.id, title: line.title, description: withFeatureDoD(line.set!.featureDoD, '', line.type, line.fieldLines), acceptanceCriteria: '', areaPath: epic.areaPath, iterationPath: pair.pi.path, storyIterationPath: pair.sprint.path, assignedTo: line.email }
+          const feature = { parentId: epic.id, title: line.title, description: withFeatureDoD(line.set!.featureDoD, '', classes.fieldIndex >= 0 ? undefined : line.classification || (line.type ?? ''), line.fieldLines), acceptanceCriteria: '', areaPath: epic.areaPath, iterationPath: pair.pi.path, storyIterationPath: pair.sprint.path, assignedTo: line.email }
           const bundle = await createFeatureFromSetup(config, token, feature, { stories: line.set!.stories, reviewStory: false, ...(setup?.timeWritingStory ? { timeWritingStory: setup.timeWritingStory } : {}), task: { ...(setup?.task ?? { title: '{month} | {feature}', description: '', assignedTo: '', areaPath: '', iterationPath: '' }), assignedTo: line.email } }, month, undefined, adhoc)
           azure.featureCreated([epic, ...bundle.items])
           done.push(`#${bundle.feature.id} ${line.title} → ${line.qe}${line.warned.length ? ` (empty: ${line.warned.join(', ')})` : ''}`)
@@ -75,12 +80,12 @@ export function DpBulkCreate({ rows, azure, featureSetup, qeMapping, featureMatc
 
   return <Modal eyebrow="DP RELEASES" wide title={`Create Features for ${rows.length} DP release${rows.length === 1 ? '' : 's'}`} onClose={onClose}>
     <div className="dp-bulk">
-      <p className="muted">Under Epic #{dpEpicId}{epic ? ` “${epic.title}”` : ''}: each Feature gets the DoD and default User Stories of its release type (Feature setup → Epic {dpEpicId}), its Time Writing story and month Task, all assigned to the QE from the QE Mapping.</p>
+      <p className="muted">Under Epic #{dpEpicId}{epic ? ` “${epic.title}”` : ''}: each Feature gets the DoD and User Stories of the {classes.label} chosen on its row (Admin → Epic &amp; Feature setup → Epic {dpEpicId}; a value without its own set uses the Epic’s default), its Time Writing story and month Task, all assigned to the QE from the QE Mapping.</p>
       <div className="azure-table"><table>
-        <thead><tr><th scope="col">Feature title</th><th scope="col">Type</th><th scope="col">User Stories</th><th scope="col">QE</th><th scope="col">Result</th></tr></thead>
+        <thead><tr><th scope="col">Feature title</th><th scope="col">{classes.label}</th><th scope="col">User Stories</th><th scope="col">QE</th><th scope="col">Result</th></tr></thead>
         <tbody>{plan.map((line) => <tr key={line.row.id} className={line.skip ? 'muted' : undefined}>
           <td>{line.title}</td>
-          <td>{line.type ? `${dpTypeLabel(line.type)} (${line.set === undefined ? '' : line.type === 'Major' || line.type === 'Minor' ? 'Release set' : 'PU set'})` : '—'}</td>
+          <td><select aria-label={`${classes.label} of ${line.title}`} value={line.classification} onChange={(event) => setClassPicks((current) => ({ ...current, [String(line.row.id)]: event.target.value }))}><option value="">{line.type ? `— (${dpTypeLabel(line.type)} from the number)` : '— choose —'}</option>{[...classes.values, ...(line.classification && !classes.values.includes(line.classification) ? [line.classification] : [])].map((value) => <option key={value} value={value}>{value}</option>)}</select>{!classes.values.length && <small className="muted"> No values: give the Epic’s {classes.label} field a list.</small>}</td>
           <td>{line.set ? line.set.stories.map((story) => story.title.split(' :')[0]).join(', ') || 'none' : '—'}</td>
           <td>{line.baseSkip ? (line.qe || '—') : <QePick label={line.title} email={line.email} mapped={mappedPlan.find((entry) => String(entry.row.id) === String(line.row.id))?.qe} people={people} onPick={(email) => setPicks((current) => ({ ...current, [String(line.row.id)]: email }))} />}</td>
           <td>{line.skip ? <span className="warning-text">Skipped: {line.skip}</span> : <>Will be created{line.note && <small className="warning-text"> — {line.note}</small>}{line.warned.length > 0 && <small className="warning-text"> — empty {line.warned.join(', ')}</small>}</>}</td>

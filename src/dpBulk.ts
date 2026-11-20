@@ -3,7 +3,8 @@ import type { ReleaseEntry } from './releaseSource.ts'
 import { fieldOf } from './dpReleases.ts'
 import { dpFeatureTitle, dpProgramOf, dpVersionOf, type BoardHit } from './dpBoardMatch.ts'
 import { dpReleaseName } from './dpMilestones.ts'
-import { ioccSetsOf, releaseTypesOf, type EpicSetup, type QeMapColumns, type ReleaseTypeSetup } from './featureSetup.ts'
+import { bulkSetFor, type EpicSetup, type QeMapColumns, type ReleaseTypeSetup } from './featureSetup.ts'
+import { classificationFromType } from './epicSetup.ts'
 import type { QeMappingFile } from './qeMapping.ts'
 
 // DP releases (Release Details → DP, Epic 13946): the release type from the version, the QE from the QE Mapping, the
@@ -59,21 +60,23 @@ export function qeForName(name: string, file: QeMappingFile | null | undefined, 
 }
 // QV-59: IOCC releases in bulk, by the DP rules: the release type from the release number (x.y.z.a), its set (Release or
 // PU) from the bulk Epic's Feature setup, the QE from the QE Mapping by the release name, a 100% match skipped.
-export interface IoccLine { release: ReleaseEntry; title: string; type?: DpReleaseType; set?: ReleaseTypeSetup; qe: string; email: string; skip: string; baseSkip: string; note: string }
-export function ioccPlan(releases: ReleaseEntry[], options: { setup?: EpicSetup; qeMapping?: QeMappingFile | null; board: AzureWorkItem[]; featureTitle: (release: ReleaseEntry) => string; featureMatch: (release: ReleaseEntry) => BoardHit | undefined; epicId?: number }): IoccLine[] {
-  const sets = ioccSetsOf(options.setup)
+export interface IoccLine { release: ReleaseEntry; title: string; type?: DpReleaseType; classification: string; set?: ReleaseTypeSetup; qe: string; email: string; skip: string; baseSkip: string; note: string }
+// DPF-08: classes — the Release Classification picked per row (by release key); classValues — the Epic's list, from
+// which the release number's type is prefilled. The set follows the classification (DPF-07).
+export function ioccPlan(releases: ReleaseEntry[], options: { setup?: EpicSetup; qeMapping?: QeMappingFile | null; board: AzureWorkItem[]; featureTitle: (release: ReleaseEntry) => string; featureMatch: (release: ReleaseEntry) => BoardHit | undefined; epicId?: number; classes?: Record<string, string>; classValues?: string[] }): IoccLine[] {
   return releases.map((release) => {
-    const typed = dpReleaseType(release.release), found = qeForName(release.name, options.qeMapping, options.setup?.qeColumns)
+    const typed = dpReleaseType(release.release), classification = options.classes?.[release.key] ?? classificationFromType(options.classValues ?? [], typed?.type), found = qeForName(release.name, options.qeMapping, options.setup?.qeColumns)
     const qe = found?.qe ?? '', email = qe ? emailFor(qe, options.board) : ''
     const hit = options.featureMatch(release)
     const baseSkip = !options.epicId ? 'no IOCC bulk Epic is set (Admin → Stream options → Bulk creation Epics)'
       : fullMatch(hit) ? `Feature #${hit!.item.id} on QMS-0025 matches it 100%`
-      : !typed ? `no release type from the release number “${release.release || '—'}” (x.y.z.a expected)` : ''
+      : !typed && !classification ? `no release type from the release number “${release.release || '—'}” (x.y.z.a expected): choose its Release Classification` : ''
     const qeSkip = !options.setup?.qeColumns ? 'the QE Mapping columns are not set (Feature setup of the IOCC bulk Epic)'
       : !qe ? 'no QE in the QE Mapping for this release name'
       : !email ? `no email found for ${qe} (not assigned anything on QMS-0025 yet)` : ''
     const skip = baseSkip || qeSkip
-    return { release, title: options.featureTitle(release), ...(typed ? { type: typed.type, set: sets[typed.kind] } : {}), qe, email, skip, baseSkip, note: baseSkip ? '' : similarNote(hit) }
+    const set = typed || classification ? bulkSetFor(options.setup, classification, typed?.kind) : undefined
+    return { release, title: options.featureTitle(release), classification, ...(typed ? { type: typed.type } : {}), ...(set ? { set } : {}), qe, email, skip, baseSkip, note: baseSkip ? '' : similarNote(hit) }
   })
 }
 
@@ -112,20 +115,20 @@ export function emailFor(name: string, board: AzureWorkItem[]): string {
 // threshold but not exact Feature is named as a note, and the release is still created.
 export const fullMatch = (hit: BoardHit | undefined) => Boolean(hit && hit.score >= 100)
 export const similarNote = (hit: BoardHit | undefined) => hit && hit.score < 100 ? `a similar Feature #${hit.item.id} (${hit.score}%) exists` : ''
-export interface BulkLine { row: AzureWorkItem; title: string; version: string; type?: DpReleaseType; set?: ReleaseTypeSetup; qe: string; email: string; skip: string; baseSkip: string; note: string }
-export function bulkPlan(rows: AzureWorkItem[], options: { setup?: EpicSetup; qeMapping?: QeMappingFile | null; board: AzureWorkItem[]; featureMatch: (row: AzureWorkItem) => BoardHit | undefined }): BulkLine[] {
-  const sets = releaseTypesOf(options.setup)
+export interface BulkLine { row: AzureWorkItem; title: string; version: string; type?: DpReleaseType; classification: string; set?: ReleaseTypeSetup; qe: string; email: string; skip: string; baseSkip: string; note: string }
+export function bulkPlan(rows: AzureWorkItem[], options: { setup?: EpicSetup; qeMapping?: QeMappingFile | null; board: AzureWorkItem[]; featureMatch: (row: AzureWorkItem) => BoardHit | undefined; classes?: Record<string, string>; classValues?: string[] }): BulkLine[] {
   return rows.map((row) => {
-    const version = dpRowVersion(row), typed = dpReleaseType(version), found = qeFor(row, options.qeMapping, options.setup?.qeColumns)
+    const version = dpRowVersion(row), typed = dpReleaseType(version), classification = options.classes?.[String(row.id)] ?? classificationFromType(options.classValues ?? [], typed?.type), found = qeFor(row, options.qeMapping, options.setup?.qeColumns)
     const qe = found?.qe ?? '', email = qe ? emailFor(qe, options.board) : ''
     const hit = options.featureMatch(row)
     const baseSkip = fullMatch(hit) ? `Feature #${hit!.item.id} on QMS-0025 matches it 100%`
-      : !typed ? `no release type from the version “${version || '—'}” (x.y.z.a expected)` : ''
+      : !typed && !classification ? `no release type from the version “${version || '—'}” (x.y.z.a expected): choose its Release Classification` : ''
     const qeSkip = !options.setup?.qeColumns ? 'the QE Mapping columns are not set (Feature setup of the bulk Epic)'
       : !qe ? 'no QE in the QE Mapping for this product'
       : !email ? `no email found for ${qe} (not assigned anything on QMS-0025 yet)` : ''
     const skip = baseSkip || qeSkip
-    return { row, title: dpFeatureTitle(row), version, ...(typed ? { type: typed.type, set: sets[typed.kind] } : {}), qe, email, skip, baseSkip, note: baseSkip ? '' : similarNote(hit) }
+    const set = typed || classification ? bulkSetFor(options.setup, classification, typed?.kind) : undefined
+    return { row, title: dpFeatureTitle(row), version, classification, ...(typed ? { type: typed.type } : {}), ...(set ? { set } : {}), qe, email, skip, baseSkip, note: baseSkip ? '' : similarNote(hit) }
   })
 }
 

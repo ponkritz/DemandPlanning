@@ -49,7 +49,7 @@ export interface AzureRequest extends AzureConfig {
   // add-comment: the comment as plain text.
   comment?: string
 }
-export interface FeatureInput { parentId: number; title: string; description: string; acceptanceCriteria: string; areaPath?: string; iterationPath?: string; assignedTo?: string; targetDate?: string; assignToCreator?: boolean; storyIterationPath?: string; taskOriginalEstimate?: number; taskCompletedWork?: number }
+export interface FeatureInput { parentId: number; title: string; description: string; acceptanceCriteria: string; areaPath?: string; iterationPath?: string; assignedTo?: string; startDate?: string; targetDate?: string; assignToCreator?: boolean; storyIterationPath?: string; taskOriginalEstimate?: number; taskCompletedWork?: number }
 // The Feature DoD (Definition of Done) is mandatory. It opens the Feature's Description as "Feature DoD: …", where
 // Backlog Health looks for it; these are the defaults per release classification.
 export { featureDoD }
@@ -299,6 +299,7 @@ export async function createAzureFeature(config: AzureConfig, pat: string, featu
   if (feature.assignToCreator) throw new Error('Configure a Feature creator email in the ADS configuration. Azure DevOps does not accept the PAT identity GUID as Assigned To.')
   if (!feature.assignedTo?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(feature.assignedTo.trim())) throw new Error('A valid Feature creator email is required for Assigned To.')
   if (!hasFeatureDoD(feature.description)) throw new Error(missingDoDMessage)
+  if (feature.startDate && !/^\d{4}-\d{2}-\d{2}$/.test(feature.startDate)) throw new Error('Invalid start date.')
   const parentResponse = await transport({ ...config, pat, operation: 'items', ids: [feature.parentId] }) as { value: RawItem[] }
   const parent = parentResponse.value?.find((item) => item.id === feature.parentId)
   if (!parent || parent.fields['System.WorkItemType'] !== 'Epic') throw new Error('The selected parent is not an accessible Epic. Refresh and select an Epic.')
@@ -388,6 +389,8 @@ export function featurePatch(config: AzureConfig, feature: FeatureInput & { area
   if (feature.acceptanceCriteria.trim()) patch.push({ op: 'add', path: '/fields/Microsoft.VSTS.Common.AcceptanceCriteria', value: htmlText(feature.acceptanceCriteria) })
   if (feature.iterationPath) patch.push({ op: 'add', path: '/fields/System.IterationPath', value: feature.iterationPath })
   if (feature.assignedTo?.trim()) patch.push({ op: 'add', path: '/fields/System.AssignedTo', value: feature.assignedTo.trim() })
+  // BKL-31: the Feature's Start Date (Azure DevOps Start Date field), when one was entered.
+  if (feature.startDate) patch.push({ op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.StartDate', value: `${feature.startDate}T00:00:00Z` })
   if (feature.targetDate) patch.push({ op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.TargetDate', value: `${feature.targetDate}T00:00:00Z` })
   if (feature.adhoc === true) patch.push({ op: 'add', path: '/fields/System.Tags', value: 'ad-hoc' })
   if (feature.storyPoints != null) patch.push({ op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.StoryPoints', value: feature.storyPoints })
@@ -612,6 +615,29 @@ export async function ensureMonthTask(config: AzureConfig, pat: string, featureI
   let task = await createChildItem(config, pat, story, 'Task', taskTitle, config.project, email, transport, adhoc)
   if (defaultHours != null) task = await updateAzureTimeWritingEffort(config, pat, task.id, defaultHours, undefined, false, transport)
   return { status: 'created', task, story, storyCreated }
+}
+
+// BKL-32: the month Tasks of a new Feature after its first month, one per month up to the Target date, each by the one
+// rule of every page (ensureMonthTask: reused when it exists) with the hours typed for that month, else the Epic setup's
+// default; Completed Work only where typed. Stops at the first failure with what was made so far.
+export interface MonthHours { month: string; originalEstimate?: number; completedWork?: number; adhoc?: boolean }
+export async function addMonthTasks(config: AzureConfig, pat: string, featureId: number, assignee: string, months: MonthHours[], defaultHours?: number, transport: AzureTransport = requestAzure, progress?: (text: string) => void) {
+  const items: AzureWorkItem[] = []
+  try {
+    for (const entry of months) {
+      progress?.(`Adding the ${entry.month} Task…`)
+      const result = await ensureMonthTask(config, pat, featureId, assignee, entry.month, transport, entry.adhoc === true, entry.originalEstimate ?? defaultHours)
+      let task = result.task
+      // An existing Task keeps its hours unless new ones were typed; a new one already has its Original Estimate.
+      const plan = result.status === 'exists' ? entry.originalEstimate : undefined
+      if (plan != null || entry.completedWork != null) task = await updateAzureTimeWritingEffort(config, pat, task.id, plan, entry.completedWork, false, transport)
+      if (result.storyCreated) items.push(result.story)
+      items.push(task)
+    }
+    return items
+  } catch (failure) {
+    throw new HierarchyCreationError(failure instanceof Error ? failure.message : 'A month Task could not be added.', items)
+  }
 }
 
 // This month's Task for the person under one given User Story (ATM-26): a leave story ("PTO", "Sick Leave") of a

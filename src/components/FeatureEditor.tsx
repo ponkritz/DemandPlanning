@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { AzureWorkItem } from '../domain'
-import { completeFeatureFromSetup, createFeatureFromSetup, addUserStory, updateAzureTimeWritingEffort, createAzureReleaseHierarchy, completeReleaseHierarchy, currentIndiaMonth, releaseHierarchyTitles, HierarchyCreationError, featureDoD, withFeatureDoD, releaseClassifications, readAzureIterations, currentIterationPairs, futureIterationPairs, type AzureIteration, type AzureConfig, type FeatureInput } from '../azureDevOps'
+import { mergeAzureWorkItems, completeFeatureFromSetup, createFeatureFromSetup, addMonthTasks, addUserStory, updateAzureTimeWritingEffort, createAzureReleaseHierarchy, completeReleaseHierarchy, currentIndiaMonth, releaseHierarchyTitles, HierarchyCreationError, featureDoD, withFeatureDoD, releaseClassifications, readAzureIterations, currentIterationPairs, futureIterationPairs, type AzureIteration, type AzureConfig, type FeatureInput } from '../azureDevOps'
 import { Modal, Info, Notice } from './ui'
 import { PersonPicker } from './PersonPicker'
 import { assignablePeople } from '../myWork'
 import { runInBackground } from '../backgroundJobs'
 import { adhocAfterLock } from '../planningLock'
+import { featureMonths, isFutureMonth } from '../featureMonths'
 import { useEpicSetupFile } from '../useEpicSetup'
 import { onPremValues, useOnPremSources } from '../onPremValues'
 import { asTitleFields, epicFieldsFor, featureFromFields, listOf, offList } from '../epicSetup'
-import { chooseSetup, defaultDoDFor, fieldKey, fieldLines, fieldPlaceholders, fieldTitle, fieldsFromItems, fieldsFromTitle, fillTitle, missingValues, reviewStoryTitle, setupFor, titleValues, type FeatureSetups } from '../featureSetup'
+import { chooseSetup, setForClass, defaultDoDFor, fieldKey, fieldLines, fieldPlaceholders, fieldTitle, fieldsFromItems, fieldsFromTitle, fillTitle, missingValues, reviewStoryTitle, setupFor, titleValues, type FeatureSetups } from '../featureSetup'
 
 // The "Add Feature under an Epic" / "Complete Feature children" modal, shared by the QMS-0025 board and Assigned to
 // Me. mode.parent: create a Feature (the Epic can still be changed) with its children; mode.resume: add the missing
@@ -45,8 +46,10 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
   const [description, setDescription] = useState('')
   // Optional; written into the Description as "Release Classification : …" even when left blank.
   const [releaseClassification, setReleaseClassification] = useState('')
-  const [taskOriginalEstimate, setTaskOriginalEstimate] = useState('')
-  const [taskCompletedWork, setTaskCompletedWork] = useState('')
+  // BKL-31 / BKL-32: Start Date and Target date decide the months of the Time Writing Tasks; hours are asked per month.
+  const [startDate, setStartDate] = useState('')
+  const [targetDate, setTargetDate] = useState('')
+  const [monthHours, setMonthHours] = useState<Record<string, { plan: string; done: string }>>({})
   const [iterationPath, setIterationPath] = useState('')
   const [sprintPath, setSprintPath] = useState('')
   const [iterationChoices, setIterationChoices] = useState<AzureIteration[]>([])
@@ -61,7 +64,15 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
   const futurePairs = futureIterationPairs(iterationChoices)
   const selectablePairs = [...pairs, ...futurePairs]
   const availableMilestones = ['PRD', 'SFV', 'DT', 'IQOQ']
-  const monthLabel = month || currentIndiaMonth()
+  const todayMonth = currentIndiaMonth()
+  const baseMonth = month || todayMonth
+  let months: string[] = [baseMonth], monthsError = ''
+  if (!resumeFeature) { try { months = featureMonths({ startDate, targetDate, formMonth: baseMonth, currentMonth: todayMonth }) } catch (failure) { monthsError = failure instanceof Error ? failure.message : 'Check the dates.' } }
+  // The first month's Task is created with the hierarchy; the later ones follow (BKL-32).
+  const monthLabel = months[0]
+  const hoursOf = (label: string) => monthHours[label] ?? { plan: '', done: '' }
+  const setHours = (label: string, change: Partial<{ plan: string; done: string }>) => setMonthHours((now) => ({ ...now, [label]: { ...(now[label] ?? { plan: '', done: '' }), ...change } }))
+  const taskOriginalEstimate = hoursOf(monthLabel).plan, taskCompletedWork = isFutureMonth(monthLabel, todayMonth) ? '' : hoursOf(monthLabel).done
   // Planning of the month has locked (Admin → Capacity & time → Period control): the new Time Writing Task is tagged ad-hoc.
   const lateTask = adhocAfterLock(monthLabel)
   // The Epic's own setup (Admin → Epic & Feature setup → Feature setup), if any: its optional User Stories replace the PU / Full Release
@@ -69,7 +80,7 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
   // My own setup of the Epic first, else the shared one; the switch below picks the shared one instead.
   const [preferShared, setPreferShared] = useState(false)
   const epicId = parent?.id ?? resumeFeature?.parentId
-  const { setup: epicSetup, source: setupSource } = chooseSetup(featureSetup, epicId, preferShared)
+  const { setup: baseSetup, source: setupSource } = chooseSetup(featureSetup, epicId, preferShared)
   // EPS-02: the Epic setup's fields (Admin → Epic & Feature setup) apply to every new Feature under the Epic and take the place
   // of the Feature setup's title fields.
   const epicFile = useEpicSetupFile()
@@ -84,6 +95,12 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
   const fieldsElsewhere = !resumeFeature && !epicEntry && !titleFields.length && Boolean(otherSetup?.titleFields?.length)
   const fromRelease = releaseItems?.length ? fieldsFromItems(titleFields, releaseItems) : [], fromTitle = fieldsFromTitle(titleFields, initialTitle)
   const fieldValues = titleFields.map((field, index) => typedFields[fieldKey(field.label)] ?? (fromRelease[index] || fromTitle[index] || ''))
+  // DPF-07: the Release Classification chosen (the Epic setup's own field, else the built-in picker) picks the DoD and
+  // User Stories set for that value, else the Epic's default.
+  const classField = epicEntry ? epicEntry.fields.findIndex((field) => fieldKey(field.label) === 'releaseclassification') : -1
+  const classValue = classField >= 0 ? fieldValues[classField] ?? '' : releaseClassification
+  const classSet = setForClass(baseSetup, classValue)
+  const epicSetup = baseSetup && classSet ? { ...baseSetup, featureDoD: classSet.featureDoD, stories: classSet.stories } : baseSetup
   // With an Epic setup the Title follows its pattern or its Title fields; fields that go only into the Description leave the typed title.
   const fromFields = epicEntry ? featureFromFields(epicEntry, fieldValues, titleText) : undefined
   const fieldsMakeTitle = epicEntry ? Boolean(epicEntry.titlePattern || epicEntry.fields.some((field) => field.into !== 'description')) : titleFields.length > 0
@@ -97,6 +114,9 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
   // optional stories exclude each other: ticking one side clears the other. By default the stories are ticked and it
   // is not, unless there are no stories to tick.
   const [reviewChoice, setReviewChoice] = useState<boolean | null>(null)
+  // A different classification offers other stories: start their choice afresh.
+  const [storiesOf, setStoriesOf] = useState(classValue)
+  if (storiesOf !== classValue) { setStoriesOf(classValue); setSkipStories([]); setReviewChoice(null); setDodText(null) }
   const reviewStory = reviewChoice ?? (epicSetup ? epicSetup.stories.length === 0 : availableMilestones.length === 0)
   const chooseReview = (checked: boolean) => { setReviewChoice(checked); if (checked) { setSkipStories(epicSetup ? epicSetup.stories.map((_, index) => index) : []); setMilestones([]) } }
   const storiesChosen = (count: number) => { if (count > 0) setReviewChoice(false) }
@@ -126,12 +146,17 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
     event.preventDefault()
     if (submitting.current) return
     if (isNew && !parent) { setError('Choose the parent Epic.'); return }
+    if (monthsError) { setError(monthsError); return }
     if (fromFields?.blocked.length) { setError(`Fill ${fromFields.blocked.join(', ')}: the Epic setup of #${epicId} needs ${fromFields.blocked.length === 1 ? 'it' : 'them'} (Admin → Epic & Feature setup).`); return }
     const data = new FormData(event.currentTarget)
     const token = pat; setError(''); submitting.current = true; setCreating(true)
     const parseHours = (value: string, label: string) => { if (!value.trim()) return undefined; const hours = Number(value); if (!Number.isFinite(hours) || hours < 0 || hours > 1000000) throw new Error(`${label} must be a number from 0 to 1,000,000.`); return hours }
     let feature: FeatureInput
-    try { if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(assignee)) throw new Error(me ? 'Choose who the Feature and its children are assigned to.' : 'Configure the Feature creator email in Azure DevOps settings before creating a Feature.'); feature = { parentId: parent?.id ?? 0, title: title.trim(), description: needsDoD ? withFeatureDoD(dod, String(data.get('description') ?? ''), classificationInFields ? undefined : releaseClassification, (fromFields ? fromFields.lines : fieldLines(titleFields, fieldValues))) : '', acceptanceCriteria: String(data.get('acceptance') ?? ''), areaPath: String(data.get('areaPath') ?? ''), iterationPath, assignedTo: assignee, storyIterationPath: sprintPath, targetDate: String(data.get('targetDate') ?? ''), taskOriginalEstimate: parseHours(taskOriginalEstimate, 'Original Estimate'), taskCompletedWork: parseHours(taskCompletedWork, 'Completed Work') } }
+    try { if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(assignee)) throw new Error(me ? 'Choose who the Feature and its children are assigned to.' : 'Configure the Feature creator email in Azure DevOps settings before creating a Feature.'); feature = { parentId: parent?.id ?? 0, title: title.trim(), description: needsDoD ? withFeatureDoD(dod, String(data.get('description') ?? ''), classificationInFields ? undefined : releaseClassification, (fromFields ? fromFields.lines : fieldLines(titleFields, fieldValues))) : '', acceptanceCriteria: String(data.get('acceptance') ?? ''), areaPath: String(data.get('areaPath') ?? ''), iterationPath, assignedTo: assignee, storyIterationPath: sprintPath, ...(isNew && startDate ? { startDate } : {}), targetDate, taskOriginalEstimate: parseHours(taskOriginalEstimate, 'Original Estimate'), taskCompletedWork: parseHours(taskCompletedWork, 'Completed Work') } }
+    catch (failure) { setError(failure instanceof Error ? failure.message : 'Invalid Task effort.'); submitting.current = false; setCreating(false); return }
+    // The months after the first one, with the hours typed for each (none for a future month's Completed Work).
+    let later: { month: string; originalEstimate?: number; completedWork?: number }[]
+    try { later = months.slice(1).map((label) => ({ month: label, originalEstimate: parseHours(hoursOf(label).plan, `Original Estimate of ${label}`), completedWork: isFutureMonth(label, todayMonth) ? undefined : parseHours(hoursOf(label).done, `Completed Work of ${label}`) })) }
     catch (failure) { setError(failure instanceof Error ? failure.message : 'Invalid Task effort.'); submitting.current = false; setCreating(false); return }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(assignee)) { setError('Choose who the work is assigned to.'); submitting.current = false; setCreating(false); return }
     onSavePat?.(token)
@@ -153,6 +178,16 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
         const task = bundle.items.find((item) => item.workItemType === 'Task')
         if (task && feature.taskCompletedWork != null) { const updated = await updateAzureTimeWritingEffort(config, token, task.id, undefined, feature.taskCompletedWork); bundle = { ...bundle, items: bundle.items.map((item) => item.id === task.id ? updated : item) } }
       } else bundle = resumeFeature ? await completeReleaseHierarchy(config, token, resumeFeature.id, releaseKind, milestones, monthLabel, undefined, sprintPath, assignee, reviewStory, adhoc) : await createAzureReleaseHierarchy(config, token, feature, releaseKind, milestones, monthLabel, undefined, reviewStory, adhoc)
+      // BKL-32: one Task for every later month up to the Target date.
+      if (later.length) {
+        try {
+          const added = await addMonthTasks(config, token, bundle.feature.id, assignee, later.map((entry) => ({ ...entry, adhoc: adhocAfterLock(entry.month) })), epicSetup?.task.originalEstimate, undefined, progress)
+          bundle = { ...bundle, items: [...bundle.items, ...added] }
+        } catch (failure) {
+          const made = failure instanceof HierarchyCreationError ? failure.createdItems : []
+          throw new HierarchyCreationError(`Feature #${bundle.feature.id} and its ${monthLabel} Task exist. ${failure instanceof Error ? failure.message : 'A later month Task failed.'} Add the missing months with ＋ Time Writing Task.`, mergeAzureWorkItems(bundle.items, made))
+        }
+      }
       let storyText = ''
       const own = { title: ownStory.title.trim(), description: ownStory.description.trim(), comment: ownStory.comment.trim() }
       if (!resumeFeature && own.title) {
@@ -164,7 +199,7 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
         } catch (failure) { storyText = ` Your User Story could not be added (${failure instanceof Error ? failure.message : 'failed'}); add it with New User Story.` }
       }
       onCreated?.(parent ? [parent, ...bundle.items] : bundle.items)
-      const doneText = `Hierarchy complete: ${epicSetup ? `${epicSetup.stories.length - skipStories.length} optional` : milestones.length} ${epicSetup ? 'User Stories' : 'milestone stories'}, ${reviewStory ? 'Review of Deliverables story, ' : ''}Time Writing story and ${monthLabel} task verified${adhoc ? ' (a new Task is tagged ad-hoc: planning is locked)' : ''}.`
+      const doneText = `Hierarchy complete: ${epicSetup ? `${epicSetup.stories.length - skipStories.length} optional` : milestones.length} ${epicSetup ? 'User Stories' : 'milestone stories'}, ${reviewStory ? 'Review of Deliverables story, ' : ''}Time Writing story and ${months.length > 1 ? `${months.length} month Tasks (${monthLabel} – ${months[months.length - 1]})` : `${monthLabel} task`} verified${adhoc ? ' (a new Task is tagged ad-hoc: planning is locked)' : ''}.`
       onDone({ feature: bundle.feature, items: bundle.items, parent: parent ?? undefined, text: doneText })
       return { text: `#${bundle.feature.id} “${bundle.feature.title}”: ${doneText}${storyText}`, failed: storyText.includes('could not') }
     } catch (failure) {
@@ -188,17 +223,26 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
   // and says what is missing; Save is at the bottom. Completing children shows everything at once.
   // The saved PAT is used silently; the field shows only when none is saved (or on "Use another token").
   const [showPat, setShowPat] = useState(!savedPat)
-  const childCount = epicSetup ? epicSetup.stories.length - skipStories.length + (reviewStory ? 1 : 0) + 2 : milestones.length + (reviewStory ? 1 : 0) + 2
+  const childCount = epicSetup ? epicSetup.stories.length - skipStories.length + (reviewStory ? 1 : 0) + 1 + months.length : milestones.length + (reviewStory ? 1 : 0) + 1 + months.length
   const pairLabel = (pair: { pi: AzureIteration; sprint: AzureIteration }) => `${pair.pi.name} → ${pair.sprint.name} (${pair.sprint.attributes?.startDate?.slice(5, 10)} – ${pair.sprint.attributes?.finishDate?.slice(5, 10)})`
-  const steps = ['Feature', 'Definition of Done', 'User Stories', `Estimates for ${monthLabel}`]
-  const featureMissing = [!parent && 'the Parent Epic', !(epicSetup ? title.trim() : plan) && (title.trim() ? 'a title in the form “Program | Service | Release”' : 'the title'), !sprintPath && 'the PI → Sprint'].filter(Boolean) as string[]
+  const monthRange = months.length > 1 ? `${monthLabel} – ${months[months.length - 1]}` : monthLabel
+  const steps = ['Feature', 'Definition of Done', 'User Stories', `Estimates for ${monthRange}`]
+  const featureMissing = [!parent && 'the Parent Epic', !(epicSetup ? title.trim() : plan) && (title.trim() ? 'a title in the form “Program | Service | Release”' : 'the title'), !sprintPath && 'the PI → Sprint', monthsError && 'valid dates'].filter(Boolean) as string[]
   // BKL-30: sections 2 and 3 count as done once the person presses Continue in them (an explicit step action, as in
   // stepped forms generally — not on leaving the box): the DoD usually starts filled and the stories are optional, so
   // being filled cannot tell that they were looked at. Continue shows the next section and moves the focus to it.
   const [left, setLeft] = useState<number[]>([])
+  // The next section is focused once React has shown it (an effect after the render), never before: focusing a
+  // still-hidden section does nothing.
+  const [focusSection, setFocusSection] = useState<number | null>(null)
+  useEffect(() => {
+    if (focusSection == null) return
+    document.querySelector<HTMLElement>(`form.nf-form section[aria-label^="Section ${focusSection}"]`)?.focus()
+    setFocusSection(null) // eslint-disable-line react-hooks/set-state-in-effect
+  }, [focusSection])
   const advance = (index: number) => {
     setLeft((now) => now.includes(index) ? now : [...now, index])
-    requestAnimationFrame(() => document.querySelector<HTMLElement>(`form.nf-form section[aria-label^="Section ${index + 2}"]`)?.focus())
+    setFocusSection(index + 2)
   }
   const stepMissing = [featureMissing, dod.trim() ? [] : ['the DoD'], [], []]
   const done = (index: number) => !stepMissing[index].length && (index === 0 || left.includes(index))
@@ -254,8 +298,10 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
           <label>Area{parent ? <input name="areaPath" key={parent.key} value={parent.areaPath} readOnly title={parent.areaPath} /> : isNew ? <span className="nf-value muted">From the parent Epic</span> : <span className="nf-value" title={resumeFeature?.areaPath}>{resumeFeature?.areaPath.split('\\').pop()}</span>}</label>
           <label>Iteration (PI → Sprint)<select aria-label="PI / Sprint schedule" required value={sprintPath} onChange={(event) => { const pair = selectablePairs.find((value) => value.sprint.path === event.target.value); setSprintPath(pair?.sprint.path ?? ''); setIterationPath(pair?.pi.path ?? '') }} disabled={creating || iterationLoading}><option value="">{iterationLoading ? 'Loading the schedule…' : selectablePairs.length ? 'Select a PI → Sprint' : 'Load the schedule ↻'}</option>{pairs.length > 0 && <optgroup label="Current">{pairs.map((pair) => <option key={pair.sprint.path} value={pair.sprint.path}>{pairLabel(pair)}</option>)}</optgroup>}{futurePairs.length > 0 && <optgroup label="Future">{futurePairs.map((pair) => <option key={pair.sprint.path} value={pair.sprint.path}>{pairLabel(pair)}</option>)}</optgroup>}</select>
             <button type="button" className="text-button" onClick={() => void loadIterations()} disabled={creating || iterationLoading || !(pat || savedPat)} title="Reload the current and future PI / Sprint schedule">↻ Reload</button></label>
-          {isNew && <label>Target date<input name="targetDate" type="date" disabled={creating} /></label>}
+          {isNew && <label>Start date<input name="startDate" type="date" aria-label="Start date" value={startDate} disabled={creating} onChange={(event) => setStartDate(event.target.value)} title="Empty: today. Time Writing Tasks start in this month (not before the current month)." /></label>}
+          {isNew && <label>Target date<input name="targetDate" type="date" aria-label="Target date" value={targetDate} min={startDate || undefined} disabled={creating} onChange={(event) => setTargetDate(event.target.value)} title="Time Writing Tasks are created for every month up to this one." /></label>}
         </div>
+        {isNew && <p className={`muted nf-months${monthsError ? ' error-text' : ''}`} role={monthsError ? 'alert' : undefined}>{monthsError || <>Time Writing: {months.length === 1 ? <>one Task for <strong>{monthLabel}</strong></> : <>{months.length} month Tasks, <strong>{monthRange}</strong></>}{startDate ? '' : ' (Start date empty: from today)'}{targetDate ? '' : ' — set a Target date to add the months up to it'}.</>}</p>}
         {showPat ? <label>PAT — Work Items: Read &amp; Write<input type="password" required autoComplete="off" value={pat} onChange={(event) => { setPat(event.target.value); setIterationChoices([]); setIterationPath(''); setSprintPath('') }} disabled={creating} /><small>Saved in this browser only. Enter it, then ↻ Reload the schedule.</small></label>
           : <p className="muted nf-pat">Using your saved Azure DevOps token. <button type="button" className="text-button" disabled={creating} onClick={() => setShowPat(true)}>Use another token</button></p>}
         {missingNote(0)}
@@ -264,14 +310,14 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
       {isNew && <section className={sectionClass(1)} hidden={!shown(1)} aria-label="Section 2: Definition of Done" tabIndex={-1}>
         {heading(1)}
         <p className="muted nf-hint">What has to be true for “{title.trim() || 'this Feature'}” to be done.</p>
-        <label>Feature DoD (Definition of Done) — required<textarea required maxLength={100000} rows={6} value={dod} onChange={(event) => setDodText(event.target.value)} disabled={creating} placeholder="e.g. IQOQ finished and Checklist uploaded into the Feature." /><small>{dodText == null && epicSetup?.featureDoD.trim() ? `From the ${setupSource === 'personal' ? 'your own' : 'shared'} setup of Epic #${epicSetup.epicId}. ` : dodText == null ? 'The built-in DoD; change it as needed. ' : ''}Saved at the top of the Description.</small></label>
+        <label>Feature DoD (Definition of Done) — required<textarea required maxLength={100000} rows={6} value={dod} onChange={(event) => setDodText(event.target.value)} disabled={creating} placeholder="e.g. IQOQ finished and Checklist uploaded into the Feature." /><small>{dodText == null && epicSetup?.featureDoD.trim() ? `From the ${setupSource === 'personal' ? 'your own' : 'shared'} setup of Epic #${epicSetup.epicId}${classSet ? ` for ${classValue}` : ''}. ` : dodText == null ? 'The built-in DoD; change it as needed. ' : ''}Saved at the top of the Description.</small></label>
         <details className="nf-more"><summary>Description and acceptance criteria (optional)</summary>
           <label>Description<textarea name="description" maxLength={100000} value={description} onChange={(event) => setDescription(event.target.value)} disabled={creating} /></label>
           <label>Acceptance criteria<textarea name="acceptance" maxLength={100000} disabled={creating} /></label>
         </details>
         {missingNote(1)}
       </section>}
-      <section className={`nf-children ${sectionClass(2)}`} hidden={!shown(2)} aria-label={wizard ? 'Section 3: User Stories' : undefined} tabIndex={wizard ? -1 : undefined}>{heading(2)}{wizard ? <p className="muted nf-hint">Tick the User Stories to add under the Feature, and add one of your own if you need it. All are optional.</p> : null}<h4><strong>Child work items</strong> · {childCount} will be created or checked{epicSetup ? ` · ${setupSource === 'personal' ? 'your' : 'shared'} setup of Epic #${epicSetup.epicId}` : ''}</h4>
+      <section className={`nf-children ${sectionClass(2)}`} hidden={!shown(2)} aria-label={wizard ? 'Section 3: User Stories' : undefined} tabIndex={wizard ? -1 : undefined}>{heading(2)}{wizard ? <p className="muted nf-hint">Tick the User Stories to add under the Feature, and add one of your own if you need it. All are optional.</p> : null}<h4><strong>Child work items</strong> · {childCount} will be created or checked{epicSetup ? ` · ${setupSource === 'personal' ? 'your' : 'shared'} setup of Epic #${epicSetup.epicId}${classSet ? ` · ${classValue}` : ''}` : ''}</h4>
         {epicSetup && bothSetups && <p className="muted setup-source"><button type="button" className="text-button" disabled={creating} onClick={() => { setPreferShared(!preferShared); setSkipStories([]); setReviewChoice(null); setDodText(null) }}>{preferShared ? 'Use my own setup instead' : 'Use the shared setup instead'}</button></p>}
         {epicSetup ? <>
           <fieldset className="milestone-choices" disabled={creating}><legend>Optional User Stories</legend>
@@ -279,11 +325,11 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
             {epicSetup.stories.map((story, index) => <label className="checkbox-label" key={index}><input type="checkbox" checked={!skipStories.includes(index)} onChange={(event) => { setSkipStories((now) => event.target.checked ? now.filter((value) => value !== index) : [...now, index]); if (event.target.checked) setReviewChoice(false) }} />{filled(story.title)}</label>)}
             <label className="checkbox-label"><input type="checkbox" checked={reviewStory} onChange={(event) => chooseReview(event.target.checked)} />{reviewStoryTitle(title.trim() || '{feature}')} <small className="muted">(built-in, in the Sprint)</small></label>
           </fieldset>
-          <p className="muted nf-always">Always: {title.trim() ? <>“{title.trim()} - Time Writing” at {config.project} (project root), with the Task “{monthLabel} | {title.trim()}”{epicSetup.task.originalEstimate != null ? ` (${epicSetup.task.originalEstimate}h by default)` : ''}.</> : 'the Time Writing User Story and the month Task (enter the title to see them).'}</p>
+          <p className="muted nf-always">Always: {title.trim() ? <>“{title.trim()} - Time Writing” at {config.project} (project root), with the Task “{monthLabel} | {title.trim()}”{months.length > 1 ? ` and one for each month up to ${months[months.length - 1]}` : ''}{epicSetup.task.originalEstimate != null ? ` (${epicSetup.task.originalEstimate}h by default)` : ''}.</> : 'the Time Writing User Story and the month Task (enter the title to see them).'}</p>
         </> : <>
           <fieldset className="milestone-choices" disabled={creating}><legend>Optional milestone User Stories</legend><div className="button-row"><button type="button" className="text-button" onClick={() => { setMilestones(availableMilestones); storiesChosen(availableMilestones.length) }}>Select all</button><button type="button" className="text-button" onClick={() => { setMilestones([]); setReviewChoice(false) }}>Deselect all</button></div>{availableMilestones.map((milestone) => <label className="checkbox-label" key={milestone}><input type="checkbox" checked={milestones.includes(milestone)} onChange={(event) => { setMilestones((current) => event.target.checked ? availableMilestones.filter((value) => value === milestone || current.includes(value)) : current.filter((value) => value !== milestone)); if (event.target.checked) setReviewChoice(false) }} />{milestone} review of deliverables</label>)}
             <label className="checkbox-label"><input type="checkbox" checked={reviewStory} onChange={(event) => chooseReview(event.target.checked)} />{reviewStoryTitle(title.trim() || '{feature}')} <small className="muted">(built-in, in the Sprint)</small></label></fieldset>
-          <p className="muted nf-always">Always: {plan ? <>“{plan.timeWriting}” at {config.project} (project root), with the Task “{plan.task}”.</> : 'the Time Writing User Story and this month’s Task (enter the title to see them).'}</p>
+          <p className="muted nf-always">Always: {plan ? <>“{plan.timeWriting}” at {config.project} (project root), with the Task “{plan.task}”{months.length > 1 ? ` and one for each month up to ${months[months.length - 1]}` : ''}.</> : 'the Time Writing User Story and this month’s Task (enter the title to see them).'}</p>
         </>}
         {!resumeFeature && <fieldset className="milestone-choices nf-own-story" disabled={creating}><legend>Your own User Story <small className="muted">(optional)</small></legend>
           <label>User Story title<input value={ownStory.title} maxLength={255} placeholder="Leave empty for none" onChange={(event) => setOwnStory((current) => ({ ...current, title: event.target.value }))} /></label>
@@ -294,15 +340,25 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
         {missingNote(2)}
         <p className="info-line"><Info label="Paths and assignment">Feature → {resumeFeature ? resumeFeature.iterationPath : iterationPath || 'the PI chosen'}. Optional User Stories → {sprintPath || 'the Sprint chosen'}. Time Writing story and Task → {config.project}, never the Sprint, in the Feature’s Area Path (the same on every page; an existing month Task of the person is reused). Area: the Feature and its User Stories take the Epic’s Area Path. Every new item is assigned to {assignee || 'the person chosen'}. {month ? `Time Writing month: ${monthLabel}.` : 'Current date uses India time.'}</Info></p>
       </section>
-      {isNew && <section className={sectionClass(3)} hidden={!shown(3)} aria-label={`Section 4: Estimates for ${monthLabel}`}>
+      {isNew && <section className={sectionClass(3)} hidden={!shown(3)} aria-label={`Section 4: Estimates for ${monthRange}`} tabIndex={-1}>
         {heading(3)}
-        <p className="muted nf-hint">The hours of the Time Writing Task “{monthLabel} | {title.trim() || '…'}”. Both are optional; you can change them later.</p>
-        {lateTask && <p className="muted adhoc-note">Planning for {monthLabel} is locked: the new Task is tagged <code>ad-hoc</code>.</p>}
-        <div className="nf-estimates">
-          <label>Original Estimate (h)<input type="number" min="0" max="1000000" step="0.25" value={taskOriginalEstimate} onChange={(event) => setTaskOriginalEstimate(event.target.value)} disabled={creating} placeholder={epicSetup?.task.originalEstimate != null ? `${epicSetup.task.originalEstimate} (setup)` : 'Optional'} /></label>
-          <label>Completed Work (h)<input type="number" min="0" max="1000000" step="0.25" value={taskCompletedWork} onChange={(event) => setTaskCompletedWork(event.target.value)} disabled={creating} placeholder="Optional" /></label>
-        </div>
-        <dl className="nf-summary" aria-label="Summary"><dt>Feature</dt><dd>{title.trim()}</dd><dt>Parent Epic</dt><dd>{parent ? `#${parent.id} · ${parent.title}` : ''}</dd><dt>PI → Sprint</dt><dd>{sprintPath.split('\\').slice(-2).join(' → ')}</dd><dt>Children</dt><dd>{childCount} will be created or checked{ownStory.title.trim() ? ', plus your own User Story' : ''}</dd></dl>
+        {months.length === 1 ? <>
+          <p className="muted nf-hint">The hours of the Time Writing Task “{monthLabel} | {title.trim() || '…'}”. Both are optional; you can change them later.</p>
+          {lateTask && <p className="muted adhoc-note">Planning for {monthLabel} is locked: the new Task is tagged <code>ad-hoc</code>.</p>}
+          <div className="nf-estimates">
+            <label>Original Estimate (h)<input type="number" min="0" max="1000000" step="0.25" value={taskOriginalEstimate} onChange={(event) => setHours(monthLabel, { plan: event.target.value })} disabled={creating} placeholder={epicSetup?.task.originalEstimate != null ? `${epicSetup.task.originalEstimate} (setup)` : 'Optional'} /></label>
+            <label>Completed Work (h)<input type="number" min="0" max="1000000" step="0.25" value={taskCompletedWork} onChange={(event) => setHours(monthLabel, { done: event.target.value })} disabled={creating || isFutureMonth(monthLabel, todayMonth)} placeholder={isFutureMonth(monthLabel, todayMonth) ? 'From that month' : 'Optional'} /></label>
+          </div>
+        </> : <>
+          <p className="muted nf-hint">One Time Writing Task “{'{Month}'} | {title.trim() || '…'}” for each month. Enter the planned hours per month (optional; you can change them later). Completed Work cannot be entered for a future month.</p>
+          <table className="nf-month-hours"><thead><tr><th scope="col">Month</th><th scope="col">Original Estimate (h)</th><th scope="col">Completed Work (h)</th></tr></thead>
+            <tbody>{months.map((label) => { const future = isFutureMonth(label, todayMonth); return <tr key={label}><th scope="row">{label}{adhocAfterLock(label) && <small className="muted" title={`Planning for ${label} is locked: the new Task is tagged ad-hoc.`}> · ad-hoc</small>}</th>
+              <td><input type="number" aria-label={`Original Estimate (h) ${label}`} min="0" max="1000000" step="0.25" value={hoursOf(label).plan} onChange={(event) => setHours(label, { plan: event.target.value })} disabled={creating} placeholder={epicSetup?.task.originalEstimate != null ? `${epicSetup.task.originalEstimate} (setup)` : 'Optional'} /></td>
+              <td><input type="number" aria-label={`Completed Work (h) ${label}`} min="0" max="1000000" step="0.25" value={future ? '' : hoursOf(label).done} onChange={(event) => setHours(label, { done: event.target.value })} disabled={creating || future} placeholder={future ? '—' : 'Optional'} /></td></tr> })}</tbody>
+            <tfoot><tr><th scope="row">Total</th><td>{months.reduce((sum, label) => sum + (Number(hoursOf(label).plan) || 0), 0)}</td><td>{months.reduce((sum, label) => sum + (isFutureMonth(label, todayMonth) ? 0 : Number(hoursOf(label).done) || 0), 0)}</td></tr></tfoot>
+          </table>
+        </>}
+        <dl className="nf-summary" aria-label="Summary"><dt>Feature</dt><dd>{title.trim()}</dd><dt>Parent Epic</dt><dd>{parent ? `#${parent.id} · ${parent.title}` : ''}</dd><dt>PI → Sprint</dt><dd>{sprintPath.split('\\').slice(-2).join(' → ')}</dd><dt>Children</dt><dd>{childCount} will be created or checked{ownStory.title.trim() ? ', plus your own User Story' : ''}</dd><dt>Time Writing</dt><dd>{months.length === 1 ? monthLabel : `${months.length} months, ${monthRange}`}</dd></dl>
         {missingNote(3)}
       </section>}
       {error && <div className="notice error" role="alert">{error}</div>}
