@@ -577,7 +577,7 @@ test('TC-SET-06: Admin lists the shared setup pages, My settings opens from your
   assert.match(await text(page.locator('.scope-line')), /Only you · This computer/)
   // EPS-08: Epic setup and Feature setup are one page, starting from the list of all Epic setups.
   await navigate(page, 'Epic & Feature setup')
-  assert.deepEqual((await sections.getByRole('tab').allInnerTexts()).map((label) => label.trim()), ['Setup per Epic', 'Value lists'])
+  assert.deepEqual((await sections.getByRole('tab').allInnerTexts()).map((label) => label.trim()), ['Setup per Epic', 'Value lists', 'User Story templates'])
   assert.deepEqual(errors, [])
   await context.close()
 })

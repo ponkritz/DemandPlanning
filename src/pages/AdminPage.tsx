@@ -5,6 +5,7 @@ import type { SetupStep } from '../setupGuide'
 import { useBulkEpic } from '../useStreamEpics'
 import { NamingPatternsPanel } from '../components/NamingPatternsPanel'
 import { EpicSetupPanel } from '../components/EpicSetupPanel'
+import { StoryTemplatesPanel } from '../components/StoryTemplatesPanel'
 import type { EpicSetupStore } from '../useEpicSetup'
 import { ScopeChip } from '../components/ScopeChip'
 import { MyViewsPanel } from '../components/MyViewsPanel'
@@ -378,6 +379,7 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, epic
     {tab === 'epics' && <SectionTabs page="epics" sections={[
       { key: 'setup', label: 'Setup per Epic', scope: 'both', node: <EpicFeatureEditor setup={featureSetup} epicSetup={epicSetup} git={git} items={azure.items} qeColumnNames={qeColumnNames} /> },
       { key: 'lists', label: 'Value lists', scope: 'everyone', node: <EpicSetupPanel section="lists" setup={epicSetup} git={git} items={azure.items} canEdit={can('setup.epic')} canEditLists={can('setup.values')} /> },
+      { key: 'templates', label: 'User Story templates', scope: 'everyone', node: <StoryTemplatesPanel setup={epicSetup} featureSetup={featureSetup} git={git} items={azure.items} canEdit={can('setup.values')} /> },
     ]} />}
     {tab === 'audit' && <Panel eyebrow="HISTORY" title="Changes" info="The changes made to the shared planning data, newest first, with who and what. Filter by area or text.">
       <div className="query-toolbar"><select aria-label="Area" value={auditFilter.entity} onChange={(event) => setAuditFilter({ ...auditFilter, entity: event.target.value })}><option value="">All areas</option>{auditEntities.map((entity) => <option key={entity}>{entity}</option>)}</select><input className="search" aria-label="Search changes" placeholder="Search changes" value={auditFilter.text} onChange={(event) => setAuditFilter({ ...auditFilter, text: event.target.value })} /><small className="muted">{auditShown.length} of {store.state.audits.length}</small></div>

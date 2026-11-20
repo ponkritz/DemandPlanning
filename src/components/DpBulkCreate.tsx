@@ -6,7 +6,7 @@ import { useEpicSetupFile } from '../useEpicSetup'
 import type { AzureWorkItem } from '../domain'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { FeatureSetups } from '../featureSetup'
-import { chooseSetup } from '../featureSetup'
+import { chooseSetup, withLinkedStories } from '../featureSetup'
 import { useBulkEpic } from '../useStreamEpics'
 import type { QeMappingFile } from '../qeMapping'
 import { bulkPlan, dpTypeLabel, pickQe } from '../dpBulk'
@@ -24,13 +24,15 @@ import { Modal, Notice } from './ui'
 export function DpBulkCreate({ rows, azure, featureSetup, qeMapping, featureMatch, onClose }: { rows: AzureWorkItem[]; azure: AzureWorkspace; featureSetup?: FeatureSetups | null; qeMapping?: QeMappingFile | null; featureMatch: (row: AzureWorkItem) => BoardHit | undefined; onClose: () => void }) {
   // QV-59: the DP bulk Epic — mine, else shared, else built in (13946).
   const dpEpicId = useBulkEpic('DP').epicId ?? 0
-  const setup = chooseSetup(featureSetup, dpEpicId, true).setup
+  const unlinked = chooseSetup(featureSetup, dpEpicId, true).setup
+  const epicFile = useEpicSetupFile()
+  // STT-02: stories linked to a User Story template take its current title and description.
+  const setup = withLinkedStories(unlinked, epicFile?.storyTemplates)
   // DPF-06: the QE picked per release in the pop-up (email by release), in place of the QE Mapping's.
   const [picks, setPicks] = useState<Record<string, string>>({})
   const people = boardPeople(azure.items)
   // DPF-08: the Release Classification per row, from the Epic's list (prefilled from the release number), decides
   // the DoD and User Stories (DPF-07).
-  const epicFile = useEpicSetupFile()
   const classes = classificationOf(epicFile, dpEpicId)
   const [classPicks, setClassPicks] = useState<Record<string, string>>({})
   const mappedPlan = bulkPlan(rows, { setup, qeMapping, board: azure.items, featureMatch, classes: classPicks, classValues: classes.values })

@@ -144,6 +144,7 @@ Stakeholders:
 | UC-33 | Create the Features of several Content releases at once, all assigned to one person | QE lead |
 | UC-34 | Set up, per Epic, the extra fields a new Feature carries (e.g. Program, Platform) and their drop-down values, once for everyone | Tool Owner, Admin, Scrum Master |
 | UC-35 | See what is left to set up and what is not yet shared, and find any setting quickly | Admin, Tool Owner |
+| UC-36 | Keep User Stories as reusable templates, tag them to Epics and Release Classification values, and pick them into an Epic's setup so they stay in step | Tool Owner, Admin, Scrum Master |
 | UC-24 | Prepare the two monthly Pulse Check slides (2x2 and Performance Pulse) for the month before the header month from the app's data, with the month's text kept in Git, and download them as .pptx | Lead, manager |
 
 ## 3. User requirements
@@ -182,7 +183,9 @@ User requirements are what the stakeholders of §2 need from the tool, written a
 | UR-30 | I need to create the Features of many Content releases in one go, each the same way, and give them all to one person. | QE lead | UC-33 | SR-34 |
 | SR-35 | The system shall keep a shared Epic setup in Git — per Epic, Feature fields (type, value list, If empty, Title and/or Description, on-prem field) and a title pattern, plus shared value lists — and apply it to every new Feature under the Epic, in New Feature and in bulk creation. | UR-31 | EPS (§5.33) |
 | SR-36 | The system shall give Admin an Overview of setup health with links to the settings that fix each item, show unsaved shared changes with Save to Git and a count in the menu, search every setting by name or topic (Ctrl K), and list the changes with filters. | UR-32 | ADM (§5.34) |
+| SR-37 | The system shall keep a shared library of User Story templates (title and description) in the Epic setup in Git, each tagged with Epics and Release Classification values, offer the matching ones when an Epic's User Stories are set up, keep picked stories linked so that a template change applies everywhere, and let a story of the setup be saved as a template. | UR-33 | STT (§5.35) |
 | UR-32 | I need one place that tells me what is not set up or not yet shared, with a way straight to the setting, and a quick way to find any setting and the recent changes. | Admin, Tool Owner | UC-35 | SR-36 |
+| UR-33 | I need to save User Story details once as templates, tag them to the Epics and release types they belong to, and pick them for an Epic, so that a change to a template reaches every Epic that uses it. | Tool Owner, Admin, Scrum Master | UC-36 | SR-37 |
 | UR-31 | I need each Epic's new Features to carry the fields that Epic needs (Program for DP, Platform for CP …), from drop-downs the team shares, in the Title or the Description, and to say which may be left empty. | Tool Owner, Admin, Scrum Master | UC-34 | SR-35 |
 | SR-34 | The system shall create the Features of selected Content releases in bulk under Epic 22919 with a fixed DoD, Release Classification, Review of Deliverables story and month Task estimate, all assigned to one person chosen when creating. | UR-30 | CNB (§5.32) |
 | SR-33 | The system shall classify DP releases by their version, show each release’s QE from the QE Mapping and its possible QEs from the earlier releases of the product, and create the Features of selected DP releases in bulk under Epic 13946 with the DoD and User Stories of their release type, assigned to the QE, from a setup kept in the Feature setup. | UR-29 | DPF (§5.31) |
@@ -1027,6 +1030,13 @@ OVR-01 to OVR-08 describe the earlier Overview (Team / Individual switch, "This 
 | ADM-02 | Shared planning-data changes not yet saved to Git shall be shown on the Overview with **Save to Git** (the publish tray) and as a count next to the **ADMIN** heading of the menu until saved; shared changes keep saving as today. | T | S | UC-35 |
 | ADM-03 | **Search settings** — Ctrl K (⌘ K), a Search settings link in the sidebar and a button on the Overview — shall find any settings page or section by its name, its page or what it affects (e.g. PAT, IOCC, DoD, master data), list only those the person may open, and open the chosen one (Enter opens the first). | T | S | UC-35 |
 | ADM-04 | **Admin → History** shall list the recorded changes, newest first, filtered by area and by text, with how many are shown. | T | C | UC-35 |
+
+### 5.35 User Story templates (STT) — UC-36
+
+| ID | Requirement | Ver. | Pri. | Trace |
+|---|---|---|---|---|
+| STT-01 | **Admin → Epic & Feature setup → User Story templates** shall keep a shared library of User Story templates in the Epic setup file in Git (`storyTemplates`, at most 200): each a **title** (placeholders such as {service} {version} or {feature} allowed) and a **description**, tagged with any number of **Epics** and **Release Classification values** (the built-in values and those of the value lists); no tag means any. It shall be searchable, show where each template is linked in the saved Feature setup, and add, edit and remove templates (a linked one after confirmation) for roles allowed "Edit Epic setup value lists and User Story templates" with a Git token that can save; others see it read only. | T | M | UC-36 |
+| STT-02 | In Setup per Epic, the User Stories (of the Epic default, a Release Classification value — DPF-07 — or All Epics) shall offer **＋ Add from templates**: first the templates whose tags fit the Epic and the value shown (Epic tags empty or naming the Epic; value tags empty, or naming the value on a value tab), then the other templates. A picked story stays **linked**: it is shown with a Template mark and its description, and New Feature (ticked by default) and the DP / IOCC bulk creation use the template's **current** title and description; **Unlink** keeps a copy that no longer follows it; a removed template leaves the copy saved with the story. **Save as template** on a story of the setup makes it a template (tagged with the Epic and the value shown; none on All Epics) and links the story. A story's description can be edited in the setup. | T | M | UC-36, UC-07 |
 
 ## 6. Non-functional requirements
 

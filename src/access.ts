@@ -47,7 +47,7 @@ export const actions = [
   { key: 'setup.feature', group: 'Setup', label: 'Edit the shared Feature setup', legacy: '*' },
   // EPS-04 (permissions 3): the Epic setup's fields and its value lists.
   { key: 'setup.epic', group: 'Setup', label: 'Edit the Epic setup (Feature fields per Epic, title pattern, Copy to Epics)', legacy: 'settings.manage', since: 3 },
-  { key: 'setup.values', group: 'Setup', label: 'Edit Epic setup value lists', legacy: 'settings.manage', since: 3 },
+  { key: 'setup.values', group: 'Setup', label: 'Edit Epic setup value lists and User Story templates', legacy: 'settings.manage', since: 3 },
   { key: 'capacity.settings', group: 'Capacity and time', label: 'Capacity and absence, calculation profiles', legacy: 'settings.manage' },
   { key: 'capacity.rules', group: 'Capacity and time', label: 'Bucket rules and insight thresholds', legacy: 'settings.manage' },
   { key: 'capacity.time', group: 'Capacity and time', label: 'Holidays and common activities', legacy: 'settings.manage' },

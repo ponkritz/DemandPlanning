@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { AzureWorkItem } from '../domain'
-import { classificationOf, copyEpicFields, emptyEpicSetup, featureFromFields, fieldTypes, ifEmptyOptions, intoOptions, maxEpicFields, serializeEpicSetup, upsertEpicFields, type EpicField, type EpicFields, type EpicSetupFile } from '../epicSetup'
+import { classificationOf, copyEpicFields, emptyEpicSetup, newStoryTemplateId, templatesFor, upsertStoryTemplate, type StoryTemplateItem, featureFromFields, fieldTypes, ifEmptyOptions, intoOptions, maxEpicFields, serializeEpicSetup, upsertEpicFields, type EpicField, type EpicFields, type EpicSetupFile } from '../epicSetup'
 import { chooseSetup, classKindOf, classSetKey, dpEpicId, emptySetup, fieldKey, inheritFields, serializeFeatureSetup, setForClass, setupFor, type EpicSetup, type FeatureSetupFile, type InheritField, type SetupDefaults, type StoryTemplate } from '../featureSetup'
 import { useCan } from '../useCan'
 import type { EpicSetupStore } from '../useEpicSetup'
@@ -118,6 +118,16 @@ export function EpicFeatureEditor({ setup, epicSetup, git, items, qeColumnNames 
     else if (own) changeEntry((item) => { item.classSets![ownKey!].stories = next })
     else changeEntry((item) => { item.stories = next })
   }
+  // STT-01 / STT-02: User Story templates — picked here (linked), or a story saved as one (tagged with this Epic and value).
+  const allTemplates = epicFile.storyTemplates ?? []
+  const offered = isAll ? allTemplates.filter((item) => !item.epics.length && !item.classes.length) : templatesFor(epicFile, epicId, value)
+  const canTemplates = writable && can('setup.values')
+  const saveAsTemplate = (index: number) => {
+    const story = stories[index], id = newStoryTemplateId(epicFile, story.title)
+    epicSetup.setDraft(upsertStoryTemplate(epicFile, { id, title: story.title.trim(), description: story.description, epics: isAll ? [] : [epicId], classes: value ? [value] : [] }))
+    setStories(stories.map((item, at) => at === index ? { ...item, templateId: id } : item))
+    setResult({ tone: 'success', text: `Saved “${story.title.trim()}” as a template, linked here — Save to Git to keep it.` })
+  }
   // A value's own set: on, it starts from what applies to the value now; off, the value uses the Epic's default again.
   const toggleValue = (on: boolean) => {
     if (on) changeEntry((item) => { item.classSets = { ...(item.classSets ?? {}), [value]: { featureDoD: forValue?.from === 'legacy' ? forValue.featureDoD : '', stories: structuredClone(stories) } } })
@@ -209,7 +219,7 @@ export function EpicFeatureEditor({ setup, epicSetup, git, items, qeColumnNames 
         <header><span className="efe-n">{isAll ? 2 : 3}</span><div><h3>User Stories{value && ` — ${value}`}</h3><small>Created under the Feature, ticked by default</small></div>{!value && switchView('stories', 'User Stories')}</header>
         {value && !own ? <div className="efe-inherited"><small>{legacyKind ? 'FROM THE OLD SET' : 'FROM THE EPIC’S DEFAULT'}</small><span>{stories.map((story) => story.title).join('\n') || 'None'}</span></div>
         : !value && !isAll && !custom.stories ? fromDefaults((defaults.stories ?? []).map((story) => story.title).join('\n') || 'None set: New Feature offers the built-in PU / Full Release stories') : <>
-          <StoriesEditor stories={stories} disabled={!editable} onChange={setStories} />
+          <StoriesEditor stories={stories} disabled={!editable} onChange={setStories} templates={allTemplates} offered={offered} canSaveTemplate={canTemplates} onSaveTemplate={saveAsTemplate} />
           {hasSets && entry && !value && <div className="form-row">
             <label>QE Mapping column with the Platform / Product{qeColumnNames.length ? <select value={entry.qeColumns?.matchColumn ?? ''} disabled={!editable} onChange={(event) => changeEntry((value) => { value.qeColumns = { matchColumn: event.target.value, qeColumn: value.qeColumns?.qeColumn ?? '' } })}><option value="">Not set</option>{qeColumnNames.map((name) => <option key={name}>{name}</option>)}</select> : <small className="muted">Open QE Mapping once to list its columns.</small>}</label>
             <label>QE Mapping column with the QE{qeColumnNames.length ? <select value={entry.qeColumns?.qeColumn ?? ''} disabled={!editable} onChange={(event) => changeEntry((value) => { value.qeColumns = { matchColumn: value.qeColumns?.matchColumn ?? '', qeColumn: event.target.value } })}><option value="">Not set</option>{qeColumnNames.map((name) => <option key={name}>{name}</option>)}</select> : null}</label>
@@ -232,16 +242,34 @@ export function EpicFeatureEditor({ setup, epicSetup, git, items, qeColumnNames 
   </div>
 }
 
-function StoriesEditor({ stories, disabled, onChange }: { stories: StoryTemplate[]; disabled: boolean; onChange: (next: StoryTemplate[]) => void }) {
+function StoriesEditor({ stories, disabled, onChange, templates, offered, canSaveTemplate, onSaveTemplate }: { stories: StoryTemplate[]; disabled: boolean; onChange: (next: StoryTemplate[]) => void; templates: StoryTemplateItem[]; offered: StoryTemplateItem[]; canSaveTemplate: boolean; onSaveTemplate: (index: number) => void }) {
   const set = (index: number, update: Partial<StoryTemplate>) => onChange(stories.map((story, at) => at === index ? { ...story, ...update } : story))
+  const used = new Set(stories.map((story) => story.templateId).filter(Boolean))
+  const others = templates.filter((item) => !offered.some((entry) => entry.id === item.id) && !used.has(item.id))
+  const add = (id: string) => { const item = templates.find((entry) => entry.id === id); if (item) onChange([...stories, { title: item.title, description: item.description, templateId: item.id }]) }
   return <div className="efe-list">
-    {stories.map((story, index) => <div key={index} className="efe-row">
-      <span className="efe-num">{index + 1}</span>
-      <input aria-label={`User Story ${index + 1} title`} value={story.title} maxLength={255} disabled={disabled} onChange={(event) => set(index, { title: event.target.value })} />
-      {!disabled && <><button type="button" className="text-button" aria-label={`Move User Story ${index + 1} up`} disabled={index === 0} onClick={() => { const next = [...stories]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; onChange(next) }}>↑</button><button type="button" className="text-button danger-text" aria-label={`Remove User Story ${index + 1}`} onClick={() => onChange(stories.filter((_, at) => at !== index))}>Remove</button></>}
-    </div>)}
+    {stories.map((story, index) => {
+      const linked = story.templateId ? templates.find((item) => item.id === story.templateId) : undefined
+      const tools = !disabled && <><button type="button" className="text-button" aria-label={`Move User Story ${index + 1} up`} disabled={index === 0} onClick={() => { const next = [...stories]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; onChange(next) }}>↑</button><button type="button" className="text-button danger-text" aria-label={`Remove User Story ${index + 1}`} onClick={() => onChange(stories.filter((_, at) => at !== index))}>Remove</button></>
+      return <div key={index} className="efe-story">
+        <div className="efe-row">
+          <span className="efe-num">{index + 1}</span>
+          {linked ? <span className="efe-linked" aria-label={`User Story ${index + 1} from template`}><span>{linked.title}</span><small className="efe-badge efe-badge-custom">Template</small></span>
+            : <input aria-label={`User Story ${index + 1} title`} value={story.title} maxLength={255} disabled={disabled} onChange={(event) => set(index, { title: event.target.value })} />}
+          {!disabled && linked && <button type="button" className="text-button" title="Keep a copy here that no longer follows the template" onClick={() => set(index, { title: linked.title, description: linked.description, templateId: undefined })}>Unlink</button>}
+          {!disabled && !linked && canSaveTemplate && story.title.trim() && <button type="button" className="text-button" onClick={() => onSaveTemplate(index)}>Save as template</button>}
+          {tools}
+        </div>
+        {linked ? linked.description && <p className="muted efe-desc-text">{linked.description}</p>
+          : <details className="efe-desc"><summary>{story.description ? 'Description' : 'Add a description'}{story.templateId ? ' · template removed, kept as a copy' : ''}</summary><textarea aria-label={`User Story ${index + 1} description`} rows={2} value={story.description} disabled={disabled} onChange={(event) => set(index, { description: event.target.value })} /></details>}
+      </div>
+    })}
     {!stories.length && <p className="muted">No User Stories: only the Time Writing story and Task are created.</p>}
-    {!disabled && <button type="button" className="ghost efe-add" onClick={() => onChange([...stories, { title: '', description: '' }])}>＋ Add User Story</button>}
+    {!disabled && <div className="button-row"><button type="button" className="ghost efe-add" onClick={() => onChange([...stories, { title: '', description: '' }])}>＋ Add User Story</button>
+      {(offered.length > 0 || others.length > 0) && <select aria-label="Add from templates" className="efe-add" value="" onChange={(event) => { if (event.target.value) add(event.target.value) }}><option value="">＋ Add from templates…</option>
+        {offered.filter((item) => !used.has(item.id)).length > 0 && <optgroup label="For this Epic and value">{offered.filter((item) => !used.has(item.id)).map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</optgroup>}
+        {others.length > 0 && <optgroup label="Other templates">{others.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</optgroup>}
+      </select>}</div>}
   </div>
 }
 

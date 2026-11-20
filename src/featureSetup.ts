@@ -8,7 +8,8 @@ import { fieldOf } from './dpReleases.ts'
 // Two layers: the shared setup (feature-setup.json, for everyone) and each person's own (feature-setup/<email>.json,
 // same format). For its owner a personal setup of an Epic wins over the shared one; anyone who can write to Git may
 // enable their setup of an Epic for everyone, which copies it into the shared file.
-export interface StoryTemplate { title: string; description: string }
+// templateId: linked to a User Story template of the Epic setup file (STT-02); title and description are its copy.
+export interface StoryTemplate { title: string; description: string; templateId?: string }
 export interface TaskTemplate { title: string; description: string; originalEstimate?: number; assignedTo: string; areaPath: string; iterationPath: string }
 // The "Time Writing" User Story that holds the month Task: always created; its title and fields are configurable.
 export interface TimeWritingStoryTemplate { title: string; description: string; assignedTo: string; areaPath: string; iterationPath: string }
@@ -147,7 +148,8 @@ export function cleanTitleFields(input: unknown): TitleField[] {
   return input.map((field: Partial<Record<keyof TitleField, unknown>>) => ({ label: text(field?.label, 60), source: text(field?.source, 255) }))
     .filter((field) => { const key = fieldKey(field.label); if (!key || seen.has(key)) return false; seen.add(key); return true }).slice(0, maxTitleFields)
 }
-const cleanStories = (input: unknown) => Array.isArray(input) ? input.map((story: Partial<Record<keyof StoryTemplate, unknown>>) => ({ title: text(story?.title, 255), description: text(story?.description, 100000) })).filter((story) => story.title).slice(0, 20) : []
+const templateRef = (value: unknown) => typeof value === 'string' && /^[a-z0-9-]{1,60}$/.test(value) ? { templateId: value } : {}
+const cleanStories = (input: unknown, max = 20) => Array.isArray(input) ? input.map((story: Partial<Record<keyof StoryTemplate, unknown>>) => ({ title: text(story?.title, 255), description: text(story?.description, 100000), ...templateRef(story?.templateId) })).filter((story) => story.title).slice(0, max) : []
 function cleanReleaseTypes(input: unknown): ReleaseTypeSetups | undefined {
   if (!input || typeof input !== 'object') return undefined
   const value = input as Record<string, Partial<Record<keyof ReleaseTypeSetup, unknown>> | undefined>
@@ -173,7 +175,7 @@ function cleanQeColumns(input: unknown): QeMapColumns | undefined {
 export function cleanSetup(input: Partial<Record<keyof EpicSetup, unknown>>): EpicSetup | null {
   const epicId = Number(input.epicId)
   if (!Number.isSafeInteger(epicId) || epicId < 1) return null
-  const stories = Array.isArray(input.stories) ? input.stories.map((story: Partial<Record<keyof StoryTemplate, unknown>>) => ({ title: text(story?.title, 255), description: text(story?.description, 100000) })).filter((story) => story.title) : []
+  const stories = cleanStories(input.stories, 1000)
   // EPS-07: the Feature fields moved to the Epic setup; the old title fields are no longer read or saved.
   const releaseTypes = cleanReleaseTypes(input.releaseTypes), qeColumns = cleanQeColumns(input.qeColumns), classSets = cleanClassSets(input.classSets)
   const inherits = Array.isArray(input.inherits) ? inheritFields.filter((field) => (input.inherits as unknown[]).includes(field)) : []
@@ -194,7 +196,7 @@ function cleanDefaults(input: unknown): SetupDefaults | undefined {
   if (!input || typeof input !== 'object') return undefined
   const value = input as Record<string, unknown>
   const featureDoD = text(value.featureDoD, 100000)
-  const stories = Array.isArray(value.stories) ? value.stories.map((story: Partial<Record<keyof StoryTemplate, unknown>>) => ({ title: text(story?.title, 255), description: text(story?.description, 100000) })).filter((story) => story.title) : undefined
+  const stories = Array.isArray(value.stories) ? cleanStories(value.stories, 1000) : undefined
   const estimate = typeof value.originalEstimate === 'number' && Number.isFinite(value.originalEstimate) && value.originalEstimate >= 0 && value.originalEstimate <= 1000000 ? value.originalEstimate : undefined
   const out: SetupDefaults = { ...(featureDoD ? { featureDoD } : {}), ...(stories ? { stories } : {}), ...(estimate != null ? { originalEstimate: estimate } : {}) }
   return Object.keys(out).length ? out : undefined
@@ -308,3 +310,25 @@ export function fillMissingDoD(file: FeatureSetupFile): { file: FeatureSetupFile
   if (!filled.length) return { file, filled }
   return { file: { ...file, epics: file.epics.map((entry) => missingDoD(entry) ? { ...structuredClone(entry), featureDoD: defaultDoDFor(entry) } : entry) }, filled }
 }
+
+// STT-02: stories linked to a User Story template take its current title and description; a removed template leaves
+// the copy saved with the story.
+export function linkStories(stories: StoryTemplate[], templates: { id: string; title: string; description: string }[]): StoryTemplate[] {
+  return stories.map((story) => { const found = story.templateId ? templates.find((item) => item.id === story.templateId) : undefined; return found ? { ...story, title: found.title, description: found.description } : story })
+}
+export function withLinkedStories(setup: EpicSetup | undefined, templates: { id: string; title: string; description: string }[] | undefined): EpicSetup | undefined {
+  if (!setup || !templates?.length) return setup
+  const next = structuredClone(setup)
+  next.stories = linkStories(next.stories, templates)
+  if (next.classSets) for (const key of Object.keys(next.classSets)) next.classSets[key].stories = linkStories(next.classSets[key].stories, templates)
+  if (next.releaseTypes) for (const kind of ['release', 'pu'] as const) next.releaseTypes[kind].stories = linkStories(next.releaseTypes[kind].stories, templates)
+  return next
+}
+
+// How many stories of a Feature setup file link to the template (every Epic, its value sets, old Release / PU sets, All Epics).
+export function templateUses(file: FeatureSetupFile | null | undefined, id: string) {
+  if (!file) return 0
+  const lists = [file.defaults?.stories ?? [], ...file.epics.flatMap((entry) => [entry.stories, ...Object.values(entry.classSets ?? {}).map((set) => set.stories), ...(entry.releaseTypes ? [entry.releaseTypes.release.stories, entry.releaseTypes.pu.stories] : [])])]
+  return lists.reduce((sum, stories) => sum + stories.filter((story) => story.templateId === id).length, 0)
+}
+

@@ -57,7 +57,7 @@ export function EpicSetupPanel({ setup, git, items, canEdit, canEditLists, secti
 
   if (section === 'lists') return <Panel className="admin-section epic-lists" eyebrow="EPIC SETUP" title="Value lists" info="The drop-down values of the Epic setup's List fields, shared by every Epic (e.g. Platform: Platform 1.0, Platform 2.0). One value per line. A list used by a field cannot be removed.">
     {notices}
-    {!canEditLists && <p className="muted">View only: your role is not allowed “Edit Epic setup value lists”.</p>}
+    {!canEditLists && <p className="muted">View only: your role is not allowed “Edit Epic setup value lists and User Story templates”.</p>}
     {file.lists.length ? <div className="epic-list-grid">{[...file.lists].sort((a, b) => a.name.localeCompare(b.name)).map((list) => { const used = listUsedBy(file, list.id); return <div className="epic-list" key={list.id}>
       <div className="epic-list-head"><strong>{list.name}</strong><small className="muted">{used.length ? `Used by Epic ${used.map((id) => `#${id}`).join(', ')}` : 'Not used yet'}</small>{editLists && <button type="button" className="text-button danger-text" disabled={used.length > 0} title={used.length ? 'Used by a field: change the field first' : 'Remove this list'} onClick={() => change({ ...file, lists: file.lists.filter((item) => item.id !== list.id) })}>Remove</button>}</div>
       <textarea aria-label={`Values of ${list.name}`} rows={Math.min(8, Math.max(3, list.values.length + 1))} value={list.values.join('\n')} readOnly={!editLists} onChange={(event) => change(upsertList(file, { ...list, values: event.target.value.split('\n').map((value) => value.replace(/\s+$/, '')).filter((value, index, all) => value.trim() || index === all.length - 1) }))} />
