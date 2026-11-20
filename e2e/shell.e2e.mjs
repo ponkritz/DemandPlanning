@@ -1232,6 +1232,8 @@ test('TC-CON-60: Setup per Epic — All Epics defaults, and an Epic showing whic
   assert.deepEqual([await switchOf('Definition of Done').getAttribute('aria-checked'), await switchOf('User Stories').getAttribute('aria-checked'), await switchOf('Month Task').getAttribute('aria-checked')], ['true', 'false', 'false'])
   assert.match(await text(page.locator('section[aria-label="User Stories"] .efe-inherited')), /FROM ALL EPICS All Epics story/)
   assert.match(await text(page.locator('.efe-preview')), /Feature DoD: Own DoD.*User Stories All Epics story.*Month Task 3 h/s)
+  const list = await page.locator('.efe-epics').evaluate((el) => { const style = getComputedStyle(el); return [style.overflowY, style.position, el.getBoundingClientRect().height <= 600] })
+  assert.deepEqual(list, ['auto', 'sticky', true], 'the Epic list scrolls on its own, stays in view and is at most 600px tall')
   assert.deepEqual(errors, [])
   await context.close()
 })

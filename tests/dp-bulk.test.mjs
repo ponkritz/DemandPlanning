@@ -60,7 +60,8 @@ test('DPF-04 / BLK-01: the bulk plan — title, type, QE with email, or why a re
     ['Major', '', '', 'no QE in the QE Mapping for this product'],
     ['Major', 'Asha Rao', 'asha@x.com', 'Feature #905 on QMS-0025 matches it 100%'],
   ])
-  assert.equal(plan[0].title, 'DP | Dose Planning | 5.2.1.3'); assert.equal(plan[0].set.featureDoD, 'DT is finished.')
+  assert.equal(plan[0].title, 'DP | Dose Planning | 5.2.1.3'); assert.equal(plan[0].set.featureDoD, 'x', 'DPF-07: an Epic with a setup uses its own DoD, not DP’s hidden built-in set')
+  assert.equal(bulkPlan([rows[0]], { setup: undefined, qeMapping: mapping, board, featureMatch: () => undefined })[0].set.featureDoD, 'DT is finished.', 'no setup at all: the built-in PU set')
   assert.equal(plan[0].note, 'a similar Feature #901 (88%) exists', 'BLK-01: a match below 100% is named, the release is still created')
   assert.match(bulkPlan([rows[0]], { setup: cleanSetup({ epicId: 13946, featureDoD: 'x' }), qeMapping: mapping, board, featureMatch: () => undefined })[0].skip, /QE Mapping columns are not set/)
 })

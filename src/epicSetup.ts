@@ -106,13 +106,30 @@ export const newListId = (file: EpicSetupFile, name: string) => { const base = l
 // field skips the release; an empty Warn field creates it and is listed. A title pattern sets the Title (with
 // {feature} as the title the stream gives); without one the stream's title is kept. The Description gets the lines.
 export interface WithFields { title: string; skip?: string; fieldLines: string[]; warned: string[] }
-export function withEpicFields<L extends { title: string; skip?: string }>(plan: L[], entry: EpicFields | undefined, itemsOf: (line: L) => Pick<AzureWorkItem, 'fields'>[]): (L & WithFields)[] {
+// set: a field's value given by the row itself (DPF-08: the Release Classification picked in the pop-up), over the
+// value read from the release.
+export function withEpicFields<L extends { title: string; skip?: string }>(plan: L[], entry: EpicFields | undefined, itemsOf: (line: L) => Pick<AzureWorkItem, 'fields'>[], set?: { index: number; of: (line: L) => string }): (L & WithFields)[] {
   if (!entry) return plan.map((line) => ({ ...line, fieldLines: [], warned: [] }))
   const titleFields = asTitleFields(entry.fields)
   return plan.map((line) => {
     const values = fieldsFromItems(titleFields, itemsOf(line))
+    if (set && set.index >= 0 && set.of(line).trim()) values[set.index] = set.of(line).trim()
     const result = featureFromFields(entry, values, line.title)
     const blocked = result.blocked.length ? `empty ${result.blocked.join(', ')} (Epic setup of #${entry.epicId})` : undefined
     return { ...line, title: entry.titlePattern ? result.title : line.title, ...(line.skip || blocked ? { skip: line.skip ?? blocked } : {}), fieldLines: result.lines, warned: result.warned }
   })
 }
+
+// DPF-07: the Release Classification values of an Epic — the list of its own "Release Classification" field when it
+// has one (a List field), else the built-in values of the New Feature picker (BKL-17). fieldIndex: that field's place
+// in the Epic's fields, -1 for the built-in picker.
+export const builtinClassifications = ['Major', 'Minor', 'MLD', 'Platform Update', 'Service Pack']
+export function classificationOf(file: EpicSetupFile | null | undefined, epicId: number | undefined): { values: string[]; fieldIndex: number; label: string } {
+  const entry = epicFieldsFor(file, epicId)
+  const fieldIndex = entry ? entry.fields.findIndex((field) => fieldKey(field.label) === 'releaseclassification') : -1
+  if (fieldIndex < 0) return { values: [...builtinClassifications], fieldIndex: -1, label: 'Release Classification' }
+  const field = entry!.fields[fieldIndex]
+  return { values: field.type === 'list' ? [...(listOf(file, field.list)?.values ?? [])] : [], fieldIndex, label: field.label }
+}
+/** The value of the release type read from the release number (Major, Minor, MLD, Platform Update) in an Epic's list. */
+export const classificationFromType = (values: string[], type: string | undefined) => type ? values.find((value) => value.trim().toLowerCase() === type.toLowerCase()) ?? '' : ''

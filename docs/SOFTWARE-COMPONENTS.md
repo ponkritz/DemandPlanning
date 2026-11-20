@@ -144,6 +144,7 @@ This document lists every software component of the system: the in-house source 
 | nestedGroups | `src/nestedGroups.ts` | Nested grouping of a list by several levels, with a unique key per group path (IOCC releases). | QV |
 | dpReleases | `src/dpReleases.ts` | DP releases from Pedestal Release items dated by matching DHFI documents (exact version). | QV |
 | featureSetup | `src/featureSetup.ts` | Per-Epic Feature setup (stories, Time Writing story, task defaults), placeholders, shared/personal layers, parse/serialise. | CON |
+| featureMonths | `src/featureMonths.ts` | The Time Writing months of a new Feature from its Start date and Target date (BKL-31, BKL-32). | BKL |
 | format | `src/format.ts` | Display formatting: hours, percent, dates in viewer time zone, month names, relative time. | UI |
 | packInputs | `src/packInputs.ts` | The Monthly pack's inputs for a month (streams' releases and supported counts, utilisation), shared by the pack tab and the Insights workspace. | PCK, WSP |
 | insights | `src/insights.ts` | Dashboard insights: month forecast, plan accuracy, stream momentum, resilience, anomalies and health score. | OVR |
@@ -286,6 +287,8 @@ This document lists every software component of the system: the in-house source 
 | dp-milestones.test | `tests/dp-milestones.test.mjs` | DP Completed/Supported Release counts, DDT month and milestone names. | QV |
 | dp-releases.test | `tests/dp-releases.test.mjs` | Pedestal fields and titles, DHFI matching and dating, DP releases and fuzzy match. | QV |
 | feature-setup.test | `tests/feature-setup.test.mjs` | Feature setup paths, layer choice, publish, built-ins, copy and shared listing. | CON |
+| feature-months.test | `tests/feature-months.test.mjs` | Start date and Target date months, the Start Date field on web and desktop, the later month Tasks with their hours (TC-BKL-20, TC-BKL-21). | BKL |
+| class-sets.test | `tests/class-sets.test.mjs` | Sets per Release Classification value, the Epic's value list, the bulk set choice and the per-row classification (TC-DPF-06, TC-DPF-07). | DPF, EPS |
 | format.test | `tests/format.test.mjs` | Formatting helpers and page registry consistency. | UI, NAV |
 | git-snapshots.test | `tests/git-snapshots.test.mjs` | On-prem view snapshots via Git: no PATs, digests, helpers and validation. | GIT, FET |
 | git-storage.test | `tests/git-storage.test.mjs` | Git config, planning data round trip, read/write/conflict/write-check/delete. | GIT |
@@ -334,7 +337,7 @@ The end-to-end suite (`pnpm test:e2e`, after `pnpm build:web`) drives the built 
 | helpers | `e2e/helpers.mjs` | Starts `vite preview` on a free port, opens Chromium pages with clean storage, records page errors, shared actions (navigate, load sample). | CI |
 | shell.e2e | `e2e/shell.e2e.mjs` | Sidebar groups and footer, header and month picker, Get started pop-up, synthetic sample, theme toggle, phone width, Force Update dialog, Git storage form defaults, refresh while open (TC-GIT-08), KPI tracker hidden from the menu (TC-KPT-01), typed formula (TC-CAP-27), release naming patterns (TC-QV-37), desktop zoom (TC-UI-07), manager not on the board (TC-GIT-06, TC-SET-05, TC-NAV-01, 03, 31, 33, TC-UI-01, TC-SMP-01, TC-UPD-02). | NAV, UI, SMP, UPD |
 | documents-and-data.e2e | `e2e/documents-and-data.e2e.mjs` | Documentation tabs, links and download; Windchill export releases from names and from Location with the locations CSV; "＋ ECP" import named after the stream with the ECP CSV, Project No / Project Name columns, an ECP setup at the 3rd folder with the type-2 CSV (TC-CON-53, 54, 55); the table default on the Windchill raw data — move, hide, density, Excel export with dates, Settings → Table defaults (TC-UI-04, 05); My Work tree, Backlog Health and Baselines on the default (TC-UI-06); neutralised CSV; JSON backup without credentials (TC-DOC-01, 02, TC-CON-39, 40, 37, TC-STO-04, TC-INS-01); Windchill releases' QMS-0025 match column (TC-QV-23); auto-fit tables and Wrap text (TC-CON-42); the DP Supported Releases list in Pulse Check folded until Show list (TC-QV-17). | DOC, CON, STO, NFR, QV |
-| backlog.e2e | `e2e/backlog.e2e.mjs` | New User Story form from a Feature row of the Backlogs (TC-BKL-10); the Edit form from Feature, User Story and Task rows (TC-BKL-11). | CI, BKL |
+| backlog.e2e | `e2e/backlog.e2e.mjs` | New User Story form from a Feature row of the Backlogs (TC-BKL-10); the Edit form from Feature, User Story and Task rows (TC-BKL-11); New Feature sections, Start date and the Time Writing months with hours per month (TC-BKL-19, TC-BKL-21); DoD and User Stories per Release Classification value (TC-DPF-06). | CI, BKL |
 | monthly-pack.e2e | `e2e/monthly-pack.e2e.mjs` | Monthly pack tab with the synthetic sample, the .pptx download and the setup tab (TC-PCK-04). | CI |
 
 ## 2. Third-party components (SOUP)

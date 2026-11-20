@@ -798,3 +798,21 @@ kbd{font-size:11px;border:1px solid var(--accent-line);border-radius:4px;padding
 .efe-copy-list{display:flex;flex-wrap:wrap;gap:6px 14px;margin:6px 0}
 .efe-savebar{position:fixed;left:0;right:0;bottom:0;z-index:20;display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:10px;padding:10px 24px;background:var(--surface,#fff);border-top:1px solid var(--accent-line);box-shadow:0 -4px 16px rgba(20,20,40,.08)}
 .efe-savebar span{flex:1 1 240px}
+/* BKL-31 / BKL-32: Start date, the months of the Time Writing Tasks, and the hours asked per month. */
+.nf-months{margin:6px 0 0;font-size:13px}.nf-months.error-text{color:var(--danger-text)}
+.nf-month-hours{border-collapse:collapse;width:100%;max-width:560px;font-size:13px}
+.nf-month-hours th,.nf-month-hours td{padding:4px 8px;text-align:left;border-bottom:1px solid var(--line-soft)}
+.nf-month-hours input{width:100%;max-width:140px}
+.nf-month-hours tfoot th,.nf-month-hours tfoot td{font-weight:600;border-bottom:0}
+.nf-month-hours th{text-transform:none;letter-spacing:normal;font-size:13px;color:var(--text)}.nf-month-hours thead th{font-size:12px;color:var(--muted);font-weight:600}.nf-month-hours tbody th{font-weight:500}
+/* DPF-07: DoD and User Stories by Release Classification value. */
+.efe-classes{display:flex;flex-direction:column;gap:10px;padding:12px 16px;border:1px dashed var(--accent-line);border-radius:12px}
+.efe-classes>div:first-child{display:flex;flex-direction:column;gap:2px}.efe-classes small{color:var(--muted)}
+.efe-classhead{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+/* Setup per Epic: the Epic list is as tall as the window at most, scrolls on its own and stays in view beside the setup;
+   the search box stays on top. On a narrow screen (the list above the setup) it is at most 320px tall. */
+.efe-epics{position:sticky;top:116px;max-height:min(600px,calc(100vh - 136px));overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-gutter:stable}
+.efe-epics>label{position:sticky;top:-12px;z-index:1;background:var(--surface,#fff);margin:-12px -12px 0;padding:12px 16px 8px}
+.efe-epics .efe-epic{flex:none}
+@media(max-width:860px){.efe-epics{position:static;max-width:none;max-height:320px}}
+.efe-epics{scrollbar-color:var(--muted) transparent}

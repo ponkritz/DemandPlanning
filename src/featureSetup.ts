@@ -24,7 +24,7 @@ export interface TitleField { label: string; source: string }
 export interface ReleaseTypeSetup { featureDoD: string; stories: StoryTemplate[] }
 export interface ReleaseTypeSetups { release: ReleaseTypeSetup; pu: ReleaseTypeSetup }
 export interface QeMapColumns { matchColumn: string; qeColumn: string }
-export interface EpicSetup { epicId: number; epicTitle: string; inherits?: InheritField[]; featureDoD: string; stories: StoryTemplate[]; timeWritingStory: TimeWritingStoryTemplate; task: TaskTemplate; titleFields?: TitleField[]; releaseTypes?: ReleaseTypeSetups; qeColumns?: QeMapColumns }
+export interface EpicSetup { epicId: number; epicTitle: string; inherits?: InheritField[]; featureDoD: string; stories: StoryTemplate[]; timeWritingStory: TimeWritingStoryTemplate; task: TaskTemplate; titleFields?: TitleField[]; releaseTypes?: ReleaseTypeSetups; qeColumns?: QeMapColumns; classSets?: Record<string, ReleaseTypeSetup> }
 // CON-95: the shared file may hold defaults for all Epics; an Epic's setup (shared or mine) may leave fields to the
 // layer above (inherits): Built in → All Epics → Epic (shared) → Mine.
 export type InheritField = 'featureDoD' | 'stories' | 'estimate'
@@ -60,6 +60,38 @@ export const ioccSetsOf = (setup?: Pick<EpicSetup, 'releaseTypes' | 'featureDoD'
   if (!setup) return dpReleaseTypeDefaults
   const own = { featureDoD: setup.featureDoD, stories: structuredClone(setup.stories) }
   return { release: own, pu: structuredClone(own) }
+}
+// DPF-07: a Definition of Done and User Stories per Release Classification value (the Epic's own list, else the built-in
+// one), chosen by the value picked when a Feature is created — New Feature and bulk alike. A value without its own set
+// uses the old Release / PU set where one was saved (Major, Minor → Release; MLD, Platform Update, Service Pack → PU),
+// else the Epic's own DoD and User Stories.
+export const maxClassSets = 50
+export function classKindOf(value: string): 'release' | 'pu' | undefined {
+  const key = value.trim().toLowerCase()
+  return key === 'major' || key === 'minor' ? 'release' : ['mld', 'platform update', 'service pack', 'pu'].includes(key) ? 'pu' : undefined
+}
+export const classSetKey = (setup: Pick<EpicSetup, 'classSets'> | undefined, value: string) => {
+  const wanted = value.trim().toLowerCase()
+  return wanted ? Object.keys(setup?.classSets ?? {}).find((key) => key.toLowerCase() === wanted) : undefined
+}
+/** The set of a Release Classification value: its own, else the old Release / PU set; undefined = the Epic's default. */
+export function setForClass(setup: EpicSetup | undefined, value: string): (ReleaseTypeSetup & { from: 'value' | 'legacy' }) | undefined {
+  if (!setup || !value.trim()) return undefined
+  const key = classSetKey(setup, value)
+  if (key) { const own = setup.classSets![key]; return { featureDoD: own.featureDoD.trim() || setup.featureDoD, stories: structuredClone(own.stories), from: 'value' } }
+  const kind = classKindOf(value)
+  if (kind && setup.releaseTypes) return { ...structuredClone(setup.releaseTypes[kind]), from: 'legacy' }
+  return undefined
+}
+/** Bulk creation: the value's set, else the old set of the release number's type, else the Epic's own DoD and stories;
+ * DP's built-in Release / PU sets only for an Epic without any setup. */
+export function bulkSetFor(setup: EpicSetup | undefined, value: string, kind: 'release' | 'pu' | undefined): ReleaseTypeSetup | undefined {
+  const chosen = setForClass(setup, value)
+  if (chosen) return { featureDoD: chosen.featureDoD, stories: chosen.stories }
+  const type = classKindOf(value) ?? kind
+  if (setup?.releaseTypes && type) return structuredClone(setup.releaseTypes[type])
+  if (setup) return { featureDoD: setup.featureDoD, stories: structuredClone(setup.stories) }
+  return type ? structuredClone(dpReleaseTypeDefaults[type]) : undefined
 }
 // The placeholder key of a label: letters and digits in lower case ({Release Name} and {releasename} are the same).
 export const fieldKey = (label: string) => label.toLowerCase().replace(/[^a-z0-9]/g, '')
@@ -122,6 +154,17 @@ function cleanReleaseTypes(input: unknown): ReleaseTypeSetups | undefined {
   const one = (key: 'release' | 'pu'): ReleaseTypeSetup => ({ featureDoD: text(value[key]?.featureDoD, 100000) || dpReleaseTypeDefaults[key].featureDoD, stories: value[key]?.stories === undefined ? dpReleaseTypeDefaults[key].stories : cleanStories(value[key]?.stories) })
   return { release: one('release'), pu: one('pu') }
 }
+function cleanClassSets(input: unknown): Record<string, ReleaseTypeSetup> | undefined {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined
+  const sets: Record<string, ReleaseTypeSetup> = {}
+  for (const [rawKey, rawSet] of Object.entries(input as Record<string, unknown>).slice(0, maxClassSets)) {
+    const key = rawKey.trim().slice(0, 100)
+    if (!key || Object.keys(sets).some((item) => item.toLowerCase() === key.toLowerCase()) || !rawSet || typeof rawSet !== 'object') continue
+    const value = rawSet as Partial<Record<keyof ReleaseTypeSetup, unknown>>
+    sets[key] = { featureDoD: text(value.featureDoD, 100000), stories: cleanStories(value.stories) }
+  }
+  return Object.keys(sets).length ? sets : undefined
+}
 function cleanQeColumns(input: unknown): QeMapColumns | undefined {
   const value = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>
   const matchColumn = text(value.matchColumn, 120), qeColumn = text(value.qeColumn, 120)
@@ -132,9 +175,9 @@ export function cleanSetup(input: Partial<Record<keyof EpicSetup, unknown>>): Ep
   if (!Number.isSafeInteger(epicId) || epicId < 1) return null
   const stories = Array.isArray(input.stories) ? input.stories.map((story: Partial<Record<keyof StoryTemplate, unknown>>) => ({ title: text(story?.title, 255), description: text(story?.description, 100000) })).filter((story) => story.title) : []
   // EPS-07: the Feature fields moved to the Epic setup; the old title fields are no longer read or saved.
-  const releaseTypes = cleanReleaseTypes(input.releaseTypes), qeColumns = cleanQeColumns(input.qeColumns)
+  const releaseTypes = cleanReleaseTypes(input.releaseTypes), qeColumns = cleanQeColumns(input.qeColumns), classSets = cleanClassSets(input.classSets)
   const inherits = Array.isArray(input.inherits) ? inheritFields.filter((field) => (input.inherits as unknown[]).includes(field)) : []
-  return { epicId, epicTitle: text(input.epicTitle, 255), ...(inherits.length ? { inherits } : {}), featureDoD: text(input.featureDoD, 100000), stories, timeWritingStory: cleanTimeWritingStory(input.timeWritingStory as Partial<Record<keyof TimeWritingStoryTemplate, unknown>> | undefined), task: cleanTask(input.task as Partial<Record<keyof TaskTemplate, unknown>> | undefined), ...(releaseTypes ? { releaseTypes } : {}), ...(qeColumns ? { qeColumns } : {}) }
+  return { epicId, epicTitle: text(input.epicTitle, 255), ...(inherits.length ? { inherits } : {}), featureDoD: text(input.featureDoD, 100000), stories, timeWritingStory: cleanTimeWritingStory(input.timeWritingStory as Partial<Record<keyof TimeWritingStoryTemplate, unknown>> | undefined), task: cleanTask(input.task as Partial<Record<keyof TaskTemplate, unknown>> | undefined), ...(releaseTypes ? { releaseTypes } : {}), ...(qeColumns ? { qeColumns } : {}), ...(classSets ? { classSets } : {}) }
 }
 
 export function parseFeatureSetup(raw: string): FeatureSetupFile {
@@ -187,6 +230,8 @@ export function chooseSetup(setups: FeatureSetups | null | undefined, epicId: nu
   const resolved = resolveFields(layers, setups?.shared?.defaults)
   const setup: EpicSetup = { ...structuredClone(base), featureDoD: resolved.featureDoD, stories: resolved.stories, task: { ...base.task, ...(resolved.originalEstimate != null ? { originalEstimate: resolved.originalEstimate } : {}) } }
   if (resolved.originalEstimate == null) delete setup.task.originalEstimate
+  // DPF-07: my own version without sets per Release Classification uses the shared ones.
+  if (useMine && !setup.classSets && shared?.classSets) setup.classSets = structuredClone(shared.classSets)
   delete setup.inherits
   return { setup, source: useMine ? 'personal' : shared ? 'shared' : 'defaults', origin: resolved.origin }
 }
