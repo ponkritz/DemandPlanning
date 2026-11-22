@@ -1347,6 +1347,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
   - Every document opens, rendered; the Known issues register has the KB, OI, residual-risk and limitation tables; the components inventory lists the in-house files by layer, the SOUP table with versions and licences, and the audit result.
   - The IDs resolve: the requirement row exists and the test case exists and names that requirement.
 
+**TC-DOC-05 Design documents in the app** — Req DOC-13 — L1 `markdown.test.mjs` ("TC-DOC-05: design links resolve by document path and keep repository source links on GitHub"); E2E `documents-and-data.e2e.mjs` ("TC-DOC-05: open, browse and download bundled design documents"). Open Documentation → Design documents and verify the index, an in-app view link, the source link to GitHub, a nested Settings design in the selector, and an original Markdown download. Inspect the build registry for recursive design-document inclusion.
+
 ### 6.19 User interface
 
 **TC-UI-01 Theme** — Req UI-01, UI-02 — L1 `theme.test.mjs`.
@@ -1933,6 +1935,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | DOC-04, DOC-06…08 | TC-DOC-02 |
 | DOC-09…11 | TC-DOC-03 |
 | DOC-12 | TC-DOC-04 |
+| DOC-13 | TC-DOC-05 |
 | UI-01, UI-02 | TC-UI-01 |
 | UI-03, UI-04 | TC-INS-03 |
 | UI-05 | TC-UI-02 |
@@ -2114,7 +2117,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-17 | TC-DSK-01…03, TC-INS-02 |
 | UC-18 | TC-SMP-01, TC-ATM-06, TC-GIT-04, TC-SMP-02 |
 | UC-19 | TC-INS-04, TC-CI-01, TC-CI-02, TC-CI-03, TC-CI-07, TC-CI-08, TC-DOC-03 |
-| UC-20 | TC-DOC-01, TC-DOC-02, TC-DOC-03 |
+| UC-20 | TC-DOC-01, TC-DOC-02, TC-DOC-03, TC-DOC-04, TC-DOC-05 |
 | UC-21 | TC-SCR-01 |
 | UC-22 | TC-ACC-01, TC-ACC-02, TC-CON-57, TC-CON-58 |
 | UC-23 | TC-QEM-01…08 |

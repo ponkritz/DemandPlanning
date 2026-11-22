@@ -52,6 +52,18 @@ test('links resolve to bundled documents, anchors or https pages only', () => {
   assert.deepEqual(linkTarget('http://example.com', docs), { kind: 'none' })
 })
 
+test('TC-DOC-05: design links resolve by document path and keep repository source links on GitHub', () => {
+  const docs = ['design/README.md', 'design/home.md', 'design/settings/home.md', 'TEST-PLAN.md']
+  assert.deepEqual(linkTarget('home.md', docs, 'design/README.md'), { kind: 'doc', doc: 'design/home.md', anchor: '' })
+  assert.deepEqual(linkTarget('settings/home.md#implementation', docs, 'design/README.md'), { kind: 'doc', doc: 'design/settings/home.md', anchor: 'implementation' })
+  assert.deepEqual(linkTarget('../home.md', docs, 'design/settings/home.md'), { kind: 'doc', doc: 'design/home.md', anchor: '' })
+  assert.deepEqual(linkTarget('../TEST-PLAN.md', docs, 'design/README.md'), { kind: 'doc', doc: 'TEST-PLAN.md', anchor: '' })
+  const sourceLink = linkTarget('../../src/App.tsx', docs, 'design/home.md')
+  assert.equal(sourceLink.kind, 'external')
+  assert.match(sourceLink.href, /^https:\/\/github\.com\/ponkritz\/DemandPlanning\/blob\/[^/]+\/src\/App\.tsx$/)
+  assert.deepEqual(linkTarget('javascript:alert(1)', docs, 'design/home.md'), { kind: 'none' })
+})
+
 test('every bundled document parses, and its in-app links point at existing sections', () => {
   const files = readdirSync(new URL('../docs/', import.meta.url)).filter((file) => file.endsWith('.md'))
   const parsed = Object.fromEntries(files.map((file) => [file, parseMarkdown(readFileSync(new URL(`../docs/${file}`, import.meta.url), 'utf8'))]))

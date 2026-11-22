@@ -104,11 +104,43 @@ export function parseInline(text: string): Inline[] {
 // Where a link in a document goes: another document in the app (by file name, with an optional anchor), an anchor in
 // this document, or an external https page. Anything else is shown as text.
 export type LinkTarget = { kind: 'doc'; doc: string; anchor: string } | { kind: 'anchor'; anchor: string } | { kind: 'external'; href: string } | { kind: 'none' }
-export function linkTarget(href: string, docs: string[]): LinkTarget {
+export function linkTarget(href: string, docs: string[], currentDoc?: string): LinkTarget {
   if (href.startsWith('#')) return { kind: 'anchor', anchor: href.slice(1) }
   if (/^https:\/\//i.test(href)) return { kind: 'external', href }
   const [path, anchor = ''] = href.split('#')
+  if (currentDoc) {
+    if (currentDoc.startsWith('design/')) {
+      const target = designLinkPath(currentDoc, path)
+      if (!target) return { kind: 'none' }
+      if (target.startsWith('docs/') && docs.includes(target.slice('docs/'.length))) {
+        return { kind: 'doc', doc: target.slice('docs/'.length), anchor }
+      }
+      const encoded = target.split('/').map(encodeURIComponent).join('/')
+      return { kind: 'external', href: `https://github.com/ponkritz/DemandPlanning/blob/main/${encoded}${anchor ? `#${encodeURIComponent(anchor)}` : ''}` }
+    }
+    if (docs.includes(path)) return { kind: 'doc', doc: path, anchor }
+  }
   const file = path.split('/').pop() ?? ''
-  if (docs.includes(file)) return { kind: 'doc', doc: file, anchor }
+  if (file && docs.includes(file)) return { kind: 'doc', doc: file, anchor }
   return { kind: 'none' }
+}
+
+function designLinkPath(currentDoc: string, path: string): string | undefined {
+  let decoded: string
+  try { decoded = decodeURIComponent(path) } catch { return undefined }
+  if (!decoded || decoded.startsWith('/') || /[\\:?#]/.test(decoded) || [...decoded].some((char) => char.charCodeAt(0) < 32)) return undefined
+  const parts = ['docs', ...currentDoc.split('/').slice(0, -1)]
+  for (const part of decoded.split('/')) {
+    if (!part || part === '.') continue
+    if (part === '..') {
+      if (!parts.length) return undefined
+      parts.pop()
+    } else {
+      parts.push(part)
+    }
+  }
+  const resolved = parts.join('/')
+  if (/^(?:src|electron|scripts|tests|e2e|\.github|docs)\/.+/.test(resolved) ||
+      /^(?:index\.html|vite\.config\.ts|package\.json|tsconfig(?:\.[a-z]+)?\.json)$/.test(resolved)) return resolved
+  return undefined
 }

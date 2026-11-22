@@ -3,13 +3,13 @@ import { linkTarget, parseInline, type Block, type ListBlock } from '../markdown
 
 // Renders parsed Markdown blocks as React elements. Links to other bundled documents and to anchors are handled by
 // the page (onLink); external https links open in a new tab.
-export function Markdown({ blocks, docs, onLink }: { blocks: Block[]; docs: string[]; onLink: (doc: string | null, anchor: string) => void }) {
+export function Markdown({ blocks, docs, currentDoc, onLink }: { blocks: Block[]; docs: string[]; currentDoc?: string; onLink: (doc: string | null, anchor: string) => void }) {
   const inline = (text: string): ReactNode => parseInline(text).map((part, index) => {
     if (part.kind === 'code') return <code key={index}>{part.text}</code>
     if (part.kind === 'strong') return <strong key={index}>{inline(part.text)}</strong>
     if (part.kind === 'em') return <em key={index}>{inline(part.text)}</em>
     if (part.kind === 'link') {
-      const target = linkTarget(part.href, docs)
+      const target = linkTarget(part.href, docs, currentDoc)
       if (target.kind === 'external') return <a key={index} href={target.href} target="_blank" rel="noreferrer">{inline(part.text)}</a>
       if (target.kind === 'none') return <Fragment key={index}>{inline(part.text)}</Fragment>
       const doc = target.kind === 'doc' ? target.doc : null

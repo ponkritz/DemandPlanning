@@ -17,8 +17,19 @@ import process from '../../docs/DEVELOPMENT-PROCESS.md?raw'
 import cpReporting from '../../docs/CP_Release_Reporting_Implementation.md?raw'
 import releaseNotes from '../../docs/RELEASE-NOTES.md?raw'
 import configuration from '../../docs/CONFIGURATION-MANAGEMENT.md?raw'
+import { plainText } from '../markdown'
 
 export interface ProjectDoc { file: string; label: string; source: string }
+
+export const designIndex = 'design/README.md'
+export const designDocs: ProjectDoc[] = Object.entries(
+  import.meta.glob<string>('../../docs/design/**/*.md', { eager: true, query: '?raw', import: 'default' }),
+).map(([path, source]) => {
+  const file = path.slice('../../docs/'.length)
+  const title = /^#\s+(.+)$/m.exec(source)?.[1].trim()
+  return { file, label: title ? plainText(title) : file, source }
+}).sort((left, right) => left.file.localeCompare(right.file))
+
 export const projectDocs: ProjectDoc[] = [
   { file: 'VALIDATION-PACKAGE.md', label: 'Validation package', source: validationPackage },
   { file: 'RELEASE-NOTES.md', label: 'Release notes', source: releaseNotes },

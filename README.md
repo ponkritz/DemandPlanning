@@ -49,6 +49,8 @@ Implemented in the MVP UI:
 
 ## Documentation
 
+The [as-built design package](docs/design/README.md) describes the default UI, business rules and implementation of each view, including Settings, release variants and the shared table design. In the web and desktop app, open **Data & governance → Documentation → Design documents** to browse or download the Markdown.
+
 **SWBOM.** `docs/SWBOM.md` (and `docs/swbom.cdx.json`, CycloneDX 1.5) is the Software Bill of Materials: every third-party component with its version, licence, integrity hash and whether it ships (runtime) or only builds and tests the app. Regenerate it with `pnpm swbom` after any dependency change; `pnpm test` fails when it is out of date.
 
 The same documents are in the app under **Data & governance → Documentation**, bundled with each build (so the app shows the Validation Package of its own build): tabs per document, an "On this page" list, in-app links between documents, and Download .md.
