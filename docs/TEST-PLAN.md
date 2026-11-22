@@ -780,6 +780,8 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-BKL-27 Complete children per Epic** — Req BKL-38, BKL-10 — L1 `feature-setup.test.mjs` ("BKL-38: Complete children per Epic — on unless the shared setup turns it off; kept through a save; mine cannot turn it off (TC-BKL-27)"); E2E `backlog.e2e.mjs` ("TC-EPS-01: Epic setup — its fields appear in New Feature (a value list, required and warning fields), the title follows its pattern, and Admin → Epic setup shows them": the Complete children setting, on and read-only without Git storage); browser check with Git storage: turn it off for an Epic and Save — its Features no longer offer Complete children on Backlogs and My Tasks [Board], another Epic's still do; turn it on — Complete children opens with the Epic's User Stories unticked and Your own User Story, and only the ticked ones (and your own) are created.
 
+**TC-BKL-28 The Close pop-up** — Req BKL-39, ACT-18 — L1 `close-list.test.mjs` ("BKL-39: Close Feature lists everything open under it, parents before children; yours ticked, others’ not (TC-BKL-28)", "BKL-39: Close User Story — the story alone, or with the Feature, Time Writing story and Tasks when it is the last open one (TC-BKL-28)", "BKL-39: closing runs children first; a parent stays open when an item below it could not be closed (TC-BKL-28)"); E2E `shell.e2e.mjs` ("TC-BKL-28: Close on a Feature lists what would close with tick boxes and #ID links — yours ticked, others’ not; ticking the Feature ticks all; hours are confirmed first"); browser check with a Time Writing connection: Close Features on Time Writing and Close on a Feature row list the Feature, its User Stories and Tasks with tick boxes and #ID links; another person's Task is unticked and keeps its story and the Feature unticked; ticking the Feature ticks everything; a month Task ticked asks to confirm the hours; closing the last open User Story lists the Feature, Time Writing story and Tasks; closing another lists the story alone.
+
 **TC-BKL-14 Release number without "v" in Feature titles** — Req BKL-24 — L1 `release-source.test.mjs` ("Create Feature title from a release: \"Stream | Name | Release\" without a \"v\", mapping back to the release (BKL-24)"), `dp-board-match.test.mjs`, `cp-reporting.test.mjs`; browser check: Create Feature on a DP, CP and Windchill row pre-fills the title with the number and no "v".
 
 **TC-CON-45 Git view data with another query is not applied** — Req CON-77 — L1 `git-snapshots.test.mjs` ("a snapshot fetched with another query than the connection has here is not applied"); browser check:
@@ -1802,6 +1804,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | BKL-36 | TC-BKL-25 |
 | BKL-37 | TC-BKL-26 |
 | BKL-38 | TC-BKL-27 |
+| BKL-39 | TC-BKL-28 |
 | QV-01, QV-02 | TC-QV-01 |
 | QV-03, QV-05 | TC-QV-02 |
 | QV-04 | TC-FET-07 |
@@ -2098,7 +2101,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-04 | TC-TWN-01, TC-TWN-02, TC-MON-01…06, TC-MON-09, TC-MON-10, TC-ATM-19, TC-BKL-18, TC-ACT-14, TC-ACT-15, TC-ACT-16, TC-ACT-17 |
 | UC-05 | TC-MON-07 |
 | UC-06 | TC-ATM-01…11, TC-ATM-21, TC-ATM-22, TC-ATM-23, TC-TWN-03, TC-CON-20, TC-CON-33, TC-CON-34, TC-CON-43 |
-| UC-07 | TC-BKL-01…09, TC-BKL-15, TC-BKL-16, TC-BKL-17, TC-BKL-18, TC-BKL-19, TC-BKL-20, TC-BKL-21, TC-BKL-22, TC-BKL-23, TC-BKL-24, TC-BKL-25, TC-BKL-26, TC-BKL-27, TC-DPF-06, TC-NAV-36, TC-CON-23, TC-CON-25…27, TC-CON-29…32, TC-CON-35 |
+| UC-07 | TC-BKL-01…09, TC-BKL-15, TC-BKL-16, TC-BKL-17, TC-BKL-18, TC-BKL-19, TC-BKL-20, TC-BKL-21, TC-BKL-22, TC-BKL-23, TC-BKL-24, TC-BKL-25, TC-BKL-26, TC-BKL-27, TC-BKL-28, TC-DPF-06, TC-NAV-36, TC-CON-23, TC-CON-25…27, TC-CON-29…32, TC-CON-35 |
 | UC-08 | TC-QV-01…05, TC-FET-07, TC-CON-08, TC-CON-11…16, TC-QV-08, TC-QV-09, TC-QV-10, TC-QV-11, TC-QV-12, TC-QV-13, TC-QV-14, TC-QV-15, TC-QV-16, TC-CON-37, TC-CON-38, TC-CON-39, TC-CON-40, TC-CON-41, TC-QV-18, TC-QV-19, TC-QV-20, TC-QV-21, TC-QV-22, TC-CON-42, TC-QV-41, TC-QV-42, TC-CON-61 |
 | UC-09 | TC-OV-11…14, TC-CAP-01, TC-CAP-02, TC-CAP-03, TC-CAP-08, TC-CAP-10, TC-CAP-11, TC-CAP-12, TC-CAP-13, TC-CAP-14, TC-CAP-15, TC-CAP-16, TC-CAP-17, TC-CAP-18, TC-CAP-19, TC-CAP-20, TC-CAP-21, TC-CAP-22, TC-CAP-23, TC-CAP-24, TC-CAP-25, TC-CAP-26, TC-CAP-27, TC-QV-17, TC-CON-21, TC-QV-10, TC-QV-11, TC-QV-21 |
 | UC-10 | TC-OV-11 (Months, Streams), TC-OV-13 |

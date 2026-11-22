@@ -85,6 +85,7 @@ This document lists every software component of the system: the in-house source 
 | MonthTasksDialog | `src/components/MonthTasksDialog.tsx` | ＋ Time Writing Task: the months (header month first, ＋ Add month) and the hours of each (BKL-34); Assigned to and the warning on a month that already has a Task (BKL-35). | BKL |
 | JobsIndicator | `src/components/JobsIndicator.tsx` | Top-bar list of the background jobs: running count, results, Clear finished; asks before leaving the page while one runs. | NAV |
 | ProfileMenu | `src/components/ProfileMenu.tsx` | The profile button at the top right and its menu: My settings, Classic / Tile view, View as…, Search settings, Customize menu (NAV-48). | NAV |
+| CloseItemsDialog | `src/components/CloseItemsDialog.tsx` | The Close pop-up: tick boxes, #ID links, owners, the hours confirmation (BKL-39). | BKL, ACT |
 | MonthlyPackPanel | `src/components/MonthlyPackPanel.tsx` | Pulse Check → Monthly pack: the two slides as boxes with generated lines and the month's text, Save to Git, copy, Download .pptx. | PCK |
 | HistoryPanel | `src/components/HistoryPanel.tsx` | Settings → Historical hours: upload the planning workbook, check names and stream Epics, save to or remove from Git. | HIS |
 | ViewAsDialog | `src/components/ViewAsDialog.tsx` | View as: choose a person or a role to view the app as, read only. | CON |
@@ -181,6 +182,7 @@ This document lists every software component of the system: the in-house source 
 | insights | `src/insights.ts` | Dashboard insights: month forecast, plan accuracy, stream momentum, resilience, anomalies and health score. | OVR |
 | markdown | `src/markdown.ts` | Small Markdown parser to plain data (headings with GitHub anchors, lists, tables, inline) and link targets. | DOC |
 | closeChain | `src/closeChain.ts` | After a close: the follow-up question and the staged closing of the related User Stories or Feature, each write read back; Close Features on Time Writing (only the person's own items, children first). | ATM, ACT |
+| closeList | `src/closeList.ts` | The Close pop-up's rows: the open items under a Feature or the last User Story, default ticks, tick rules, children-first closing (BKL-39). | BKL, ACT |
 | myWork | `src/myWork.ts` | "Me" matching, pending work, month-task and move candidates, state checks and next states, Feature children, the Time Writing order by Feature number (ACT-21). | ATM, ACT |
 | pulseCheck | `src/pulseCheck.ts` | Pulse Check: previous month, release comparison, work flow opened/closed and ongoing work. | OVR |
 | pulsePeriods | `src/pulsePeriods.ts` | Pulse Check over calendar quarters, half-years and years: periods, the period before, releases once per period, work opened and closed. | QV, MYD |
@@ -343,6 +345,7 @@ This document lists every software component of the system: the in-house source 
 | format.test | `tests/format.test.mjs` | Formatting helpers and page registry consistency. | UI, NAV |
 | home-tiles.test | `tests/home-tiles.test.mjs` | Home: the tile and link search, the Home page entry (TC-NAV-42). | NAV |
 | app-frame.test | `tests/app-frame.test.mjs` | The app frame: My dashboard always you, the Refresh order (TC-NAV-47, TC-FET-10). | NAV, FET |
+| close-list.test | `tests/close-list.test.mjs` | The Close pop-up's rows, ticks and closing order (TC-BKL-28). | BKL |
 | git-snapshots.test | `tests/git-snapshots.test.mjs` | On-prem view snapshots via Git: no PATs, digests, helpers and validation. | GIT, FET |
 | git-storage.test | `tests/git-storage.test.mjs` | Git config, planning data round trip, read/write/conflict/write-check/delete. | GIT |
 | git-watch.test | `tests/git-watch.test.mjs` | Files changed in Git since they were read here; banner names. | GIT |

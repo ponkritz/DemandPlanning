@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import { DataTable } from '../components/DataTable'
 import { MonthTasksDialog } from '../components/MonthTasksDialog'
+import { CloseItemsDialog } from '../components/CloseItemsDialog'
+import { closeChosen, closeTree, storyCloseRows, type CloseRow, type closeSelection } from '../closeList'
+type CloseSelection = ReturnType<typeof closeSelection>
 import { EmptyState, Metric, Metrics, Notice, Page, Pill, TablePanel, type Tone } from '../components/ui'
 import { currentIndiaMonth, updateAzureWorkItem } from '../azureDevOps'
 import { capacityContext } from '../capacity'
@@ -59,7 +62,28 @@ export function MyWorkPage({ azure, store, my, month: headerMonth, onOpenActivit
     for (const text of [...result.skipped, ...result.failed]) note({ tone: result.failed.includes(text) ? 'error' : 'info', text })
   }
 
+  // BKL-39: closing a Feature or a User Story opens the pop-up of what it closes (the last User Story brings its Feature,
+  // Time Writing story and Tasks); a Task or Bug is closed after one confirmation as before.
+  const [closeAsk, setCloseAsk] = useState<{ item: AzureWorkItem; rows: CloseRow[] } | null>(null)
+  // With sample data Close on a Feature or User Story still opens the pop-up, to see what would close (nothing is written).
+  const previewClose = (entry: AzureWorkItem, state: string) => azure.isSample && state === 'Closed' && (entry.workItemType === 'Feature' || entry.workItemType === 'User Story')
+  async function closeSelected(item: AzureWorkItem, selection: CloseSelection) {
+    setCloseAsk(null)
+    if (blocked || !config) return
+    setBusy(`state-${item.id}`)
+    try {
+      const result = await closeChosen(config, pat, selection)
+      if (result.closed.length) { azure.applyWorkItems(result.closed, 'Close item', result.closed.map((entry) => `#${entry.id} → ${entry.state}`).join(', ')); note({ tone: 'success', text: `Closed ${result.closed.map((entry) => `#${entry.id}`).join(', ')}.` }) }
+      for (const text of [...result.failed, ...result.skipped]) note({ tone: result.failed.includes(text) ? 'error' : 'info', text })
+      note({ tone: 'info', text: 'Refreshing data…' }); await azure.refresh()
+    } finally { setBusy('') }
+  }
   async function finish(item: AzureWorkItem, state: string) {
+    // BKL-39: the pop-up opens with sample data too (to see what would close); its Close is disabled then.
+    if (state === 'Closed' && (item.workItemType === 'Feature' || item.workItemType === 'User Story')) {
+      const rows = item.workItemType === 'Feature' ? closeTree(azure.items, item, my.me) : storyCloseRows(azure.items, item, my.me)
+      if (rows.length) { setCloseAsk({ item, rows }); return }
+    }
     if (blocked || !config) return
     if (!window.confirm(`${state === 'Active' ? 'Set' : 'Close'} ${item.workItemType} #${item.id} “${item.title}”${state === 'Active' ? ' to Active' : ''}? Its State is set to ${state} in Azure DevOps.`)) return
     setBusy(`state-${item.id}`)
@@ -106,7 +130,7 @@ export function MyWorkPage({ azure, store, my, month: headerMonth, onOpenActivit
           {shown.length > 0 && (() => {
             const monthButton = (entry: AzureWorkItem) => (entry.workItemType === 'Feature' || entry.workItemType === 'User Story') && config && meEmail ? <button type="button" className="text-button" disabled={Boolean(blocked) || busy.startsWith('month-')} title="Add your Time Writing Task for the month in the header under this Feature (or the Feature above this Story)" onClick={() => setMonthFor(entry)}>＋ Time Writing Task</button> : null
             const editButton = (entry: AzureWorkItem) => ['Feature', 'User Story', 'Task'].includes(entry.workItemType) ? <button type="button" className="text-button" disabled={Boolean(blocked)} title={`Edit ${entry.workItemType} #${entry.id}`} onClick={() => setEditing(entry)}>Edit</button> : null
-            const action = (entry: AzureWorkItem) => { const next = nextStateFor(entry, azure.items); return next ? <button type="button" className="ghost" disabled={Boolean(blocked) || busy === `state-${entry.id}`} onClick={() => void finish(entry, next.state)}>{busy === `state-${entry.id}` ? 'Saving…' : next.label}</button> : entry.workItemType === 'Feature' && /new/i.test(entry.state) ? <small className="muted" title="A Feature becomes Active only when one of its User Stories is Active">Set a User Story to Active first</small> : <small className="muted" title="Only an Active Feature or User Story can be closed">Set to Active first</small> }
+            const action = (entry: AzureWorkItem) => { const next = nextStateFor(entry, azure.items); return next ? <button type="button" className="ghost" disabled={(Boolean(blocked) && !previewClose(entry, next.state)) || busy === `state-${entry.id}`} onClick={() => void finish(entry, next.state)}>{busy === `state-${entry.id}` ? 'Saving…' : next.label}</button> : entry.workItemType === 'Feature' && /new/i.test(entry.state) ? <small className="muted" title="A Feature becomes Active only when one of its User Stories is Active">Set a User Story to Active first</small> : <small className="muted" title="Only an Active Feature or User Story can be closed">Set to Active first</small> }
             type WorkRow = { item: AzureWorkItem; feature?: AzureWorkItem; depth: 0 | 1 | 2; below: AzureWorkItem[]; top: AzureWorkItem }
             const topRows: WorkRow[] = shown.map(({ item, feature }) => ({ item, feature, depth: 0, below: [], top: item }))
             const childrenOf = (row: WorkRow): WorkRow[] => {
@@ -131,6 +155,7 @@ export function MyWorkPage({ azure, store, my, month: headerMonth, onOpenActivit
               ]} />
           })()}
         </TablePanel>
+        {closeAsk && <CloseItemsDialog title={`Close ${closeAsk.item.workItemType} #${closeAsk.item.id}`} intro={closeAsk.rows.length > 1 ? (closeAsk.item.workItemType === 'Feature' ? 'Everything still open under the Feature is listed.' : 'This is the last open User Story of its Feature: the Feature, its Time Writing story and Tasks are listed too.') + ' Tick what to close; children close first.' : 'Close this item in Azure DevOps?'} rows={closeAsk.rows} asked={closeAsk.item.id} blocked={blocked || undefined} onConfirm={(selection) => void closeSelected(closeAsk.item, selection)} onClose={() => setCloseAsk(null)} />}
         {monthFor && config && <MonthTasksDialog item={monthFor} items={azure.items} config={config} pat={pat} me={meEmail} canChoose={Boolean(assign?.canChoose)} month={headerMonth} featureSetup={featureSetup} onClose={() => setMonthFor(null)} onFailed={(text, changed) => { if (changed.length) azure.applyWorkItems(changed, 'Add Time Writing Task', text); setLog((current) => [{ tone: 'error', text }, ...current]) }} onDone={(text, changed) => { setMonthFor(null); azure.applyWorkItems(changed, 'Add Time Writing Task', text); setLog((current) => [{ tone: 'success', text }, ...current]) }} />}
         {editing && config && <WorkItemEditor item={editing} items={azure.items} config={config} savedPat={pat} me={meEmail} canChoose={Boolean(assign?.canChoose)} onSavePat={azure.rememberPat} onUpdated={azure.featureCreated} onClose={() => setEditing(null)}
           onDone={(text) => { note({ tone: 'success', text }); void azure.refresh() }} onFailed={(text) => note({ tone: 'error', text })} />}

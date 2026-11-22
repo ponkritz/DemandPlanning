@@ -5,6 +5,9 @@ import { currentIterationPairs, readAzureIterations, updateAzureWorkItem, type A
 import { capacityContext } from '../capacity'
 import { canActivateHere, isMine, moveCandidates, stateCheckChildren, nextStateFor, stateChecks, type MoveStates, type StateCheck } from '../myWork'
 import { activateFeatureOf, closeRelated } from '../closeChain'
+import { closeChosen, closeTree, storyCloseRows, type CloseRow, type closeSelection } from '../closeList'
+import { CloseItemsDialog } from '../components/CloseItemsDialog'
+type CloseSelection = ReturnType<typeof closeSelection>
 import type { AzureWorkItem } from '../domain'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { MyWork } from '../useMyWork'
@@ -61,7 +64,24 @@ export function SprintCheckPage({ azure, store, my }: { azure: AzureWorkspace; s
     'feature-old-pi': (check) => `The Feature is in ${shortPath(check.item.iterationPath) || 'no PI'} but its Active User Stor${check.children.length === 1 ? 'y is' : 'ies are'} in ${shortPath(check.targetPi ?? '')}: move the Feature to that PI.`,
     'feature-needs-active-story': (check) => check.children.length ? `The Feature is Active but none of its ${check.children.length} User Stor${check.children.length === 1 ? 'y is' : 'ies are'} Active: set at least one to Active.` : 'The Feature is Active but has no User Story: add one and set it to Active.',
   }
+  // BKL-39: closing a Feature or User Story here opens the same pop-up as My Tasks [Board].
+  const [closeAsk, setCloseAsk] = useState<{ item: AzureWorkItem; rows: CloseRow[] } | null>(null)
+  async function closeSelected(item: AzureWorkItem, selection: CloseSelection) {
+    setCloseAsk(null)
+    if (blocked || !config) return
+    setBusy(`check-${item.id}`)
+    try {
+      const result = await closeChosen(config, pat, selection)
+      if (result.closed.length) { azure.applyWorkItems(result.closed, 'State check', result.closed.map((entry) => `#${entry.id} → ${entry.state}`).join(', ')); note({ tone: 'success', text: `Closed ${result.closed.map((entry) => `#${entry.id}`).join(', ')}.` }) }
+      for (const text of [...result.failed, ...result.skipped]) note({ tone: result.failed.includes(text) ? 'error' : 'info', text })
+      note({ tone: 'info', text: 'Refreshing data…' }); await azure.refresh()
+    } finally { setBusy('') }
+  }
   async function applyState(item: AzureWorkItem, state: string) {
+    if (state === 'Closed' && (item.workItemType === 'Feature' || item.workItemType === 'User Story')) {
+      const rows = item.workItemType === 'Feature' ? closeTree(azure.items, item, my.me) : storyCloseRows(azure.items, item, my.me)
+      if (rows.length) { setCloseAsk({ item, rows }); return }
+    }
     if (blocked || !config || !window.confirm(`Set ${item.workItemType} #${item.id} “${item.title}” to ${state} in Azure DevOps?`)) return
     setBusy(`check-${item.id}`)
     try {
@@ -156,7 +176,7 @@ export function SprintCheckPage({ azure, store, my }: { azure: AzureWorkspace; s
                 <td>{item.assignedTo || 'Unassigned'}</td>
                 <td><span className={`state-check-text${check.kind === 'feature-needs-active-story' ? ' warning-text' : ''}`}>{checkText[check.kind](check)}</span></td>
                 <td>{check.kind === 'feature-old-pi' && check.targetPi ? <button type="button" className="backlog-action" disabled={Boolean(blocked) || saving} onClick={() => void moveToPi(item, check.targetPi!)}>{saving ? 'Saving…' : `Move Feature to ${shortPath(check.targetPi)}`}</button>
-                  : next ? <button type="button" className="backlog-action" disabled={Boolean(blocked) || saving} onClick={() => void applyState(item, next.state)}>{saving ? 'Saving…' : next.label}</button>
+                  : next ? <button type="button" className="backlog-action" disabled={(Boolean(blocked) && !(azure.isSample && next.state === 'Closed' && (item.workItemType === 'Feature' || item.workItemType === 'User Story'))) || saving} onClick={() => void applyState(item, next.state)}>{saving ? 'Saving…' : next.label}</button>
                   : check.kind === 'feature-needs-active-story' && below.length ? <button type="button" className="backlog-action" aria-expanded={expanded} onClick={() => toggle(item.id)}>{expanded ? 'Hide User Stories' : 'Choose a User Story'}</button>
                   : <a href={item.url} target="_blank" rel="noreferrer">Open in Azure DevOps</a>}</td>
               </tr>, ...(expanded ? below.map((child) => {
@@ -175,5 +195,6 @@ export function SprintCheckPage({ azure, store, my }: { azure: AzureWorkspace; s
           </table></div> : <EmptyState title="Nothing to fix." detail="Every Feature and User Story matches the state of its children." />}
         </Panel>
       </>}
+    {closeAsk && <CloseItemsDialog title={`Close ${closeAsk.item.workItemType} #${closeAsk.item.id}`} intro={closeAsk.rows.length > 1 ? (closeAsk.item.workItemType === 'Feature' ? 'Everything still open under the Feature is listed.' : 'This is the last open User Story of its Feature: the Feature, its Time Writing story and Tasks are listed too.') + ' Tick what to close; children close first.' : 'Close this item in Azure DevOps?'} rows={closeAsk.rows} asked={closeAsk.item.id} blocked={blocked || undefined} onConfirm={(selection) => void closeSelected(closeAsk.item, selection)} onClose={() => setCloseAsk(null)} />}
   </Page>
 }

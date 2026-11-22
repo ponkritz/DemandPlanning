@@ -916,3 +916,13 @@ html{scroll-padding-bottom:calc(var(--app-footer-h) + 8px)}
 .build-details{display:grid;gap:8px;margin:10px 0 4px;padding-top:10px;border-top:1px solid var(--line-soft)}
 .build-details .storage-line{margin:0;font-size:13px;color:var(--text)}
 .build-details .download-link{width:auto;margin:0;justify-self:start;padding:6px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);color:var(--text)}
+/* BKL-39 the Close pop-up */
+.close-list{list-style:none;margin:8px 0;padding:0;max-height:min(420px,55vh);overflow:auto;border:1px solid var(--line);border-radius:10px}
+.close-list li{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;padding:8px 12px;border-bottom:1px solid var(--line-soft)}
+.close-list li:last-child{border-bottom:0}
+.close-list .checkbox-label{display:flex;align-items:center;gap:8px;margin:0}
+.close-type{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);min-width:9.5em}
+.close-id{font-weight:600}
+.close-title{flex:1 1 220px;min-width:0}
+.close-other{background:var(--surface-2)}
+.close-hours{margin:10px 0;align-items:flex-start}

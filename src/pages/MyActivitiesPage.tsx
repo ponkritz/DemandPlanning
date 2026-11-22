@@ -3,7 +3,9 @@ import { isRunning, runInBackground, subscribeJobs } from '../backgroundJobs'
 import { addTask, addUserStory, currentIterationPairs, ensureAbsenceStoryMonthTask, ensureMonthTask, ensureStoryMonthTask, futureIterationPairs, readAzureIterations, updateAzureTimeWritingEffort, type AzureIteration } from '../azureDevOps'
 import { azureInsights, isTimeWritingStory, timeWritingMonth } from '../azureInsights'
 import { capacityContext, capacityGap, capacityModel } from '../capacity'
-import { closeFeatureItems, featureClosePlan, featureCloseQuestion } from '../closeChain'
+import { closeChosen, closeTree, type CloseRow, type closeSelection } from '../closeList'
+import { CloseItemsDialog } from '../components/CloseItemsDialog'
+type CloseSelection = ReturnType<typeof closeSelection>
 import { FeatureEditor } from '../components/FeatureEditor'
 import { SearchSelect } from '../components/SearchSelect'
 import { EmptyState, Metric, Metrics, Modal, Page } from '../components/ui'
@@ -262,32 +264,29 @@ export function MyActivitiesPage({ azure, store, my, month, assign, featureSetup
   // and its hours become read-only. Only for the person themselves, with the rows' hours saved first.
   const closable = (row: Row) => row.kind === 'work' && row.link?.workItemType === 'Feature' && isPending(row.link)
   const closingRows = closeMode ? existing.filter((row) => closable(row) && closing[row.key]) : []
+  // BKL-39: Close Features opens the pop-up of everything open under the ticked Features (yours ticked).
+  const [closeAsk, setCloseAsk] = useState<{ rows: CloseRow[]; features: AzureWorkItem[] } | null>(null)
   function closeFeatures() {
     if (blocked) { setMessage({ tone: 'info', text: blocked }); return }
-    if (!self) { setMessage({ tone: 'info', text: 'Close Features closes only your own items: choose “Me” first.' }); return }
+    if (!self) { setMessage({ tone: 'info', text: 'Close Features closes your items: choose “Me” first.' }); return }
     const unsavedRows = closingRows.filter((row) => changedExisting.some((entry) => entry.key === row.key))
     if (unsavedRows.length) { setMessage({ tone: 'info', text: `Save your hours first: ${unsavedRows.map((row) => row.title).join(', ')}.` }); return }
-    const plans = closingRows.map((row) => featureClosePlan(azure.items, row.link!.id, my.me)).filter((plan): plan is NonNullable<typeof plan> => Boolean(plan))
-    const work = plans.filter((plan) => plan.close.length)
-    const keptText = plans.flatMap((plan) => plan.kept.map((entry) => `#${entry.item.id} stays open — ${entry.reason}`))
-    if (!work.length) { setMessage({ tone: 'info', text: `Nothing of yours is open under the ticked Feature${plans.length === 1 ? '' : 's'}.${keptText.length ? ` ${keptText.join(' · ')}` : ''}` }); return }
-    if (!window.confirm(work.map(featureCloseQuestion).join('\n\n'))) return
+    const features = closingRows.map((row) => row.link!).filter((item, index, list) => list.findIndex((entry) => entry.id === item.id) === index)
+    const rows = features.flatMap((feature) => closeTree(azure.items, feature, my.me))
+    if (!rows.length) { setMessage({ tone: 'info', text: 'Nothing is open under the ticked Features.' }); return }
+    setCloseAsk({ rows, features })
+  }
+  function runClose(selection: CloseSelection, features: AzureWorkItem[]) {
+    setCloseAsk(null)
     const config = azure.config!, pat = azure.pat
-    const total = work.reduce((sum, plan) => sum + plan.close.length, 0)
-    const started = runInBackground('activities:save', `Close ${work.length} Feature${work.length === 1 ? '' : 's'}`, async (progress) => {
-      let done = 0
-      const open: string[] = []
-      for (const [index, plan] of work.entries()) {
-        const result = await closeFeatureItems(config, pat, plan, undefined, (text) => progress(`Feature ${index + 1} of ${work.length}: ${text}`))
-        azure.applyWorkItems(result.closed, 'Close Feature', result.closed.map((entry) => `#${entry.id} → ${entry.state}`).join(', '))
-        done += result.closed.length
-        open.push(...result.failed, ...result.skipped)
-      }
+    const started = runInBackground('activities:save', `Close ${features.length} Feature${features.length === 1 ? '' : 's'}`, async (progress) => {
+      const result = await closeChosen(config, pat, selection, undefined, progress)
+      if (result.closed.length) azure.applyWorkItems(result.closed, 'Close Feature', result.closed.map((entry) => `#${entry.id} → ${entry.state}`).join(', '))
       setClosing({}); setCloseMode(false)
-      const failed = open.length > 0
-      const text = `${done} of ${total} item${total === 1 ? '' : 's'} closed under ${work.map((plan) => `#${plan.feature.id}`).join(', ')}.${[...open, ...keptText].length ? ` ${[...open, ...keptText].join(' · ')}` : ''}`
-      setMessage({ tone: failed ? 'error' : 'success', text })
-      return { text, failed }
+      const open = [...result.failed, ...result.skipped]
+      const text = `${result.closed.length} of ${selection.items.length} item${selection.items.length === 1 ? '' : 's'} closed under ${features.map((feature) => `#${feature.id}`).join(', ')}.${open.length ? ` ${open.join(' · ')}` : ''}`
+      setMessage({ tone: open.length ? 'error' : 'success', text })
+      return { text, failed: open.length > 0 }
     })
     if (!started) setMessage({ tone: 'info', text: 'Your activities are already being saved (see the top bar).' })
   }
@@ -452,6 +451,7 @@ export function MyActivitiesPage({ azure, store, my, month, assign, featureSetup
         </section>
       </Modal>}
     </div></>}
+    {closeAsk && <CloseItemsDialog title={`Close ${closeAsk.features.length === 1 ? `Feature #${closeAsk.features[0].id}` : `${closeAsk.features.length} Features`}`} intro="Everything still open under the Feature is listed. Tick what to close; it is closed in Azure DevOps children first, and closed Time Writing Tasks become read-only." rows={closeAsk.rows} onConfirm={(selection) => runClose(selection, closeAsk.features)} onClose={() => setCloseAsk(null)} />}
     {featureOpen && azure.config && (chosenEpic ?? epics[0]) && <FeatureEditor mode={{ parent: (chosenEpic ?? epics[0])! }} month={label} items={azure.items} config={azure.config} savedPat={azure.pat} me={assignee} canChoose={self && Boolean(assign?.canChoose)} featureSetup={featureSetup} onSavePat={azure.rememberPat} onCreated={azure.featureCreated} onClose={() => setFeatureOpen(false)}
       onDone={(done) => { setFeatureOpen(false); setMessage({ tone: 'success', text: `Feature #${done.feature.id} “${done.feature.title}”: ${done.text}` }); void azure.refresh() }}
       onPartial={(text) => { setFeatureOpen(false); setMessage({ tone: 'error', text }); void azure.refresh() }} />}
