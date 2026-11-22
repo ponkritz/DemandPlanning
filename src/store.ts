@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { AppState, AuditEvent } from './domain'
+import type { AppState, AuditEvent, PeriodControl } from './domain'
 import { seedState } from './seed'
 import { SharePointStateClient, defaultSharePointConfig, type SharePointConfig } from './sharepoint'
 import { loadBrowserState, indexedStateRepository, createStateWriter, validateBackup } from './browserState'
@@ -167,8 +167,11 @@ export function useAppStore() {
   }
 
   const listSnapshots = () => snapshotClient().listSnapshots()
+  async function savePeriods(periods: PeriodControl[]) {
+    update((draft) => { draft.periods = periods; return draft })
+  }
 
-  return { state, setState, update, addAudit, reset, connection, connectSharePoint, initializeSharePoint, pullSharePoint, disconnectSharePoint, getSavedSharePointConfig, ready, loadError, cache, retryLoad: () => { setLoadError(''); setLoadAttempt((value) => value + 1) }, retrySave: () => setSaveAttempt((value) => value + 1), restoreBackup, saveSnapshot, listSnapshots, hasPendingSave: () => pendingSnapshot.current || pendingSave.current || (connection.mode === 'sharepoint' && pendingRemoteSave.current) }
+  return { state, setState, update, addAudit, reset, connection, connectSharePoint, initializeSharePoint, pullSharePoint, disconnectSharePoint, getSavedSharePointConfig, ready, loadError, cache, retryLoad: () => { setLoadError(''); setLoadAttempt((value) => value + 1) }, retrySave: () => setSaveAttempt((value) => value + 1), restoreBackup, saveSnapshot, listSnapshots, savePeriods, hasPendingSave: () => pendingSnapshot.current || pendingSave.current || (connection.mode === 'sharepoint' && pendingRemoteSave.current) }
 }
 
 function friendlyError(error: unknown) {

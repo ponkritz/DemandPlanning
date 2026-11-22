@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { useAppStore } from './store'
-import { canWrite, deleteFile, fileSha, forgetGitStorage, GitConflictError, historyUrl, listFolder, loadGitConfig, loadGitToken, planningData, readBinaryFile, readPlanningFile, readRawFile, readTextFile, saveGitConfig, saveGitToken, serializePlanning, siblingConfig, validateGitConfig, writeBinaryFile, writePlanningFile, writeTextFile, type GitConfig } from './gitStorage'
+import { canWrite, deleteFile, fileCommits, fileSha, forgetGitStorage, GitConflictError, historyUrl, listFolder, loadGitConfig, loadGitToken, planningData, readBinaryFile, readPlanningFile, readRawFile, readTextAt, readTextFile, saveGitConfig, saveGitToken, serializePlanning, siblingConfig, validateGitConfig, writeBinaryFile, writePlanningFile, writeTextFile, type GitConfig } from './gitStorage'
 import { historyPath } from './history'
 import { packTemplateFile } from './pptxTemplate'
 import { applySnapshots, parseSnapshot, serializeSnapshot, snapshotDigest, snapshotFile, snapshotFileName, snapshotFolder, type SnapshotFile, type ViewSnapshot } from './gitSnapshots'
@@ -9,7 +9,7 @@ import { applyWindchillSnapshots, parseWindchillSnapshot, windchillDigest, windc
 import { loadWindchillViews, saveWindchillViews, type WindchillView } from './windchillViews'
 import { windchillAnalysisFolder } from './windchillReleases'
 import { loadAzureConnectionProfile, saveAzureConnectionProfile, type AzureConnectionProfileSummary, listAzureConnectionProfiles } from './azureCredentials'
-import { applyViewsReset, resetPending, parseViews, parseViewsReset, serializeViews, serializeViewsReset, sharedEmails, syncViewsFromGit, connectionKey, viewsBackupFolder, viewsFile, viewsResetPath } from './viewDefinitions'
+import { applyViewsReset, resetPending, parseViews, parseViewsReset, serializeViews, serializeViewsReset, sharedEmails, syncViewsFromGit, connectionKey, mergeViews, removedFromGit, viewsBackupFolder, viewsFile, viewsResetPath, type RemovedView } from './viewDefinitions'
 import { personalSetupPath } from './featureSetup'
 import { listValidationDocuments as listPackage, readValidationDocument as readPackage } from './toolValidation'
 import type { PeriodControl } from './domain'
@@ -195,6 +195,27 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     if (current.text === text) return { changed: false, commitUrl: historyUrl(viewsConfig) }
     return { changed: true, ...(await trackWrite(viewsConfig, token, text, current.sha, commitMessage)) }
   }
+  // CON-98: saving the shared setup merges connections already in Git, unless the caller explicitly removed one.
+  async function shareViews(views: AzureConnectionProfileSummary[], commitMessage: string, removed: string[] = []) {
+    if (!viewsConfig || !token) throw new Error('Connect Git storage first.')
+    if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
+    const current = await trackRead(viewsConfig, token)
+    const inGit = current.text == null ? [] : parseViews(current.text)
+    const text = serializeViews(viewsFile(mergeViews(inGit, views, removed)))
+    if (current.text === text) return { changed: false, commitUrl: historyUrl(viewsConfig) }
+    return { changed: true, ...(await trackWrite(viewsConfig, token, text, current.sha, commitMessage)) }
+  }
+  // CON-99: inspect prior versions of the shared setup without writing credentials or connection data.
+  async function removedViews(here: AzureConnectionProfileSummary[]): Promise<RemovedView[]> {
+    if (!viewsConfig || !token) throw new Error('Connect Git storage first.')
+    const current = await readViews()
+    const commits = await fileCommits(viewsConfig, token)
+    const versions = (await Promise.all(commits.map(async (commit) => {
+      const text = await readTextAt(viewsConfig, token, commit.sha)
+      return text == null ? null : { ...commit, views: parseViews(text) }
+    }))).filter((entry): entry is { sha: string; date: string; message: string; views: AzureConnectionProfileSummary[] } => entry != null)
+    return removedFromGit(versions, current.text == null ? [] : parseViews(current.text), here)
+  }
 
   // Back up and clean up (CON-88). backupViews: the connection setup as it is now, as a new dated file in
   // azure-views-backups/ (never a PAT). resetViews: announces the clean-up to every computer (azure-views-reset.json),
@@ -231,6 +252,16 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     if (!config || !token) throw new Error('Connect Git storage first.')
     return trackRead(siblingConfig(config, 'feature-setup.json'), token)
   }, [config, token])
+  // The per-Epic creation setup is a separate shared file from the Feature setup.
+  const readEpicSetup = useCallback(async () => {
+    if (!config || !token) throw new Error('Connect Git storage first.')
+    return trackRead(siblingConfig(config, 'epic-setup.json'), token)
+  }, [config, token])
+  async function writeEpicSetup(text: string, version: string | null, commitMessage: string) {
+    if (!config || !token) throw new Error('Connect Git storage first.')
+    if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
+    return trackWrite(siblingConfig(config, 'epic-setup.json'), token, text, version, commitMessage)
+  }
   async function writeFeatureSetup(text: string, sha: string | null, commitMessage: string) {
     if (!config || !token) throw new Error('Connect Git storage first.')
     if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
@@ -498,6 +529,6 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     setConfig(null); setToken(''); setSynced(null); setStatus('off'); setMessage('Git storage disconnected in this browser. The data stays in the app and in the repository.'); sha.current = null
   }
 
-  return { readPersonalViews, writePersonalViews, readViewsDefaults, writeViewsDefaults, savePeriod, listValidationDocuments, readValidationDocument, backupViews, resetViews, readPackTemplate, writePackTemplate, packTemplateHistory: config ? historyUrl(siblingConfig(config, packTemplateFile)) : '', config, connected, readOnly, status, message, dirty, commitUrl, history: config ? historyUrl(config) : '', isSample, load: () => load(), connect, remoteChanges, save, disconnect, viewsPath: viewsConfig?.path ?? '', viewsHistory: viewsConfig ? historyUrl(viewsConfig) : '', readViews, writeViews, syncViews, pushWindchillAnalysis, accessScope: accessConfig && token ? `${accessConfig.owner}/${accessConfig.repo}@${accessConfig.branch}:${accessConfig.path}` : '', accessPath: accessConfig?.path ?? '', accessHistory: accessConfig ? historyUrl(accessConfig) : '', readAccess, writeAccess, readFeatureSetup, writeFeatureSetup, readPersonalFeatureSetup, writePersonalFeatureSetup, featureSetupHistory: config ? historyUrl(siblingConfig(config, 'feature-setup.json')) : '', readQeMapping, writeQeMapping, readKpiTracker, writeKpiTracker, kpiTrackerHistory: config ? historyUrl(siblingConfig(config, kpiTrackerFile)) : '', readHistory, writeHistory, removeHistory, listWorkbooks, readWorkbook, historyFileHistory: config ? historyUrl(siblingConfig(config, historyPath)) : '', readMonthlyPack, writeMonthlyPack, monthlyPackHistory: (name: string) => config ? historyUrl(siblingConfig(config, name)) : '', qeMappingHistory: config ? historyUrl(siblingConfig(config, 'qe-mapping.json')) : '', removeSnapshots, viewsSync, snapshotNotes, pushSnapshot, pullSnapshot, pullSnapshots, pushWindchill, pullWindchill, pullWindchillOne, snapshotsHistory: config ? historyUrl(siblingConfig(config, snapshotFolder)) : '' }
+  return { readPersonalViews, writePersonalViews, readViewsDefaults, writeViewsDefaults, savePeriod, listValidationDocuments, readValidationDocument, backupViews, resetViews, readPackTemplate, writePackTemplate, packTemplateHistory: config ? historyUrl(siblingConfig(config, packTemplateFile)) : '', config, connected, readOnly, status, message, dirty, commitUrl, history: config ? historyUrl(config) : '', isSample, load: () => load(), connect, remoteChanges, save, disconnect, viewsPath: viewsConfig?.path ?? '', viewsHistory: viewsConfig ? historyUrl(viewsConfig) : '', readViews, writeViews, shareViews, removedViews, syncViews, pushWindchillAnalysis, accessScope: accessConfig && token ? `${accessConfig.owner}/${accessConfig.repo}@${accessConfig.branch}:${accessConfig.path}` : '', accessPath: accessConfig?.path ?? '', accessHistory: accessConfig ? historyUrl(accessConfig) : '', readAccess, writeAccess, readFeatureSetup, writeFeatureSetup, readEpicSetup, writeEpicSetup, readPersonalFeatureSetup, writePersonalFeatureSetup, featureSetupHistory: config ? historyUrl(siblingConfig(config, 'feature-setup.json')) : '', epicSetupHistory: config ? historyUrl(siblingConfig(config, 'epic-setup.json')) : '', readQeMapping, writeQeMapping, readKpiTracker, writeKpiTracker, kpiTrackerHistory: config ? historyUrl(siblingConfig(config, kpiTrackerFile)) : '', readHistory, writeHistory, removeHistory, listWorkbooks, readWorkbook, historyFileHistory: config ? historyUrl(siblingConfig(config, historyPath)) : '', readMonthlyPack, writeMonthlyPack, monthlyPackHistory: (name: string) => config ? historyUrl(siblingConfig(config, name)) : '', qeMappingHistory: config ? historyUrl(siblingConfig(config, 'qe-mapping.json')) : '', removeSnapshots, viewsSync, snapshotNotes, pushSnapshot, pullSnapshot, pullSnapshots, pushWindchill, pullWindchill, pullWindchillOne, snapshotsHistory: config ? historyUrl(siblingConfig(config, snapshotFolder)) : '' }
 }
 export type GitStorage = ReturnType<typeof useGitStorage>

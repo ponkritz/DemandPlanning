@@ -425,7 +425,7 @@ export default function App() {
       {page === 'board' && <BoardPage azure={azure} store={store} current={view} month={month} git={git} onOpenConnection={openConnection} assign={assign} featureSetup={featureSetup.setups} qeMapping={qeMapping.file} />}
       {page === 'snapshots' && <SnapshotsPage {...pageProps} />}
       {page === 'admin' && <AdminPage key={`${settingsTab}:${settingsVisit}`} tab={settingsTab} onOpenTab={openSettings} {...pageProps} azure={azure} git={git} access={access} featureSetup={featureSetup} epicSetup={epicSetup} setupSteps={steps} onSearch={() => setSearchOpen(true)} qeColumnNames={[...new Set((qeMapping.file?.sheets ?? []).flatMap((sheet) => sheet.columns.map((column) => column.name)))]} monthlyPack={monthlyPack} history={history} loadEverything={loadEverything} onOpenBoard={() => setPage('board')} />}
-      {page === 'docs' && <DocsPage />}
+      {page === 'docs' && <DocsPage git={git} onConfigure={() => openSettings('storage', 'git')} />}
       </Suspense>
       <footer className="app-footer" aria-label="Version" ref={footerRef}><ZoomControl /><DesktopDownload />{buildStatus}</footer>
     </main>
