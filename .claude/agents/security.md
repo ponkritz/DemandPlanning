@@ -11,7 +11,7 @@ security assessment current. Read `CLAUDE.md` and `docs/SECURITY-ASSESSMENT.md` 
 
 - **Credentials**: PATs and the Git token stay in browser / desktop local storage only — never in app state, backups,
   snapshots, Git files, URLs, logs or error text (errors redact the PAT). One PAT per server.
-- **Writes**: only dev.azure.com (`assertWritableBase` in `src/azureDevOps.ts` and `electron/azure-devops.cjs`); only the
+- **Writes**: only dev.azure.com (`assertWritableBase` in `src/azureClient.ts` and `electron/azure-devops.cjs`); only the
   allow-listed operations and fields; both transports validate the same way (web `requestAzure`, desktop proxy);
   every write is read back and verified; no arbitrary JSON patch, URL or tag from the UI.
 - **Desktop proxy**: https only, no credentials in URLs, fixed API paths, no redirects, JSON only, PAT redacted.

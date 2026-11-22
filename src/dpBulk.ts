@@ -70,12 +70,12 @@ export function ioccPlan(releases: ReleaseEntry[], options: { setup?: EpicSetup;
     const hit = options.featureMatch(release)
     const baseSkip = !options.epicId ? 'no IOCC bulk Epic is set (Admin → Stream options → Bulk creation Epics)'
       : fullMatch(hit) ? `Feature #${hit!.item.id} on QMS-0025 matches it 100%`
-      : !typed && !classification ? `no release type from the release number “${release.release || '—'}” (x.y.z.a expected): choose its Release Classification` : ''
+      : !options.setup ? 'the IOCC bulk Epic has no Feature setup (Admin → Epic & Feature setup)' : ''
     const qeSkip = !options.setup?.qeColumns ? 'the QE Mapping columns are not set (Feature setup of the IOCC bulk Epic)'
       : !qe ? 'no QE in the QE Mapping for this release name'
       : !email ? `no email found for ${qe} (not assigned anything on QMS-0025 yet)` : ''
     const skip = baseSkip || qeSkip
-    const set = typed || classification ? bulkSetFor(options.setup, classification, typed?.kind) : undefined
+    const set = bulkSetFor(options.setup, classification)
     return { release, title: options.featureTitle(release), classification, ...(typed ? { type: typed.type } : {}), ...(set ? { set } : {}), qe, email, skip, baseSkip, note: baseSkip ? '' : similarNote(hit) }
   })
 }
@@ -122,12 +122,12 @@ export function bulkPlan(rows: AzureWorkItem[], options: { setup?: EpicSetup; qe
     const qe = found?.qe ?? '', email = qe ? emailFor(qe, options.board) : ''
     const hit = options.featureMatch(row)
     const baseSkip = fullMatch(hit) ? `Feature #${hit!.item.id} on QMS-0025 matches it 100%`
-      : !typed && !classification ? `no release type from the version “${version || '—'}” (x.y.z.a expected): choose its Release Classification` : ''
+      : !options.setup ? 'the DP bulk Epic has no Feature setup (Admin → Epic & Feature setup)' : ''
     const qeSkip = !options.setup?.qeColumns ? 'the QE Mapping columns are not set (Feature setup of the bulk Epic)'
       : !qe ? 'no QE in the QE Mapping for this product'
       : !email ? `no email found for ${qe} (not assigned anything on QMS-0025 yet)` : ''
     const skip = baseSkip || qeSkip
-    const set = typed || classification ? bulkSetFor(options.setup, classification, typed?.kind) : undefined
+    const set = bulkSetFor(options.setup, classification)
     return { row, title: dpFeatureTitle(row), version, classification, ...(typed ? { type: typed.type } : {}), ...(set ? { set } : {}), qe, email, skip, baseSkip, note: baseSkip ? '' : similarNote(hit) }
   })
 }

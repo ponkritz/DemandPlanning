@@ -61,9 +61,11 @@ test('every source file is a listed software component, with requirement areas t
   for (const file of ['src/App.tsx', 'src/windchillReleases.ts', 'electron/main.cjs', 'scripts/traceability.mjs', 'tests/traceability.test.mjs']) assert.ok(paths.includes(file), `${file} is listed`)
 })
 
-test('the committed traceability matrix is complete and current', () => {
+// A pull request need not commit the matrix: the release commit after the merge regenerates it (CI-11), and the
+// builds of main (CHECK_GENERATED=1) check that the committed one is the generated one.
+test('the traceability matrix is complete, and current on main (TC-CI-07)', () => {
   const { text, gaps, untested } = build()
   assert.deepEqual(gaps, [], 'no trace gap')
   assert.deepEqual(untested.map((req) => req.id), [], 'every requirement in force has a test case')
-  assert.equal(readFileSync(new URL('../docs/TRACEABILITY-MATRIX.md', import.meta.url), 'utf8').replace(/\r\n/g, '\n'), text, 'docs/TRACEABILITY-MATRIX.md is current: run `node scripts/traceability.mjs`')
+  if (process.env.CHECK_GENERATED === '1') assert.equal(readFileSync(new URL('../docs/TRACEABILITY-MATRIX.md', import.meta.url), 'utf8').replace(/\r\n/g, '\n'), text, 'docs/TRACEABILITY-MATRIX.md is current: run `node scripts/traceability.mjs`')
 })

@@ -18,7 +18,8 @@ import { NamingPatternsPanel } from './NamingPatternsPanel'
 import { FeatureEpicsPanel } from './FeatureEpicsPanel'
 import { ReleaseCountsAdmin } from './ReleaseCounts'
 import { BulkEpicsPanel } from './BulkEpicsPanel'
-import { markPendingShare, markViewsSynced, serializeViews, viewsFile } from '../viewDefinitions'
+import { markPendingShare, markViewsSynced } from '../viewDefinitions'
+import { RemovedConnections } from './RemovedConnections'
 
 const roleLabel: Record<AzureConnectionRole, string> = { 'time-tracking': 'Time Writing (read & write)', 'release-source': 'Releases · DHFI (read only)', documents: 'Documents · Vault (read only)', reference: 'Reference (read only)', 'backlog-view': 'Backlog view (read only)' }
 const roleUse: Record<AzureConnectionRole, string> = {
@@ -98,7 +99,7 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
   async function shareMapping(name: string, id?: string) {
     if (!canManageStreams || azure.isSample) return
     if (!git?.connected || git.readOnly) { if (id) markPendingShare([id], true); setCleanup({ tone: 'warning', text: `“${name}” saved here only: ${!git?.connected ? 'connect Git storage' : 'your Git token is read-only'} to share the stream mapping with everyone.` }); return }
-    try { const list = listAzureConnectionProfiles(); await git.writeViews(serializeViews(viewsFile(list)), `Stream mapping: ${name}`); markViewsSynced(list); markPendingShare(list.map((profile) => profile.id), false); setCleanup({ tone: 'success', text: `“${name}” saved to the shared setup in Git; it applies to every user at their next start.` }) }
+    try { const list = listAzureConnectionProfiles(); await git.shareViews(list, `Stream mapping: ${name}`); markViewsSynced(list); markPendingShare(list.map((profile) => profile.id), false); setCleanup({ tone: 'success', text: `“${name}” saved to the shared setup in Git; it applies to every user at their next start.` }) }
     catch (failure) { if (id) markPendingShare([id], true); setCleanup({ tone: 'warning', text: `“${name}” saved here, but not to Git: ${failure instanceof Error ? failure.message : String(failure)}. Use “Save stream mapping to Git” to retry.` }) }
   }
 
@@ -163,7 +164,7 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
     if (toGit && git) {
       try {
         const list = listAzureConnectionProfiles()
-        await git.writeViews(serializeViews(viewsFile(list)), `Use ${profile.reason} as the Time Writing connection${names ? `; remove ${names}` : ''}`)
+        await git.shareViews(list, `Use ${profile.reason} as the Time Writing connection${names ? `; remove ${names}` : ''}`, replaced.map((entry) => entry.id))
         markViewsSynced(list)
         const deleted = await git.removeSnapshots([profile.id, ...replaced.map((entry) => entry.id)], `Remove data of replaced connection${names ? ` ${names}` : ''}`)
         text += ` The connection setup in Git is updated${deleted ? ` and ${deleted} data file${deleted === 1 ? '' : 's'} removed` : ''}.`
@@ -179,7 +180,7 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
     for (const profile of extras) azure.removeConnection(profile.id)
     if (!toGit || !git) { setCleanup({ tone: git?.connected ? 'warning' : 'success', text: `Removed ${names}.${git?.connected ? ' They are still in the connection setup in Git (your Git token cannot save), so they come back at the next start until someone with write access removes them there.' : ''}` }); return }
     try {
-      await git.writeViews(serializeViews(viewsFile(listAzureConnectionProfiles())), `Remove duplicate Time Writing connection${extras.length === 1 ? '' : 's'}: ${names}`)
+      await git.shareViews(listAzureConnectionProfiles(), `Remove duplicate Time Writing connection${extras.length === 1 ? '' : 's'}: ${names}`, extras.map((profile) => profile.id))
       markViewsSynced(listAzureConnectionProfiles())
       setCleanup({ tone: 'success', text: `Removed ${names} here and from the connection setup in Git.` })
     } catch (failure) { setCleanup({ tone: 'warning', text: `Removed ${names} here, but Git was not updated (${failure instanceof Error ? failure.message : String(failure)}); they may come back at the next start.` }) }
@@ -243,6 +244,7 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
         </tr> })}
       </tbody></table></div>
     </Panel>}
+    {show('mapping') && git && <RemovedConnections git={git} azure={azure} canShare={canManageStreams} />}
     {show('mapping') && <NamingPatternsPanel store={store} canManage={canManageStreams} />}
     {show('epics') && <FeatureEpicsPanel store={store} items={azure.items} canManage={canManage} />}
     {show('bulk') && <BulkEpicsPanel store={store} items={azure.items} canManage={canManage} />}

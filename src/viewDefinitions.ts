@@ -242,3 +242,32 @@ export function applyViewsReset(resetAt: string | null, storage: Pick<Storage, '
   markResetApplied(resetAt, storage)
   return removed
 }
+
+// CON-98: the shared connection setup in Git is merged, never overwritten by one computer's list: the connections in
+// Git stay, those here replace theirs (same id) or are added, and only the ids named in `removed` (an explicit removal,
+// e.g. the extra Time Writing connections or duplicates) leave Git. Personal views (mine) are never written.
+export function mergeViews(inGit: AzureConnectionProfileSummary[], here: AzureConnectionProfileSummary[], removed: string[] = []): AzureConnectionProfileSummary[] {
+  const gone = new Set(removed)
+  const merged = new Map<string, AzureConnectionProfileSummary>()
+  for (const view of inGit) if (!gone.has(view.id) && !view.mine) merged.set(view.id, view)
+  for (const view of here) if (!gone.has(view.id) && !view.mine) merged.set(view.id, view)
+  return [...merged.values()]
+}
+
+// CON-99: connections that were in an older version of the shared setup in Git but are neither in it now nor here —
+// e.g. one dropped when another computer overwrote the file. Newest version first; each connection once, as it was in
+// the newest version that had it; one duplicating a connection here (same server, project, role and query) is left out.
+export interface GitVersion { sha: string; date: string; message: string; views: AzureConnectionProfileSummary[] }
+export interface RemovedView { view: AzureConnectionProfileSummary; date: string; message: string; sha: string }
+export function removedFromGit(versions: GitVersion[], current: AzureConnectionProfileSummary[], here: AzureConnectionProfileSummary[]): RemovedView[] {
+  const present = new Set([...current, ...here].map((view) => view.id))
+  const keys = new Set([...current, ...here].map(connectionKey))
+  const found = new Map<string, RemovedView>()
+  for (const version of [...versions].sort((a, b) => b.date.localeCompare(a.date))) {
+    for (const view of version.views) {
+      if (present.has(view.id) || found.has(view.id) || view.mine || keys.has(connectionKey(view))) continue
+      found.set(view.id, { view, date: version.date, message: version.message, sha: version.sha })
+    }
+  }
+  return [...found.values()]
+}

@@ -48,7 +48,7 @@ The main session runs the specialists from this brief (agents cannot start other
 ## Step 2 — before the pull request
 
 1. Every specialist reported back; every requirement row you added has a test case (`node scripts/traceability.mjs --check`).
-2. `pnpm trace` regenerates `docs/TRACEABILITY-MATRIX.md` — never edit it by hand.
+2. `node scripts/traceability.mjs --check` finds no gap; CI's release commit regenerates `docs/TRACEABILITY-MATRIX.md` after the merge — never edit it by hand, and leave it out of the pull request. The pull request has one change note in `docs/changes/` (bump type and release-notes text) and does not change the version.
 3. Run, in order: `npx tsc -b`, `pnpm lint`, `pnpm test`, `pnpm -s build:web`, `pnpm test:e2e`.
 4. Check the documents named in CLAUDE.md for the change: SRS, TEST-PLAN (§6, §7, use cases), UAT-PLAN, README,
    SOFTWARE-COMPONENTS (every file once), KNOWN-ISSUES, DFMEA (summary count = number of DF rows), SECURITY-ASSESSMENT.

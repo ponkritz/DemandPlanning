@@ -1,6 +1,5 @@
 import { listJobs, runInBackground, subscribeJobs } from '../backgroundJobs'
 import { useState, useSyncExternalStore } from 'react'
-import { PersonPicker } from '../components/PersonPicker'
 import { EmptyState, Notice, Page, Panel, Pill } from '../components/ui'
 import { currentIterationPairs, readAzureIterations, updateAzureWorkItem, type AzureIteration } from '../azureDevOps'
 import { capacityContext } from '../capacity'
@@ -125,9 +124,8 @@ export function SprintCheckPage({ azure, store, my }: { azure: AzureWorkspace; s
   return <Page>
     <section className="me-bar">
       <div><span className="eyebrow">WORK ASSIGNED TO</span><strong>{my.me.name ?? my.me.email ?? 'Not set'}</strong>{my.me.email && <small>{my.me.email}</small>}</div>
-      <label>Show work for<PersonPicker label="Show work for" value={my.chosenName} people={my.people} onChange={my.setName} meLabel={my.me.email ? 'Me (connection email)' : 'Choose a person…'} /></label>
     </section>
-    {!my.known ? <EmptyState title="Who are you in Azure DevOps?" detail="Set the Feature creator email on your Time Writing connection, or choose your name above." />
+    {!my.known ? <EmptyState title="Who are you in Azure DevOps?" detail="Set the Feature creator email on your Time Writing connection, or choose your name with Person at the top right." />
       : <>
         {blocked && <Notice tone="warning">{blocked}</Notice>}
         {log.map((entry, index) => <Notice key={index} tone={entry.tone}>{entry.text}</Notice>)}

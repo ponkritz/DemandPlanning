@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { AzureWorkItem } from '../domain'
 import { classificationOf, copyEpicFields, emptyEpicSetup, newStoryTemplateId, templatesFor, upsertStoryTemplate, type StoryTemplateItem, featureFromFields, fieldTypes, ifEmptyOptions, intoOptions, maxEpicFields, serializeEpicSetup, upsertEpicFields, type EpicField, type EpicFields, type EpicSetupFile } from '../epicSetup'
-import { chooseSetup, classKindOf, classSetKey, dpEpicId, emptySetup, fieldKey, inheritFields, serializeFeatureSetup, setForClass, setupFor, type EpicSetup, type FeatureSetupFile, type InheritField, type SetupDefaults, type StoryTemplate } from '../featureSetup'
+import { chooseSetup, classSetKey, dpEpicId, emptySetup, fieldKey, inheritFields, serializeFeatureSetup, setForClass, setupFor, type EpicSetup, type FeatureSetupFile, type InheritField, type SetupDefaults, type StoryTemplate } from '../featureSetup'
 import { useCan } from '../useCan'
 import type { EpicSetupStore } from '../useEpicSetup'
 import type { FeatureSetup } from '../useFeatureSetup'
@@ -76,7 +76,6 @@ export function EpicFeatureEditor({ setup, epicSetup, git, items, qeColumnNames 
   const forValue = value ? setForClass(resolved, value) : undefined
   const dod = isAll ? defaults.featureDoD ?? '' : forValue?.featureDoD ?? resolved?.featureDoD ?? ''
   const stories: StoryTemplate[] = isAll ? defaults.stories ?? [] : forValue?.stories ?? resolved?.stories ?? []
-  const legacyKind = value && !own && entry?.releaseTypes ? classKindOf(value) : undefined
   const estimate = isAll ? defaults.originalEstimate : resolved?.task.originalEstimate
 
   // Changes: to the layer's file (shared or mine), the All Epics defaults, or the Epic setup.
@@ -88,6 +87,15 @@ export function EpicFeatureEditor({ setup, epicSetup, git, items, qeColumnNames 
     update(value)
     if (!value.inherits?.length) delete value.inherits
     putLayer(next)
+  }
+  // BKL-38: Complete children per Epic, in the shared setup only (a team decision); on unless turned off.
+  const completeChildrenHere = isAll || setupFor(sharedFile, epicId)?.completeChildren !== false
+  const setCompleteChildren = (on: boolean) => {
+    const next = structuredClone(sharedFile)
+    let value = next.epics.find((item) => item.epicId === epicId)
+    if (!value) { value = { ...emptySetup(epicId, known.get(epicId) ?? ''), inherits: [...inheritFields] }; next.epics.push(value) }
+    if (on) delete value.completeChildren; else value.completeChildren = false
+    setShared(next); setResult(null)
   }
   const changeDefaults = (update: (value: SetupDefaults) => void) => { const next = structuredClone(sharedFile); const value = { ...(next.defaults ?? {}) }; update(value); next.defaults = value; setShared(next); setResult(null) }
   const changeFields = (update: (value: EpicFields) => void) => {
@@ -130,7 +138,7 @@ export function EpicFeatureEditor({ setup, epicSetup, git, items, qeColumnNames 
   }
   // A value's own set: on, it starts from what applies to the value now; off, the value uses the Epic's default again.
   const toggleValue = (on: boolean) => {
-    if (on) changeEntry((item) => { item.classSets = { ...(item.classSets ?? {}), [value]: { featureDoD: forValue?.from === 'legacy' ? forValue.featureDoD : '', stories: structuredClone(stories) } } })
+    if (on) changeEntry((item) => { item.classSets = { ...(item.classSets ?? {}), [value]: { featureDoD: '', stories: structuredClone(stories) } } })
     else if (window.confirm(`Use the Epic’s default DoD and User Stories for ${value} again? Save to keep it.`)) changeEntry((item) => { const next = { ...(item.classSets ?? {}) }; delete next[ownKey!]; if (Object.keys(next).length) item.classSets = next; else delete item.classSets })
   }
 
@@ -155,9 +163,9 @@ export function EpicFeatureEditor({ setup, epicSetup, git, items, qeColumnNames 
   const fromFields = fieldsEntry?.fields.length ? featureFromFields(fieldsEntry, sample, 'Feature title') : undefined
   const preview = {
     title: fromFields?.title || 'The title typed in New Feature',
-    description: [dod ? `Feature DoD: ${dod}` : 'Feature DoD: (the PU or Full Release default)', ...(fromFields?.lines ?? [])].join('\n'),
-    stories: stories.map((story) => story.title).join(' · ') || (isAll || resolved ? 'None' : 'The built-in PU / Full Release choice'),
-    classification: value ? `${value}${own ? ' (its own set)' : legacyKind ? ` (the old ${legacyKind === 'pu' ? 'PU' : 'Release'} set)` : ' (the Epic’s default)'}` : '',
+    description: [dod ? `Feature DoD: ${dod}` : 'Feature DoD: (typed in New Feature)', ...(fromFields?.lines ?? [])].join('\n'),
+    stories: stories.map((story) => story.title).join(' · ') || 'None',
+    classification: value ? `${value}${own ? ' (its own set)' : ' (the Epic’s default)'}` : '',
     task: `${estimate != null ? `${estimate} h` : 'No default estimate'} · “<Month> | <Feature>” under “<Feature> - Time Writing”`,
   }
   const switchView = (section: Section, label: string) => !isAll && <button type="button" role="switch" aria-checked={custom[section]} aria-label={`Customize ${label} for this Epic`} className="efe-switch" disabled={section === 'fields' ? !canFields || useMine : !editable} onClick={() => toggle(section, !custom[section])}><span className="efe-track" data-on={custom[section]}><span /></span>Customize for this Epic</button>
@@ -198,27 +206,27 @@ export function EpicFeatureEditor({ setup, epicSetup, git, items, qeColumnNames 
         </details>}
       </section>}
 
-      {!isAll && <section className="efe-classes" aria-label={`By ${classes.label}`}>
-        <div><strong>DoD and User Stories by {classes.label}</strong><small>{classes.fieldIndex >= 0 ? `The values of this Epic’s ${classes.label} field.` : `The built-in values (give the Epic a ${classes.label} List field in section 1 to use your own).`} A value without its own set uses the Epic’s default.</small></div>
+      {!isAll && classes.values.length > 0 && <section className="efe-classes" aria-label={`By ${classes.label}`}>
+        <div><strong>DoD and User Stories by {classes.label}</strong><small>The values of this Epic’s {classes.label} field. A value without its own set uses the Epic’s default.</small></div>
         <div role="tablist" aria-label={classes.label} className="efe-tabs">
           <button type="button" role="tab" aria-selected={!value} onClick={() => setCls('')}>Epic default</button>
           {classes.values.map((item) => <button key={item} type="button" role="tab" aria-selected={value === item} onClick={() => setCls(item)}>{item}{classSetKey(entry, item) ? ' ●' : ''}</button>)}
         </div>
         {value && <div className="efe-classhead"><button type="button" role="switch" aria-checked={Boolean(own)} aria-label={`Own DoD and User Stories for ${value}`} className="efe-switch" disabled={!editable} onClick={() => toggleValue(!own)}><span className="efe-track" data-on={Boolean(own)}><span /></span>Own DoD and User Stories for {value}</button>
-          {!own && <small className="muted">{legacyKind ? `Now: the old ${legacyKind === 'pu' ? 'PU' : 'Release'} set saved for this Epic.` : 'Now: the Epic’s default.'}</small>}</div>}
+          {!own && <small className="muted">Now: the Epic’s default.</small>}</div>}
       </section>}
 
       <section className="efe-section" aria-label="Definition of Done">
         <header><span className="efe-n">{isAll ? 1 : 2}</span><div><h3>Definition of Done{value && ` — ${value}`}</h3><small>Written at the top of the Feature’s Description</small></div>{!value && switchView('dod', 'Definition of Done')}</header>
         {value ? own ? <label className="efe-field">Definition of Done for {value}<textarea rows={2} value={own.featureDoD} disabled={!editable} placeholder={`Empty: the Epic’s DoD (${resolved?.featureDoD || 'none'})`} onChange={(event) => changeEntry((item) => { item.classSets![ownKey!].featureDoD = event.target.value })} /></label>
-          : <div className="efe-inherited"><small>{legacyKind ? 'FROM THE OLD SET' : 'FROM THE EPIC’S DEFAULT'}</small><span>{dod || '—'}</span></div>
-        : !isAll && !custom.dod ? fromDefaults(defaults.featureDoD || 'The PU or Full Release default, chosen in New Feature') : <label className="efe-field">Definition of Done{!isAll && ' (required)'}<textarea rows={2} value={isAll ? defaults.featureDoD ?? '' : entry?.featureDoD ?? ''} disabled={!editable} onChange={(event) => isAll ? changeDefaults((value) => { if (event.target.value.trim()) value.featureDoD = event.target.value; else delete value.featureDoD }) : changeEntry((value) => { value.featureDoD = event.target.value })} placeholder={isAll ? 'Empty: the PU or Full Release default' : ''} /></label>}
+          : <div className="efe-inherited"><small>FROM THE EPIC’S DEFAULT</small><span>{dod || '—'}</span></div>
+        : !isAll && !custom.dod ? fromDefaults(defaults.featureDoD || 'None set: typed in New Feature') : <label className="efe-field">Definition of Done{!isAll && ' (required)'}<textarea rows={2} value={isAll ? defaults.featureDoD ?? '' : entry?.featureDoD ?? ''} disabled={!editable} onChange={(event) => isAll ? changeDefaults((value) => { if (event.target.value.trim()) value.featureDoD = event.target.value; else delete value.featureDoD }) : changeEntry((value) => { value.featureDoD = event.target.value })} placeholder={isAll ? 'Empty: typed in New Feature' : ''} /></label>}
       </section>
 
       <section className="efe-section" aria-label="User Stories">
         <header><span className="efe-n">{isAll ? 2 : 3}</span><div><h3>User Stories{value && ` — ${value}`}</h3><small>Created under the Feature, ticked by default</small></div>{!value && switchView('stories', 'User Stories')}</header>
-        {value && !own ? <div className="efe-inherited"><small>{legacyKind ? 'FROM THE OLD SET' : 'FROM THE EPIC’S DEFAULT'}</small><span>{stories.map((story) => story.title).join('\n') || 'None'}</span></div>
-        : !value && !isAll && !custom.stories ? fromDefaults((defaults.stories ?? []).map((story) => story.title).join('\n') || 'None set: New Feature offers the built-in PU / Full Release stories') : <>
+        {value && !own ? <div className="efe-inherited"><small>FROM THE EPIC’S DEFAULT</small><span>{stories.map((story) => story.title).join('\n') || 'None'}</span></div>
+        : !value && !isAll && !custom.stories ? fromDefaults((defaults.stories ?? []).map((story) => story.title).join('\n') || 'None set: only the Review of Deliverables story and your own') : <>
           <StoriesEditor stories={stories} disabled={!editable} onChange={setStories} templates={allTemplates} offered={offered} canSaveTemplate={canTemplates} onSaveTemplate={saveAsTemplate} />
           {hasSets && entry && !value && <div className="form-row">
             <label>QE Mapping column with the Platform / Product{qeColumnNames.length ? <select value={entry.qeColumns?.matchColumn ?? ''} disabled={!editable} onChange={(event) => changeEntry((value) => { value.qeColumns = { matchColumn: event.target.value, qeColumn: value.qeColumns?.qeColumn ?? '' } })}><option value="">Not set</option>{qeColumnNames.map((name) => <option key={name}>{name}</option>)}</select> : <small className="muted">Open QE Mapping once to list its columns.</small>}</label>
@@ -231,6 +239,12 @@ export function EpicFeatureEditor({ setup, epicSetup, git, items, qeColumnNames 
         <header><span className="efe-n">{isAll ? 3 : 4}</span><div><h3>Month Task</h3><small>The Time Writing Task’s default estimate</small></div>{switchView('task', 'Month Task')}</header>
         {!isAll && !custom.task ? fromDefaults(defaults.originalEstimate != null ? `${defaults.originalEstimate} hours` : 'No default estimate') : <label className="efe-field efe-inline">Default Original Estimate<input type="number" min="0" max="1000000" step="0.25" value={(isAll ? defaults.originalEstimate : entry?.task.originalEstimate) ?? ''} disabled={!editable} onChange={(event) => { const raw = event.target.value.trim(), hours = raw === '' || !Number.isFinite(Number(raw)) || Number(raw) < 0 ? undefined : Number(raw); if (isAll) changeDefaults((value) => { if (hours == null) delete value.originalEstimate; else value.originalEstimate = hours }); else changeEntry((value) => { if (hours == null) delete value.task.originalEstimate; else value.task.originalEstimate = hours }) }} />hours</label>}
       </section>
+
+      {!isAll && <section className="efe-section" aria-label="Complete children">
+        <header><span className="efe-n">5</span><div><h3>Complete children</h3><small>Offered on this Epic’s Features — a team setting (shared setup)</small></div></header>
+        <label className="checkbox-label"><input type="checkbox" checked={completeChildrenHere} disabled={!canShared} onChange={(event) => setCompleteChildren(event.target.checked)} />Offer “Complete children” on the Features of this Epic</label>
+        <small className="muted">{completeChildrenHere ? 'A Feature without optional User Stories shows Complete children; its pop-up lists this Epic’s User Stories, none ticked, so the person decides which to add.' : 'Hidden on this Epic’s Features; single User Stories are still added with ＋ User Story.'}</small>
+      </section>}
 
       {!isAll && entry && editable && <div className="button-row"><button type="button" className="text-button danger-text" onClick={() => { if (!window.confirm(`${useMine ? 'Remove your own version of' : 'Reset'} ${title}${useMine ? '' : ' to the defaults'}? Save to keep it.`)) return; putLayer({ ...layerFile, epics: layerFile.epics.filter((item) => item.epicId !== epicId) }) }}>{useMine ? 'Remove my own version' : 'Reset this Epic to the defaults'}</button>
         {useMine && can('setup.feature') && canShared && <button type="button" className="ghost" onClick={() => { const next = structuredClone(sharedFile); next.epics = [...next.epics.filter((item) => item.epicId !== epicId), structuredClone(entry)]; setShared(next); setResult({ tone: 'success', text: 'Your version will be the shared one — Save to keep it.' }) }}>Share my version with everyone</button>}

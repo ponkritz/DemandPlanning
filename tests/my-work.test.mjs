@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { isMine, isPending, matchesWork, mentions, myPendingWork, monthTaskCandidates, moveCandidates, assignablePeople } from '../src/myWork.ts'
+import { isMine, isPending, matchesWork, mentions, myPendingWork, monthTaskCandidates, moveCandidates, assignablePeople, byFeatureNumber } from '../src/myWork.ts'
 import { ensureMonthTask, updateAzureWorkItem, workItemUpdatePatch, addChildWorkItem, requestAzure, createUserStory } from '../src/azureDevOps.ts'
 import { createRequire } from 'node:module'
 
@@ -572,4 +572,11 @@ test('ATM-30: an Active Feature left in an older PI than its Active User Stories
   ]
   const flagged = stateChecks(list, me).filter((check) => check.kind === 'feature-old-pi')
   assert.deepEqual(flagged.map((check) => [check.item.id, check.targetPi, check.children.map((child) => child.id)]), [[30, 'Quality\\PI 2026.4', [31]]], 'only the Active Feature behind its Active stories; 2026.10 is later than 2026.9; a New Feature gets the Active check first')
+})
+
+test('ACT-21: Time Writing lists in order of Feature number — a Task or story by the Feature above it; rows without a Feature after (TC-ACT-16)', () => {
+  const all = [item(1, 'Epic', 'E'), item(40, 'Feature', 'Zeta', { parentId: 1 }), item(7, 'Feature', 'Alpha', { parentId: 1 }), item(12, 'Feature', 'Mid', { parentId: 1 }), item(50, 'User Story', 'Ana - PTO', { parentId: 12 }), item(3, 'Task', 'Loose task')]
+  const by = (id) => all.find((entry) => entry.id === id)
+  const rows = [{ key: 'a', link: by(40) }, { key: 'b', link: by(3) }, { key: 'c', link: by(50) }, { key: 'd', link: by(7) }, { key: 'e' }]
+  assert.deepEqual([...rows].sort(byFeatureNumber(all)).map((row) => row.key), ['d', 'c', 'a', 'b', 'e'], 'Feature #7, the story under #12, #40; then a Task with no Feature, then a row with no item')
 })

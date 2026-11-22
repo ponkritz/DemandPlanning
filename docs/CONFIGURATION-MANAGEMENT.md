@@ -10,7 +10,7 @@ This plan says what is under configuration control, how each item is identified 
 |---|---|---|---|
 | Application source (web, desktop shell, scripts) | This repository: `src/`, `electron/`, `scripts/`, `index.html`, `vite.config.ts`, `tsconfig*.json` | Git revision; version `x.y.z` in `package.json` | Pull request to `main` (§4) |
 | Tests and test data | `tests/`, `e2e/` (with `e2e/fixtures`) | Git revision | Pull request, with the requirement and test case it covers |
-| Documents (Validation Package, release notes, this plan) | `docs/`, `README.md`, `CLAUDE.md` | Git revision; document ID in each document; bundled into each build (Documentation page) | Pull request, in the same pull request as the code they describe |
+| Documents (Validation Package, release notes, this plan) | `docs/`, `README.md`, `CLAUDE.md`, `AGENTS.md` | Git revision; document ID in each document; bundled into each build (Documentation page) | Pull request, in the same pull request as the code they describe |
 | Third-party components (SOUP) | `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml` (overrides) | Exact versions and integrity hashes in the lockfile; [SWBOM.md](SWBOM.md) / `swbom.cdx.json` | Pull request; daily dependency check (§7) |
 | Build and release definition | `.github/workflows/build-and-deploy.yml`, `electron-builder` settings in `package.json` | Git revision | Pull request |
 | Build outputs | GitHub Pages (web app), GitHub release `desktop-latest` (installers, `SHA256SUMS`, `latest.json`), tagged releases `vX.Y.Z` | Version, CI build number and Git revision in `build-info.json` and `latest.json`; SHA-256 per installer | Only by CI (§5); never by hand |
@@ -28,7 +28,7 @@ The separate Philips Tool Validation Package is stored under `tool-validation/de
   - **minor**: a new or changed feature, report or rule;
   - **patch**: a fix, a dependency update, or documentation only.
 - **Build number**: the CI build of a merge to `main`; with the Git **revision** it is in `build-info.json`, the app (Force Update dialog) and `latest.json` per platform.
-- **Tag** `vX.Y.Z` on the merge commit of each version, created by CI (§5, CI-10); a tag pushed by hand must equal the version (CI-05).
+- **Tag** `vX.Y.Z` on the release commit of each version (CI-11), created by CI (§5, CI-10); a tag pushed by hand must equal the version (CI-05).
 - **Documents** carry a document ID (see [VALIDATION-PACKAGE.md](VALIDATION-PACKAGE.md)); their revision is the version they ship with.
 
 ## 3. Baselines
@@ -40,18 +40,18 @@ A **baseline** is a tagged version: the source, documents, lockfile and workflow
 Every change is a pull request to `main`:
 
 1. Start from the request: requirement rows, test cases and document changes are identified first (CLAUDE.md; DEVELOPMENT-PROCESS.md §4).
-2. In the same pull request: the code, the tests, the documents (requirements, test plan, UAT, README, known issues, DFMEA, security assessment, software components, regenerated traceability matrix and SWBOM as they apply), **the version bump** (§2) and **the release-notes entry** for the new version.
-3. Before pushing: `npx tsc -b`, `pnpm lint`, `pnpm test` (includes the traceability, SWBOM and release-notes checks), `pnpm build:web`, `pnpm test:e2e` when the UI changed.
+2. In the same pull request: the code, the tests, the documents (requirements, test plan, UAT, README, known issues, DFMEA, security assessment, software components, and the SWBOM when the lockfile changed, as they apply) and **one change note** `docs/changes/<name>.md` with the bump type (§2) and the release-notes text ([changes/README.md](changes/README.md)). The pull request does not change the version, the top of RELEASE-NOTES.md or the traceability matrix: CI writes them after the merge (CI-09, CI-11), so open pull requests do not conflict on them.
+3. Before pushing: `npx tsc -b`, `pnpm lint`, `pnpm test` (includes the traceability, SWBOM, change-note and release-notes checks), `pnpm build:web`, `pnpm test:e2e` when the UI changed.
 4. CI runs on the pull request (Windows packaging, unit tests, E2E); the pull request is merged (squash) only when CI is green, with the expected head revision.
-5. After the merge: CI builds and publishes the version, tags the merge commit `vX.Y.Z` and publishes its release (§5). Nobody tags by hand.
+5. After the merge: the job *Write release commit* turns the change notes into the version, its release-notes entry and the regenerated SWBOM and traceability matrix, and pushes them as one release commit; CI builds and publishes that commit, tags it `vX.Y.Z` and publishes its release (§5). Nobody tags or bumps by hand.
 
 Emergency fixes follow the same steps; there is no path to `main` that skips CI.
 
 ## 5. Build and release
 
 - **Every merge to `main`** builds and tests the app, deploys the web app to GitHub Pages, and publishes the installers with `SHA256SUMS` and `latest.json` to the `desktop-latest` release; the desktop updater downloads only from there and verifies the SHA-256 (DSK-07…09).
-- **The tagged release:** when the Windows, macOS and end-to-end jobs of that merge pass, the job *Tag and publish versioned release* tags the merge commit `vX.Y.Z` (the version in `package.json`) and publishes the GitHub release of the version with both installers, their SHA256SUMS files and the version's entry from RELEASE-NOTES.md (`scripts/release-entry.mjs`) (CI-10). It runs no dependency code (CI-07). When that release already exists (the version was not bumped) it changes nothing. A run cancelled by a later merge leaves its version untagged: re-run that workflow run (LIM-13). A tag pushed by hand runs the same job.
-- **Rollback:** revert the change by a new pull request (with its own patch version and release-notes entry); a published version is never replaced in place. The web app follows `main`; desktop users update to the newest `desktop-latest` build.
+- **The tagged release:** when the Windows, macOS and end-to-end jobs of that merge pass, the job *Tag and publish versioned release* tags the release commit `vX.Y.Z` (the version in `package.json`) and publishes the GitHub release of the version with both installers, their SHA256SUMS files and the version's entry from RELEASE-NOTES.md (`scripts/release-entry.mjs`) (CI-10). It runs no dependency code (CI-07). When that release already exists (no change note was merged) it changes nothing. Runs on `main` are not cancelled by a later merge, so every version is tagged; a merge while a run builds waits, and its notes go into the next release commit (CI-11). A tag pushed by hand runs the same job.
+- **Rollback:** revert the change by a new pull request (with its own change note, patch); a published version is never replaced in place. The web app follows `main`; desktop users update to the newest `desktop-latest` build.
 
 ## 6. Status accounting
 

@@ -8,7 +8,8 @@ import { fullMatch, similarNote } from './dpBulk.ts'
 // current Sprint, the Time Writing story and the month Task with 4 h Original Estimate, all assigned to one person
 // chosen in the pop-up.
 export const contentEpicId = 22919
-export const contentBulk = { classification: 'NA', featureDoD: 'All Documents are approved', taskEstimate: 4 } as const
+// DPF-09: no Release Classification line any more (it was "NA").
+export const contentBulk = { featureDoD: 'All Documents are approved', taskEstimate: 4 } as const
 
 export interface ContentLine { release: ReleaseEntry; title: string; skip: string; note: string }
 export function contentPlan(releases: ReleaseEntry[], featureTitle: (release: ReleaseEntry) => string, featureMatch: (release: ReleaseEntry) => BoardHit | undefined): ContentLine[] {

@@ -1,11 +1,13 @@
 // Single source for navigation labels, header text and grouping so the sidebar and page header always agree.
-export type Page = 'mydash' | 'activities' | 'planover' | 'capactual' | 'overview' | 'pulse' | 'pireview' | 'mywork' | 'bulk' | 'baselines' | 'board' | 'health' | 'windchill' | 'brite' | 'snapshots' | 'qemapping' | 'kpitracker' | 'admin' | 'docs'
-export type PageGroup = 'Data Insights' | 'My Work' | 'Testing' | 'I&D Board' | 'Release Details' | 'Other views' | 'Data & governance' | 'Settings'
+export type Page = 'home' | 'mydash' | 'activities' | 'planover' | 'capactual' | 'overview' | 'pulse' | 'pireview' | 'mywork' | 'bulk' | 'baselines' | 'board' | 'health' | 'windchill' | 'brite' | 'snapshots' | 'qemapping' | 'kpitracker' | 'admin' | 'docs'
+export type PageGroup = 'Home' | 'Data Insights' | 'My Work' | 'Testing' | 'I&D Board' | 'Release Details' | 'Other views' | 'Data & governance' | 'Settings'
 
 // hidden: kept in the build but not offered in the menu.
 export interface PageMeta { id: Page; label: string; icon: string; group: PageGroup; detail: string; usesMonth: boolean; hidden?: boolean }
 
 export const pages: PageMeta[] = [
+  // NAV-42: Home is above the menu groups (not in pageGroups): the start page, open to everyone.
+  { id: 'home', label: 'Home', icon: '⌂', group: 'Home', detail: 'Every area of the app as a tile: open an area, or jump straight to one of its pages.', usesMonth: false },
   { id: 'mydash', label: 'My dashboard', icon: '◐', group: 'Data Insights', detail: 'Your hours against your capacity, your open work and your streams and releases.', usesMonth: true },
   { id: 'overview', label: 'Team overview', icon: '▦', group: 'Data Insights', detail: 'The team at a glance: six headline tiles, each opening its analysis — capacity and workload, streams, plan quality — for a period and filters.', usesMonth: false },
   { id: 'pulse', label: 'Pulse Check', icon: '◔', group: 'Data Insights', detail: 'Last month’s releases and analysis, ongoing activities, and the current month’s releases.', usesMonth: true },

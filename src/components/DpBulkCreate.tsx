@@ -9,7 +9,7 @@ import type { FeatureSetups } from '../featureSetup'
 import { chooseSetup, withLinkedStories } from '../featureSetup'
 import { useBulkEpic } from '../useStreamEpics'
 import type { QeMappingFile } from '../qeMapping'
-import { bulkPlan, dpTypeLabel, pickQe } from '../dpBulk'
+import { bulkPlan, pickQe } from '../dpBulk'
 import type { BoardHit } from '../dpBoardMatch'
 import { createFeatureFromSetup, currentIndiaMonth, currentIterationPairs, futureIterationPairs, readAzureIterations, withFeatureDoD, HierarchyCreationError, type AzureIteration } from '../azureDevOps'
 import { runInBackground } from '../backgroundJobs'
@@ -65,7 +65,7 @@ export function DpBulkCreate({ rows, azure, featureSetup, qeMapping, featureMatc
       for (const [index, line] of ready.entries()) {
         progress(`${index + 1} of ${ready.length}: ${line.title}…`)
         try {
-          const feature = { parentId: epic.id, title: line.title, description: withFeatureDoD(line.set!.featureDoD, '', classes.fieldIndex >= 0 ? undefined : line.classification || (line.type ?? ''), line.fieldLines), acceptanceCriteria: '', areaPath: epic.areaPath, iterationPath: pair.pi.path, storyIterationPath: pair.sprint.path, assignedTo: line.email }
+          const feature = { parentId: epic.id, title: line.title, description: withFeatureDoD(line.set!.featureDoD, '', undefined, line.fieldLines), acceptanceCriteria: '', areaPath: epic.areaPath, iterationPath: pair.pi.path, storyIterationPath: pair.sprint.path, assignedTo: line.email }
           const bundle = await createFeatureFromSetup(config, token, feature, { stories: line.set!.stories, reviewStory: false, ...(setup?.timeWritingStory ? { timeWritingStory: setup.timeWritingStory } : {}), task: { ...(setup?.task ?? { title: '{month} | {feature}', description: '', assignedTo: '', areaPath: '', iterationPath: '' }), assignedTo: line.email } }, month, undefined, adhoc)
           azure.featureCreated([epic, ...bundle.items])
           done.push(`#${bundle.feature.id} ${line.title} → ${line.qe}${line.warned.length ? ` (empty: ${line.warned.join(', ')})` : ''}`)
@@ -84,10 +84,10 @@ export function DpBulkCreate({ rows, azure, featureSetup, qeMapping, featureMatc
     <div className="dp-bulk">
       <p className="muted">Under Epic #{dpEpicId}{epic ? ` “${epic.title}”` : ''}: each Feature gets the DoD and User Stories of the {classes.label} chosen on its row (Admin → Epic &amp; Feature setup → Epic {dpEpicId}; a value without its own set uses the Epic’s default), its Time Writing story and month Task, all assigned to the QE from the QE Mapping.</p>
       <div className="azure-table"><table>
-        <thead><tr><th scope="col">Feature title</th><th scope="col">{classes.label}</th><th scope="col">User Stories</th><th scope="col">QE</th><th scope="col">Result</th></tr></thead>
+        <thead><tr><th scope="col">Feature title</th>{classes.values.length > 0 && <th scope="col">{classes.label}</th>}<th scope="col">User Stories</th><th scope="col">QE</th><th scope="col">Result</th></tr></thead>
         <tbody>{plan.map((line) => <tr key={line.row.id} className={line.skip ? 'muted' : undefined}>
           <td>{line.title}</td>
-          <td><select aria-label={`${classes.label} of ${line.title}`} value={line.classification} onChange={(event) => setClassPicks((current) => ({ ...current, [String(line.row.id)]: event.target.value }))}><option value="">{line.type ? `— (${dpTypeLabel(line.type)} from the number)` : '— choose —'}</option>{[...classes.values, ...(line.classification && !classes.values.includes(line.classification) ? [line.classification] : [])].map((value) => <option key={value} value={value}>{value}</option>)}</select>{!classes.values.length && <small className="muted"> No values: give the Epic’s {classes.label} field a list.</small>}</td>
+          {classes.values.length > 0 && <td><select aria-label={`${classes.label} of ${line.title}`} value={line.classification} onChange={(event) => setClassPicks((current) => ({ ...current, [String(line.row.id)]: event.target.value }))}><option value="">— the Epic’s default —</option>{[...classes.values, ...(line.classification && !classes.values.includes(line.classification) ? [line.classification] : [])].map((value) => <option key={value} value={value}>{value}</option>)}</select></td>}
           <td>{line.set ? line.set.stories.map((story) => story.title.split(' :')[0]).join(', ') || 'none' : '—'}</td>
           <td>{line.baseSkip ? (line.qe || '—') : <QePick label={line.title} email={line.email} mapped={mappedPlan.find((entry) => String(entry.row.id) === String(line.row.id))?.qe} people={people} onPick={(email) => setPicks((current) => ({ ...current, [String(line.row.id)]: email }))} />}</td>
           <td>{line.skip ? <span className="warning-text">Skipped: {line.skip}</span> : <>Will be created{line.note && <small className="warning-text"> — {line.note}</small>}{line.warned.length > 0 && <small className="warning-text"> — empty {line.warned.join(', ')}</small>}</>}</td>

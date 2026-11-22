@@ -327,6 +327,16 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-NAV-41 Get started opens when the fetch fails** — Req NAV-41 — L1 `setup-guide.test.mjs` ("NAV-41: a failed fetch reopens the token step (token problems) and the Fetch step (any problem)"); E2E `shell.e2e.mjs` ("TC-NAV-41: a fetch that fails shows the reason in Get started and opens the token step again": Azure DevOps answers 401) — **UAT**; browser check: with an expired or revoked PAT, open the app — Get started opens with Could not fetch from Azure DevOps and the token step; save a new PAT and Fetch now — the steps turn Done; with the network off (or VPN for on-prem) the reason says Azure DevOps could not be reached.
 
+**TC-NAV-42 Home: tiles per area, links and search** — Req NAV-42, NAV-43, NAV-44 — **UAT** — L1 `home-tiles.test.mjs` ("NAV-43: a search keeps a matching tile whole, else only its matching links; nothing left out without a match (TC-NAV-42)", "NAV-42: Home is a page of its own, open to everyone, without a month"); E2E `shell.e2e.mjs` ("TC-NAV-42: Home is the start page — a tile per area with links to its pages, a search, and Home first in the menu": the start page and first menu entry, the tiles in order, six links and “+n more” showing the rest, a search keeping only matching links or whole matching tiles, nothing found, a tile opening its area and a link its page; "TC-NAV-01 / TC-NAV-17": the app opens on Home); browser check: dark mode and phone width; a role without Release Details sees no Release Details tile.
+
+**TC-NAV-46 Tile view or classic view** — Req NAV-46, NAV-42 — L1 `home-tiles.test.mjs` ("NAV-46: the tile view opens on Home, the classic view on My dashboard; the choice is kept in this browser (TC-NAV-46)"); E2E `shell.e2e.mjs` ("TC-NAV-46: the menu switches between the tile view (opens on Home) and the classic view (opens on My dashboard, no Home); the choice is kept"); browser check: Classic view opens My dashboard and Home leaves the menu; a reload keeps it; Tile view brings Home back.
+
+**TC-NAV-47 Person picker on the person-based pages** — Req NAV-47, MYD-01, ACT-14 — L1 `app-frame.test.mjs` ("NAV-47: My dashboard always shows you — your work email, else the name you chose before an email; never the Person picked on other pages (TC-NAV-47)"); E2E `shell.e2e.mjs` ("TC-NAV-48: the profile at the top right holds My settings, the view switch and the tools; the footer shows the version and ends the page without covering it; Person only on person-based pages", "TC-ACT-10: Time Writing can show another person, chosen at the top right"); browser check: Person in the top bar on Time Writing, My Tasks [Board] and Sprint check only; choosing someone changes those pages and not My dashboard.
+
+**TC-NAV-48 Profile menu and footer** — Req NAV-48, NAV-49, NAV-15 — E2E `shell.e2e.mjs` ("TC-NAV-48: the profile at the top right holds My settings, the view switch and the tools; the footer shows the version and ends the page without covering it; Person only on person-based pages"); browser check: the profile button at the top right opens My settings, Classic / Tile view, View as… (Admin), Search settings, Customize menu; the footer shows only the desktop app download, “v{x.y.z} (Build n)” and Force Update, whose window shows the build ID, build time and where data is saved; scrolled to the end, the last row of a long table is fully visible above it; in Admin → Epic & Feature setup the Unsaved changes bar sits above the footer; every My settings section has the same width and starts under the tabs (KB-61).
+
+**TC-NAV-45 My page usage** — Req NAV-45 — L1 `usage-counts.test.mjs` ("NAV-45: page usage is off until turned on; nothing is counted or stored while off (TC-NAV-45)"; "NAV-45: on, each opening of a page counts; off deletes the counts; most used first (TC-NAV-45)"; "NAV-45: a tampered or broken entry is read safely (TC-NAV-45)"); E2E `shell.e2e.mjs` ("TC-NAV-45: My page usage is off by default; turned on, it counts the pages opened in this browser; off deletes the counts"); inspection: an exported JSON backup and a Git snapshot contain no usage counts.
+
 **TC-NAV-36 Background jobs** — Req NAV-36 — L1 `background-jobs.test.mjs` ("background jobs: run, report progress and the result; the same job is not started twice"; "… a failed result or a thrown error marks the job; Clear finished keeps the running ones"); browser check (QMS-0025 with a saved PAT): New Feature → Save closes the form at once and the top bar shows “⟳ 1 running” with its progress, then “✓ Jobs done” with “#id … Hierarchy complete”; the menu and other pages stay usable meanwhile; Bulk actions → Create month tasks and Move run the same way and their buttons wait while the job runs; Monthly Time Writing → Save leaves a failed Task staged; reloading while a job runs asks first.
 
 **TC-NAV-34 Settings editors as pop-ups** — Req NAV-34 — browser check: Settings → Storage shows the Git storage and SharePoint summaries; "Connect Git storage…" and "Connect to SharePoint…" open pop-ups, a click beside them keeps them open, Cancel closes them; Settings → Azure DevOps: Edit on the Time Writing row and "＋ Add server" open pop-ups; Settings → Capacity & periods: "Edit capacity settings…" opens the form in a pop-up; "＋ Map an Epic or Feature…" maps #424242 and closes, the mapping's Edit opens "Change the mapping of #424242"; Settings → Feature setup: Go to Epic #13946 → the summary and "View setup…" (no Git) open "Shared Feature setup · Epic #13946", Close closes it; every pop-up form is one column (title, input, explanation per field) with Cancel then the main action at the bottom right; at 390 × 844 the connection pop-up fits without horizontal scrolling; no page errors. **UAT**
@@ -396,6 +406,10 @@ Cases marked **UAT** are also run in acceptance testing.
 **TC-NAV-12 Freshness in the viewer's time zone** — Req NAV-12 — L1 `format.test.mjs` and `app-update.test.mjs` (the same instant in Asia/Kolkata, America/New_York and UTC; local "today"); browser check in America/New_York: a fetch at 09:00 UTC shows "05:00 AM EDT".
 
 **TC-OV-10 Releases summary, tracking Feature and local approval dates** — Req QV-18, QV-19, OV-10 — L1 `release-overview.test.mjs`, `format.test.mjs`, `release-source.test.mjs` (the same UTC instant is 30 September in New York and 1 October in India); browser check in Asia/Kolkata with CP, DP and IOCC loaded from Git: October shows three stream quadrants and the total (3 releases, 4 documents); September shows the CP release approved 29 Sep 18:30 UTC as “September 30, 2026”, in both the quadrant and the CP view.
+
+**TC-PERF-01 Pages load on demand** — Req NFR-08 — L1 `bundle-split.test.mjs` ("NFR-08: pages load on demand — the shell imports only the start pages; the documents come with the Documentation page (TC-PERF-01)"); E2E every page opened through `navigate` (helpers.mjs waits for the page's code) and "TC-DOC-01" (the documents load with the page); browser check: `pnpm build:web` lists the main script under 1 MB and one chunk per page.
+
+**TC-CSP-01 Content-Security-Policy on the built page** — Req NFR-09 — L1 `csp.test.mjs` ("NFR-09: the built page carries a Content-Security-Policy — scripts from the app only, no plugins, no foreign forms (TC-CSP-01)"); E2E `shell.e2e.mjs` ("TC-NAV-01 / TC-NAV-17 …": the meta is on the built page) and every E2E scenario runs under it (a blocked script fails the page); browser check: every menu page with the sample, a CSV export and Documentation open with no "Refused to …" console message; desktop app: opens and fetches with the policy.
 
 **TC-INS-01 Credentials storage** — Req CON-18, STO-09, NFR-05, NFR-07
 - Steps:
@@ -469,6 +483,8 @@ Cases marked **UAT** are also run in acceptance testing.
 - L1: `azure-devops.test.mjs` (scoped cache, no project fallback).
 
 **TC-FET-09 Start-up fetch does not wait for slow Git** — Req FET-21, FET-20 — E2E `shell.e2e.mjs` ("TC-FET-09: the start-up fetch does not wait for slow Git and shows in the top bar"); browser check: with Git storage and many on-prem views, opening the app shows "Fetch Azure DevOps at start" in the top bar right after the connection setup is read, with "1 of 1 connection fetched" or the reason (no PAT here, on-premises); with no connection set up nothing is shown.
+
+**TC-FET-10 Fetch Time Writing from the top bar** — Req FET-22 — L1 `app-frame.test.mjs` ("FET-22: Refresh fetches the Time Writing connection first, then the read-only ones; a duplicate Time Writing connection is left out (TC-FET-10)"); browser check with a Time Writing connection and its PAT: ⟳ Time Writing in the top bar fetches it and says it was saved (as Admin → Streams → Fetch does); ↻ Refresh with an on-prem view and no VPN still updates Time Writing first.
 
 **TC-FET-08 Cloud fetch at start** — Req FET-20, CON-45 — browser check with Azure DevOps mocked: with a cloud Time Writing connection and an on-prem connection, opening the app sends the cloud fetch once and nothing to the on-prem server; a rejected PAT shows the usual error and keeps the saved data. Settings shows one tab at a time, the shared tabs only with "manage shared settings", and reopens on the last tab; "Fetch work items from Azure DevOps →" opens the Azure DevOps tab. Live check needed: the QMS-0025 data refreshes after Force Update. **UAT**
 
@@ -752,6 +768,18 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-BKL-21 Time Writing months up to the Target date, hours per month** — Req BKL-32, BKL-31 — **UAT** — L1 `feature-months.test.mjs` ("Target date: one Task for every month from the start up to it, no limit (TC-BKL-21)", "addMonthTasks adds one Task per later month with the hours typed for it, else the setup default (TC-BKL-21)", "addMonthTasks stops at the first failure and reports what it made"); E2E `backlog.e2e.mjs` ("TC-BKL-21: New Feature with a Start Date and a Target date asks for the hours of every month from the start to the target": no dates → this month; Start date next month → that month only; Target date two months later → three months; a Target date before the Start date refused; section 4 names the months, one row per month, no Completed Work for a future month, totals, the summary names the months); UAT: create a Feature starting next month with a Target date two months later, enter hours per month, and check in Azure DevOps that one Task per month exists under "{Feature} - Time Writing" with those hours and none for the current month.
 
+**TC-BKL-22 No built-in Release Classification on New Feature** — Req BKL-33, EPS-07 — E2E `backlog.e2e.mjs` ("TC-BKL-19: New Feature shows its sections one after another…": no Release Classification field for an Epic without its own; "TC-DPF-06: a DoD and User Stories per Release Classification value…": an Epic's own Release Classification field is still asked for and picks its set); L1 `azure-devops.test.mjs` ("the Feature DoD is mandatory: composed into the Description, and creation is refused without one": without a classification no Release Classification line is written); browser check: a Feature created under an Epic without its own field has no "Release Classification :" line in its Description.
+
+**TC-BKL-23 ＋ Time Writing Task: months and hours** — Req BKL-34, BKL-22 — **UAT** — L1 `feature-months.test.mjs` ("BKL-34: ＋ Time Writing Task for several months — each with its hours, from a User Story row to its Feature (TC-BKL-23)", "addMonthTasks adds one Task per later month with the hours typed for it, else the setup default (TC-BKL-21)"); E2E `backlog.e2e.mjs` ("TC-BKL-23: ＋ Time Writing Task asks for the months — the header month first, ＋ Add month, any month changeable — and the hours of each; Assigned to is the person creating (TC-BKL-24); Add runs as a background job (TC-BKL-26)"); UAT: on a Feature, add three months with hours, save, and check one Task per month with those hours in Azure DevOps; repeat for a month you already have and see it kept.
+
+**TC-BKL-24 ＋ Time Writing Task: Assigned to and a month that already has a Task** — Req BKL-35 — L1 `feature-months.test.mjs` ("BKL-35: Time Writing Tasks for the chosen person — an unassigned story is assigned to them; a month they already have is warned about, never duplicated (TC-BKL-24)"); E2E `backlog.e2e.mjs` ("TC-BKL-23: ＋ Time Writing Task asks for the months — the header month first, ＋ Add month, any month changeable — and the hours of each; Assigned to is the person creating (TC-BKL-24); Add runs as a background job (TC-BKL-26)"); browser check with live data: open ＋ Time Writing Task on a Feature where you already have this month's Task — the row says there is already a Time Writing Task for the month with its hours, and Add asks to confirm before overriding the hours; with the right "Assign new work to other people" choose another person and check in Azure DevOps that the Task and its Time Writing story are assigned to them.
+
+**TC-BKL-25 Time Writing titles follow the Feature name** — Req BKL-36 — L1 `feature-months.test.mjs` ("BKL-36: a renamed Feature’s Time Writing story and month Tasks take its new name — everyone’s; leave, holidays and own titles are left alone (TC-BKL-25)"); browser check with live data: rename a Feature in Edit and save — its "… - Time Writing" story and "{Month} | …" Tasks show the new name and the message says how many titles were updated; rename a Feature in Azure DevOps, then save the hours of one of its month Tasks in the app — the titles follow; a leave Feature's story and Tasks keep their titles.
+
+**TC-BKL-26 ＋ Time Writing Task as a background job** — Req BKL-37, NAV-36 — L1 `feature-months.test.mjs` ("BKL-37: ＋ Time Writing Task runs as a background job — progress and result in the top bar; one at a time per Feature and person; Tasks made before a failure are kept (TC-BKL-26)"); E2E `backlog.e2e.mjs` ("TC-BKL-23: ＋ Time Writing Task asks for the months — the header month first, ＋ Add month, any month changeable — and the hours of each; Assigned to is the person creating (TC-BKL-24); Add runs as a background job (TC-BKL-26)"); browser check with live data: Add 2 months — the pop-up closes, the top bar shows “⟳ 1 running” with “Adding the … Task…”, then the result, and the rows show the new Tasks.
+
+**TC-BKL-27 Complete children per Epic** — Req BKL-38, BKL-10 — L1 `feature-setup.test.mjs` ("BKL-38: Complete children per Epic — on unless the shared setup turns it off; kept through a save; mine cannot turn it off (TC-BKL-27)"); E2E `backlog.e2e.mjs` ("TC-EPS-01: Epic setup — its fields appear in New Feature (a value list, required and warning fields), the title follows its pattern, and Admin → Epic setup shows them": the Complete children setting, on and read-only without Git storage); browser check with Git storage: turn it off for an Epic and Save — its Features no longer offer Complete children on Backlogs and My Tasks [Board], another Epic's still do; turn it on — Complete children opens with the Epic's User Stories unticked and Your own User Story, and only the ticked ones (and your own) are created.
+
 **TC-BKL-14 Release number without "v" in Feature titles** — Req BKL-24 — L1 `release-source.test.mjs` ("Create Feature title from a release: \"Stream | Name | Release\" without a \"v\", mapping back to the release (BKL-24)"), `dp-board-match.test.mjs`, `cp-reporting.test.mjs`; browser check: Create Feature on a DP, CP and Windchill row pre-fills the title with the number and no "v".
 
 **TC-CON-45 Git view data with another query is not applied** — Req CON-77 — L1 `git-snapshots.test.mjs` ("a snapshot fetched with another query than the connection has here is not applied"); browser check:
@@ -788,12 +816,14 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-CON-60 Setup per Epic** — Req CON-97, CON-95 — L1 `feature-setup-inheritance.test.mjs` ("Feature setup layers: Mine → Epic (shared) → All Epics → Built in, per field (CON-95, TC-CON-59)" — an Epic without its own setup uses All Epics); E2E `shell.e2e.mjs` ("TC-CON-60: Setup per Epic — All Epics defaults, and an Epic showing which sections it customizes, with a preview"), `backlog.e2e.mjs` ("TC-EPS-01: …" — the Epic's fields in Setup per Epic); browser check with Git storage: Admin → Epic & Feature setup → Setup per Epic: All Epics — set a DoD and a story; an Epic: switch on Customize for User Stories (it starts from All Epics' story), add one, change its DoD; the preview follows; one Save to Git writes the setup files; Use my own version — customize the estimate, Save; New Feature under the Epic uses your estimate; Remove my own version; Reset this Epic to the defaults. The Epic list scrolls on its own, stays in view and is at most 600 px tall (KB-57).
 
+**TC-CON-61 Shared connections merged, removed ones restored** — Req CON-98, CON-99 — **UAT** — L1 `removed-connections.test.mjs` ("CON-98: sharing merges with the setup in Git — a connection only in Git stays; only named ones are removed (TC-CON-61)", "CON-99: connections in older versions of the shared setup that are gone now are found once, newest version first (TC-CON-61)", "CON-99: the history of the shared setup is read from GitHub — commits of the file, then the file at a commit; nothing is written"); E2E `shell.e2e.mjs` ("TC-CON-61: Streams → Removed connections finds a connection dropped from the shared setup in Git and restores it, for everyone"); UAT: on the computer that lost the second CP query, Settings → Streams → Removed connections → Look in Git history, Restore it, Fetch, and check it is back in the menu and on a second computer after its next start.
+
 
 **TC-CON-44 DP and DHFI defaults** — Req CON-76 — L1 `connections.test.mjs` ("pre-filled connections from the shared setup …": DP reads the Release work items of DHP with DDTDate, SourceProgram, PsName and Release; DHFI [Approved] reads the DHP.Vault documents, hidden from the menu); browser check in a fresh browser with only the on-prem PAT: Settings → Azure DevOps → Stream mapping → Set up DP, Pedestal and DHFI from their defaults; Release Details → DP lists Release items for the DDT month; Get started shows the release streams step done.
 
 **TC-CON-43 Title fields in the Feature setup** — Req CON-75 — L1 `feature-setup.test.mjs` ("title fields per Epic: up to five, unique names, saved with the setup …"); browser check with GitHub mocked: Settings → Feature setup → an Epic → ＋ Add title field three times (Platform / Custom.Platform, Release Name, Number), the preview of a story titled "{Platform} review" with the sample "CP 2 | Atlas | 4.1" shows "CP 2 review"; Save to Git writes titleFields; a sixth field cannot be added.
 
-**TC-BKL-08 Release Classification in the Description** — Req BKL-17 — L1 `azure-devops.test.mjs` ("Release Classification: optional, always written below the Feature DoD in the Description"); browser check (QMS-0025, connection with a saved PAT): New Feature shows Release Classification under Planning for an Epic with a setup and one without; choosing Platform Update and saving gives the Feature a Description starting "Feature DoD: …" followed by "Release Classification : Platform Update"; leaving it blank gives "Release Classification :"; the children created are the same either way.
+**TC-BKL-08 Release Classification in the Description (retired — see TC-BKL-22)** — Req BKL-17 — L1 `azure-devops.test.mjs` ("Release Classification: optional, always written below the Feature DoD in the Description"); browser check (QMS-0025, connection with a saved PAT): New Feature shows Release Classification under Planning for an Epic with a setup and one without; choosing Platform Update and saving gives the Feature a Description starting "Feature DoD: …" followed by "Release Classification : Platform Update"; leaving it blank gives "Release Classification :"; the children created are the same either way.
 
 **TC-BKL-07 New Feature form in the Azure DevOps layout** — Req BKL-16 — L1 `npx tsc -b` and `my-work.test.mjs` (the creation paths it calls are unchanged; TC-BKL-02…06 still pass); browser check (QMS-0025, connection with a saved PAT): ＋ New Feature opens “New Feature” with the title on top and the Parent Epic and Release Classification side by side above it, as wide as the title; the strip shows you, New, the Epic’s Area and the current PI → Sprint already chosen; no PAT field is shown; the DoD is prefilled from the setup; Child work items is shown open, headed “n will be created or checked”; there is no Milestone set field; Save creates the same hierarchy as before; at phone width the form fits without sideways scrolling.
 
@@ -918,9 +948,9 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-QV-39 Release counts with entered placeholders** — Req QV-58 — L1 `release-counts.test.mjs` ("QV-58: entered release counts — CP, DP and IOCC only, months YYYY-MM, whole numbers (TC-QV-39)"; "QV-58: a stream without data takes the entered counts, marked; without them it is a placeholder; data always wins (TC-QV-39)"); E2E `shell.e2e.mjs` ("TC-QV-39: an Admin enters CP release counts for a month without data; My dashboard shows them as entered, the others as placeholders"); browser check: with CP not fetched, enter CP Completed 3 / Supported 5 for the month — My dashboard, the CP page, Pulse Check and the Monthly pack show 3 / 5 as entered; fetch CP — its real counts replace them; DP without data and without entered counts shows — and the reason.
 
-**TC-QV-40 IOCC bulk Features and bulk creation Epics** — Req QV-59 — L1 `bulk-epics.test.mjs` ("QV-59: the bulk creation Epic per stream — mine over shared over built in; IOCC has none built in (TC-QV-40)"; "QV-59: IOCC releases in bulk by the DP rules — type from the number, set from the Epic setup, QE by the release name (TC-QV-40)"); E2E `shell.e2e.mjs` ("TC-QV-40: Stream mapping → Bulk creation Epics — shared and my own Epic per stream, mine used"); browser check with the QMS-0025 board and IOCC: set the IOCC bulk Epic (shared), its Feature setup (Release / PU sets, QE Mapping columns), tick IOCC releases, Create Features — each Feature is created under that Epic with its set's DoD and stories, assigned to the mapped QE; set my own DP Epic — DP's Create Features uses it, others keep the shared one.
+**TC-QV-40 IOCC bulk Features and bulk creation Epics** — Req QV-59 — L1 `bulk-epics.test.mjs` ("QV-59: the bulk creation Epic per stream — mine over shared over built in; IOCC has none built in (TC-QV-40)"; "QV-59: IOCC releases in bulk — the Epic setup’s DoD and stories (no Release / PU sets, DPF-09), QE by the release name (TC-QV-40)"); E2E `shell.e2e.mjs` ("TC-QV-40: Stream mapping → Bulk creation Epics — shared and my own Epic per stream, mine used"); browser check with the QMS-0025 board and IOCC: set the IOCC bulk Epic (shared), its Feature setup (Release / PU sets, QE Mapping columns), tick IOCC releases, Create Features — each Feature is created under that Epic with its set's DoD and stories, assigned to the mapped QE; set my own DP Epic — DP's Create Features uses it, others keep the shared one.
 
-**TC-QV-42 IOCC bulk creation uses the IOCC Feature setup** — Req QV-61, QV-59 — L1 `bulk-epics.test.mjs` ("QV-61: IOCC bulk creation uses the IOCC Epic's own Feature setup (DoD and User Stories) when it has no Release / PU sets; DP's built-in sets only without a setup (TC-QV-42)"); browser check: with a Feature setup (DoD and stories) on the IOCC bulk Epic, IOCC → Create Features says it uses that Feature setup and each row lists its User Stories; the created Feature has that DoD and those stories.
+**TC-QV-42 IOCC bulk creation uses the IOCC Feature setup** — Req QV-61, QV-59 — L1 `bulk-epics.test.mjs` ("QV-61: IOCC bulk creation uses the IOCC Epic's own Feature setup (DoD and User Stories); without a setup a release is skipped (TC-QV-42)"); browser check: with a Feature setup (DoD and stories) on the IOCC bulk Epic, IOCC → Create Features says it uses that Feature setup and each row lists its User Stories; the created Feature has that DoD and those stories.
 
 **TC-QV-41 My naming patterns** — Req QV-60, CON-93 — L1 `my-naming-patterns.test.mjs` ("My naming patterns: IOCC, Content and Tool Validations only, kept here, used for me instead of the shared ones (QV-60, TC-QV-41)"); E2E `shell.e2e.mjs` ("TC-QV-41: My settings → My naming patterns — your own patterns for IOCC, Content and Tool Validations, kept on this computer, back to the shared ones"); browser check: with Content fetched, My settings → My naming patterns → Content: a pattern of your own changes Release Details → Content and the Content counts for you only (another browser keeps the shared names); Use the shared patterns restores them; DP and CP are not offered.
 
@@ -1266,6 +1296,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 ### 6.17 Sample data
 
 **TC-SMP-01 Load sample** — Req SMP-01…04, FET-14 — L1 `sample-data.test.mjs`.
+
+**TC-SMP-02 Sample mode writes nothing; the reset asks first** — Req SMP-05, SMP-06 — L1 `sample-guard.test.mjs` ("OI-10: with the synthetic sample loaded, every write to Azure DevOps is refused before anything is sent (TC-SMP-02)"); E2E `shell.e2e.mjs` ("TC-SMP-02: Reset synthetic MVP data asks first and is recorded in History"); browser check: with the sample loaded, New Feature and Time Writing saves report that nothing is written.
 - Steps:
   1. From an empty state, press "Load synthetic sample".
   2. Repeat from Settings with real data saved, and cancel.
@@ -1378,9 +1410,13 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-CI-04 Software Bill of Materials** — Req CI-08 — L1 `swbom.test.mjs` ("the SWBOM lists exactly the components of pnpm-lock.yaml, with scope and licence (TC-CI-04)"; "lockfile keys: scoped names and peer suffixes (TC-CI-04)"); inspection: after a dependency change, `pnpm swbom` rewrites `docs/SWBOM.md` and `docs/swbom.cdx.json`; without it `pnpm test` fails; the Documentation page has a SWBOM tab listing the shipped components (react, react-dom, @azure/msal-browser and their dependencies, Electron) with licences.
 
-**TC-CI-05 Version bump and release notes** — Req CI-09 — L1 `release-notes.test.mjs` ("release notes: the newest version is the package version; versions unique, descending, each with an entry (TC-CI-05)"; "release-notes headings are read exactly (TC-CI-05)"); inspection: a pull request that changes `package.json` without a release-notes entry for the new version (or adds an entry without the bump) fails `pnpm test`; after the merge CI tags the commit `vX.Y.Z` (TC-CI-06); the Documentation page has the Release notes and Configuration management tabs; the app footer shows the new version.
+**TC-CI-05 Change notes, version and release notes** — Req CI-09 — L1 `release-notes.test.mjs` ("release notes: the newest version is the package version; versions unique, descending, each with an entry (TC-CI-05)"; "release-notes headings are read exactly (TC-CI-05)"), `release-changes.test.mjs` ("CI-09: every waiting change note is valid — a bump type and at least one change (TC-CI-05)"; "CI-09: a change note is read exactly; malformed ones are refused (TC-CI-05)"); inspection: a pull request without a note in `docs/changes/`, or one that changes the version in `package.json`, fails the step *Check the change note* of the Windows job; a Dependabot pull request passes without a note; after the merge the release commit carries the version (TC-CI-07) and CI tags it (TC-CI-06); the Documentation page has the Release notes and Configuration management tabs; the app footer shows the new version.
 
-**TC-CI-06 Automatic version tag and release** — Req CI-10 — L1 `release-notes.test.mjs` ("the versioned release takes its notes from the release-notes entry of its version (TC-CI-06)"; "CI tags every version on main and publishes its release; nobody tags by hand (TC-CI-06)"); inspection after a merge that bumps the version: the run's job *Tag and publish versioned release* is green, the repository has the tag `vX.Y.Z` on the merge commit, and the GitHub release `Demand Planning Hub vX.Y.Z` has `Demand-Planning-Hub-Setup.exe`, `Demand-Planning-Hub-mac.dmg`, `SHA256SUMS.txt`, `SHA256SUMS-mac.txt` and the version's release-notes entry; a merge without a bump logs "already exists" and changes nothing; `desktop-latest` and `latest.json` are unchanged by this job.
+**TC-CI-06 Automatic version tag and release** — Req CI-10 — L1 `release-notes.test.mjs` ("the versioned release takes its notes from the release-notes entry of its version (TC-CI-06)"; "CI tags every version on main and publishes its release; nobody tags by hand (TC-CI-06)"); inspection after a merge that bumps the version: the run's job *Tag and publish versioned release* is green, the repository has the tag `vX.Y.Z` on the release commit, and the GitHub release `Demand Planning Hub vX.Y.Z` has `Demand-Planning-Hub-Setup.exe`, `Demand-Planning-Hub-mac.dmg`, `SHA256SUMS.txt`, `SHA256SUMS-mac.txt` and the version's release-notes entry; a merge without a bump logs "already exists" and changes nothing; `desktop-latest` and `latest.json` are unchanged by this job.
+
+**TC-CI-07 Release commit** — Req CI-11 — L1 `release-changes.test.mjs` ("CI-11: the highest bump of the waiting notes gives the next version (TC-CI-07)"; "CI-11: the notes become the new version’s entry at the top, each with its pull request (TC-CI-07)"; "CI-11: the release commit is written after every merge by a job that installs nothing; builds use that commit (TC-CI-07)"), `traceability.test.mjs` ("the traceability matrix is complete, and current on main (TC-CI-07)"); inspection after a merge with a change note: the job *Write release commit* is green and `main` has the commit "Release vX.Y.Z [skip ci]" right after the squash commit, with the version in `package.json`, the entry with "PR #N." at the top of RELEASE-NOTES.md, the note removed and the SWBOM and matrix regenerated; the Windows, macOS, end-to-end and web jobs check out that commit, the tag `vX.Y.Z` is on it, and the app shows the new version; two merges in quick succession give two release commits or one with both notes, and no run on main is cancelled.
+
+**TC-CI-08 End-to-end on a slow machine** — Req CI-12 — L1 `e2e-slow.test.mjs` ("CI-12: the E2E scenarios also run on a 4x slower CPU, in their own read-only job (TC-CI-08)"); inspection: `E2E_CPU_SLOWDOWN=4 pnpm test:e2e` passes every scenario (locally: shell 56, backlog 11, documents-and-data 14, monthly-pack 2, about twice the time); a fixed loop in the page takes about four times as long with the throttle; the job *End-to-end tests (slow machine)* runs on every pull request and push to main and turns the run red when a scenario fails.
 
 ### 6.21 QE Mapping
 
@@ -1450,7 +1486,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 ### 6.24 My dashboard and team insights
 
-**TC-MYD-01 My dashboard as the start page** — Req MYD-01…MYD-04 — E2E `shell.e2e.mjs` ("TC-MYD-01: My dashboard is the start page: my hours, my open work, my streams and what I signed; Pulse Check offers quarter, half-year and year"); browser check: without a work email or chosen name it asks who you are; with one, the hours match Monthly Time Writing for the month and the counts match My Tasks [Board].
+**TC-MYD-01 My dashboard** — Req MYD-01…MYD-04 — E2E `shell.e2e.mjs` ("TC-MYD-01: My dashboard — my hours, my open work, my streams and what I signed; Pulse Check offers quarter, half-year and year"); browser check: without a work email or chosen name it asks who you are; with one, the hours match Monthly Time Writing for the month and the counts match My Tasks [Board].
 
 **TC-MYD-02 Team insights for selected roles** — Req MYD-05 — L1 `access.test.mjs` ("Team insights: My dashboard for every role, the team insights for Tool Owner, Admin and People Manager; older files keep them for those three (MYD-05, TC-MYD-02)"); browser check (Git storage with access.json): a Team Member sees My dashboard but not the Dashboard or Pulse Check; a People Manager sees both; ticking Team insights for Scrum Master in Settings → Access shows them to Scrum Masters.
 
@@ -1514,6 +1550,10 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-ACT-15 Add a new activity as a pop-up** — Req ACT-20, ACT-19 — E2E `shell.e2e.mjs` ("TC-ACT-02: Time Writing shows the person's KPI cards, month tasks, hours and deadline": ＋ Add a new activity next to Activities of, the list full width, the form in a pop-up that closes); browser check: ＋ Add a new activity opens the pop-up with Time Writing task / User Story / Task / Feature; a save shows its message in the pop-up; Open New Feature closes it and opens New Feature.
 
+**TC-ACT-16 Time Writing in order of Feature number** — Req ACT-21 — L1 `my-work.test.mjs` ("ACT-21: Time Writing lists in order of Feature number — a Task or story by the Feature above it; rows without a Feature after (TC-ACT-16)"); E2E `shell.e2e.mjs` ("TC-ACT-02: Time Writing shows the person's KPI cards, month tasks, hours and deadline": the #IDs of Your activities rise); browser check: Your activities, the suggestions and Leave and training list by Feature #ID, lowest first.
+
+**TC-ACT-17 Time Writing cards stay at the top; Add a new activity in the list** — Req ACT-22, ACT-20 — E2E `shell.e2e.mjs` ("TC-ACT-02: Time Writing shows the person's KPI cards, month tasks, hours and deadline": scrolled to the end, the cards sit under the top bar; ＋ Add a new activity is in the list's heading row and there is no “Add activities” heading); browser check: scroll a long month — the cards stay at the top.
+
 **TC-ACT-05 Suggestions by state, Add all** — Req ACT-09, ACT-10 — E2E `shell.e2e.mjs` ("TC-ACT-05: suggestions filter by Active / New / Both and Add all moves them into Your activities"); browser check with the Time Writing connection: with a New and an Active Feature of yours without a task, Active / New / Both narrow the suggestions; Add all puts the shown ones in Your activities and Save creates their tasks; the Features keep their state (ATM-28: a New Feature becomes Active only through an Active User Story).
 
 ### 6.26 Planning Overview
@@ -1538,7 +1578,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-KPT-03 The read is saved to Git for everyone** — Req KPT-03, KPT-05 — L1 `kpi-tracker.test.mjs` ("KPT-03: the workbook is kept as text sheets within the limits; the Git copy is checked when read"); `git-watch.test.mjs` (labels); desktop check with Git: as an admin read the tracker — "Saved to Git"; kpi-tracker.json has one new commit; another browser with the app open shows "Newer data in Git: KPI tracker", Reload shows the new copy; as a Team member (or a read-only token) a read shows "not saved to Git"; with SharePoint unreachable (VPN off) the page still shows the Git copy.
 
-**TC-DPF-01 DP release type and its set** — Req DPF-01 — L1 `dp-bulk.test.mjs` ("DPF-01: the release type from x.y.z.a — Major and Minor are a Release, MLD and Platform Update a PU"; "DPF-01: Epic 13946 sets — Release: PRD, SFV, DT, IQ/OQ and the IQ/OQ DoD; PU: SFV, DT, IQ/OQ and the DT DoD; kept in the setup"); browser check: Settings → Feature setup, Epic 13946 shows "DP releases" with both sets; Release Details → DP shows Release type (5.0.0.0 Major, 5.2.0.0 Minor, 5.2.1.0 MLD, 5.2.1.3 PU).
+**TC-DPF-01 DP release type and its set (retired — see TC-DPF-08)** — Req DPF-01 — L1 `dp-bulk.test.mjs` ("DPF-08: the type read from x.y.z.a (Major, Minor, MLD, Platform Update) only prefills a bulk row’s Release Classification"); the Release type column and the built-in Release / PU sets are removed (DPF-09).
 
 **TC-DPF-02 QE from the QE Mapping** — Req DPF-02 — L1 `dp-bulk.test.mjs` ("DPF-02: the QE comes from the QE Mapping row naming the product (PsName, else Program); columns chosen in the setup"); browser check: choose the product and QE columns in Feature setup → Epic 13946, Save to Git; the DP table’s QE column shows the mapped QE.
 
@@ -1548,9 +1588,11 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-DPF-05 QE picked per release in bulk** — Req DPF-06, DPF-04, CNB-02 — L1 `dp-bulk.test.mjs` ("DPF-06: the QE picked in the pop-up replaces the QE Mapping's and lets a release without one be created; other reasons still skip it (TC-DPF-05)"); browser check with the QMS-0025 board and DP / IOCC / Content data: Create Features shows a person drop-down on each release that will be created, prefilled from the QE Mapping (its name under it) or, for Content, from Assign all; a release with no QE in the mapping can be picked and is then created; changing a row assigns that Feature and its stories and Task to the person picked; the result lists each Feature with its person.
 
-**TC-DPF-06 DoD and User Stories per Release Classification value** — Req DPF-07, EPS-07 — **UAT** — L1 `class-sets.test.mjs` ("DPF-07: an Epic keeps a DoD and User Stories per Release Classification value, cleaned and saved (TC-DPF-06)", "DPF-07: the value chosen picks its own set, else the old Release / PU set, else the Epic default (TC-DPF-06)", "DPF-07: bulk sets — the value’s set, else the old set of the number’s type, else the Epic’s own, built-ins only without a setup", "DPF-07: my own version without sets per value uses the shared ones", "DPF-07: an Epic’s Release Classification values come from its own List field, else the built-in picker"); `dp-bulk.test.mjs` ("DPF-04 / BLK-01: the bulk plan …": an Epic with a setup uses its own DoD, DP's built-ins only without a setup); E2E `backlog.e2e.mjs` ("TC-DPF-06: a DoD and User Stories per Release Classification value — set up per Epic, picked by the value chosen in New Feature"); UAT: give an Epic's Release Classification values their own DoD and stories, Save to Git, create a Feature for two values and check its DoD and User Stories in Azure DevOps.
+**TC-DPF-06 DoD and User Stories per Release Classification value** — Req DPF-07, EPS-07 — **UAT** — L1 `class-sets.test.mjs` ("DPF-07: an Epic keeps a DoD and User Stories per Release Classification value, cleaned and saved (TC-DPF-06)", "DPF-07: the value chosen picks its own set, else the Epic default; old Release / PU sets are not used (TC-DPF-06)", "DPF-07, DPF-09: bulk sets — the value’s set, else the Epic’s own; nothing without a setup (no built-ins)", "DPF-07: my own version without sets per value uses the shared ones", "DPF-07, DPF-09: an Epic’s Release Classification values come from its own List field only (no built-in values)"); `dp-bulk.test.mjs` ("DPF-04 / BLK-01: the bulk plan …": an Epic with a setup uses its own DoD, DP's built-ins only without a setup); E2E `backlog.e2e.mjs` ("TC-DPF-06: a DoD and User Stories per Release Classification value — set up per Epic, picked by the value chosen in New Feature"); UAT: give an Epic's Release Classification values their own DoD and stories, Save to Git, create a Feature for two values and check its DoD and User Stories in Azure DevOps.
 
-**TC-DPF-07 Release Classification per row in bulk** — Req DPF-08, DPF-07 — L1 `class-sets.test.mjs` ("DPF-08: bulk rows — the classification prefilled from the release number, picked per row, and it picks the set (TC-DPF-07)", "DPF-07: an Epic’s Release Classification values come from its own List field, else the built-in picker": the picked value fills the Epic's field); browser check: DP and IOCC Create Features show the drop-down per row, prefilled from the number, and the row's User Stories change with it.
+**TC-DPF-07 Release Classification per row in bulk** — Req DPF-08, DPF-07 — L1 `class-sets.test.mjs` ("DPF-08: bulk rows — the classification prefilled from the release number, picked per row, and it picks the set (TC-DPF-07)", "DPF-07, DPF-09: an Epic’s Release Classification values come from its own List field only (no built-in values)": the picked value fills the Epic's field); browser check: DP and IOCC Create Features show the drop-down per row, prefilled from the number, and the row's User Stories change with it.
+
+**TC-DPF-08 No built-in Release Classification or Release / PU lists** — Req DPF-09, DPF-01, BKL-06, QV-61, BKL-13, CNB-01 — L1 `dp-bulk.test.mjs` ("DPF-09: no built-in Release / PU sets — the old ones are no longer read; the QE Mapping columns stay", "DPF-04 / BLK-01: the bulk plan …": no setup at all is skipped, no built-in set; "DPF-08: the type read from x.y.z.a …"), `class-sets.test.mjs` ("DPF-07, DPF-09: bulk sets — the value’s set, else the Epic’s own; nothing without a setup (no built-ins)", "DPF-07, DPF-09: an Epic’s Release Classification values come from its own List field only (no built-in values)"), `bulk-epics.test.mjs` ("QV-61: IOCC bulk creation uses the IOCC Epic's own Feature setup (DoD and User Stories); without a setup a release is skipped (TC-QV-42)"), `content-bulk.test.mjs` (no Release Classification), `feature-setup-inheritance.test.mjs` ("Feature setup layers: Mine → Epic (shared) → All Epics → Built in, per field (CON-95, TC-CON-59)": no built-in DoD); E2E `backlog.e2e.mjs` ("TC-BKL-19: New Feature shows its sections one after another…": an Epic without a setup has no built-in DoD and no Release Classification field); browser check: Release Details → DP has no Release type column; the DP / IOCC Create Features pop-up has no Release Classification column for an Epic without its own field; Setup per Epic shows no value tabs for such an Epic.
 
 **TC-CNB-01 Content Features in bulk** — Req CNB-01, DPF-05 — L1 `content-bulk.test.mjs` ("CNB-01: Content bulk Features — Epic 22919, NA, the DoD, one Review of Deliverables story, 4 h; a 100% Feature match is never created, a closer one is named (BLK-01)"); browser check with QMS-0025 (a test Epic first): Release Details → Content: releases with a Feature matching 100 % cannot be ticked; Select all, Create Features → the list shows each Feature title, with similar Features named; after Create each Feature is under Epic 22919 with "Release Classification : NA", "Feature DoD: All Documents are approved", one "Review of Deliverables - <title>" story in the current Sprint and the month Task with 4 h Original Estimate.
 
@@ -1569,7 +1611,9 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-ADM-01 Overview checks and settings search** — Req ADM-01, ADM-03 — L1 `admin-overview.test.mjs` ("Admin overview: open Get started steps and shared-setup checks, required first, each with its fix (ADM-01, TC-ADM-01)"; "Search settings: by name or what it affects, every page reachable (ADM-03, TC-ADM-01)").
 
-**TC-ADM-02 Overview, Ctrl K and History** — Req ADM-01…04 — E2E `shell.e2e.mjs` ("TC-ADM-02: Admin → Overview lists what to set up with links; Ctrl K finds a setting and opens it; History filters the changes"); browser check with Git storage: change a capacity setting — the ADMIN heading shows 1 and the Overview shows Unsaved shared changes with Save to Git; Save to Git clears both; Ctrl K → "dod" offers Feature setup; History → choose an area and type part of a change.
+**TC-ADM-02 Overview, Ctrl K and History** — Req ADM-01…04 — E2E `shell.e2e.mjs` ("TC-ADM-02: Admin → Overview lists what to set up with links (and the bulk Epic without a setup, TC-ADM-03); Ctrl K finds a setting and opens it; History filters the changes"); browser check with Git storage: change a capacity setting — the ADMIN heading shows 1 and the Overview shows Unsaved shared changes with Save to Git; Save to Git clears both; Ctrl K → "dod" offers Feature setup; History → choose an area and type part of a change.
+
+**TC-ADM-03 Feature setup gaps on the Overview** — Req ADM-05 — L1 `admin-overview.test.mjs` ("ADM-05: bulk creation Epics without a shared Feature setup, and shared setups without a Feature DoD (TC-ADM-03)"); E2E `shell.e2e.mjs` ("TC-ADM-02: Admin → Overview lists what to set up with links (and the bulk Epic without a setup, TC-ADM-03); …"): on a fresh start the Overview warns "DP bulk creation Epic #13946 has no Feature setup"; browser check with Git storage: share a Feature setup for the DP bulk Epic and the warning goes; share a setup with an empty Feature DoD and no All Epics DoD and "Feature setup without a Feature DoD: #…" appears, its button opening Feature setup.
 
 **TC-STT-01 User Story templates: library, tags and linked stories** — Req STT-01, STT-02 — **UAT** — L1 `story-templates.test.mjs` ("STT-01: a User Story template is cleaned and kept with the Epic setup (TC-STT-01)", "STT-01: the templates offered follow their Epic and Release Classification tags (TC-STT-01)"); E2E `backlog.e2e.mjs` ("TC-STT-01: a User Story template, linked in an Epic’s setup, gives New Feature its current title, ticked; Admin lists it with its tags"); UAT: save a story of an Epic's setup as a template, tag it to a second Epic and a Release Classification value, add it there with ＋ Add from templates, Save to Git, change the template's title and check that New Feature under both Epics offers the new title, ticked.
 
@@ -1601,6 +1645,14 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | NAV-39 | TC-NAV-39 |
 | NAV-40 | TC-NAV-40 |
 | NAV-41 | TC-NAV-41 |
+| NAV-42 | TC-NAV-42 |
+| NAV-43 | TC-NAV-42 |
+| NAV-44 | TC-NAV-42 |
+| NAV-45 | TC-NAV-45 |
+| NAV-46 | TC-NAV-46 |
+| NAV-47 | TC-NAV-47 |
+| NAV-48 | TC-NAV-48 |
+| NAV-49 | TC-NAV-48 |
 | CON-01…03 | TC-CON-01 |
 | CON-04…08, CON-19 | TC-CON-02 |
 | CON-09 | TC-CON-03 |
@@ -1654,6 +1706,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CON-95 | TC-CON-59, TC-CON-60 |
 | CON-96 | TC-CON-60 |
 | CON-97 | TC-CON-60 |
+| CON-98 | TC-CON-61 |
+| CON-99 | TC-CON-61 |
 | QV-20 | TC-QV-06 |
 | QV-21 | TC-QV-07 |
 | CON-21, CON-22 | TC-CON-08 |
@@ -1682,6 +1736,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | FET-18, FET-19 | TC-FET-07 |
 | FET-20 | TC-FET-08, TC-FET-09 |
 | FET-21 | TC-FET-09 |
+| FET-22 | TC-FET-10 |
 | TWN-01…06 | TC-TWN-01 |
 | TWN-07, TWN-08 | TC-TWN-02 |
 | TWN-09 | TC-TWN-03, TC-ATM-05 |
@@ -1741,6 +1796,12 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | BKL-30 | TC-BKL-19 |
 | BKL-31 | TC-BKL-20, TC-BKL-21 |
 | BKL-32 | TC-BKL-21 |
+| BKL-33 | TC-BKL-22 |
+| BKL-34 | TC-BKL-23 |
+| BKL-35 | TC-BKL-24 |
+| BKL-36 | TC-BKL-25 |
+| BKL-37 | TC-BKL-26 |
+| BKL-38 | TC-BKL-27 |
 | QV-01, QV-02 | TC-QV-01 |
 | QV-03, QV-05 | TC-QV-02 |
 | QV-04 | TC-FET-07 |
@@ -1863,6 +1924,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | DSK-04…06 | TC-DSK-02 |
 | DSK-07…10 | TC-DSK-03 |
 | SMP-01…04 | TC-SMP-01 |
+| SMP-05 | TC-SMP-02 |
+| SMP-06 | TC-SMP-02 |
 | DOC-01…03, DOC-05 | TC-DOC-01 |
 | DOC-04, DOC-06…08 | TC-DOC-02 |
 | DOC-09…11 | TC-DOC-03 |
@@ -1889,6 +1952,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CI-08 | TC-CI-04 |
 | CI-09 | TC-CI-05 |
 | CI-10 | TC-CI-06 |
+| CI-11 | TC-CI-07 |
+| CI-12 | TC-CI-08 |
 | QEM-01 | TC-QEM-03, TC-QEM-04 |
 | QEM-02 | TC-QEM-01, TC-QEM-04 |
 | QEM-03…QEM-06 | TC-QEM-02, TC-QEM-04 |
@@ -1966,6 +2031,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | ACT-18 | TC-ACT-14 |
 | ACT-19 | TC-ACT-15 |
 | ACT-20 | TC-ACT-15 |
+| ACT-21 | TC-ACT-16 |
+| ACT-22 | TC-ACT-17 |
 | OVW-01 | TC-OVW-01, TC-OVW-02, TC-OVW-03 |
 | OVW-02 | TC-OVW-02 |
 | OVW-03 | TC-OVW-01 |
@@ -1993,6 +2060,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | DPF-05 | TC-DPF-04, TC-CNB-01 |
 | DPF-07 | TC-DPF-06, TC-DPF-07 |
 | DPF-08 | TC-DPF-07 |
+| DPF-09 | TC-DPF-08 |
 | CNB-01 | TC-CNB-01 |
 | CNB-02 | TC-CNB-02 |
 | EPS-01 | TC-EPS-01, TC-EPS-02 |
@@ -2007,12 +2075,15 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | ADM-02 | TC-ADM-02 |
 | ADM-03 | TC-ADM-01, TC-ADM-02 |
 | ADM-04 | TC-ADM-02 |
+| ADM-05 | TC-ADM-03 |
 | STT-01 | TC-STT-01 |
 | STT-02 | TC-STT-01, TC-STT-02 |
 | IF-05 | TC-KPT-02 |
 | NFR-02 | TC-STO-01 |
 | NFR-03…05 | TC-DSK-02, TC-INS-01 |
 | NFR-06 | TC-INS-02 |
+| NFR-08 | TC-PERF-01 |
+| NFR-09 | TC-CSP-01 |
 | NFR-07 | TC-INS-01 |
 | IF-01, IF-03, IF-04 | TC-INS-04 |
 | IF-02 | TC-DSK-02 |
@@ -2021,14 +2092,14 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 | Use case | Test cases |
 |---|---|
-| UC-01 | TC-NAV-01…06, TC-NAV-33, TC-NAV-37, TC-UI-01, TC-UI-02, TC-UI-03, TC-CON-36, TC-CON-38, TC-NAV-38, TC-NAV-39, TC-NAV-40, TC-NAV-41, TC-UI-09, TC-UI-10 |
+| UC-01 | TC-NAV-01…06, TC-NAV-33, TC-NAV-37, TC-UI-01, TC-UI-02, TC-UI-03, TC-CON-36, TC-CON-38, TC-NAV-38, TC-NAV-39, TC-NAV-40, TC-NAV-41, TC-NAV-42, TC-NAV-45, TC-NAV-46, TC-NAV-47, TC-NAV-48, TC-UI-09, TC-UI-10 |
 | UC-02 | TC-CON-01…07, TC-CON-17…19, TC-CON-44, TC-CON-28, TC-NAV-02, TC-NAV-34, TC-QV-14, TC-QV-16, TC-QV-23, TC-QV-24, TC-CON-46, TC-QV-25, TC-CON-47, TC-QV-38, TC-QV-39, TC-QV-40 |
 | UC-03 | TC-CON-03, TC-FET-01…06, TC-FET-09 |
-| UC-04 | TC-TWN-01, TC-TWN-02, TC-MON-01…06, TC-MON-09, TC-MON-10, TC-ATM-19, TC-BKL-18, TC-ACT-14, TC-ACT-15 |
+| UC-04 | TC-TWN-01, TC-TWN-02, TC-MON-01…06, TC-MON-09, TC-MON-10, TC-ATM-19, TC-BKL-18, TC-ACT-14, TC-ACT-15, TC-ACT-16, TC-ACT-17 |
 | UC-05 | TC-MON-07 |
 | UC-06 | TC-ATM-01…11, TC-ATM-21, TC-ATM-22, TC-ATM-23, TC-TWN-03, TC-CON-20, TC-CON-33, TC-CON-34, TC-CON-43 |
-| UC-07 | TC-BKL-01…09, TC-BKL-15, TC-BKL-16, TC-BKL-17, TC-BKL-18, TC-BKL-19, TC-BKL-20, TC-BKL-21, TC-DPF-06, TC-NAV-36, TC-CON-23, TC-CON-25…27, TC-CON-29…32, TC-CON-35 |
-| UC-08 | TC-QV-01…05, TC-FET-07, TC-CON-08, TC-CON-11…16, TC-QV-08, TC-QV-09, TC-QV-10, TC-QV-11, TC-QV-12, TC-QV-13, TC-QV-14, TC-QV-15, TC-QV-16, TC-CON-37, TC-CON-38, TC-CON-39, TC-CON-40, TC-CON-41, TC-QV-18, TC-QV-19, TC-QV-20, TC-QV-21, TC-QV-22, TC-CON-42, TC-QV-41, TC-QV-42 |
+| UC-07 | TC-BKL-01…09, TC-BKL-15, TC-BKL-16, TC-BKL-17, TC-BKL-18, TC-BKL-19, TC-BKL-20, TC-BKL-21, TC-BKL-22, TC-BKL-23, TC-BKL-24, TC-BKL-25, TC-BKL-26, TC-BKL-27, TC-DPF-06, TC-NAV-36, TC-CON-23, TC-CON-25…27, TC-CON-29…32, TC-CON-35 |
+| UC-08 | TC-QV-01…05, TC-FET-07, TC-CON-08, TC-CON-11…16, TC-QV-08, TC-QV-09, TC-QV-10, TC-QV-11, TC-QV-12, TC-QV-13, TC-QV-14, TC-QV-15, TC-QV-16, TC-CON-37, TC-CON-38, TC-CON-39, TC-CON-40, TC-CON-41, TC-QV-18, TC-QV-19, TC-QV-20, TC-QV-21, TC-QV-22, TC-CON-42, TC-QV-41, TC-QV-42, TC-CON-61 |
 | UC-09 | TC-OV-11…14, TC-CAP-01, TC-CAP-02, TC-CAP-03, TC-CAP-08, TC-CAP-10, TC-CAP-11, TC-CAP-12, TC-CAP-13, TC-CAP-14, TC-CAP-15, TC-CAP-16, TC-CAP-17, TC-CAP-18, TC-CAP-19, TC-CAP-20, TC-CAP-21, TC-CAP-22, TC-CAP-23, TC-CAP-24, TC-CAP-25, TC-CAP-26, TC-CAP-27, TC-QV-17, TC-CON-21, TC-QV-10, TC-QV-11, TC-QV-21 |
 | UC-10 | TC-OV-11 (Months, Streams), TC-OV-13 |
 | UC-11 | TC-BAS-01…04 |
@@ -2038,8 +2109,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-15 | TC-STO-01…04, TC-SNP-04 |
 | UC-16 | TC-UPD-01, TC-UPD-02 |
 | UC-17 | TC-DSK-01…03, TC-INS-02 |
-| UC-18 | TC-SMP-01, TC-ATM-06, TC-GIT-04 |
-| UC-19 | TC-INS-04, TC-CI-01, TC-CI-02, TC-CI-03, TC-DOC-03 |
+| UC-18 | TC-SMP-01, TC-ATM-06, TC-GIT-04, TC-SMP-02 |
+| UC-19 | TC-INS-04, TC-CI-01, TC-CI-02, TC-CI-03, TC-CI-07, TC-CI-08, TC-DOC-03 |
 | UC-20 | TC-DOC-01, TC-DOC-02, TC-DOC-03 |
 | UC-21 | TC-SCR-01 |
 | UC-22 | TC-ACC-01, TC-ACC-02, TC-CON-57, TC-CON-58 |
@@ -2052,10 +2123,10 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-29 | TC-OVW-01…03 |
 | UC-30 | TC-CVA-01…03 |
 | UC-31 | TC-KPT-01…03 |
-| UC-32 | TC-DPF-01…04, TC-DPF-05, TC-DPF-06, TC-DPF-07 |
+| UC-32 | TC-DPF-01…04, TC-DPF-05, TC-DPF-06, TC-DPF-07, TC-DPF-08 |
 | UC-33 | TC-CNB-01, TC-CNB-02 |
 | UC-34 | TC-EPS-01, TC-EPS-02, TC-EPS-03, TC-EPS-04, TC-EPS-05, TC-EPS-06 |
-| UC-35 | TC-ADM-01, TC-ADM-02 |
+| UC-35 | TC-ADM-01, TC-ADM-02, TC-ADM-03 |
 | UC-36 | TC-STT-01, TC-STT-02 |
 
 ## 8. Result record

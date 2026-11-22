@@ -1,11 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { bulkPlan, dpReleaseType, emailFor, pickQe, possibleQes, qeFor } from '../src/dpBulk.ts'
-import { cleanSetup, dpReleaseTypeDefaults, releaseTypesOf } from '../src/featureSetup.ts'
+import { cleanSetup } from '../src/featureSetup.ts'
 
 const row = (id, psName, release, assignedTo = '', program = 'DP') => ({ key: `dp/${id}`, id, title: `${psName} ${release}`, workItemType: 'Release', state: 'Active', assignedTo, fields: { 'Custom.PsName': psName, 'Custom.Release': release, 'Custom.SourceProgram': program } })
 
-test('DPF-01: the release type from x.y.z.a — Major and Minor are a Release, MLD and Platform Update a PU', () => {
+test('DPF-08: the type read from x.y.z.a (Major, Minor, MLD, Platform Update) only prefills a bulk row’s Release Classification', () => {
   assert.deepEqual(dpReleaseType('5.0.0.0'), { type: 'Major', kind: 'release' })
   assert.deepEqual(dpReleaseType('v5.2'), { type: 'Minor', kind: 'release' }, 'missing parts are 0, a "v" is ignored')
   assert.deepEqual(dpReleaseType('5.2.1.0'), { type: 'MLD', kind: 'pu' })
@@ -14,17 +14,11 @@ test('DPF-01: the release type from x.y.z.a — Major and Minor are a Release, M
   assert.equal(dpReleaseType('R12'), null); assert.equal(dpReleaseType(''), null); assert.equal(dpReleaseType('1.2.3.4.5'), null)
 })
 
-test('DPF-01: Epic 13946 sets — Release: PRD, SFV, DT, IQ/OQ and the IQ/OQ DoD; PU: SFV, DT, IQ/OQ and the DT DoD; kept in the setup', () => {
-  assert.deepEqual(dpReleaseTypeDefaults.release.stories.map((story) => story.title.split(' :')[0]), ['PRD', 'SFV', 'DT', 'IQ/OQ'])
-  assert.deepEqual(dpReleaseTypeDefaults.pu.stories.map((story) => story.title.split(' :')[0]), ['SFV', 'DT', 'IQ/OQ'])
-  assert.equal(dpReleaseTypeDefaults.release.featureDoD, 'IQ/OQ is complete and Checklist is uploaded into the feature.')
-  assert.equal(dpReleaseTypeDefaults.pu.featureDoD, 'DT is finished.')
-  const setup = cleanSetup({ epicId: 13946, featureDoD: 'x', releaseTypes: { pu: { featureDoD: 'DT done', stories: [{ title: 'DT : Review' }, { title: '' }] } }, qeColumns: { matchColumn: 'Product', qeColumn: 'QE Name' } })
-  assert.equal(setup.releaseTypes.pu.featureDoD, 'DT done'); assert.deepEqual(setup.releaseTypes.pu.stories.map((story) => story.title), ['DT : Review'])
-  assert.equal(setup.releaseTypes.release.featureDoD, dpReleaseTypeDefaults.release.featureDoD, 'a missing type keeps the built-in values')
+test('DPF-09: no built-in Release / PU sets — the old ones are no longer read; the QE Mapping columns stay', () => {
+  const setup = cleanSetup({ epicId: 13946, featureDoD: 'x', releaseTypes: { pu: { featureDoD: 'DT done', stories: [{ title: 'DT : Review' }] } }, qeColumns: { matchColumn: 'Product', qeColumn: 'QE Name' } })
+  assert.equal(setup.releaseTypes, undefined, 'dropped on load, so the next save removes them from Git')
   assert.deepEqual(setup.qeColumns, { matchColumn: 'Product', qeColumn: 'QE Name' })
   assert.equal(cleanSetup({ epicId: 13946, featureDoD: 'x', qeColumns: { matchColumn: 'Product' } }).qeColumns, undefined, 'both columns are needed')
-  assert.equal(releaseTypesOf(undefined), dpReleaseTypeDefaults)
 })
 
 const mapping = { schema: 1, kind: 'qe-mapping', sheets: [{ id: 's', name: 'Map', columns: [{ id: 'a', name: 'Platform / Product' }, { id: 'b', name: 'QE Name' }], rows: [
@@ -55,13 +49,13 @@ test('DPF-04 / BLK-01: the bulk plan — title, type, QE with email, or why a re
   const plan = bulkPlan(rows, { setup, qeMapping: mapping, board, featureMatch: (item) => hits[item.id] })
   assert.deepEqual(plan.map((line) => [line.type ?? '', line.qe, line.email, line.skip.split(' (')[0]]), [
     ['Platform Update', 'Asha Rao', 'asha@x.com', ''],
-    ['', 'Asha Rao', 'asha@x.com', 'no release type from the version “R1”'],
+    ['', 'Asha Rao', 'asha@x.com', ''],
     ['Major', 'Ben Ito', '', 'no email found for Ben Ito'],
     ['Major', '', '', 'no QE in the QE Mapping for this product'],
     ['Major', 'Asha Rao', 'asha@x.com', 'Feature #905 on QMS-0025 matches it 100%'],
   ])
   assert.equal(plan[0].title, 'DP | Dose Planning | 5.2.1.3'); assert.equal(plan[0].set.featureDoD, 'x', 'DPF-07: an Epic with a setup uses its own DoD, not DP’s hidden built-in set')
-  assert.equal(bulkPlan([rows[0]], { setup: undefined, qeMapping: mapping, board, featureMatch: () => undefined })[0].set.featureDoD, 'DT is finished.', 'no setup at all: the built-in PU set')
+  assert.match(bulkPlan([rows[0]], { setup: undefined, qeMapping: mapping, board, featureMatch: () => undefined })[0].skip, /has no Feature setup/, 'DPF-09: no setup at all — skipped, no built-in set')
   assert.equal(plan[0].note, 'a similar Feature #901 (88%) exists', 'BLK-01: a match below 100% is named, the release is still created')
   assert.match(bulkPlan([rows[0]], { setup: cleanSetup({ epicId: 13946, featureDoD: 'x' }), qeMapping: mapping, board, featureMatch: () => undefined })[0].skip, /QE Mapping columns are not set/)
 })
@@ -75,7 +69,7 @@ test('DPF-06: the QE picked in the pop-up replaces the QE Mapping\'s and lets a 
   const picked = pickQe(plan, { 1: 'cara@x.com', 2: 'cara@x.com', 4: 'CARA@x.com' }, (line) => String(line.row.id), people)
   assert.deepEqual(picked.map((line) => [line.qe, line.email, line.skip.split(' (')[0], line.picked]), [
     ['Cara Lim', 'cara@x.com', '', true],
-    ['Cara Lim', 'cara@x.com', 'no release type from the version “R1”', true],
+    ['Cara Lim', 'cara@x.com', '', true],
     ['Cara Lim', 'cara@x.com', '', true],
   ], 'a release without a QE in the mapping is created for the person picked')
   assert.deepEqual(pickQe(plan, { 1: 'asha@x.com' }, (line) => String(line.row.id), people).map((line) => line.picked), [false, false, false], 'picking the mapped QE changes nothing')

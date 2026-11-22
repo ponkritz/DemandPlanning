@@ -18,8 +18,8 @@ export function AzureViewsGitPanel({ git, azure }: { git: GitStorage; azure: Azu
   async function save() {
     setBusy('save'); setNotice(null)
     try {
-      const text = serializeViews(viewsFile(listAzureConnectionProfiles()))
-      const result = await git.writeViews(text, commit || `Azure DevOps views: ${count} connection${count === 1 ? '' : 's'}`)
+      // CON-98: merged into the setup in Git; a connection only in Git is kept.
+      const result = await git.shareViews(listAzureConnectionProfiles(), commit || `Azure DevOps views: ${count} connection${count === 1 ? '' : 's'}`)
       markViewsSynced(listAzureConnectionProfiles())
       setCommit('')
       setNotice(result.changed ? { tone: 'success', text: `${count} connection${count === 1 ? '' : 's'} saved to ${git.viewsPath} (no PATs).` } : { tone: 'info', text: `${git.viewsPath} is already up to date.` })

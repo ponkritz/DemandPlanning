@@ -1,6 +1,6 @@
 import test, { after, before } from 'node:test'
 import assert from 'node:assert/strict'
-import { loadSample, navigate, openPage, startApp, text } from './helpers.mjs'
+import { loadSample, navigate, openPage, profileItem, startApp, text } from './helpers.mjs'
 
 // Shell, navigation and first-run scenarios of the UAT (TC-NAV-01, TC-NAV-03, TC-NAV-37, TC-HIS-01, TC-ACC-04, TC-NAV-31, TC-NAV-33, TC-UI-01, TC-SMP-01,
 // TC-UPD-02, TC-GIT-06, TC-SET-05), automated against the built web app.
@@ -10,12 +10,101 @@ after(async () => { await app.stop() })
 
 test('TC-NAV-01 / TC-NAV-17: the sidebar shows the groups in order, with Documentation under Data & governance', async () => {
   const { page, context, errors } = await openPage(app)
+  assert.equal(await text(page.locator('header.topbar h1')), 'Home', 'the app opens on Home (NAV-42)')
+  assert.match(await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute('content'), /script-src 'self' file:; .*object-src 'none'/, 'NFR-09: the built page carries its Content-Security-Policy')
   const groups = await page.locator('.sidebar nav .nav-group').allInnerTexts()
   assert.deepEqual(groups.map((group) => group.replace(/^[▾▸]\s*/, '').trim().toLowerCase()), ['data insights', 'my work', 'i&d board', 'release details', 'data & governance', 'admin'])
   const entries = (await page.locator('.sidebar nav .nav-items button').allInnerTexts()).map((entry) => entry.replace(/\s+/g, ' ').trim())
   for (const entry of ['My dashboard', 'Team overview', 'Pulse Check', 'My Tasks [Board]', 'Time Writing', 'Sprint check', 'Backlog Health', 'Streams', 'Stream options', 'Data & sharing', 'People & roles', 'Epic & Feature setup', 'Documentation']) assert.ok(entries.some((item) => item.endsWith(entry)), `${entry} is in the menu`)
-  assert.match(await text(page.locator('.sidebar-footer')), /v\d+\.\d+\.\d+/, 'the footer shows the version (NAV-15)')
-  assert.equal(await page.getByRole('button', { name: /^My settings/ }).count(), 1, 'My settings opens from your name (SET-15)')
+  assert.match(await text(page.locator('footer.app-footer')), /v\d+\.\d+\.\d+/, 'the footer shows the version (NAV-15, NAV-49)')
+  assert.equal(await page.locator('header.topbar').getByRole('button', { name: /^Profile/ }).count(), 1, 'My settings opens from the profile at the top right (SET-15, NAV-48)')
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
+test('TC-NAV-48: the profile at the top right holds My settings, the view switch and the tools; the footer shows the version and ends the page without covering it; Person only on person-based pages', async () => {
+  const { page, context, errors } = await openPage(app)
+  await loadSample(page)
+  await page.setViewportSize({ width: 1280, height: 720 })
+  // NAV-48: the profile menu.
+  await page.locator('header.topbar').getByRole('button', { name: /^Profile/ }).click()
+  const menu = page.getByRole('menu', { name: 'Profile' })
+  assert.deepEqual((await menu.getByRole('menuitem').allInnerTexts()).map((entry) => entry.replace(/^\S+\s*/, '').trim()), ['My settings', 'Classic view', 'Search settings', 'Customize menu'])
+  await page.keyboard.press('Escape')
+  assert.equal(await menu.count(), 0, 'Escape closes it')
+  // NAV-49: the footer — version and build — at the end of the page; the page content ends where the footer starts.
+  const footer = page.locator('footer.app-footer')
+  assert.match(await text(footer), /v\d+\.\d+\.\d+.*Build/)
+  await navigate(page, 'Team overview')
+  await page.locator('.content').first().waitFor()
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+  const gap = await page.evaluate(() => { const top = document.querySelector('footer.app-footer').getBoundingClientRect().top; return Math.max(...[...document.querySelectorAll('main > *:not(footer)')].map((element) => element.getBoundingClientRect().bottom)) - top })
+  assert.ok(gap <= 1, `nothing ends under the footer (${gap}px)`)
+  // KB-61: a short page keeps the full width and starts at the top — every My settings section the same width.
+  await profileItem(page, 'My settings')
+  await page.locator('.settings-sections').waitFor()
+  const widths = []
+  for (const name of ['Your work email', 'Servers and PATs', 'My views', 'My naming patterns', 'My page usage']) {
+    await page.getByRole('tab', { name }).click()
+    widths.push(await page.evaluate(() => { const tabs = document.querySelector('.settings-sections').getBoundingClientRect(), block = document.querySelector('.settings-sections').parentElement.lastElementChild.getBoundingClientRect(), content = document.querySelector('main > .content').getBoundingClientRect(); return [Math.round(tabs.width), Math.round(block.width), Math.round(content.top)] }))
+  }
+  assert.equal(new Set(widths.map(([tabs, block]) => `${tabs}/${block}`)).size, 1, `one width for every section: ${JSON.stringify(widths)}`)
+  assert.ok(widths.every(([, , top]) => top < 200), `the page starts at the top: ${JSON.stringify(widths)}`)
+  // NAV-47: Person in the top bar on the person-based pages only; My dashboard is always you.
+  const person = page.locator('header.topbar').getByRole('combobox', { name: 'Person' })
+  assert.equal(await person.count(), 0, 'not on Team overview')
+  for (const name of ['Time Writing', 'My Tasks [Board]', 'Sprint check']) { await navigate(page, name); assert.equal(await person.count(), 1, `on ${name}`) }
+  await navigate(page, 'My dashboard')
+  assert.equal(await person.count(), 0, 'not on My dashboard')
+  assert.deepEqual(errors.filter((entry) => !/401|Unauthorized/.test(entry)), [])
+  await context.close()
+})
+
+test('TC-NAV-46: the menu switches between the tile view (opens on Home) and the classic view (opens on My dashboard, no Home); the choice is kept', async () => {
+  const { page, context, errors } = await openPage(app)
+  await loadSample(page)
+  assert.equal(await text(page.locator('header.topbar h1')), 'Home', 'the tile view by default')
+  await profileItem(page, 'Classic view')
+  assert.equal(await text(page.locator('header.topbar h1')), 'My dashboard', 'the classic view opens My dashboard')
+  assert.equal(await page.locator('.sidebar nav button', { hasText: /^\S*\s*Home$/ }).count(), 0, 'no Home in the menu')
+  await page.reload()
+  await page.locator('header.topbar h1').waitFor()
+  assert.equal(await text(page.locator('header.topbar h1')), 'My dashboard', 'the choice is kept after a reload')
+  await profileItem(page, 'Tile view')
+  assert.equal(await text(page.locator('header.topbar h1')), 'Home', 'back to the tiles')
+  assert.equal(await page.locator('.sidebar nav .nav-home button').count(), 1, 'Home is in the menu again')
+  assert.deepEqual(errors.filter((entry) => !/401|Unauthorized/.test(entry)), [])
+  await context.close()
+})
+
+test('TC-NAV-42: Home is the start page — a tile per area with links to its pages, a search, and Home first in the menu', async () => {
+  const { page, context, errors } = await openPage(app)
+  await loadSample(page)
+  await page.locator('.sidebar nav button', { hasText: 'Home' }).first().click()
+  assert.equal(await text(page.locator('header.topbar h1')), 'Home')
+  assert.equal((await page.locator('.sidebar nav .nav-items button').first().innerText()).replace(/\s+/g, ' ').trim().replace(/^\S+\s/, ''), 'Home', 'Home is first in the menu')
+  const tiles = page.getByRole('listitem')
+  assert.deepEqual((await tiles.locator('.home-tile-title').allInnerTexts()).map((entry) => entry.trim()), ['My Work', 'My dashboard', 'Team Insights', 'I&D Board', 'Release Details', 'Planning & Baselines', 'QE Mapping', 'Snapshots & Documents', 'Admin', 'My settings'])
+  const release = page.locator('article[aria-label="Release Details"]')
+  assert.equal(await release.locator('.home-link').count(), 7, 'six links and “+n more”')
+  await release.getByRole('button', { name: /^Show \d+ more Release Details pages$/ }).click()
+  assert.ok(await release.getByRole('button', { name: 'S&S IT' }).isVisible(), 'the rest of the links are shown in the tile')
+  // Search: a tile whose title matches keeps all its links; otherwise only its matching links stay.
+  await page.getByLabel('Search pages').fill('stream options')
+  assert.deepEqual((await tiles.locator('.home-tile-title').allInnerTexts()).map((entry) => entry.trim()), ['Admin'])
+  assert.deepEqual((await page.locator('article[aria-label="Admin"]').locator('.home-link-label').allInnerTexts()), ['Stream options'], 'only the matching link')
+  await page.getByLabel('Search pages').fill('backlog')
+  assert.deepEqual((await tiles.locator('.home-tile-title').allInnerTexts()).map((entry) => entry.trim()), ['I&D Board'], 'a tile whose description matches keeps all its links')
+  assert.equal(await page.locator('article[aria-label="I&D Board"]').locator('.home-link').count(), 2)
+  await page.getByLabel('Search pages').fill('nothing like this')
+  assert.match(await text(page.locator('.home')), /Nothing matches “nothing like this”/)
+  await page.getByLabel('Search pages').fill('')
+  // A tile opens its area; a link opens its page.
+  await page.getByRole('button', { name: /^Open My Work/ }).click()
+  assert.equal(await text(page.locator('header.topbar h1')), 'Time Writing')
+  await page.locator('.sidebar nav button', { hasText: 'Home' }).first().click()
+  await page.locator('article[aria-label="Team Insights"]').getByRole('button', { name: 'Pulse Check' }).click()
+  assert.equal(await text(page.locator('header.topbar h1')), 'Pulse Check')
   assert.deepEqual(errors, [])
   await context.close()
 })
@@ -131,12 +220,17 @@ test('TC-NAV-31: at phone width the navigation sits behind a menu button and the
 
 test('TC-UPD-02: Force Update shows the running version, build number and build id', async () => {
   const { page, context, errors } = await openPage(app)
-  await page.locator('.sidebar-footer button', { hasText: /Force Update/ }).first().click()
+  // NAV-49: the footer shows only the version and build, with Force Update; the rest is in its window.
+  const footer = page.locator('footer.app-footer')
+  assert.match(await text(footer), /^(⬇ Desktop app )?v\d+\.\d+\.\d+ \(Build [\d—]+\) ↻ Force Update$/, 'the desktop app download, the version (build) and Force Update only')
+  assert.equal(await footer.getByRole('link', { name: /Desktop app/ }).or(footer.getByRole('button', { name: /Desktop app/ })).count(), 1, 'the desktop app download is in the footer')
+  await footer.getByRole('button', { name: /Force Update/ }).click()
   const dialog = page.getByRole('dialog').filter({ hasText: 'Force Update' })
   await dialog.waitFor()
   const body = await text(dialog)
   assert.match(body, /v\d+\.\d+\.\d+/)
   assert.match(body, /Build number \d+/)
+  assert.match(body, /Build ID .*Built .*Data saved: /, 'the build ID, build time and where data is saved')
   assert.deepEqual(errors, [])
   await context.close()
 })
@@ -508,7 +602,7 @@ test('TC-ACC-04: an Admin views the app as a role, read only, and exits', async 
   // An access policy cached in this browser whose default role is Admin (no Git storage in the test).
   const policy = { schema: 1, defaultRole: 'Admin', roles: { 'Admin': { areas: ['overview', 'insights', 'mywork', 'monthly', 'bulk', 'board', 'health', 'release', 'baselines', 'qemapping', 'snapshots', 'docs'], actions: ['azure.write', 'settings.manage', 'access.manage'] }, 'Product Owner': { areas: [], actions: [] }, 'People Manager': { areas: [], actions: [] }, 'Scrum Master': { areas: [], actions: [] }, 'Team Member': { areas: ['overview', 'mywork', 'docs'], actions: [] } }, members: {} }
   const { page, context, errors } = await openPage(app, { init: (text) => localStorage.setItem('demand-planning-access-v1', text), initArg: JSON.stringify(policy) })
-  await page.getByRole('button', { name: 'View as…' }).click()
+  await profileItem(page, 'View as…')
   const dialog = page.getByRole('dialog')
   await dialog.getByRole('radio', { name: 'A role' }).check()
   await dialog.getByRole('combobox', { name: 'Role' }).selectOption('Team Member')
@@ -570,10 +664,10 @@ test('TC-SET-06: Admin lists the shared setup pages, My settings opens from your
   await navigate(page, /Streams$/)
   await navigate(page, 'Data & sharing')
   assert.equal(await sections.getByRole('tab', { name: 'Other views' }).getAttribute('aria-selected'), 'true')
-  // My settings: from the name in the sidebar, everything that is only yours.
-  await page.getByRole('button', { name: /^My settings/ }).click()
+  // My settings: from the profile at the top right (NAV-48), everything that is only yours.
+  await profileItem(page, 'My settings')
   assert.equal(await text(page.locator('header.topbar h1')), 'My settings')
-  assert.deepEqual((await sections.getByRole('tab').allInnerTexts()).map((label) => label.trim()), ['Your work email', 'Servers and PATs', 'My views', 'My naming patterns'])
+  assert.deepEqual((await sections.getByRole('tab').allInnerTexts()).map((label) => label.trim()), ['Your work email', 'Servers and PATs', 'My views', 'My naming patterns', 'My page usage'])
   assert.match(await text(page.locator('.scope-line')), /Only you · This computer/)
   // EPS-08: Epic setup and Feature setup are one page, starting from the list of all Epic setups.
   await navigate(page, 'Epic & Feature setup')
@@ -595,9 +689,9 @@ test('TC-CON-56: Storage → Shared setup in Git offers Back up and clean up; re
   await context.close()
 })
 
-test('TC-MYD-01: My dashboard is the start page: my hours, my open work, my streams and what I signed; Pulse Check offers quarter, half-year and year', async () => {
+test('TC-MYD-01: My dashboard — my hours, my open work, my streams and what I signed; Pulse Check offers quarter, half-year and year', async () => {
   const { page, context, errors } = await openPage(app, { init: () => { localStorage.setItem('demand-planning-my-name-v1', 'Ana Costa') } })
-  assert.equal(await text(page.locator('header.topbar h1')), 'My dashboard', 'the start page')
+  assert.equal(await text(page.locator('header.topbar h1')), 'Home', 'the start page is Home (NAV-42)')
   await loadSample(page)
   await navigate(page, 'My dashboard')
   const content = page.locator('.content')
@@ -635,7 +729,7 @@ test('TC-MYD-04: a person hides and moves the sections of My dashboard and pins 
   await content.getByRole('button', { name: 'Done' }).click()
   const order = async () => content.locator('.layout-section').evaluateAll((sections) => sections.map((section) => section.getAttribute('data-section')))
   assert.deepEqual(await order(), ['streams', 'hours', 'releasecounts', 'signed'], 'hidden section gone, moved section first')
-  await page.getByRole('button', { name: 'Customize menu' }).click()
+  await profileItem(page, 'Customize menu')
   await page.getByRole('checkbox', { name: 'Pin Pulse Check' }).check()
   await page.getByRole('button', { name: 'Done' }).click()
   assert.match(await text(page.locator('.nav-pinned')), /PINNED.*Pulse Check/s)
@@ -725,6 +819,9 @@ test('TC-ACT-02: Time Writing shows the person\'s KPI cards, month tasks, hours 
   await content.getByRole('heading', { name: /Your activities for/ }).waitFor()
   assert.ok(await content.locator('.act-table tbody tr').count() > 0, 'the month tasks are listed')
   assert.ok(await content.getByRole('textbox', { name: /^Actual hours for / }).count() > 0, 'actual hours can be entered')
+  const ids = (await content.locator('.act-table').first().locator('tbody a.act-id').allInnerTexts()).map((text) => Number(text.replace('#', '')))
+  assert.ok(ids.length > 1, 'several activities')
+  assert.deepEqual(ids, [...ids].sort((a, b) => a - b), 'ACT-21: in order of Feature number (TC-ACT-16)')
   // Columns: Epic, Activity, Planned, Actual.
   assert.deepEqual((await content.locator('.act-table').first().locator('thead th').allInnerTexts()).map((cell) => cell.trim().toLowerCase()).filter(Boolean), ['epic', 'activity', 'planned', 'actual'])
   // KPI cards on top in this order, Unsaved changes only while editing; the monthly update (ring and last day) beside them.
@@ -750,8 +847,16 @@ test('TC-ACT-02: Time Writing shows the person\'s KPI cards, month tasks, hours 
   assert.equal(await content.locator('.act-table').first().getByRole('checkbox', { name: /^Close / }).count(), 0, 'the tick boxes go with Close mode')
   await content.getByRole('textbox', { name: /^Actual hours for / }).first().fill('1')
   assert.match(await text(content.locator('.act-top .metric-grid')), /Unsaved changes/)
-  // ACT-20: ＋ Add a new activity sits at the top next to "Activities of" and opens a pop-up; the list keeps the full width.
-  assert.equal(await content.locator('.act-header-tools').getByRole('button', { name: '＋ Add a new activity' }).count(), 1)
+  // ACT-20: ＋ Add a new activity is a button of the list (in its heading row, not a page heading) and opens a pop-up.
+  assert.equal(await content.locator('.act-card-head').getByRole('button', { name: '＋ Add a new activity' }).count(), 1)
+  assert.equal(await content.getByRole('heading', { name: 'Add activities' }).count(), 0, 'no “Add activities” heading')
+  // ACT-22: the cards stay at the top under the top bar when the page scrolls.
+  await page.setViewportSize({ width: 1280, height: 520 })
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+  const stuck = await page.evaluate(() => Math.abs(document.querySelector('.act-top').getBoundingClientRect().top - document.querySelector('header.topbar').getBoundingClientRect().bottom))
+  assert.ok(stuck <= 1, `the cards sit under the top bar (${stuck}px)`)
+  await page.setViewportSize({ width: 1280, height: 720 })
+  await page.evaluate(() => window.scrollTo(0, 0))
   assert.equal(await content.locator('.act-grid.act-add-folded').count(), 1)
   await content.getByRole('button', { name: '＋ Add a new activity' }).click()
   const dialog = page.getByRole('dialog', { name: 'Add a new activity' })
@@ -874,8 +979,8 @@ test('TC-ACT-10: Time Writing can show another person, chosen at the top right',
   await navigate(page, 'Time Writing')
   const content = page.locator('.content')
   await content.getByRole('heading', { name: /Your activities for/ }).waitFor()
-  const picker = content.locator('.act-header').getByRole('combobox', { name: 'Activities of' })
-  assert.equal(await picker.count(), 1, 'the person picker is in the header row')
+  const picker = page.locator('header.topbar').getByRole('combobox', { name: 'Person' })
+  assert.equal(await picker.count(), 1, 'the person picker is in the top bar (NAV-47)')
   const before = await text(content.locator('.act-table').first())
   await picker.click()
   await page.keyboard.type('Fatima')
@@ -950,7 +1055,7 @@ test('TC-KPT-01: the KPI tracker page is hidden from the menu (kept in the build
   const { page, context, errors } = await openPage(app)
   await page.locator('.sidebar nav').waitFor()
   assert.equal(await page.locator('.sidebar nav button', { hasText: 'KPI tracker' }).count(), 0, 'not in the menu')
-  await page.getByRole('button', { name: 'Customize menu' }).click()
+  await profileItem(page, 'Customize menu')
   assert.equal(await page.getByText('KPI tracker', { exact: true }).count(), 0, 'not offered in Customize menu')
   assert.deepEqual(errors, [])
   await context.close()
@@ -1189,7 +1294,7 @@ test('TC-SET-07: My views — a view of your own on a server you have a PAT for,
   await context.route('https://dev.azure.com/**', (route) => route.fulfill({ status: 401, contentType: 'application/json', body: '{}' }))
   const guide = page.getByRole('dialog').filter({ hasText: 'Could not fetch from Azure DevOps' })
   await guide.waitFor({ timeout: 3000 }).then(() => guide.getByRole('button', { name: 'Close', exact: true }).last().click()).catch(() => undefined)
-  await page.getByRole('button', { name: /^My settings/ }).click()
+  await profileItem(page, 'My settings')
   await page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'My views' }).click()
   const form = page.getByRole('form', { name: 'Add my view' })
   await form.getByLabel('Name').fill('DP')
@@ -1238,9 +1343,63 @@ test('TC-CON-60: Setup per Epic — All Epics defaults, and an Epic showing whic
   await context.close()
 })
 
+test('TC-CON-61: Streams → Removed connections finds a connection dropped from the shared setup in Git and restores it, for everyone', async () => {
+  // The shared setup in Git: CP Releases was in yesterday's version, today's (saved from another computer) lacks it.
+  const sha = 'b'.repeat(40)
+  const view = (id, viewName, query) => ({ id, reason: viewName, viewName, role: 'release-source', showInMenu: true, url: 'https://dev.azure.com/example/Project', query })
+  const older = { schema: 1, kind: 'azure-devops-views', views: [view('cp-names', 'CP Releases', 'SELECT [System.Id] FROM WorkItems WHERE [System.Title] CONTAINS \'Release\'')] }
+  const writes = []
+  const { page, context, errors } = await openPage(app, { init: () => {
+    localStorage.setItem('demand-planning-git-storage-v1', JSON.stringify({ owner: 'example', repo: 'storage', branch: 'main', path: 'planning-data.json' }))
+    localStorage.setItem('demand-planning-git-token-v1', 'test-token')
+  } })
+  await context.route('https://dev.azure.com/**', (route) => route.fulfill({ status: 401, contentType: 'application/json', body: '{}' }))
+  await context.route('https://api.github.com/**', (route) => {
+    const request = route.request(), url = new URL(request.url())
+    const json = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
+    if (url.pathname === '/repos/example/storage') return json({ permissions: { push: true } })
+    if (url.pathname === '/repos/example/storage/commits') return json(url.searchParams.get('path') === 'azure-views.json' ? [{ sha, commit: { message: 'Stream mapping: CP Releases', committer: { date: '2026-11-19T10:00:00Z' } } }] : [])
+    const match = /^\/repos\/example\/storage\/contents\/(.*)$/.exec(url.pathname)
+    if (!match) return json({ message: 'Not Found' }, 404)
+    const path = decodeURIComponent(match[1])
+    if (request.method() === 'PUT') { if (path === '.demand-planning-write-check') return json({ message: 'Invalid request' }, 422); writes.push([path, JSON.parse(Buffer.from(JSON.parse(request.postData()).content, 'base64').toString())]); return json({ content: { sha: 'new' }, commit: { html_url: 'https://github.com/example/storage/commit/new' } }) }
+    if (path === 'azure-views.json') { const text = JSON.stringify(url.searchParams.get('ref') === sha ? older : { schema: 1, kind: 'azure-devops-views', views: [] }); return json({ type: 'file', encoding: 'base64', content: Buffer.from(text).toString('base64'), sha: 'v1' }) }
+    return json({ message: 'Not Found' }, 404)
+  })
+  await page.reload()
+  await page.locator('.sidebar nav').waitFor()
+  await navigate(page, /Streams$/)
+  const panel = page.locator('.removed-connections')
+  await panel.getByRole('button', { name: 'Look in Git history' }).click()
+  await panel.getByRole('button', { name: 'Restore' }).waitFor()
+  assert.match(await text(panel.locator('tbody')), /CP Releases.*CONTAINS 'Release'.*Stream mapping: CP Releases/s)
+  await panel.getByRole('button', { name: 'Restore' }).click()
+  await panel.getByText(/“CP Releases” is back here and in the shared setup in Git for everyone/).waitFor()
+  const shared = writes.filter(([path]) => path === 'azure-views.json').pop()
+  assert.deepEqual(shared[1].views.map((entry) => entry.id), ['cp-names'], 'written back to Git (merged, no PAT)')
+  assert.equal(JSON.stringify(shared[1]).includes('token'), false)
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('demand-planning-azure-connection-profiles-v1') ?? '[]').some((entry) => entry.id === 'cp-names')), true, 'restored in this browser')
+  assert.deepEqual(errors.filter((entry) => !/401|Unauthorized/.test(entry)), [])
+  await context.close()
+})
+
+test('TC-SMP-02: Reset synthetic MVP data asks first and is recorded in History', async () => {
+  const { page, context, errors } = await openPage(app)
+  await navigate(page, /History$/)
+  const reset = page.getByRole('button', { name: 'Reset synthetic MVP data' })
+  page.once('dialog', (dialog) => dialog.dismiss())
+  await reset.click()
+  assert.equal(await page.locator('.audit-row', { hasText: 'Planning data reset' }).count(), 0, 'Cancel changes nothing')
+  page.once('dialog', (dialog) => { assert.match(dialog.message(), /fetched Azure DevOps data is cleared.*connections and PATs are kept/s); return dialog.accept() })
+  await reset.click()
+  await page.locator('.audit-row', { hasText: 'Planning data reset to the synthetic MVP data' }).waitFor()
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
 test('TC-QV-41: My settings → My naming patterns — your own patterns for IOCC, Content and Tool Validations, kept on this computer, back to the shared ones', async () => {
   const { page, context, errors } = await openPage(app)
-  await page.getByRole('button', { name: /^My settings/ }).click()
+  await profileItem(page, 'My settings')
   await page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'My naming patterns' }).click()
   const panel = page.locator('.my-naming-patterns')
   assert.deepEqual((await panel.getByLabel('Stream for naming patterns').locator('option').allInnerTexts()).map((entry) => entry.trim()), ['IOCC', 'Content', 'Tool Validations'], 'never DP or CP')
@@ -1258,13 +1417,14 @@ test('TC-QV-41: My settings → My naming patterns — your own patterns for IOC
   await context.close()
 })
 
-test('TC-ADM-02: Admin → Overview lists what to set up with links; Ctrl K finds a setting and opens it; History filters the changes', async () => {
+test('TC-ADM-02: Admin → Overview lists what to set up with links (and the bulk Epic without a setup, TC-ADM-03); Ctrl K finds a setting and opens it; History filters the changes', async () => {
   const { page, context, errors } = await openPage(app)
   await navigate(page, /Overview$/)
   assert.equal(await text(page.locator('header.topbar h1')), 'Overview')
   const health = page.locator('.admin-overview')
   assert.match(await text(health), /Connect Git storage/, 'the open Get started steps are listed')
   assert.match(await text(health), /No access roles yet/)
+  assert.match(await text(health), /DP bulk creation Epic #13946 has no Feature setup/, 'ADM-05: the built-in DP bulk Epic has no shared Feature setup yet')
   await health.locator('li', { hasText: 'IOCC bulk creation Epic not chosen' }).getByRole('button').click()
   assert.equal(await text(page.locator('header.topbar h1')), 'Stream options')
   assert.equal(await page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'Bulk creation Epics' }).getAttribute('aria-selected'), 'true', 'the fix opens the section')
@@ -1282,6 +1442,33 @@ test('TC-ADM-02: Admin → Overview lists what to set up with links; Ctrl K find
   assert.equal(await page.locator('.audit-row').count(), 0)
   await page.getByLabel('Search changes').fill('')
   assert.equal(await page.locator('.audit-row').count(), before)
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
+test('TC-NAV-45: My page usage is off by default; turned on, it counts the pages opened in this browser; off deletes the counts', async () => {
+  const { page, context, errors } = await openPage(app)
+  const openUsage = async () => {
+    await page.keyboard.press('Control+k')
+    const search = page.getByRole('dialog').filter({ hasText: 'Search settings' })
+    await search.getByLabel('Search settings').fill('page usage')
+    await search.getByLabel('Search settings').press('Enter')
+    return page.locator('.usage-panel')
+  }
+  let panel = await openUsage()
+  const toggle = panel.getByLabel('Count the pages I open (this browser only)')
+  assert.equal(await toggle.isChecked(), false, 'off by default')
+  await toggle.check()
+  assert.match(await text(panel), /Nothing counted yet/)
+  await navigate(page, /Documentation$/)
+  await navigate(page, /My dashboard$/)
+  await navigate(page, /Documentation$/)
+  panel = await openUsage()
+  assert.match(await text(panel.locator('tbody tr').first()), /^Documentation 2$/i, 'most used first')
+  assert.match(await text(panel), /My dashboard 1/i)
+  assert.ok(await page.evaluate(() => localStorage.getItem('demand-planning-usage-v1')?.includes('"docs":2')), 'kept in this browser')
+  await panel.getByLabel('Count the pages I open (this browser only)').uncheck()
+  assert.equal(await page.evaluate(() => localStorage.getItem('demand-planning-usage-v1')), null, 'turning it off deletes the counts')
   assert.deepEqual(errors, [])
   await context.close()
 })

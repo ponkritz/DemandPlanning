@@ -29,10 +29,10 @@ test('STT-02: a linked story takes the template’s current title and descriptio
   assert.deepEqual(setup.stories.map((story) => story.templateId), ['t-sfv', undefined, 't-gone', undefined], 'a malformed link is dropped')
   const linked = withLinkedStories(setup, [template('t-sfv', 'SFV : Review ({service})')])
   assert.deepEqual(linked.stories.map((story) => [story.title, story.description]), [['SFV : Review ({service})', 'SFV : Review ({service}) details'], ['Own', ''], ['Gone', 'copy'], ['Bad', '']])
-  assert.equal(linked.classSets.Hotfix.stories[0].title, 'SFV : Review ({service})'); assert.equal(linked.releaseTypes.release.stories[0].title, 'SFV : Review ({service})')
+  assert.equal(linked.classSets.Hotfix.stories[0].title, 'SFV : Review ({service})')
   assert.equal(setup.stories[0].title, 'Old', 'the saved setup is not changed')
   assert.equal(withLinkedStories(setup, []), setup); assert.equal(withLinkedStories(undefined, [template('t', 'x')]), undefined)
   const file = { schema: 1, kind: 'feature-setup', defaults: { stories: [{ title: 'D', description: '', templateId: 't-sfv' }] }, epics: [setup] }
   assert.equal(parseFeatureSetup(serializeFeatureSetup(file)).epics[0].stories[0].templateId, 't-sfv', 'the link is saved')
-  assert.equal(templateUses(parseFeatureSetup(serializeFeatureSetup(file)), 't-sfv'), 4, 'Epic stories, a value set, an old Release set and All Epics')
+  assert.equal(templateUses(parseFeatureSetup(serializeFeatureSetup(file)), 't-sfv'), 3, 'Epic stories, a value set and All Epics (old Release / PU sets are dropped, DPF-09)')
 })

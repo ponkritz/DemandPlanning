@@ -8,6 +8,7 @@ Verification is defined in [TEST-PLAN.md](TEST-PLAN.md) (TP-DPH-001), against th
 - `scripts/verify-version.mjs`: the package version is `x.y.z`, and a release tag matches it.
 - `pnpm test`: Node test runner over `tests/*.test.mjs`, including the document checks: the traceability matrix is current and gap-free (`scripts/traceability.mjs --check`) and the Validation Package documents are consistent (`validation-package.test.mjs`). The coverage per requirement is in TEST-PLAN.md §7 and, generated, in TRACEABILITY-MATRIX.md.
 - `pnpm test:e2e` (job "End-to-end tests"): the Playwright suite over the built web app, automating the repeatable UAT scenarios.
+- `E2E_CPU_SLOWDOWN=4 pnpm test:e2e` (job "End-to-end tests (slow machine)"): the same suite with the page on a CPU four times slower, to catch timing races (CI-12).
 - `pnpm build:web` (`tsc -b && vite build`), which emits `build-info.json`.
 - The Windows installer (NSIS) and the macOS universal disk image, each with SHA-256 sums.
 

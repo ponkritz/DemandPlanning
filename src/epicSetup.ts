@@ -133,14 +133,13 @@ export function withEpicFields<L extends { title: string; skip?: string }>(plan:
   })
 }
 
-// DPF-07: the Release Classification values of an Epic — the list of its own "Release Classification" field when it
-// has one (a List field), else the built-in values of the New Feature picker (BKL-17). fieldIndex: that field's place
-// in the Epic's fields, -1 for the built-in picker.
-export const builtinClassifications = ['Major', 'Minor', 'MLD', 'Platform Update', 'Service Pack']
+// DPF-07, DPF-09: the Release Classification values of an Epic — the list of its own "Release Classification" field
+// (a List field); none without one (there are no built-in values). fieldIndex: that field's place in the Epic's
+// fields, -1 without one.
 export function classificationOf(file: EpicSetupFile | null | undefined, epicId: number | undefined): { values: string[]; fieldIndex: number; label: string } {
   const entry = epicFieldsFor(file, epicId)
   const fieldIndex = entry ? entry.fields.findIndex((field) => fieldKey(field.label) === 'releaseclassification') : -1
-  if (fieldIndex < 0) return { values: [...builtinClassifications], fieldIndex: -1, label: 'Release Classification' }
+  if (fieldIndex < 0) return { values: [], fieldIndex: -1, label: 'Release Classification' }
   const field = entry!.fields[fieldIndex]
   return { values: field.type === 'list' ? [...(listOf(file, field.list)?.values ?? [])] : [], fieldIndex, label: field.label }
 }

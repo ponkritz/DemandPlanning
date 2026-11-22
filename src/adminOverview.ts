@@ -1,3 +1,4 @@
+import { chooseSetup, type FeatureSetupFile } from './featureSetup.ts'
 import type { SetupStep } from './setupGuide'
 import type { SettingsTab } from './settingsTabs'
 
@@ -5,7 +6,18 @@ import type { SettingsTab } from './settingsTabs'
 // with a link to the setting that fixes it; nothing is changed here.
 export type HealthTone = 'ok' | 'todo' | 'warn' | 'info'
 export interface HealthItem { id: string; title: string; detail: string; tone: HealthTone; fix?: { tab: SettingsTab; section?: string; label: string } }
-export interface AdminFacts { policy: boolean; toolOwner: boolean; epicSetups: number; sharedFeatureSetups: number; ioccBulkEpic: boolean; unsaved: boolean; gitConnected: boolean; gitReadOnly: boolean }
+export interface AdminFacts { policy: boolean; toolOwner: boolean; epicSetups: number; sharedFeatureSetups: number; ioccBulkEpic: boolean; unsaved: boolean; gitConnected: boolean; gitReadOnly: boolean; bulkWithoutSetup?: { stream: string; epicId: number }[]; withoutDoD?: number[] }
+
+// ADM-05: gaps in the shared Feature setup that others meet — a DP or IOCC bulk creation Epic without a shared Feature
+// setup (Create Features skips every row: dpBulk.ts), and shared setups whose Feature DoD resolves to nothing (own, All
+// Epics) so new Features under that Epic start without one. Only the shared file counts: others do not have my own.
+export function setupGaps(shared: FeatureSetupFile | null | undefined, bulkEpics: { stream: string; epicId?: number }[]): Pick<AdminFacts, 'bulkWithoutSetup' | 'withoutDoD'> {
+  const setups = { personal: null, shared: shared ?? null }
+  const bulkWithoutSetup = bulkEpics.filter((entry): entry is { stream: string; epicId: number } => entry.epicId != null && !chooseSetup(setups, entry.epicId).setup)
+  const withoutDoD = (shared?.epics ?? []).map((entry) => entry.epicId).filter((epicId) => !(chooseSetup(setups, epicId).setup?.featureDoD ?? '').trim()).sort((a, b) => a - b)
+  return { bulkWithoutSetup, withoutDoD }
+}
+const ids = (list: number[]) => list.map((id) => `#${id}`).join(', ')
 
 export function adminHealth(steps: SetupStep[], facts: AdminFacts): HealthItem[] {
   const fromSteps: HealthItem[] = steps.filter((step) => step.state !== 'done').map((step) => ({ id: `step:${step.id}`, title: step.title, detail: step.why, tone: step.required ? 'todo' : 'info', ...(step.tab ? { fix: { tab: step.tab, ...(step.section ? { section: step.section } : {}), label: 'Open' } } : {}) }))
@@ -14,6 +26,8 @@ export function adminHealth(steps: SetupStep[], facts: AdminFacts): HealthItem[]
   if (facts.gitConnected && facts.gitReadOnly) checks.push({ id: 'readonly', title: 'Git token can read but not save', detail: 'Shared setup can be viewed but not changed from this computer.', tone: 'info', fix: { tab: 'storage', section: 'git', label: 'Git storage' } })
   if (!facts.policy) checks.push({ id: 'access', title: 'No access roles yet', detail: 'Without access.json everyone sees every page and may do everything.', tone: 'info', fix: { tab: 'resources', section: 'rights', label: 'Role rights' } })
   else if (!facts.toolOwner) checks.push({ id: 'toolowner', title: 'No Tool Owner', detail: 'Nobody holds the Tool Owner role: those who manage access change the stream mapping until one is named (CON-93).', tone: 'warn', fix: { tab: 'resources', section: 'rights', label: 'Role rights' } })
+  for (const gap of facts.bulkWithoutSetup ?? []) checks.push({ id: `bulk-setup:${gap.stream}`, title: `${gap.stream} bulk creation Epic #${gap.epicId} has no Feature setup`, detail: `${gap.stream} Create Features skips every row until Epic #${gap.epicId} has a shared Feature setup (or All Epics sets one).`, tone: 'warn', fix: { tab: 'epics', section: 'setup', label: 'Feature setup' } })
+  if (facts.withoutDoD?.length) checks.push({ id: 'no-dod', title: `Feature setup without a Feature DoD: ${ids(facts.withoutDoD)}`, detail: 'New Features under these Epics start without a Definition of Done; fill it in the setup (or in All Epics).', tone: 'warn', fix: { tab: 'epics', section: 'setup', label: 'Feature setup' } })
   if (!facts.ioccBulkEpic) checks.push({ id: 'iocc-epic', title: 'IOCC bulk creation Epic not chosen', detail: 'IOCC Create Features needs the Epic its Features go under.', tone: 'info', fix: { tab: 'options', section: 'bulk', label: 'Bulk creation Epics' } })
   if (!facts.epicSetups) checks.push({ id: 'epic-setup', title: 'No Epic setup yet', detail: 'Optional: the extra fields (Program, Platform…) new Features carry per Epic.', tone: 'info', fix: { tab: 'epics', section: 'setup', label: 'Epic setup' } })
   if (!facts.sharedFeatureSetups) checks.push({ id: 'feature-setup', title: 'No shared Feature setup yet', detail: 'Optional: the User Stories, DoD and estimate new Features get per Epic.', tone: 'info', fix: { tab: 'epics', section: 'setup', label: 'Feature setup' } })
@@ -29,6 +43,7 @@ export const settingsIndex: SettingsEntry[] = [
   { tab: 'my', section: 'servers', page: 'My settings', label: 'Servers and PATs', words: 'token pat azure devops server password' },
   { tab: 'my', section: 'myviews', page: 'My settings', label: 'My views', words: 'personal query wiql other views' },
   { tab: 'my', section: 'patterns', page: 'My settings', label: 'My naming patterns', words: 'release names iocc content tool validations personal' },
+  { tab: 'my', section: 'usage', page: 'My settings', label: 'My page usage', words: 'usage statistics counts visits analytics pages opened' },
   { tab: 'connections', section: 'mapping', page: 'Streams', label: 'Stream mapping', words: 'dp cp iocc content tool validations query server project data sets naming patterns tool owner' },
   { tab: 'options', section: 'epics', page: 'Stream options', label: 'Epics to match Features in', words: 'feature matching board epics dp cp iocc content' },
   { tab: 'options', section: 'bulk', page: 'Stream options', label: 'Bulk creation Epics', words: 'create features bulk epic dp iocc content' },

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { AzureWorkItem } from '../domain'
-import { builtinClassifications, emptyEpicSetup, newStoryTemplateId, parseEpicSetup, serializeEpicSetup, upsertStoryTemplate, type StoryTemplateItem } from '../epicSetup'
+import { emptyEpicSetup, newStoryTemplateId, parseEpicSetup, serializeEpicSetup, upsertStoryTemplate, type StoryTemplateItem } from '../epicSetup'
 import { templateUses } from '../featureSetup'
 import type { EpicSetupStore } from '../useEpicSetup'
 import type { FeatureSetup } from '../useFeatureSetup'
@@ -21,8 +21,8 @@ export function StoryTemplatesPanel({ setup, featureSetup, git, items, canEdit }
   const change = (item: StoryTemplateItem) => { setup.setDraft(upsertStoryTemplate(file, item)); setResult(null) }
   const epics = items.filter((item) => item.workItemType === 'Epic' && item.state.toLowerCase() !== 'removed').sort((a, b) => a.title.localeCompare(b.title))
   const epicName = (id: number) => epics.find((epic) => epic.id === id)?.title ?? file.epics.find((entry) => entry.epicId === id)?.epicTitle ?? ''
-  // Every Release Classification value known: the built-in ones and the values of every value list.
-  const knownValues = [...new Set([...builtinClassifications, ...file.lists.flatMap((list) => list.values)])]
+  // Every Release Classification value known: the values of every value list (there are no built-in ones, DPF-09).
+  const knownValues = [...new Set(file.lists.flatMap((list) => list.values))]
   const usedBy = (id: string) => templateUses(featureSetup.shared, id) + templateUses(featureSetup.personal, id)
   const templates = [...(file.storyTemplates ?? [])].sort((a, b) => a.title.localeCompare(b.title))
     .filter((item) => !find.trim() || `${item.title} ${item.description} ${item.classes.join(' ')}`.toLowerCase().includes(find.trim().toLowerCase()))

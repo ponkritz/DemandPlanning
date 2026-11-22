@@ -129,6 +129,25 @@ export function siblingConfig(config: GitConfig, file: string): GitConfig {
   return { ...config, path: `${folder}${file}` }
 }
 
+// CON-99: the commits that changed a file, newest first (at most `count`), and the file as it was at one of them.
+// Read only: nothing is written.
+export async function fileCommits(config: GitConfig, token: string, count = 30, fetchImpl: Fetch = fetch): Promise<{ sha: string; date: string; message: string }[]> {
+  const url = `${api}/repos/${encodeURIComponent(config.owner)}/${encodeURIComponent(config.repo)}/commits?path=${encodeURIComponent(config.path)}&sha=${encodeURIComponent(config.branch)}&per_page=${Math.max(1, Math.min(100, count))}`
+  const response = await fetchImpl(url, { headers: headers(token), cache: 'no-store' })
+  if (!response.ok) throw await failure(response, config, `read the history of ${config.path}`)
+  const body = (await response.json()) as { sha?: unknown; commit?: { message?: unknown; committer?: { date?: unknown }; author?: { date?: unknown } } }[]
+  return (Array.isArray(body) ? body : []).flatMap((entry) => typeof entry?.sha === 'string' && /^[0-9a-f]{40}$/.test(entry.sha) ? [{ sha: entry.sha, date: String(entry.commit?.committer?.date ?? entry.commit?.author?.date ?? ''), message: String(entry.commit?.message ?? '').split('\n')[0].slice(0, 200) }] : [])
+}
+export async function readTextAt(config: GitConfig, token: string, ref: string, fetchImpl: Fetch = fetch): Promise<string | null> {
+  if (!/^[0-9a-f]{40}$/.test(ref)) throw new Error('Unknown version.')
+  const response = await fetchImpl(`${fileUrl(config)}?ref=${ref}`, { headers: headers(token), cache: 'no-store' })
+  if (response.status === 404) return null
+  if (!response.ok) throw await failure(response, config, `read ${config.path}`)
+  const body = (await response.json()) as { content?: string; encoding?: string; type?: string }
+  if (body.type !== 'file' || body.encoding !== 'base64' || typeof body.content !== 'string') return null
+  return decodeBase64(body.content)
+}
+
 // Plain text read / commit of a file, with the same errors and conflict check as the planning data file.
 export async function readTextFile(config: GitConfig, token: string, fetchImpl: Fetch = fetch): Promise<{ text: string | null; sha: string | null }> {
   const response = await fetchImpl(`${fileUrl(config)}?ref=${encodeURIComponent(config.branch)}`, { headers: headers(token), cache: 'no-store' })

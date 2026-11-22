@@ -3,7 +3,8 @@ import { BrandMark } from './components/BrandMark'
 import { TableDefaultsContext } from './components/tableDesign'
 import { ReleaseSettingsContext } from './useStreamEpics'
 import { normalizeTableDefaults } from './tableDefaults'
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, lazy, Suspense } from 'react'
+import { recordVisit } from './usageCounts'
 import './App.css'
 import './fresh.css'
 import { useAppStore } from './store'
@@ -14,42 +15,28 @@ import { ThemeToggle } from './components/Clock'
 import { DataNotices, DataStatus } from './components/DataStatus'
 import { JobsIndicator } from './components/JobsIndicator'
 import { pages, pageGroups, pageMeta, type Page } from './pages/registry'
-import { DashboardPage } from './pages/DashboardPage'
 import { MyDashboardPage } from './pages/MyDashboardPage'
-import { MyActivitiesPage } from './pages/MyActivitiesPage'
-import { PlanningOverviewPage } from './pages/PlanningOverviewPage'
-import { CapacityActualPage } from './pages/CapacityActualPage'
-import { BaselinesPage } from './pages/BaselinesPage'
-import { SnapshotsPage } from './pages/SnapshotsPage'
-import { AdminPage } from './pages/AdminPage'
+import { HomePage } from './pages/HomePage'
+import { loadStartView, saveStartView, startPageOf, visibleTiles, type HomeLink, type HomeTile, type StartView } from './homeTiles'
 import { mySettingsLabel, readSettingsTab, resolveSettings, saveSettingsSection, saveSettingsTab, settingsLabel, settingsPagesFor, type SettingsTab } from './settingsTabs'
 import { normalizeReleaseSourceSettings } from './releaseSource'
 import { dataSets, defaultMatchThreshold, defaultStreams, profileForDataSet, profileForStream, windchillStreamExports } from './streams'
 import { connectionPresets } from './connectionPresets'
-import { gitSyncedIds, markViewsSynced, removeDuplicateConnections, serializeViews, viewsFile } from './viewDefinitions'
+import { gitSyncedIds, markViewsSynced, removeDuplicateConnections } from './viewDefinitions'
 import { listAzureConnectionProfiles } from './azureCredentials'
-import { DocsPage } from './pages/DocsPage'
-import { BoardPage } from './pages/BoardPage'
 import { useAzureWorkspace, type FetchListener, type GitDataSource } from './useAzureWorkspace'
 import { sharedThroughGit } from './gitSnapshots'
 import { useGitStorage } from './useGitStorage'
 import { useWindchill } from './useWindchill'
-import { WindchillExportImport, WindchillPage } from './components/WindchillViews'
-import { BacklogHealthPage } from './pages/BacklogHealthPage'
 import { viewAsLabel, viewAsPeople, type ViewAs } from './viewAs'
 import { ViewAsDialog } from './components/ViewAsDialog'
 import { useHistory } from './useHistory'
 import { withHistory } from './history'
-import { PulseCheckPage } from './pages/PulseCheckPage'
-import { PiReviewPage } from './pages/PiReviewPage'
-import { BritePage } from './pages/BritePage'
-import { KpiTrackerPage } from './pages/KpiTrackerPage'
 import { CanContext } from './useCan'
 import { SettingsSearch } from './components/SettingsSearch'
 import { EpicSetupContext, useEpicSetup } from './useEpicSetup'
 import { OnPremContext } from './onPremValues'
 import { myPatternsVersion, subscribeMyPatterns } from './myNamingPatterns'
-import { QeMappingPage } from './pages/QeMappingPage'
 import { useAccess } from './useAccess'
 import { useFeatureSetup } from './useFeatureSetup'
 import { useQeMapping } from './useQeMapping'
@@ -58,12 +45,12 @@ import { previousMonth } from './pulseCheck'
 import type { Area } from './access'
 import { useMyWork } from './useMyWork'
 import { setLockSettings } from './planningLock'
-import { MyWorkPage } from './pages/MyWorkPage'
-import { SprintCheckPage } from './pages/SprintCheckPage'
 import { DesktopDownload } from './components/DesktopDownload'
 import { exportStateJson } from './download'
 import { BuildStatus } from './components/BuildStatus'
 import { ZoomControl } from './components/ZoomControl'
+import { PersonPicker } from './components/PersonPicker'
+import { ProfileMenu, type ProfileAction } from './components/ProfileMenu'
 import { backlogViews, loadBacklogTab, otherMenuViews, saveBacklogTab, timeWritingView } from './backlogViews'
 import { detectWorkEmail, mergeAzureWorkItems } from './azureDevOps'
 import { formatDateTime, todayIso } from './format'
@@ -74,6 +61,28 @@ import { defaultGitRepository, normalizeSetupLinks, type SetupLinks } from './gi
 import { guideKey, requiredOpen, setupSteps } from './setupGuide'
 import { azureResources, capacityContext, setAccessRoles, setAzureEmails } from './capacity'
 import { hasServerPat, serverKey } from './azureCredentials'
+
+// Pages load on demand (their own chunk), so the first download is the shell and the start page only; the
+// Documentation page brings the bundled documents with it.
+const DashboardPage = lazy(() => import('./pages/DashboardPage').then((module) => ({ default: module.DashboardPage })))
+const MyActivitiesPage = lazy(() => import('./pages/MyActivitiesPage').then((module) => ({ default: module.MyActivitiesPage })))
+const PlanningOverviewPage = lazy(() => import('./pages/PlanningOverviewPage').then((module) => ({ default: module.PlanningOverviewPage })))
+const CapacityActualPage = lazy(() => import('./pages/CapacityActualPage').then((module) => ({ default: module.CapacityActualPage })))
+const BaselinesPage = lazy(() => import('./pages/BaselinesPage').then((module) => ({ default: module.BaselinesPage })))
+const SnapshotsPage = lazy(() => import('./pages/SnapshotsPage').then((module) => ({ default: module.SnapshotsPage })))
+const AdminPage = lazy(() => import('./pages/AdminPage').then((module) => ({ default: module.AdminPage })))
+const DocsPage = lazy(() => import('./pages/DocsPage').then((module) => ({ default: module.DocsPage })))
+const BoardPage = lazy(() => import('./pages/BoardPage').then((module) => ({ default: module.BoardPage })))
+const BacklogHealthPage = lazy(() => import('./pages/BacklogHealthPage').then((module) => ({ default: module.BacklogHealthPage })))
+const PulseCheckPage = lazy(() => import('./pages/PulseCheckPage').then((module) => ({ default: module.PulseCheckPage })))
+const PiReviewPage = lazy(() => import('./pages/PiReviewPage').then((module) => ({ default: module.PiReviewPage })))
+const BritePage = lazy(() => import('./pages/BritePage').then((module) => ({ default: module.BritePage })))
+const KpiTrackerPage = lazy(() => import('./pages/KpiTrackerPage').then((module) => ({ default: module.KpiTrackerPage })))
+const QeMappingPage = lazy(() => import('./pages/QeMappingPage').then((module) => ({ default: module.QeMappingPage })))
+const MyWorkPage = lazy(() => import('./pages/MyWorkPage').then((module) => ({ default: module.MyWorkPage })))
+const WindchillPage = lazy(() => import('./components/WindchillViews').then((module) => ({ default: module.WindchillPage })))
+const WindchillExportImport = lazy(() => import('./components/WindchillViews').then((module) => ({ default: module.WindchillExportImport })))
+const SprintCheckPage = lazy(() => import('./pages/SprintCheckPage').then((module) => ({ default: module.SprintCheckPage })))
 const menuMiniKey = 'demand-planning-menu-mini-v1'
 
 
@@ -131,7 +140,7 @@ export default function App() {
     if (git.connected && !git.readOnly && !azure.isSample) {
       const names = removed.map((profile) => profile.viewName || profile.reason).join(', ')
       void git.removeSnapshots(ids, `Remove duplicate connections: ${names}`).catch(() => undefined)
-      void git.writeViews(serializeViews(viewsFile(listAzureConnectionProfiles())), `Remove duplicate connections: ${names}`).then(() => markViewsSynced(listAzureConnectionProfiles())).catch(() => undefined)
+      void git.shareViews(listAzureConnectionProfiles(), `Remove duplicate connections: ${names}`, ids).then(() => markViewsSynced(listAzureConnectionProfiles())).catch(() => undefined)
     }
   }, [store, git, azure, setupSynced])
   // Every start (opening the app, Force Update, reload) fetches the cloud connections once, after the shared
@@ -193,7 +202,10 @@ export default function App() {
   const qeMapping = useQeMapping(git)
   // Who creates new work items (the email on the Time Writing connection) and whether they may assign them to others.
   const assign = { me: azure.creatorEmail.trim().toLowerCase(), canChoose: access.can('azure.createForOthers') }
-  const [requested, setPage] = useState<Page>('mydash')
+  // NAV-42, NAV-46: the start page — Home (the tiles) in the tile view, My dashboard in the classic view.
+  const [startView, setStartView] = useState<StartView>(() => loadStartView())
+  const [requested, setPage] = useState<Page>(() => startPageOf(loadStartView()))
+  const switchView = (next: StartView) => { setStartView(saveStartView(next)); setPage(startPageOf(next)) }
   const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null)
   // The selected month starts on the viewer's current month (their time zone).
   const [month, setMonth] = useState(() => todayIso().slice(0, 7))
@@ -215,11 +227,13 @@ export default function App() {
   const openView = (id: string) => { setViewId(id); saveBacklogTab(id); setPage('board') }
   // Access roles: each menu entry belongs to an area; Settings is always there (each person's own connections and tokens).
   // A page the viewer's roles do not include falls back to the first one they do.
-  const areaOf = (id: Page): Area | null => id === 'admin' ? null : id === 'board' ? (view.onPrem ? 'release' : 'board') : id === 'windchill' || id === 'brite' ? 'release' : id === 'overview' || id === 'pulse' || id === 'pireview' || id === 'kpitracker' ? 'insights' : id === 'mydash' ? 'overview' : id === 'activities' ? 'monthly' : id === 'planover' || id === 'capactual' ? 'insights' : id
+  const areaOf = (id: Page): Area | null => id === 'admin' || id === 'home' ? null : id === 'board' ? (view.onPrem ? 'release' : 'board') : id === 'windchill' || id === 'brite' ? 'release' : id === 'overview' || id === 'pulse' || id === 'pireview' || id === 'kpitracker' ? 'insights' : id === 'mydash' ? 'overview' : id === 'activities' ? 'monthly' : id === 'planover' || id === 'capactual' ? 'insights' : id
   // Testing (ACT-01): pages being tried out, for the Admin role only (an access policy must name it; View as follows the viewed rights).
   const testing = access.rights.roles.includes('Admin')
-  const allowed = (id: Page) => { if (pageMeta(id).group === 'Testing' && !testing) return false; const area = areaOf(id); return area == null || access.sees(area) }
+  const allowed = (id: Page) => { if (id === 'home' && startView === 'classic') return false; if (pageMeta(id).group === 'Testing' && !testing) return false; const area = areaOf(id); return area == null || access.sees(area) }
   const page = allowed(requested) ? requested : pages.find((entry) => allowed(entry.id))?.id ?? 'admin'
+  // NAV-45: count the page opened, only when the person turned My page usage on (this browser only).
+  useEffect(() => { recordVisit(page) }, [page])
   const meta = pageMeta(page)
   // Windchill exports, each in the sidebar under Release Details ('' = the import page).
   const windchillViews = windchill.views.filter((entry) => entry.exportFile && entry.showInMenu)
@@ -283,9 +297,64 @@ export default function App() {
   useEffect(() => { if (problemAt && !azure.isSample) setGuideOpen(true) }, [problemAt, azure.isSample])
   const dismissGuide = () => { try { localStorage.setItem(guideKey, 'dismissed') } catch { /* this visit only */ } setGuideOpen(false) }
   const pageProps = { store, month, setMonth }
-  const buildStatus = <BuildStatus pending={store.hasPendingSave} failed={store.ready && (store.cache.status === 'error' || (store.connection.mode === 'sharepoint' && ['error', 'conflict'].includes(store.connection.status)))} busy={azure.busy} preview={Boolean(azure.preview)} onBackup={store.ready ? () => exportStateJson({ ...store.state, azureWorkItems: mergeAzureWorkItems(store.state.azureWorkItems ?? [], azure.preview?.items ?? []), ...(azure.preview ? { azureBacklogScope: azure.preview.scope } : {}) }) : undefined} />
   const storageLabel = store.connection.mode === 'sharepoint' ? '● Live SharePoint' : store.cache.status === 'error' ? '⚠ Not saved locally' : store.cache.status === 'saving' ? '◌ Saving locally' : '○ Local IndexedDB'
+  const buildStatus = <BuildStatus pending={store.hasPendingSave} failed={store.ready && (store.cache.status === 'error' || (store.connection.mode === 'sharepoint' && ['error', 'conflict'].includes(store.connection.status)))} busy={azure.busy} preview={Boolean(azure.preview)} details={<p className="storage-line" title="Where app data is saved"><strong>Data saved:</strong> {storageLabel}</p>} onBackup={store.ready ? () => exportStateJson({ ...store.state, azureWorkItems: mergeAzureWorkItems(store.state.azureWorkItems ?? [], azure.preview?.items ?? []), ...(azure.preview ? { azureBacklogScope: azure.preview.scope } : {}) }) : undefined} />
 
+  // NAV-43: the Home tiles — one per area, each with links to its pages; only what the viewer may open.
+  const pageLink = (id: Page, note?: string): HomeLink[] => allowed(id) && !pageMeta(id).hidden ? [{ key: id, label: pageMeta(id).label, icon: pageMeta(id).icon, open: () => setPage(id), ...(note ? { note } : {}) }] : []
+  const tileOf = (tile: Omit<HomeTile, 'open'> & { open?: () => void }): HomeTile | null => tile.open ? { ...tile, open: tile.open } : tile.links.length ? { ...tile, open: tile.links[0].open } : null
+  const firstAllowed = (...ids: Page[]) => { const id = ids.find((entry) => allowed(entry)); return id ? () => setPage(id) : undefined }
+  const streamLinks: HomeLink[] = access.sees('release') ? [
+    ...defaultStreams.filter((stream) => stream.source === 'azure').map((stream) => { const profile = profileForStream(stream, azure.connectionProfiles), entry = profile && views.find((item) => item.id === profile.id); return entry ? { key: `stream:${stream.name}`, label: stream.name, icon: pageMeta('board').icon, open: () => openView(entry.id) } : { key: `stream:${stream.name}`, label: stream.name, icon: '＋', note: 'not set up yet — opens Stream mapping', open: openConnection } }),
+    ...windchillStreamExports(windchillViews).map(({ stream, name, view: entry }) => ({ key: `windchill:${entry?.id ?? stream.name}`, label: name, icon: entry ? pageMeta('windchill').icon : '＋', ...(entry ? {} : { note: 'not imported yet' }), open: () => entry ? openWindchill(entry.id) : openWindchill('', stream.name) })),
+    ...pageLink('brite'),
+  ] : []
+  const settingsLinks: HomeLink[] = settingsPagesFor(access.can).map((entry) => ({ key: `settings:${entry.key}`, label: entry.label, icon: pageMeta('admin').icon, open: () => openSettings(entry.key) }))
+  const homeTiles = visibleTiles([
+    tileOf({ key: 'mywork', title: 'My Work', detail: 'Time Writing, your tasks and the Sprint check.', tone: 'sky', open: firstAllowed('activities', 'mywork'), links: [...pageLink('activities'), ...pageLink('mywork'), ...pageLink('bulk')], ...(my.known && azure.items.length ? { badge: `${my.pending.length} open` } : {}) }),
+    tileOf({ key: 'mydash', title: 'My dashboard', detail: 'Your hours against your capacity, your open work and your streams.', tone: 'peach', open: firstAllowed('mydash'), links: [] }),
+    tileOf({ key: 'insights', title: 'Team Insights', detail: 'Team overview, Pulse Check and PI Review.', tone: 'lilac', links: [...pageLink('overview'), ...pageLink('pulse'), ...pageLink('pireview'), ...pageLink('kpitracker')] }),
+    tileOf({ key: 'board', title: 'I&D Board', detail: 'The QMS-0025 backlog and its health.', tone: 'mint', open: allowed('board') && access.sees('board') ? () => openView(timeWriting.id) : undefined, links: [...(access.sees('board') ? [{ key: 'board', label: timeWriting.name, icon: pageMeta('board').icon, open: () => openView(timeWriting.id) }] : []), ...pageLink('health')] }),
+    tileOf({ key: 'release', title: 'Release Details', detail: 'The releases of each stream: DP, CP, IOCC, Content, Tool Validations and the Windchill exports.', tone: 'lemon', links: streamLinks }),
+    tileOf({ key: 'planning', title: 'Planning & Baselines', detail: 'Release baselines against booked hours, and the pages being tried out.', tone: 'teal', links: [...pageLink('baselines'), ...pageLink('planover'), ...pageLink('capactual')] }),
+    tileOf({ key: 'qe', title: 'QE Mapping', detail: 'Which QE covers which platform or product.', tone: 'rose', open: firstAllowed('qemapping'), links: [] }),
+    tileOf({ key: 'records', title: 'Snapshots & Documents', detail: 'Point-in-time snapshots and the project documents of this build.', tone: 'sand', links: [...pageLink('snapshots'), ...pageLink('docs')] }),
+    tileOf({ key: 'admin', title: 'Admin', detail: 'Streams, Epic & Feature setup, people and roles, capacity, reports and sharing.', tone: 'sky', open: () => openSettings('home'), links: settingsLinks }),
+    tileOf({ key: 'my', title: mySettingsLabel, detail: 'Your work email, servers and tokens, your views and naming patterns.', tone: 'mint', open: () => openSettings('my'), links: [] }),
+  ])
+
+  // ACT-22: the top bar's real height, so sticky page headers (the Time Writing cards) sit right under it.
+  const topbarRef = useRef<HTMLElement | null>(null)
+  useEffect(() => {
+    const bar = topbarRef.current
+    if (!bar || typeof ResizeObserver === 'undefined') return
+    const apply = () => document.documentElement.style.setProperty('--topbar-h', `${Math.ceil(bar.getBoundingClientRect().height)}px`)
+    apply()
+    const observer = new ResizeObserver(apply)
+    observer.observe(bar)
+    return () => observer.disconnect()
+  }, [store.ready])
+  // NAV-49: the footer's real height (it wraps on narrow screens) keeps the bars fixed at the bottom above it.
+  const footerRef = useRef<HTMLElement | null>(null)
+  useEffect(() => {
+    const footer = footerRef.current
+    if (!footer || typeof ResizeObserver === 'undefined') return
+    const apply = () => document.documentElement.style.setProperty('--app-footer-h', `${Math.ceil(footer.getBoundingClientRect().height)}px`)
+    apply()
+    const observer = new ResizeObserver(apply)
+    observer.observe(footer)
+    return () => observer.disconnect()
+  }, [store.ready])
+  // NAV-47: the person picker in the top bar, on the person-based pages only (My dashboard always shows you).
+  const personPage = page === 'activities' || page === 'mywork' || page === 'bulk'
+  // NAV-48: the profile menu (top right).
+  const profileActions: ProfileAction[] = [
+    { key: 'my', label: mySettingsLabel, icon: '⚙', onClick: () => openSettings('my') },
+    { key: 'view', label: startView === 'tiles' ? 'Classic view' : 'Tile view', icon: startView === 'tiles' ? '☰' : '⌂', detail: startView === 'tiles' ? 'Open on My dashboard, without Home (the classic view)' : 'Open on Home, the tiles of every area', onClick: () => switchView(startView === 'tiles' ? 'classic' : 'tiles') },
+    ...(access.canViewAs ? [{ key: 'viewas', label: 'View as…', icon: '👁', onClick: () => setViewAsOpen(true) }] : []),
+    { key: 'search', label: 'Search settings', icon: '⌕', detail: 'Ctrl K', onClick: () => setSearchOpen(true) },
+    { key: 'menu', label: 'Customize menu', icon: '☰', onClick: () => setMenuEditor(true) },
+  ]
   if (!store.ready) return <main className="content"><h1>I&amp;D Quality Demand Planning</h1>{store.loadError ? <Notice tone="error"><p>{store.loadError}</p><p>Do not clear browser data. If you still have an older tab open with unsaved changes, export its JSON backup first.</p><button className="primary" onClick={store.retryLoad}>Retry loading saved data</button></Notice> : <p role="status">Loading saved browser data…</p>}{buildStatus}</main>
 
   // UI-12: every table follows the shared design default.
@@ -294,7 +363,7 @@ export default function App() {
     <aside className="sidebar" id="primary-navigation">
       <div className="brand" title="I&amp;D Quality Demand Planning"><div className="brand-mark"><BrandMark /></div><div><strong>I&amp;D Quality</strong><span>Demand Planning</span></div><button type="button" className="nav-mini-toggle" aria-pressed={menuMini} aria-label={menuMini ? 'Expand the menu' : 'Collapse the menu'} title={menuMini ? 'Show the menu with names' : 'Fold the menu to icons'} onClick={toggleMenuMini}>{menuMini ? '»' : '«'}</button></div>
       <div className="nav-fold" role="group" aria-label="Menu headings"><button type="button" className="text-button" disabled={!collapsed.length} onClick={() => setCollapsed(saveCollapsed([]))}>Expand all</button><button type="button" className="text-button" disabled={allCollapsed} onClick={() => setCollapsed(saveCollapsed(navKeys))}>Collapse all</button></div>
-      <nav aria-label="Primary navigation">{(() => { const pinned = personalViews.menu.pinned.map((id) => pages.find((item) => item.id === id)).filter((item): item is typeof pages[number] => Boolean(item && !item.hidden && allowed(item.id))); return pinned.length ? <div className="nav-section nav-pinned"><span className="nav-group">PINNED</span><div className="nav-items">{pinned.map((item) => <button key={`pin:${item.id}`} className={page === item.id ? 'nav-active' : ''} aria-current={page === item.id ? 'page' : undefined} onClick={() => setPage(item.id)}><span className="nav-icon">{item.icon}</span>{item.label}</button>)}</div></div> : null })()}{pageGroups.map((group) => {
+      <nav aria-label="Primary navigation">{startView === 'tiles' && <div className="nav-section nav-home"><div className="nav-items">{navButton('home', pageMeta('home').icon, 'Home', page === 'home', () => setPage('home'))}</div></div>}{(() => { const pinned = personalViews.menu.pinned.map((id) => pages.find((item) => item.id === id)).filter((item): item is typeof pages[number] => Boolean(item && !item.hidden && allowed(item.id))); return pinned.length ? <div className="nav-section nav-pinned"><span className="nav-group">PINNED</span><div className="nav-items">{pinned.map((item) => <button key={`pin:${item.id}`} className={page === item.id ? 'nav-active' : ''} aria-current={page === item.id ? 'page' : undefined} onClick={() => setPage(item.id)}><span className="nav-icon">{item.icon}</span>{item.label}</button>)}</div></div> : null })()}{pageGroups.map((group) => {
         const pageButton = (item: typeof pages[number]) => !allowed(item.id) ? [] : [<button key={item.id} title={menuMini ? item.label : undefined} className={page === item.id ? 'nav-active' : ''} aria-current={page === item.id ? 'page' : undefined} onClick={() => setPage(item.id)}><span className="nav-icon">{item.icon}</span>{item.label}{item.id === 'mywork' && my.pending.length > 0 && <span className="nav-badge" aria-label={`${my.pending.length} pending`}>{my.pending.length}</span>}</button>]
         const windchillMeta = pageMeta('windchill')
         // Release Details has two sub-lists: the default Azure streams (DP, CP, IOCC, Content, Tool Validations) and the
@@ -324,20 +393,21 @@ export default function App() {
           </div> : <div key={section.key} className="nav-items">{section.entries}</div>)}</div>
         </div>
       })}</nav>
-      <div className="sidebar-footer"><button type="button" className={`my-settings-button${page === 'admin' && settingsTab === 'my' ? ' active' : ''}`} title={mySettingsLabel} aria-label={`${mySettingsLabel}${my.me.name ? ` (${my.me.name})` : ''}`} onClick={() => { openSettings('my'); setNavOpen(false) }}><span className="my-settings-avatar" aria-hidden="true">{(my.me.name || azure.creatorEmail || '?').trim().charAt(0).toUpperCase()}</span><span className="my-settings-name">{my.me.name || azure.creatorEmail.trim() || mySettingsLabel}<small>{mySettingsLabel}</small></span></button><ZoomControl /><div className="sidebar-tools"><button type="button" className="download-link" onClick={() => setMenuEditor(true)}><span aria-hidden="true">☰</span>Customize menu</button><button type="button" className="download-link" title="Ctrl K" onClick={() => setSearchOpen(true)}><span aria-hidden="true">⌕</span>Search settings</button>{access.canViewAs && <button type="button" className="download-link" onClick={() => setViewAsOpen(true)}><span aria-hidden="true">👁</span>View as…</button>}</div><DesktopDownload /><small className="storage-line" title="Where app data is saved">{storageLabel}</small>{buildStatus}</div>
     </aside>
     {searchOpen && <SettingsSearch allowed={(entry) => entry.tab === 'my' || settingsPagesFor(access.can).some((item) => item.key === entry.tab)} onOpen={openSettings} onClose={() => setSearchOpen(false)} />}
     {menuEditor && <MenuCustomizer pages={pages.filter((item) => !item.hidden && item.id !== 'admin' && allowed(item.id)).map(({ id, label, group }) => ({ id, label, group }))} menu={personalViews.menu} onChange={personalViews.setMenu} onClose={() => setMenuEditor(false)} />}
     <main>
-      <header className="topbar"><button type="button" className="menu-button" aria-label={navOpen ? 'Close menu' : 'Open menu'} aria-expanded={navOpen} aria-controls="primary-navigation" onClick={() => setNavOpen((open) => !open)}>{navOpen ? '✕' : '☰'}</button><h1 title={meta.detail}>{page === 'board' ? view.name : page === 'windchill' && windchillView ? windchillView.name : page === 'admin' ? settingsLabel(settingsTab) : meta.label}</h1><div className="topbar-slot" ref={setHeaderSlot} /><div className="topbar-actions">{openSteps > 0 && <button type="button" className="ghost setup-button" title="What to configure and how" onClick={() => setGuideOpen(true)}>Setup · {steps.filter((step) => step.required && step.state === 'done').length}/{steps.filter((step) => step.required).length}</button>}<JobsIndicator /><DataStatus azure={azure} />{(meta.usesMonth || (page === 'board' && view.readOnly)) && <label className="month-picker"><span className="sr-only">Month</span><input type="month" aria-label="Month" value={month} onChange={(event) => /^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value) && setMonth(event.target.value)} /></label>}<ThemeToggle /></div></header>
+      <header className="topbar" ref={topbarRef}><button type="button" className="menu-button" aria-label={navOpen ? 'Close menu' : 'Open menu'} aria-expanded={navOpen} aria-controls="primary-navigation" onClick={() => setNavOpen((open) => !open)}>{navOpen ? '✕' : '☰'}</button><h1 title={meta.detail}>{page === 'board' ? view.name : page === 'windchill' && windchillView ? windchillView.name : page === 'admin' ? settingsLabel(settingsTab) : meta.label}</h1><div className="topbar-slot" ref={setHeaderSlot} /><div className="topbar-actions">{openSteps > 0 && <button type="button" className="ghost setup-button" title="What to configure and how" onClick={() => setGuideOpen(true)}>Setup · {steps.filter((step) => step.required && step.state === 'done').length}/{steps.filter((step) => step.required).length}</button>}<JobsIndicator /><DataStatus azure={azure} />{(meta.usesMonth || (page === 'board' && view.readOnly)) && <label className="month-picker"><span className="sr-only">Month</span><input type="month" aria-label="Month" value={month} onChange={(event) => /^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value) && setMonth(event.target.value)} /></label>}{personPage && <label className="topbar-person">Person<PersonPicker label="Person" value={my.chosenName} people={my.people} onChange={my.setName} meLabel={azure.creatorEmail.trim() ? 'Me' : 'Choose a person…'} /></label>}<ThemeToggle /><ProfileMenu name={my.self.me.name ?? ''} email={azure.creatorEmail.trim()} actions={profileActions} /></div></header>
       {access.viewingAs && <div className="view-as-banner" role="status"><span>👁 Viewing as <strong>{viewAsLabel(access.viewingAs)}</strong>{access.viewingAs.kind === 'role' ? '' : access.rights.roles.length ? ` (${access.rights.roles.join(', ')})` : ' (default role)'} — read only: nothing is saved to Azure DevOps or Git.</span><button type="button" className="ghost" onClick={() => setViewAsOpen(true)}>Change</button><button type="button" className="primary" onClick={() => setViewAs(null)}>Exit View as</button></div>}
-      {viewAsOpen && <ViewAsDialog current={access.viewingAs} people={viewAsPeople(azure.items, access.policy)} onStart={(next) => { setViewAs(next); setViewAsOpen(false); setPage('mydash') }} onClose={() => setViewAsOpen(false)} />}
+      {viewAsOpen && <ViewAsDialog current={access.viewingAs} people={viewAsPeople(azure.items, access.policy)} onStart={(next) => { setViewAs(next); setViewAsOpen(false); setPage(startPageOf(startView)) }} onClose={() => setViewAsOpen(false)} />}
       <DataNotices azure={azure} onOpenConnection={openConnection} />
       {guideOpen && <SetupGuide steps={steps} busy={azure.busy} problem={azure.fetchProblem} links={setupLinks} linkDefaults={linkDefaults} editLinks={access.can('layout.defaults') && git.connected && !git.readOnly && !azure.isSample ? { links: store.state.setupLinks ?? {}, onChange: (links) => store.update((draft) => { draft.setupLinks = links; return draft }), saveBar: <GitSyncBar git={git} /> } : undefined} inputs={{ connectGit: (token) => git.connect({ ...defaultGitRepository, ...git.config }, token, true), saveEmail: (email) => { azure.setCreatorEmail(email) }, savePat: (token) => { azure.rememberPat(token); azure.reloadConnectionProfiles() }, detectEmail: () => azure.config ? detectWorkEmail(azure.config, azure.pat) : Promise.reject(new Error('Set up the Time Writing connection first.')), gitMessage: git.status === 'error' ? git.message : undefined }} onClose={() => setGuideOpen(false)} onDismiss={dismissGuide} onOpenTab={(tab, section) => { openSettings(tab, section); setGuideOpen(false) }} onFetch={() => void azure.refresh()} />}
       {store.cache.status === 'error' && <Notice tone="error"><p>{store.cache.message}</p><div className="button-row"><button className="ghost" onClick={() => exportStateJson(store.state)}>Export JSON backup now</button><button className="primary" onClick={store.retrySave}>Retry browser save</button></div></Notice>}
       {store.connection.mode !== 'sharepoint' && store.connection.status === 'error' && <Notice tone="error">{store.connection.message}</Notice>}
       {git.remoteChanges.length > 0 && <Notice className="git-update-banner"><p><strong>Newer data in Git</strong>, saved by someone else since you opened the app: {git.remoteChanges.map((change) => change.label).join(', ')}.{git.remoteChanges.some((change) => change.planning) && git.dirty ? ' Reloading drops the planning changes you have not saved to Git here.' : ' Reload to see it.'}</p><div className="button-row"><button type="button" onClick={() => window.location.reload()}>Reload</button></div></Notice>}
-      {page === 'mydash' && <MyDashboardPage month={month} azure={reportAzure} store={store} my={my} navigate={setPage} views={personalViews} canSetDefault={access.can('layout.defaults')} windchill={windchill} />}
+      <Suspense fallback={<p className="muted page-loading" role="status">Loading the page…</p>}>
+      {page === 'home' && <HomePage tiles={homeTiles} name={my.me.name} />}
+      {page === 'mydash' && <MyDashboardPage month={month} azure={reportAzure} store={store} my={{ ...my, ...my.self }} navigate={setPage} views={personalViews} canSetDefault={access.can('layout.defaults')} windchill={windchill} />}
       {page === 'overview' && <DashboardPage month={month} azure={reportAzure} navigate={setPage} store={store} setMonth={setMonth} my={my} views={personalViews} canSetDefault={access.can('layout.defaults')} canLock={access.can('capacity.periods')} />}
       {page === 'pulse' && <PulseCheckPage month={month} azure={reportAzure} store={store} my={my} navigate={setPage} windchill={windchill} openWindchill={openWindchill} git={git} pack={monthlyPack} views={personalViews} canPickProfile={access.rights.roles.includes('Admin')} />}
       {page === 'pireview' && <PiReviewPage />}
@@ -356,6 +426,8 @@ export default function App() {
       {page === 'snapshots' && <SnapshotsPage {...pageProps} />}
       {page === 'admin' && <AdminPage key={`${settingsTab}:${settingsVisit}`} tab={settingsTab} onOpenTab={openSettings} {...pageProps} azure={azure} git={git} access={access} featureSetup={featureSetup} epicSetup={epicSetup} setupSteps={steps} onSearch={() => setSearchOpen(true)} qeColumnNames={[...new Set((qeMapping.file?.sheets ?? []).flatMap((sheet) => sheet.columns.map((column) => column.name)))]} monthlyPack={monthlyPack} history={history} loadEverything={loadEverything} onOpenBoard={() => setPage('board')} />}
       {page === 'docs' && <DocsPage />}
+      </Suspense>
+      <footer className="app-footer" aria-label="Version" ref={footerRef}><ZoomControl /><DesktopDownload />{buildStatus}</footer>
     </main>
   </div></HeaderSlot.Provider></OnPremContext.Provider></EpicSetupContext.Provider></CanContext.Provider></ReleaseSettingsContext.Provider></TableDefaultsContext.Provider>
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { myPendingWork, type Me } from './myWork'
+import { myPendingWork, selfOf, type Me } from './myWork'
 import type { AzureWorkspace } from './useAzureWorkspace'
 import type { PageProps } from './pages/types'
 import { capacityContext } from './capacity'
@@ -20,10 +20,16 @@ export function useMyWork(azure: AzureWorkspace, store: PageProps['store'], view
   const absenceEpicId = capacityContext(store.state).absenceEpicId
   const pending = known ? myPendingWork(azure.items, me, absenceEpicId) : []
   const people = [...new Set(azure.items.map((item) => item.assignedTo).filter(Boolean))].sort()
+  // NAV-47: My dashboard is always the person themselves — their work email, else the name they chose as theirs before
+  // an email was set (or the person viewed as); the person picker of the person-based pages does not change it.
+  const selfMe: Me = selfOf(email, nameFromEmail, chosen, viewed)
+  const selfKnown = Boolean(selfMe.email || selfMe.name)
+  const self = { me: selfMe, known: selfKnown, pending: selfKnown ? myPendingWork(azure.items, selfMe, absenceEpicId) : [] }
   function setName(name: string) {
     setChosen(name)
     try { if (name) localStorage.setItem(nameKey, name); else localStorage.removeItem(nameKey) } catch { /* kept for this session */ }
   }
-  return { me, known, pending, absenceEpicId, people, setName, chosenName: chosen }
+  return { me, known, pending, absenceEpicId, people, setName, chosenName: chosen, self }
 }
 export type MyWork = ReturnType<typeof useMyWork>
+

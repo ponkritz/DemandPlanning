@@ -23,9 +23,8 @@ export interface TitleField { label: string; source: string }
 // PU (MLD, Platform Update) — and which QE Mapping columns name the product and its QE. Used by Release Details → DP
 // (QE, possible QEs, Create Features); built-in values when the setup has none.
 export interface ReleaseTypeSetup { featureDoD: string; stories: StoryTemplate[] }
-export interface ReleaseTypeSetups { release: ReleaseTypeSetup; pu: ReleaseTypeSetup }
 export interface QeMapColumns { matchColumn: string; qeColumn: string }
-export interface EpicSetup { epicId: number; epicTitle: string; inherits?: InheritField[]; featureDoD: string; stories: StoryTemplate[]; timeWritingStory: TimeWritingStoryTemplate; task: TaskTemplate; titleFields?: TitleField[]; releaseTypes?: ReleaseTypeSetups; qeColumns?: QeMapColumns; classSets?: Record<string, ReleaseTypeSetup> }
+export interface EpicSetup { epicId: number; epicTitle: string; inherits?: InheritField[]; featureDoD: string; stories: StoryTemplate[]; timeWritingStory: TimeWritingStoryTemplate; task: TaskTemplate; titleFields?: TitleField[]; qeColumns?: QeMapColumns; classSets?: Record<string, ReleaseTypeSetup>; completeChildren?: false }
 // CON-95: the shared file may hold defaults for all Epics; an Epic's setup (shared or mine) may leave fields to the
 // layer above (inherits): Built in → All Epics → Epic (shared) → Mine.
 export type InheritField = 'featureDoD' | 'stories' | 'estimate'
@@ -48,51 +47,26 @@ export const emptySetup = (epicId: number, epicTitle = ''): EpicSetup => ({ epic
 
 export const maxTitleFields = 5
 export const dpEpicId = 13946
-const reviewStories = (milestones: string[]): StoryTemplate[] => milestones.map((milestone) => ({ title: `${milestone} : Review of Deliverables ({service} {version})`, description: '' }))
-export const dpReleaseTypeDefaults: ReleaseTypeSetups = {
-  release: { featureDoD: 'IQ/OQ is complete and Checklist is uploaded into the feature.', stories: reviewStories(['PRD', 'SFV', 'DT', 'IQ/OQ']) },
-  pu: { featureDoD: 'DT is finished.', stories: reviewStories(['SFV', 'DT', 'IQ/OQ']) },
-}
-export const releaseTypesOf = (setup?: Pick<EpicSetup, 'releaseTypes'>): ReleaseTypeSetups => setup?.releaseTypes ?? dpReleaseTypeDefaults
-// QV-61: IOCC releases use the IOCC bulk Epic's own Release / PU sets when they are set, else that Epic's Feature setup
-// itself (its DoD and User Stories, for every release type) — never DP's built-in sets while the Epic has a setup.
-export const ioccSetsOf = (setup?: Pick<EpicSetup, 'releaseTypes' | 'featureDoD' | 'stories'>): ReleaseTypeSetups => {
-  if (setup?.releaseTypes) return setup.releaseTypes
-  if (!setup) return dpReleaseTypeDefaults
-  const own = { featureDoD: setup.featureDoD, stories: structuredClone(setup.stories) }
-  return { release: own, pu: structuredClone(own) }
-}
-// DPF-07: a Definition of Done and User Stories per Release Classification value (the Epic's own list, else the built-in
-// one), chosen by the value picked when a Feature is created — New Feature and bulk alike. A value without its own set
-// uses the old Release / PU set where one was saved (Major, Minor → Release; MLD, Platform Update, Service Pack → PU),
-// else the Epic's own DoD and User Stories.
+// DPF-09: there are no built-in Release / PU (MLD) sets any more, and no built-in Release Classification values.
+// DPF-07: a Definition of Done and User Stories per value of the Epic's own Release Classification list, chosen by the
+// value picked when a Feature is created — New Feature and bulk alike; a value without its own set uses the Epic's own
+// DoD and User Stories.
 export const maxClassSets = 50
-export function classKindOf(value: string): 'release' | 'pu' | undefined {
-  const key = value.trim().toLowerCase()
-  return key === 'major' || key === 'minor' ? 'release' : ['mld', 'platform update', 'service pack', 'pu'].includes(key) ? 'pu' : undefined
-}
 export const classSetKey = (setup: Pick<EpicSetup, 'classSets'> | undefined, value: string) => {
   const wanted = value.trim().toLowerCase()
   return wanted ? Object.keys(setup?.classSets ?? {}).find((key) => key.toLowerCase() === wanted) : undefined
 }
-/** The set of a Release Classification value: its own, else the old Release / PU set; undefined = the Epic's default. */
-export function setForClass(setup: EpicSetup | undefined, value: string): (ReleaseTypeSetup & { from: 'value' | 'legacy' }) | undefined {
+/** The set of a Release Classification value; undefined = the Epic's default. */
+export function setForClass(setup: EpicSetup | undefined, value: string): ReleaseTypeSetup | undefined {
   if (!setup || !value.trim()) return undefined
   const key = classSetKey(setup, value)
-  if (key) { const own = setup.classSets![key]; return { featureDoD: own.featureDoD.trim() || setup.featureDoD, stories: structuredClone(own.stories), from: 'value' } }
-  const kind = classKindOf(value)
-  if (kind && setup.releaseTypes) return { ...structuredClone(setup.releaseTypes[kind]), from: 'legacy' }
-  return undefined
+  if (!key) return undefined
+  const own = setup.classSets![key]
+  return { featureDoD: own.featureDoD.trim() || setup.featureDoD, stories: structuredClone(own.stories) }
 }
-/** Bulk creation: the value's set, else the old set of the release number's type, else the Epic's own DoD and stories;
- * DP's built-in Release / PU sets only for an Epic without any setup. */
-export function bulkSetFor(setup: EpicSetup | undefined, value: string, kind: 'release' | 'pu' | undefined): ReleaseTypeSetup | undefined {
-  const chosen = setForClass(setup, value)
-  if (chosen) return { featureDoD: chosen.featureDoD, stories: chosen.stories }
-  const type = classKindOf(value) ?? kind
-  if (setup?.releaseTypes && type) return structuredClone(setup.releaseTypes[type])
-  if (setup) return { featureDoD: setup.featureDoD, stories: structuredClone(setup.stories) }
-  return type ? structuredClone(dpReleaseTypeDefaults[type]) : undefined
+/** Bulk creation: the value's set, else the Epic's own DoD and stories; nothing for an Epic without a setup. */
+export function bulkSetFor(setup: EpicSetup | undefined, value: string): ReleaseTypeSetup | undefined {
+  return setForClass(setup, value) ?? (setup ? { featureDoD: setup.featureDoD, stories: structuredClone(setup.stories) } : undefined)
 }
 // The placeholder key of a label: letters and digits in lower case ({Release Name} and {releasename} are the same).
 export const fieldKey = (label: string) => label.toLowerCase().replace(/[^a-z0-9]/g, '')
@@ -150,12 +124,6 @@ export function cleanTitleFields(input: unknown): TitleField[] {
 }
 const templateRef = (value: unknown) => typeof value === 'string' && /^[a-z0-9-]{1,60}$/.test(value) ? { templateId: value } : {}
 const cleanStories = (input: unknown, max = 20) => Array.isArray(input) ? input.map((story: Partial<Record<keyof StoryTemplate, unknown>>) => ({ title: text(story?.title, 255), description: text(story?.description, 100000), ...templateRef(story?.templateId) })).filter((story) => story.title).slice(0, max) : []
-function cleanReleaseTypes(input: unknown): ReleaseTypeSetups | undefined {
-  if (!input || typeof input !== 'object') return undefined
-  const value = input as Record<string, Partial<Record<keyof ReleaseTypeSetup, unknown>> | undefined>
-  const one = (key: 'release' | 'pu'): ReleaseTypeSetup => ({ featureDoD: text(value[key]?.featureDoD, 100000) || dpReleaseTypeDefaults[key].featureDoD, stories: value[key]?.stories === undefined ? dpReleaseTypeDefaults[key].stories : cleanStories(value[key]?.stories) })
-  return { release: one('release'), pu: one('pu') }
-}
 function cleanClassSets(input: unknown): Record<string, ReleaseTypeSetup> | undefined {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined
   const sets: Record<string, ReleaseTypeSetup> = {}
@@ -177,9 +145,10 @@ export function cleanSetup(input: Partial<Record<keyof EpicSetup, unknown>>): Ep
   if (!Number.isSafeInteger(epicId) || epicId < 1) return null
   const stories = cleanStories(input.stories, 1000)
   // EPS-07: the Feature fields moved to the Epic setup; the old title fields are no longer read or saved.
-  const releaseTypes = cleanReleaseTypes(input.releaseTypes), qeColumns = cleanQeColumns(input.qeColumns), classSets = cleanClassSets(input.classSets)
+  // DPF-09: the old Release / PU sets (releaseTypes) are no longer read; a save drops them.
+  const qeColumns = cleanQeColumns(input.qeColumns), classSets = cleanClassSets(input.classSets)
   const inherits = Array.isArray(input.inherits) ? inheritFields.filter((field) => (input.inherits as unknown[]).includes(field)) : []
-  return { epicId, epicTitle: text(input.epicTitle, 255), ...(inherits.length ? { inherits } : {}), featureDoD: text(input.featureDoD, 100000), stories, timeWritingStory: cleanTimeWritingStory(input.timeWritingStory as Partial<Record<keyof TimeWritingStoryTemplate, unknown>> | undefined), task: cleanTask(input.task as Partial<Record<keyof TaskTemplate, unknown>> | undefined), ...(releaseTypes ? { releaseTypes } : {}), ...(qeColumns ? { qeColumns } : {}), ...(classSets ? { classSets } : {}) }
+  return { epicId, epicTitle: text(input.epicTitle, 255), ...(inherits.length ? { inherits } : {}), featureDoD: text(input.featureDoD, 100000), stories, timeWritingStory: cleanTimeWritingStory(input.timeWritingStory as Partial<Record<keyof TimeWritingStoryTemplate, unknown>> | undefined), task: cleanTask(input.task as Partial<Record<keyof TaskTemplate, unknown>> | undefined), ...(qeColumns ? { qeColumns } : {}), ...(classSets ? { classSets } : {}), ...(input.completeChildren === false ? { completeChildren: false as const } : {}) }
 }
 
 export function parseFeatureSetup(raw: string): FeatureSetupFile {
@@ -250,7 +219,7 @@ export function resolveFields(layers: { entry: EpicSetup; origin: SetupOrigin }[
   const estimate = pick('estimate', (entry) => entry.task.originalEstimate, defaults?.originalEstimate)
   const storyList = stories.value ?? []
   return {
-    stories: storyList, featureDoD: dod.value ?? (dod.origin === 'builtin' ? defaultDoDFor({ stories: storyList }) : ''), originalEstimate: estimate.value,
+    stories: storyList, featureDoD: dod.value ?? '', originalEstimate: estimate.value,
     origin: { stories: stories.origin, featureDoD: dod.origin, estimate: estimate.origin } as Record<InheritField, SetupOrigin>,
   }
 }
@@ -321,14 +290,17 @@ export function withLinkedStories(setup: EpicSetup | undefined, templates: { id:
   const next = structuredClone(setup)
   next.stories = linkStories(next.stories, templates)
   if (next.classSets) for (const key of Object.keys(next.classSets)) next.classSets[key].stories = linkStories(next.classSets[key].stories, templates)
-  if (next.releaseTypes) for (const kind of ['release', 'pu'] as const) next.releaseTypes[kind].stories = linkStories(next.releaseTypes[kind].stories, templates)
   return next
 }
 
 // How many stories of a Feature setup file link to the template (every Epic, its value sets, old Release / PU sets, All Epics).
 export function templateUses(file: FeatureSetupFile | null | undefined, id: string) {
   if (!file) return 0
-  const lists = [file.defaults?.stories ?? [], ...file.epics.flatMap((entry) => [entry.stories, ...Object.values(entry.classSets ?? {}).map((set) => set.stories), ...(entry.releaseTypes ? [entry.releaseTypes.release.stories, entry.releaseTypes.pu.stories] : [])])]
+  const lists = [file.defaults?.stories ?? [], ...file.epics.flatMap((entry) => [entry.stories, ...Object.values(entry.classSets ?? {}).map((set) => set.stories)])]
   return lists.reduce((sum, stories) => sum + stories.filter((story) => story.templateId === id).length, 0)
 }
 
+
+// BKL-38: "Complete children" is offered per Epic — a team decision in the shared setup (Admin → Epic & Feature setup),
+// on unless the Epic's shared setup turns it off; an Epic without a setup keeps it on.
+export const completeChildrenOn = (setups: FeatureSetups | null | undefined, epicId: number | undefined) => epicId == null || setupFor(setups?.shared ?? null, epicId)?.completeChildren !== false

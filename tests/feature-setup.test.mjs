@@ -133,3 +133,19 @@ test('title fields per Epic: up to five, unique names, saved with the setup; tit
   const items = [{ fields: { 'Custom.Platform': '' } }, { fields: { 'Custom.Platform': 'CP 2', 'Custom.ReleaseName': 'Atlas' } }]
   assert.deepEqual(fieldsFromItems(cp, items), ['CP 2', 'Atlas', ''], 'first item with the field; a bare name finds Custom.ReleaseName; no source stays blank')
 })
+
+test('BKL-38: Complete children per Epic — on unless the shared setup turns it off; kept through a save; mine cannot turn it off (TC-BKL-27)', async () => {
+  const { completeChildrenOn, cleanSetup: clean } = await import('../src/featureSetup.ts')
+  const off = { ...emptySetup(10, 'DP'), completeChildren: false }
+  const shared = parseFeatureSetup(serializeFeatureSetup({ schema: 1, kind: 'feature-setup', epics: [off, emptySetup(11, 'CP')] }))
+  assert.equal(shared.epics.find((entry) => entry.epicId === 10).completeChildren, false, 'kept through a save')
+  assert.equal('completeChildren' in shared.epics.find((entry) => entry.epicId === 11), false, 'on is not written')
+  assert.equal(clean({ ...emptySetup(12), completeChildren: 'no' }).completeChildren, undefined, 'only false turns it off')
+  assert.equal(completeChildrenOn({ shared, personal: null }, 10), false, 'turned off for this Epic')
+  assert.equal(completeChildrenOn({ shared, personal: null }, 11), true, 'another Epic keeps it')
+  assert.equal(completeChildrenOn({ shared, personal: null }, 99), true, 'an Epic without a setup keeps it')
+  assert.equal(completeChildrenOn(null, 10), true, 'no setup files: on')
+  assert.equal(completeChildrenOn({ shared, personal: null }, undefined), true, 'a Feature without an Epic: on')
+  const personal = { schema: 1, kind: 'feature-setup', epics: [{ ...emptySetup(11), completeChildren: false }] }
+  assert.equal(completeChildrenOn({ shared, personal }, 11), true, 'a team setting: a personal setup does not turn it off')
+})

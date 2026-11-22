@@ -50,7 +50,7 @@ export function ContentBulkCreate({ releases, featureTitle, featureMatch, azure,
         progress(`${index + 1} of ${ready.length}: ${line.title}…`)
         const owner = ownerOf(line)
         try {
-          const feature = { parentId: epic.id, title: line.title, description: withFeatureDoD(contentBulk.featureDoD, '', contentBulk.classification, line.fieldLines), acceptanceCriteria: '', areaPath: epic.areaPath, iterationPath: pair.pi.path, storyIterationPath: pair.sprint.path, assignedTo: owner }
+          const feature = { parentId: epic.id, title: line.title, description: withFeatureDoD(contentBulk.featureDoD, '', undefined, line.fieldLines), acceptanceCriteria: '', areaPath: epic.areaPath, iterationPath: pair.pi.path, storyIterationPath: pair.sprint.path, assignedTo: owner }
           const bundle = await createFeatureFromSetup(config, token, feature, { stories: [], reviewStory: true, task: { title: '{month} | {feature}', description: '', originalEstimate: contentBulk.taskEstimate, assignedTo: owner, areaPath: '', iterationPath: '' } }, month, undefined, adhoc)
           azure.featureCreated([epic, ...bundle.items])
           done.push(`#${bundle.feature.id} ${line.title} → ${owner}${line.warned.length ? ` (empty: ${line.warned.join(', ')})` : ''}`)
@@ -70,7 +70,7 @@ export function ContentBulkCreate({ releases, featureTitle, featureMatch, azure,
       <label className="content-assignee">Assign all the Features to<input list="content-bulk-people" aria-label="Assign all the Features to" value={person} placeholder="Type a name or an email" autoFocus onChange={(event) => setPerson(event.target.value)} /></label>
       <datalist id="content-bulk-people">{people.map((entry) => <option key={entry.email} value={entry.name}>{entry.email}</option>)}</datalist>
       {person.trim() && <small className={email ? 'muted' : 'warning-text'}>{email ? `→ ${email}` : 'Not a name on QMS-0025: type their email.'}</small>}
-      <p className="muted">Under Epic #{contentEpicId}{epic ? ` “${epic.title}”` : ''}, each with Release Classification {contentBulk.classification}, the DoD “{contentBulk.featureDoD}”, the User Story “Review of Deliverables - &lt;Feature title&gt;” in the current Sprint and the Time Writing story with its month Task ({contentBulk.taskEstimate} h Original Estimate), all assigned to that person.</p>
+      <p className="muted">Under Epic #{contentEpicId}{epic ? ` “${epic.title}”` : ''}, each with the DoD “{contentBulk.featureDoD}”, the User Story “Review of Deliverables - &lt;Feature title&gt;” in the current Sprint and the Time Writing story with its month Task ({contentBulk.taskEstimate} h Original Estimate), all assigned to that person.</p>
       <div className="azure-table"><table>
         <thead><tr><th scope="col">Feature title</th><th scope="col">Assigned to</th><th scope="col">Result</th></tr></thead>
         <tbody>{plan.map((line) => <tr key={line.release.key} className={line.skip ? 'muted' : undefined}><td>{line.title}</td><td>{line.skip ? '—' : <QePick label={line.title} email={ownerOf(line)} people={people} onPick={(picked) => setPicks((current) => ({ ...current, [line.release.key]: picked }))} />}</td><td>{line.skip ? <span className="warning-text">Skipped: {line.skip}</span> : <>Will be created{line.note && <small className="warning-text"> — {line.note}</small>}{line.warned.length > 0 && <small className="warning-text"> — empty {line.warned.join(', ')}</small>}</>}</td></tr>)}</tbody>

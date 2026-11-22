@@ -41,15 +41,16 @@ test('the versioned release takes its notes from the release-notes entry of its 
   assert.match(releaseEntry(read('docs/RELEASE-NOTES.md'), version) ?? '', /^- \S/m, `the entry of v${version} is published with its release`)
 })
 
-test('CI tags every version after the enabled release checks; nobody tags by hand (TC-CI-06)', () => {
+test('CI tags every version on main and publishes its release; nobody tags by hand (TC-CI-06)', () => {
   const workflow = read('.github/workflows/build-and-deploy.yml')
   const job = workflow.slice(workflow.indexOf('  publish-tagged-release:'), workflow.indexOf('\n  end-to-end:'))
-  assert.match(job, /if: github\.ref == 'refs\/heads\/main' \|\| startsWith\(github\.ref, 'refs\/tags\/v'\)/, 'runs on main and on a pushed tag')
-  assert.match(job, /needs: \[validate-and-package, end-to-end\]/, 'only after the enabled Windows and end-to-end checks pass')
+  assert.match(job, /\(github\.ref == 'refs\/heads\/main' \|\| startsWith\(github\.ref, 'refs\/tags\/v'\)\)/, 'runs on main and on a pushed tag')
+  assert.match(job, /needs: \[release-commit, validate-and-package, package-macos, end-to-end\]/, 'only after Windows, macOS and the end-to-end suite pass')
+  for (const name of ['validate-and-package', 'package-macos', 'end-to-end']) assert.match(job, new RegExp(`needs\\.${name}\\.result == 'success'`), `${name} must pass`)
   assert.match(job, /gh release view "\$tag"[^\n]*\n[^\n]*exit 0/, 'an existing release is left alone')
   assert.match(job, /node scripts\/release-entry\.mjs "\$version" > release-notes\.md/, 'notes from RELEASE-NOTES.md')
-  assert.match(job, /--target "\$GITHUB_SHA"/, 'the tag is the commit that was built')
-  assert.match(job, /release\/\*\.exe/, 'the Windows installer is attached')
+  assert.match(job, /--target "\$RELEASE_SHA"/, 'the tag is the commit that was built: the release commit (CI-11)')
+  assert.match(job, /release\/\*\.exe[^\n]*release\/\*\.dmg/, 'both installers are attached')
   assert.doesNotMatch(job, /pnpm (install|test|build)/, 'the job that can write releases runs no dependency code (CI-07)')
   assert.doesNotMatch(job.split('run: |')[1] ?? '', /\$\{\{/, 'the script reads environment variables, not expressions (CI-07)')
 })

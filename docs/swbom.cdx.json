@@ -18,8 +18,8 @@
     {
       "type": "library",
       "name": "@azure/msal-browser",
-      "version": "5.29.1",
-      "purl": "pkg:npm/%40azure/msal-browser@5.29.1",
+      "version": "5.30.0",
+      "purl": "pkg:npm/%40azure/msal-browser@5.30.0",
       "scope": "required",
       "licenses": [
         {
@@ -31,7 +31,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "f9332853fe21dca614bd02991fea75ffdfe20da7a90e554943b50c50007aabca6b3ec31fb0ea2a03d9b66a5a4fa8b510e3c069eec5ea376c1d840f6b3a0f6ad4"
+          "content": "a3f003c56c4415c56b13ae5aeecb0e1aec678afabc95ccbeda148694e3b0b67d2019dea28b0977abcfc1315468ad813cd5407faf807ef161845315a7a8feebc8"
         }
       ],
       "properties": [
@@ -48,8 +48,8 @@
     {
       "type": "library",
       "name": "@azure/msal-common",
-      "version": "16.16.2",
-      "purl": "pkg:npm/%40azure/msal-common@16.16.2",
+      "version": "16.17.0",
+      "purl": "pkg:npm/%40azure/msal-common@16.17.0",
       "scope": "required",
       "licenses": [
         {
@@ -61,7 +61,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "215a0f800ba9d219e9cf00bc7acc4fc6bae70c355ed27de698af9453725198a5b248ac4142b97e6b7d2d4cfde892627d59cedd87e220a0d6945e40b16f60c14a"
+          "content": "acdbed126ec0c738f5f277889340bc923af56576c9b079160ea19e7427ce88b5418d20b158171b276ebf23b83da30a1e18a528cab3a0b3bddc224ed6c4b77da8"
         }
       ],
       "properties": [
@@ -4158,8 +4158,8 @@
     {
       "type": "library",
       "name": "csstype",
-      "version": "3.2.3",
-      "purl": "pkg:npm/csstype@3.2.3",
+      "version": "3.2.4",
+      "purl": "pkg:npm/csstype@3.2.4",
       "scope": "excluded",
       "licenses": [
         {
@@ -4171,7 +4171,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "cf51c629c632db103c00641fc2b9f43c0cbe3c1ed7fc64a3dd45495bda8aca7e37c566be825e675e6538aaa2cc4735952c50bc2aeb145fc4ffd240a2398a4021"
+          "content": "3e829aa0fcd06a99c4a2a5129c7c75bba5ba92ef0254480ab27a669b35379b59f09227693c143c57f66adbe6d636bb0e2a828bc1319d6f1eb117b0573f5ccb55"
         }
       ],
       "properties": [
@@ -4638,8 +4638,8 @@
     {
       "type": "library",
       "name": "electron",
-      "version": "44.11.4",
-      "purl": "pkg:npm/electron@44.11.4",
+      "version": "44.11.5",
+      "purl": "pkg:npm/electron@44.11.5",
       "scope": "required",
       "licenses": [
         {
@@ -4651,7 +4651,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "00946bd1bd05f8ab7e8aa99d1462cd52196e54785c3547c50a6e8015763f97d4e652bf9f13a856e0759569a2467612a466289527b6606c0a36bd0a962750b88d"
+          "content": "160b410408164724ff9362db5c3be59c7411b5cdf9b1fa7851a5a362f92db21d875966129df03f0e760610ec505195e9729e0410b8f7ef1e73492ae1e7ce67c2"
         }
       ],
       "properties": [
@@ -9796,8 +9796,8 @@
     {
       "type": "library",
       "name": "source-map-js",
-      "version": "1.2.2",
-      "purl": "pkg:npm/source-map-js@1.2.2",
+      "version": "1.2.4",
+      "purl": "pkg:npm/source-map-js@1.2.4",
       "scope": "excluded",
       "licenses": [
         {
@@ -9809,7 +9809,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "2868fff18e37c77e5a6550edb7e27898ad61a0b18750b3187d290e0c93508cd0c2de85b53ea3e8c4cc28d292d4b1633f5041b338dfcdc5e1f2c047cd5cd3f757"
+          "content": "27b66332f1ddf4ed5f713ff9574f5059a69297605b5b1dc5e8ed3cb2975ef3635a99ff540741b145520f88d6d5b1d2a4a22cc7892a53a1da37be9d9b032f7530"
         }
       ],
       "properties": [

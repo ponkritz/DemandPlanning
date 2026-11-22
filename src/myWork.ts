@@ -345,3 +345,18 @@ export function myNames(items: Pick<AzureWorkItem, 'assignedTo' | 'assignedToEma
   return [...names]
 }
 
+
+// ACT-21: Time Writing lists in order of Feature number (ID, lowest first): a row's Feature is its own item when that is
+// a Feature, else the Feature above it; a row with no Feature above it comes after, by its own ID.
+export function byFeatureNumber<T extends { link?: AzureWorkItem }>(items: AzureWorkItem[]) {
+  const key = (row: T) => { const link = row.link; if (!link) return [1, Number.MAX_SAFE_INTEGER] as const; const feature = featureOf(items, link); return feature ? [0, feature.id] as const : [1, link.id] as const }
+  return (a: T, b: T) => { const [ga, ia] = key(a), [gb, ib] = key(b); return ga - gb || ia - ib }
+}
+
+// NAV-47: who My dashboard shows — the person viewed as, else your work email (and its name), else the name you chose
+// before an email was set; never another person chosen with the Person picker.
+export function selfOf(email: string, nameFromEmail: string | undefined, chosen: string, viewed?: Me): Me {
+  if (viewed) return viewed
+  if (email) return { email, ...(nameFromEmail ? { name: nameFromEmail } : {}) }
+  return chosen ? { name: chosen } : {}
+}

@@ -23,3 +23,17 @@ test('Search settings: by name or what it affects, every page reachable (ADM-03,
   assert.equal(searchSettings('').length, settingsIndex.length)
   for (const page of settingsPages) assert.ok(settingsIndex.some((entry) => entry.tab === page.key), `${page.label} is in the index`)
 })
+
+test('ADM-05: bulk creation Epics without a shared Feature setup, and shared setups without a Feature DoD (TC-ADM-03)', async () => {
+  const { setupGaps } = await import('../src/adminOverview.ts')
+  const setup = (epicId, featureDoD, extra = {}) => ({ epicId, epicTitle: '', featureDoD, stories: [], timeWritingStory: { title: '{feature} - Time Writing', description: '', assignedTo: '', areaPath: '', iterationPath: '' }, task: { title: '{month} | {feature}', description: '', assignedTo: '', areaPath: '', iterationPath: '' }, ...extra })
+  const shared = { schema: 1, kind: 'feature-setup', epics: [setup(13946, 'DoD'), setup(5, ''), setup(6, '', { inherits: ['featureDoD'] })] }
+  assert.deepEqual(setupGaps(shared, [{ stream: 'DP', epicId: 13946 }, { stream: 'IOCC', epicId: 77 }, { stream: 'IOCC', epicId: undefined }]), { bulkWithoutSetup: [{ stream: 'IOCC', epicId: 77 }], withoutDoD: [5, 6] }, 'an unset bulk Epic is reported by its own check')
+  const withDefaults = { ...shared, defaults: { featureDoD: 'All Epics DoD' } }
+  assert.deepEqual(setupGaps(withDefaults, [{ stream: 'IOCC', epicId: 77 }]), { bulkWithoutSetup: [], withoutDoD: [5] }, 'All Epics gives a setup and a DoD to whoever inherits it; an own empty DoD stays empty')
+  assert.deepEqual(setupGaps(null, [{ stream: 'DP', epicId: 13946 }]), { bulkWithoutSetup: [{ stream: 'DP', epicId: 13946 }], withoutDoD: [] })
+  const items = adminHealth([], { ...facts, bulkWithoutSetup: [{ stream: 'IOCC', epicId: 77 }], withoutDoD: [5, 6] })
+  assert.deepEqual(items.map((item) => [item.id, item.tone]), [['bulk-setup:IOCC', 'warn'], ['no-dod', 'warn']])
+  assert.match(items[0].title, /IOCC bulk creation Epic #77 has no Feature setup/); assert.match(items[1].title, /#5, #6/)
+  assert.deepEqual(items[1].fix, { tab: 'epics', section: 'setup', label: 'Feature setup' })
+})

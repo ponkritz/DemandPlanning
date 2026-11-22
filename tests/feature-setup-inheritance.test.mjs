@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { chooseSetup, defaultDoDFor, missingDoD, parseFeatureSetup, publishSetup, serializeFeatureSetup, setupsMissingDoD } from '../src/featureSetup.ts'
+import { chooseSetup, missingDoD, parseFeatureSetup, publishSetup, serializeFeatureSetup, setupsMissingDoD } from '../src/featureSetup.ts'
 
 const entry = (epicId, extra = {}) => ({ epicId, epicTitle: `Epic ${epicId}`, featureDoD: `DoD ${epicId}`, stories: [{ title: `Story ${epicId}`, description: '' }], timeWritingStory: { title: '{feature} - Time Writing', description: '', assignedTo: '', areaPath: '', iterationPath: '' }, task: { title: '{month} | {feature}', description: '', assignedTo: '', areaPath: '', iterationPath: '', originalEstimate: epicId }, ...extra })
 
@@ -23,9 +23,9 @@ test('Feature setup layers: Mine → Epic (shared) → All Epics → Built in, p
   assert.equal(chooseSetup(setups, 1, true).setup.task.originalEstimate, 4)
   // Epic 2 sets everything: unchanged from before.
   assert.deepEqual(chooseSetup(setups, 2).setup, entry(2))
-  // Epic 3 inherits everything; without All Epics, Built in applies (the default DoD of its stories, no stories, no estimate).
+  // Epic 3 inherits everything; without All Epics nothing is set (DPF-09: no built-in DoD, no stories, no estimate).
   const bare = chooseSetup({ shared: { ...shared, defaults: undefined }, personal: null }, 3)
-  assert.deepEqual([bare.setup.featureDoD, bare.setup.stories, bare.setup.task.originalEstimate, bare.origin], [defaultDoDFor({ stories: [] }), [], undefined, { featureDoD: 'builtin', stories: 'builtin', estimate: 'builtin' }])
+  assert.deepEqual([bare.setup.featureDoD, bare.setup.stories, bare.setup.task.originalEstimate, bare.origin], ['', [], undefined, { featureDoD: 'builtin', stories: 'builtin', estimate: 'builtin' }])
   // CON-97: an Epic without a setup of its own uses All Epics when All Epics has anything set…
   const none = chooseSetup(setups, 99)
   assert.deepEqual([none.source, none.setup.featureDoD, none.setup.stories.map((story) => story.title), none.setup.task.originalEstimate], ['defaults', 'All DoD', ['All story'], 4])

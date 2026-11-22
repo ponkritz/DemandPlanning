@@ -5,14 +5,13 @@ import { azureInsights, isTimeWritingStory, timeWritingMonth } from '../azureIns
 import { capacityContext, capacityGap, capacityModel } from '../capacity'
 import { closeFeatureItems, featureClosePlan, featureCloseQuestion } from '../closeChain'
 import { FeatureEditor } from '../components/FeatureEditor'
-import { PersonPicker } from '../components/PersonPicker'
 import { SearchSelect } from '../components/SearchSelect'
 import { EmptyState, Metric, Metrics, Modal, Page } from '../components/ui'
 import { personMonths, totals } from '../dashboard'
 import type { AzureWorkItem } from '../domain'
 import { setupHours, type FeatureSetups } from '../featureSetup'
 import { formatDate, formatHours, monthName, todayIso } from '../format'
-import { absenceStoryType, assignablePeople, isMine, isPending, leaveTaskCandidates, myNames, monthTaskCandidates, type MonthTaskCandidate } from '../myWork'
+import { absenceStoryType, assignablePeople, byFeatureNumber, isMine, isPending, leaveTaskCandidates, myNames, monthTaskCandidates, type MonthTaskCandidate } from '../myWork'
 import { actualsLockDate, actualsLocked as isActualsLocked, planLockDate, planningLocked as isPlanningLocked } from '../planningLock'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { MyWork } from '../useMyWork'
@@ -94,17 +93,19 @@ export function MyActivitiesPage({ azure, store, my, month, assign, featureSetup
 
   // This month's tasks of mine, then the Features still without one (work ticked, leave and training not).
   const mine = my.known ? azure.items.filter((item) => item.workItemType === 'Task' && item.state.trim().toLowerCase() !== 'removed' && isMine(item, my.me) && timeWritingMonth(item.title) === month) : []
-  const existing: Row[] = mine.map((task) => { const feature = featureOf(task); return { key: `task:${task.id}`, title: feature?.title ?? task.title, stream: epicOf(task)?.title ?? 'No stream', kind: kindOf(task), task, link: feature ?? task } })
+  // ACT-21: every list on the page in order of Feature number.
+  const byFeature = byFeatureNumber<Row>(azure.items)
+  const existing: Row[] = mine.map((task): Row => { const feature = featureOf(task); return { key: `task:${task.id}`, title: feature?.title ?? task.title, stream: epicOf(task)?.title ?? 'No stream', kind: kindOf(task), task, link: feature ?? task } }).sort(byFeature)
   const work = my.known ? monthTaskCandidates(azure.items, my.me, label, absenceEpicId) : []
   const leave = my.known ? leaveTaskCandidates(azure.items, my.me, label, absenceEpicId) : []
-  const toAdd: Row[] = [...work, ...leave].filter((row) => row.status === 'needs-task' || row.status === 'needs-story').map((row) => ({
+  const toAdd: Row[] = [...work, ...leave].filter((row) => row.status === 'needs-task' || row.status === 'needs-story').map((row): Row => ({
     key: row.story ? `story:${row.story.id}` : row.kind ? `feature:${row.feature.id}:${row.kind}` : `feature:${row.feature.id}`,
     title: row.leave ? row.story?.title ?? row.storyTitle : row.feature.title,
     link: row.story ?? row.feature,
     stream: epicOf(row.feature)?.title ?? 'No stream',
     kind: !row.leave ? 'work' : row.kind === 'Training' ? 'training' : 'leave',
     candidate: row,
-  }))
+  })).sort(byFeature)
   const conflicts = work.filter((row) => row.status === 'conflict')
   // Nothing is chosen for the person (ACT-03): Features without a task are only suggested; Add puts one in the list.
   const isTicked = (row: Row) => ticked[row.key] ?? false
@@ -331,18 +332,11 @@ export function MyActivitiesPage({ azure, store, my, month, assign, featureSetup
   const chosenEpic = epics.find((epic) => epic.id === Number(stream))
 
   return <Page className="activities-page">
-    <header className="act-header">
-      <div><h2>Add activities</h2><p>Record your activities for {label}. Copy your recurring activities or add a new one.</p></div>
-      <div className="act-header-tools">
-        {my.known && <button type="button" className="act-primary act-add-open" onClick={() => setAddOpen(true)}>＋ Add a new activity</button>}
-        <label className="act-person">Activities of<PersonPicker label="Activities of" value={my.chosenName} people={my.people} onChange={my.setName} meLabel={assign?.me || azure.creatorEmail ? 'Me' : 'Choose a person…'} /></label>
-      </div>
-    </header>
     {!self && my.known && <div className="act-message act-info" role="status">Showing {my.me.name}'s activities. {assignee ? `What you save here is written for ${my.me.name} (assigned to them).` : 'Saving is not available for another person here.'} Choose “Me” to go back.</div>}
     {message && <div className={`act-message act-${message.tone}`} role="status">{message.text}<button type="button" className="icon-button" aria-label="Dismiss" onClick={() => setMessage(null)}>×</button></div>}
-    {!my.known ? <EmptyState title="Who are you in Azure DevOps?" detail="Set your work email in Admin → Streams, or choose your name above, to see your activities." /> : <>
+    {!my.known ? <EmptyState title="Who are you in Azure DevOps?" detail="Set your work email in Admin → Streams, or choose your name with Person at the top right, to see your activities." /> : <>
     {/* One row of equal tiles (ACT-11, ACT-05): the hours, the tasks, the monthly update and the last day. */}
-    <div className="act-top">
+    <div className="act-top act-sticky">
     <Metrics>
       <Metric label="Capacity" value={capacity == null ? '—' : `${formatHours(capacity)}h`} hint={capacity != null ? 'Working days less absence' : capacityWhy ?? 'Your name is not known yet'} />
       <Metric label="Planned hours" value={<>{formatHours(kpi.plan.value)}{pctOf(kpi.plan.value, capacity)}</>} hint="Original Estimate · % of capacity" />
@@ -367,10 +361,12 @@ export function MyActivitiesPage({ azure, store, my, month, assign, featureSetup
       <div className="act-main">
       <section className="act-card" aria-labelledby="act-copy">
         <div className="act-card-head"><h3 id="act-copy">Your activities for {label}</h3>
+          {/* ACT-20: an action of the list, not a heading of the page. */}
+          <button type="button" className="ghost act-add-open" disabled={saving} onClick={() => setAddOpen(true)}>＋ Add a new activity</button>
           <label className="act-close-mode" title="Tick Features in the list to close your open Tasks and User Stories under them (and the Feature when nothing else is open); their month Tasks become read-only"><input type="checkbox" checked={closeMode} disabled={saving} onChange={(event) => { setCloseMode(event.target.checked); setClosing({}) }} />Close Features</label>
           {closeMode ? <button type="button" className="act-primary act-save-top" disabled={!closingRows.length || saving} onClick={closeFeatures}>{closingRows.length ? `Close ${closingRows.length} Feature${closingRows.length === 1 ? '' : 's'}` : 'Tick Features to close'}</button>
             : <button type="button" className="act-primary act-save-top" disabled={!pendingCount || saving} onClick={saveAll}>{saving ? 'Saving…' : pendingCount ? `Save ${pendingCount} activit${pendingCount === 1 ? 'y' : 'ies'}` : 'Nothing to save'}</button>}</div>
-        <p className="act-sub">Your {label} tasks with their hours. Activities you add from the suggestions appear here until you save; enter or change hours and save once.</p>
+        <p className="act-sub">Record your activities for {label}: your tasks with their hours. Add one from the suggestions (they appear here until you save) or with ＋ Add a new activity; enter or change hours and save once.</p>
         <table className="act-table">
           <thead><tr><th aria-label="Add" /><th className="act-stream">Epic</th><th>Activity</th><th>Planned</th><th>Actual</th></tr></thead>
           <tbody>

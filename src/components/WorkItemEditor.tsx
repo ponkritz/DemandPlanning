@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { AzureWorkItem } from '../domain'
+import { syncTitlesAfterSave } from '../monthTaskAction'
 import { addComment, editWorkItem, readAzureIterations, readComments, readWorkItemForEdit, currentIterationPairs, futureIterationPairs, updateAzureWorkItem, validStoryPoints, storyPriorities, storyRisks, storyValueAreas, type AzureConfig, type AzureIteration, type WorkItemComment } from '../azureDevOps'
 import { editLocks, isAdhocTask, joinDoD, splitDoD, statesFor, type WorkItemEdit } from '../workItemEdit'
 import { actualsLockedNow, planningLockedNow } from '../planningLock'
@@ -148,8 +149,11 @@ export function WorkItemEditor({ item: opened, items, config, savedPat = '', me,
         // ATM-28: a User Story set to Active makes its New Feature Active.
         let activated: AzureWorkItem | null = null
         if (edit.state) { try { activated = await activateFeatureOf(config, token, items, updated) } catch (failure) { failed.push(`Feature not set to Active: ${failure instanceof Error ? failure.message : 'failed'}`) } }
-        onUpdated?.([updated, ...moved, ...(activated ? [activated] : [])])
-        const text = `#${opened.id} saved and verified${moved.length ? `; ${moved.length} User Stor${moved.length === 1 ? 'y' : 'ies'} moved to ${storySprint.split('\\').pop()}` : ''}${activated ? `; Feature #${activated.id} is now Active` : ''}.${failed.length ? ` ${failed.length} not done — ${failed.join(' · ')}` : ''}`
+        // BKL-36: the Feature's Time Writing story and month Tasks follow its name (checked on every save, silently).
+        progress('Checking the Time Writing titles…')
+        const titles = await syncTitlesAfterSave(config, token, items, updated)
+        onUpdated?.([updated, ...moved, ...(activated ? [activated] : []), ...titles.renamed])
+        const text = `#${opened.id} saved and verified${moved.length ? `; ${moved.length} User Stor${moved.length === 1 ? 'y' : 'ies'} moved to ${storySprint.split('\\').pop()}` : ''}${activated ? `; Feature #${activated.id} is now Active` : ''}.${titles.note}${failed.length ? ` ${failed.length} not done — ${failed.join(' · ')}` : ''}`
         onDone?.(text, updated)
         return { text, failed: failed.length > 0 }
       } catch (failure) {

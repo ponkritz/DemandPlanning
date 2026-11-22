@@ -19,7 +19,7 @@ import { ddtMonthOf, dpListedIn, dpMilestoneNames, dpMilestones, dpMilestoneText
 import type { DataColumn } from '../components/DataTable'
 import type { QeMappingFile } from '../qeMapping'
 import { chooseSetup } from '../featureSetup'
-import { dpReleaseType, dpRowVersion, dpTypeLabel, fullMatch, possibleQes, qeFor } from '../dpBulk'
+import { fullMatch, possibleQes, qeFor } from '../dpBulk'
 import { dpBoardCandidates, dpBoardMatch } from '../dpBoardMatch'
 import { DpBulkCreate } from '../components/DpBulkCreate'
 import { formatDate, formatDateTime, monthName } from '../format'
@@ -109,7 +109,6 @@ function ReadOnlyView({ id, name, role, azure, store, month, gitNote, onOpenConn
   const allDp = source?.items ?? noItems
   const dpColumns: DataColumn<AzureWorkItem>[] = isDp ? [
     { id: '@dp-pick', label: 'Select', fixed: true, sortable: false, export: false, value: (item) => picked.includes(item.id) ? 'yes' : '', render: (item) => { const full = fullMatch(featureMatch(item)); return <input type="checkbox" aria-label={`Select ${item.title}`} disabled={full} title={full ? `Feature #${featureMatch(item)!.item.id} on QMS-0025 matches this release 100%: nothing to create` : undefined} checked={!full && picked.includes(item.id)} onChange={() => setPicked((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])} /> } },
-    { id: '@dp-type', label: 'Release type', sortable: false, value: (item) => { const typed = dpReleaseType(dpRowVersion(item)); return typed ? dpTypeLabel(typed.type) : '—' }, title: (item) => { const typed = dpReleaseType(dpRowVersion(item)); return typed ? `${dpRowVersion(item)}: ${typed.type} — ${typed.kind === 'release' ? 'Release' : 'PU'} set (Feature setup → Epic ${dpBulkEpic})` : 'No x.y.z.a version' } },
     { id: '@dp-qe', label: 'QE', sortable: false, value: (item) => qeFor(item, qeMapping, dpSetup?.qeColumns)?.qe ?? '', title: () => dpSetup?.qeColumns ? `From the QE Mapping: ${dpSetup.qeColumns.matchColumn} → ${dpSetup.qeColumns.qeColumn}` : `Set the QE Mapping columns in Feature setup → Epic ${dpBulkEpic}` },
     { id: '@dp-backup', label: 'Possible QEs', sortable: false, value: (item) => possibleQes(item, allDp, qeFor(item, qeMapping, dpSetup?.qeColumns)?.qe ?? '').join(', '), title: () => 'Assigned to the earlier releases of the same product (newest first), not the QE and not the release’s own Assigned To' },
     { id: '@dp-month', label: 'Month & Year', value: (item) => dpMonthText(item), title: (item) => ddtMonthOf(item) ? 'The month of the DDT Date: the month this release is listed in' : dpPlannedMilestones(item).length ? 'No DDT Date: listed in the months of its Planned / ToBePlanned milestones, not counted as Supported or Completed' : 'No DDT Date and no planned milestone: listed only with “All months”, never counted', sortable: false },

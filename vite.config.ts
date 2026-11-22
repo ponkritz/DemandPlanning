@@ -13,6 +13,24 @@ let buildNumber = Number(process.env.GITHUB_RUN_NUMBER) || 0
 if (!buildNumber) { try { buildNumber = Number(execFileSync('git', ['rev-list', '--count', 'HEAD'], { encoding: 'utf8' }).trim()) || 0 } catch { /* Builds outside Git carry build number 0. */ } }
 const metadata = { app: 'demandplanning', formatVersion: 1, version: pkg.version, buildId: process.env.GITHUB_RUN_ID ? `${process.env.GITHUB_RUN_ID}.${process.env.GITHUB_RUN_ATTEMPT || '1'}` : `local-${revision.slice(0, 8)}-${builtAt.replace(/[^\d]/g, '')}`, builtAt, revision, buildNumber }
 
+// SEC-CSP (NFR-09): the built page carries a Content-Security-Policy. Scripts only from the app itself (file: for the
+// desktop app, which loads dist/index.html from disk); requests to any https host (dev.azure.com, on-premises servers,
+// GitHub, Microsoft Graph); the Microsoft sign-in in a frame; no plugins, no foreign forms or base URL. Inline style
+// attributes stay allowed (React style props). Not added to the dev server (its hot reload injects inline scripts).
+export const contentSecurityPolicy = [
+  "default-src 'self' file:",
+  "script-src 'self' file:",
+  "style-src 'self' 'unsafe-inline' file:",
+  "img-src 'self' data: blob: https: file:",
+  "font-src 'self' data: file:",
+  "connect-src 'self' https: file:",
+  "frame-src https://login.microsoftonline.com",
+  "worker-src 'self' blob:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'none'",
+].join('; ')
+
 export default defineConfig({
   base: './',
   define: { __APP_BUILD__: JSON.stringify(metadata) },
@@ -27,5 +45,9 @@ export default defineConfig({
         response.end(JSON.stringify(metadata))
       })
     },
+  }, {
+    name: 'content-security-policy',
+    apply: 'build',
+    transformIndexHtml() { return [{ tag: 'meta', attrs: { 'http-equiv': 'Content-Security-Policy', content: contentSecurityPolicy }, injectTo: 'head-prepend' }] },
   }],
 })

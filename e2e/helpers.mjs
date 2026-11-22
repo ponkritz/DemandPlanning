@@ -45,12 +45,17 @@ export async function openPage(app, { width = 1300, height = 1000, guide = false
   if (init) await context.addInitScript(init, initArg)
   const page = await context.newPage()
   page.on('pageerror', (error) => errors.push(error.message))
+  // CI-12: E2E_CPU_SLOWDOWN=4 runs the page on a CPU four times slower (Chromium's own throttling), as on a busy
+  // laptop, so a step that only works because the app happens to be fast (a race) fails here rather than for a user.
+  const slowdown = Number(process.env.E2E_CPU_SLOWDOWN ?? 1)
+  if (slowdown > 1) await (await context.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: slowdown })
   await page.goto(app.url)
   await page.locator('.sidebar nav').waitFor()
   return { page, context, errors }
 }
 
-export const navigate = async (page, label) => { await page.locator('.sidebar nav button', { hasText: label }).first().click(); await page.locator('header.topbar h1').waitFor() }
+// Pages load on demand: wait for the page's code too (the "Loading the page…" placeholder gone).
+export const navigate = async (page, label) => { await page.locator('.sidebar nav button', { hasText: label }).first().click(); await page.locator('header.topbar h1').waitFor(); await page.locator('.page-loading').waitFor({ state: 'detached' }) }
 
 export async function loadSample(page) {
   await page.getByRole('button', { name: 'Load synthetic sample' }).first().click()
@@ -58,3 +63,18 @@ export async function loadSample(page) {
 }
 
 export const text = async (locator) => (await locator.innerText()).replace(/\s+/g, ' ').trim()
+
+// Reload a page that has the synthetic sample loaded. The sample is saved to IndexedDB in the background; a reload
+// that beats that save (slow CI runners) starts without it, so it is loaded again. Settings kept in localStorage stay.
+export async function reloadWithSample(page) {
+  await page.reload()
+  await page.locator('.sidebar nav').waitFor()
+  const kept = await page.locator('.notice', { hasText: 'synthetic sample dataset' }).first().waitFor({ timeout: 5000 }).then(() => true, () => false)
+  if (!kept) await loadSample(page)
+}
+
+// NAV-48: an item of the profile menu (top right).
+export async function profileItem(page, name) {
+  await page.locator('header.topbar').getByRole('button', { name: /^Profile/ }).click()
+  await page.getByRole('menu', { name: 'Profile' }).getByRole('menuitem', { name }).click()
+}

@@ -4,7 +4,7 @@ import { boardPeople, contentBulk, contentEpicId, contentPlan, personEmail } fro
 
 test('CNB-01: Content bulk Features — Epic 22919, NA, the DoD, one Review of Deliverables story, 4 h; a 100% Feature match is never created, a closer one is named (BLK-01)', () => {
   assert.equal(contentEpicId, 22919)
-  assert.deepEqual(contentBulk, { classification: 'NA', featureDoD: 'All Documents are approved', taskEstimate: 4 })
+  assert.deepEqual(contentBulk, { featureDoD: 'All Documents are approved', taskEstimate: 4 }, 'DPF-09: no Release Classification')
   const releases = [{ key: 'a', name: 'Clinical Library v7' }, { key: 'b', name: 'Atlas' }, { key: 'c', name: '' }, { key: 'd', name: 'Lexicon' }]
   const hits = { b: { item: { id: 7 }, score: 100 }, d: { item: { id: 8 }, score: 91 } }
   const plan = contentPlan(releases, (release) => release.name ? `Content | ${release.name}` : '', (release) => hits[release.key])
