@@ -44,6 +44,8 @@ The 3–5 day target is viable for a testable Release 1, not for every productio
 
 ## Backlog
 
+The [Code Review Backlog](CODE-REVIEW-BACKLOG.md) lists P1 fixes and records requirement and behavior contradictions under **Potential Bug**.
+
 Deferred on request; to be decided again when needed:
 
 - **Access coverage and usability (planning only, 4 November 2026).** Offer every Dashboard and Settings subpage in the Access configuration, and simplify the Access page layout so page visibility and edit permissions are easier to configure. Do not implement until explicitly requested.
