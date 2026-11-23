@@ -2,6 +2,18 @@
 
 Version history of the I&D Quality Demand Planning app, newest first. Every merged change bumps the version in `package.json` and adds its entry here, in the same pull request (CI-09; [CONFIGURATION-MANAGEMENT.md](CONFIGURATION-MANAGEMENT.md) §4): **major** for a change that breaks existing data, shared setup files or the way users work; **minor** for a new or changed feature; **patch** for a fix, a dependency update or documentation only. `pnpm test` fails when the newest version here is not the version in `package.json`. CI tags each version `vX.Y.Z` on its merge commit and publishes its GitHub release with the installers and this entry (CI-10); the build number of a version is the CI build of that merge (shown in the app under Force Update, and in `latest.json`). Open bugs and accepted limitations of every version are in [KNOWN-ISSUES.md](KNOWN-ISSUES.md); the third-party components of every version are in [SWBOM.md](SWBOM.md).
 
+## v4.0.0 — 2026-11-23
+
+**Fixed**
+- **QMS-0025 board: no extra page scrolling on Windows** — the board table no longer stops at 240 px (now 120 px, about three rows), and any page overflow the measurement misses is taken off the table, so the page does not scroll by a few pixels (BKL-45, KB-74).
+
+TC-BKL-34.
+
+- Removed a legacy dashboard containing embedded planning data from the public repository tree and recorded the code-review follow-up in the project backlog.
+
+- Sync Test2's layout, Board filters, Team Overview, close workflow and Azure write-action handling (NAV-50, NAV-51, BKL-40…47, OV-15, CON-102).
+- Store LTE and PI Review snapshots in the configured Git data repository (SNP-04…08). The desktop KPI tracker retains its SharePoint workbook reader.
+
 ## v3.21.0 — 2026-11-22
 
 **Added**
