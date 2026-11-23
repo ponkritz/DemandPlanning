@@ -150,14 +150,14 @@ export function CustomDashboardPage({ git, store, pageId, menu, viewer, views, o
       {tiles.length > 0 && <Metrics>{tiles.map((entry) => { const dataset = datasetOf(entry.source); const target = tabs.length ? tabs.find((tab) => tab.id === entry.tab) ?? tabs[0] : undefined; return <KpiTile key={entry.id} dataset={dataset} block={entry} narrowed={narrow(dataset, entry)} tabName={target?.name} onOpenTab={target ? () => update({ tab: target.id }) : undefined} /> })}</Metrics>}
       {tabs.length > 0 && <div className="overview-tabs dsh-tabs" role="tablist" aria-label="Dashboard tabs">{tabs.map((tab) => <button key={tab.id} type="button" role="tab" aria-selected={tab.id === activeTab?.id} className={`backlog-tab ${tab.id === activeTab?.id ? 'backlog-tab-active' : ''}`} onClick={() => update({ tab: tab.id })}>{tab.name}</button>)}</div>}
       <div className="od-insights dsh-panels" role={tabs.length ? 'tabpanel' : undefined}>
-        {panels.map((entry) => { const dataset = datasetOf(entry.source); return <BlockPanel key={entry.id} dataset={dataset} block={entry} narrowed={narrow(dataset, entry)} /> })}
+        {panels.map((entry) => { const dataset = datasetOf(entry.source); return <BlockPanel key={entry.id} dataset={dataset} block={entry} narrowed={narrow(dataset, entry)} colors={dashboard.colors} /> })}
       </div>
       {!panels.length && <EmptyState title={tabs.length ? `No charts or tables on ${activeTab?.name}.` : 'No charts or tables yet.'} detail={tiles.length ? undefined : noData.detail} />}
       <Panel className="dsh-about" eyebrow={(group?.name ?? 'On-Demand').toUpperCase()} title="About this dashboard" detail={`${dashboard.blocks.length} block${dashboard.blocks.length === 1 ? '' : 's'}${tabs.length ? ` on ${tabs.length} tab${tabs.length === 1 ? '' : 's'}` : ''}, read only, the same for everyone.`} info={<DashboardInfo path={dash.path} history={dash.history} owners={owners} />}><span /></Panel>
     </>}
 
     {editing && <BlockDialog datasets={datasets} dashboard={dashboard} block={editing.block} isNew={editing.isNew} preview={narrow} onCancel={() => setEditing(null)}
-      onSave={async (entry) => { await saveDashboard(upsertBlock(dashboard, entry), editing.isNew ? 'Add block' : 'Edit block', `Dashboard ${page.name}: ${editing.isNew ? 'add' : 'change'} the ${blockTypeLabel(entry.type)} ${entry.title}`); setEditing(null) }} />}
+      onSave={async (entry, colors) => { const next = upsertBlock(dashboard, entry); if (colors) next.colors = colors; else delete next.colors; await saveDashboard(next, editing.isNew ? 'Add block' : 'Edit block', `Dashboard ${page.name}: ${editing.isNew ? 'add' : 'change'} the ${blockTypeLabel(entry.type)} ${entry.title}`); setEditing(null) }} />}
     {arranging && <ArrangeDialog blocks={dashboard.blocks} tabs={tabs} sourceOf={(source) => sourceName(datasets, source)} onClose={() => setArranging(false)} onEdit={(entry) => { setArranging(false); setEditing({ block: entry, isNew: false }) }}
       onMove={(entry, by) => run(() => saveDashboard(moveBlock(dashboard, entry.id, by), 'Move block', `Dashboard ${page.name}: move ${entry.title} ${by < 0 ? 'up' : 'down'}`))}
       onRemove={(entry) => saveDashboard(removeBlock(dashboard, entry.id), 'Remove block', `Dashboard ${page.name}: remove the ${blockTypeLabel(entry.type)} ${entry.title}`)} />}

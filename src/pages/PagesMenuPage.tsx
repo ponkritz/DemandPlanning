@@ -130,7 +130,7 @@ export function PagesMenuPage({ git, store, menu, viewer, onOpen, onAddPage }: {
       }
       setGroupDialog(null)
     }} />}
-    {pageDialog && <EditPageDialog viewer={viewer} layout={layout} page={pageDialog} pending={Boolean(store.drafts[pageDialog.id])} onCancel={() => setPageDialog(null)} onSave={async (edit: PageEdit) => {
+    {pageDialog && <EditPageDialog viewer={viewer} layout={layout} page={pageDialog} pending={store.pending(pageDialog.id).length > 0} onCancel={() => setPageDialog(null)} onSave={async (edit: PageEdit) => {
       const stored = store.pages.find((entry) => entry.id === pageDialog.id) ?? pageDialog
       if (edit.name.trim() !== stored.name || edit.description.trim() !== stored.description) {
         const saved = await store.save(renamePage(stored, edit.name, edit.description), `Pages & menu: rename ${stored.name} to ${edit.name.trim()}`)

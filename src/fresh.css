@@ -975,6 +975,13 @@ td .od-flag{display:inline-block;margin-top:0}
 .od-filters{border:1px solid var(--line);border-radius:8px;padding:8px 12px;display:grid;gap:8px;justify-items:start}.od-filters>small{font-size:12px;color:var(--muted)}
 .od-filter{display:grid;gap:6px;width:100%;padding:8px;border-radius:8px;background:var(--surface-2)}.od-filter-head{display:flex;gap:8px;align-items:center}.od-filter-head select{flex:1}
 @media(max-width:900px){.od-insight-editor{grid-template-columns:1fr}}
+/* CHT-01…CHT-12 chart options: full-width panels, the target and 80% lines, clickable charts, the Display fieldset and colour pins */
+.od-insights>.od-insight-full{grid-column:1/-1}
+.viz-target{stroke-dasharray:5 4;stroke:var(--text-2)}.viz-legend i.viz-key-target{width:16px;height:0;border-top:2px dashed var(--text-2);border-radius:0;background:none}
+.viz-drill .viz-row-hit,.viz-drill .viz-row-active,.viz-drill .viz-bar,.viz-drill .viz-slice,.viz-fixed.viz-drill[role=img]{cursor:pointer}
+.od-kpi{margin:0 0 4px}.viz-target-group,.viz-pareto{pointer-events:none}
+.od-display{border:1px solid var(--line);border-radius:8px;padding:8px 12px;display:grid;gap:8px}.od-display legend{font-size:11px;font-weight:700;color:var(--text-2);padding:0 4px}.od-display .check{margin:0;font-size:13px}.od-display small{font-size:12px;color:var(--muted)}
+.od-colors{display:grid;gap:6px}.od-color{display:grid;grid-template-columns:14px minmax(0,1fr) minmax(0,9rem);gap:8px;align-items:center;font-size:12px}.od-color i{width:14px;height:14px;border-radius:3px;display:inline-block}.od-color span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .od-key{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;letter-spacing:.3px;white-space:nowrap}.od-row-key{margin:0;display:flex;gap:8px;align-items:baseline}.od-prefix{max-width:28rem}.od-prefix input{max-width:10rem;text-transform:uppercase}
 /* OND-19…25: row IDs, who added a row, History, Long text, Currency and column descriptions. */
 th .info-button{margin-left:4px;padding:0 6px;font-size:10px}
@@ -991,6 +998,32 @@ th .info-button{margin-left:4px;padding:0 6px;font-size:10px}
 .od-history ol>li{border:1px solid var(--line-soft);border-radius:8px;padding:6px 10px;background:var(--surface-2)}
 .od-history-head{margin:0 0 2px;color:var(--text-2)}.od-history ul{margin:0;padding-left:18px;display:grid;gap:2px;overflow-wrap:anywhere}
 .od-history del{color:var(--danger-text,var(--text-3))}.od-history ins{text-decoration:none;font-weight:600}.od-history-field{font-weight:600}.od-history-comment{margin:2px 0 0;font-style:italic}
+/* OND-27: the drawer (components/ui.tsx Drawer) — one record from the right, ~520px, the full width on a phone; an
+   overlay beside it; header and footer stay, the body scrolls. A row that opens it shows it can be clicked and focused. */
+.drawer-backdrop{position:fixed;inset:0;background:var(--overlay);z-index:1000;display:flex;justify-content:flex-end;animation:drawer-fade .16s ease-out}
+body:has(.drawer-backdrop){overflow:hidden}
+.drawer{width:min(520px,100vw);height:100%;max-height:100dvh;background:var(--surface);color:var(--text);box-shadow:-18px 0 50px var(--shadow-strong);display:flex;flex-direction:column;border-left:1px solid var(--line);animation:drawer-in .2s ease-out}
+.drawer:focus{outline:none}.drawer:focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
+.drawer-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 20px 14px;border-bottom:1px solid var(--line)}
+.drawer-heading h2{margin:3px 0 0;font-size:16px;color:var(--heading);overflow-wrap:anywhere}
+.drawer-heading-actions{display:flex;align-items:center;gap:6px;flex:none}.drawer-heading-actions .icon-button{color:var(--text-2);line-height:1;padding:0 4px}
+.drawer-steps{align-items:center}.drawer-steps .ghost{padding:5px 10px;font-size:14px;line-height:1}.drawer-steps small{font-size:11px;white-space:nowrap}
+.drawer-body{flex:1;overflow:auto;padding:16px 20px;display:grid;gap:14px;align-content:start;font-size:13px}
+.drawer-footer{border-top:1px solid var(--line);padding:12px 20px;display:grid;gap:8px;background:var(--surface)}
+.drawer-footer .notice{margin:0}.drawer-footer .write-blocked{display:block}
+.drawer-actions{display:flex;justify-content:flex-end;align-items:center;gap:8px;flex-wrap:wrap}.drawer-actions .drawer-remove{margin-right:auto}
+.drawer form{display:grid;gap:13px}.drawer label{gap:6px;font-size:12px}.drawer label small{font-size:11px;font-weight:400;color:var(--muted);line-height:1.4}
+.drawer input,.drawer select,.drawer textarea{padding:10px 12px}
+.od-row-values{margin:0;display:grid;gap:12px}.od-row-values>div{display:grid;gap:3px;padding-bottom:10px;border-bottom:1px solid var(--line-soft)}
+.od-row-values dt{font-size:11px;font-weight:700;color:var(--text-2)}.od-row-values dt .od-help{font-weight:400;color:var(--muted);margin-top:2px}
+.od-row-values dd{margin:0;font-size:13px;overflow-wrap:anywhere}.od-long-full{white-space:pre-line}
+.od-drawer .od-history ol{max-height:none}
+.data-table-row-open{cursor:pointer}.data-table-row-open:focus{outline:none}.data-table-row-open:focus-visible td{box-shadow:inset 0 2px 0 var(--accent),inset 0 -2px 0 var(--accent)}
+.od-pending .button-row{display:inline-flex;margin-left:6px;vertical-align:middle}
+@keyframes drawer-in{from{transform:translateX(100%)}to{transform:none}}
+@keyframes drawer-fade{from{opacity:0}to{opacity:1}}
+@media(max-width:560px){.drawer{width:100vw;border-left:0}.drawer-heading,.drawer-body,.drawer-footer{padding-left:16px;padding-right:16px}}
+@media(prefers-reduced-motion:reduce){.drawer,.drawer-backdrop{animation:none}}
 /* PGB-04, PGB-05: a menu group's heading with ⋯ (add a page to it); the Add / Edit page pop-ups. */
 .sidebar nav .nav-group-row{display:flex;align-items:center;gap:2px}.sidebar nav .nav-group-row>button.nav-group{flex:1;min-width:0}
 .sidebar nav button.nav-group-more{flex:none;width:auto;min-width:0;background:none;border:0;box-shadow:none;color:var(--sidebar-muted);font-weight:800;padding:0 8px;margin:0 2px 4px 0;line-height:1.4;cursor:pointer}

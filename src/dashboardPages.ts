@@ -1,7 +1,7 @@
 import { csvCell } from './csv.ts'
 import { merge3 } from './gitSaveQueue.ts'
-import { hasOptions, moneyOf, valuesOf, type Insight, type InsightFilter, type InsightMeasure, type OnDemandColumn, type OnDemandPage, type OnDemandRow } from './onDemand.ts'
-import { aggregate, bucketsOf, categoryColumns, filterColumns, formatValue, insightProblems, measureText, noneKey, numberOf, otherKey, passesFilter, secondColumns, valueColumns, type InsightData } from './onDemandInsights.ts'
+import { cleanOptions, hasOptions, measureKeys, moneyOf, parseColors, valuesOf, type ChartOptions, type Insight, type InsightFilter, type InsightMeasure, type OnDemandColumn, type OnDemandPage, type OnDemandRow } from './onDemand.ts'
+import { bucketsOf, categoryColumns, chartData, dateGroupLabels, filterColumns, formatValue, grainOf, insightProblems, kpiData, measureText, noneKey, numberOf, otherKey, passesFilter, secondColumns, valueColumns, withType, type ChartData } from './onDemandInsights.ts'
 
 // DSH-01…DSH-12 On-Demand Dashboard pages: a page type of the page builder (PGB-01) that is read only for everyone and
 // built by its owners from blocks — KPI tiles, bar, line and pie charts and summary tables — over the rows of any table
@@ -11,12 +11,13 @@ import { aggregate, bucketsOf, categoryColumns, filterColumns, formatValue, insi
 // dashboards/<page-id>.json, next to the page's own file (on-demand/<page-id>.json keeps its name and description).
 // Kept free of React so that every rule is tested on its own (tests/dashboard-pages.test.mjs).
 
-export type BlockType = 'kpi' | 'bar' | 'line' | 'pie' | 'table'
+export type BlockType = 'kpi' | 'bar' | 'line' | 'pie' | 'table' | 'pareto'
 export const blockTypes: { key: BlockType; label: string; hint: string }[] = [
   { key: 'kpi', label: 'KPI tile', hint: 'One number: the count, sum or average of the rows, shown as a tile above the tabs.' },
   { key: 'bar', label: 'Bar chart', hint: 'A value per category, optionally stacked by a Dropdown or Multi-select.' },
   { key: 'line', label: 'Line chart', hint: 'A value per month of a Date column.' },
   { key: 'pie', label: 'Pie chart', hint: 'Each category’s share of the total; more than 5 categories: the 5 largest and “Other”.' },
+  { key: 'pareto', label: 'Pareto chart', hint: 'Categories largest first as columns, the cumulative share (%) as a line on a 0–100% axis and an 80% line.' },
   { key: 'table', label: 'Summary table', hint: 'Rows by one field (largest first), optional columns by another, with totals; the first 10 rows, Show all, Export.' },
 ]
 export const blockTypeLabel = (type: BlockType) => blockTypes.find((entry) => entry.key === type)?.label ?? type
@@ -28,11 +29,13 @@ export interface DashboardBlock {
   category: string; second: string; measure: InsightMeasure; value: string; filters: InsightFilter[]; sort: 'value' | 'label'
   period: string // the Date column the dashboard's period filters on; '' = not filtered by period
   tab: string // the tab the block is on (a KPI tile: the tab it opens); '' = the first tab
+  options?: ChartOptions // CHT: the chart's display options, as an insight's
 }
 export interface DashboardTab { id: string; name: string }
 // A filter of the filter row: the viewer ticks values of a Dropdown / Multi-select column of one data source.
 export interface ViewerFilter { id: string; source: string; column: string }
-export interface Dashboard { schema: 1; kind: 'dashboard'; id: string; tabs: DashboardTab[]; filters: ViewerFilter[]; blocks: DashboardBlock[] }
+// colors (CHT-09): the dashboard's colour pins, a value's text → palette colour 1…5, used by every block's chart.
+export interface Dashboard { schema: 1; kind: 'dashboard'; id: string; tabs: DashboardTab[]; filters: ViewerFilter[]; blocks: DashboardBlock[]; colors?: Record<string, number> }
 
 export const dashboardFolder = 'dashboards'
 export const dashboardPath = (id: string) => `${dashboardFolder}/${id}.json`
@@ -110,7 +113,7 @@ export function parseDashboard(raw: string, expectedId?: string): ParsedDashboar
     if (!title) { dropped.push(`${label} has no title: left out.`); return [] }
     blockIds.add(item.id as string)
     const type = item.type as BlockType
-    const measure: InsightMeasure = item.measure === 'sum' || item.measure === 'average' ? item.measure : 'count'
+    const measure: InsightMeasure = measureKeys.includes(item.measure as InsightMeasure) ? item.measure as InsightMeasure : 'count'
     const blockFilters = (Array.isArray(item.filters) ? item.filters : []).flatMap((raw): InsightFilter[] => {
       const filter = raw as Partial<Record<keyof InsightFilter, unknown>> | null
       const column = ref(filter?.column)
@@ -122,16 +125,20 @@ export function parseDashboard(raw: string, expectedId?: string): ParsedDashboar
       return [{ column, ...(values?.length ? { values } : {}), ...(from ? { from } : {}), ...(to ? { to } : {}) }]
     }).slice(0, maxBlockFilters)
     const tab = ref(item.tab)
-    return [{ id: item.id as string, title, type, source: item.source, category: type === 'kpi' ? '' : ref(item.category), second: type === 'kpi' || type === 'pie' ? '' : ref(item.second), measure, value: measure === 'count' ? '' : ref(item.value), filters: blockFilters,
-      sort: type === 'line' ? 'label' : type === 'table' || type === 'kpi' ? 'value' : item.sort === 'label' ? 'label' : 'value', period: ref(item.period), tab: tab && tabIds.has(tab) ? tab : '' }]
+    // CHT: the display options validated as an insight's (a KPI tile takes none); unknown ones dropped.
+    const options = type === 'kpi' ? undefined : cleanOptions(type, measure, item.options)
+    return [{ id: item.id as string, title, type, source: item.source, category: type === 'kpi' ? '' : ref(item.category), second: type === 'kpi' || type === 'pie' || type === 'pareto' ? '' : ref(item.second), measure, value: measure === 'count' ? '' : ref(item.value), filters: blockFilters,
+      sort: type === 'line' ? 'label' : type === 'table' || type === 'kpi' || type === 'pareto' ? 'value' : item.sort === 'label' ? 'label' : 'value', period: ref(item.period), tab: tab && tabIds.has(tab) ? tab : '', ...(options ? { options } : {}) }]
   })
   if (blocks.length > maxBlocks) dropped.push(`Only the first ${maxBlocks} blocks are shown (${blocks.length} in the file).`)
-  return { dashboard: { schema: 1, kind: 'dashboard', id, tabs: keptTabs, filters: filters.slice(0, maxViewerFilters), blocks: blocks.slice(0, maxBlocks) }, dropped }
+  const colors = parseColors(file.colors)
+  return { dashboard: { schema: 1, kind: 'dashboard', id, tabs: keptTabs, filters: filters.slice(0, maxViewerFilters), blocks: blocks.slice(0, maxBlocks), ...(colors ? { colors } : {}) }, dropped }
 }
-const blockOut = ({ id, title, type, source, category, second, measure, value, filters, sort, period, tab }: DashboardBlock) =>
-  ({ id, title, type, source, ...(category ? { category } : {}), ...(second ? { second } : {}), measure, ...(value ? { value } : {}), ...(filters.length ? { filters } : {}), sort, ...(period ? { period } : {}), ...(tab ? { tab } : {}) })
+// CHT: options and colours are written only when set, so a dashboard without them stays byte for byte as before.
+const blockOut = ({ id, title, type, source, category, second, measure, value, filters, sort, period, tab, options }: DashboardBlock) =>
+  ({ id, title, type, source, ...(category ? { category } : {}), ...(second ? { second } : {}), measure, ...(value ? { value } : {}), ...(filters.length ? { filters } : {}), sort, ...(period ? { period } : {}), ...(tab ? { tab } : {}), ...(options && Object.keys(options).length ? { options } : {}) })
 export function serializeDashboard(dashboard: Dashboard) {
-  const out = `${JSON.stringify({ schema: 1, kind: 'dashboard', id: dashboard.id, tabs: dashboard.tabs.map(({ id, name }) => ({ id, name })), filters: dashboard.filters.map(({ id, source, column }) => ({ id, source, column })), blocks: dashboard.blocks.map(blockOut) }, null, 1)}\n`
+  const out = `${JSON.stringify({ schema: 1, kind: 'dashboard', id: dashboard.id, tabs: dashboard.tabs.map(({ id, name }) => ({ id, name })), filters: dashboard.filters.map(({ id, source, column }) => ({ id, source, column })), blocks: dashboard.blocks.map(blockOut), ...(dashboard.colors && Object.keys(dashboard.colors).length ? { colors: dashboard.colors } : {}) }, null, 1)}\n`
   if (new TextEncoder().encode(out).length > dashboardMaxBytes) throw new Error(`The dashboard is too large to save (over ${Math.round(dashboardMaxBytes / 1000)} KB). Remove blocks or filters.`)
   return out
 }
@@ -184,7 +191,9 @@ export function mergeDashboardText(baseText: string | null, mineText: string, th
   const blocks = mergeById(base?.blocks ?? null, mine.blocks, theirs.blocks, mineLater)
   // Read back through the parser: every rule of the file applies to the merged result (a tab removed by one save takes
   // the other's blocks on it to the first tab; the caps apply).
-  return serializeDashboard(parseDashboard(JSON.stringify({ schema: 1, kind: 'dashboard', id: mine.id, tabs, filters, blocks: blocks.map(blockOut) }), mine.id).dashboard)
+  // CHT-09: the colour pins are one entry, the later save's where both changed them.
+  const colors = later(base?.colors, mine.colors, theirs.colors, mineLater)
+  return serializeDashboard(parseDashboard(JSON.stringify({ schema: 1, kind: 'dashboard', id: mine.id, tabs, filters, blocks: blocks.map(blockOut), ...(colors ? { colors } : {}) }), mine.id).dashboard)
 }
 
 // ---- changing the dashboard (DSH-05, DSH-06) ----
@@ -217,7 +226,7 @@ export function setTabsAndFilters(dashboard: Dashboard, tabs: DashboardTab[], fi
 }
 
 // ---- a block's fields (DSH-05) ----
-export const asInsight = (block: DashboardBlock): Insight => ({ id: block.id, title: block.title, type: block.type === 'kpi' ? 'bar' : block.type, category: block.category, second: block.second, measure: block.measure, value: block.value, filters: block.filters, sort: block.type === 'table' ? 'value' : block.sort })
+export const asInsight = (block: DashboardBlock): Insight => ({ id: block.id, title: block.title, type: block.type, category: block.category, second: block.second, measure: block.measure, value: block.value, filters: block.filters, sort: block.type === 'table' ? 'value' : block.sort, ...(block.options ? { options: block.options } : {}) })
 export const periodColumns = (page: OnDemandPage) => page.columns.filter((column) => column.type === 'date')
 export function blankBlock(dataset: Dataset, id: string, type: BlockType = 'kpi', tab = ''): DashboardBlock {
   const page = dataset.page
@@ -227,15 +236,17 @@ export function blankBlock(dataset: Dataset, id: string, type: BlockType = 'kpi'
 // The block after its type or data source changed: fields that no longer fit are cleared or replaced by the first that fits.
 export function withBlockType(dataset: Dataset, block: DashboardBlock, type: BlockType): DashboardBlock {
   const page = dataset.page
-  if (type === 'kpi') return { ...block, type, category: '', second: '', sort: 'value' }
-  const category = categoryColumns(page, type).some((column) => column.id === block.category) ? block.category : categoryColumns(page, type)[0]?.id ?? ''
-  const second = type !== 'pie' && secondColumns(page, type).some((column) => column.id === block.second) && block.second !== category ? block.second : ''
-  const measure = type === 'pie' && block.measure === 'average' ? 'sum' : block.measure
-  return { ...block, type, category, second, measure, sort: type === 'line' ? 'label' : type === 'table' ? 'value' : block.sort }
+  if (type === 'kpi') { const out: DashboardBlock = { ...block, type, category: '', second: '', sort: 'value' }; delete out.options; return out }
+  // The insight's rules (OND-15, CHT): fields that no longer fit cleared, the measure and the options made to fit.
+  const next = withType(page, asInsight(block), type)
+  const out: DashboardBlock = { ...block, type, category: next.category, second: next.second, measure: next.measure, value: next.value, sort: type === 'table' ? 'value' : next.sort }
+  if (next.options) out.options = next.options
+  else delete out.options
+  return out
 }
 export function withSource(dataset: Dataset, block: DashboardBlock): DashboardBlock {
   const fresh = blankBlock(dataset, block.id, block.type, block.tab)
-  return { ...fresh, title: block.title, measure: block.measure !== 'count' && valueColumns(dataset.page).length ? block.measure : 'count', value: block.measure !== 'count' ? valueColumns(dataset.page)[0]?.id ?? '' : '' }
+  return { ...fresh, ...(block.options ? { options: block.options } : {}), title: block.title, measure: block.measure !== 'count' && valueColumns(dataset.page).length ? block.measure : 'count', value: block.measure !== 'count' ? valueColumns(dataset.page)[0]?.id ?? '' : '' }
 }
 
 // Why a block cannot be shown with its data source as it is now — empty when it can (OND-17 for the columns, plus the
@@ -297,17 +308,18 @@ export function narrowRows(dataset: Dataset, block: DashboardBlock, months: stri
 // A KPI tile: the measure over the rows (each row once), one currency at a time for a Currency column (OND-24).
 export interface KpiValue { value: number | null; rows: number; used: number; currency: string; currencies: { code: string; rows: number }[]; otherCurrency: number; noNumber: number }
 export function kpiValue(page: OnDemandPage, block: DashboardBlock, currency = ''): KpiValue {
-  const probe: OnDemandPage = { ...page, columns: [...page.columns, { id: 'dsh-all', name: 'All', type: 'text', options: [], required: false }] }
-  const data = aggregate(probe, { ...asInsight(block), type: 'table', category: 'dsh-all', second: '' }, { currency })
+  const data = kpiData(page, asInsight(block), currency)
   return { value: data.total, rows: data.rows.matched, used: data.rows.used, currency: data.currency, currencies: data.currencies, otherCurrency: data.rows.otherCurrency, noNumber: data.rows.noNumber }
 }
-export const blockData = (page: OnDemandPage, block: DashboardBlock, currency = ''): InsightData => aggregate(page, asInsight(block), { ...(block.type === 'pie' ? { maxCategories: 5 } : block.type === 'table' ? {} : { maxCategories: block.type === 'bar' ? 20 : undefined, maxSeries: 5 }), currency })
+// The limits of each type as the insights' (limitsFor: a pie 5 + Other, bars 20 and 5 stacks, lines 5, a table all, or
+// the chosen Top N) and the chart options (CHT): the same data as an insight of the same fields.
+export const blockData = (page: OnDemandPage, block: DashboardBlock, currency = ''): ChartData => chartData(page, asInsight(block), currency)
 export const kpiText = (value: KpiValue) => value.value == null ? '—' : `${formatValue(value.value)}${value.currency ? ` ${value.currency}` : ''}`
 // DSH-06: a summary table — one row per category, largest total first ("(none)" and "Other" last), the first 10
 // shown unless Show all; the shared table exports every row through the neutralising CSV helper (csv.ts).
 export const tableLimit = 10
 export interface SummaryRow { key: string; label: string; values: (number | null)[]; total: number | null; rank: number }
-export function summaryRows(data: InsightData): SummaryRow[] {
+export function summaryRows(data: ChartData): SummaryRow[] {
   const rank = (key: string) => key === otherKey ? 2 : key === noneKey ? 1 : 0
   return data.categories.map((cat, index) => ({ key: cat.key, label: cat.label, values: data.values[index], total: data.categoryTotals[index], rank: rank(cat.key) }))
     .sort((a, b) => a.rank - b.rank || (b.total ?? -Infinity) - (a.total ?? -Infinity) || a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' }))
@@ -326,7 +338,7 @@ export function blockSubject(dataset: Dataset, block: DashboardBlock, currency =
   const column = (id: string) => page.columns.find((entry) => entry.id === id)?.name ?? '(removed column)'
   const measure = measureText(page, asInsight(block), currency)
   if (block.type === 'kpi') return measure
-  const by = block.type === 'line' ? `per month of ${column(block.category)}` : `by ${column(block.category)}`
+  const by = block.type === 'line' ? `per ${dateGroupLabels[grainOf(asInsight(block))].unit} of ${column(block.category)}` : `by ${column(block.category)}`
   const split = block.second ? `, ${block.type === 'table' ? 'columns by' : block.type === 'line' ? 'one line per' : 'stacked by'} ${column(block.second)}` : ''
   return `${measure} ${by}${split}`
 }

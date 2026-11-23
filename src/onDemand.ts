@@ -29,19 +29,68 @@ export interface LogEntry { id: string; at: string; by: string; added?: true; co
 // OND-19…21: seq — the readable sequential number (given on Save to Git); addedBy / addedAt — who added the row and
 // when (UTC ISO), set once; log — the update log.
 export interface OnDemandRow { id: string; key?: string; seq?: number; addedBy?: string; addedAt?: string; log?: LogEntry[]; cells: Record<string, OnDemandValue> }
-export interface OnDemandPage { schema: 1; kind: 'on-demand-page'; id: string; name: string; description: string; keyPrefix: string; columns: OnDemandColumn[]; rows: OnDemandRow[]; insights: Insight[] }
+export interface OnDemandPage { schema: 1; kind: 'on-demand-page'; id: string; name: string; description: string; keyPrefix: string; columns: OnDemandColumn[]; rows: OnDemandRow[]; insights: Insight[]; colors?: Record<string, number> }
 
 // OND-11…OND-17 Insights: charts and summary tables built from the page's rows, kept in the same file (an `insights`
 // list, written only when the page has one) so they travel with the page and are merged with it. Columns are referred
 // to by id, so a renamed column is followed; a removed one (or one whose type no longer fits) is kept as written and
 // the insight says so instead of drawing (OND-17).
-export type InsightType = 'bar' | 'line' | 'pie' | 'table'
-export type InsightMeasure = 'count' | 'sum' | 'average'
+// CHT-01…: 'pareto' and 'kpi' are chart types of their own; 'min', 'max' and 'distinct' further measures.
+export type InsightType = 'bar' | 'line' | 'pie' | 'table' | 'pareto' | 'kpi'
+export type InsightMeasure = 'count' | 'sum' | 'average' | 'min' | 'max' | 'distinct'
 // A filter on a Dropdown / Multi-select column (values: the options kept; '' is "(none)") or on a Date column (from / to
 // month, YYYY-MM, either may be open).
 export interface InsightFilter { column: string; values?: string[]; from?: string; to?: string }
-export interface Insight { id: string; title: string; type: InsightType; category: string; second: string; measure: InsightMeasure; value: string; filters: InsightFilter[]; sort: 'value' | 'label' }
-export const insightTypeKeys: InsightType[] = ['bar', 'line', 'pie', 'table']
+// CHT-02…CHT-10: the display options of a chart, all optional — an insight or dashboard block without them is drawn as
+// before (horizontal bars, dates by month, the usual number of categories, values as measured, no target, half width).
+export type DateGroup = 'day' | 'week' | 'month' | 'quarter' | 'year'
+export interface ChartOptions {
+  orientation?: 'vertical' // a bar chart as vertical columns (horizontal bars when absent)
+  dateGroup?: DateGroup // a Date column grouped by day, ISO week, quarter or year (month when absent)
+  top?: number | 'all' // the N largest categories and "Other" (1…50) or all of them; absent: the type's usual limit
+  cumulative?: true // a running total along the categories (bar, line)
+  percent?: true // values as a share of the total (bar, line, summary table)
+  target?: { value: number; label: string } // a fixed reference line (bar, line, Pareto)
+  size?: 'half' | 'full' // the panel's width in the grid (half when absent)
+}
+export interface Insight { id: string; title: string; type: InsightType; category: string; second: string; measure: InsightMeasure; value: string; filters: InsightFilter[]; sort: 'value' | 'label'; options?: ChartOptions }
+export const insightTypeKeys: InsightType[] = ['bar', 'line', 'pie', 'table', 'pareto', 'kpi']
+export const measureKeys: InsightMeasure[] = ['count', 'sum', 'average', 'min', 'max', 'distinct']
+// Count and Sum add up; the others cannot be stacked, shown as shares, summed into a running total or a Pareto.
+export const additive = (measure: InsightMeasure) => measure === 'count' || measure === 'sum'
+export const dateGroups: DateGroup[] = ['day', 'week', 'month', 'quarter', 'year']
+export const maxTop = 50, maxTargetLabel = 40, maxColorPins = 200
+// CHT-09: the colours of the chart palette a value can be pinned to (--viz-series-1…5).
+export const paletteSize = 5
+// Which options each type takes; the others are dropped when read and when the type changes.
+export function cleanOptions(type: InsightType, measure: InsightMeasure, raw: unknown): ChartOptions | undefined {
+  const item = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {}
+  const out: ChartOptions = {}
+  if (type === 'bar' && item.orientation === 'vertical') out.orientation = 'vertical'
+  if (type !== 'kpi' && typeof item.dateGroup === 'string' && item.dateGroup !== 'month' && dateGroups.includes(item.dateGroup as DateGroup)) out.dateGroup = item.dateGroup as DateGroup
+  if (type === 'bar' || type === 'pie' || type === 'pareto' || type === 'table') {
+    if (item.top === 'all') out.top = 'all'
+    else if (typeof item.top === 'number' && Number.isFinite(item.top) && item.top >= 1) out.top = Math.min(maxTop, Math.round(item.top))
+  }
+  if ((type === 'bar' || type === 'line') && additive(measure) && item.cumulative === true) out.cumulative = true
+  if ((type === 'bar' || type === 'line' || type === 'table') && additive(measure) && item.percent === true) out.percent = true
+  const target = item.target as Record<string, unknown> | undefined
+  if ((type === 'bar' || type === 'line' || type === 'pareto') && target && typeof target === 'object' && typeof target.value === 'number' && Number.isFinite(target.value) && Math.abs(target.value) <= 1e12) {
+    out.target = { value: target.value, label: typeof target.label === 'string' ? target.label.trim().replace(/\s+/g, ' ').slice(0, maxTargetLabel) : '' }
+  }
+  if (item.size === 'half' || item.size === 'full') out.size = item.size
+  return Object.keys(out).length ? out : undefined
+}
+// CHT-09: a page's (or a dashboard's) colour pins — a value's text → a palette colour 1…5; anything else is dropped.
+export function parseColors(raw: unknown): Record<string, number> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const out: Record<string, number> = {}
+  for (const [key, slot] of Object.entries(raw as Record<string, unknown>).slice(0, maxColorPins)) {
+    const value = key.trim().replace(/\s+/g, ' ').slice(0, 120)
+    if (value && typeof slot === 'number' && Number.isInteger(slot) && slot >= 1 && slot <= paletteSize) out[value] = slot
+  }
+  return Object.keys(out).length ? out : undefined
+}
 export const maxInsights = 40, maxFilters = 10
 
 export const onDemandFolder = 'on-demand'
@@ -215,6 +264,18 @@ export function upsertRow(page: OnDemandPage, row: OnDemandRow, edit: RowEdit = 
   return { ...page, rows: page.rows.map((current) => current.id === row.id ? next : current) }
 }
 export const removeRow = (page: OnDemandPage, id: string): OnDemandPage => ({ ...page, rows: page.rows.filter((row) => row.id !== id) })
+// OND-28: a row saved at once from the drawer — the row's change applied to the page as last read from Git (its log
+// entry made now), and the commit message naming it: "CoNQ: add row CONQ-0013 (CONQ-261123-K7Q2)", "CoNQ: update row
+// CONQ-0012", "CoNQ: remove row CONQ-0012". A new row's ID is the one it will get when nothing else was saved meanwhile
+// (the merged save of GIT-17 gives the next free one otherwise); its key never changes, so the message names both.
+export type RowAction = 'add' | 'update' | 'remove'
+export function rowSave(page: OnDemandPage, row: OnDemandRow, action: RowAction, edit: RowEdit = {}): { page: OnDemandPage; message: string } {
+  const next = action === 'remove' ? removeRow(page, row.id) : upsertRow(page, row, edit)
+  const named = withRowNumbers(next).rows.find((entry) => entry.id === row.id) ?? page.rows.find((entry) => entry.id === row.id) ?? row
+  const id = rowId(page, named)
+  const label = action === 'add' ? [id, named.key].filter(Boolean).join(' (') + (id && named.key ? ')' : '') : id || named.key || row.id
+  return { page: next, message: `${page.name}: ${action} row ${label}` }
+}
 export function filterRows(page: OnDemandPage, search: string) {
   const words = search.trim().toLowerCase().split(/\s+/).filter(Boolean)
   if (!words.length) return page.rows
@@ -368,7 +429,8 @@ export function parseOnDemandPage(raw: string, expectedId?: string): OnDemandPag
   }).slice(0, maxRows)
   const name = cleanName(text(file.name, 80)) || id
   const keyPrefix = typeof file.keyPrefix === 'string' && keyPrefixPattern.test(file.keyPrefix) ? file.keyPrefix : prefixFor(name)
-  return { schema: 1, kind: 'on-demand-page', id, name, description: text(file.description, 300).trim(), keyPrefix, columns, rows, insights: parseInsights(file.insights) }
+  const colors = parseColors(file.colors)
+  return { schema: 1, kind: 'on-demand-page', id, name, description: text(file.description, 300).trim(), keyPrefix, columns, rows, insights: parseInsights(file.insights), ...(colors ? { colors } : {}) }
 }
 // OND-20, OND-21: a time in the file — kept as a UTC ISO time when it is one, else dropped.
 const isoTime = (value: unknown) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value) && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : ''
@@ -402,7 +464,7 @@ export function parseInsights(list: unknown): Insight[] {
     if (!item || typeof item !== 'object' || typeof item.id !== 'string' || !idPattern.test(item.id) || seen.has(item.id) || !insightTypeKeys.includes(item.type as InsightType)) return []
     seen.add(item.id)
     const type = item.type as InsightType
-    const measure: InsightMeasure = item.measure === 'sum' || item.measure === 'average' ? item.measure : 'count'
+    const measure: InsightMeasure = measureKeys.includes(item.measure as InsightMeasure) ? item.measure as InsightMeasure : 'count'
     const filters = (Array.isArray(item.filters) ? item.filters : []).flatMap((raw): InsightFilter[] => {
       const filter = raw as Partial<Record<keyof InsightFilter, unknown>> | null
       const column = ref(filter?.column)
@@ -413,10 +475,12 @@ export function parseInsights(list: unknown): Insight[] {
       if (!values?.length && !from && !to) return []
       return [{ column, ...(values?.length ? { values } : {}), ...(from ? { from } : {}), ...(to ? { to } : {}) }]
     }).slice(0, maxFilters)
-    return [{ id: item.id, title: cleanName(text(item.title, 120)) || 'Untitled', type, category: ref(item.category), second: type === 'pie' ? '' : ref(item.second), measure, value: measure === 'count' ? '' : ref(item.value), filters, sort: type === 'line' ? 'label' : item.sort === 'label' ? 'label' : 'value' }]
+    const options = cleanOptions(type, measure, item.options)
+    return [{ id: item.id, title: cleanName(text(item.title, 120)) || 'Untitled', type, category: type === 'kpi' ? '' : ref(item.category), second: type === 'pie' || type === 'pareto' || type === 'kpi' ? '' : ref(item.second), measure, value: measure === 'count' ? '' : ref(item.value), filters, sort: type === 'line' ? 'label' : type === 'pareto' ? 'value' : item.sort === 'label' ? 'label' : 'value', ...(options ? { options } : {}) }]
   }).slice(0, maxInsights)
 }
-const insightOut = ({ id, title, type, category, second, measure, value, filters, sort }: Insight) => ({ id, title, type, category, ...(second ? { second } : {}), measure, ...(value ? { value } : {}), ...(filters.length ? { filters } : {}), sort })
+// CHT: the options are written only when an insight has any, so a file without them stays byte for byte as before.
+const insightOut = ({ id, title, type, category, second, measure, value, filters, sort, options }: Insight) => ({ id, title, type, category, ...(second ? { second } : {}), measure, ...(value ? { value } : {}), ...(filters.length ? { filters } : {}), sort, ...(options && Object.keys(options).length ? { options } : {}) })
 // Schema 1 still: the new fields (a column's description and currency, a row's seq, addedBy, addedAt and log) are
 // optional, so an older file reads as before; an older app version drops them when it saves (LIM-19).
 const logOut = ({ id, at, by, added, comment, changes }: LogEntry) => ({ id, at, by, ...(added ? { added } : {}), ...(comment ? { comment } : {}), changes })
@@ -424,7 +488,7 @@ const logOut = ({ id, at, by, added, comment, changes }: LogEntry) => ({ id, at,
 export function serializeOnDemandPage(input: OnDemandPage, { fill = true }: { fill?: boolean } = {}) {
   // OND-18, OND-19: a saved file has a key and a sequential number on every row.
   const page = fill ? withRowNumbers(withRowKeys(input)) : input
-  const out = `${JSON.stringify({ schema: 1, kind: 'on-demand-page', id: page.id, name: page.name, description: page.description, keyPrefix: page.keyPrefix, columns: page.columns.map(({ id, name, type, options, required, description, currency }) => ({ id, name, type, ...(hasOptions(type) ? { options } : {}), ...(required ? { required } : {}), ...(description ? { description } : {}), ...(type === 'currency' ? { currency: currency ?? defaultCurrency } : {}) })), rows: page.rows.map(({ id, key, seq, addedBy, addedAt, log, cells }) => ({ id, ...(key ? { key } : {}), ...(seq ? { seq } : {}), ...(addedBy ? { addedBy } : {}), ...(addedAt ? { addedAt } : {}), ...(log?.length ? { log: log.map(logOut) } : {}), cells })), ...(page.insights.length ? { insights: page.insights.map(insightOut) } : {}) }, null, 1)}\n`
+  const out = `${JSON.stringify({ schema: 1, kind: 'on-demand-page', id: page.id, name: page.name, description: page.description, keyPrefix: page.keyPrefix, columns: page.columns.map(({ id, name, type, options, required, description, currency }) => ({ id, name, type, ...(hasOptions(type) ? { options } : {}), ...(required ? { required } : {}), ...(description ? { description } : {}), ...(type === 'currency' ? { currency: currency ?? defaultCurrency } : {}) })), rows: page.rows.map(({ id, key, seq, addedBy, addedAt, log, cells }) => ({ id, ...(key ? { key } : {}), ...(seq ? { seq } : {}), ...(addedBy ? { addedBy } : {}), ...(addedAt ? { addedAt } : {}), ...(log?.length ? { log: log.map(logOut) } : {}), cells })), ...(page.insights.length ? { insights: page.insights.map(insightOut) } : {}), ...(page.colors && Object.keys(page.colors).length ? { colors: page.colors } : {}) }, null, 1)}\n`
   if (new TextEncoder().encode(out).length > onDemandMaxBytes) throw new Error(`The page is too large to save to Git (over ${Math.round(onDemandMaxBytes / 1000)} KB). Remove rows, or split it into two pages.`)
   return out
 }
@@ -481,6 +545,8 @@ export const mergeOnDemandText: Merge = (baseText, mineText, theirsText, mineLat
   const insights = mergeById(base?.insights ?? null, mine.insights, theirs.insights, mineLater)
   const insightOrder = later(base?.insights.map((entry) => entry.id), mine.insights.map((entry) => entry.id), theirs.insights.map((entry) => entry.id), mineLater) ?? mine.insights.map((entry) => entry.id)
   const orderedInsights = [...insightOrder.flatMap((id) => insights.filter((entry) => entry.id === id)), ...insights.filter((entry) => !insightOrder.includes(entry.id))]
+  // CHT-09: the colour pins are one entry, the later save's where both changed them.
+  const colors = later(base?.colors, mine.colors, theirs.colors, mineLater)
   // Read back through the parser: values of columns that are gone are dropped, every rule of the file applies.
-  return serializeOnDemandPage(parseOnDemandPage(JSON.stringify({ schema: 1, kind: 'on-demand-page', id: mine.id, ...head, columns: ordered, rows, insights: orderedInsights.map(insightOut) }), mine.id))
+  return serializeOnDemandPage(parseOnDemandPage(JSON.stringify({ schema: 1, kind: 'on-demand-page', id: mine.id, ...head, columns: ordered, rows, insights: orderedInsights.map(insightOut), ...(colors ? { colors } : {}) }), mine.id))
 }

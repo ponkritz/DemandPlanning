@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { useCan } from '../useCan'
 import { useTableDefaults } from './tableDesign'
 import { compareCells, moveId, moveIdTo, orderedIds, readLayout, saveLayout, tableCsv, tableSheet, type CellValue, type ExportFormat, type TableDensity, type TableLayout } from '../tableDefaults'
@@ -64,9 +64,13 @@ export interface DataTableProps<T> {
   // Child rows drawn under a row with the same columns (a tree, e.g. a Feature's User Stories and Tasks); the owner
   // returns them only while the row is open.
   subRows?: (row: T) => T[] | undefined
+  // OND-27: a row opens (e.g. in a drawer) on a click or Enter / Space; the rows are focusable, and the owner gets the
+  // rows in the order shown (sort and filter) for Previous / Next. A click on a button, link or field in the row does not open it.
+  onRowOpen?: (row: T, shown: T[]) => void
+  rowLabel?: (row: T) => string // the accessible name of an opening row
 }
 
-export function DataTable<T>({ id, columns, rows, rowKey, exportName, toolbar, status, limit, defaultSort, sort: controlledSort, onSort, rowClassName, empty, footer, className = '', caption, expand, group, totals, subRows }: DataTableProps<T>) {
+export function DataTable<T>({ id, columns, rows, rowKey, exportName, toolbar, status, limit, defaultSort, sort: controlledSort, onSort, rowClassName, empty, footer, className = '', caption, expand, group, totals, subRows, onRowOpen, rowLabel }: DataTableProps<T>) {
   const defaults = useTableDefaults()
   const widths = useColumnWidths(`table:${id}`, defaults.defaultWrap)
   const [layout, setLayoutState] = useState<TableLayout>(() => readLayout(id))
@@ -121,7 +125,12 @@ export function DataTable<T>({ id, columns, rows, rowKey, exportName, toolbar, s
 
   const rowLines = (row: T, index: number): ReactNode[] => {
     const key = rowKey(row, index), detail = expand?.(row)
-    return [<tr key={key} className={rowClassName?.(row)}>{shownColumns.map((column) => {
+    const opens = onRowOpen ? {
+      tabIndex: 0, 'data-row-key': key, 'aria-label': rowLabel?.(row),
+      onClick: (event: ReactMouseEvent) => { if (!(event.target instanceof Element) || !event.target.closest('button, a, input, select, textarea, label')) onRowOpen(row, sorted) },
+      onKeyDown: (event: ReactKeyboardEvent) => { if ((event.key === 'Enter' || event.key === ' ') && event.target === event.currentTarget) { event.preventDefault(); onRowOpen(row, sorted) } },
+    } : {}
+    return [<tr key={key} className={[rowClassName?.(row), onRowOpen ? 'data-table-row-open' : ''].filter(Boolean).join(' ') || undefined} {...opens}>{shownColumns.map((column) => {
       const value = valueOf(column, row)
       return <td key={column.id} style={defaults.resize ? widths.style(column.id) : undefined} className={[column.align ? `align-${column.align}` : '', column.className ?? ''].filter(Boolean).join(' ') || undefined} title={column.title?.(row) ?? (typeof value === 'string' && value.length > 40 ? value : undefined)}>{column.render ? column.render(row) : value instanceof Date ? value.toLocaleString() : value ?? ''}</td>
     })}</tr>, ...(detail ? [<tr key={`${key}/detail`} className="data-table-detail"><td colSpan={shownColumns.length}>{detail}</td></tr>] : []), ...(subRows?.(row) ?? []).flatMap((child, childIndex) => rowLines(child, childIndex))]

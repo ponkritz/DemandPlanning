@@ -130,6 +130,57 @@ export function Modal({ title, eyebrow, onClose, children, wide = false, form = 
   }, [])
   return createPortal(<div className="modal-backdrop" role="presentation" onMouseDown={form ? undefined : onClose}><div ref={dialog} tabIndex={-1} className={wide ? 'modal modal-wide' : 'modal'} role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}><div className="modal-heading"><div><p className="eyebrow">{eyebrow}</p><h2>{title}</h2></div><button type="button" className="icon-button" onClick={onClose} aria-label="Close">×</button></div>{children}</div></div>, document.body)
 }
+// OND-27: a drawer — one record beside the page it belongs to, sliding in from the right (about 520 px; the full width
+// on a phone). Rendered into <body> like a pop-up and sharing its keyboard rules (UI-18): the focus moves into it (the
+// first field, else the drawer), Tab and Shift+Tab stay inside, Escape closes the topmost drawer or pop-up, and on close
+// the focus goes back to what opened it (or to restoreFocus()). A click on the overlay beside it closes it as × does —
+// onClose decides whether to ask first (unsaved edits). Header: eyebrow, title (the dialog's accessible name), optional
+// actions (‹ ›) and ×; the body scrolls; the footer (the actions) stays at the bottom.
+export function Drawer({ title, eyebrow, onClose, children, footer, headerActions, restoreFocus, className = '' }: { title: string; eyebrow?: string; onClose: () => void; children: ReactNode; footer?: ReactNode; headerActions?: ReactNode; restoreFocus?: () => HTMLElement | null | undefined; className?: string }) {
+  const panel = useRef<HTMLElement>(null)
+  const titleId = useId()
+  const close = useRef(onClose)
+  const restore = useRef(restoreFocus)
+  useEffect(() => { close.current = onClose; restore.current = restoreFocus })
+  useEffect(() => {
+    const me = {}
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    openDialogs.push(me)
+    const box = panel.current
+    if (box && !box.contains(document.activeElement)) (box.querySelector<HTMLElement>('.drawer-body [autofocus]') ?? box).focus()
+    const key = (event: KeyboardEvent) => {
+      if (openDialogs[openDialogs.length - 1] !== me || !box) return
+      const target = event.target instanceof HTMLElement ? event.target : null
+      if (event.key === 'Escape') {
+        if (event.defaultPrevented || target?.getAttribute('aria-expanded') === 'true') return
+        event.preventDefault(); close.current()
+      } else if (event.key === 'Tab') {
+        const items = [...box.querySelectorAll<HTMLElement>(focusable)].filter((item) => item.offsetParent !== null || item === document.activeElement)
+        if (!items.length) { event.preventDefault(); box.focus(); return }
+        const at = items.indexOf(document.activeElement as HTMLElement)
+        if (event.shiftKey && at <= 0) { event.preventDefault(); items[items.length - 1].focus() }
+        else if (!event.shiftKey && (at === -1 || at === items.length - 1)) { event.preventDefault(); items[0].focus() }
+      }
+    }
+    document.addEventListener('keydown', key)
+    return () => {
+      document.removeEventListener('keydown', key)
+      openDialogs.splice(openDialogs.indexOf(me), 1)
+      const back = restore.current?.() ?? opener
+      if (back?.isConnected && (!document.activeElement || document.activeElement === document.body || box?.contains(document.activeElement) || !document.activeElement.isConnected)) back.focus()
+    }
+  }, [])
+  return createPortal(<div className="drawer-backdrop" role="presentation" onMouseDown={() => close.current()}>
+    <aside ref={panel} tabIndex={-1} className={`drawer ${className}`.trim()} role="dialog" aria-modal="true" aria-labelledby={titleId} onMouseDown={(event) => event.stopPropagation()}>
+      <div className="drawer-heading">
+        <div>{eyebrow && <p className="eyebrow">{eyebrow}</p>}<h2 id={titleId}>{title}</h2></div>
+        <div className="drawer-heading-actions">{headerActions}<button type="button" className="icon-button" onClick={() => close.current()} aria-label="Close">×</button></div>
+      </div>
+      <div className="drawer-body">{children}</div>
+      {footer && <div className="drawer-footer">{footer}</div>}
+    </aside>
+  </div>, document.body)
+}
 // The saved values of a setting, shown on the page while its editor is a pop-up.
 export function SettingsSummary({ rows }: { rows: [string, ReactNode][] }) {
   return <dl className="settings-summary">{rows.map(([term, value]) => <div key={term}><dt>{term}</dt><dd>{value || '—'}</dd></div>)}</dl>

@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { readChartLabels, saveChartLabel } from '../chartLabels'
 import { DataTable, type DataColumn } from './DataTable'
+import { ChartOptionsFields } from './ChartOptionsFields'
 import { InsightView } from './InsightCharts'
 import { EmptyState, Info, Metric, Modal, Notice, Panel } from './ui'
 import { hasOptions, type InsightFilter, type InsightMeasure } from '../onDemand'
-import { currencyText, formatValue, insightRules, measureText, measures, noneKey, noneLabel, secondLabel } from '../onDemandInsights'
-import { asInsight, noData, blockData, blockError, blockProblems, blockSubject, blockTypeLabel, blockTypes, categoryColumns, filterColumns, kpiText, kpiValue, periodColumns, periodNote, secondColumns, summaryRows, tableLimit, valueColumns, withBlockType, withSource, type Dashboard, type DashboardBlock, type Dataset, type Narrowed, type SummaryRow } from '../dashboardPages'
+import { currencyText, formatShown, insightRules, measureColumns, measuresFor, noneKey, noneLabel, secondLabel, valueText } from '../onDemandInsights'
+import { asInsight, noData, blockData, blockError, blockProblems, blockSubject, blockTypeLabel, blockTypes, categoryColumns, filterColumns, kpiText, kpiValue, periodColumns, periodNote, secondColumns, summaryRows, tableLimit, withBlockType, withSource, type Dashboard, type DashboardBlock, type Dataset, type Narrowed, type SummaryRow } from '../dashboardPages'
 
 // DSH-05, DSH-06 The blocks of a Dashboard page: a KPI tile (Metric, UI-STANDARDS §9), a bar, line or pie chart — the
 // On-Demand insight charts in the shared chart frame (OND-12: legend, Data labels, Table / Chart) — and a summary table
@@ -31,23 +32,23 @@ export function KpiTile({ dataset, block, narrowed, tabName, onOpenTab }: { data
 }
 
 // A chart or a summary table in its panel.
-export function BlockPanel({ dataset, block, narrowed }: { dataset: Dataset; block: DashboardBlock; narrowed: Narrowed | null }) {
+export function BlockPanel({ dataset, block, narrowed, colors }: { dataset: Dataset; block: DashboardBlock; narrowed: Narrowed | null; colors?: Record<string, number> }) {
   const filters = filtersText(dataset, block.filters)
   const problems = narrowed ? blockProblems(dataset, block) : [dataset.problem ?? '']
-  return <Panel className={`od-insight dsh-block dsh-block-${block.type}`} eyebrow={`${blockTypeLabel(block.type).toUpperCase()} · ${dataset.name.toUpperCase()}`} title={block.title}
+  return <Panel className={`od-insight dsh-block dsh-block-${block.type}${block.options?.size === 'full' ? ' od-insight-full' : ''}`} eyebrow={`${blockTypeLabel(block.type).toUpperCase()} · ${dataset.name.toUpperCase()}`} title={block.title}
     detail={<><span>{blockSubject(dataset, block)}</span><br /><span className="od-insight-filters">{periodNote(dataset, block)}{filters ? ` · Filters: ${filters}` : ''}{narrowed ? ` · ${counted(narrowed)}` : ''}</span></>}
     info={problems.length || !narrowed ? undefined : <ul className="od-rules">{insightRules(narrowed.page, asInsight(block)).map((line) => <li key={line}>{line}</li>)}<li>The period (Year / Quarter / Month above) keeps the rows whose {dataset.page.columns.find((column) => column.id === block.period)?.name ?? 'date'} falls in it; rows without that date are left out.</li></ul>}>
-    <BlockBody dataset={dataset} block={block} narrowed={narrowed} problems={problems} />
+    <BlockBody dataset={dataset} block={block} narrowed={narrowed} problems={problems} colors={colors} />
   </Panel>
 }
-function BlockBody({ dataset, block, narrowed, problems }: { dataset: Dataset; block: DashboardBlock; narrowed: Narrowed | null; problems: string[] }) {
+function BlockBody({ dataset, block, narrowed, problems, colors, drill = true }: { dataset: Dataset; block: DashboardBlock; narrowed: Narrowed | null; problems: string[]; colors?: Record<string, number>; drill?: boolean }) {
   // DSH-06: a dashboard chart starts with its data labels on (UI-17 keeps the viewer's own choice per chart): the choice is
   // set through the shared chart-labels helper once, before the chart reads it — the insight charts stay as they are.
   useState(() => { if (block.type !== 'table' && readChartLabels()[`ondemand-${block.id}`] === undefined) saveChartLabel(`ondemand-${block.id}`, true); return true })
   if (problems.length || !narrowed) return <Notice tone="warning"><strong>This block cannot be shown:</strong> {problems.join(' ')} {dataset.problem ? '' : 'Its owners edit it to choose the columns again, or remove it.'}</Notice>
   const probe = blockData(narrowed.page, block)
   if (!narrowed.page.rows.length || !probe.categories.length) return <EmptyState {...noData} />
-  return block.type === 'table' ? <SummaryTable block={block} narrowed={narrowed} /> : <InsightView page={narrowed.page} insight={asInsight(block)} />
+  return block.type === 'table' ? <SummaryTable block={block} narrowed={narrowed} /> : <InsightView page={narrowed.page} insight={asInsight(block)} colors={colors} drill={drill} />
 }
 
 // DSH-06: the summary table — largest first, the first 10 rows with Show all, the shared table's Export (every row).
@@ -58,12 +59,13 @@ function SummaryTable({ block, narrowed }: { block: DashboardBlock; narrowed: Na
   const rows = summaryRows(data)
   const page = narrowed.page
   const split = Boolean(block.second)
-  const measure = measureText(page, asInsight(block), data.currency)
+  const measure = valueText(page, asInsight(block), data.currency)
+  const show = (value: number | null) => formatShown(value, data.unit)
   const category = page.columns.find((column) => column.id === block.category)?.name ?? 'Category'
   const columns: DataColumn<SummaryRow>[] = [
     { id: 'dsh-category', label: `${category}${block.type === 'table' && page.columns.find((column) => column.id === block.category)?.type === 'date' ? ' (month)' : ''}`, sortable: false, value: (row) => row.label },
-    ...(split ? data.series.map((ser, at): DataColumn<SummaryRow> => ({ id: `dsh-s${at}`, label: ser.label || noneLabel, align: 'right', sortable: false, value: (row) => row.values[at] ?? '', render: (row) => formatValue(row.values[at]) })) : []),
-    { id: 'dsh-total', label: split ? 'Total' : measure, align: 'right', sortable: false, value: (row) => row.total ?? '', render: (row) => formatValue(row.total) },
+    ...(split ? data.series.map((ser, at): DataColumn<SummaryRow> => ({ id: `dsh-s${at}`, label: ser.label || noneLabel, align: 'right', sortable: false, value: (row) => row.values[at] ?? '', render: (row) => show(row.values[at]) })) : []),
+    { id: 'dsh-total', label: split ? 'Total' : measure, align: 'right', sortable: false, value: (row) => row.total ?? '', render: (row) => show(row.total) },
   ]
   const more = rows.length - tableLimit
   return <>
@@ -71,7 +73,7 @@ function SummaryTable({ block, narrowed }: { block: DashboardBlock; narrowed: Na
     {currencyText(data) && <p className="muted">{currencyText(data)}</p>}
     <DataTable id={`dashboard-block:${block.id}`} columns={columns} rows={rows} rowKey={(row) => row.key} exportName={block.title} limit={all ? undefined : tableLimit}
       status={`${Math.min(rows.length, all ? rows.length : tableLimit)} of ${rows.length} row${rows.length === 1 ? '' : 's'}`}
-      totals={{ label: 'Total', values: { ...Object.fromEntries(split ? data.seriesTotals.map((value, at) => [`dsh-s${at}`, formatValue(value)]) : []), 'dsh-total': formatValue(data.total) } }} />
+      totals={{ label: 'Total', values: { ...Object.fromEntries(split ? data.seriesTotals.map((value, at) => [`dsh-s${at}`, show(value)]) : []), 'dsh-total': show(data.total) } }} />
     {(more > 0 || all) && <button type="button" className="text-button" onClick={() => setAll(!all)}>{all ? 'Show the first 10' : `Show all (+${more} more)`}</button>}
     {data.rows.multi && block.measure !== 'average' && <p className="muted od-pivot-note">A row with several values of a Multi-select counts in each of them; the totals take each row once.</p>}
   </>
@@ -79,8 +81,9 @@ function SummaryTable({ block, narrowed }: { block: DashboardBlock; narrowed: Na
 
 // DSH-05: the pop-up of one block — title, type, data source, the fields, the measure, the period's Date column, the
 // tab, filters — with a live preview over the current period. Add block / Save to Git saves the dashboard at once.
-export function BlockDialog({ datasets, dashboard, block, isNew, preview, onCancel, onSave }: { datasets: Dataset[]; dashboard: Dashboard; block: DashboardBlock; isNew: boolean; preview: (dataset: Dataset, block: DashboardBlock) => Narrowed | null; onCancel: () => void; onSave: (block: DashboardBlock) => Promise<void> }) {
+export function BlockDialog({ datasets, dashboard, block, isNew, preview, onCancel, onSave }: { datasets: Dataset[]; dashboard: Dashboard; block: DashboardBlock; isNew: boolean; preview: (dataset: Dataset, block: DashboardBlock) => Narrowed | null; onCancel: () => void; onSave: (block: DashboardBlock, colors: Record<string, number> | undefined) => Promise<void> }) {
   const [draft, setDraft] = useState<DashboardBlock>(block)
+  const [pins, setPins] = useState(dashboard.colors)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const dataset = datasets.find((entry) => entry.key === draft.source) ?? datasets[0]
@@ -91,14 +94,14 @@ export function BlockDialog({ datasets, dashboard, block, isNew, preview, onCanc
   const chart = draft.type === 'kpi' ? null : draft.type
   const categories = chart ? categoryColumns(page, chart) : []
   const seconds = chart ? secondColumns(page, chart).filter((column) => column.id !== draft.category) : []
-  const numbers = valueColumns(page)
+  const numbers = measureColumns(page, draft.measure)
   const dates = periodColumns(page)
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
     const problem = blockError(dataset, draft)
     if (problem) { setError(problem); return }
     setBusy(true); setError('')
-    try { await onSave({ ...draft, title: draft.title.trim().replace(/\s+/g, ' ') }) } catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); setBusy(false) }
+    try { await onSave({ ...draft, title: draft.title.trim().replace(/\s+/g, ' ') }, pins) } catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); setBusy(false) }
   }
   const shown = { ...draft, filters: draft.filters.filter((filter) => filter.values?.length || filter.from || filter.to) }
   const narrowed = dataset.problem ? null : preview(dataset, shown)
@@ -124,7 +127,7 @@ export function BlockDialog({ datasets, dashboard, block, isNew, preview, onCanc
               {categories.map((column) => <option key={column.id} value={column.id}>{column.name} ({column.type === 'date' ? 'by month' : column.type === 'multi' ? 'Multi-select' : column.type === 'dropdown' ? 'Dropdown' : 'Text'})</option>)}
             </select>
           </label>}
-          {chart && chart !== 'pie' && <label>{secondLabel(chart)} (optional)
+          {chart && chart !== 'pie' && chart !== 'pareto' && <label>{secondLabel(chart)} (optional)
             <select aria-label={secondLabel(chart)} value={draft.second} onChange={(event) => edit({ second: event.target.value })}>
               <option value="">— None —</option>
               {draft.second && !seconds.some((column) => column.id === draft.second) && <option value={draft.second}>(not available)</option>}
@@ -133,12 +136,12 @@ export function BlockDialog({ datasets, dashboard, block, isNew, preview, onCanc
           </label>}
           <div className="form-row">
             <label>Measure
-              <select aria-label="Measure" value={draft.measure} onChange={(event) => { const measure = event.target.value as InsightMeasure; edit({ measure, value: measure === 'count' ? '' : draft.value || numbers[0]?.id || '' }) }}>
-                {measures.filter((measure) => !(measure.key === 'average' && draft.type === 'pie')).map((measure) => <option key={measure.key} value={measure.key} disabled={measure.key !== 'count' && !numbers.length}>{measure.label}{measure.key !== 'count' && !numbers.length ? ' (needs a Number or Currency column)' : ''}</option>)}
+              <select aria-label="Measure" value={draft.measure} onChange={(event) => { const measure = event.target.value as InsightMeasure; const fits = measureColumns(page, measure); setDraft(withBlockType(dataset, { ...draft, measure, value: measure === 'count' ? '' : fits.some((column) => column.id === draft.value) ? draft.value : fits[0]?.id || '' }, draft.type)); setError('') }}>
+                {measuresFor(draft.type).map((measure) => { const none = measure.key !== 'count' && !measureColumns(page, measure.key).length; return <option key={measure.key} value={measure.key} disabled={none}>{measure.label}{none ? measure.key === 'distinct' ? ' (needs a column other than Long text)' : ' (needs a Number or Currency column)' : ''}</option> })}
               </select>
             </label>
-            {draft.measure !== 'count' && <label>Of the Number column
-              <select aria-label="Of the Number column" value={draft.value} onChange={(event) => edit({ value: event.target.value })}>
+            {draft.measure !== 'count' && <label>{draft.measure === 'distinct' ? 'Of the column' : 'Of the Number column'}
+              <select aria-label={draft.measure === 'distinct' ? 'Of the column' : 'Of the Number column'} value={draft.value} onChange={(event) => edit({ value: event.target.value })}>
                 {!numbers.some((column) => column.id === draft.value) && <option value={draft.value}>— Choose —</option>}
                 {numbers.map((column) => <option key={column.id} value={column.id}>{column.name}{column.type === 'currency' ? ' (Currency)' : ''}</option>)}
               </select>
@@ -150,6 +153,7 @@ export function BlockDialog({ datasets, dashboard, block, isNew, preview, onCanc
               <option value="label">By option order, month or name</option>
             </select>
           </label>}
+          <ChartOptionsFields page={page} insight={asInsight(draft)} pins={pins} onPins={setPins} scope="dashboard" onOptions={(options) => { const next = { ...draft }; if (options && draft.type !== 'kpi') next.options = options; else delete next.options; setDraft(next); setError('') }} />
           <label>Period filter on
             <select aria-label="Period filter on" value={draft.period} onChange={(event) => edit({ period: event.target.value })}>
               <option value="">— Not filtered by the period —</option>
@@ -189,7 +193,7 @@ export function BlockDialog({ datasets, dashboard, block, isNew, preview, onCanc
           <h3>{draft.title.trim() || 'Untitled'}</h3>
           <p className="muted">{blockSubject(dataset, draft)} · {periodNote(dataset, draft)}</p>
           {draft.type === 'kpi' ? <div className="metric-grid compact"><KpiTile dataset={dataset} block={{ ...shown, title: shown.title || 'Untitled' }} narrowed={narrowed} /></div>
-            : <BlockBody dataset={dataset} block={shown} narrowed={narrowed} problems={narrowed ? blockProblems(dataset, shown) : [dataset.problem ?? '']} />}
+            : <BlockBody dataset={dataset} block={shown} narrowed={narrowed} colors={pins} drill={false} problems={narrowed ? blockProblems(dataset, shown) : [dataset.problem ?? '']} />}
         </section>
       </div>
       {error && <Notice tone="error">{error}</Notice>}

@@ -3,7 +3,8 @@ import assert from 'node:assert/strict'
 import { navigate, openPage, rolesFile, startApp, text } from './helpers.mjs'
 
 // On-Demand pages (OND-01…10, CON-103): CoNQ set up with a Dropdown and a Multi-select column, a row added and saved
-// to Git as on-demand/conq.json (TC-OND-01, UAT), and a viewer without the rights (TC-OND-07), against a mocked GitHub.
+// to Git as on-demand/conq.json — each change at once (OND-28) — (TC-OND-01, UAT), and a viewer without the rights
+// (TC-OND-07), against a mocked GitHub.
 let app
 before(async () => { app = await startApp() })
 after(async () => { await app.stop() })
@@ -52,7 +53,7 @@ test('TC-OND-01: On-Demand → CoNQ — add a Dropdown and a Multi-select column
   await navigate(page, 'CoNQ')
   assert.equal(await text(page.locator('header.topbar h1')), 'CoNQ')
   assert.equal(await page.locator('header.topbar h1').getAttribute('title'), 'Cost of Non-Quality')
-  await page.getByText('CoNQ is not in Git yet: it is created with its first Save to Git.').waitFor()
+  await page.getByText('CoNQ is not in Git yet: it is created with its first save to Git.').waitFor()
 
   // Set up columns…: a Dropdown (one value) and a Multi-select, each with its options.
   await page.getByRole('button', { name: 'Set up columns…' }).click()
@@ -67,41 +68,42 @@ test('TC-OND-01: On-Demand → CoNQ — add a Dropdown and a Multi-select column
   for (const [index, option] of ['Berlin', 'Leeds', 'Lyon'].entries()) { await columns.getByRole('button', { name: '＋ Add option' }).nth(1).click(); await columns.getByLabel(`Sites option ${index + 1}`).fill(option) }
   await columns.getByRole('button', { name: 'Save', exact: true }).click()
   await columns.waitFor({ state: 'detached' })
+  // OND-28: the columns are saved to Git at once (the page is created in Git with them).
+  assert.deepEqual(writes.filter((write) => write.path === 'on-demand/conq.json').map((write) => write.data.columns.map((column) => column.name)), [['Category', 'Sites']])
+  assert.equal(await page.locator('.git-bar-dirty').count(), 0, 'no unsaved-changes bar')
 
-  // ＋ Add row: one value of the Dropdown, two of the Multi-select.
+  // ＋ Add row (the row drawer, OND-27): one value of the Dropdown, two of the Multi-select; Save to Git saves it at once.
   await page.getByRole('button', { name: '＋ Add row' }).click()
-  const row = page.getByRole('dialog', { name: 'Add a row' })
+  const row = page.getByRole('dialog', { name: 'New row' })
   await row.getByLabel('Category').selectOption('Rework')
   await row.getByRole('checkbox', { name: 'Berlin' }).check()
   await row.getByRole('checkbox', { name: 'Lyon' }).check()
-  await row.getByRole('button', { name: 'Add row' }).click()
-  await row.waitFor({ state: 'detached' })
+  await row.getByRole('button', { name: 'Save to Git' }).click()
+  await page.getByRole('dialog', { name: 'CONQ-0001' }).waitFor()
+  await page.keyboard.press('Escape')
+  await page.getByRole('dialog', { name: 'CONQ-0001' }).waitFor({ state: 'detached' })
   const table = page.locator('.od-panel table')
   assert.match(await text(table.locator('thead')), /Key.*Category.*Sites.*Actions/i)
   // OND-18: the row has its key the moment it is added — prefix, date (UTC), 4 random characters.
-  const key = await text(table.locator('tbody tr').first().locator('code.od-key'))
+  const key = await text(table.locator('tbody tr').first().locator('code.od-key').nth(1))
   assert.match(key, new RegExp(`^CONQ-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}-[2-9A-HJKMNP-Z]{4}$`))
   assert.match(await text(table.locator('tbody tr').first()), /Rework Berlin, Lyon/)
   assert.match(await text(page.locator('.od-panel')), /1 of 1 row/)
 
-  // Save to Git: one commit of on-demand/conq.json with the columns, their options and the row's values.
-  const bar = page.locator('.git-bar-dirty')
-  assert.match(await text(bar), /Unsaved changes to CoNQ — not yet in Git/)
-  await bar.getByRole('button', { name: 'Save to Git' }).click()
-  await bar.waitFor({ state: 'detached' })
+  // Saved to Git: a second commit of on-demand/conq.json with the columns, their options and the row's values.
   const saved = writes.filter((write) => write.path === 'on-demand/conq.json')
-  assert.equal(saved.length, 1)
-  const file = saved[0].data
+  assert.equal(saved.length, 2)
+  const file = saved[1].data
   assert.deepEqual([file.kind, file.id, file.name, file.description], ['on-demand-page', 'conq', 'CoNQ', 'Cost of Non-Quality'])
   assert.deepEqual(file.columns.map((column) => [column.name, column.type, column.options]), [['Category', 'dropdown', ['Scrap', 'Rework']], ['Sites', 'multi', ['Berlin', 'Leeds', 'Lyon']]])
   assert.deepEqual(file.rows.map((entry) => entry.cells), [{ [file.columns[0].id]: 'Rework', [file.columns[1].id]: ['Berlin', 'Lyon'] }])
   assert.equal(file.rows[0].key, key, 'the key shown is the key saved')
   assert.equal(file.keyPrefix, 'CONQ')
-  assert.match(saved[0].message, /\[saved \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\]$/, 'a queued save carries its time (GIT-17)')
+  assert.match(saved[1].message, /^CoNQ: add row CONQ-0001 \(CONQ-.+\) \[saved \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\]$/, 'a queued save carries its time (GIT-17)')
   assert.equal(JSON.stringify(writes).includes('test-token'), false, 'no token in the data repository')
   // §8: the result is a Background jobs entry.
   await page.locator('.jobs-button').click()
-  assert.match(await text(page.getByRole('dialog', { name: 'Background jobs' }).locator('li.job', { hasText: 'Save to Git · CoNQ' })), /Saved to Git\. on-demand\/conq\.json/)
+  assert.match(await text(page.getByRole('dialog', { name: 'Background jobs' }).locator('li.job', { hasText: 'Save to Git · CoNQ · add row' })), /Saved to Git\. on-demand\/conq\.json — added CONQ-0001/)
   await page.getByRole('dialog', { name: 'Background jobs' }).getByRole('button', { name: 'Close', exact: true }).click()
 
   // Reload without the copy kept in this browser: the page is read back from Git.
@@ -155,16 +157,18 @@ test('TC-OND-09: Insights — on CoNQ add rows, add a Bar chart of Sum of cost b
   await page.locator('.sidebar nav').waitFor()
   await navigate(page, 'CoNQ')
   await page.getByText('No rows yet.').waitFor()
-  // Data tab: three rows.
-  for (const [category, sites, cost] of [['Rework', ['Berlin', 'Lyon'], '1200'], ['Scrap', ['Leeds'], '300'], ['Rework', ['Berlin'], '450']]) {
+  // Data tab: three rows, each saved to Git from the row drawer (OND-27, OND-28).
+  for (const [index, [category, sites, cost]] of [['Rework', ['Berlin', 'Lyon'], '1200'], ['Scrap', ['Leeds'], '300'], ['Rework', ['Berlin'], '450']].entries()) {
     await page.getByRole('button', { name: '＋ Add row' }).click()
-    const row = page.getByRole('dialog', { name: 'Add a row' })
+    const row = page.getByRole('dialog', { name: 'New row' })
     await row.getByLabel('Category').selectOption(category)
     for (const site of sites) await row.getByRole('checkbox', { name: site }).check()
     await row.getByLabel('Cost (EUR)', { exact: true }).fill(cost)
     await row.getByLabel('Found on', { exact: true }).fill('2026-11-02')
-    await row.getByRole('button', { name: 'Add row' }).click()
-    await row.waitFor({ state: 'detached' })
+    await row.getByRole('button', { name: 'Save to Git' }).click()
+    await page.getByRole('dialog', { name: `CONQ-000${index + 1}` }).waitFor()
+    await page.keyboard.press('Escape')
+    await page.locator('aside.drawer').waitFor({ state: 'detached' })
   }
   assert.match(await text(page.locator('.od-panel')), /3 of 3 rows/)
 
@@ -201,13 +205,13 @@ test('TC-OND-09: Insights — on CoNQ add rows, add a Bar chart of Sum of cost b
   assert.match(await text(pivot.locator('tbody tr', { hasText: 'Rework' })), /^Rework 2 0 1 2$/)
   assert.match(await text(pivot.locator('tbody tr.matrix-total')), /^Total 2 1 1 3$/)
 
-  // Save to Git: the insights are in the page file, with the rows.
-  const saveBar = page.locator('.git-bar-dirty')
-  await saveBar.getByRole('button', { name: 'Save to Git' }).click()
-  await saveBar.waitFor({ state: 'detached' })
+  // Each insight was saved to Git at once (OND-28): the last commit has both, with the rows.
+  await page.locator('.jobs-button', { hasText: 'Jobs done' }).waitFor()
+  assert.equal(await page.locator('.git-bar-dirty').count(), 0, 'no unsaved-changes bar')
   const saved = writes.filter((write) => write.path === 'on-demand/conq.json')
-  assert.equal(saved.length, 1)
-  const file = saved[0].data
+  assert.equal(saved.length, 5, 'three rows and two insights, each its own commit')
+  assert.match(saved[4].message, /^CoNQ: change the charts and tables \[saved /)
+  const file = saved[4].data
   assert.equal(file.rows.length, 3)
   assert.deepEqual(file.insights.map(({ title, type, category, second, measure, value }) => ({ title, type, category, second, measure, value })), [
     { title: 'Cost by category', type: 'bar', category: 'c1', second: undefined, measure: 'sum', value: 'c3' },
@@ -260,7 +264,7 @@ test('TC-OND-13: a viewer without the setup right sees the Insights read only �
 
 // OND-19…OND-25: a Long text and a Currency column with descriptions, a row with its ID given on Save to Git, who added
 // it and when, and an edit logged in the row's History and in the file (TC-OND-16, UAT).
-test('TC-OND-16: row details — Long text and Currency columns with a description, a row gets CONQ-0001 on Save to Git with who added it and when, an edit is logged in History and in the file', async () => {
+test('TC-OND-16: row details — Long text and Currency columns with a description, a row gets CONQ-0001 when it is saved to Git with who added it and when, an edit is logged in History and in the file', async () => {
   const email = 'qe.lead@example.com'
   const files = { 'on-demand/conq.json': JSON.stringify({ schema: 1, kind: 'on-demand-page', id: 'conq', name: 'CoNQ', description: 'Cost of Non-Quality', keyPrefix: 'CONQ', columns: [{ id: 'c1', name: 'Category', type: 'dropdown', options: ['Scrap', 'Rework'] }], rows: [] }) }
   const { page, context, errors } = await openPage(app, { init: (work) => {
@@ -289,35 +293,33 @@ test('TC-OND-16: row details — Long text and Currency columns with a descripti
   await columns.getByRole('button', { name: 'Save', exact: true }).click()
   await columns.waitFor({ state: 'detached' })
 
-  // ＋ Add row: the descriptions are shown under the fields; the ID is given on Save to Git.
+  // ＋ Add row (the row drawer, OND-27): the descriptions are shown under the fields; the ID is given in the row's save.
   await page.getByRole('button', { name: '＋ Add row' }).click()
-  let row = page.getByRole('dialog', { name: 'Add a row' })
+  let row = page.getByRole('dialog', { name: 'New row' })
   assert.match(await text(row), /What went wrong and what was done, in a few sentences\./)
   assert.match(await text(row), /The cost in the supplier’s currency, without VAT\./)
-  assert.match(await text(row.locator('.od-row-facts')), /ID given on Save to Git/)
+  assert.match(await text(row.locator('.od-row-facts')), /ID given when the row is saved to Git/)
   await row.getByLabel('Category').selectOption('Rework')
   const paragraph = 'The seal ring was cut too short.\nThe batch was reworked on site and checked again before shipping.'
   await row.getByLabel('Details', { exact: true }).fill(paragraph)
   assert.equal(await row.getByLabel('Cost currency').inputValue(), 'USD', 'the column’s default currency')
   await row.getByLabel('Cost', { exact: true }).fill('1200')
-  await row.getByRole('button', { name: 'Add row' }).click()
+  // Save to Git (OND-28): the row is saved at once and gets CONQ-0001; the file has who added it, when and the first log entry.
+  await row.getByRole('button', { name: 'Save to Git' }).click()
+  row = page.getByRole('dialog', { name: 'CONQ-0001' })
+  await row.waitFor()
+  await page.keyboard.press('Escape')
   await row.waitFor({ state: 'detached' })
   const table = page.locator('.od-panel table')
   assert.match(await text(table.locator('thead')), /ID.*Key.*Category.*Details.*Cost.*Added by.*Added on.*Actions/i)
   assert.equal(await table.getByRole('button', { name: 'About Cost' }).count(), 1, 'the description behind ⓘ on the heading')
   const first = table.locator('tbody tr').first()
-  assert.match(await text(first), /^on save CONQ-\d{6}-[2-9A-HJKMNP-Z]{4} Rework/)
+  assert.match(await text(first), /^CONQ-0001 CONQ-\d{6}-[2-9A-HJKMNP-Z]{4} Rework/)
   assert.match(await text(first), /1,200\.00 USD/)
   assert.match(await text(first), new RegExp(email.replace(/\./g, '\\.')))
-
-  // Save to Git: the row gets CONQ-0001, and the file has who added it, when and the first log entry.
-  const bar = page.locator('.git-bar-dirty')
-  await bar.getByRole('button', { name: 'Save to Git' }).click()
-  await bar.waitFor({ state: 'detached' })
-  await first.locator('code.od-key', { hasText: 'CONQ-0001' }).waitFor()
   let saved = writes.filter((write) => write.path === 'on-demand/conq.json')
-  assert.equal(saved.length, 1)
-  let file = saved[0].data
+  assert.equal(saved.length, 2, 'the columns, then the row')
+  let file = saved[1].data
   const [, details, cost] = file.columns
   assert.deepEqual([details.type, details.description, cost.type, cost.currency, cost.description], ['longtext', 'What went wrong and what was done, in a few sentences.', 'currency', 'USD', 'The cost in the supplier’s currency, without VAT.'])
   assert.equal(file.rows[0].seq, 1)
@@ -328,21 +330,19 @@ test('TC-OND-16: row details — Long text and Currency columns with a descripti
   assert.equal(file.rows[0].cells[cost.id], '1200 USD')
   assert.deepEqual(file.rows[0].log.map((entry) => [entry.added, entry.by]), [[true, email]])
 
-  // Edit: change the cost; Save logs the change on its own — History shows who, when and old → new.
+  // Edit: change the cost; Save to Git logs the change on its own — History shows who, when and old → new.
   await first.getByRole('button', { name: /^Edit row/ }).click()
-  row = page.getByRole('dialog', { name: 'Edit the row' })
+  row = page.getByRole('dialog', { name: 'CONQ-0001' })
   assert.match(await text(row.locator('.od-row-facts')), new RegExp(`ID CONQ-0001.*Added .* by ${email.replace(/\./g, '\\.')}`))
   assert.equal(await row.getByLabel(/^Why/).count(), 0, 'no comment to type: the change is logged on its own')
   await row.getByLabel('Cost', { exact: true }).fill('1500')
   await row.getByLabel('Cost currency').selectOption('EUR')
-  await row.getByRole('button', { name: 'Save', exact: true }).click()
-  await row.waitFor({ state: 'detached' })
+  await row.getByRole('button', { name: 'Save to Git' }).click()
+  await row.locator('.od-row-values').waitFor()
   assert.match(await text(first), /1,500\.00 EUR/)
-  await page.locator('.git-bar-dirty').getByRole('button', { name: 'Save to Git' }).click()
-  await page.locator('.git-bar-dirty').waitFor({ state: 'detached' })
   saved = writes.filter((write) => write.path === 'on-demand/conq.json')
-  assert.equal(saved.length, 2)
-  file = saved[1].data
+  assert.equal(saved.length, 3)
+  file = saved[2].data
   assert.equal(file.rows[0].seq, 1, 'the ID never changes')
   assert.equal(file.rows[0].addedBy, email)
   assert.equal(file.rows[0].log.length, 2)
@@ -351,15 +351,14 @@ test('TC-OND-16: row details — Long text and Currency columns with a descripti
   assert.match(edit.at, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
   assert.equal(edit.comment, undefined)
   assert.deepEqual(edit.changes, [{ column: cost.id, from: '1200 USD', to: '1500 EUR' }])
-  // History in the row pop-up, newest first.
-  await first.getByRole('button', { name: /^Edit row/ }).click()
-  row = page.getByRole('dialog', { name: 'Edit the row' })
+  // History in the row drawer, newest first.
   const history = row.getByRole('region', { name: 'History' })
   const entries = history.locator('ol > li')
   assert.equal(await entries.count(), 2)
   assert.match(await text(entries.nth(0)), new RegExp(`^Changed · .* · ${email.replace(/\./g, '\\.')} Cost: 1,200\\.00 USD → 1,500\\.00 EUR$`))
   assert.match(await text(entries.nth(1)), /^Added · .* Category: Rework Details: The seal ring was cut too short\./)
-  await row.getByRole('button', { name: 'Cancel' }).click()
+  await row.getByRole('button', { name: 'Close' }).click()
+  await row.waitFor({ state: 'detached' })
   // Last updated by / on: hidden at first, offered in the Columns list.
   assert.doesNotMatch(await text(table.locator('thead')), /Last updated/)
   assert.deepEqual(errors.filter((entry) => !/401|Unauthorized/.test(entry)), [])

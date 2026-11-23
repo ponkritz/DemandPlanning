@@ -110,7 +110,7 @@ test('TC-PGB-01: a Tool Owner adds the group Quality with the Table page “Supp
   assert.deepEqual(layout.groups['g-quality'].owners, [lead])
   assert.match(await text(groups.locator('tbody tr', { hasText: 'Quality' })), new RegExp(`Quality Custom Yes ${lead.replace(/\./g, '\\.')} 1`))
 
-  // Back on the page: Set up columns… and ＋ Add row, then Save to Git.
+  // Back on the page: Set up columns… and ＋ Add row, each saved to Git at once (OND-28).
   await quality.getByRole('button', { name: /Supplier issues/ }).click()
   await page.getByRole('button', { name: 'Set up columns…' }).click()
   const columns = page.getByRole('dialog', { name: 'Set up columns' })
@@ -123,16 +123,16 @@ test('TC-PGB-01: a Tool Owner adds the group Quality with the Table page “Supp
   await columns.getByRole('button', { name: 'Save', exact: true }).click()
   await columns.waitFor({ state: 'detached' })
   await page.getByRole('button', { name: '＋ Add row' }).click()
-  const row = page.getByRole('dialog', { name: 'Add a row' })
+  const row = page.getByRole('dialog', { name: 'New row' })
   await row.getByLabel('Supplier', { exact: true }).fill('Acme Seals')
   await row.getByLabel('Severity').selectOption('Major')
-  await row.getByRole('button', { name: 'Add row' }).click()
-  await row.waitFor({ state: 'detached' })
+  await row.getByRole('button', { name: 'Save to Git' }).click()
+  await page.getByRole('dialog', { name: 'SUPPLIER-0001' }).waitFor()
+  await page.keyboard.press('Escape')
+  await page.locator('aside.drawer').waitFor({ state: 'detached' })
   assert.match(await text(page.locator('.od-panel .panel-heading')), /^QUALITY Supplier issues/)
   assert.match(await text(page.locator('.od-panel table tbody tr').first()), /Acme Seals Major/)
-  const bar = page.locator('.git-bar-dirty')
-  await bar.getByRole('button', { name: 'Save to Git' }).click()
-  await bar.waitFor({ state: 'detached' })
+  assert.equal(await page.locator('.git-bar-dirty').count(), 0, 'no unsaved-changes bar: the columns and the row were saved at once')
   const saved = lastWrite(writes, 'on-demand/supplier-issues.json').data
   assert.deepEqual(saved.columns.map((column) => [column.name, column.type]), [['Supplier', 'text'], ['Severity', 'dropdown']])
   assert.deepEqual(saved.rows.map((entry) => Object.values(entry.cells)), [['Acme Seals', 'Major']])
