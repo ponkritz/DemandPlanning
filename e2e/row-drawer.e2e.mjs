@@ -165,7 +165,7 @@ test('TC-OND-21: a CoNQ row opens in a drawer from the right with its values and
   await context.close()
 })
 
-test('TC-OND-23: a viewer without the right to edit rows opens a row in the drawer read only — Edit and Remove row disabled with the reason; a click beside the drawer closes it', async () => {
+test('TC-OND-23: a viewer without the right to edit rows opens a row in the drawer read only — Edit and Hide row disabled with the reason; a click beside the drawer closes it', async () => {
   const { page, context, errors, writes } = await openConq('Team Member')
   await page.locator('.od-panel table tbody tr', { hasText: 'CONQ-0002' }).locator('td', { hasText: 'Rework' }).click()
   const drawer = drawerOf(page)
@@ -174,7 +174,7 @@ test('TC-OND-23: a viewer without the right to edit rows opens a row in the draw
   const reason = 'Your role does not allow “Edit On-Demand data (rows)”. An Admin can change this in Admin → People & roles → Role rights.'
   assert.equal(await drawer.getByRole('button', { name: 'Edit', exact: true }).isDisabled(), true)
   assert.equal(await drawer.getByRole('button', { name: 'Edit', exact: true }).getAttribute('title'), reason)
-  assert.equal(await drawer.getByRole('button', { name: 'Remove row' }).isDisabled(), true)
+  assert.equal(await drawer.getByRole('button', { name: 'Hide row' }).isDisabled(), true)
   assert.equal(await text(drawer.locator('.drawer-footer .write-blocked')), reason, 'the reason is a visible line')
   assert.equal(await drawer.locator('form, input, select, textarea').count(), 0, 'nothing to edit')
   // A click on the overlay beside the drawer closes it.

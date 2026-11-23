@@ -9,8 +9,8 @@ import { narrowPeriod, offeredMonths, offeredQuarters, periodMonths, periodOf, p
 import { utcToday } from '../businessTime'
 import { noData, blankBlock, blockTypeLabel, dashId, dataSources, filterColumns, maxBlocks, maxTabs, maxViewerFilters, missingDataset, moveBlock, narrowRows, pageOfSource, removeBlock, setTabsAndFilters, sourceName, tabsError, upsertBlock, viewerKey, type DashboardBlock, type DashboardTab, type Dataset, type ViewerFilter } from '../dashboardPages'
 import { outcomeText } from '../gitSaveQueue'
-import { findGroup, gitReasonOf, isDashboard, pageMenuReason, pageRights, placementOf, removePlacement, type Viewer } from '../menuLayout'
-import { hasOptions, onDemandPath, renamePage, type OnDemandPage } from '../onDemand'
+import { deleteReason, findGroup, gitReasonOf, hideReason, isDashboard, isHidden, pageMenuReason, pageRights, placementOf, removePlacement, setHidden, type Viewer } from '../menuLayout'
+import { hasOptions, onDemandPath, renamePage, type OnDemandPage, withoutHidden } from '../onDemand'
 import { noneKey, noneLabel } from '../onDemandInsights'
 import { useWriteBlock } from '../useCan'
 import { useDashboardPage } from '../useDashboardPage'
@@ -64,6 +64,11 @@ export function CustomDashboardPage({ git, store, pageId, menu, viewer, views, o
   const rights = pageRights(viewer, menu.layout, pageId)
   const buildReason = gitReason || (rights.setup ? '' : block.noteFor('on this dashboard', 'ondemand.setup')) || (dash.loaded || !git.connected ? '' : 'Reading the dashboard from Git…')
   const menuReason = gitReason || pageMenuReason(viewer, menu.layout, pageId)
+  // PGB-19, PGB-20: hide / show (owners) and delete (Tool Owner only), as on the table pages.
+  const hidingReason = gitReason || hideReason(viewer, menu.layout, pageId)
+  const removeReason = gitReason || deleteReason(viewer)
+  const hidden = isHidden(menu.layout, pageId)
+  const toggleHidden = () => { const next = !hidden; void menu.save(setHidden(menu.layout, pageId, next, store.pages.map((entry) => entry.id)), `Pages & menu: ${next ? 'hide' : 'show'} the page ${page?.name ?? pageId}`).then((saved) => recordJob(`pages:${pageId}`, `${next ? 'Hide' : 'Show'} page · ${page?.name ?? pageId}`, { text: `${outcomeText(saved)} ${menu.path}` }), (failure: unknown) => recordJob(`pages:${pageId}`, `${next ? 'Hide' : 'Show'} page · ${page?.name ?? pageId}`, { text: failure instanceof Error ? failure.message : String(failure), failed: true })) }
 
   // DSH-07: the period — Year → Quarter → Month as in Team overview (OV-15, OV-16): nothing ticked in Year is the current year.
   const months = periodMonths(viewed.period, currentYear)
@@ -72,8 +77,10 @@ export function CustomDashboardPage({ git, store, pageId, menu, viewer, views, o
   const setPeriod = (period: Period) => update({ period: narrowPeriod(period, currentYear) })
 
   // DSH-03: the data sources — every table page as saved in Git (not a dashboard, not this page).
-  const tablePages = store.pages.filter((entry) => entry.id !== pageId && !isDashboard(menu.layout, entry.id)).map((entry) => store.stored(entry.id) ?? entry)
-  const datasets = dataSources(store.pages, store.stored, (id) => isDashboard(menu.layout, id), pageId)
+  // OND-39: a dashboard reads the table pages without their hidden rows.
+  const visibleStored = (id: string) => { const found = store.stored(id); return found ? withoutHidden(found) : null }
+  const tablePages = store.pages.filter((entry) => entry.id !== pageId && !isDashboard(menu.layout, entry.id)).map((entry) => visibleStored(entry.id) ?? entry)
+  const datasets = dataSources(store.pages, visibleStored, (id) => isDashboard(menu.layout, id), pageId)
   const datasetOf = (source: string) => datasets.find((entry) => entry.key === source) ?? missingDataset(source, `The table page “${pageOfSource(source)}” is no longer there (removed), or you cannot see it.`)
   const narrow = (dataset: Dataset, entry: DashboardBlock) => dataset.problem ? null : narrowRows(dataset, entry, months, dashboard.filters, viewed.choices)
 
@@ -120,7 +127,8 @@ export function CustomDashboardPage({ git, store, pageId, menu, viewer, views, o
       <button type="button" className="ghost" disabled={Boolean(buildReason)} title={buildReason || undefined} onClick={() => setSetup(true)}>Tabs and filters…</button>
       <button type="button" className="ghost" disabled={Boolean(gitReason || addPageReason)} title={gitReason || addPageReason || undefined} onClick={onAddPage}>＋ Add page…</button>
       <button type="button" className="ghost" disabled={Boolean(menuReason)} title={menuReason || undefined} onClick={() => setPageDialog('rename')}>Rename page…</button>
-      <button type="button" className="danger-button" disabled={Boolean(menuReason)} title={menuReason || undefined} onClick={() => setPageDialog('remove')}>Remove page…</button>
+      <button type="button" className="ghost" disabled={Boolean(hidingReason)} title={hidingReason || undefined} onClick={toggleHidden}>{hidden ? 'Show page' : 'Hide page'}</button>
+      <button type="button" className="danger-button" disabled={Boolean(removeReason)} title={removeReason || undefined} onClick={() => setPageDialog('remove')}>Delete page…</button>
       {git.connected && <button type="button" className="ghost" onClick={() => { void dash.reload(); void store.reload() }}>↻ Reload from Git</button>}
     </>}>
     {gitReason && <Notice tone={git.isSample ? 'warning' : 'info'}>{gitReason}{!git.connected ? ' The dashboard last loaded in this browser is shown.' : ''}</Notice>}
@@ -277,11 +285,11 @@ function RemoveDashboardDialog({ page, blocks, path, onCancel, onRemove }: { pag
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const remove = async () => { setBusy(true); setError(''); try { await onRemove() } catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); setBusy(false) } }
-  return <Modal eyebrow={`PAGES & MENU · ${page.name.toUpperCase()}`} title="Remove the On-Demand Dashboard" onClose={() => { if (!busy) onCancel() }}>
+  return <Modal eyebrow={`PAGES & MENU · ${page.name.toUpperCase()}`} title="Delete the On-Demand Dashboard" onClose={() => { if (!busy) onCancel() }}>
     <form onSubmit={(event) => { event.preventDefault(); void remove() }}>
-      <p>Remove the On-Demand Dashboard <strong>{page.name}</strong> with its {blocks} block{blocks === 1 ? '' : 's'}, for everyone? Its files {onDemandPath(page.id)} and {path} are deleted from Git; their history stays in GitHub. The table pages and hours it shows are not changed.</p>
+      <p>Delete the On-Demand Dashboard <strong>{page.name}</strong> with its {blocks} block{blocks === 1 ? '' : 's'}, for everyone? Its files {onDemandPath(page.id)} and {path} are deleted from Git; their history stays in GitHub. The table pages and hours it shows are not changed.</p>
       {error && <Notice tone="error">{error}</Notice>}
-      <div className="modal-actions"><button type="button" className="ghost" disabled={busy} onClick={onCancel}>Cancel</button><button className="danger-button" disabled={busy}>{busy ? 'Removing…' : 'Remove On-Demand Dashboard'}</button></div>
+      <div className="modal-actions"><button type="button" className="ghost" disabled={busy} onClick={onCancel}>Cancel</button><button className="danger-button" disabled={busy}>{busy ? 'Deleting…' : 'Delete On-Demand Dashboard'}</button></div>
     </form>
   </Modal>
 }

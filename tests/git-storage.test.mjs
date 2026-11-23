@@ -29,6 +29,22 @@ test('TC-OND-02, TC-PGB-02 and TC-DSH-03: page, menu and dashboard writes requir
   assert.deepEqual(calls, urls.flatMap((url) => [[repoUrl, 'GET'], [url, 'PUT']]))
 })
 
+test('TC-OND-26: Git tree, ref and row lock writes refuse public or unverified destinations', async () => {
+  const repoUrl = 'https://api.github.com/repos/acme/demand-planning-data'
+  const calls = []
+  const send = privateGitWrites(config, 'synthetic', async (url, init) => {
+    calls.push([url, init?.method ?? 'GET'])
+    return response(200, { visibility: 'public' })
+  })
+  for (const [path, method] of [['git/trees', 'POST'], ['git/refs', 'POST'], ['git/refs/heads/main', 'PATCH'], ['contents/locks/example.json', 'DELETE']]) {
+    await assert.rejects(send(`${repoUrl}/${path}`, { method, body: '{}' }), /private Git data repository/)
+  }
+  assert.deepEqual(calls, Array.from({ length: 4 }, () => [repoUrl, 'GET']))
+  const queryUrl = 'https://api.github.com/graphql'
+  await send(queryUrl, { method: 'POST', body: JSON.stringify({ query: 'query { viewer { login } }' }) })
+  assert.deepEqual(calls.slice(4), [[queryUrl, 'POST']], 'batched GraphQL reads use the read path')
+})
+
 test('config validation and browser persistence', () => {
   assert.deepEqual(validateGitConfig({ owner: ' acme ', repo: 'demand-planning-data.git', branch: '', path: '/planning-data.json' }), config)
   assert.throws(() => validateGitConfig({ owner: '', repo: 'x' }), /owner/)

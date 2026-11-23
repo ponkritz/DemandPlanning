@@ -74,17 +74,18 @@ export function encodeBase64(text: string) { let binary = ''; for (const byte of
 export function decodeBase64(value: string) { const binary = atob(value.replace(/\s/g, '')); return new TextDecoder().decode(Uint8Array.from(binary, (char) => char.charCodeAt(0))) }
 
 export class GitConflictError extends Error {}
-type Fetch = (input: string, init?: RequestInit) => Promise<Response>
-const api = 'https://api.github.com'
-const encodePath = (path: string) => path.split('/').map(encodeURIComponent).join('/')
+export type Fetch = (input: string, init?: RequestInit) => Promise<Response>
+export const api = 'https://api.github.com'
+export const encodePath = (path: string) => path.split('/').map(encodeURIComponent).join('/')
 const fileUrl = (config: GitConfig) => `${api}/repos/${encodeURIComponent(config.owner)}/${encodeURIComponent(config.repo)}/contents/${encodePath(config.path)}`
-const headers = (token: string) => ({ Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`, 'X-GitHub-Api-Version': '2022-11-28' })
+export const headers = (token: string) => ({ Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`, 'X-GitHub-Api-Version': '2022-11-28' })
 export function privateGitWrites(config: GitConfig, token: string, fetchImpl: typeof fetch = fetch): typeof fetch {
   return async (url, init) => {
-    if (init?.method === 'PUT') {
+    const method = (init?.method ?? 'GET').toUpperCase()
+    if (method === 'PUT' || method === 'PATCH' || method === 'DELETE' || (method === 'POST' && url !== `${api}/graphql`)) {
       const repo = await fetchImpl(`${api}/repos/${encodeURIComponent(config.owner)}/${encodeURIComponent(config.repo)}`, { headers: headers(token), cache: 'no-store' })
       const details = repo.ok ? await repo.json().catch(() => null) as { visibility?: unknown } | null : null
-      if (details?.visibility !== 'private') throw new Error('Connect a private Git data repository to save pages and menu settings.')
+      if (details?.visibility !== 'private') throw new Error('Connect a private Git data repository before saving.')
     }
     return fetchImpl(url, init)
   }
@@ -92,7 +93,7 @@ export function privateGitWrites(config: GitConfig, token: string, fetchImpl: ty
 
 export const historyUrl = (config: GitConfig) => `https://github.com/${config.owner}/${config.repo}/commits/${config.branch}/${encodePath(config.path)}`
 
-async function failure(response: Response, config: GitConfig, action: string): Promise<Error> {
+export async function failure(response: Response, config: GitConfig, action: string): Promise<Error> {
   if (response.status === 401) return new Error('GitHub rejected the token. Create a fine-grained token with Contents: Read and write on this repository.')
   if (response.status === 403) return new Error(`GitHub refused to ${action}: the token needs Contents: Read and write on ${config.owner}/${config.repo}, or the rate limit was reached.`)
   if (response.status === 409 || response.status === 422) return new GitConflictError('The data file changed in Git since it was loaded here. Load the latest version, then make your change again.')
@@ -216,11 +217,24 @@ export async function deleteFile(config: GitConfig, token: string, message: stri
 
 // Folder listing (files only); a missing folder is empty.
 export async function listFolder(config: GitConfig, token: string, fetchImpl: Fetch = fetch): Promise<{ name: string; path: string; sha: string }[]> {
+  return (await listEntries(config, token, fetchImpl)).filter((entry) => entry.type === 'file').map(({ name, path, sha }) => ({ name, path, sha }))
+}
+// OND-31: a folder listing with its folders too (a folder's sha is its tree's: it changes when anything inside changes).
+export async function listEntries(config: GitConfig, token: string, fetchImpl: Fetch = fetch): Promise<{ name: string; path: string; sha: string; type: 'file' | 'dir' }[]> {
   const response = await fetchImpl(`${fileUrl(config)}?ref=${encodeURIComponent(config.branch)}`, { headers: headers(token), cache: 'no-store' })
   if (response.status === 404) return []
   if (!response.ok) throw await failure(response, config, `list ${config.path}`)
   const body = await response.json() as unknown
-  return Array.isArray(body) ? body.filter((entry) => entry?.type === 'file' && typeof entry.name === 'string' && typeof entry.path === 'string' && typeof entry.sha === 'string').map(({ name, path, sha }) => ({ name, path, sha })) : []
+  return Array.isArray(body) ? body.filter((entry) => (entry?.type === 'file' || entry?.type === 'dir') && typeof entry.name === 'string' && typeof entry.path === 'string' && typeof entry.sha === 'string').map(({ name, path, sha, type }) => ({ name, path, sha, type })) : []
+}
+// A file deleted with the version id already known (a lock, OND-38): one call; keepalive lets it finish while the page
+// closes. False when the file was not there (or changed meanwhile).
+export async function deleteFileAt(config: GitConfig, token: string, sha: string, message: string, fetchImpl: Fetch = fetch, keepalive = false): Promise<boolean> {
+  assertNotViewingAs()
+  const response = await fetchImpl(fileUrl(config), { method: 'DELETE', keepalive, headers: { ...headers(token), 'Content-Type': 'application/json' }, body: JSON.stringify({ message: message.trim() || `Delete ${config.path}`, sha, branch: config.branch }) })
+  if (response.status === 404 || response.status === 409 || response.status === 422) return false
+  if (!response.ok) throw await failure(response, config, `delete ${config.path}`)
+  return true
 }
 // Raw file text (works for files above 1 MB, which the JSON form returns without content); null when missing.
 export async function readRawFile(config: GitConfig, token: string, fetchImpl: Fetch = fetch): Promise<string | null> {

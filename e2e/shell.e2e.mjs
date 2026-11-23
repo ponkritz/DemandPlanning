@@ -1459,7 +1459,7 @@ test('TC-CON-61: Streams → Removed connections finds a connection dropped from
   await context.route('https://api.github.com/**', (route) => {
     const request = route.request(), url = new URL(request.url())
     const json = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
-    if (url.pathname === '/repos/example/storage') return json({ permissions: { push: true } })
+    if (url.pathname === '/repos/example/storage') return json({ visibility: 'private', permissions: { push: true } })
     if (url.pathname === '/repos/example/storage/commits') return json(url.searchParams.get('path') === 'azure-views.json' ? [{ sha, commit: { message: 'Stream mapping: CP Releases', committer: { date: '2026-11-19T10:00:00Z' } } }] : [])
     const match = /^\/repos\/example\/storage\/contents\/(.*)$/.exec(url.pathname)
     if (!match) return json({ message: 'Not Found' }, 404)
@@ -1520,7 +1520,7 @@ test('TC-CON-63: without a roles file the app is read-only — a notice says why
   await second.context.route('https://api.github.com/**', (route) => {
     const request = route.request(), url = new URL(request.url())
     const json = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
-    if (url.pathname === '/repos/example/storage') return json({ permissions: { push: true } })
+    if (url.pathname === '/repos/example/storage') return json({ visibility: 'private', permissions: { push: true } })
     const match = /^\/repos\/example\/storage\/contents\/(.*)$/.exec(url.pathname)
     if (match && request.method() === 'PUT') { const path = decodeURIComponent(match[1]); if (path === '.demand-planning-write-check') return json({ message: 'Invalid request' }, 422); writes.push([path, JSON.parse(Buffer.from(JSON.parse(request.postData()).content, 'base64').toString())]); return json({ content: { sha: 'new' }, commit: { html_url: 'https://github.com/example/storage/commit/new' } }) }
     return json({ message: 'Not Found' }, 404)

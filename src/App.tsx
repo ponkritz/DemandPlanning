@@ -48,7 +48,7 @@ import { useFeatureSetup } from './useFeatureSetup'
 import { useQeMapping } from './useQeMapping'
 import { useOnDemand } from './useOnDemand'
 import { createPage, useMenuLayout } from './useMenuLayout'
-import { addPageReason, builtInGroupOf, findGroup, gitReasonOf, kindOf, menuGroups, pagesOfGroup, placementOf, type Viewer } from './menuLayout'
+import { addPageReason, builtInGroupOf, findGroup, gitReasonOf, isHidden, kindOf, menuGroups, pagesOfGroup, placementOf, type Viewer } from './menuLayout'
 import { AddPageDialog } from './components/PageDialogs'
 import { OwnerPeopleContext, PageNamesContext } from './usePageNames'
 import { knownPeople } from './ownerPeople'
@@ -305,7 +305,7 @@ export default function App() {
   const navButton = (key: string, icon: string, label: string, active: boolean, onClick: () => void) => <button key={key} title={menuMini ? label : undefined} className={active ? 'nav-active' : ''} aria-current={active ? 'page' : undefined} onClick={onClick}><span className="nav-icon">{icon}</span>{label}</button>
   // PGB-04: the added pages of a group that the viewer sees — the On-Demand area (all added pages share it, CON-103), in
   // Testing for the Admin role only — less the ones hidden in their own menu (MYD-08: "On-Demand" hides them all).
-  const addedPages = (groupId: string) => !allowed('ondemand') || personalViews.menu.hidden.includes('ondemand') || (groupId === 'testing' && !testing) ? [] : pagesOfGroup(menu.layout, onDemand.pages, groupId).filter((entry) => !personalViews.menu.hidden.includes(`ondemand:${entry.id}`))
+  const addedPages = (groupId: string) => !allowed('ondemand') || personalViews.menu.hidden.includes('ondemand') || (groupId === 'testing' && !testing) ? [] : pagesOfGroup(menu.layout, onDemand.pages, groupId).filter((entry) => !personalViews.menu.hidden.includes(`ondemand:${entry.id}`) && !isHidden(menu.layout, entry.id))
   // PGB-15…PGB-17: every page name in the menu, for the unique-name check of the page dialogs; an added page whose name
   // another page also has (two saves at the same time, or older files in Git) shows its group in the menu.
   const menuNames: MenuPageName[] = [
@@ -428,7 +428,7 @@ export default function App() {
   const quietTarget = (target: FilePages) => target.quiet === 'menu' || target.quiet === 'views'
   // An added page's file is named by the page's name ("CoNQ"; its blocks for a dashboard).
   const pageChanges = changesForPage(git.remoteChanges, pageKey, targetOf, quietTarget).map((change) => {
-    const added = /(?:^|\/)(on-demand|dashboards)\/([a-z0-9-]+)\.json$/.exec(change.path), name = added && onDemand.pages.find((entry) => entry.id === added[2])?.name
+    const added = /(?:^|\/)(on-demand|dashboards)\/([a-z0-9-]+)(?:\.json|\/page\.json|\/rows)$/.exec(change.path), name = added && onDemand.pages.find((entry) => entry.id === added[2])?.name
     return name ? { ...change, label: added[1] === 'dashboards' ? `the blocks of ${name}` : name } : change
   })
   const editsHere = useUnsavedEdits()
@@ -453,6 +453,7 @@ export default function App() {
       else if (loader === 'history') await history.reload()
       else if (loader === 'menu') await menu.reload()
       else if (loader === 'views') personalViews.reload()
+      else if (loader === 'rowLocks') await onDemand.reloadLockSettings()
     }
     // Pages that hold the data they show (an added page's drawer and pop-ups, a dashboard's blocks, the QE Mapping draft,
     // the KPI tracker copy) open afresh; the others show the data just loaded and keep their open forms.
@@ -460,11 +461,15 @@ export default function App() {
   }
   // The menu layout and the views: read again quietly as soon as a newer version is found.
   const quietPaths = git.remoteChanges.filter((change) => quietTarget(targetOf(change.path))).map((change) => `${change.path}@${change.sha}`).join('|')
-  const quietLoad = useRef({ menu: menu.reload, views: personalViews.reload })
-  useEffect(() => { quietLoad.current = { menu: menu.reload, views: personalViews.reload } })
+  // GIT-21: with a newer menu layout the On-Demand folder is listed again: a page someone else added is read (only pages
+  // not known here), one they deleted leaves the menu — unless it is the page in use with edits not saved here (it stays,
+  // with its notice of GIT-18).
+  const keepOpen = (id: string) => pageKey === `ondemand:${id}` && editsHere.length > 0
+  const quietLoad = useRef({ menu: menu.reload, views: personalViews.reload, pages: () => onDemand.loadNew(keepOpen) })
+  useEffect(() => { quietLoad.current = { menu: menu.reload, views: personalViews.reload, pages: () => onDemand.loadNew(keepOpen) } })
   useEffect(() => {
     if (!quietPaths) return
-    if (quietPaths.includes('menu-layout.json@')) void quietLoad.current.menu()
+    if (quietPaths.includes('menu-layout.json@')) { void quietLoad.current.menu(); void quietLoad.current.pages().catch(() => undefined) }
     if (/personal-views/.test(quietPaths)) quietLoad.current.views()
   }, [quietPaths])
   if (!store.ready) return <main className="content"><h1>I&amp;D Quality Demand Planning</h1>{store.loadError ? <Notice tone="error"><p>{store.loadError}</p><p>Do not clear browser data. If you still have an older tab open with unsaved changes, export its JSON backup first.</p><button className="primary" onClick={store.retryLoad}>Retry loading saved data</button></Notice> : <p role="status">Loading saved browser data…</p>}{buildStatus}</main>
@@ -479,7 +484,7 @@ export default function App() {
         // MYD-08, PGB-04: pinned pages — built-in ones by their id, added pages as ondemand:<page id>.
         const pinned = personalViews.menu.pinned.flatMap((id) => {
           const added = id.startsWith('ondemand:') ? onDemand.pages.find((entry) => `ondemand:${entry.id}` === id) : undefined
-          if (added) return allowed('ondemand') ? [{ key: id, icon: placementOf(menu.layout, added.id).icon, label: added.name, active: page === 'ondemand' && onDemandPage?.id === added.id, open: () => openOnDemand(added.id) }] : []
+          if (added) return allowed('ondemand') && !isHidden(menu.layout, added.id) ? [{ key: id, icon: placementOf(menu.layout, added.id).icon, label: added.name, active: page === 'ondemand' && onDemandPage?.id === added.id, open: () => openOnDemand(added.id) }] : []
           const item = pages.find((entry) => entry.id === id)
           return item && !item.hidden && allowed(item.id) ? [{ key: id, icon: item.icon, label: item.label, active: page === item.id, open: () => setPage(item.id) }] : []
         })
@@ -522,7 +527,7 @@ export default function App() {
       })}</nav>
     </aside>
     {searchOpen && <SettingsSearch allowed={(entry) => entry.tab === 'my' || settingsPagesFor(access.can).some((item) => item.key === entry.tab)} onOpen={openSettings} onClose={() => setSearchOpen(false)} />}
-    {menuEditor && <MenuCustomizer pages={[...pages.filter((item) => !item.hidden && item.id !== 'admin' && allowed(item.id)).map(({ id, label, group }) => ({ id, label, group: group as string })), ...(allowed('ondemand') ? onDemand.pages.map((entry) => ({ id: `ondemand:${entry.id}`, label: entry.name, group: groupNameOf(placementOf(menu.layout, entry.id).group) })) : [])]} menu={personalViews.menu} onChange={personalViews.setMenu} onClose={() => setMenuEditor(false)} />}
+    {menuEditor && <MenuCustomizer pages={[...pages.filter((item) => !item.hidden && item.id !== 'admin' && allowed(item.id)).map(({ id, label, group }) => ({ id, label, group: group as string })), ...(allowed('ondemand') ? onDemand.pages.filter((entry) => !isHidden(menu.layout, entry.id)).map((entry) => ({ id: `ondemand:${entry.id}`, label: entry.name, group: groupNameOf(placementOf(menu.layout, entry.id).group) })) : [])]} menu={personalViews.menu} onChange={personalViews.setMenu} onClose={() => setMenuEditor(false)} />}
     <main>
       <header className="topbar" ref={topbarRef}><button type="button" className="menu-button" aria-label={navOpen ? 'Close menu' : 'Open menu'} aria-expanded={navOpen} aria-controls="primary-navigation" onClick={() => setNavOpen((open) => !open)}>{navOpen ? '✕' : '☰'}</button><h1 title={page === 'ondemand' && onDemandPage ? onDemandPage.description || `${onDemandPage.name}, in ${groupNameOf(placementOf(menu.layout, onDemandPage.id).group)}` : meta.detail}>{page === 'board' ? view.name : page === 'windchill' && windchillView ? windchillView.name : page === 'admin' ? settingsLabel(settingsTab) : page === 'ondemand' && onDemandPage ? onDemandPage.name : meta.label}</h1><div className="topbar-slot" ref={setHeaderSlot} /><div className="topbar-actions">{openSteps > 0 && <button type="button" className="ghost setup-button" title="What to configure and how" onClick={() => setGuideOpen(true)}>Setup · {steps.filter((step) => step.required && step.state === 'done').length}/{steps.filter((step) => step.required).length}</button>}<JobsIndicator /><DataStatus azure={azure} />{(meta.usesMonth || (page === 'board' && view.readOnly)) && <label className="month-picker"><span className="sr-only">Month</span><input type="month" aria-label="Month" value={month} onChange={(event) => /^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value) && setMonth(event.target.value)} /></label>}{personPage && <label className="topbar-person">Person<PersonPicker label="Person" value={my.chosenName} people={my.people} onChange={my.setName} meLabel={azure.creatorEmail.trim() ? 'Me' : 'Choose a person…'} /></label>}<ThemeToggle /><ProfileMenu name={my.self.me.name ?? ''} email={azure.creatorEmail.trim()} actions={profileActions} /></div></header>
       {access.viewingAs && <div className="view-as-banner" role="status"><span>👁 Viewing as <strong>{viewAsLabel(access.viewingAs)}</strong>{access.viewingAs.kind === 'role' ? '' : access.rights.roles.length ? ` (${access.rights.roles.join(', ')})` : ' (default role)'} — read only: nothing is saved to Azure DevOps or Git.</span><button type="button" className="ghost" onClick={() => setViewAsOpen(true)}>Change</button><button type="button" className="primary" onClick={() => setViewAs(null)}>Exit View as</button></div>}
@@ -542,7 +547,7 @@ export default function App() {
       {page === 'brite' && <BritePage />}
       {page === 'kpitracker' && <KpiTrackerPage git={git} canManage={access.can('storage.shared')} who={my.me.name || 'Admin'} />}
       {page === 'ondemand' && onDemandPage && kindOf(menu.layout, onDemandPage.id) === 'dashboard' && <CustomDashboardPage key={onDemandPage.id} git={git} store={onDemand} pageId={onDemandPage.id} menu={menu} viewer={viewer} views={personalViews} onOpen={openOnDemand} addPageReason={addPageReason(viewer, menu.layout, placementOf(menu.layout, onDemandPage.id).group)} onAddPage={() => setAddPageFor(placementOf(menu.layout, onDemandPage.id).group)} />}
-      {page === 'ondemand' && onDemandPage && kindOf(menu.layout, onDemandPage.id) !== 'dashboard' && <OnDemandPage key={onDemandPage.id} git={git} store={onDemand} pageId={onDemandPage.id} me={azure.isSample ? '' : azure.creatorEmail.trim().toLowerCase() || my.self.me.name?.trim() || ''} onOpen={openOnDemand} kind={kindOf(menu.layout, onDemandPage.id)} menu={menu} viewer={viewer} addPageReason={addPageReason(viewer, menu.layout, placementOf(menu.layout, onDemandPage.id).group)} onAddPage={() => setAddPageFor(placementOf(menu.layout, onDemandPage.id).group)} />}
+      {page === 'ondemand' && onDemandPage && kindOf(menu.layout, onDemandPage.id) !== 'dashboard' && <OnDemandPage key={onDemandPage.id} git={git} store={onDemand} pageId={onDemandPage.id} me={azure.isSample ? '' : azure.creatorEmail.trim().toLowerCase() || my.self.me.name?.trim() || ''} onOpen={openOnDemand} kind={kindOf(menu.layout, onDemandPage.id)} menu={menu} viewer={viewer} addPageReason={addPageReason(viewer, menu.layout, placementOf(menu.layout, onDemandPage.id).group)} onAddPage={() => setAddPageFor(placementOf(menu.layout, onDemandPage.id).group)} views={personalViews} />}
       {page === 'qemapping' && <QeMappingPage git={git} store={qeMapping} resources={qeResources} />}
       {page === 'mywork' && <MyWorkPage azure={azure} store={store} my={my} month={month} onOpenActivities={() => setPage('activities')} assign={assign} featureSetup={featureSetup.setups} />}
       {page === 'bulk' && <SprintCheckPage azure={azure} store={store} my={my} />}

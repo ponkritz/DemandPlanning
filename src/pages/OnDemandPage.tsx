@@ -1,20 +1,25 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useUnsavedEdit } from '../pageEdits'
 import { PageNameField } from '../components/PageDialogs'
 import { usePageNameClash } from '../usePageNames'
 import { recordJob, runInBackground } from '../backgroundJobs'
 import { DataTable, type DataColumn } from '../components/DataTable'
 import { ResultTabs } from '../components/ResultTabs'
-import { Drawer, EmptyState, Info, Modal, Notice, Page, SaveQueueStatus, TablePanel, WriteBlocked } from '../components/ui'
+import { Drawer, EmptyState, Info, Modal, Notice, Page, Pill, SaveQueueStatus, TablePanel, WriteBlocked } from '../components/ui'
 import { outcomeText, type QueuedOutcome } from '../gitSaveQueue'
 import { formatDateTime } from '../format'
-import { applyColumns, hasRowKeys, setKeyPrefix, cellProblem, cellSortValue, cellText, columnDrafts, columnEffects, columnsError, currencyCodes, defaultCurrency, displayText, filterRows, hasOptions, lastUpdate, maxDescription, maxLog, maxLongValue, moneyOf, newId, onDemandPath, onDemandTypes, renamePage, rowError, rowId, rowSave, valuesOf, type ColumnDraft, type OnDemandColumn, type OnDemandPage as PageFile, type OnDemandRow, type OnDemandValue } from '../onDemand'
+import { applyColumns, hasTable, isRowHidden, withoutHidden, hasRowKeys, setKeyPrefix, cellProblem, cellSortValue, cellText, columnDrafts, columnEffects, columnsError, currencyCodes, defaultCurrency, displayText, filterRows, hasOptions, lastUpdate, maxDescription, maxLog, maxLongValue, moneyOf, newId, onDemandPath, onDemandTypes, renamePage, rowError, rowId, rowSave, valuesOf, type ColumnDraft, type OnDemandColumn, type OnDemandPage as PageFile, type OnDemandRow, type OnDemandValue } from '../onDemand'
 import { useWriteBlock } from '../useCan'
 import type { GitStorage } from '../useGitStorage'
 import type { OnDemandStore } from '../useOnDemand'
-import { findGroup, pageMenuReason, pageRights, placementOf, removePlacement, type PageKind, type Viewer } from '../menuLayout'
+import { deleteReason, findGroup, hideReason, isHidden, pageMenuReason, pageRights, placementOf, removePlacement, setHidden, type PageKind, type Viewer } from '../menuLayout'
 import type { MenuLayoutStore } from '../useMenuLayout'
 import { InsightsTab } from './OnDemandInsights'
+import type { PersonalViewsStore } from '../usePersonalViews'
+import { countdown, draftRestore, editPhase, heldBy, shouldRenew, type RowDraft, type RowLock } from '../rowLocks'
+import { pageFolder } from '../rowFiles'
+import { useRowLocks } from '../useRowLocks'
+import { useNow } from '../useNow'
 
 // OND-03…OND-07 One On-Demand page (CoNQ, or one added under On-Demand): a work table in the shared DataTable — one
 // column per configured column, search, sort, the row count and Export. OND-27: a click on a row (or Enter / Space on it)
@@ -30,8 +35,12 @@ import { InsightsTab } from './OnDemandInsights'
 // PGB-01: kind — a Table page has the Data table only; a Table + Insights page (CoNQ and every page from before the
 // page builder) has both tabs. PGB-09…PGB-11: the rights follow the role rights (CON-103) or a co-ownership of the page
 // or its group (menu-layout.json); Add page… opens the shared Add page pop-up (PGB-05).
-export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-insights', menu, viewer, addPageReason = '', onAddPage }: { git: GitStorage; store: OnDemandStore; pageId: string; me: string; onOpen: (id: string) => void; kind?: PageKind; menu: MenuLayoutStore; viewer: Viewer; addPageReason?: string; onAddPage: () => void }) {
-  const page = store.pages.find((entry) => entry.id === pageId) ?? store.pages[0]
+export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-insights', menu, viewer, addPageReason = '', onAddPage, views }: { git: GitStorage; store: OnDemandStore; pageId: string; me: string; onOpen: (id: string) => void; kind?: PageKind; menu: MenuLayoutStore; viewer: Viewer; addPageReason?: string; onAddPage: () => void; views?: PersonalViewsStore }) {
+  // OND-39: the page with its hidden rows (listed only with Show hidden rows); the Insights get it without them.
+  const listed = store.pages.find((entry) => entry.id === pageId) ?? store.pages[0]
+  const page = (listed && store.full(listed.id)) || listed
+  const [showHidden, setShowHidden] = useState(() => { try { return (JSON.parse(localStorage.getItem(showHiddenKey) ?? '[]') as string[]).includes(pageId) } catch { return false } })
+  const toggleHiddenRows = (on: boolean) => { setShowHidden(on); try { const list = (JSON.parse(localStorage.getItem(showHiddenKey) ?? '[]') as string[]).filter((id) => id !== pageId); localStorage.setItem(showHiddenKey, JSON.stringify(on ? [...list, pageId] : list)) } catch { /* this visit only */ } }
   const [search, setSearch] = useState('')
   // OND-27: the row open in the drawer (by id; a new row until it is saved), the rows in the order shown when it was
   // opened (‹ ›), and whether it opens for editing.
@@ -49,8 +58,23 @@ export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-ins
   // PGB-07: renaming and removing the page is a change of the menu: a Tool Owner, a co-owner of its group, or in
   // On-Demand a role allowed "Set up On-Demand pages".
   const menuReason = gitReason || (page ? pageMenuReason(viewer, menu.layout, page.id) : '')
+  // PGB-19, PGB-20: hide / show the page (Tool Owner, its or its group's co-owners, in On-Demand "Set up On-Demand
+  // pages"); delete it with its files — the Tool Owner only.
+  const hidingReason = gitReason || (page ? hideReason(viewer, menu.layout, page.id) : '')
+  const removeReason = gitReason || deleteReason(viewer)
+  const hidden = page ? isHidden(menu.layout, page.id) : false
+  const toggleHidden = () => { if (!page) return; const next = !hidden; void inBackground(`${next ? 'Hide' : 'Show'} page · ${page.name}`, async () => { const saved = await menu.save(setHidden(menu.layout, page.id, next, store.pages.map((entry) => entry.id)), `Pages & menu: ${next ? 'hide' : 'show'} the page ${page.name}`); return { value: saved, text: `${next ? 'Hidden from the menu, Home and search for everyone; its data stays in Git.' : 'Shown in the menu again.'} ${menu.path}` } }).catch(() => undefined) }
   const blocked = [...(rights.rows ? [] : ['ondemand.edit' as const]), ...(rights.setup ? [] : ['ondemand.setup' as const])]
-  const rows = useMemo(() => page ? filterRows(page, search) : [], [page, search])
+  const rows = useMemo(() => page ? filterRows(showHidden ? page : withoutHidden(page), search) : [], [page, search, showHidden])
+  // OND-35: the row locks of a row-file page — listed when the page opens, when the drawer opens a row and on the
+  // open-app check (GIT-18).
+  const locking = useRowLocks(git, page, me, store.lockSettings.timeoutMinutes)
+  const refreshLocks = locking.refresh
+  const drawerRow = drawer?.id
+  useEffect(() => { if (drawerRow) void refreshLocks() }, [drawerRow, refreshLocks])
+  const [converting, setConverting] = useState(false)
+  // A lock is shown until it expires (checked every 30 seconds).
+  const now = useNow().getTime()
   // GIT-18: what Load the newer data would drop: the columns or the name being set up (a change kept after a failed
   // save stays: it is applied on top of the page read again).
   useUnsavedEdit(!page ? false : columnsOpen ? `the columns you are setting up on ${page.name}` : pageDialog === 'rename' ? `the new name of ${page.name}` : false)
@@ -60,7 +84,20 @@ export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-ins
   const owners = [...placement.owners, ...(findGroup(menu.layout, placement.group)?.acceptsPages ? findGroup(menu.layout, placement.group)!.owners : [])]
   const queue = store.queue(page.id)
   const pending = store.pending(page.id)
-  const path = onDemandPath(page.id)
+  const rowFiles = page.storage === 'rows'
+  const path = rowFiles ? `${pageFolder(page.id)}/` : onDemandPath(page.id)
+  // OND-35: on a row-file page a row another person is editing cannot be edited or removed here (viewing stays free);
+  // the lock names the editor by their work email, so Edit needs one. OND-38: the Tool Owner and the page's co-owners
+  // (also a co-owner of its group, who holds the page's rights, PGB-10) may release a stuck lock.
+  const holderOf = (row: OnDemandRow) => locking.active && row.key ? heldBy(locking.locks[row.key]?.lock, me, now) : null
+  const timeoutMinutes = store.lockSettings.timeoutMinutes
+  const lockReason = (row: OnDemandRow) => { const lock = holderOf(row); return lock ? lockedText(lock, rowId(page, row) || row.key || 'this row', timeoutMinutes) : '' }
+  const meReason = rowFiles && !me ? 'Set your work email in My settings to edit rows of this page: the row lock names who is editing.' : ''
+  const editRowsReason = rowsReason || meReason
+  const canRelease = !gitReason && !viewer.readOnly && (viewer.manager || rights.owner)
+  // OND-32: Convert to row files — a Tool Owner, on a table page in Git that is still one file.
+  const convertReason = gitReason || (!store.inGit(page.id) ? `${page.name} is not in Git yet.` : viewer.manager ? '' : 'Only a Tool Owner (“Manage pages and menu groups”) converts a page to row files.')
+  const showConvert = !rowFiles && hasTable(kind) && (viewer.manager || rights.setup)
   const resultText = (saved: QueuedOutcome, what = '') => `${outcomeText(saved)} ${path}${what ? ` — ${what}` : ''}${saved.commitUrl ? ` — ${saved.commitUrl}` : ''}`
 
   // OND-28: one change of the page saved to Git at once, as a Background job (§8): "Saving to Git…", then its result.
@@ -81,21 +118,34 @@ export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-ins
       return { value: saved, text: resultText(saved, after ? `${isNew ? 'added' : 'updated'} ${rowId(saved.page, after) || after.key}` : '') }
     })
   }
+  // OND-40: Delete row (the Tool Owner, a hidden row only): the row goes for good; its number is never given again.
   async function removeRowNow(row: OnDemandRow) {
-    const { message } = rowSave(store.stored(page.id) ?? page, row, 'remove')
-    await inBackground(`Remove row · ${page.name} · ${rowId(page, row) || row.key || rowLabel(page, row)}`, async () => {
-      const saved = await store.update(page.id, (base) => rowSave(base, row, 'remove').page, message)
-      return { value: saved, text: resultText(saved, `removed ${rowId(page, row) || row.key || ''}`) }
+    const { message } = rowSave(store.stored(page.id) ?? page, row, 'delete')
+    await inBackground(`Delete row · ${page.name} · ${rowId(page, row) || row.key || rowLabel(page, row)}`, async () => {
+      const saved = await store.update(page.id, (base) => rowSave(base, row, 'delete').page, message)
+      return { value: saved, text: resultText(saved, `deleted ${rowId(page, row) || row.key || ''}`) }
     })
     if (drawer?.id === row.id) setDrawer(null)
   }
+  // OND-39: Hide row / Show row — a change of the row, saved at once like an edit (its History says who and when).
+  const hideRowNow = (row: OnDemandRow, hide: boolean) => {
+    const action = hide ? 'hide' : 'show'
+    const { message } = rowSave(store.stored(page.id) ?? page, row, action, { by: me })
+    return inBackground(`${hide ? 'Hide' : 'Show'} row · ${page.name} · ${rowId(page, row) || row.key || rowLabel(page, row)}`, async () => {
+      const saved = await store.update(page.id, (base) => rowSave(base, row, action, { by: me }).page, message)
+      return { value: saved, text: resultText(saved, `${hide ? 'hidden' : 'shown'} ${rowId(page, row) || row.key || ''}`) }
+    })
+  }
+  const canDelete = !gitReason && viewer.manager && !viewer.readOnly
+  const hiddenCount = page.rows.filter(isRowHidden).length
+  const visibleCount = page.rows.length - hiddenCount
   const retry = () => inBackground(`Retry · ${page.name}`, async () => { await store.retry(page.id); return { value: null, text: `Saved to Git. ${path}` } }).catch(() => undefined)
 
   const onSave = <small className="muted" title="Given when the row is saved to Git">on save</small>
   const open = (row: OnDemandRow, shown: OnDemandRow[], edit = false) => setDrawer({ id: row.id, order: shown.map((entry) => entry.id), edit })
   const columns: DataColumn<OnDemandRow>[] = [
     // OND-19: the readable ID, given when the row is saved to Git (sorted by its number).
-    { id: 'od-id', label: 'ID', value: (row) => row.seq ?? Number.MAX_SAFE_INTEGER, exportValue: (row) => rowId(page, row), render: (row) => row.seq ? <code className="od-key">{rowId(page, row)}</code> : onSave },
+    { id: 'od-id', label: 'ID', value: (row) => row.seq ?? Number.MAX_SAFE_INTEGER, exportValue: (row) => rowId(page, row), render: (row) => { const lock = holderOf(row); return <>{row.seq ? <code className="od-key">{rowId(page, row)}</code> : onSave}{row.hidden && <>{' '}<Pill tone="neutral">Hidden</Pill></>}{lock && <>{' '}<LockBadge lock={lock} /></>}</> } },
     // OND-18: the row's key, made when the row is added; rows from before keys get theirs on their next save.
     { id: 'od-key', label: 'Key', value: (row) => row.key ?? '', render: (row) => row.key ? <code className="od-key">{row.key}</code> : onSave },
     ...page.columns.map((column): DataColumn<OnDemandRow> => ({
@@ -110,10 +160,10 @@ export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-ins
     { id: 'od-added-on', label: 'Added on', firstSortDesc: true, value: (row) => row.addedAt ?? '', render: (row) => row.addedAt ? formatDateTime(row.addedAt) : <span className="muted">—</span> },
     { id: 'od-updated-by', label: 'Last updated by', defaultHidden: true, export: 'always', value: (row) => lastUpdate(row)?.by ?? '', render: (row) => lastUpdate(row)?.by || <span className="muted">—</span> },
     { id: 'od-updated-on', label: 'Last updated on', defaultHidden: true, export: 'always', firstSortDesc: true, value: (row) => lastUpdate(row)?.at ?? '', render: (row) => { const last = lastUpdate(row); return last ? formatDateTime(last.at) : <span className="muted">—</span> } },
-    // OND-27: Edit opens the row's drawer for editing; Remove asks first (OND-28: removed in Git at once).
+    // OND-27: Edit opens the row's drawer for editing; OND-39: Hide (Show for a hidden row) saves at once.
     { id: '@actions', label: 'Actions', sortable: false, export: false, render: (row) => <span className="button-row nowrap">
-      <button type="button" className="ghost" disabled={!canRows} title={rowsReason || undefined} aria-label={`Edit row ${rowLabel(page, row)}`} onClick={() => open(row, rows, true)}>Edit</button>
-      <button type="button" className="text-button danger-text" disabled={!canRows} title={rowsReason || undefined} aria-label={`Remove row ${rowLabel(page, row)}`} onClick={() => setRemoving(row)}>Remove</button>
+      <button type="button" className="ghost" disabled={Boolean(editRowsReason || lockReason(row))} title={editRowsReason || lockReason(row) || undefined} aria-label={`Edit row ${rowLabel(page, row)}`} onClick={() => open(row, rows, true)}>Edit</button>
+      <button type="button" className="text-button" disabled={!canRows || Boolean(lockReason(row))} title={rowsReason || lockReason(row) || undefined} aria-label={`${row.hidden ? 'Show' : 'Hide'} row ${rowLabel(page, row)}`} onClick={() => void hideRowNow(row, !row.hidden).catch(() => undefined)}>{row.hidden ? 'Show' : 'Hide'}</button>
     </span> },
   ]
 
@@ -132,41 +182,59 @@ export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-ins
     actions={<>
       <button type="button" className="ghost" disabled={Boolean(gitReason || addPageReason)} title={gitReason || addPageReason || undefined} onClick={onAddPage}>＋ Add page…</button>
       <button type="button" className="ghost" disabled={Boolean(menuReason)} title={menuReason || undefined} onClick={() => setPageDialog('rename')}>Rename page…</button>
-      <button type="button" className="danger-button od-remove-page" disabled={Boolean(menuReason)} title={menuReason || undefined} onClick={() => setPageDialog('remove')}>Remove page…</button>
+      <button type="button" className="ghost od-hide-page" disabled={Boolean(hidingReason)} title={hidingReason || undefined} onClick={toggleHidden}>{hidden ? 'Show page' : 'Hide page'}</button>
+      <button type="button" className="danger-button od-remove-page" disabled={Boolean(removeReason)} title={removeReason || undefined} onClick={() => setPageDialog('remove')}>Delete page…</button>
+      {showConvert && <button type="button" className="ghost od-convert" disabled={Boolean(convertReason)} title={convertReason || undefined} onClick={() => setConverting(true)}>Convert to row files…</button>}
       {git.connected && <button type="button" className="ghost" onClick={() => { if (pending.length && !window.confirm(`Discard the changes to ${page.name} that are not saved to Git?`)) return; store.discard(page.id); void store.reload() }}>↻ Reload from Git</button>}
     </>}>
     {gitReason && <Notice tone={git.isSample ? 'warning' : 'info'}>{gitReason}{!git.connected && store.inGit(page.id) ? ' The page last loaded in this browser is shown.' : ''}</Notice>}
     {store.errors.map((error) => <Notice key={error} tone="error">On-Demand: {error}</Notice>)}
+    {hidden && <Notice tone="info" className="od-hidden-note">{page.name} is hidden: it is not in the menu, on Home or in search for anyone. Its rows stay in Git and dashboards keep reading them; it opens from Admin → Pages & menu.{!hidingReason && <>{' '}<button type="button" className="ghost" onClick={toggleHidden}>Show page</button></>}</Notice>}
     {store.loaded && !store.inGit(page.id) && <Notice tone="info">{page.name} is not in Git yet: it is created with its first save to Git.</Notice>}
+    {locking.active && git.lockFallback && <Notice tone="info">Row locks are kept in the folder locks/ of the data branch: the data repository did not allow a branch “locks”. They work the same.</Notice>}
+    {locking.error && <Notice tone="warning">The row locks of {page.name} could not be read ({locking.error}). Who is editing a row is not shown; two edits of the same row are still merged field by field.</Notice>}
     {(() => { const table = <TablePanel className="od-panel" eyebrow={groupName.toUpperCase()} title={page.name} detail={page.description || undefined}
-      info={<>Click a row (or press Enter on it) to open it on the right: its ID, key, who added it and when, every value with its column’s description, and its History; Edit there changes it, and Save to Git saves it for everyone at once. Each column has a type — Text, Long text (a paragraph), Number, Currency (an amount and its currency), Date, Dropdown (one value) or Multi-select with the options of its list — and may have a description (ⓘ on its heading) saying how or what to fill. A value that no longer fits its column (an option removed, the type changed) is kept and marked, e.g. “not in the list”, until it is changed. Every row gets a readable ID such as {page.keyPrefix}-0001 when it is saved to Git, and records who added it and when; every saved change is logged in the row’s History (who, when, what changed — the last {maxLog}). Last updated by / on can be shown with Columns. The export holds the IDs, values, Added by / on and Last updated by / on (in UTC), not the History. Every change — a row, the columns, the name, a chart — is saved to Git as {onDemandPath(page.id)} the moment it is saved (no separate Save to Git); two saves at the same time are merged row by row and column by column, the later one winning where both changed the same.{store.history(page.id) && <> <a href={store.history(page.id)} target="_blank" rel="noreferrer">History in GitHub</a></>}{owners.length > 0 && <> Co-owners (set up the page and edit its rows): {[...new Set(owners)].join(', ')}.</>}</>}
+      info={<>Click a row (or press Enter on it) to open it on the right: its ID, key, who added it and when, every value with its column’s description, and its History; Edit there changes it, and Save to Git saves it for everyone at once. Each column has a type — Text, Long text (a paragraph), Number, Currency (an amount and its currency), Date, Dropdown (one value) or Multi-select with the options of its list — and may have a description (ⓘ on its heading) saying how or what to fill. A value that no longer fits its column (an option removed, the type changed) is kept and marked, e.g. “not in the list”, until it is changed. Every row gets a readable ID such as {page.keyPrefix}-0001 when it is saved to Git, and records who added it and when; every saved change is logged in the row’s History (who, when, what changed — the last {maxLog}). Last updated by / on can be shown with Columns. The export holds the IDs, values, Added by / on and Last updated by / on (in UTC), not the History. Every change — a row, the columns, the name, a chart — is saved to Git {rowFiles ? <>in {path} the moment it is saved: each row is its own file, so two people adding or editing rows at the same time never get in each other’s way. Edit takes the row’s lock — others see who is editing it and cannot edit that row until it is saved, cancelled or {timeoutMinutes} minutes pass without activity (the unsaved values are then kept in that browser as a draft for one day)</> : <>as {onDemandPath(page.id)} the moment it is saved (no separate Save to Git); two saves at the same time are merged row by row and column by column, the later one winning where both changed the same</>}.{store.history(page.id) && <> <a href={store.history(page.id)} target="_blank" rel="noreferrer">History in GitHub</a></>}{owners.length > 0 && <> Co-owners (set up the page and edit its rows): {[...new Set(owners)].join(', ')}.</>}</>}
       action={<button type="button" className="ghost" disabled={!canSetup} title={setupReason || undefined} onClick={() => setColumnsOpen(true)}>Set up columns…</button>}>
       {!gitReason && <WriteBlocked reason={block.noteFor('on this page', ...blocked)} />}
       {page.columns.length ? <DataTable id={`on-demand:${page.id}`} columns={columns} rows={rows} rowKey={(row) => row.id} exportName={page.name}
         onRowOpen={(row, shown) => open(row, shown)} rowLabel={(row) => `Open row ${rowId(page, row) || row.key || rowLabel(page, row)}`}
         toolbar={<><input className="search" type="search" aria-label={`Search ${page.name}`} placeholder="Search all columns" value={search} onChange={(event) => setSearch(event.target.value)} />
-          <button type="button" className="ghost" disabled={!canRows} title={rowsReason || undefined} onClick={() => { const draft = { id: newId('r'), cells: {} }; setDrawer({ id: draft.id, order: [], draft, edit: true }) }}>＋ Add row</button></>}
-        status={`${rows.length} of ${page.rows.length} row${page.rows.length === 1 ? '' : 's'}`}
-        empty={<EmptyState title={page.rows.length ? 'No row matches the search.' : 'No rows yet.'} detail={page.rows.length ? undefined : canRows ? 'Add the first one with ＋ Add row.' : undefined} />} />
+          <button type="button" className="ghost" disabled={Boolean(editRowsReason)} title={editRowsReason || undefined} onClick={() => { const draft = { id: newId('r'), cells: {} }; setDrawer({ id: draft.id, order: [], draft, edit: true }) }}>＋ Add row</button>
+          {(hiddenCount > 0 || showHidden) && <label className="check od-show-hidden"><input type="checkbox" checked={showHidden} onChange={(event) => toggleHiddenRows(event.target.checked)} />Show hidden rows ({hiddenCount})</label>}</>}
+        rowClassName={(row) => row.hidden ? 'od-row-hidden' : undefined}
+        status={`${rows.length} of ${showHidden ? page.rows.length : visibleCount} row${(showHidden ? page.rows.length : visibleCount) === 1 ? '' : 's'}${hiddenCount ? ` (${hiddenCount} hidden${showHidden ? ', shown' : ''})` : ''}`}
+        empty={<EmptyState title={visibleCount || (showHidden && page.rows.length) ? 'No row matches the search.' : 'No rows yet.'} detail={page.rows.length ? undefined : canRows ? 'Add the first one with ＋ Add row.' : undefined} />} />
         : <EmptyState title="No columns yet." detail={canSetup ? 'Add them with Set up columns…: a name and a type for each, and the options of a Dropdown or Multi-select.' : 'Someone allowed to set up On-Demand pages adds the columns.'} />}
       {saveBar}
     </TablePanel>
       // PGB-01: a Table page is the Data table alone; Table + Insights adds the Insights tab (OND-11).
       return kind === 'table' ? table : <ResultTabs id={`on-demand:${page.id}`} mainLabel="Data" rawLabel="Insights" rawCount={page.insights.length}
-        raw={<InsightsTab page={page} canSetup={canSetup} setupReason={setupReason} blockNote={gitReason || rights.setup ? '' : block.noteFor('on this tab', 'ondemand.setup')} saveBar={saveBar}
-          onChange={(next) => { void saveChange('insights', (base) => { const out = { ...base, insights: next.insights }; if (next.colors) out.colors = next.colors; else delete out.colors; return out }, `${page.name}: change the charts and tables`, 'charts and tables').catch(() => undefined) }} />}
+        raw={<InsightsTab page={withoutHidden(page)} canSetup={canSetup} setupReason={setupReason} blockNote={gitReason || rights.setup ? '' : block.noteFor('on this tab', 'ondemand.setup')} saveBar={saveBar} views={views}
+          onChange={(next, message) => { void saveChange('insights', (base) => { const out = { ...base, insights: next.insights }; if (next.colors) out.colors = next.colors; else delete out.colors; if (next.insightFilters !== page.insightFilters) { if (next.insightFilters) out.insightFilters = next.insightFilters; else delete out.insightFilters } return out }, message ?? `${page.name}: change the charts and tables`, 'charts and tables').catch(() => undefined) }} />}
         main={table} />
     })()}
     {drawer && current && <RowDrawer key={drawer.draft ? drawer.draft.id : 'row'} page={page} row={current} isNew={!page.rows.some((entry) => entry.id === current.id)} startEditing={drawer.edit}
-      canEdit={canRows} editReason={rowsReason} queueFailed={queue.failed > 0}
+      canEdit={!editRowsReason} editReason={editRowsReason} queueFailed={queue.failed > 0}
+      locking={locking.active && current.key && page.rows.some((entry) => entry.id === current.id) ? (() => { const key = current.key; const held = locking.locks[key]; return {
+        holder: holderOf(current), canRelease, timeoutMs: locking.timeoutMs,
+        // OND-35: Edit takes the lock, then reads the page again (only its changed rows), so the edit starts from the row as it is in Git.
+        take: async () => { const result = await locking.take(key); if (!result.ok) return result; const fresh = await store.reloadPage(page.id).catch(() => null); return { ok: true as const, row: fresh?.rows.find((entry) => entry.key === key) } }, renew: () => locking.renew(key), release: () => locking.release(key),
+        releaseOther: async () => { if (!held) return; const done = await locking.releaseOther(key, held); recordJob(`ondemand:lock:${page.id}:${key}`, `Release lock · ${page.name} · ${rowId(page, current) || key}`, { text: done ? `Released the lock of ${rowId(page, current) || key} held by ${held.lock.name} since ${formatDateTime(held.lock.at)}; the row can be edited again.` : `The lock of ${rowId(page, current) || key} was already released.` }) },
+        findDraft: () => locking.draft.find(key), keepDraft: (cells, base) => locking.draft.keep(key, cells, base), dropDraft: () => locking.draft.drop(key),
+      } })() : undefined}
       position={drawer.draft ? null : { at: drawer.order.indexOf(current.id), of: drawer.order.length }} onStep={step}
-      onSave={(row, isNew) => saveRow(row, isNew)} onRetryQueue={() => store.retry(page.id)} onRemove={() => setRemoving(current)}
+      onSave={(row, isNew) => saveRow(row, isNew)} onRetryQueue={() => store.retry(page.id)} onHide={(hide) => hideRowNow(current, hide)} onRemove={canDelete && current.hidden ? () => setRemoving(current) : undefined}
       onClose={() => setDrawer(null)} />}
+    {converting && <ConvertDialog page={page} onCancel={() => setConverting(false)} onConvert={async () => {
+      await inBackground(`Convert to row files · ${page.name}`, async () => { const done = await store.convert(page.id); return { value: done, text: `Converted ${onDemandPath(page.id)} to ${pageFolder(page.id)}/ — ${done.page.rows.length} row file${done.page.rows.length === 1 ? '' : 's'}, page.json and counter.json in one commit. — ${done.commitUrl}` } })
+      setConverting(false)
+    }} />}
     {removing && <RemoveRowDialog page={page} row={removing} onCancel={() => setRemoving(null)} onRemove={async () => { await removeRowNow(removing); setRemoving(null) }} />}
     {columnsOpen && <ColumnsDialog page={page} onCancel={() => setColumnsOpen(false)} onSave={async (change) => { await saveChange('columns', change, `${page.name}: set up the columns`); setColumnsOpen(false) }} />}
     {pageDialog === 'rename' && <PageNameDialog title="Rename the page" action="Save to Git" name={page.name} description={page.description} except={`ondemand:${page.id}`} note="Saved to Git for everyone at once." onCancel={() => setPageDialog(null)} onSave={async (name, description) => { await saveChange('rename', (base) => renamePage(base, name, description), `On-Demand: rename ${page.name} to ${name.trim()}`); setPageDialog(null) }} />}
     {pageDialog === 'remove' && <RemovePageDialog page={page} inGit={store.inGit(page.id)} onCancel={() => setPageDialog(null)} onRemove={async () => {
-      await store.remove(page.id, `On-Demand: remove the page ${page.name} (${page.rows.length} rows)`)
+      await store.remove(page.id, `On-Demand: delete the page ${page.name} (${page.rows.length} rows)`)
       // PGB-07: its place in the menu goes with it.
       if (menu.layout.pages[page.id]) await menu.save(removePlacement(menu.layout, page.id), `Pages & menu: remove the page ${page.name}`)
       recordRemoved(page)
@@ -187,11 +255,28 @@ function inBackground<T>(label: string, work: () => Promise<{ value: T; text: st
     })
   })
 }
-const recordRemoved = (page: PageFile) => recordJob(`ondemand:${page.id}`, `Remove page · ${page.name}`, { text: `Removed ${onDemandPath(page.id)} with its ${page.rows.length} row${page.rows.length === 1 ? '' : 's'}; its history stays in GitHub.` })
+const recordRemoved = (page: PageFile) => recordJob(`ondemand:${page.id}`, `Delete page · ${page.name}`, { text: `Deleted ${page.storage === 'rows' ? `${pageFolder(page.id)}/` : onDemandPath(page.id)} with its ${page.rows.length} row${page.rows.length === 1 ? '' : 's'}; its history stays in GitHub.` })
 
+const showHiddenKey = 'demand-planning-od-show-hidden-v1'
 const rowLabel = (page: PageFile, row: OnDemandRow) => { const first = page.columns.find((column) => cellText(row.cells[column.id])); return first ? cellText(row.cells[first.id]).slice(0, 60) : row.id }
 const eyebrowOf = (page: PageFile) => `ON-DEMAND · ${page.name.toUpperCase()}`
 const sameCells = (columns: OnDemandColumn[], a: Record<string, OnDemandValue>, b: Record<string, OnDemandValue>) => columns.every((column) => cellText(a[column.id]) === cellText(b[column.id]))
+
+// OND-35: who is editing a row — the badge in the table's ID cell (the full text as its tooltip and accessible name).
+function LockBadge({ lock }: { lock: RowLock }) {
+  const text = `Being edited by ${lock.name} since ${formatDateTime(lock.at)}`
+  return <span className="od-lock" title={text} aria-label={text}><Pill tone="warning">✎ {lock.name.split('@')[0]}</Pill></span>
+}
+const lockedText = (lock: RowLock, title: string, minutes: number) => `${lock.name} is editing ${title} since ${formatDateTime(lock.at)}. You can view it; Edit is free again when they save or cancel, or ${minutes} minute${minutes === 1 ? '' : 's'} after their last activity.`
+
+// OND-35…OND-38: the lock of the row open in the drawer (row-file pages only): someone else's (holder), taking,
+// renewing and releasing this window's, an owner's release of a stuck lock, and the row's draft in this browser.
+interface DrawerLocking {
+  holder: RowLock | null; canRelease: boolean; timeoutMs: number
+  take: () => Promise<{ ok: true; row?: OnDemandRow } | { ok: false; holder: RowLock | null }>
+  renew: () => Promise<boolean>; release: () => Promise<void>; releaseOther: () => Promise<void>
+  findDraft: () => RowDraft | null; keepDraft: (cells: RowDraft['cells'], base: RowDraft['base']) => void; dropDraft: () => void
+}
 
 // OND-27: one row in a drawer from the right (UI-STANDARDS: Drawer, a deliberate addition). View: the row's ID, key,
 // who added it and when and its last change, every column's value with the column's description, and its History,
@@ -199,23 +284,90 @@ const sameCells = (columns: OnDemandColumn[], a: Record<string, OnDemandValue>, 
 // disabled with the reason otherwise, CON-102) turns the values into the fields of OND-04 in place; Save to Git saves the
 // row at once (OND-28) and shows it saved, with its ID; a failed save keeps the edit with the error and Retry. Closing
 // or moving to another row with unsaved edits asks first. ＋ Add row opens it empty, for editing.
-function RowDrawer({ page, row, isNew, startEditing, canEdit, editReason, queueFailed, position, onStep, onSave, onRetryQueue, onRemove, onClose }: { page: PageFile; row: OnDemandRow; isNew: boolean; startEditing: boolean; canEdit: boolean; editReason: string; queueFailed: boolean; position: { at: number; of: number } | null; onStep: (by: number) => void; onSave: (row: OnDemandRow, isNew: boolean) => Promise<unknown>; onRetryQueue: () => Promise<void>; onRemove: () => void; onClose: () => void }) {
+// OND-35…OND-38 (a row-file page): Edit first takes the row's lock — when someone else holds it, the drawer says who and
+// since when and Edit stays disabled (a Tool Owner or page co-owner may Release lock); while editing, input keeps the
+// lock (renewed every 2 minutes when there was input), a warning comes 2 minutes before the timeout (Keep editing),
+// and at the timeout the edit closes, its unsaved values kept as a draft in this browser for one day and the lock
+// released; the next Edit of the row offers the draft back, saying what changed in Git meanwhile.
+function RowDrawer({ page, row, isNew, startEditing, canEdit, editReason, queueFailed, position, onStep, onSave, onRetryQueue, onHide, onRemove, onClose, locking }: { page: PageFile; row: OnDemandRow; isNew: boolean; startEditing: boolean; canEdit: boolean; editReason: string; queueFailed: boolean; position: { at: number; of: number } | null; onStep: (by: number) => void; onSave: (row: OnDemandRow, isNew: boolean) => Promise<unknown>; onRetryQueue: () => Promise<void>; onHide: (hide: boolean) => Promise<unknown>; onRemove?: () => void; onClose: () => void; locking?: DrawerLocking }) {
   // The form follows the row shown: moving to another row starts again from its values.
-  const [form, setForm] = useState({ id: row.id, editing: canEdit && (isNew || startEditing), cells: row.cells })
-  if (form.id !== row.id) setForm({ id: row.id, editing: canEdit && startEditing, cells: row.cells })
+  const [form, setForm] = useState({ id: row.id, editing: !locking && canEdit && (isNew || startEditing), cells: row.cells })
+  if (form.id !== row.id) setForm({ id: row.id, editing: !locking && canEdit && startEditing, cells: row.cells })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [asking, setAsking] = useState<(() => void) | null>(null)
+  const [note, setNote] = useState<{ row: string; kind: 'timeout' | 'lost'; kept: boolean } | null>(null)
+  const [offer, setOffer] = useState<RowDraft | null>(null)
+  const [warning, setWarning] = useState<number | null>(null)
+  const [releasing, setReleasing] = useState(false)
+  // A restored draft puts new values into the fields: they start afresh (a Currency field keeps its own state).
+  const [restored, setRestored] = useState(0)
   const bodyStart = useRef<HTMLDivElement>(null)
   const editing = form.editing && canEdit
   const dirty = editing && !sameCells(page.columns, form.cells, isNew ? {} : row.cells)
   // GIT-18: a row being edited is dropped by Load the newer data, which asks first.
   useUnsavedEdit(dirty ? `the ${isNew ? 'new row' : `row ${rowId(page, row) || row.key || ''}`} you are editing in ${page.name}` : false)
   const title = isNew ? 'New row' : rowId(page, row) || row.key || 'Row'
+  const holder = editing ? null : locking?.holder ?? null
+  const minutes = Math.round((locking?.timeoutMs ?? 0) / 60_000)
+  const reason = editReason || (holder ? lockedText(holder, title, minutes) : '')
   const guard = (action: () => void) => { if (busy) return; if (dirty) setAsking(() => action); else action() }
   const set = (id: string, value: OnDemandValue) => { setForm({ ...form, cells: { ...form.cells, [id]: value } }); setError('') }
-  const startEdit = () => { setForm({ ...form, editing: true, cells: row.cells }); setError('') }
-  const cancel = () => { if (isNew) onClose(); else { setForm({ ...form, editing: false, cells: row.cells }); setError('') } }
+  // OND-35: the time of the last input in the drawer and of the lock's last renewal (this window's edit only).
+  const activity = useRef(0), renewed = useRef(0)
+  async function startEdit() {
+    setError(''); setNote(null)
+    if (!locking) { setForm({ ...form, editing: true, cells: row.cells }); return }
+    setBusy(true)
+    try {
+      const result = await locking.take()
+      if (!result.ok) { setError(result.holder ? lockedText(result.holder, title, minutes) : `Someone else is editing ${title}. You can view it.`); return }
+      activity.current = renewed.current = Date.now()
+      setForm({ id: row.id, editing: true, cells: result.row?.cells ?? row.cells })
+      setOffer(locking.findDraft())
+    } catch (failure) { setError(`Edit could not take the row’s lock: ${failure instanceof Error ? failure.message : String(failure)}`) }
+    finally { setBusy(false) }
+  }
+  // Edit in the table opens the drawer for editing: on a row-file page that takes the lock first.
+  const opened = useRef('')
+  useEffect(() => {
+    if (opened.current === row.id) return
+    opened.current = row.id
+    if (locking && startEditing && canEdit && !locking.holder) void Promise.resolve().then(startEdit)
+  })
+  const cancel = () => { if (isNew) onClose(); else { setForm({ ...form, editing: false, cells: row.cells }); setError(''); setOffer(null); setWarning(null) } }
+  // OND-36, OND-37: the edit holding the lock — input keeps it; a warning before the timeout; at the timeout (or when the
+  // lock was released by an owner or taken over) the edit closes and the unsaved values are kept as a draft.
+  const latest = useRef({ dirty, cells: form.cells, base: row.cells, locking })
+  useEffect(() => { latest.current = { dirty, cells: form.cells, base: row.cells, locking } })
+  const lockedEdit = Boolean(locking) && editing
+  const timeoutMs = locking?.timeoutMs ?? 0
+  useEffect(() => {
+    if (!lockedEdit) return
+    const release = latest.current.locking?.release
+    const panel = bodyStart.current?.closest<HTMLElement>('.drawer')
+    const mark = () => { activity.current = Date.now(); setWarning(null) }
+    const stop = (kind: 'timeout' | 'lost') => {
+      const { dirty: changed, cells, base, locking: current } = latest.current
+      if (changed) current?.keepDraft(cells, base)
+      setForm((value) => ({ ...value, editing: false, cells: base }))
+      setWarning(null); setOffer(null); setAsking(null)
+      setNote({ row: row.id, kind, kept: changed })
+    }
+    const timer = window.setInterval(() => {
+      const now = Date.now(), state = editPhase(activity.current, now, timeoutMs)
+      if (state.phase === 'expired') { stop('timeout'); return }
+      setWarning(state.phase === 'warning' ? state.left : null)
+      if (shouldRenew(renewed.current, activity.current, now)) { renewed.current = now; void latest.current.locking?.renew().then((ok) => { if (!ok) stop('lost') }, () => undefined) }
+    }, 1000)
+    for (const type of ['input', 'keydown', 'pointerdown']) panel?.addEventListener(type, mark)
+    return () => {
+      window.clearInterval(timer)
+      for (const type of ['input', 'keydown', 'pointerdown']) panel?.removeEventListener(type, mark)
+      // Save, Cancel, the timeout, another row or closing the drawer: the lock is released.
+      void release?.()
+    }
+  }, [lockedEdit, row.id, timeoutMs])
   async function save(retryQueue = false) {
     const problem = rowError(page.columns, form.cells)
     if (problem) { setError(problem); return }
@@ -224,22 +376,29 @@ function RowDrawer({ page, row, isNew, startEditing, canEdit, editReason, queueF
     try {
       if (retryQueue) await onRetryQueue()
       else await onSave({ id: row.id, ...(row.key ? { key: row.key } : {}), cells: form.cells }, isNew)
-      setForm((current) => ({ ...current, editing: false }))
+      locking?.dropDraft()
+      setForm((current) => ({ ...current, editing: false })); setOffer(null); setWarning(null)
       bodyStart.current?.closest<HTMLElement>('.drawer')?.focus()
     } catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)) }
     finally { setBusy(false) }
   }
+  const keepEditing = () => { activity.current = Date.now(); setWarning(null) }
   const footer = editing ? <>
+    {warning != null && <Notice tone="warning" className="od-timeout"><span>No activity: your changes to {title} will be discarded in <strong aria-hidden="true">{countdown(warning)}</strong><span className="sr-only">{Math.max(1, Math.ceil(warning / 60_000))} minute{Math.ceil(warning / 60_000) > 1 ? 's' : ''}</span> and kept as a draft in this browser for one day.</span>{' '}<button type="button" className="ghost" onClick={keepEditing}>Keep editing</button></Notice>}
     {error && <Notice tone="error" className="drawer-error">{error}{' '}<button type="button" className="ghost" disabled={busy} onClick={() => void save(queueFailed)}>Retry</button></Notice>}
     <div className="drawer-actions" key="editing"><button type="button" className="ghost" disabled={busy} onClick={cancel}>Cancel</button><button type="submit" form="od-row-form" className="primary" disabled={busy}>{busy ? 'Saving to Git…' : 'Save to Git'}</button></div>
   </> : <>
-    <WriteBlocked reason={editReason} />
+    {error && <Notice tone="error" className="drawer-error">{error}</Notice>}
+    <WriteBlocked reason={reason} />
     {/* Keyed apart from the editing buttons: Edit must not turn into the Save to Git (submit) button under the click. */}
     <div className="drawer-actions" key="viewing">
-      {!isNew && <button type="button" className="text-button danger-text drawer-remove" disabled={!canEdit} title={editReason || undefined} onClick={onRemove}>Remove row</button>}
-      <button type="button" className="primary" disabled={!canEdit} title={editReason || undefined} onClick={startEdit}>Edit</button>
+      {!isNew && <button type="button" className="text-button drawer-remove" disabled={!canEdit || Boolean(holder) || busy} title={reason || undefined} onClick={() => { setBusy(true); setError(''); void onHide(!row.hidden).catch((failure: unknown) => setError(failure instanceof Error ? failure.message : String(failure))).finally(() => setBusy(false)) }}>{row.hidden ? 'Show row' : 'Hide row'}</button>}
+      {!isNew && row.hidden && onRemove && <button type="button" className="text-button danger-text" disabled={busy} onClick={onRemove}>Delete row…</button>}
+      <button type="button" className="primary" disabled={!canEdit || Boolean(holder) || busy} title={reason || undefined} onClick={() => void startEdit()}>{busy ? 'Taking the row…' : 'Edit'}</button>
     </div>
   </>
+  const restore = offer && editing ? draftRestore(offer, row.cells, page.columns) : null
+  const shownNote = note?.row === row.id && !editing ? note : null
   return <Drawer eyebrow={eyebrowOf(page)} title={title} className="od-drawer" onClose={() => guard(onClose)}
     restoreFocus={() => document.querySelector<HTMLElement>(`tr[data-row-key="${CSS.escape(row.id)}"]`)}
     headerActions={position && position.of > 1 && <span className="button-row drawer-steps">
@@ -249,13 +408,21 @@ function RowDrawer({ page, row, isNew, startEditing, canEdit, editReason, queueF
     </span>}
     footer={footer}>
     <div ref={bodyStart} />
+    {row.hidden && <Notice tone="info" className="od-hidden-row">Hidden by {row.hidden.by} on {formatDateTime(row.hidden.at)}: left out of the table, the charts, the exports and the dashboards for everyone. Show row brings it back.</Notice>}
+    {holder && <Notice tone="info" className="od-lock-note"><strong>Being edited by {holder.name}</strong> since {formatDateTime(holder.at)}.{locking?.canRelease && <>{' '}<button type="button" className="text-button" onClick={() => setReleasing(true)}>Release lock</button></>}</Notice>}
+    {shownNote && <Notice tone="warning" className="od-timeout-note">{shownNote.kind === 'timeout' ? `Your edit of ${title} was closed after ${minutes} minute${minutes === 1 ? '' : 's'} without activity, and the row is free for others again.` : `Your edit of ${title} was closed: its lock was released by a page owner or taken over by someone else.`}{shownNote.kept ? ' Your changes are kept in this browser as a draft for one day: choose Edit to restore them.' : ' Nothing had been changed.'}</Notice>}
+    {restore && offer && <Notice tone="info" className="od-draft">
+      <p><strong>Restore your draft from {formatDateTime(offer.at)}?</strong> It holds your unsaved change{restore.mine.length === 1 ? '' : 's'} to {restore.mine.map((column) => `“${column.name}”`).join(', ') || 'no field'}.</p>
+      {restore.changed.length > 0 && <><p>Changed in Git since that edit started:</p><ul>{restore.changed.map((column) => <li key={column.id}>{column.name}: {displayText(column, offer.base[column.id]) || '(empty)'} → {displayText(column, row.cells[column.id]) || '(empty)'}{restore.both.includes(column) ? ` — your draft has “${displayText(column, offer.cells[column.id]) || '(empty)'}”, which replaces it when restored` : ''}</li>)}</ul></>}
+      <div className="button-row"><button type="button" className="ghost" onClick={() => { locking?.dropDraft(); setOffer(null) }}>Discard draft</button><button type="button" className="primary" onClick={() => { setForm({ ...form, cells: restore.cells }); setRestored((count) => count + 1); locking?.dropDraft(); setOffer(null) }}>Restore draft</button></div>
+    </Notice>}
     <dl className="od-row-facts">
       <div><dt>ID</dt><dd>{row.seq ? <code className="od-key">{rowId(page, row)}</code> : <span className="muted">{isNew ? 'given when the row is saved to Git (the next number, it never changes)' : 'given on its next save'}</span>}</dd></div>
       <div><dt>Key</dt><dd>{row.key ? <code className="od-key">{row.key}</code> : <span className="muted">{isNew ? 'given when the row is saved (unique, it never changes)' : 'given on its next save'}</span>}</dd></div>
       {!isNew && <div><dt>Added</dt><dd>{row.addedAt ? `${formatDateTime(row.addedAt)} by ${row.addedBy || 'unknown'}` : <span className="muted">— (before this was recorded)</span>}</dd></div>}
     </dl>
     {editing ? <form id="od-row-form" className="od-row-form" noValidate onSubmit={(event) => { event.preventDefault(); void save() }}>
-      {page.columns.map((column, index) => <Field key={column.id} column={column} value={form.cells[column.id]} first={index === 0} onChange={(value) => set(column.id, value)} />)}
+      {page.columns.map((column, index) => <Field key={`${column.id}:${restored}`} column={column} value={form.cells[column.id]} first={index === 0} onChange={(value) => set(column.id, value)} />)}
       {!page.columns.length && <EmptyState title="No columns yet." detail="Set up the page’s columns first." />}
     </form> : <dl className="od-row-values">{page.columns.map((column) => { const value = row.cells[column.id], problem = cellProblem(column, value); return <div key={column.id}>
       <dt>{column.name}{column.description && <small className="od-help">{column.description}</small>}</dt>
@@ -268,20 +435,51 @@ function RowDrawer({ page, row, isNew, startEditing, canEdit, editReason, queueF
         <div className="modal-actions"><button type="button" className="ghost" onClick={() => setAsking(null)}>Keep editing</button><button className="danger-button">Discard changes</button></div>
       </form>
     </Modal>}
+    {releasing && holder && locking && <ReleaseLockDialog page={page} title={title} lock={holder} onCancel={() => setReleasing(false)} onRelease={async () => { await locking.releaseOther(); setReleasing(false) }} />}
   </Drawer>
 }
 
-// OND-28: removing a row asks first in a pop-up naming it (UI-STANDARDS §4), then removes it from Git at once.
+// OND-38: releasing someone else's lock asks first in a pop-up (UI-STANDARDS §4) naming who holds it and since when.
+function ReleaseLockDialog({ page, title, lock, onCancel, onRelease }: { page: PageFile; title: string; lock: RowLock; onCancel: () => void; onRelease: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const release = async () => { setBusy(true); setError(''); try { await onRelease() } catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); setBusy(false) } }
+  return <Modal eyebrow={eyebrowOf(page)} title="Release the lock" onClose={() => { if (!busy) onCancel() }}>
+    <form onSubmit={(event) => { event.preventDefault(); void release() }}>
+      <p>Release the lock of <strong>{title}</strong> held by <strong>{lock.name}</strong> since {formatDateTime(lock.at)}? Use it when the lock is stuck (they left without saving). Anyone allowed to edit rows can then edit the row; if {lock.name} is still editing, their edit is closed at its next check and their unsaved values are kept as a draft in their browser.</p>
+      {error && <Notice tone="error">{error}</Notice>}
+      <div className="modal-actions"><button type="button" className="ghost" disabled={busy} onClick={onCancel}>Cancel</button><button className="danger-button" disabled={busy}>{busy ? 'Releasing…' : 'Release lock'}</button></div>
+    </form>
+  </Modal>
+}
+
+// OND-32: converting a page to row files asks first in a pop-up naming its rows and what changes.
+export function ConvertDialog({ page, onCancel, onConvert }: { page: PageFile; onCancel: () => void; onConvert: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const convert = async () => { setBusy(true); setError(''); try { await onConvert() } catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); setBusy(false) } }
+  const count = `${page.rows.length} row${page.rows.length === 1 ? '' : 's'}`
+  return <Modal eyebrow={eyebrowOf(page)} title="Convert to row files" onClose={() => { if (!busy) onCancel() }}>
+    <form onSubmit={(event) => { event.preventDefault(); void convert() }}>
+      <p>Convert <strong>{page.name}</strong> with its <strong>{count}</strong> from the single file {onDemandPath(page.id)} to one file per row in {pageFolder(page.id)}/, as one commit? Keys, IDs, values, History, columns and charts stay as they are; rows without a key or ID get one now, as their next save would.</p>
+      <p>Afterwards two people can add and edit rows at the same time, and Edit takes the row’s lock. <strong>App versions before 10.0 cannot open the page any more</strong> (they say the file is not an On-Demand page): update every app first. This cannot be undone in the app.</p>
+      {error && <Notice tone="error">{error}</Notice>}
+      <div className="modal-actions"><button type="button" className="ghost" disabled={busy} onClick={onCancel}>Cancel</button><button className="primary" disabled={busy}>{busy ? 'Converting…' : `Convert ${count}`}</button></div>
+    </form>
+  </Modal>
+}
+
+// OND-40: deleting a hidden row (the Tool Owner) asks first in a pop-up naming it (UI-STANDARDS §4), then deletes it from Git at once.
 function RemoveRowDialog({ page, row, onCancel, onRemove }: { page: PageFile; row: OnDemandRow; onCancel: () => void; onRemove: () => Promise<void> }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const name = rowId(page, row) || row.key || rowLabel(page, row)
   const remove = async () => { setBusy(true); setError(''); try { await onRemove() } catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); setBusy(false) } }
-  return <Modal eyebrow={eyebrowOf(page)} title="Remove the row" onClose={() => { if (!busy) onCancel() }}>
+  return <Modal eyebrow={eyebrowOf(page)} title="Delete the row" onClose={() => { if (!busy) onCancel() }}>
     <form onSubmit={(event) => { event.preventDefault(); void remove() }}>
-      <p>Remove <strong>{name}</strong>{rowLabel(page, row) !== name ? ` (${rowLabel(page, row)})` : ''} for everyone? It is removed from {onDemandPath(page.id)} in Git at once; its number is not given again and its history stays in GitHub.</p>
+      <p>Delete <strong>{name}</strong>{rowLabel(page, row) !== name ? ` (${rowLabel(page, row)})` : ''} for good, for everyone? It is deleted from {page.storage === 'rows' ? `${pageFolder(page.id)}/rows/` : onDemandPath(page.id)} in Git at once; its number {name} is never given again and its history stays in GitHub. To keep it, leave it hidden.</p>
       {error && <Notice tone="error">{error}</Notice>}
-      <div className="modal-actions"><button type="button" className="ghost" disabled={busy} onClick={onCancel}>Cancel</button><button className="danger-button" disabled={busy}>{busy ? 'Removing…' : 'Remove row'}</button></div>
+      <div className="modal-actions"><button type="button" className="ghost" disabled={busy} onClick={onCancel}>Cancel</button><button className="danger-button" disabled={busy}>{busy ? 'Deleting…' : `Delete ${name}`}</button></div>
     </form>
   </Modal>
 }
@@ -295,7 +493,7 @@ function History({ page, row }: { page: PageFile; row: OnDemandRow }) {
   return <section className="od-history" aria-label="History">
     <h3>History</h3>
     {log.length ? <ol>{log.map((entry) => <li key={entry.id}>
-      <p className="od-history-head"><strong>{entry.added ? 'Added' : 'Changed'}</strong> · {formatDateTime(entry.at)} · {entry.by}</p>
+      <p className="od-history-head"><strong>{entry.added ? 'Added' : entry.action === 'hidden' ? 'Hidden' : entry.action === 'shown' ? 'Shown again' : 'Changed'}</strong> · {formatDateTime(entry.at)} · {entry.by}</p>
       {entry.changes.length > 0 && <ul>{entry.changes.map((change) => <li key={change.column}><span className="od-history-field">{nameOf(change.column)}</span>: {entry.added ? shown(change.column, change.to) : <><del>{shown(change.column, change.from)}</del> → <ins>{shown(change.column, change.to)}</ins></>}</li>)}</ul>}
       {entry.comment && <p className="od-history-comment">{entry.comment}</p>}
     </li>)}</ol> : <p className="muted">No changes recorded yet: the row was added before its History was kept. Its next saved change is the first entry.</p>}
@@ -448,16 +646,16 @@ export function PageNameDialog({ title, action, name = '', description = '', not
   </Modal>
 }
 
-// OND-10: removing a page asks first, naming how many rows go with it.
+// OND-10, PGB-20: deleting a page (the Tool Owner) asks first, naming how many rows and columns go with it.
 export function RemovePageDialog({ page, inGit, onCancel, onRemove }: { page: PageFile; inGit: boolean; onCancel: () => void; onRemove: () => Promise<void> }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const remove = async () => { setBusy(true); setError(''); try { await onRemove() } catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); setBusy(false) } }
-  return <Modal eyebrow={eyebrowOf(page)} title="Remove the page" onClose={() => { if (!busy) onCancel() }}>
+  return <Modal eyebrow={eyebrowOf(page)} title="Delete the page" onClose={() => { if (!busy) onCancel() }}>
     <form onSubmit={(event) => { event.preventDefault(); void remove() }}>
-      <p>Remove <strong>{page.name}</strong> with its {page.rows.length} row{page.rows.length === 1 ? '' : 's'} and {page.columns.length} column{page.columns.length === 1 ? '' : 's'}, for everyone?{inGit ? <> Its file {onDemandPath(page.id)} is deleted from Git; its history stays in GitHub.</> : ' It is not in Git yet.'}</p>
+      <p>Delete <strong>{page.name}</strong> with its {page.rows.length} row{page.rows.length === 1 ? '' : 's'} and {page.columns.length} column{page.columns.length === 1 ? '' : 's'}, for everyone?{inGit ? page.storage === 'rows' ? <> Its folder {pageFolder(page.id)}/ (every row file) is deleted from Git in one commit; its history stays in GitHub.</> : <> Its file {onDemandPath(page.id)} is deleted from Git; its history stays in GitHub.</> : ' It is not in Git yet.'} To take it out of the menu and keep its data, hide it instead.</p>
       {error && <Notice tone="error">{error}</Notice>}
-      <div className="modal-actions"><button type="button" className="ghost" disabled={busy} onClick={onCancel}>Cancel</button><button className="danger-button" disabled={busy}>{busy ? 'Removing…' : `Remove page and ${page.rows.length} row${page.rows.length === 1 ? '' : 's'}`}</button></div>
+      <div className="modal-actions"><button type="button" className="ghost" disabled={busy} onClick={onCancel}>Cancel</button><button className="danger-button" disabled={busy}>{busy ? 'Deleting…' : `Delete page and ${page.rows.length} row${page.rows.length === 1 ? '' : 's'}`}</button></div>
     </form>
   </Modal>
 }

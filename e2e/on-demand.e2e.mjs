@@ -130,9 +130,9 @@ test('TC-OND-07: a viewer without the On-Demand rights sees the page read only �
   await first.waitFor()
   // The value no longer in the options is kept and marked.
   assert.match(await text(first), /Rework not in the list/)
-  for (const name of ['＋ Add row', 'Set up columns…', '＋ Add page…', 'Rename page…', 'Remove page…']) assert.equal(await page.getByRole('button', { name }).isDisabled(), true, `${name} is disabled`)
+  for (const name of ['＋ Add row', 'Set up columns…', '＋ Add page…', 'Rename page…', 'Hide page', 'Delete page…']) assert.equal(await page.getByRole('button', { name }).isDisabled(), true, `${name} is disabled`)
   assert.equal(await first.getByRole('button', { name: /^Edit row/ }).isDisabled(), true)
-  assert.equal(await first.getByRole('button', { name: /^Remove row/ }).isDisabled(), true)
+  assert.equal(await first.getByRole('button', { name: /^Hide row/ }).isDisabled(), true)
   assert.equal(await text(page.locator('.od-panel .write-blocked')), 'Your role does not allow “Edit On-Demand data (rows)”, “Set up On-Demand pages (pages, columns, options)”. An Admin can change this in Admin → People & roles → Role rights.')
   assert.match(await first.getByRole('button', { name: /^Edit row/ }).getAttribute('title'), /Your role does not allow “Edit On-Demand data \(rows\)”/)
   assert.equal(writes.length, 0, 'nothing is written')

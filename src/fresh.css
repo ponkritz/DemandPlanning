@@ -974,6 +974,11 @@ td .od-flag{display:inline-block;margin-top:0}
 .od-types{border:1px solid var(--line);border-radius:8px;padding:8px 12px;display:flex;flex-wrap:wrap;gap:4px 16px}.od-types legend,.od-filters legend{font-size:11px;font-weight:700;color:var(--text-2);padding:0 4px}.od-types .check{margin:0;font-size:13px}.od-types small{flex-basis:100%;font-size:12px;color:var(--muted)}
 .od-filters{border:1px solid var(--line);border-radius:8px;padding:8px 12px;display:grid;gap:8px;justify-items:start}.od-filters>small{font-size:12px;color:var(--muted)}
 .od-filter{display:grid;gap:6px;width:100%;padding:8px;border-radius:8px;background:var(--surface-2)}.od-filter-head{display:flex;gap:8px;align-items:center}.od-filter-head select{flex:1}
+/* OND-53: the Insights tab's filter row — the dashboard's filter row, with month, number and text fields beside the multi-selects. */
+.ins-filters .dash-select{font-weight:700;color:var(--text-2)}.ins-filters .dash-select input{min-width:120px;max-width:200px;text-transform:none;letter-spacing:0;font-size:13px;font-weight:400;color:var(--text);padding:8px 10px}.ins-range{display:flex;gap:8px;align-items:end}.ins-scope{font-size:13px;margin:0 0 12px}.ins-setup,.ins-setup .od-filters{min-width:0}.ins-setup .od-filters{justify-items:stretch}.ins-setup .od-filter-head select{min-width:0;width:100%}.ins-setup .od-filters>.text-button{justify-self:start}
+/* OND-57…OND-59: a Currency filter — its currency, the amount from / to in it, and the error when From is above To. */
+.ins-money select{min-width:120px}.ins-filters .ins-error{flex-basis:100%;grid-column:1/-1}
+@media(max-width:760px){.ins-filters .ins-range{grid-column:1/-1}.ins-filters .ins-range .dash-select{flex:1}.ins-filters .dash-select input{width:100%;max-width:none;min-width:0}}
 @media(max-width:900px){.od-insight-editor{grid-template-columns:1fr}}
 /* CHT-01…CHT-12 chart options: full-width panels, the target and 80% lines, clickable charts, the Display fieldset and colour pins */
 .od-insights>.od-insight-full{grid-column:1/-1}
@@ -1037,3 +1042,10 @@ body:has(.drawer-backdrop){overflow:hidden}
 .field-with-error{display:grid;gap:4px}.field-error{color:var(--danger-text);font-weight:600;font-size:12px}label input[aria-invalid=true]{border-color:var(--danger-line);outline-color:var(--danger-line)}
 /* PGB-18: the co-owner list: type to filter, people without a work email greyed with why. */
 .multi-search{width:100%;margin-bottom:6px}.multi-option-disabled{opacity:.65}.pgb-owners{display:grid;gap:4px}.pgb-owners .multi-list{max-height:260px;overflow:auto;min-width:min(420px,80vw)}
+/* OND-35…OND-38: row locks — who is editing a row (the badge in the ID cell, the note in the drawer), the timeout
+   warning with Keep editing, and the draft offered back. */
+.od-lock{display:inline-flex;vertical-align:middle;margin-left:4px}.od-lock .pill{font-size:10px;white-space:nowrap}
+.od-lock-note,.od-timeout-note,.od-draft{margin:0}.od-draft p{margin:0 0 6px}.od-draft ul{margin:0 0 8px;padding-left:18px;overflow-wrap:anywhere}
+.od-timeout{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}.od-timeout strong{font-variant-numeric:tabular-nums}
+/* OND-39: a hidden row listed with Show hidden rows — greyed, with its Hidden mark. */
+.od-row-hidden td{color:var(--text-3)}.od-row-hidden td code{opacity:.75}.od-show-hidden{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600}

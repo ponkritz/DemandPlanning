@@ -39,6 +39,8 @@ const fileNames: [RegExp, string][] = [
   [/(^|\/)history-hours\.json$/, 'Historical hours'],
   [/(^|\/)kpi-tracker\.json$/, 'KPI tracker'],
   [/(^|\/)on-demand\/([a-z0-9-]+)\.json$/, 'On-Demand page $2'],
+  [/(^|\/)on-demand\/([a-z0-9-]+)\/(?:page\.json|rows)$/, 'On-Demand page $2'],
+  [/(^|\/)row-locks\.json$/, 'Row lock timeout'],
   [/(^|\/)menu-layout\.json$/, 'Pages & menu'],
   [/(^|\/)dashboards\/([a-z0-9-]+)\.json$/, 'Dashboard $2'],
 ]
@@ -94,7 +96,11 @@ export function pagesOfFile(path: string, planningPath: string, dashboardsReadin
   const folder = folderOf(planningPath)
   const name = folder && path.startsWith(`${folder}/`) ? path.slice(folder.length + 1) : path
   if (path === planningPath) return { pages: ['baselines', 'admin:*'], quiet: 'planning', loader: 'planning' }
-  const onDemand = /^on-demand\/([a-z0-9-]+)\.json$/.exec(name)
+  // OND-31: a row-file page's page.json and rows folder are the page's data; its locks (OND-35, on the branch `locks`, or
+  // in the folder locks/ of the data branch) never raise a notice.
+  if (/^locks\//.test(name)) return { pages: [], loader: 'none' }
+  if (name === 'row-locks.json') return { pages: ['admin:pages'], loader: 'rowLocks' }
+  const onDemand = /^on-demand\/([a-z0-9-]+)(?:\.json|\/page\.json|\/rows)$/.exec(name)
   if (onDemand) return { pages: [`ondemand:${onDemand[1]}`, ...dashboardsReading(onDemand[1]).map((id) => `ondemand:${id}`), 'admin:pages'], loader: `ondemand:${onDemand[1]}` }
   const dashboard = /^dashboards\/([a-z0-9-]+)\.json$/.exec(name)
   if (dashboard) return { pages: [`ondemand:${dashboard[1]}`], loader: 'remount' }

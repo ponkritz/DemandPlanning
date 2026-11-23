@@ -180,7 +180,7 @@ test('TC-DSH-09: a viewer without the right sees the dashboard read only, every 
     assert.equal(await button.isDisabled(), true, `${name} is disabled`)
     assert.equal(await button.getAttribute('title'), reason)
   }
-  for (const name of ['Rename page…', 'Remove page…']) assert.equal(await page.getByRole('button', { name }).isDisabled(), true, `${name} is disabled`)
+  for (const name of ['Rename page…', 'Hide page', 'Delete page…']) assert.equal(await page.getByRole('button', { name }).isDisabled(), true, `${name} is disabled`)
   assert.equal(await text(page.locator('.dashboard-page .write-blocked').first()), reason)
   // The viewer still filters for themselves.
   await pick(page, 'Year', [String(last)])

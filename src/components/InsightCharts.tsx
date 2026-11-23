@@ -44,8 +44,13 @@ const drillHint = 'Click a bar, slice or point — or press Enter on the highlig
 // hold several (not saved: the one with most rows comes first for everyone). Stacking or adding the currencies up would
 // draw amounts of different currencies as one total; one currency at a time keeps every bar, slice and total in one unit.
 // colors: the page's (or dashboard's) colour pins (CHT-09); drill: false in an editor's preview (CHT-10).
-export function InsightView({ page, insight, colors: pins, drill = true }: { page: OnDemandPage; insight: Insight; colors?: Record<string, number>; drill?: boolean }) {
-  const [currency, setCurrency] = useState('')
+// narrowed (OND-54): the page's rows are those the Insights tab's filter row keeps, so an empty chart says so.
+// currency (OND-60): the currency the filter row chose for this chart's column, shown first; the viewer's own pick
+// above the chart wins until the filter row's currency changes.
+export function InsightView({ page, insight, colors: pins, drill = true, narrowed = false, currency: preferred = '' }: { page: OnDemandPage; insight: Insight; colors?: Record<string, number>; drill?: boolean; narrowed?: boolean; currency?: string }) {
+  const [pick, setPick] = useState({ base: preferred, code: '' })
+  const currency = (pick.base === preferred ? pick.code : '') || preferred
+  const setCurrency = (code: string) => setPick({ base: preferred, code })
   const [drilled, setDrilled] = useState<{ category: number; series: number | null } | null>(null)
   const problems = insightProblems(page, insight)
   if (problems.length) return <Notice tone="warning"><strong>This {insight.type === 'table' ? 'table' : 'chart'} cannot be shown:</strong> {problems.join(' ')} {' '}Edit it to choose the columns again, or remove it.</Notice>
@@ -62,7 +67,7 @@ export function InsightView({ page, insight, colors: pins, drill = true }: { pag
   </>
   // CHT-02: a KPI — one number in the shared tile.
   if (insight.type === 'kpi') return <>{status}<div className="metric-grid compact od-kpi"><Metric label={insight.title || 'Untitled'} value={data.total == null ? '—' : `${formatValue(data.total)}${data.currency ? ` ${data.currency}` : ''}`} hint={measureText(page, insight, data.currency)} /></div></>
-  if (!data.categories.length) return <>{status}<div className="empty-state"><strong>No rows to show.</strong><p>{page.rows.length ? 'No row matches the filters, or none has the values this needs.' : 'Add rows on the Data tab.'}</p></div></>
+  if (!data.categories.length) return <>{status}<div className="empty-state"><strong>No rows to show.</strong><p>{page.rows.length ? 'No row matches the filters, or none has the values this needs.' : narrowed ? 'No row matches the filter row above: change it, or Reset filters.' : 'Add rows on the Data tab.'}</p></div></>
   const onDrill: Drill | undefined = drill ? (category, series) => setDrilled({ category, series }) : undefined
   const props: ChartProps = { page, insight, data, pins, onDrill }
   return <>

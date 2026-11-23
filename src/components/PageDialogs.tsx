@@ -3,7 +3,7 @@ import { MultiSelect } from './MultiSelect'
 import { ownerOptions, ownersFromList } from '../ownerPeople'
 import { OwnerPeopleContext } from '../usePageNames'
 import { usePageNameClash } from '../usePageNames'
-import { defaultIcon, findGroup, groupNameError, groupsForAdding, menuGroups, moveReason, pageIcons, pageKinds, placementOf, type MenuLayout, type PageKind, type Viewer } from '../menuLayout'
+import { defaultIcon, findGroup, groupNameError, hideReason, groupsForAdding, menuGroups, moveReason, pageIcons, pageKinds, placementOf, type MenuLayout, type PageKind, type Viewer } from '../menuLayout'
 import type { NewPage } from '../useMenuLayout'
 import { Modal, Notice } from './ui'
 
@@ -85,7 +85,8 @@ export function AddPageDialog({ viewer, layout, group: preset, onCancel, onCreat
 
 // PGB-07: a page in the menu — name and description (in the page's file), type, icon, group and co-owners (in the menu
 // layout). A move offers the groups the viewer may move it to.
-export interface PageEdit { name: string; description: string; kind: PageKind; icon: string; group: string; owners: string[] }
+// PGB-19: hidden — hidden from the menu, Home and search for everyone (Tool Owner, the page's and its group's co-owners).
+export interface PageEdit { name: string; description: string; kind: PageKind; icon: string; group: string; owners: string[]; hidden: boolean }
 export function EditPageDialog({ viewer, layout, page, pending, onCancel, onSave }: { viewer: Viewer; layout: MenuLayout; page: { id: string; name: string; description: string }; pending: boolean; onCancel: () => void; onSave: (edit: PageEdit) => Promise<void> }) {
   const placement = placementOf(layout, page.id)
   const [name, setName] = useState(page.name)
@@ -94,6 +95,8 @@ export function EditPageDialog({ viewer, layout, page, pending, onCancel, onSave
   const [icon, setIcon] = useState(placement.icon)
   const [group, setGroup] = useState(placement.group)
   const [owners, setOwners] = useState<string[]>(placement.owners)
+  const [hidden, setHidden] = useState(placement.hidden === true)
+  const hiding = hideReason(viewer, layout, page.id)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const targets = menuGroups(layout).filter((entry) => entry.id === placement.group || !moveReason(viewer, layout, page.id, entry.id))
@@ -105,7 +108,7 @@ export function EditPageDialog({ viewer, layout, page, pending, onCancel, onSave
     if (clash) return
     if (pending && (name.trim() !== page.name || description.trim() !== page.description)) { setError(`Save or discard the unsaved changes to ${page.name} first: the name is saved in the page’s file.`); return }
     setBusy(true); setError('')
-    try { await onSave({ name, description, kind, icon, group, owners }) }
+    try { await onSave({ name, description, kind, icon, group, owners, hidden }) }
     catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); setBusy(false) }
   }
   return <Modal eyebrow={`PAGES & MENU · ${page.name.toUpperCase()}`} title="Edit the page" onClose={() => { if (!busy) onCancel() }}>
@@ -117,6 +120,7 @@ export function EditPageDialog({ viewer, layout, page, pending, onCancel, onSave
       <IconField value={icon} onChange={setIcon} />
       <label>Menu group<select aria-label="Menu group" value={group} onChange={(event) => setGroup(event.target.value)}>{targets.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}</select><small>{viewer.manager ? 'Any group that accepts added pages.' : 'A group co-owner moves pages within the groups they co-own.'}</small></label>
       <OwnersField label="Page co-owners (optional)" value={owners} onChange={setOwners} help={kind === 'dashboard' ? 'They may build this dashboard.' : 'They may set up this page and edit its rows.'} />
+      <label className="check"><input type="checkbox" checked={hidden} disabled={Boolean(hiding)} title={hiding || undefined} onChange={(event) => setHidden(event.target.checked)} />Hidden from the menu<small>Not in the menu, on Home or in search for anyone; the page’s data stays in Git and dashboards keep reading it. Only a Tool Owner deletes a page.</small></label>
       {error && <Notice tone="error">{error}</Notice>}
       <div className="modal-actions"><button type="button" className="ghost" disabled={busy} onClick={onCancel}>Cancel</button><button className="primary" disabled={busy || Boolean(clash)}>{busy ? 'Saving to Git…' : 'Save to Git'}</button></div>
     </form>

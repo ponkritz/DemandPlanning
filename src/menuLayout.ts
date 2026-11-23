@@ -40,7 +40,8 @@ const pageIdPattern = /^[a-z0-9][a-z0-9-]{0,39}$/
 
 // What the file keeps. A built-in group has no name or order (the menu fixes them); a custom one has both.
 export interface GroupSettings { name?: string; order?: number; acceptsPages: boolean; owners: string[] }
-export interface Placement { type: string; group: string; order: number; icon: string; owners: string[] }
+// PGB-19: hidden — the page is hidden from the menu, Home and search for everyone (its files stay in Git).
+export interface Placement { type: string; group: string; order: number; icon: string; owners: string[]; hidden?: boolean }
 export interface MenuLayout { schema: 1; kind: 'menu-layout'; groups: Record<string, GroupSettings>; pages: Record<string, Placement> }
 export const emptyLayout = (): MenuLayout => ({ schema: 1, kind: 'menu-layout', groups: {}, pages: {} })
 
@@ -87,7 +88,7 @@ export function parseMenuLayout(raw: string): MenuLayout {
     const type = typeof entry.type === 'string' && /^[a-z][a-z-]{0,29}$/.test(entry.type) ? entry.type : defaultKind
     const group = typeof entry.group === 'string' && (customIdPattern.test(entry.group) || builtInGroups.some((item) => item.id === entry.group)) ? entry.group : onDemandGroup
     const icon = pageIcons.some((item) => item.icon === entry.icon) ? entry.icon as string : defaultIcon
-    pages[id] = { type, group, order: number(entry.order) ?? 0, icon, owners: ownersOf(entry.owners) }
+    pages[id] = { type, group, order: number(entry.order) ?? 0, icon, owners: ownersOf(entry.owners), ...(entry.hidden === true ? { hidden: true } : {}) }
   }
   return { schema: 1, kind: 'menu-layout', groups, pages }
 }
@@ -95,7 +96,7 @@ export function parseMenuLayout(raw: string): MenuLayout {
 export function serializeMenuLayout(layout: MenuLayout) {
   const sortedKeys = <T>(entries: Record<string, T>) => Object.fromEntries(Object.keys(entries).sort().map((key) => [key, entries[key]]))
   const groups = sortedKeys(Object.fromEntries(Object.entries(layout.groups).map(([id, group]) => [id, { ...(group.name != null ? { name: group.name, order: group.order ?? 0 } : {}), acceptsPages: group.acceptsPages, owners: group.owners }])))
-  const pages = sortedKeys(Object.fromEntries(Object.entries(layout.pages).map(([id, page]) => [id, { type: page.type, group: page.group, order: page.order, icon: page.icon, owners: page.owners }])))
+  const pages = sortedKeys(Object.fromEntries(Object.entries(layout.pages).map(([id, page]) => [id, { type: page.type, group: page.group, order: page.order, icon: page.icon, owners: page.owners, ...(page.hidden ? { hidden: true } : {}) }])))
   return `${JSON.stringify({ schema: 1, kind: 'menu-layout', groups, pages }, null, 2)}\n`
 }
 
@@ -187,7 +188,7 @@ export function placePage(layout: MenuLayout, pageId: string, placement: Partial
   const moved = group !== current.group || !current.placed
   const others = pageIds.filter((id) => id !== pageId && placementOf(layout, id).group === group).map((id) => placementOf(layout, id).order).filter((order) => order < Number.MAX_SAFE_INTEGER)
   const order = placement.order ?? (moved ? Math.max(0, ...others) + 1 : current.order)
-  return { ...layout, pages: { ...layout.pages, [pageId]: { type: placement.type ?? current.type, group, order, icon: placement.icon ?? current.icon, owners: ownersOf(placement.owners ?? current.owners) } } }
+  return { ...layout, pages: { ...layout.pages, [pageId]: { type: placement.type ?? current.type, group, order, icon: placement.icon ?? current.icon, owners: ownersOf(placement.owners ?? current.owners), ...((placement.hidden ?? current.hidden) ? { hidden: true } : {}) } } }
 }
 // Reorder within a group (↑ ↓): the group's pages get orders 1…n, so pages never placed before are placed too.
 export function movePage<T extends { id: string; name: string }>(layout: MenuLayout, pages: T[], pageId: string, by: -1 | 1): MenuLayout {
@@ -196,8 +197,11 @@ export function movePage<T extends { id: string; name: string }>(layout: MenuLay
   const from = ids.indexOf(pageId), to = from + by
   if (from < 0 || to < 0 || to >= ids.length) return layout
   ids.splice(from, 1); ids.splice(to, 0, pageId)
-  return { ...layout, pages: { ...layout.pages, ...Object.fromEntries(ids.map((id, index) => { const current = placementOf(layout, id); return [id, { type: current.type, group, order: index + 1, icon: current.icon, owners: current.owners }] })) } }
+  return { ...layout, pages: { ...layout.pages, ...Object.fromEntries(ids.map((id, index) => { const current = placementOf(layout, id); return [id, { type: current.type, group, order: index + 1, icon: current.icon, owners: current.owners, ...(current.hidden ? { hidden: true } : {}) }] })) } }
 }
+// PGB-19: hide or show a page (a field of its placement, merged like the others, GIT-17).
+export const setHidden = (layout: MenuLayout, pageId: string, hidden: boolean, pageIds: string[] = []): MenuLayout => placePage(layout, pageId, { hidden }, pageIds)
+export const isHidden = (layout: MenuLayout, pageId: string) => layout.pages[pageId]?.hidden === true
 export function removePlacement(layout: MenuLayout, pageId: string): MenuLayout {
   if (!layout.pages[pageId]) return layout
   const pages = { ...layout.pages }; delete pages[pageId]
@@ -236,12 +240,22 @@ export function addPageReason(viewer: Viewer, layout: MenuLayout, groupId: strin
 const setupInOnDemand = (viewer: Viewer, groupId: string) => groupId === onDemandGroup && viewer.can('ondemand.setup')
 // The groups the viewer may add a page to.
 export const groupsForAdding = (viewer: Viewer, layout: MenuLayout) => menuGroups(layout).filter((group) => !addPageReason(viewer, layout, group.id))
-// A page in the menu — rename, reorder, remove, its co-owners: a Tool Owner or a co-owner of the page's group.
+// A page in the menu — rename, reorder, its co-owners: a Tool Owner or a co-owner of the page's group (PGB-20: deleting
+// is the Tool Owner's only, deleteReason).
 export function pageMenuReason(viewer: Viewer, layout: MenuLayout, pageId: string) {
   if (viewer.readOnly) return readOnlyMenuReason
   const groupId = placementOf(layout, pageId).group, group = findGroup(layout, groupId)
   return viewer.manager || isGroupOwner(layout, groupId, viewer.email) || setupInOnDemand(viewer, groupId) ? '' : `Only a Tool Owner or a co-owner of the group “${group?.name ?? 'On-Demand'}”${groupId === onDemandGroup ? ' (or a role allowed “Set up On-Demand pages”)' : ''} can change this page in the menu.`
 }
+// PGB-19: hiding and showing a page — a Tool Owner, a co-owner of the page or of its group (while it accepts pages), or
+// in On-Demand a role allowed "Set up On-Demand pages". Fail closed without the roles file.
+export function hideReason(viewer: Viewer, layout: MenuLayout, pageId: string) {
+  if (viewer.readOnly) return readOnlyMenuReason
+  const groupId = placementOf(layout, pageId).group, group = findGroup(layout, groupId)
+  return viewer.manager || isGroupOwner(layout, groupId, viewer.email) || isPageOwner(layout, pageId, viewer.email) || setupInOnDemand(viewer, groupId) ? '' : `Only a Tool Owner or a co-owner of this page or of the group “${group?.name ?? 'On-Demand'}”${groupId === onDemandGroup ? ' (or a role allowed “Set up On-Demand pages”)' : ''} can hide or show this page.`
+}
+// PGB-20: deleting a page (its files in Git) — the Tool Owner only; everyone else hides it.
+export const deleteReason = (viewer: Viewer) => viewer.readOnly ? readOnlyMenuReason : viewer.manager ? '' : 'Only a Tool Owner (“Manage pages and menu groups”) can delete a page. Hide it instead: it leaves the menu for everyone and its data stays in Git.'
 // Moving a page to another group: into a group that accepts added pages; a Tool Owner anywhere, a group co-owner only
 // between groups they co-own.
 export function moveReason(viewer: Viewer, layout: MenuLayout, pageId: string, toGroup: string) {

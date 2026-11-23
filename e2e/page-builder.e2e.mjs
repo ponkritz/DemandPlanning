@@ -178,7 +178,10 @@ test('TC-PGB-09: a group co-owner adds a Table + Insights page to Quality and se
   // The pages of Quality are theirs; CoNQ (On-Demand) is not.
   const pagesTable = page.locator('.pgb-pages')
   assert.equal(await pagesTable.getByRole('button', { name: 'Edit page Supplier issues' }).isDisabled(), false)
-  assert.equal(await pagesTable.getByRole('button', { name: 'Remove page CoNQ' }).isDisabled(), true)
+  assert.equal(await pagesTable.getByRole('button', { name: 'Hide page CoNQ' }).isDisabled(), true)
+  // PGB-19, PGB-20: their page they hide and show, but only a Tool Owner deletes it.
+  assert.equal(await pagesTable.getByRole('button', { name: 'Hide page Supplier issues' }).isDisabled(), false)
+  assert.equal(await pagesTable.getByRole('button', { name: 'Delete page Supplier issues' }).isDisabled(), true)
   // ＋ Add page…: only Quality is offered, no new group.
   await page.getByRole('button', { name: '＋ Add page…' }).click()
   const add = page.getByRole('dialog', { name: 'Add a page' })
@@ -214,14 +217,15 @@ test('TC-PGB-10: a person with no ownership and no rights sees Pages & menu and 
   assert.equal(await page.getByRole('button', { name: '＋ New group…' }).isDisabled(), true)
   const pagesTable = page.locator('.pgb-pages')
   assert.equal(await text(pagesTable.locator('.write-blocked')), 'Only a Tool Owner or a co-owner of the group “On-Demand” (or a role allowed “Set up On-Demand pages”) can change this page in the menu.')
-  for (const name of ['Edit page Supplier issues', 'Move page Supplier issues up', 'Remove page Supplier issues', 'Remove page CoNQ']) assert.equal(await pagesTable.getByRole('button', { name }).isDisabled(), true, `${name} is disabled`)
-  assert.equal(await pagesTable.getByRole('button', { name: 'Remove page Supplier issues' }).getAttribute('title'), 'Only a Tool Owner or a co-owner of the group “Quality” can change this page in the menu.')
-  assert.match(await text(page.locator('.pages-menu-page .settings-summary')), /View only: a Tool Owner changes the groups\./)
+  for (const name of ['Edit page Supplier issues', 'Move page Supplier issues up', 'Hide page Supplier issues', 'Delete page Supplier issues', 'Delete page CoNQ']) assert.equal(await pagesTable.getByRole('button', { name }).isDisabled(), true, `${name} is disabled`)
+  assert.equal(await pagesTable.getByRole('button', { name: 'Move page Supplier issues up' }).getAttribute('title'), 'Only a Tool Owner or a co-owner of the group “Quality” can change this page in the menu.')
+  assert.match(await pagesTable.getByRole('button', { name: 'Delete page Supplier issues' }).getAttribute('title'), /^Only a Tool Owner .* can delete a page\. Hide it instead/)
+  assert.match(await text(page.locator('.pages-menu-page .settings-summary').first()), /View only: a Tool Owner changes the groups\./)
   // The page itself: rows shown, every change disabled with the role reason (OND-07).
   await pagesTable.getByRole('button', { name: 'Open Supplier issues' }).click()
   await page.locator('.od-panel table tbody tr').first().waitFor()
   assert.match(await text(page.locator('.od-panel table tbody tr').first()), /Late delivery/)
-  for (const name of ['＋ Add row', 'Set up columns…', '＋ Add page…', 'Rename page…', 'Remove page…']) assert.equal(await page.getByRole('button', { name }).isDisabled(), true, `${name} is disabled`)
+  for (const name of ['＋ Add row', 'Set up columns…', '＋ Add page…', 'Rename page…', 'Hide page', 'Delete page…']) assert.equal(await page.getByRole('button', { name }).isDisabled(), true, `${name} is disabled`)
   assert.equal(await text(page.locator('.od-panel .write-blocked')), 'Your role does not allow “Edit On-Demand data (rows)”, “Set up On-Demand pages (pages, columns, options)”. An Admin can change this in Admin → People & roles → Role rights.')
   assert.equal(await page.getByRole('button', { name: 'Rename page…' }).getAttribute('title'), 'Only a Tool Owner or a co-owner of the group “Quality” can change this page in the menu.')
   assert.equal(writes.length, 0, 'nothing is written')

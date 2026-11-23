@@ -25,11 +25,16 @@ export interface OnDemandColumn { id: string; name: string; type: OnDemandType; 
 // OND-21: one entry of a row's update log — who, when (UTC) and what changed per field (column id, old → new as text),
 // written by the app on every saved change; a comment only when a file holds one (the app writes none). The first entry is the row being added (added: true).
 export interface RowChange { column: string; from: string; to: string }
-export interface LogEntry { id: string; at: string; by: string; added?: true; comment?: string; changes: RowChange[] }
+// OND-39: action — the row was hidden or shown again (no value changed).
+export interface LogEntry { id: string; at: string; by: string; added?: true; action?: 'hidden' | 'shown'; comment?: string; changes: RowChange[] }
 // OND-19…21: seq — the readable sequential number (given on Save to Git); addedBy / addedAt — who added the row and
 // when (UTC ISO), set once; log — the update log.
-export interface OnDemandRow { id: string; key?: string; seq?: number; addedBy?: string; addedAt?: string; log?: LogEntry[]; cells: Record<string, OnDemandValue> }
-export interface OnDemandPage { schema: 1; kind: 'on-demand-page'; id: string; name: string; description: string; keyPrefix: string; columns: OnDemandColumn[]; rows: OnDemandRow[]; insights: Insight[]; colors?: Record<string, number> }
+// OND-39: hidden — who hid the row and when; a hidden row stays in the file with its ID and is left out of the table,
+// the Insights, the exports and the dashboards.
+export interface OnDemandRow { id: string; key?: string; seq?: number; addedBy?: string; addedAt?: string; log?: LogEntry[]; hidden?: { by: string; at: string }; cells: Record<string, OnDemandValue> }
+// OND-31: storage 'rows' — the page is kept as one file per row (on-demand/<id>/page.json, rows/<key>.json, counter.json,
+// src/rowFiles.ts); absent — the single page file on-demand/<id>.json (OND-08).
+export interface OnDemandPage { schema: 1; kind: 'on-demand-page'; id: string; name: string; description: string; keyPrefix: string; columns: OnDemandColumn[]; rows: OnDemandRow[]; insights: Insight[]; colors?: Record<string, number>; storage?: 'rows'; lastSeq?: number; insightFilters?: InsightFilterSetup }
 
 // OND-11…OND-17 Insights: charts and summary tables built from the page's rows, kept in the same file (an `insights`
 // list, written only when the page has one) so they travel with the page and are merged with it. Columns are referred
@@ -94,6 +99,9 @@ export function parseColors(raw: unknown): Record<string, number> | undefined {
 export const maxInsights = 40, maxFilters = 10
 
 export const onDemandFolder = 'on-demand'
+// OND-31: the page types that hold a table (Table, Table + Insights today). The follow-up that makes page types a
+// combination (Table, Insights, Dashboard, Release view) changes only this predicate.
+export const hasTable = (kind: string) => kind === 'table' || kind === 'table-insights'
 export const onDemandPath = (id: string) => `${onDemandFolder}/${id}.json`
 // GitHub's contents API reads files up to 1 MB inline; stay below it (as the QE Mapping does).
 export const onDemandMaxBytes = 900_000
@@ -144,9 +152,10 @@ export const hasRowKeys = (page: OnDemandPage) => page.rows.some((row) => row.ke
 // free one on the next save. Rows from before get theirs on the next save, in page order.
 export const maxSeq = 9_999_999
 export const rowId = (page: Pick<OnDemandPage, 'keyPrefix'>, row: Pick<OnDemandRow, 'seq'>) => row.seq ? `${keyPrefixPattern.test(page.keyPrefix) ? page.keyPrefix : 'ROW'}-${String(row.seq).padStart(4, '0')}` : ''
+// OND-40: lastSeq — the highest number given on the page, kept when a row is deleted, so a number is never given again.
 export function withRowNumbers(page: OnDemandPage): OnDemandPage {
   if (page.rows.every((row) => row.seq)) return page
-  let next = page.rows.reduce((max, row) => Math.max(max, row.seq ?? 0), 0)
+  let next = page.rows.reduce((max, row) => Math.max(max, row.seq ?? 0), page.lastSeq ?? 0)
   return { ...page, rows: page.rows.map((row) => row.seq || next >= maxSeq ? row : { ...row, seq: ++next }) }
 }
 // OND-20, OND-21: the last change of a row (the newest log entry), else when it was added.
@@ -263,14 +272,33 @@ export function upsertRow(page: OnDemandPage, row: OnDemandRow, edit: RowEdit = 
   const next: OnDemandRow = { ...existing, key, cells, log: capLog([...(existing.log ?? []), entry(changes)]) }
   return { ...page, rows: page.rows.map((current) => current.id === row.id ? next : current) }
 }
-export const removeRow = (page: OnDemandPage, id: string): OnDemandPage => ({ ...page, rows: page.rows.filter((row) => row.id !== id) })
+export const removeRow = (page: OnDemandPage, id: string): OnDemandPage => {
+  const highest = page.rows.reduce((max, row) => Math.max(max, row.seq ?? 0), page.lastSeq ?? 0)
+  return { ...page, rows: page.rows.filter((row) => row.id !== id), ...(highest ? { lastSeq: highest } : {}) }
+}
+// OND-39: hide a row (or show it again) — a change of the row with its log entry "Hidden" / "Shown"; nothing else changes.
+export function setRowHidden(page: OnDemandPage, id: string, hidden: boolean, edit: RowEdit = {}): OnDemandPage {
+  const { random = Math.random, now = Date.now } = edit
+  const by = edit.by?.trim().slice(0, 200) || 'unknown', at = new Date(now()).toISOString()
+  return { ...page, rows: page.rows.map((row) => {
+    if (row.id !== id || Boolean(row.hidden) === hidden) return row
+    const { hidden: _was, ...rest } = row
+    void _was
+    const entry: LogEntry = { id: newId('l', random, now), at, by, action: hidden ? 'hidden' : 'shown', changes: [] }
+    return { ...rest, ...(hidden ? { hidden: { by, at } } : {}), log: capLog([...(row.log ?? []), entry]) }
+  }) }
+}
+// OND-39: the page as everyone sees it by default — without its hidden rows (table, Insights, exports, dashboards).
+export const isRowHidden = (row: OnDemandRow) => Boolean(row.hidden)
+export const withoutHidden = (page: OnDemandPage): OnDemandPage => page.rows.some(isRowHidden) ? { ...page, rows: page.rows.filter((row) => !row.hidden) } : page
 // OND-28: a row saved at once from the drawer — the row's change applied to the page as last read from Git (its log
 // entry made now), and the commit message naming it: "CoNQ: add row CONQ-0013 (CONQ-261123-K7Q2)", "CoNQ: update row
 // CONQ-0012", "CoNQ: remove row CONQ-0012". A new row's ID is the one it will get when nothing else was saved meanwhile
 // (the merged save of GIT-17 gives the next free one otherwise); its key never changes, so the message names both.
-export type RowAction = 'add' | 'update' | 'remove'
+// OND-39, OND-40: 'hide' / 'show' a row, 'delete' it for good (the Tool Owner, from a hidden row).
+export type RowAction = 'add' | 'update' | 'remove' | 'hide' | 'show' | 'delete'
 export function rowSave(page: OnDemandPage, row: OnDemandRow, action: RowAction, edit: RowEdit = {}): { page: OnDemandPage; message: string } {
-  const next = action === 'remove' ? removeRow(page, row.id) : upsertRow(page, row, edit)
+  const next = action === 'remove' || action === 'delete' ? removeRow(page, row.id) : action === 'hide' || action === 'show' ? setRowHidden(page, row.id, action === 'hide', edit) : upsertRow(page, row, edit)
   const named = withRowNumbers(next).rows.find((entry) => entry.id === row.id) ?? page.rows.find((entry) => entry.id === row.id) ?? row
   const id = rowId(page, named)
   const label = action === 'add' ? [id, named.key].filter(Boolean).join(' (') + (id && named.key ? ')' : '') : id || named.key || row.id
@@ -418,8 +446,10 @@ export function parseOnDemandPage(raw: string, expectedId?: string): OnDemandPag
     const addedBy = text(row.addedBy, 200).trim()
     const addedAt = isoTime(row.addedAt)
     const log = parseLog(row.log)
+    const hiddenBy = row.hidden && typeof row.hidden === 'object' ? row.hidden as Record<string, unknown> : null
+    const hidden = hiddenBy && isoTime(hiddenBy.at) ? { by: text(hiddenBy.by, 200).trim() || 'unknown', at: isoTime(hiddenBy.at) } : null
     const cells = row.cells && typeof row.cells === 'object' && !Array.isArray(row.cells) ? row.cells as Record<string, unknown> : {}
-    return [{ id: row.id, ...(key ? { key } : {}), ...(seq ? { seq } : {}), ...(addedBy ? { addedBy } : {}), ...(addedAt ? { addedAt } : {}), ...(log.length ? { log } : {}), cells: Object.fromEntries(columns.flatMap((column): [string, OnDemandValue][] => {
+    return [{ id: row.id, ...(key ? { key } : {}), ...(seq ? { seq } : {}), ...(addedBy ? { addedBy } : {}), ...(addedAt ? { addedAt } : {}), ...(log.length ? { log } : {}), ...(hidden ? { hidden } : {}), cells: Object.fromEntries(columns.flatMap((column): [string, OnDemandValue][] => {
       const value = cells[column.id]
       if (column.type === 'multi') { const list = [...new Set((Array.isArray(value) ? value : [value]).map((item) => text(item, maxValue).trim()).filter(Boolean))].slice(0, maxOptions); return list.length ? [[column.id, list]] : [] }
       // Every single value is read up to the Long text size, so changing a column's type never cuts a value (OND-06).
@@ -430,7 +460,7 @@ export function parseOnDemandPage(raw: string, expectedId?: string): OnDemandPag
   const name = cleanName(text(file.name, 80)) || id
   const keyPrefix = typeof file.keyPrefix === 'string' && keyPrefixPattern.test(file.keyPrefix) ? file.keyPrefix : prefixFor(name)
   const colors = parseColors(file.colors)
-  return { schema: 1, kind: 'on-demand-page', id, name, description: text(file.description, 300).trim(), keyPrefix, columns, rows, insights: parseInsights(file.insights), ...(colors ? { colors } : {}) }
+  return { schema: 1, kind: 'on-demand-page', id, name, description: text(file.description, 300).trim(), keyPrefix, columns, rows, insights: parseInsights(file.insights), ...(colors ? { colors } : {}), ...(file.storage === 'rows' ? { storage: 'rows' as const } : {}), ...(typeof file.lastSeq === 'number' && Number.isInteger(file.lastSeq) && file.lastSeq >= 1 && file.lastSeq <= maxSeq ? { lastSeq: file.lastSeq } : {}), ...insightFiltersPart(parseInsightFilterSetup(file.insightFilters)) }
 }
 // OND-20, OND-21: a time in the file — kept as a UTC ISO time when it is one, else dropped.
 const isoTime = (value: unknown) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value) && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : ''
@@ -449,7 +479,7 @@ export function parseLog(list: unknown): LogEntry[] {
       if (!change || typeof change.column !== 'string' || !idPattern.test(change.column)) return []
       return [{ column: change.column, from: text(change.from, maxLogText), to: text(change.to, maxLogText) }]
     }).slice(0, maxColumns)
-    return [{ id: entry.id, at, by: text(entry.by, 200).trim() || 'unknown', ...(entry.added === true ? { added: true as const } : {}), ...(comment ? { comment } : {}), changes }]
+    return [{ id: entry.id, at, by: text(entry.by, 200).trim() || 'unknown', ...(entry.added === true ? { added: true as const } : {}), ...(entry.action === 'hidden' || entry.action === 'shown' ? { action: entry.action } : {}), ...(comment ? { comment } : {}), changes }]
   }))
 }
 // OND-16: the insights of a page file — an unknown type, a bad or repeated id is dropped; a reference to a column that
@@ -483,14 +513,20 @@ export function parseInsights(list: unknown): Insight[] {
 const insightOut = ({ id, title, type, category, second, measure, value, filters, sort, options }: Insight) => ({ id, title, type, category, ...(second ? { second } : {}), measure, ...(value ? { value } : {}), ...(filters.length ? { filters } : {}), sort, ...(options && Object.keys(options).length ? { options } : {}) })
 // Schema 1 still: the new fields (a column's description and currency, a row's seq, addedBy, addedAt and log) are
 // optional, so an older file reads as before; an older app version drops them when it saves (LIM-19).
-const logOut = ({ id, at, by, added, comment, changes }: LogEntry) => ({ id, at, by, ...(added ? { added } : {}), ...(comment ? { comment } : {}), changes })
+const logOut = ({ id, at, by, added, action, comment, changes }: LogEntry) => ({ id, at, by, ...(added ? { added } : {}), ...(action ? { action } : {}), ...(comment ? { comment } : {}), changes })
 // fill: false (the copy kept in this browser) writes the page as it is, without giving keys and numbers.
 export function serializeOnDemandPage(input: OnDemandPage, { fill = true }: { fill?: boolean } = {}) {
   // OND-18, OND-19: a saved file has a key and a sequential number on every row.
   const page = fill ? withRowNumbers(withRowKeys(input)) : input
-  const out = `${JSON.stringify({ schema: 1, kind: 'on-demand-page', id: page.id, name: page.name, description: page.description, keyPrefix: page.keyPrefix, columns: page.columns.map(({ id, name, type, options, required, description, currency }) => ({ id, name, type, ...(hasOptions(type) ? { options } : {}), ...(required ? { required } : {}), ...(description ? { description } : {}), ...(type === 'currency' ? { currency: currency ?? defaultCurrency } : {}) })), rows: page.rows.map(({ id, key, seq, addedBy, addedAt, log, cells }) => ({ id, ...(key ? { key } : {}), ...(seq ? { seq } : {}), ...(addedBy ? { addedBy } : {}), ...(addedAt ? { addedAt } : {}), ...(log?.length ? { log: log.map(logOut) } : {}), cells })), ...(page.insights.length ? { insights: page.insights.map(insightOut) } : {}), ...(page.colors && Object.keys(page.colors).length ? { colors: page.colors } : {}) }, null, 1)}\n`
+  const out = `${JSON.stringify({ schema: 1, kind: 'on-demand-page', id: page.id, name: page.name, description: page.description, keyPrefix: page.keyPrefix, columns: page.columns.map(({ id, name, type, options, required, description, currency }) => ({ id, name, type, ...(hasOptions(type) ? { options } : {}), ...(required ? { required } : {}), ...(description ? { description } : {}), ...(type === 'currency' ? { currency: currency ?? defaultCurrency } : {}) })), rows: page.rows.map(({ id, key, seq, addedBy, addedAt, log, hidden, cells }) => ({ id, ...(key ? { key } : {}), ...(seq ? { seq } : {}), ...(addedBy ? { addedBy } : {}), ...(addedAt ? { addedAt } : {}), ...(log?.length ? { log: log.map(logOut) } : {}), ...(hidden ? { hidden } : {}), cells })), ...(page.insights.length ? { insights: page.insights.map(insightOut) } : {}), ...(page.colors && Object.keys(page.colors).length ? { colors: page.colors } : {}), ...(page.storage === 'rows' ? { storage: 'rows' } : {}), ...(page.lastSeq ? { lastSeq: page.lastSeq } : {}), ...insightFiltersPart(page.insightFilters) }, null, 1)}\n`
   if (new TextEncoder().encode(out).length > onDemandMaxBytes) throw new Error(`The page is too large to save to Git (over ${Math.round(onDemandMaxBytes / 1000)} KB). Remove rows, or split it into two pages.`)
   return out
+}
+// GIT-21: what a newer menu layout makes the app read: the pages listed in Git and not known here (read), and the pages
+// known here that are no longer listed (dropped) — except keep(id), the page in use with edits not saved here.
+export function pageListChange(known: string[], listed: { id: string; rows: boolean }[], keep: (id: string) => boolean = () => false) {
+  const ids = new Set(listed.map((entry) => entry.id))
+  return { read: listed.filter((entry) => !known.includes(entry.id)), dropped: known.filter((id) => !ids.has(id) && !keep(id)) }
 }
 export const sortPages = (pages: OnDemandPage[]) => [...pages].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }) || a.id.localeCompare(b.id))
 
@@ -521,7 +557,7 @@ function mergeRows(base: OnDemandRow[] | null, mine: OnDemandRow[], theirs: OnDe
     const a = t.get(merged.id), b = m.get(merged.id)
     const log = capLog([...(a?.log ?? []), ...(b?.log ?? [])].filter((entry, index, list) => list.findIndex((other) => other.id === entry.id) === index))
     const seq = a?.seq ?? b?.seq, addedBy = a?.addedBy ?? b?.addedBy, addedAt = a?.addedAt ?? b?.addedAt
-    const row: OnDemandRow = { id: merged.id, ...(merged.key ? { key: merged.key } : {}), ...(seq ? { seq } : {}), ...(addedBy ? { addedBy } : {}), ...(addedAt ? { addedAt } : {}), ...(log.length ? { log } : {}), cells: merged.cells }
+    const row: OnDemandRow = { id: merged.id, ...(merged.key ? { key: merged.key } : {}), ...(seq ? { seq } : {}), ...(addedBy ? { addedBy } : {}), ...(addedAt ? { addedAt } : {}), ...(log.length ? { log } : {}), ...(merged.hidden ? { hidden: merged.hidden } : {}), cells: merged.cells }
     return { row, inGit: Boolean(seq) && a?.seq === seq }
   })
   const taken = new Set(fixed.flatMap((entry) => entry.inGit && entry.row.seq ? [entry.row.seq] : []))
@@ -547,6 +583,26 @@ export const mergeOnDemandText: Merge = (baseText, mineText, theirsText, mineLat
   const orderedInsights = [...insightOrder.flatMap((id) => insights.filter((entry) => entry.id === id)), ...insights.filter((entry) => !insightOrder.includes(entry.id))]
   // CHT-09: the colour pins are one entry, the later save's where both changed them.
   const colors = later(base?.colors, mine.colors, theirs.colors, mineLater)
+  // OND-52: the Insights filter row's setup is one entry, the later save's where both changed it.
+  const insightFilters = later(base?.insightFilters, mine.insightFilters, theirs.insightFilters, mineLater)
   // Read back through the parser: values of columns that are gone are dropped, every rule of the file applies.
-  return serializeOnDemandPage(parseOnDemandPage(JSON.stringify({ schema: 1, kind: 'on-demand-page', id: mine.id, ...head, columns: ordered, rows, insights: orderedInsights.map(insightOut), ...(colors ? { colors } : {}) }), mine.id))
+  return serializeOnDemandPage(parseOnDemandPage(JSON.stringify({ schema: 1, kind: 'on-demand-page', id: mine.id, ...head, columns: ordered, rows, insights: orderedInsights.map(insightOut), ...(colors ? { colors } : {}), ...(mine.storage === 'rows' || theirs.storage === 'rows' ? { storage: 'rows' } : {}), ...(Math.max(mine.lastSeq ?? 0, theirs.lastSeq ?? 0) ? { lastSeq: Math.max(mine.lastSeq ?? 0, theirs.lastSeq ?? 0) } : {}), ...insightFiltersPart(insightFilters) }), mine.id))
 }
+
+// ---- the Insights filter row (OND-50…OND-56) ----
+// OND-52: the page owner's setup of the Insights tab's filter row — the Date column of the period (optional) and up to 6
+// filter columns, in order — as one optional field `insightFilters` of the page file, written only when set (a page
+// without it is written byte for byte as before; an older app version ignores it, and drops it when it saves, LIM-35).
+// Read back, only the shape is checked here (ids, no repeats, the period column not again as a field, at most 6); a
+// column that is not on the page or no longer of a type that can filter is left out of the row when it is drawn, with a
+// note (insightFilters.ts, resolveFilterSetup) — so a merge with a save that added the column loses nothing.
+export interface InsightFilterSetup { period?: string; fields: string[] }
+export const maxInsightFilters = 6
+export function parseInsightFilterSetup(raw: unknown): InsightFilterSetup | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const item = raw as { period?: unknown; fields?: unknown }
+  const period = ref(item.period)
+  const fields = [...new Set((Array.isArray(item.fields) ? item.fields : []).map(ref).filter((id) => id && id !== period))].slice(0, maxInsightFilters)
+  return period || fields.length ? { ...(period ? { period } : {}), fields } : undefined
+}
+const insightFiltersPart = (setup: InsightFilterSetup | undefined) => setup && (setup.period || setup.fields.length) ? { insightFilters: { ...(setup.period ? { period: setup.period } : {}), fields: setup.fields } } : {}
