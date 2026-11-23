@@ -2,7 +2,7 @@ import { ReleaseCountsPanel } from '../components/ReleaseCounts'
 import { SignedByMe } from '../components/SignedByMe'
 import { azureSignatures, isSignatureField, windchillSignatures } from '../mySignatures'
 import { streamPatterns } from '../releaseSource'
-import { defaultStreams, profileForStream, windchillOptionsForView, windchillStreamExports } from '../streams'
+import { allStreams, profileForStream, streamArea, windchillOptionsForView, windchillStreamExports } from '../streams'
 import { viewSource } from '../viewSources'
 import type { WindchillWorkspace } from '../useWindchill'
 import { capacityContext, capacityGap, capacityModel, itemsForPerson, problemBreakdown } from '../capacity'
@@ -44,11 +44,11 @@ export function MyDashboardPage({ month, azure, store, my, navigate, views, canS
   // MYD-13: the documents I signed in every stream that has the data (Azure DevOps views and Windchill exports).
   const signer = { names, ...(my.me.email ? { email: my.me.email } : {}) }
   const releaseConnections = azure.connectionProfiles.filter((entry) => entry.role === 'release-source').length
-  const streamData = defaultStreams.map((stream) => {
+  const streamData = allStreams().map((stream) => {
     if (stream.source === 'azure') {
       const profile = profileForStream(stream, azure.connectionProfiles)
       const source = profile ? viewSource(store.state, profile.id, profile.role, profile.query, releaseConnections) : undefined
-      return { stream: stream.name, has: Boolean(source?.items.some((item) => Object.keys(item.fields ?? {}).some(isSignatureField))), signed: source ? azureSignatures(source.items, stream.name, signer, stream.rule, streamPatterns(store.state.releaseSourceSettings, stream.name)) : [] }
+      return { stream: stream.name, has: Boolean(source?.items.some((item) => Object.keys(item.fields ?? {}).some(isSignatureField))), signed: source ? azureSignatures(source.items, stream.name, signer, stream.rule, streamPatterns(store.state.releaseSourceSettings, stream.name), undefined, streamArea(stream)) : [] }
     }
     const exports = windchill ? windchillStreamExports(windchill.views).filter((entry) => entry.stream === stream && entry.view) : []
     const sources = exports.flatMap((entry) => { const source = windchill!.sources.find((item) => item.viewId === entry.view!.id); return source ? [{ source, view: entry.view! }] : [] })

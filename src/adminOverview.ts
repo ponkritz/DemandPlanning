@@ -73,6 +73,7 @@ export const settingsIndex: SettingsEntry[] = [
   { tab: 'storage', section: 'views', page: 'Data & sharing', label: 'Other views', words: 'connections queries backlog' },
   { tab: 'storage', section: 'sample', page: 'Data & sharing', label: 'Synthetic sample', words: 'demo test data' },
   { tab: 'audit', page: 'History', label: 'History', words: 'audit changes who when' },
+  { tab: 'pages', page: 'Pages & menu', label: 'Pages & menu', words: 'page builder add page menu group co-owner owner table insights on-demand' },
 ]
 export function searchSettings(query: string, entries: SettingsEntry[] = settingsIndex): SettingsEntry[] {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean)

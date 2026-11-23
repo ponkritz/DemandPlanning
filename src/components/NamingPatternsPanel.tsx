@@ -1,6 +1,6 @@
 import { useState, useSyncExternalStore } from 'react'
 import { myPatternsFor, myPatternsVersion, personalPatternStreams, setMyNamingPatterns, subscribeMyPatterns } from '../myNamingPatterns'
-import { defaultStreams } from '../streams'
+import { allStreams, streamsVersion, subscribeStreams } from '../streams'
 import { compilePattern, defaultNamingPatterns, matchPatterns, maxPatterns, type NamingPattern } from '../namingPatterns'
 import { normalizeReleaseSourceSettings } from '../releaseSource'
 import type { PageProps } from '../pages/types'
@@ -9,12 +9,15 @@ import { Panel, Notice } from './ui'
 // QV-55: Admin → Streams → Stream mapping → Release naming patterns. Per stream, the patterns that name a
 // release from a document's Title (built in: Content {*_RELEASE}*, IOCC *Conformance Verification {*} and *Test Tools
 // {*}); edited here, tried on a Title, applied to the shared settings and saved to Git with the planning data.
-const streams = defaultStreams.filter((stream) => stream.source === 'azure' && stream.rule !== 'dp' && stream.rule !== 'cp').map((stream) => stream.name)
+// STR-02: the custom Azure streams too (not those like DP, whose releases come from the paths only).
+const patternStreams = () => allStreams().filter((stream) => stream.source === 'azure' && stream.rule !== 'dp' && stream.rule !== 'cp').map((stream) => stream.name)
 // QV-60 mode "mine" (My settings → My naming patterns): my own patterns for IOCC, Content and Tool Validations, kept on
 // this computer; where set they are used for me instead of the shared ones.
 export function NamingPatternsPanel({ store, canManage, mode = 'shared' }: { store: PageProps['store']; canManage: boolean; mode?: 'shared' | 'mine' }) {
   const personal = mode === 'mine'
   useSyncExternalStore(subscribeMyPatterns, myPatternsVersion)
+  useSyncExternalStore(subscribeStreams, streamsVersion)
+  const streams = patternStreams()
   const saved = normalizeReleaseSourceSettings(store.state.releaseSourceSettings).namingPatterns
   const choices = personal ? [...personalPatternStreams] : streams
   const [stream, setStream] = useState(choices.includes('Content') ? 'Content' : choices[0] ?? '')

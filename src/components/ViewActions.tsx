@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 
-// The actions of a Release Details page (QV-48), compact: the main one as a small icon button with its name as tooltip
-// (Refresh from Azure, Import newer export…), the others — Load from Git, Connection settings, Remove — in a "⋯" menu.
+// The actions of a Release page's source bar (QV-48, UI-STANDARDS §10), compact: the main one as a small ↻ icon button
+// (class primary) with its name as tooltip and aria-label (Refresh from Azure, Import newer export…), the others — Load from Git, Connection settings, Remove — in a "⋯" menu.
 // The menu closes on a choice, a click outside or Escape.
 export interface ViewAction { key: string; label: string; onClick?: () => void; disabled?: boolean; danger?: boolean; render?: (close: () => void) => ReactNode }
 export function ViewActions({ primary, items, label }: { primary?: ReactNode; items: ViewAction[]; label: string }) {
@@ -18,7 +18,7 @@ export function ViewActions({ primary, items, label }: { primary?: ReactNode; it
   const shown = items.filter(Boolean)
   return <div className="view-actions" ref={box}>
     {primary}
-    {shown.length > 0 && <button type="button" className="act-button" aria-label={`More actions: ${label}`} aria-haspopup="menu" aria-expanded={open} title="More actions" onClick={() => setOpen(!open)}>⋯</button>}
+    {shown.length > 0 && <button type="button" className="ghost" aria-label={`More actions: ${label}`} aria-haspopup="menu" aria-expanded={open} title="More actions" onClick={() => setOpen(!open)}>⋯</button>}
     {open && <div className="view-actions-menu" role="menu">{shown.map((item) => item.render ? <div key={item.key} role="none">{item.render(close)}</div>
       : <button key={item.key} type="button" role="menuitem" className={item.danger ? 'danger-text' : undefined} disabled={item.disabled} onClick={() => { close(); item.onClick?.() }}>{item.label}</button>)}</div>}
   </div>

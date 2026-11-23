@@ -1,6 +1,6 @@
 // Single source for navigation labels, header text and grouping so the sidebar and page header always agree.
-export type Page = 'home' | 'mydash' | 'activities' | 'planover' | 'capactual' | 'overview' | 'pulse' | 'pireview' | 'mywork' | 'bulk' | 'baselines' | 'board' | 'health' | 'windchill' | 'brite' | 'snapshots' | 'qemapping' | 'kpitracker' | 'admin' | 'docs'
-export type PageGroup = 'Home' | 'Data Insights' | 'My Work' | 'Testing' | 'I&D Board' | 'Release Details' | 'Other views' | 'Data & governance' | 'Settings'
+export type Page = 'home' | 'mydash' | 'activities' | 'planover' | 'capactual' | 'overview' | 'pulse' | 'pireview' | 'mywork' | 'bulk' | 'baselines' | 'board' | 'health' | 'windchill' | 'brite' | 'snapshots' | 'qemapping' | 'kpitracker' | 'ondemand' | 'admin' | 'docs'
+export type PageGroup = 'Home' | 'Data Insights' | 'My Work' | 'Testing' | 'I&D Board' | 'Release Details' | 'Other views' | 'On-Demand' | 'Data & governance' | 'Settings'
 
 // hidden: kept in the build but not offered in the menu.
 export interface PageMeta { id: Page; label: string; icon: string; group: PageGroup; detail: string; usesMonth: boolean; hidden?: boolean }
@@ -24,6 +24,8 @@ export const pages: PageMeta[] = [
   { id: 'windchill', label: 'Import Windchill export', icon: '◇', group: 'Release Details', detail: 'A Windchill search exported to CSV and imported here: its results with the file’s columns, and its releases for the chosen month.', usesMonth: true },
   { id: 'brite', label: 'BRITE', icon: '◇', group: 'Release Details', detail: 'BRITE releases (planned): the exports and their rules are still to be defined.', usesMonth: false },
   { id: 'qemapping', label: 'QE Mapping', icon: '⇄', group: 'Data & governance', detail: 'QE mapping (planned).', usesMonth: false },
+  // OND-01: one entry for every On-Demand page (CoNQ first); the menu lists each page by its name under On-Demand.
+  { id: 'ondemand', label: 'On-Demand', icon: '▦', group: 'On-Demand', detail: 'Blank tables the team sets up itself — CoNQ (Cost of Non-Quality) and the pages added there: columns of text, numbers, dates, drop-downs and multi-selects, rows added and edited here, shared through Git.', usesMonth: false },
   { id: 'snapshots', label: 'Snapshots', icon: '▣', group: 'Data & governance', detail: 'Save point-in-time app data to Git for LTE and PI Review; manage browser backups.', usesMonth: true },
   { id: 'admin', label: 'Settings', icon: '⚙', group: 'Settings', detail: 'Azure DevOps connections, Git storage, capacity, periods, resources, master data and audit.', usesMonth: true },
   { id: 'docs', label: 'Documentation', icon: '☰', group: 'Data & governance', detail: 'Requirements, test plan and the other project documents of this build.', usesMonth: false },
@@ -33,5 +35,6 @@ export const pages: PageMeta[] = [
 // with the Windchill exports.
 // Settings is a group of its own: one menu entry per Settings page (SET-14).
 // Testing (ACT-01): pages being tried out before they replace others; shown only to the Admin role.
-export const pageGroups: PageGroup[] = ['Data Insights', 'My Work', 'Testing', 'I&D Board', 'Release Details', 'Other views', 'Data & governance', 'Settings']
+// On-Demand (OND-01): the pages the team sets up itself, each listed by its name.
+export const pageGroups: PageGroup[] = ['Data Insights', 'My Work', 'Testing', 'I&D Board', 'Release Details', 'Other views', 'On-Demand', 'Data & governance', 'Settings']
 export const pageMeta = (id: Page) => pages.find((page) => page.id === id)!

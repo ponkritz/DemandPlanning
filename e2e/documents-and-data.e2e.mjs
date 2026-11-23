@@ -1,13 +1,13 @@
 import test, { after, before } from 'node:test'
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
-import { fixture, navigate, openPage, profileItem, startApp, text } from './helpers.mjs'
+import { fixture, loadSample, navigate, openPage, profileItem, startApp, text } from './helpers.mjs'
 
 // UI-10: every table has one Export that offers Excel or CSV.
 const exportFrom = async (page, scope, format = 'CSV (.csv)') => { await scope.getByRole('button', { name: /^Export/ }).first().click(); const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('menuitem', { name: format }).click()]); return download }
 
 // Documentation, Windchill export and data-safety scenarios of the UAT (TC-DOC-01, TC-DOC-02, TC-CON-39, TC-CON-37,
-// TC-STO-04, TC-INS-01, TC-QV-23), automated against the built web app.
+// TC-STO-04, TC-INS-01, TC-QV-23, TC-QV-43, TC-QV-44), automated against the built web app.
 let app
 before(async () => { app = await startApp() })
 after(async () => { await app.stop() })
@@ -56,10 +56,11 @@ test('TC-CON-39 / TC-CON-37 / TC-QV-27: a Windchill export lists its unique rele
   await page.locator('input[type=file]').first().setInputFiles(fixture('windchill-export.csv'))
   const releases = page.locator('.panel').filter({ has: page.locator('h2, h3', { hasText: /^Releases/ }) }).first()
   await releases.waitFor()
-  await releases.getByLabel('Show').selectOption('all')
+  await page.getByLabel('Show', { exact: true }).selectOption('all')
   const body = await text(releases)
   assert.match(body, /5 releases · 6 of 7 documents · 1 clubbed/)
-  for (const row of ['Remote Diagnostics 1.6 ▸ 2 documents', 'Service1_rel1_Service2_rel2 1 + 2 ▸ 1 document', 'CareLink 3.2']) assert.ok(body.includes(row), row)
+  // QV-62: Release name ▸ (opens the documents), Release, the latest date, Documents (a count).
+  for (const row of ['▸ Remote Diagnostics 1.6 2026-10-01 2', '▸ Service1_rel1_Service2_rel2 1 + 2 2026-10-06 1', '▸ CareLink 3.2 2026-08-01 1']) assert.ok(body.includes(row), row)
   assert.match(body, /1 document without a release number in the name/)
   const download = await exportFrom(page, releases)
   const csv = readFileSync(await download.path(), 'utf8')
@@ -67,9 +68,9 @@ test('TC-CON-39 / TC-CON-37 / TC-QV-27: a Windchill export lists its unique rele
   // CON-69: a cell that a spreadsheet would read as a formula is prefixed so that it stays text.
   await page.locator('input[type=file]').first().setInputFiles(fixture('windchill-formula.csv'))
   await page.locator('.notice, .panel', { hasText: /windchill-formula/ }).first().waitFor().catch(() => {})
-  // VIEW-01: the imported rows are on the "Raw data" tab, not below the releases.
+  // VIEW-01, QV-62: the imported rows are on the "Source data" tab, not below the releases.
   assert.equal(await page.getByLabel(/^Search /).count(), 0, 'the raw rows are not shown on the Releases tab')
-  await page.getByRole('tab', { name: /^Raw data/ }).click()
+  await page.getByRole('tab', { name: /^Source data/ }).click()
   await page.getByLabel(/^Search /).waitFor()
   const exported = await exportFrom(page, page.getByRole('tabpanel'))
   const content = readFileSync(await exported.path(), 'utf8')
@@ -108,12 +109,12 @@ test('TC-CON-40: an export with a Location column reads its releases from Locati
   await page.locator('input[type=file]').first().setInputFiles(fixture('windchill-locations.csv'))
   const releases = page.locator('.panel').filter({ has: page.locator('h2, h3', { hasText: /^Releases/ }) }).first()
   await releases.waitFor()
-  await releases.getByLabel('Show').selectOption('all')
+  await page.getByLabel('Show', { exact: true }).selectOption('all')
   let body = await text(releases)
   assert.match(body, /5 releases · 6 of 7 documents · from Location/)
-  for (const row of ['CareLink R3.2', 'Remote Diagnostics 1.7', 'Remote Diagnostics 1.6 ▸ 2 documents 1', 'Service1 1.0']) assert.ok(body.includes(row), row)
+  for (const row of ['CareLink R3.2', 'Remote Diagnostics 1.7', '▸ Remote Diagnostics 1.6 2026-10-01 2 1', 'Service1 1.0']) assert.ok(body.includes(row), row)
   assert.match(body, /1 document without a release in the Location/)
-  assert.deepEqual(await releases.locator('tbody tr td:first-child strong').allInnerTexts(), ['Service1', 'IntelliSpace Portal', 'Remote Diagnostics', 'Remote Diagnostics', 'CareLink'], 'newest Last Modified first')
+  assert.deepEqual((await releases.locator('tbody tr td:first-child button').allInnerTexts()).map((name) => name.replace(/^▸\s*/, '')), ['Service1', 'IntelliSpace Portal', 'Remote Diagnostics', 'Remote Diagnostics', 'CareLink'], 'newest Last Modified first')
   await releases.locator('summary', { hasText: /unique locations/ }).click()
   body = await text(releases)
   assert.match(body, /6 unique locations/)
@@ -146,16 +147,17 @@ test('TC-CON-41: the export page follows the header month, sorts by any column a
   let body = await text(releases)
   assert.match(body, /1 of 5 releases with a document Last Modified in August 2026 · 1 document/)
   assert.ok(body.includes('CareLink 3.2'))
-  await releases.getByLabel('Show').selectOption('all')
+  await page.getByLabel('Show', { exact: true }).selectOption('all')
   assert.match(await text(releases), /5 releases · 6 of 7 documents/)
-  const names = () => releases.locator('tbody tr td:first-child strong').allInnerTexts()
+  const names = async () => (await releases.locator('tbody tr td:first-child button').allInnerTexts()).map((name) => name.replace(/^▸\s*/, ''))
   await releases.getByRole('button', { name: /^Release name/ }).click()
   assert.deepEqual((await names())[0], 'CareLink', 'A→Z')
   await releases.getByRole('button', { name: /^Release name/ }).click()
   assert.deepEqual((await names())[0], 'Service1_rel1_Service2_rel2', 'Z→A')
   await releases.getByRole('button', { name: /^Latest Last Modified/ }).click()
   assert.deepEqual((await names())[0], 'Service1_rel1_Service2_rel2', 'newest first again (2026-10-06)')
-  assert.equal(await releases.locator('th [role=separator]').count(), 5, 'every heading (QMS-0025 match included) has a resize handle')
+  // QV-65: 8 headings — Release name, Release, Latest Last Modified, Documents, Time Writing Feature, Planned (h), Booked (h), QMS-0025 match.
+  assert.equal(await releases.locator('th [role=separator]').count(), 8, 'every heading (the hours and QMS-0025 match included) has a resize handle')
   assert.deepEqual(errors, [])
   await context.close()
 })
@@ -166,7 +168,7 @@ test('TC-QV-23: the export\'s releases have a QMS-0025 match column with Create 
   await page.locator('input[type=file]').first().setInputFiles(fixture('windchill-export.csv'))
   const releases = page.locator('.panel').filter({ has: page.locator('h2, h3', { hasText: /^Releases/ }) }).first()
   await releases.waitFor()
-  await releases.getByLabel('Show').selectOption('all')
+  await page.getByLabel('Show', { exact: true }).selectOption('all')
   assert.equal(await releases.getByRole('button', { name: /^QMS-0025 match/ }).count(), 1, 'the column heading sorts')
   const rows = releases.locator('table').first().locator('tbody > tr')
   assert.equal(await rows.count(), 5)
@@ -183,20 +185,21 @@ test('TC-QV-23: the export\'s releases have a QMS-0025 match column with Create 
   await context.close()
 })
 
-test('TC-CON-53 / TC-CON-54: "＋ ECP" imports the export as the ECP page whatever the file is called, read by project, with Project No / Project Name columns', async () => {
+test('TC-CON-53 / TC-QV-43: "＋ ECP" imports the export as the ECP page whatever the file is called, read by project, with the common Release name / Release columns', async () => {
   const { page, context, errors } = await openPage(app, { roles: true })
   await page.locator('nav button', { hasText: /^＋\s*ECP$/ }).click()
   assert.equal(await page.getByLabel(/^Name/).first().inputValue(), 'ECP', 'the import is named after the stream')
   await page.locator('input[type=file]').first().setInputFiles(fixture('windchill-ecp.csv'))
   const releases = page.locator('.panel').filter({ has: page.locator('h2, h3', { hasText: /^Releases/ }) }).first()
   await releases.waitFor()
-  await releases.getByLabel('Show').selectOption('all')
+  await page.getByLabel('Show', { exact: true }).selectOption('all')
   const body = await text(releases)
   assert.match(body, /123456/)
-  // TC-CON-54: an ECP release is a project, so its columns read Project No and Project Name.
+  // QV-62 (CON-86 retired): an ECP release is a project, shown with the columns every Release page has.
   const headers = (await releases.locator('thead th').allTextContents()).map((header) => header.trim().toLowerCase())
-  assert.ok(headers.some((header) => header.startsWith('project name')) && headers.some((header) => header.startsWith('project no')), `project columns: ${headers.join(', ')}`)
-  assert.ok(!headers.some((header) => header === 'release' || header === 'release name'), `no Release columns on ECP: ${headers.join(' | ')}`)
+  assert.deepEqual(headers.slice(0, 2), ['release name', 'release'], `common columns first: ${headers.join(' | ')}`)
+  assert.ok(!headers.some((header) => header.startsWith('project')), `no Project columns: ${headers.join(' | ')}`)
+  assert.equal(await page.getByRole('tab', { name: 'Releases', exact: true }).getAttribute('aria-selected'), 'true', 'the main tab is Releases, not Projects')
   assert.match(body, /Lab Automation/)
   assert.equal(await page.locator('nav button', { hasText: /^＋\s*ECP$/ }).count(), 0, 'ECP is no longer "not imported"')
   assert.equal(await page.locator('nav button', { hasText: /^\S*\s*ECP$/ }).count(), 1, 'ECP opens the export')
@@ -213,7 +216,7 @@ test('TC-CON-55 / TC-QV-28: an ECP setup named "ECP - Type 2" reads projects fro
   await page.locator('input[type=file]').first().setInputFiles(fixture('windchill-ecp-type2.csv'))
   const releases = page.locator('.panel').filter({ has: page.locator('h2, h3', { hasText: /^Releases/ }) }).first()
   await releases.waitFor()
-  await releases.getByLabel('Show').selectOption('all')
+  await page.getByLabel('Show', { exact: true }).selectOption('all')
   let body = await text(releases)
   assert.match(body, /Patient Monitor/)
   assert.match(body, /Scanner/)
@@ -239,7 +242,7 @@ test('TC-UI-04 / TC-UI-05: every table follows the table default — move, hide,
   const { page, context, errors } = await openPage(app, { roles: true })
   await navigate(page, 'Import Windchill export')
   await page.locator('input[type=file]').first().setInputFiles(fixture('windchill-export.csv'))
-  await page.getByRole('tab', { name: /^Raw data/ }).click()
+  await page.getByRole('tab', { name: /^Source data/ }).click()
   const table = page.getByRole('tabpanel')
   const headings = () => table.locator('thead th').allTextContents()
   assert.deepEqual((await headings()).map((h) => h.trim()), ['Number', 'Name', 'State', 'Last Modified'])
@@ -264,7 +267,7 @@ test('TC-UI-04 / TC-UI-05: every table follows the table default — move, hide,
   await page.getByRole('checkbox', { name: 'CSV (.csv)' }).uncheck()
   await navigate(page, 'Import Windchill export')
   await page.locator('nav button', { hasText: /windchill-export/ }).first().click().catch(() => {})
-  await page.getByRole('tab', { name: /^Raw data/ }).click()
+  await page.getByRole('tab', { name: /^Source data/ }).click()
   assert.equal(await page.getByRole('tabpanel').getByRole('button', { name: 'Export Excel' }).count(), 1, 'one format: a single Export Excel button')
   assert.deepEqual(errors, [])
   await context.close()
@@ -343,7 +346,7 @@ test('TC-CON-42: tables fit their columns — widening a column widens the table
   await page.locator('input[type=file]').first().setInputFiles(fixture('windchill-export.csv'))
   const releases = page.locator('.panel').filter({ has: page.locator('h2, h3', { hasText: /^Releases/ }) }).first()
   await releases.waitFor()
-  await releases.getByLabel('Show').selectOption('all')
+  await page.getByLabel('Show', { exact: true }).selectOption('all')
   const table = releases.locator('table.resizable')
   assert.match(await table.getAttribute('class'), /\bno-wrap\b/, 'one line per cell by default')
   const widths = () => table.locator('thead th').evaluateAll((cells) => cells.map((cell) => Math.round(cell.getBoundingClientRect().width)))
@@ -391,6 +394,116 @@ test('TC-DOC-05: open, browse and download bundled design documents', async () =
   await panel.getByRole('heading', { name: 'Admin Overview', exact: true }).waitFor()
   await page.getByRole('button', { name: 'Design index', exact: true }).click()
   await panel.getByRole('heading', { name: 'DemandPlanning as-built design', exact: true }).waitFor()
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
+test('TC-QV-43: every Release page has the source bar, counts, Releases | Source data tabs and the common columns in order', async () => {
+  // DP, IOCC and Content read the synthetic sample's release documents (the same query, so each shows them); the
+  // Time Writing connection comes first so that the sample loads. Nothing is fetched: Azure DevOps answers 401.
+  const query = "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project AND [System.State] = 'Approved'"
+  const view = (name) => ({ id: name.toLowerCase().replace(/\W+/g, '-'), url: `https://azure.example.com/tfs/Collection/${encodeURIComponent(name)}`, baseUrl: 'https://azure.example.com/tfs', token: 'e2e-token-0123456789', reason: name, viewName: name, role: 'release-source', query, showInMenu: true })
+  const profiles = [{ id: 'tw', url: 'https://dev.azure.com/ALMP-ORG-MSTP01/Patient%20Safety%20and%20Quality/_backlogs/backlog/InD%20Quality/Epics', token: '', reason: 'QMS-0025', role: 'time-tracking', showInMenu: true }, ...['DP', 'IOCC', 'Content', 'Tool Validations'].map(view)]
+  const { page, context, errors } = await openPage(app, { roles: true, init: (list) => { localStorage.setItem('demand-planning-azure-connection-profiles-v1', JSON.stringify(list)) }, initArg: profiles })
+  await context.route(/azure\.example\.com|dev\.azure\.com/, (route) => route.fulfill({ status: 401, contentType: 'application/json', body: '{}' }))
+  const guide = page.getByRole('dialog').filter({ hasText: 'Get started' })
+  if (await guide.waitFor({ timeout: 10000 }).then(() => true, () => false)) await guide.getByRole('button', { name: 'Close', exact: true }).last().click()
+  await loadSample(page)
+  const open = async (name) => { await page.locator('.sidebar nav button').filter({ hasText: new RegExp(`(^|[^A-Za-z])${name}$`) }).first().click(); await page.locator('.page-loading').waitFor({ state: 'detached' }); await page.locator('.release-source', { hasText: name }).waitFor() }
+  const releases = () => page.locator('.panel', { has: page.locator('h2', { hasText: /^Releases/ }) }).first()
+  const headers = async () => (await releases().locator('thead').waitFor(), await releases().locator('thead th').allTextContents()).map((header) => header.replace(/[▴▾▲▼↑↓]/g, '').trim().toLowerCase())
+  const show = page.getByLabel('Show', { exact: true })
+  // counts: the tiles after Releases in {Month} (QV-58, QV-64; at most three, UI-STANDARDS §9).
+  const parts = async (name, { counts }) => {
+    const bar = page.locator('.release-source')
+    // (1) Source bar: name · source · when fetched, then Show: {month} / All months, ↻ and ⋯.
+    assert.match(await text(bar.locator('.view-source-bar > div').first()), new RegExp(`^${name} · .+ · .*(fetched|imported) `), `${name}: name · source · when fetched`)
+    const monthLabel = await show.locator('option').first().innerText()
+    assert.match(monthLabel, /^\w+ \d{4}$/, `${name}: Show offers the header month`)
+    assert.deepEqual(await show.locator('option').allInnerTexts(), [monthLabel, 'All months'], `${name}: Show: {month} / All months`)
+    assert.equal(await bar.locator('.view-actions .primary', { hasText: '↻' }).count(), 1, `${name}: ↻`)
+    assert.equal(await bar.getByRole('button', { name: `More actions: ${name}` }).count(), 1, `${name}: ⋯`)
+    // (2) Counts: every stream, with the tiles it has a rule for; the numbers in the one KPI size (24px, §9).
+    assert.deepEqual((await page.locator('.release-counts .metric-grid article > span').allInnerTexts()).map((label) => label.trim().toLowerCase()), [`releases in ${monthLabel.toLowerCase()}`, ...counts], `${name}: the counts`)
+    assert.equal(await page.locator('.release-counts').getByRole('button', { name: /What was counted/ }).count(), 1, `${name}: ⓘ What was counted`)
+    for (const size of await page.locator('.release-counts .metric-grid article > strong').evaluateAll((numbers) => numbers.map((number) => getComputedStyle(number).fontSize))) assert.equal(size, '24px', `${name}: KPI numbers 24px`)
+    // (3) Tabs: Releases | Source data (n), with every month shown.
+    await show.selectOption('all')
+    const tabs = page.getByRole('tablist', { name: 'Result' })
+    await tabs.waitFor()
+    const labels = (await tabs.getByRole('tab').allInnerTexts()).map((label) => label.trim())
+    assert.equal(labels[0], 'Releases', `${name}: the Releases tab first`)
+    assert.match(labels[1], /^Source data \(\d+\)$/, `${name}: Source data (n)`)
+  }
+  // The common end of the Releases table (QV-65): the Time Writing Feature, its hours, then the QMS-0025 match.
+  const commonEnd = ['time writing feature', 'planned (h)', 'booked (h)', 'qms-0025 match']
+  const rightAligned = async (label) => { const index = (await headers()).indexOf(label) + 1; return releases().locator(`tbody tr td:nth-child(${index})`).first().evaluate((cell) => getComputedStyle(cell).textAlign) }
+  await open('DP')
+  await parts('DP', { counts: ['completed', 'supported'] })
+  // (4) DP: its query's rows are the releases — Select first (bulk Create Features), the QMS-0025 match last.
+  let shown = await headers()
+  assert.equal(shown[0], 'select', 'DP: Select first')
+  assert.deepEqual(shown.slice(-4), commonEnd, 'DP: Time Writing Feature, Planned (h), Booked (h), then QMS-0025 match last')
+  for (const label of ['planned (h)', 'booked (h)']) assert.equal(await rightAligned(label), 'right', `DP: ${label} right-aligned`)
+  for (const label of ['Select all shown', 'Clear']) assert.equal(await releases().getByRole('button', { name: label, exact: true }).count(), 1, `DP toolbar: ${label}`)
+  assert.equal(await releases().getByRole('button', { name: /^Create Features \(0\)$/ }).count(), 1)
+
+  await open('IOCC')
+  await parts('IOCC', { counts: ['completed', 'supported'] })
+
+  // QV-64: Content counts its releases of the month (no Completed or Supported rule); Tool Validations its tools,
+  // Supported as Pulse Check counts them (no Completed rule).
+  await open('Tool Validations')
+  await parts('Tool Validations', { counts: ['supported'] })
+  assert.deepEqual((await headers()).slice(-4), commonEnd, 'Tool Validations: the common end')
+
+  await open('Content')
+  await parts('Content', { counts: [] })
+  shown = await headers()
+  assert.deepEqual(shown, ['select', 'release name', 'approved', 'documents', 'time writing feature', 'planned (h)', 'booked (h)', 'qms-0025 match'], 'Content: the common columns in the standard order (no Release number: the Title is the release)')
+  assert.equal(await releases().locator('tbody tr td:nth-child(4)').first().evaluate((cell) => getComputedStyle(cell).textAlign), 'right', 'Documents right-aligned')
+  assert.equal(await releases().getByRole('button', { name: 'Select all shown', exact: true }).count(), 1, 'Content toolbar: Select all shown')
+
+  await navigate(page, 'Import Windchill export')
+  await page.getByLabel(/^Name/).first().fill('S&S IT')
+  await page.locator('input[type=file]').first().setInputFiles(fixture('windchill-export.csv'))
+  await page.getByRole('tab', { name: /^Source data/ }).waitFor()
+  await parts('S&S IT', { counts: ['supported'] })
+  assert.deepEqual(await headers(), ['release name', 'release', 'latest last modified', 'documents', ...commonEnd], 'S&S IT: Release name, Release, the latest date (Approved place), Documents, the matched Feature with its hours, the QMS-0025 match')
+  for (const label of ['documents', 'planned (h)', 'booked (h)']) assert.equal(await rightAligned(label), 'right', `S&S IT: ${label} right-aligned`)
+  // QV-64: the tiles count what the table lists for the month — the same number as the table's "n of N releases".
+  await show.selectOption('month')
+  const [listed] = (await text(releases().locator('.record-count'))).match(/^\d+/) ?? ['']
+  assert.equal(await text(page.locator('.release-counts .metric-grid article').first().locator('strong')), listed, 'S&S IT: Releases in the month = the releases the table lists')
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
+test('TC-QV-44: the result of an action on a Release page — a Windchill import, a file that is not an export — is listed in Background jobs, not as a notice on the page', async () => {
+  const { page, context, errors } = await openPage(app, { roles: true })
+  await navigate(page, 'Import Windchill export')
+  await page.getByLabel(/^Name/).first().fill('S&S IT')
+  await page.locator('input[type=file]').first().setInputFiles(fixture('windchill-export.csv'))
+  await page.getByRole('tab', { name: /^Source data/ }).waitFor()
+  const notices = page.locator('.release-page .notice')
+  assert.equal(await notices.filter({ hasText: /imported/ }).count(), 0, 'no "imported" notice on the page')
+  // QV-63: the import is a finished entry named after the export, with its result.
+  const jobs = page.locator('.jobs-button')
+  await jobs.click()
+  const panel = page.getByRole('dialog', { name: 'Background jobs' })
+  const imported = panel.locator('li.job', { hasText: 'Import Windchill export · S&S IT' })
+  assert.match(await text(imported), /Done .*7 results imported from windchill-export\.csv\./)
+  assert.match(await imported.getAttribute('class'), /\bjob-done\b/)
+  await panel.getByRole('button', { name: 'Close', exact: true }).click()
+  // A newer file that is not an export: the entry needs a look; the page keeps no error notice.
+  await page.locator('.view-actions label[title="Import newer export"] input[type=file]').setInputFiles({ name: 'not-an-export.csv', mimeType: 'text/csv', buffer: Buffer.from('<html><body>Sign in</body></html>') })
+  await page.locator('.jobs-button.jobs-failed').waitFor()
+  assert.match(await text(jobs), /1 to check/, 'the top-bar button says how many need a look')
+  await jobs.click()
+  const failed = panel.locator('li.job-error', { hasText: 'Import Windchill export · S&S IT' })
+  assert.match(await text(failed), /Needs a look .*This is a web page \(HTML\), not a CSV export\./)
+  assert.equal(await notices.filter({ hasText: /web page|could not be read/ }).count(), 0, 'no error notice on the page')
+  assert.equal(await page.locator('.release-source').getByText('7 results · imported').count(), 1, 'the data shown is unchanged')
   assert.deepEqual(errors, [])
   await context.close()
 })

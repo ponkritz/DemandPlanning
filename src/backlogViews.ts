@@ -1,5 +1,5 @@
 import { showsInMenu, viewNameOf, type AzureConnectionProfileSummary } from './azureCredentials.ts'
-import { defaultStreams, profileForStream, windchillStreamExports } from './streams.ts'
+import { allStreams, profileForStream, windchillStreamExports } from './streams.ts'
 
 // The Azure DevOps menu: every connection marked "Show in menu", named by its View name (else the connection name).
 // The active Time Writing connection is the editable backlog; every other shown connection is a read-only view.
@@ -20,7 +20,7 @@ export function timeWritingView(profiles: ViewProfile[], activeId: string): Back
 
 export function backlogViews(profiles: ViewProfile[], activeId: string): BacklogView[] {
   const timeWriting = activeTimeWriting(profiles, activeId)
-  const streamIds = new Set(defaultStreams.map((stream) => profileForStream(stream, profiles as AzureConnectionProfileSummary[])?.id).filter(Boolean))
+  const streamIds = new Set(allStreams().map((stream) => profileForStream(stream, profiles as AzureConnectionProfileSummary[])?.id).filter(Boolean))
   return [
     // Without any Time Writing connection (sample data, first start) the backlog is still listed, as QMS-0025.
     ...(!timeWriting || showsInMenu(timeWriting) ? [timeWritingView(profiles, activeId)] : []),
@@ -39,7 +39,7 @@ export function saveBacklogTab(id: string, storage: Pick<Storage, 'setItem'> = l
 // views had no place in the menu. The Time Writing backlog stays under I&D Board.
 type StreamProfile = Parameters<typeof profileForStream>[1][number]
 export function otherMenuViews<W extends { id: string; name: string; exportFile?: string; logic?: 'standard' | 'ecp'; projectLevel?: number }>(views: BacklogView[], profiles: StreamProfile[], windchill: W[]) {
-  const streamIds = new Set(defaultStreams.map((stream) => profileForStream(stream, profiles)?.id).filter(Boolean))
+  const streamIds = new Set(allStreams().map((stream) => profileForStream(stream, profiles)?.id).filter(Boolean))
   const streamExports = new Set(windchillStreamExports(windchill).map((entry) => entry.view?.id).filter(Boolean))
   return {
     azure: views.filter((view) => view.readOnly && !streamIds.has(view.id)),

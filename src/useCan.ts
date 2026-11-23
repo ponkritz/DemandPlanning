@@ -18,5 +18,7 @@ export function useWriteBlock() {
     can,
     why: (action: Action) => can(action) ? '' : writeBlockedReason(readOnly, [action]),
     note: (...needed: Action[]) => writeBlockedReason(readOnly, needed.filter((action) => !can(action))),
+    // OND-07: the same for a change saved to Git (where: e.g. 'on this page').
+    noteFor: (where: string, ...needed: Action[]) => writeBlockedReason(readOnly, needed.filter((action) => !can(action)), where),
   }
 }

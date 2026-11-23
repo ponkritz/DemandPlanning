@@ -3,18 +3,19 @@ import type { AzureWorkItem } from '../domain'
 import type { GitStorage } from '../useGitStorage'
 import type { MonthlyPackStore } from '../useMonthlyPack'
 import { defaultCapabilitiesLabel, kpiMetrics, type KpiMetric, type KpiRow, type MonthlyPackSetup, type PackLine } from '../monthlyPack'
-import { defaultStreams } from '../streams'
+import { allStreams } from '../streams'
 import { Notice, Panel, SaveQueueStatus } from './ui'
 import { checkTemplate, maxTemplateBytes, packTemplateFile } from '../pptxTemplate'
 
 // Admin → Reports → Monthly pack: which streams and Epics feed each slide line, and which Epic (with which metric) each KPI
 // row reads. Shared in Git as monthly-pack-setup.json. Also the department name of the exported title and the team's
 // PowerPoint template (PCK-08), kept only in Storage as monthly-pack-template.pptx — never in the app's source.
-const streamNames = defaultStreams.map((stream) => stream.name)
 const newId = (prefix: string, taken: string[]) => { let index = taken.length + 1; while (taken.includes(`${prefix}-${index}`)) index += 1; return `${prefix}-${index}` }
 
 export function MonthlyPackSetupPanel({ pack, git, items }: { pack: MonthlyPackStore; git: GitStorage; items: AzureWorkItem[] }) {
   const epics = items.filter((item) => item.workItemType === 'Epic' && item.state.toLowerCase() !== 'removed').sort((a, b) => a.title.localeCompare(b.title))
+  // STR-02: the built-in streams, then the custom ones.
+  const streamNames = allStreams().map((stream) => stream.name)
   const [draft, setDraft] = useState<MonthlyPackSetup>(pack.setup)
   const [status, setStatus] = useState<{ tone: 'info' | 'success' | 'error'; text: string; url?: string } | null>(null)
   const [busy, setBusy] = useState(false)

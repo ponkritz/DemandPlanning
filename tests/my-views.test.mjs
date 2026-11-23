@@ -45,8 +45,8 @@ test('My views: on a server with a PAT, never named after a stream, never a stre
 })
 
 test('Admin and My settings: the pages, and older links opening where they moved (SET-15, TC-SET-06)', () => {
-  assert.deepEqual(settingsPagesFor(() => true).map((page) => page.label), ['Overview', 'Streams', 'Stream options', 'Epic & Feature setup', 'People & roles', 'Capacity & time', 'Reports', 'Data & sharing', 'History'])
-  assert.deepEqual(settingsPagesFor(() => false).map((page) => page.label), ['Overview', 'Streams', 'Stream options', 'Epic & Feature setup', 'People & roles', 'Data & sharing'])
+  assert.deepEqual(settingsPagesFor(() => true).map((page) => page.label), ['Overview', 'Streams', 'Stream options', 'Epic & Feature setup', 'People & roles', 'Capacity & time', 'Reports', 'Data & sharing', 'Pages & menu', 'History'])
+  assert.deepEqual(settingsPagesFor(() => false).map((page) => page.label), ['Overview', 'Streams', 'Stream options', 'Epic & Feature setup', 'People & roles', 'Data & sharing', 'Pages & menu'])
   assert.deepEqual(resolveSettings('connections', 'servers'), { tab: 'my', section: 'servers' })
   assert.deepEqual(resolveSettings('connections', 'email'), { tab: 'my', section: 'email' })
   assert.deepEqual(resolveSettings('connections', 'mapping'), { tab: 'connections', section: 'mapping' })

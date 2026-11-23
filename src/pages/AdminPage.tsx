@@ -33,7 +33,8 @@ import { AccessPanel } from '../components/AccessPanel'
 import { SharedTimePanel } from '../components/SharedTimePanel'
 import { CalculationProfilesPanel } from '../components/CalculationProfilesPanel'
 import { CapacityRolesPanel } from '../components/CapacityRolesPanel'
-import { defaultPolicy, keepsManager, roles as accessRoles, toolOwnerExists, type Action, type Role } from '../access'
+import { defaultPolicy, keepsManager, normalEmail, withMemberRoles, roles as accessRoles, toolOwnerExists, type Action, type Role } from '../access'
+import { MultiSelect } from '../components/MultiSelect'
 import { BucketRulesPanel } from '../components/BucketRulesPanel'
 import { InsightThresholdsPanel } from '../components/InsightThresholdsPanel'
 import type { InsightThresholds } from '../insightThresholds'
@@ -107,17 +108,18 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, epic
   // used only where Azure has none.
   const emailOfName = new Map([...people.map((person) => [person.name, person.email] as const), ...teamMembers.flatMap((member) => member.email ? [[member.name, member.email] as const] : [])])
   const emailOf = (name: string) => emailOfName.get(name) ?? profiles[name]?.email
-  const appRoleOf = (email?: string) => email ? members[email]?.[0] : undefined
+  // CON-104: a person may hold several roles (their rights are the union, CON-94); the People section sets all of them.
+  const appRolesOf = (email?: string): Role[] => email ? members[email] ?? [] : []
   const [peopleMessage, setPeopleMessage] = useState<{ tone: 'success' | 'error' | 'warning'; text: string } | null>(null)
   const [removeFor, setRemoveFor] = useState<{ name: string; kind: 'left' | 'not-team'; leftOn: string; revoke: boolean } | null>(null)
-  async function setAppRole(email: string, role: Role | '', who: string) {
-    const policy = structuredClone(access.policy ?? defaultPolicy(access.email))
-    if (role) policy.members[email] = [role]; else delete policy.members[email]
+  async function setAppRoles(email: string, chosen: Role[], who: string) {
+    const policy = withMemberRoles(access.policy ?? defaultPolicy(access.email), email, chosen)
+    const role = (policy.members[normalEmail(email)] ?? []).join(', ')
     if (!keepsManager(policy, access.email)) { setPeopleMessage({ tone: 'error', text: `Not saved: ${access.email || 'you'} would lose “Manage access”.` }); return false }
-    try { await access.save(policy, `Access: ${who} (${email}) → ${role || 'no app access role'}`); setPeopleMessage({ tone: 'success', text: `${who}: app access role ${role || 'removed'}; saved to ${access.path}.` }); return true }
+    try { await access.save(policy, `Access: ${who} (${email}) → ${role || 'no app access role'}`); setPeopleMessage({ tone: 'success', text: `${who}: app access roles ${role || 'removed'}; saved to ${access.path}.` }); return true }
     catch (failure) { setPeopleMessage({ tone: 'error', text: failure instanceof Error ? failure.message : String(failure) }); return false }
   }
-  const missingOf = (name: string) => { const profile = profiles[name] ?? {}; return [!emailOf(name) && 'email in Azure DevOps', !profile.region && 'region', !profile.role && 'role', !profile.reportsTo && 'reports to', !appRoleOf(emailOf(name)) && 'app access role'].filter(Boolean) as string[] }
+  const missingOf = (name: string) => { const profile = profiles[name] ?? {}; return [!emailOf(name) && 'email in Azure DevOps', !profile.region && 'region', !profile.role && 'role', !profile.reportsTo && 'reports to', !appRolesOf(emailOf(name)).length && 'app access role'].filter(Boolean) as string[] }
   const mappedEmails = new Set(resources.map((person) => emailOf(person.name)).filter(Boolean))
   const accessOnly = Object.entries(members).filter(([email]) => !mappedEmails.has(email)).sort(([a], [b]) => a.localeCompare(b))
   async function confirmRemove(event: React.FormEvent) {
@@ -125,7 +127,7 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, epic
     if (!removeFor) return
     const { name, kind, leftOn, revoke } = removeFor, email = emailOf(name)
     if (kind === 'left') { if (!leftOn) return; setProfile(name, { leftOn }) } else setProfile(name, { removed: true })
-    if (revoke && email && members[email] && accessEditable) await setAppRole(email, '', name)
+    if (revoke && email && members[email] && accessEditable) await setAppRoles(email, [], name)
     setRemoveFor(null)
   }
   function saveCapacityRoles(next: CapacityRoles, detail: string) {
@@ -347,7 +349,7 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, epic
           <td><strong>{person.name}</strong><button type="button" className="text-button danger-text resource-remove" aria-label={`Remove ${person.name}`} title="Left the team, or not part of the team" onClick={() => setRemoveFor({ name: person.name, kind: 'left', leftOn: utcToday(), revoke: true })}>Remove</button>{missingOf(person.name).length > 0 && <small className="warning-text">Mapping incomplete: {missingOf(person.name).join(', ')}</small>}{person.months ? <small>{person.months} {person.months === 1 ? 'month' : 'months'} · {person.firstMonth === person.lastMonth ? shortMonthName(person.firstMonth) : `${shortMonthName(person.firstMonth)} – ${shortMonthName(person.lastMonth)}`}</small>
             : <small>{teamNames.has(person.name) || person.sources.includes('team') ? 'Team member' : 'Assigned To in Azure DevOps'} · no Time Writing yet</small>}</td>
           <td className="person-email" aria-label={`Work email of ${person.name}`}>{emailOfName.get(person.name) ?? (profile.email ? <>{profile.email} <small className="muted">saved earlier; not in Azure DevOps</small></> : <small className="muted">No email in Azure DevOps</small>)}</td>
-          <td><select aria-label={`App access role of ${person.name}`} value={appRoleOf(emailOf(person.name)) ?? ''} disabled={!emailOf(person.name) || !accessEditable} title={!emailOf(person.name) ? 'Azure DevOps has no email for this person' : accessEditable ? undefined : 'Needs “Manage access” and a Git token that can write'} onChange={(event) => void setAppRole(emailOf(person.name)!, event.target.value as Role | '', person.name)}><option value="">{access.policy?.defaultRole ? `Default (${access.policy.defaultRole})` : 'None'}</option>{accessRoles.map((role) => <option key={role}>{role}</option>)}</select></td>
+          <td><MultiSelect label={`App access roles of ${person.name}`} emptyLabel={access.policy?.defaultRole ? `Default (${access.policy.defaultRole})` : 'None'} options={accessRoles.map((role) => [role, role])} value={appRolesOf(emailOf(person.name))} disabled={!emailOf(person.name) || !accessEditable} title={!emailOf(person.name) ? 'Azure DevOps has no email for this person' : accessEditable ? undefined : 'Needs “Manage access” and a Git token that can write'} onChange={(value) => void setAppRoles(emailOf(person.name)!, value as Role[], person.name)} /></td>
           <td><select aria-label={`Region for ${person.name}`} value={profile.region ?? ''} onChange={(event) => setProfile(person.name, { region: (event.target.value || undefined) as ResourceProfile['region'] })}><option value="">Not set</option>{regions.map((region) => <option key={region}>{region}</option>)}</select></td>
           <td><select aria-label={`Role for ${person.name}`} value={profile.role ?? ''} onChange={(event) => setProfile(person.name, { role: (event.target.value || undefined) as ResourceProfile['role'] })}><option value="">Not set</option>{resourceRoles.map((role) => <option key={role}>{role}</option>)}</select><label className="check"><input type="checkbox" checked={Boolean(profile.peopleManager)} onChange={(event) => setProfile(person.name, { peopleManager: event.target.checked || undefined })} />People manager</label></td>
           <td>{otherFor === person.name ? <form className="inline-form" onSubmit={(event) => { event.preventDefault(); const name = otherName.trim(); if (name && name !== person.name) setProfile(person.name, { reportsTo: name }); setOtherFor('') }}><input aria-label={`Manager of ${person.name}`} placeholder="Manager's name" value={otherName} autoFocus onChange={(event) => setOtherName(event.target.value)} /><button type="submit" className="ghost">OK</button><button type="button" className="text-button" onClick={() => setOtherFor('')}>Cancel</button></form>

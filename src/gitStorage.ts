@@ -79,6 +79,17 @@ const api = 'https://api.github.com'
 const encodePath = (path: string) => path.split('/').map(encodeURIComponent).join('/')
 const fileUrl = (config: GitConfig) => `${api}/repos/${encodeURIComponent(config.owner)}/${encodeURIComponent(config.repo)}/contents/${encodePath(config.path)}`
 const headers = (token: string) => ({ Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`, 'X-GitHub-Api-Version': '2022-11-28' })
+export function privateGitWrites(config: GitConfig, token: string, fetchImpl: typeof fetch = fetch): typeof fetch {
+  return async (url, init) => {
+    if (init?.method === 'PUT') {
+      const repo = await fetchImpl(`${api}/repos/${encodeURIComponent(config.owner)}/${encodeURIComponent(config.repo)}`, { headers: headers(token), cache: 'no-store' })
+      const details = repo.ok ? await repo.json().catch(() => null) as { visibility?: unknown } | null : null
+      if (details?.visibility !== 'private') throw new Error('Connect a private Git data repository to save pages and menu settings.')
+    }
+    return fetchImpl(url, init)
+  }
+}
+
 export const historyUrl = (config: GitConfig) => `https://github.com/${config.owner}/${config.repo}/commits/${config.branch}/${encodePath(config.path)}`
 
 async function failure(response: Response, config: GitConfig, action: string): Promise<Error> {

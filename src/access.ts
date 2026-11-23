@@ -22,13 +22,16 @@ export const areas = [
   { key: 'qemapping', label: 'QE Mapping' },
   { key: 'snapshots', label: 'Snapshots' },
   { key: 'docs', label: 'Documentation' },
+  // OND-01 (permissions 4): the On-Demand pages (CoNQ and the pages added there). A file older than permissions 4 shows
+  // it to every role it lists, as the starting matrix does.
+  { key: 'ondemand', label: 'On-Demand pages (CoNQ …)', since: 4 },
 ] as const
 export type Area = typeof areas[number]['key']
 
 // CON-94: every action is a permission of its own, in groups, each Allow, Deny or Not set per role. legacy: the action
 // of access.json files written before CON-94 whose holders get this permission ('*': everyone, as the app had no
 // check for it then), so nothing becomes more open or more closed than it was.
-export const actionGroups = ['Work items in Azure DevOps', 'Release data', 'Streams', 'Setup', 'Capacity and time', 'People and access', 'Reports and sharing'] as const
+export const actionGroups = ['Work items in Azure DevOps', 'Release data', 'Streams', 'Setup', 'Capacity and time', 'People and access', 'Reports and sharing', 'On-Demand'] as const
 export const actions = [
   { key: 'azure.write', group: 'Work items in Azure DevOps', label: 'Create Features, User Stories and Tasks', legacy: 'azure.write' },
   { key: 'azure.createForOthers', group: 'Work items in Azure DevOps', label: 'Assign new work to other people', legacy: 'azure.createForOthers' },
@@ -62,6 +65,15 @@ export const actions = [
   { key: 'pack.setup', group: 'Reports and sharing', label: 'Monthly pack: setup (lines, KPIs)', legacy: 'settings.manage' },
   { key: 'layout.defaults', group: 'Reports and sharing', label: 'Table, chart and page defaults, Get started links', legacy: 'settings.manage' },
   { key: 'storage.shared', group: 'Reports and sharing', label: 'Shared setup in Git, master data, audit, KPI tracker', legacy: 'settings.manage' },
+  // CON-103 (permissions 4): the On-Demand pages' setup and their rows — a group of their own, as they are their own
+  // menu area and their own data (not release data). A file older than permissions 4 gives them as the starting matrix
+  // does (Tool Owner and Admin) to the roles it lists; nobody had them before (no older permission covered them).
+  { key: 'ondemand.setup', group: 'On-Demand', label: 'Set up On-Demand pages (pages, columns, options)', legacy: 'ondemand.setup', since: 4 },
+  { key: 'ondemand.edit', group: 'On-Demand', label: 'Edit On-Demand data (rows)', legacy: 'ondemand.edit', since: 4 },
+  // CON-106 (permissions 5): the page builder (PGB-08) — create, rename, reorder, configure and remove menu groups, add,
+  // move and remove any added page and name co-owners. A file older than permissions 5 gives it as the starting matrix
+  // does: to a listed Tool Owner only (a file without the Tool Owner role gives that role every right, CON-93).
+  { key: 'pages.manage', group: 'On-Demand', label: 'Manage pages and menu groups (Tool Owner)', legacy: 'pages.manage', since: 5 },
 ] as const
 export type Action = typeof actions[number]['key']
 
@@ -88,12 +100,12 @@ export function defaultPolicy(adminEmail = ''): AccessPolicy {
     defaultRole: 'Team Member',
     roles: {
       'Tool Owner': { areas: [...allAreas], actions: [...allActions] },
-      'Admin': { areas: [...allAreas], actions: allActions.filter((action) => action !== 'streams.manage') },
+      'Admin': { areas: [...allAreas], actions: allActions.filter((action) => action !== 'streams.manage' && action !== 'pages.manage') },
       // CON-94: the starting matrix; each cell can be set to Allow, Deny or Not set in Role rights.
-      'Product Owner': { areas: ['overview', 'board', 'health', 'release', 'baselines', 'qemapping', 'docs'], actions: [...workActions, 'work.bulk', 'azure.createForOthers', 'baselines.edit', 'qemapping.edit', 'data.export', 'pack.text'] },
-      'People Manager': { areas: ['overview', 'insights', ...myWork, 'board', 'release', 'baselines', 'qemapping', 'snapshots', 'docs'], actions: [...workActions, 'work.bulk', 'azure.createForOthers', 'baselines.edit', 'qemapping.edit', 'data.export', 'pack.text'] },
-      'Scrum Master': { areas: ['overview', ...myWork, 'board', 'health', 'release', 'docs'], actions: [...workActions, 'azure.createForOthers', 'data.export', 'setup.feature', 'setup.epic'] },
-      'Team Member': { areas: ['overview', ...myWork, 'board', 'release', 'docs'], actions: [...workActions, 'data.export'] },
+      'Product Owner': { areas: ['overview', 'board', 'health', 'release', 'baselines', 'qemapping', 'docs', 'ondemand'], actions: [...workActions, 'work.bulk', 'azure.createForOthers', 'baselines.edit', 'qemapping.edit', 'data.export', 'pack.text'] },
+      'People Manager': { areas: ['overview', 'insights', ...myWork, 'board', 'release', 'baselines', 'qemapping', 'snapshots', 'docs', 'ondemand'], actions: [...workActions, 'work.bulk', 'azure.createForOthers', 'baselines.edit', 'qemapping.edit', 'data.export', 'pack.text'] },
+      'Scrum Master': { areas: ['overview', ...myWork, 'board', 'health', 'release', 'docs', 'ondemand'], actions: [...workActions, 'azure.createForOthers', 'data.export', 'setup.feature', 'setup.epic'] },
+      'Team Member': { areas: ['overview', ...myWork, 'board', 'release', 'docs', 'ondemand'], actions: [...workActions, 'data.export'] },
     },
     members: isEmail(adminEmail) ? { [normalEmail(adminEmail)]: ['Admin'] } : {},
   })
@@ -108,7 +120,7 @@ function inOrder(policy: AccessPolicy): AccessPolicy {
 
 const pick = <T extends string>(value: unknown, allowed: readonly T[]) => Array.isArray(value) ? allowed.filter((entry) => value.includes(entry)) : []
 // The permissions that did not exist before CON-94 (their presence marks a file written with the split permissions).
-const newKeys = new Set<Action>(['setup.epic', 'setup.values', 'work.edit', 'work.state', 'work.move', 'work.hours', 'work.comment', 'work.bulk', 'release.counts', 'qemapping.edit', 'data.export', 'streams.options', 'setup.feature', 'capacity.settings', 'capacity.rules', 'capacity.time', 'capacity.periods', 'capacity.history', 'people.edit', 'people.capacityRoles', 'access.viewAs', 'pack.text', 'pack.setup', 'layout.defaults', 'storage.shared'])
+const newKeys = new Set<Action>(['setup.epic', 'setup.values', 'work.edit', 'work.state', 'work.move', 'work.hours', 'work.comment', 'work.bulk', 'release.counts', 'qemapping.edit', 'data.export', 'streams.options', 'setup.feature', 'capacity.settings', 'capacity.rules', 'capacity.time', 'capacity.periods', 'capacity.history', 'people.edit', 'people.capacityRoles', 'access.viewAs', 'pack.text', 'pack.setup', 'layout.defaults', 'storage.shared', 'ondemand.setup', 'ondemand.edit', 'pages.manage'])
 
 // Reads access.json: unknown roles, areas, actions and invalid emails are dropped; a role missing from the file has no
 // rights. Throws on anything that is not an access policy, so a broken file is reported rather than ignored.
@@ -126,19 +138,22 @@ export function parseAccess(text: string): AccessPolicy {
   // A file written before Team insights existed: the roles that saw the Data Insights then and lead people (Admin,
   // People Manager) keep the team's insights; every other role keeps My dashboard only.
   const before = !Object.values(rolesIn).some((role) => Array.isArray(role?.areas) && role.areas.includes('insights'))
-  const areasOf = (role: Role) => { const listed = pick(rolesIn[role]?.areas, allAreas); return before && listed.includes('overview') && (role === 'Tool Owner' || role === 'Admin' || role === 'People Manager') ? allAreas.filter((area) => listed.includes(area) || area === 'insights') : listed }
+  // CON-103: an area or action added with permissions 4 or later (since) starts as in the starting matrix for each role a
+  // file older than it lists; a role missing from the file still has no rights.
+  const version = Number((input as { permissions?: unknown }).permissions) || 0
+  const starting = defaultPolicy()
+  const sinceOf = (key: Permission) => ([...areas, ...actions].find((entry) => entry.key === key) as { since?: number } | undefined)?.since ?? 0
+  const added = (key: Permission, role: Role) => sinceOf(key) >= 4 && sinceOf(key) > version && Boolean(rolesIn[role]) && (isArea(key) ? (starting.roles[role].areas as Permission[]) : (starting.roles[role].actions as Permission[])).includes(key)
+  const areasOf = (role: Role) => { const listed = pick(rolesIn[role]?.areas, allAreas); const kept = before && listed.includes('overview') && (role === 'Tool Owner' || role === 'Admin' || role === 'People Manager') ? allAreas.filter((area) => listed.includes(area) || area === 'insights') : listed; return allAreas.filter((area) => kept.includes(area) || added(area, role)) }
   // CON-94: a file written before the permissions were split lists only the old actions: each new permission is
   // allowed where its old action was (or for everyone, where the app had no check), so nothing changes for anyone.
   // permissions: 2 or 3 marks a file saved with the split permissions (so a role left with old keys only is not
   // migrated again). A permission added after the file's version (since) starts as in the starting matrix.
-  const version = Number((input as { permissions?: unknown }).permissions) || 0
   const split = version >= 2 || Object.values(rolesIn).some((role) => Array.isArray(role?.actions) && role.actions.some((key) => newKeys.has(key as Action)))
-  const starting = defaultPolicy()
-  const sinceOf = (key: Action) => (actions.find((entry) => entry.key === key) as { since?: number }).since ?? 0
   const actionsOf = (raw: unknown, role: Role) => {
     const listed = Array.isArray(raw) ? raw as string[] : []
-    if (split) return allActions.filter((key) => listed.includes(key) || (version >= 2 && sinceOf(key) > version && starting.roles[role].actions.includes(key)))
-    return allActions.filter((key) => { const legacy = actions.find((entry) => entry.key === key)!.legacy; return listed.includes(key) || legacy === '*' || listed.includes(legacy) })
+    if (split) return allActions.filter((key) => listed.includes(key) || added(key, role) || (version >= 2 && sinceOf(key) > version && starting.roles[role].actions.includes(key)))
+    return allActions.filter((key) => { const legacy = actions.find((entry) => entry.key === key)!.legacy; return listed.includes(key) || added(key, role) || legacy === '*' || listed.includes(legacy) })
   }
   const denyOf = (raw: unknown): Partial<RoleRights> => { const denied = pick(raw, [...allAreas, ...allActions] as Permission[]); return denied.length ? { deny: denied } : {} }
   return {
@@ -152,7 +167,7 @@ export function parseAccess(text: string): AccessPolicy {
 
 export function serializeAccess(policy: AccessPolicy) {
   const members = Object.fromEntries(Object.entries(policy.members).filter(([email, assigned]) => isEmail(email) && assigned.length).sort(([a], [b]) => a.localeCompare(b)).map(([email, assigned]) => [normalEmail(email), roles.filter((role) => assigned.includes(role))]))
-  return `${JSON.stringify({ schema: 1, permissions: 3, defaultRole: policy.defaultRole, roles: Object.fromEntries(roles.map((role) => [role, { areas: allAreas.filter((area) => policy.roles[role].areas.includes(area)), actions: allActions.filter((action) => policy.roles[role].actions.includes(action)), ...(policy.roles[role].deny?.length ? { deny: ([...allAreas, ...allActions] as Permission[]).filter((key) => policy.roles[role].deny!.includes(key)) } : {}) }])), members }, null, 2)}\n`
+  return `${JSON.stringify({ schema: 1, permissions: 5, defaultRole: policy.defaultRole, roles: Object.fromEntries(roles.map((role) => [role, { areas: allAreas.filter((area) => policy.roles[role].areas.includes(area)), actions: allActions.filter((action) => policy.roles[role].actions.includes(action)), ...(policy.roles[role].deny?.length ? { deny: ([...allAreas, ...allActions] as Permission[]).filter((key) => policy.roles[role].deny!.includes(key)) } : {}) }])), members }, null, 2)}\n`
 }
 
 // A person's rights: the union of their roles, or the default role when their email is not listed (or not known yet).
@@ -175,9 +190,10 @@ export function rightsFor(policy: AccessPolicy | null, email: string, bootstrap 
 // CON-102: why a button that starts a change in Azure DevOps is disabled — '' when nothing is missing. Read-only (no
 // roles file loaded, CON-101) says so; otherwise it names the missing permissions and where an Admin changes them.
 export const readOnlyReason = 'Read only: the access roles are not loaded yet, so nothing can be changed in Azure DevOps.'
-export function writeBlockedReason(readOnly: boolean, missing: Action[]) {
+// where: what cannot be changed (OND-07: the On-Demand pages are in Git, not in Azure DevOps).
+export function writeBlockedReason(readOnly: boolean, missing: Action[], where = 'in Azure DevOps') {
   if (!missing.length) return ''
-  if (readOnly) return readOnlyReason
+  if (readOnly) return where === 'in Azure DevOps' ? readOnlyReason : `Read only: the access roles are not loaded yet, so nothing can be changed ${where}.`
   const labels = [...new Set(missing)].map((key) => `“${actions.find((entry) => entry.key === key)?.label ?? key}”`)
   return `Your role does not allow ${labels.join(', ')}. An Admin can change this in Admin → People & roles → Role rights.`
 }
@@ -207,6 +223,15 @@ export function explainAccess(policy: AccessPolicy | null, email: string, key: P
   return { allowed: allowedBy.length > 0 && deniedBy.length === 0, roles: assigned, allowedBy, deniedBy, noPolicy: false }
 }
 
+// CON-104: a person's roles set as a whole — any number of them, kept in the matrix's order; none removes the person
+// (the default role then applies). Never one role in place of the others.
+export function withMemberRoles(policy: AccessPolicy, email: string, chosen: readonly Role[]): AccessPolicy {
+  const next = structuredClone(policy)
+  const ordered = roles.filter((role) => chosen.includes(role))
+  if (ordered.length) next.members[normalEmail(email)] = ordered; else delete next.members[normalEmail(email)]
+  return next
+}
+
 // A policy may not lock its editor out: the person saving it must keep a role that can manage access.
 export function keepsManager(policy: AccessPolicy, email: string) {
   return Boolean(email) && rightsFor(policy, email).actions.has('access.manage')
@@ -218,6 +243,12 @@ export function toolOwnerExists(policy: AccessPolicy | null) {
   if (!policy) return false
   const holds = (role: Role) => policy.roles[role]?.actions.includes('streams.manage')
   return Object.values(policy.members).some((assigned) => assigned.some(holds)) || Boolean(policy.defaultRole && holds(policy.defaultRole))
+}
+// CON-106: pages and menu groups (PGB-08): the holders of "Manage pages and menu groups" — or, while no Tool Owner
+// exists (CON-93), the people who manage access, so nobody is locked out. Without a policy nobody (CON-101).
+export function canManagePages(policy: AccessPolicy | null, rights: Pick<Rights, 'actions'>) {
+  if (!policy) return false
+  return rights.actions.has('pages.manage') || (!toolOwnerExists(policy) && rights.actions.has('access.manage'))
 }
 // CON-101: without a policy nobody changes the stream mapping (fail closed).
 export function canManageStreams(policy: AccessPolicy | null, rights: Pick<Rights, 'actions'>) {

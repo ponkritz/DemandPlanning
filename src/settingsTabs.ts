@@ -3,7 +3,7 @@ import type { Action } from './access.ts'
 // sections shown one at a time (SET-14). The last page and the last section of each page are remembered here.
 // SET-15: the group is headed Admin and holds the shared setup; My settings (what each person sets for themselves)
 // opens from the person's name in the sidebar. Older page keys ('access', 'tables', 'history') are still accepted.
-export type SettingsTab = 'home' | 'my' | 'look' | 'epics' | 'connections' | 'options' | 'storage' | 'access' | 'capacity' | 'resources' | 'masters' | 'audit' | 'features' | 'pack' | 'tables' | 'history'
+export type SettingsTab = 'home' | 'my' | 'look' | 'epics' | 'connections' | 'options' | 'storage' | 'access' | 'capacity' | 'resources' | 'masters' | 'audit' | 'features' | 'pack' | 'tables' | 'history' | 'pages'
 export const settingsTabKey = 'demand-planning-settings-tab-v1'
 export const settingsSectionKey = 'demand-planning-settings-section-v1'
 
@@ -12,6 +12,8 @@ export const settingsPages: { key: SettingsTab; label: string; needs?: Action[] 
   { key: 'home', label: 'Overview' }, { key: 'connections', label: 'Streams' }, { key: 'options', label: 'Stream options' }, { key: 'epics', label: 'Epic & Feature setup' },
   { key: 'resources', label: 'People & roles' }, { key: 'capacity', label: 'Capacity & time', needs: ['capacity.settings', 'capacity.rules', 'capacity.time', 'capacity.periods', 'capacity.history'] },
   { key: 'pack', label: 'Reports', needs: ['pack.setup'] }, { key: 'storage', label: 'Data & sharing' },
+  // PGB-12: Pages & menu — shown to everyone: who may change what is shown there, disabled with the reason.
+  { key: 'pages', label: 'Pages & menu' },
   { key: 'audit', label: 'History', needs: ['storage.shared'] },
 ]
 export const mySettingsLabel = 'My settings'

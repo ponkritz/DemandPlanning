@@ -1,5 +1,5 @@
 import { composeAzureUrl, hasServerPat, listAzureConnectionProfiles, loadAzureConnectionProfile, serverKey, type AzureConnectionProfile, type AzureConnectionProfileSummary } from './azureCredentials.ts'
-import { defaultStreams, namesStream } from './streams.ts'
+import { streamNamedBy } from './streams.ts'
 import { duplicateOf } from './viewDefinitions.ts'
 import type { AppState } from './domain'
 
@@ -28,7 +28,7 @@ export function newMyView(input: MyViewInput, profiles: AzureConnectionProfileSu
   const name = input.name.trim(), project = input.project.trim(), query = input.query.trim()
   if (!name) return 'Enter a name for the view.'
   if (name.length > 80) return 'Use a name of at most 80 characters.'
-  const stream = defaultStreams.find((entry) => namesStream(name, entry.name))
+  const stream = streamNamedBy([name])
   if (stream) return `“${name}” names the stream ${stream.name}: My views never replace a stream. Choose another name.`
   if (profiles.some((profile) => (profile.viewName || profile.reason).trim().toLowerCase() === name.toLowerCase())) return `A view named “${name}” already exists.`
   if (!input.server) return 'Choose a server you have a PAT for (My settings → Servers and PATs).'

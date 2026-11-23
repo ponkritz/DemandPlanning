@@ -8,7 +8,7 @@ import { GapsPanel } from '../components/GapsPanel'
 import { ScopeSwitch } from '../components/ScopeSwitch'
 import { TeamFilterBar } from '../components/TeamFilterBar'
 import { defaultStreamReleases, type ReleaseStream } from '../releaseOverview'
-import { defaultStreams, windchillOptionsForView, windchillStreamExports } from '../streams'
+import { allStreams, windchillOptionsForView, windchillStreamExports } from '../streams'
 import { formatDate, formatDateTime, formatHours, monthName } from '../format'
 import { utcToday } from '../businessTime'
 import type { WindchillWorkspace } from '../useWindchill'
@@ -63,7 +63,7 @@ export function PulseCheckPage({ month, azure, store, my, navigate, windchill, o
   const supportedLines = (shown: ReleaseStream[], at: string): SupportedLine[] => [
     ...shown.filter((stream) => stream.supportedEntries).map((stream) => ({ name: stream.name, releases: stream.supportedEntries!.map((entry) => entry.label) })),
     // Tool Validations: the unique tools with a document in the tab's month (validated or supported), one entry per tool.
-    ...shown.filter((stream) => { const rule = defaultStreams.find((def) => def.name === stream.name)?.rule; return rule === 'tool' }).map((stream) => ({ name: stream.name, releases: stream.releases.map((entry) => [entry.name, entry.release].filter(Boolean).join(' ')) })),
+    ...shown.filter((stream) => { const rule = allStreams().find((def) => def.name === stream.name)?.rule; return rule === 'tool' }).map((stream) => ({ name: stream.name, releases: stream.releases.map((entry) => [entry.name, entry.release].filter(Boolean).join(' ')) })),
     ...exports.map(({ name, view }) => { const source = view ? windchill.sources.find((entry) => entry.viewId === view.id) : undefined; return { name, releases: source && view ? windchillSupported(source.rows, source.columns.length ? source.columns : view.columns, at, windchillOptionsForView(view)) : [] } }),
   ]
   const releases = (shown: ReleaseStream[], at: string) => <>

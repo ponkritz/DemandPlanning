@@ -39,3 +39,26 @@ test('background jobs: a failed result or a thrown error marks the job; Clear fi
   await settle()
   resetJobs()
 })
+
+import { recordJob } from '../src/backgroundJobs.ts'
+test('QV-63: an instant result is a finished entry — done or to check — without blocking a job of the same key (TC-QV-44)', async () => {
+  resetJobs()
+  let release
+  runInBackground('windchill:a', 'Fetch from Windchill · S&S IT', () => new Promise((resolve) => { release = resolve }))
+  const id = recordJob('windchill:a', 'Import Windchill export · S&S IT', { text: '12 results imported from sit.csv.' }, () => 1000)
+  assert.equal(typeof id, 'number')
+  recordJob('windchill:b', 'Import Windchill export · ECP', { text: 'The file is not a Windchill export.', failed: true }, () => 2000)
+  const [failed, done, running] = listJobs()
+  assert.deepEqual([failed.label, failed.state, failed.detail, failed.started, failed.finished], ['Import Windchill export · ECP', 'error', 'The file is not a Windchill export.', 2000, 2000], 'newest first; a failure needs a look')
+  assert.deepEqual([done.state, done.detail, done.started, done.finished], ['done', '12 results imported from sit.csv.', 1000, 1000])
+  assert.equal(running.state, 'running', 'the running job with the same key is untouched')
+  assert.equal(isRunning('windchill:a'), true)
+  assert.equal(runningCount(), 1, 'a finished entry is never counted as running')
+  clearFinishedJobs()
+  assert.deepEqual(listJobs().map((job) => job.label), ['Fetch from Windchill · S&S IT'], 'Clear finished removes the recorded entries too')
+  release({ text: 'ok' })
+  await settle()
+  for (let index = 0; index < 25; index += 1) recordJob(`k${index}`, `Entry ${index}`, { text: 'ok' })
+  assert.equal(listJobs().length, 20, 'the list keeps the 20 newest entries')
+  resetJobs()
+})

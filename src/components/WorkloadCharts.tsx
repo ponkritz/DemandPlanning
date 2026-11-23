@@ -8,22 +8,22 @@ import { arcPath, barPath, columnPath, compactNumber, longMonth, monthTick, nice
 // Combination charts share ONE unit per plot (never a second y-axis): utilization bars + planned-utilization line
 // are both %, Epic stacks + available line are both hours. Marks carry series colour; all text wears text tokens.
 
-function LegendBar({ color, label }: { color: string; label: string }) { return <li><i className="viz-key-bar" style={{ background: color }} aria-hidden="true" />{label}</li> }
-function LegendLine({ color, label }: { color: string; label: string }) { return <li><i style={{ background: color }} aria-hidden="true" />{label}</li> }
+export function LegendBar({ color, label }: { color: string; label: string }) { return <li><i className="viz-key-bar" style={{ background: color }} aria-hidden="true" />{label}</li> }
+export function LegendLine({ color, label }: { color: string; label: string }) { return <li><i style={{ background: color }} aria-hidden="true" />{label}</li> }
 function LegendTick({ label }: { label: string }) { return <li><i className="viz-key-tick" aria-hidden="true" />{label}</li> }
 
-function ChartFrame({ legend, table, setTable, labels, children }: { legend: ReactNode; table: boolean; setTable: (value: boolean) => void; labels?: [boolean, (on: boolean) => void]; children: ReactNode }) {
+export function ChartFrame({ legend, table, setTable, labels, children }: { legend: ReactNode; table: boolean; setTable: (value: boolean) => void; labels?: [boolean, (on: boolean) => void]; children: ReactNode }) {
   return <div className="viz-root">
     <div className="viz-toolbar"><ul className="viz-legend" aria-label="Legend">{legend}</ul>{labels && !table && <DataLabelsToggle on={labels[0]} set={labels[1]} />}<button type="button" className="ghost" aria-pressed={table} onClick={() => setTable(!table)}>{table ? 'Chart' : 'Table'}</button></div>
     {children}
   </div>
 }
 
-function Tooltip({ left, top = 8, width, children }: { left: number; top?: number; width: number; children: ReactNode }) {
+export function Tooltip({ left, top = 8, width, children }: { left: number; top?: number; width: number; children: ReactNode }) {
   return <div className="viz-tooltip" role="status" style={{ left: Math.min(width - 96, Math.max(96, left)), top }}>{children}</div>
 }
 
-function TooltipRow({ color, value, label }: { color: string; value: string; label: string }) {
+export function TooltipRow({ color, value, label }: { color: string; value: string; label: string }) {
   return <div><i style={{ background: color }} aria-hidden="true" /><b>{value}</b><span>{label}</span></div>
 }
 

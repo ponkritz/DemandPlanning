@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | UIS-DPH-001 |
-| Status | **Draft — for approval by the product owner.** Until approved, it describes the target; the app does not follow it everywhere yet. |
+| Status | **Approved by the product owner on 2026-11-23.** The app does not follow it everywhere yet; each area is brought in line in its own change. |
 | Applies to | Every page and component in `src/pages` and `src/components`, and every new UI change |
 | Checked by | The independent UI/UX reviewer (`review-uiux`, [reviews/README.md](reviews/README.md)) and the change team before each pull request |
 
@@ -21,6 +21,11 @@ section ends with **Today** — the main differences found in the inventory of 2
   (`Page actions`, right-aligned) for actions on the whole page (Export, Refresh, ＋ New …).
 - Then **KPI tiles** (§9) when the page has them, then **panels** (§2) top to bottom by importance.
 - No free-standing `h2` / `h3` between panels: a heading always belongs to a panel.
+
+- **Pages added with the page builder** (PGB-01) — the page types **Table** and **Table + Insights** — follow the
+  Board-and-work-page layout of this section: `Page` with the intro and the page actions (＋ Add page…, Rename page…,
+  Remove page…), then one `TablePanel` holding the work table (§5); Table + Insights puts the table and the Insights
+  under the shared `ResultTabs` (§7). Their eyebrow is the page's menu group in capitals.
 
 **Today:** about nine pages build their own intro (`act-header` with an `h2` repeating the title, `me-bar`, `p.muted`,
 a Notice as intro); the Windchill pages (S&S IT, ECP) have no `Page` wrapper.
@@ -135,7 +140,8 @@ next to the running and finished jobs — not into the page. Warnings about the 
 
 **Today:** results are shown in the page — 19 hand-built notices and a private `act-message`, ~6 styles each for
 loading, success and empty; the "Who are you in Azure DevOps?" empty state has four different details. The top-bar
-"Background jobs" panel holds only jobs today (New Feature, Bulk actions, Time Writing).
+"Background jobs" panel holds the jobs (New Feature, Bulk actions, Time Writing) and the results of the Release pages'
+actions (QV-63); the other pages still show their results in the page.
 
 ## 9. KPI tiles and charts
 
@@ -156,7 +162,9 @@ order; a stream leaves out a part it cannot have, and adds its own columns only 
 1. **Source bar** — view name, source (server / project, or export file), when fetched, ⓘ, **Show: {month} / All
    months**, ↻ and ⋯.
 2. **Counts** — `Metrics`: Releases in the month, Completed, Supported (as the stream counts them), with ⓘ "What was
-   counted".
+   counted" for the counting rules. **At most three tiles**: a stream's extra count (CP "QA/QE-signed documents") goes in
+   the Releases table's count line, not in a fourth tile. A list behind a count stays a folded table under the tiles
+   (DP "Supported releases counted"). A tile the stream has no rule for is left out, and ⓘ says why.
 3. **Tabs** — **Releases** | **Source data (n)** (the raw query or export rows).
 4. **Releases table** (`DataTable`), columns in this order:
 
@@ -165,17 +173,23 @@ order; a stream leaves out a part it cannot have, and adds its own columns only 
 | 1 | Select | Only where bulk Create Features exists; toolbar "n selected · Select all shown · Clear · Create Features (n)" |
 | 2 | Release name | Opens the release's documents (▸) |
 | 3 | Release | Version or number |
-| 4 | Approved | The approval or latest document date |
+| 4 | Approved | The approval or latest document date; where "Approved" would be wrong the column keeps the stream's own name (Windchill "Latest {date column}", CP "Release Notes signed") |
 | 5 | Documents | Count, right-aligned |
 | 6… | Stream columns | e.g. Type of Release (IOCC), Container (CP), Locations (Windchill), Milestones (DP) |
 | then | Time Writing Feature | With the match % |
 | then | Planned (h), Booked (h) | Right-aligned |
 | last | QMS-0025 match | Link to the Feature, or ＋ Create Feature |
 
-**Today:** counts only for CP / DP / IOCC; hours only for IOCC / Content / Tool Validations; the main tab is Releases,
-CP report or Projects, the raw tab Query output or Raw data; the name column is Name, Title, Release name or Project
-Name; the month filter is a check box on Azure pages and a select on Windchill pages; CP shows two panels with the same
-title.
+- The results of the page's actions (Refresh, Import, Load from Git, Save to Git) go to **Background jobs** (§8); the
+  source bar keeps only the warnings about the data shown.
+
+The product owner accepted on 2026-11-23, as built: DP's counting rules behind ⓘ with its counted list folded under the
+tiles; the stream's own name for the date column where "Approved" would be wrong; at most three tiles, an extra count
+in the table's count line.
+
+**Today:** DP's Releases table shows its query's columns between Select and the common end (Time Writing Feature …
+QMS-0025 match) instead of Release name / Release / Approved / Documents. (Tiles left out because the stream's data has
+no rule for them — Content: Completed and Supported; Tool Validations, S&S IT, ECP: Completed — follow the rule above.)
 
 ## 11. Colours, type and spacing
 

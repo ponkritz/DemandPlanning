@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import type { AzureWorkItem } from '../domain'
 import { cellValue, columnName, columnOrderKey, defaultViewColumns, extraColumnRef, formatCell, hiddenColumnsKey, sortItems, viewSummary, withReleaseColumns, type QueryColumn, type QueryOrder } from '../queryView'
 import { utcToday } from '../businessTime'
-import { EmptyState } from './ui'
+import { EmptyState, Notice } from './ui'
 
 // A field's value for sorting and export: dates as they are (exported as date-times), numbers as numbers, the rest as shown.
 const exportValue = (value: ReturnType<typeof cellValue>) => typeof value === 'number' || (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value)) ? value : formatCell(value)
@@ -16,10 +16,11 @@ import { readLayout, saveLayout } from '../tableDefaults'
 // queryOnly: exactly the query's columns (no Name / Release read from the paths); choose: a column chooser whose
 // choice is remembered per view in this browser, and the columns can be rearranged (drag a heading onto another, or
 // ← → in the chooser; the order is remembered per view too). extra: one more column after the query's (DP: the board match),
-// searched and exported with its text.
+// searched and exported with its text. actions: the table's own actions before the search box (DP: the bulk selection
+// toolbar "n selected · Select all shown · Clear · Create Features (n)", UI-STANDARDS §10).
 export interface ExtraColumn { name: string; text: (item: AzureWorkItem) => string; cell: (item: AzureWorkItem) => ReactNode }
 const noMore: DataColumn<AzureWorkItem>[] = []
-export function QueryView({ name, items, columns, orderBy = [], unresolved = [], queryOnly = false, extra, more = noMore, summary: withSummary = true }: { name: string; items: AzureWorkItem[]; columns?: QueryColumn[]; orderBy?: QueryOrder[]; unresolved?: string[]; queryOnly?: boolean; choose?: boolean; extra?: ExtraColumn; more?: DataColumn<AzureWorkItem>[]; summary?: boolean }) {
+export function QueryView({ name, items, columns, orderBy = [], unresolved = [], queryOnly = false, extra, more = noMore, summary: withSummary = true, actions }: { actions?: ReactNode; name: string; items: AzureWorkItem[]; columns?: QueryColumn[]; orderBy?: QueryOrder[]; unresolved?: string[]; queryOnly?: boolean; choose?: boolean; extra?: ExtraColumn; more?: DataColumn<AzureWorkItem>[]; summary?: boolean }) {
   const base = columns?.length ? columns : defaultViewColumns.map((ref) => ({ ref, name: columnName(ref) }))
   const all = queryOnly ? base : withReleaseColumns(base, items, (ref) => ({ ref, name: columnName(ref) }))
   // The column choice and order kept before the table default (per view) carry over once to the table's own layout.
@@ -49,7 +50,7 @@ export function QueryView({ name, items, columns, orderBy = [], unresolved = [],
   if (extra) tableColumns.push({ id: extraColumnRef, label: extra.name, value: extra.text, render: extra.cell, sortable: false, className: 'extra-cell', title: extra.text })
   if (!items.length) return <EmptyState title={`“${name}” returned no work items.`} detail="Check the connection's query in Admin → Streams." />
   return <div className="query-view">
-    {unresolved.length > 0 && <div className="notice warning" role="status">{columns?.length ? "Not shown" : "Showing the default columns"}: {unresolved.map((entry) => `“${entry}”`).join(", ")} {unresolved.length === 1 ? "is" : "are"} not a field of this project. Check the spelling in the query (reference name such as System.Title, or the field name such as Assigned To), then refresh.</div>}
+    {unresolved.length > 0 && <Notice tone="warning">{columns?.length ? "Not shown" : "Showing the default columns"}: {unresolved.map((entry) => `“${entry}”`).join(", ")} {unresolved.length === 1 ? "is" : "are"} not a field of this project. Check the spelling in the query (reference name such as System.Title, or the field name such as Assigned To), then refresh.</Notice>}
     {withSummary && <div className="view-summary">
       <div className="summary-row"><span className="summary-label">State</span>{chips(summary.byState, state, setState)}<span className="summary-facts"><b>{summary.overdue}</b> overdue · <b>{summary.changedThisWeek}</b> changed in 7 days</span></div>
       <div className="summary-row"><span className="summary-label">Type</span>{chips(summary.byType, type, setType)}</div>
@@ -58,7 +59,7 @@ export function QueryView({ name, items, columns, orderBy = [], unresolved = [],
     {/* UI-07…12: the table follows the shared design default (resize, move, choose columns, wrap, density, Export). */}
     <DataTable id={`query:${name}`} columns={tableColumns} rows={shown} rowKey={(item) => item.key} exportName={name} limit={500}
       sort={sort[0] ? { id: sort[0].ref, desc: Boolean(sort[0].desc) } : null} onSort={(next) => setSort([{ ref: next.id, desc: next.desc }])}
-      toolbar={<input className="search" aria-label={`Search ${name}`} placeholder="Search all columns" value={search} onChange={(event) => setSearch(event.target.value)} />}
+      toolbar={<>{actions}<input className="search" aria-label={`Search ${name}`} placeholder="Search all columns" value={search} onChange={(event) => setSearch(event.target.value)} /></>}
       status={`${shown.length} of ${items.length} items${state || type ? ' · filtered' : ''}`} />
   </div>
 }

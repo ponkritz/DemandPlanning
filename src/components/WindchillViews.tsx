@@ -1,24 +1,27 @@
-import { useState } from 'react'
+import { useState, useSyncExternalStore } from 'react'
+import { isRunning, recordJob, runInBackground, subscribeJobs } from '../backgroundJobs'
 import { projectLevels, windchillOps, windchillCell, type WindchillFilter, type WindchillLogic, type WindchillView } from '../windchillViews'
-import { defaultStreams, windchillOptionsForView } from '../streams'
+import { streamNamed, windchillOptionsForView } from '../streams'
 import { ResultTabs } from './ResultTabs'
 import { DataTable, type DataColumn } from './DataTable'
-import { windchillDateValue } from '../windchillReleases'
-import { ViewActions } from './ViewActions'
-import { formatDateTime } from '../format'
+import { releasesInMonth, windchillDateValue } from '../windchillReleases'
+import { PeriodSelect, ReleaseCounts, ReleaseSourceBar, type ReleaseScope } from './ReleasePage'
+import { formatDateTime, monthName } from '../format'
 import type { WindchillWorkspace } from '../useWindchill'
 import type { GitStorage } from '../useGitStorage'
-import { EmptyState, Notice, Panel, Pill } from './ui'
+import { EmptyState, Notice, Page, Panel, Pill, TablePanel } from './ui'
 import { WindchillReleasesPanel, type ReleaseBoard } from './WindchillReleasesPanel'
+import { useWindchillReading } from '../useWindchillReading'
 
 const blank = (): WindchillView => ({ id: crypto.randomUUID().replaceAll('-', ''), name: '', entitySet: '', filters: [{ field: '', op: 'eq', value: '' }], columns: [], showInMenu: true })
 
 // Opens the view's search in the browser, where the company sign-in works, and imports the results saved (Ctrl+S) or
-// copied from there; a next page from Windchill is added the same way.
+// copied from there; a next page from Windchill is added the same way. QV-63: a file or clipboard that cannot be read
+// is a Background jobs entry, like the import's result.
 function WindchillImport({ view, windchill }: { view: WindchillView; windchill: WindchillWorkspace }) {
-  const [error, setError] = useState('')
   const source = windchill.sources.find((entry) => entry.viewId === view.id), url = windchill.searchUrl(view.id)
-  const take = (text: string, nextPage: boolean) => { setError(''); windchill.importView(view.id, text, nextPage) }
+  const setError = (text: string) => { recordJob(`windchill:${view.id}`, `Import Windchill results · ${view.name}`, { text, failed: true }) }
+  const take = (text: string, nextPage: boolean) => windchill.importView(view.id, text, nextPage)
   const file = (nextPage: boolean) => (event: React.ChangeEvent<HTMLInputElement>) => {
     const chosen = event.currentTarget.files?.[0]
     event.currentTarget.value = ''
@@ -33,7 +36,7 @@ function WindchillImport({ view, windchill }: { view: WindchillView; windchill: 
     <label className="ghost">{nextPage ? 'Import next page' : 'Import file'}<input type="file" accept=".json,.txt,application/json,text/plain" onChange={file(nextPage)} /></label>
     <button type="button" className="ghost" onClick={() => paste(nextPage)}>{nextPage ? 'Paste next page' : 'Paste results'}</button>
   </>
-  return <div className="windchill-import">{!window.windchill && <button type="button" className="ghost" disabled={!url} title={url ? undefined : 'Set the Windchill host in Settings first'} onClick={() => windchill.fetchViaTab([view.id])}>Fetch via Windchill tab</button>}{steps(false, url)}{source?.next && steps(true, source.next)}{error && <small className="negative">{error}</small>}</div>
+  return <div className="windchill-import">{!window.windchill && <button type="button" className="ghost" disabled={!url} title={url ? undefined : 'Set the Windchill host in Settings first'} onClick={() => windchill.fetchViaTab([view.id])}>Fetch via Windchill tab</button>}{steps(false, url)}{source?.next && steps(true, source.next)}</div>
 }
 
 // Settings: the Windchill views — object type, filter rows and columns — with Fetch, Open in browser and Import.
@@ -74,45 +77,70 @@ export function WindchillViewsPanel({ windchill }: { windchill: WindchillWorkspa
   </Panel>
 }
 
-// A Windchill view page: its last results with the chosen columns; search and CSV export; Fetch, or results opened in
-// the browser and imported.
+// A Windchill view page (S&S IT, ECP and every other export or search): its Release page with the parts of
+// UI-STANDARDS §10 (QV-62) — the source bar (name, export file or object type, when imported or fetched, ⓘ, Show:
+// {month} / All months, ↻ and ⋯), the counts (QV-64: Releases in the month and Supported, as Pulse Check counts the
+// Windchill streams; no Completed), the Releases | Source data tabs and the Releases table. QV-63: the results of ↻,
+// Import, Load from Git and Save to Git are Background jobs entries; the page keeps only warnings about its data.
 export function WindchillPage({ view, windchill, git, gitNote, month, board }: { view: WindchillView; windchill: WindchillWorkspace; git?: GitStorage; gitNote?: { tone: string; text: string }; month?: string; board?: ReleaseBoard }) {
   const [search, setSearch] = useState('')
-  const [error, setError] = useState('')
-  const [fromGit, setFromGit] = useState<{ tone: 'info' | 'success' | 'error'; text: string } | null>(null)
+  const [scope, setScope] = useState<ReleaseScope>('month')
+  const gitKey = `windchill-git:${view.id}`
+  const loading = useSyncExternalStore(subscribeJobs, () => isRunning(gitKey))
   // Load from Git: the results saved to Git (from this or another computer), like the on-prem views.
-  async function loadFromGit() {
+  function loadFromGit() {
     if (!git) return
-    setFromGit({ tone: 'info', text: 'Loading from Git…' })
-    try {
-      const result = await git.pullWindchillOne(view.id)
-      windchill.reload()
-      setFromGit(!result ? { tone: 'error', text: 'Git has no saved results for this export yet (they are saved at each import with Git storage connected).' } : { tone: 'success', text: result.applied ? `Loaded the results saved to Git (${formatDateTime(result.fetchedAt)}).` : `The results here are already the latest in Git (${formatDateTime(result.fetchedAt)}).` })
-    } catch (failure) { setFromGit({ tone: 'error', text: `Load from Git failed: ${failure instanceof Error ? failure.message : String(failure)}` }) }
+    runInBackground(gitKey, `Load from Git · ${view.name}`, async (progress) => {
+      progress('Loading from Git…')
+      try {
+        const result = await git.pullWindchillOne(view.id)
+        windchill.reload()
+        return !result ? { text: 'Git has no saved results for this export yet (they are saved at each import with Git storage connected).', failed: true } : { text: result.applied ? `Loaded the results saved to Git (${formatDateTime(result.fetchedAt)}).` : `The results here are already the latest in Git (${formatDateTime(result.fetchedAt)}).` }
+      } catch (failure) { return { text: `Load from Git failed: ${failure instanceof Error ? failure.message : String(failure)}`, failed: true } }
+    })
   }
   const source = windchill.sources.find((entry) => entry.viewId === view.id), status = windchill.status[view.id]
   const columns = source?.columns.length ? source.columns : view.columns
+  const reading = useWindchillReading(view, source?.rows ?? noRows, columns)
   const rows = (source?.rows ?? []).filter((row) => !search.trim() || columns.some((column) => windchillCell(row, column).toLowerCase().includes(search.trim().toLowerCase())))
   // UI-07…12: the raw rows follow the table default; a date written by Windchill ("27-Oct-2026 09:15") is exported as a date-time.
   const rawColumns: DataColumn<Record<string, unknown>>[] = columns.map((column) => ({ id: column, label: column, value: (row) => windchillDateValue(windchillCell(row, column)), render: (row) => windchillCell(row, column) }))
-  return <Panel className="connection-panel backlog-panel">
-    <div className="view-source-bar"><div><strong>{view.name}</strong><span className="muted"> · {view.exportFile ? `Windchill export ${view.exportFile}` : view.entitySet}{source ? ` · ${source.rows.length} results · ${view.exportFile ? 'imported' : 'fetched'} ${formatDateTime(source.fetchedAt)}${source.fromGit ? ' (desktop app, via Git)' : ''}` : ''}</span></div>
-      {/* QV-48: a small main action (import a newer file, or refresh a search) and the rest in a ⋯ menu. */}
-      <ViewActions label={view.name} primary={view.exportFile ? <ExportFileButton label="⤒" title="Import newer export" className="act-button act-primary" onFile={(text, file) => windchill.importExport(text, file, '', view.id)} onError={setError} />
-        : <button type="button" className="act-button act-primary" aria-label={source ? 'Refresh from Windchill' : 'Fetch from Windchill'} title={source ? 'Refresh from Windchill' : 'Fetch from Windchill'} disabled={status?.state === 'busy'} onClick={() => void windchill.fetchView(view.id)}>↻{status?.state === 'busy' ? <small>Searching…</small> : null}</button>}
-        items={[...(git?.connected ? [{ key: 'git', label: 'Load from Git', disabled: fromGit?.text === 'Loading from Git…', onClick: () => void loadFromGit() }] : []), ...(view.exportFile ? [{ key: 'remove', label: 'Remove this export…', danger: true, onClick: () => { if (window.confirm(`Remove the Windchill export “${view.name}” from this app?`)) windchill.removeView(view.id) } }] : [])]} /></div>
-    {!view.exportFile && <WindchillImport view={view} windchill={windchill} />}
-    {error && <Notice tone="error">{error}</Notice>}
-    {fromGit && <Notice tone={fromGit.tone}>{fromGit.text}</Notice>}
-    {status && <Notice tone={status.state === 'error' ? 'error' : status.state === 'busy' ? 'info' : 'success'}>{status.message}</Notice>}
-    {gitNote && <div className={`notice ${gitNote.tone}`} role="status">{gitNote.text}</div>}
-    {!source ? <EmptyState title={`“${view.name}” has not been fetched yet.`} detail="Fetch it from Windchill, or Open in browser, save the results (Ctrl+S) or copy them, then Import file or Paste results. Results saved to Git from another computer also appear here." />
-      // QV-47: the consolidation (releases / projects) and the raw imported rows are two tabs of the page.
-      : <ResultTabs id={`wc:${view.id}`} mainLabel={windchillOptionsForView(view).project ? 'Projects' : 'Releases'} rawLabel={view.exportFile ? 'Raw data' : 'Query output'} rawCount={source.rows.length} main={<WindchillReleasesPanel view={view} rows={source.rows} columns={columns} git={git} month={month} board={board} onSetup={view.exportFile ? (setup) => windchill.setSetup(view.id, setup) : undefined} />} raw={<DataTable id={`wc:${view.id}`} columns={rawColumns} rows={rows} rowKey={(_, index) => String(index)} exportName={view.name} limit={1000}
-        toolbar={<><input className="search" aria-label={`Search ${view.name}`} placeholder="Search all columns" value={search} onChange={(event) => setSearch(event.target.value)} />{!view.exportFile && <Pill tone="info">{view.filters.length} filter{view.filters.length === 1 ? '' : 's'}</Pill>}</>}
-        status={`${rows.length} of ${source.rows.length}`} />} />}
-  </Panel>
+  // QV-48: a small main action (↻ import a newer file, or refresh a search) and the rest in a ⋯ menu.
+  const importError = (text: string) => { if (text) recordJob(`windchill:${view.id}`, `Import Windchill export · ${view.name}`, { text, failed: true }) }
+  const primary = view.exportFile ? <ExportFileButton label="↻" title="Import newer export" className="primary" onFile={(text, file) => windchill.importExport(text, file, '', view.id)} onError={importError} />
+    : <button type="button" className="primary" aria-label={source ? 'Refresh from Windchill' : 'Fetch from Windchill'} title={source ? 'Refresh from Windchill' : 'Fetch from Windchill'} disabled={status?.state === 'busy'} onClick={() => void windchill.fetchView(view.id)}>↻{status?.state === 'busy' ? <small>Searching…</small> : null}</button>
+  const menu = [...(git?.connected ? [{ key: 'git', label: 'Load from Git', disabled: loading, onClick: loadFromGit }] : []), ...(view.exportFile ? [{ key: 'remove', label: 'Remove this export…', danger: true, onClick: () => { if (window.confirm(`Remove the Windchill export “${view.name}” from this app?`)) windchill.removeView(view.id) } }] : [])]
+  // (2) QV-64: the releases (ECP: projects) with a document dated in the header month, as the Releases table lists
+  // them; Supported counts the same releases, as Pulse Check's Supported line does for a Windchill stream. Completed is
+  // left out: an export has no completion event (no signature, milestone or Release Notes rule), only document dates.
+  const { result } = reading, project = Boolean(windchillOptionsForView(view).project), noun = project ? 'project' : 'release'
+  const inMonth = month && source ? releasesInMonth(result.releases, month).length : 0
+  const dated = Boolean(result.dateColumn)
+  const counted = (hint: string) => dated ? { value: inMonth, hint } : { value: '—', hint: 'No date column in the export' }
+  const counts = source && month ? <ReleaseCounts month={month}
+    releases={counted(`The ${noun}s the Releases table lists for the month`)}
+    supported={counted(`Each ${noun} with a document dated in the month, as Pulse Check counts it`)}
+    counted={<ul><li><strong>Releases in {monthName(month)}</strong>: the {noun}s the Releases table lists for the month — each {noun} with at least one document whose {result.dateColumn ? `“${result.dateColumn}”` : 'date'} is in the month (UTC), read from the {result.source === 'location' ? 'Location' : 'document names'} as chosen under Read from.</li><li><strong>Supported</strong>: the same {noun}s — Pulse Check and the Monthly pack count every {noun} of a Windchill stream with a document dated in the month as supported (with Read from on Automatic).</li><li><strong>Completed</strong> is not counted: the export has no completion event (no signature, milestone or Release Notes rule), only the documents' dates.</li>{!dated && <li>The export has no date column (a column named like Last Modified, Modified, Released or Date), so nothing can be counted for a month.</li>}</ul>} /> : null
+  // ⓘ: the Git copy of the results (saved, unchanged); a failed save to Git stays on the page as a warning.
+  const info = gitNote && gitNote.tone !== 'error' ? <p>{gitNote.text}</p> : undefined
+  return <Page className="release-page">
+    <ReleaseSourceBar name={view.name} source={view.exportFile ? `Windchill export ${view.exportFile}` : view.entitySet}
+      fetched={source ? `${source.rows.length} results · ${view.exportFile ? 'imported' : 'fetched'} ${formatDateTime(source.fetchedAt)}${source.fromGit ? ' (desktop app, via Git)' : ''}` : undefined}
+      info={info} period={source && month ? <PeriodSelect month={month} value={scope} onChange={setScope} /> : undefined} primary={primary} menu={menu}>
+      {!view.exportFile && <WindchillImport view={view} windchill={windchill} />}
+      {/* Warnings about the data shown (§8): the last fetch failed, so the results are older; the Git copy is not saved. */}
+      {source && status?.state === 'error' && <Notice tone="warning">Not refreshed: {status.message} The results shown are from {formatDateTime(source.fetchedAt)}.</Notice>}
+      {gitNote?.tone === 'error' && <Notice tone="warning">{gitNote.text}</Notice>}
+    </ReleaseSourceBar>
+    {counts}
+    {!source ? <Panel><EmptyState title={`“${view.name}” has not been fetched yet.`} detail="Fetch it from Windchill, or Open in browser, save the results (Ctrl+S) or copy them, then Import file or Paste results. Results saved to Git from another computer also appear here." /></Panel>
+      // QV-47: the consolidation (the releases; ECP's projects) and the source data (the imported rows) are two tabs of the page.
+      : <ResultTabs id={`wc:${view.id}`} rawCount={source.rows.length} main={<WindchillReleasesPanel view={view} rows={source.rows} columns={columns} git={git} month={month} scope={scope} board={board} reading={reading} onSetup={view.exportFile ? (setup) => windchill.setSetup(view.id, setup) : undefined} />} raw={<TablePanel><DataTable id={`wc:${view.id}`} columns={rawColumns} rows={rows} rowKey={(_, index) => String(index)} exportName={view.name} limit={1000}
+        toolbar={<>{!view.exportFile && <Pill tone="info">{view.filters.length} filter{view.filters.length === 1 ? '' : 's'}</Pill>}<input className="search" aria-label={`Search ${view.name}`} placeholder="Search all columns" value={search} onChange={(event) => setSearch(event.target.value)} /></>}
+        status={`${rows.length} of ${source.rows.length}`} /></TablePanel>} />}
+  </Page>
 }
+const noRows: Record<string, unknown>[] = []
 
 // Chooses an export file and hands its text on; a file that is not an export is reported.
 function ExportFileButton({ label, onFile, onError, title, className = 'primary file-button' }: { label: string; onFile: (text: string, fileName: string) => void; onError: (message: string) => void; title?: string; className?: string }) {
@@ -129,31 +157,35 @@ function ExportFileButton({ label, onFile, onError, title, className = 'primary 
 // The Logic dropdown (CON-87): Standard reads releases (S&S IT's rules); ECP reads projects "<number> <name>" from the
 // Location folder chosen under "Project details at" (2nd, 3rd…); several ECP exports each get their own name.
 export function WindchillExportImport({ windchill, git, onImported, stream = '' }: { windchill: WindchillWorkspace; git?: GitStorage; onImported: (id: string) => void; stream?: string }) {
-  const ecpStream = defaultStreams.find((entry) => entry.project)?.name ?? 'ECP'
+  // ECP and a custom stream "Like ECP" (STR-03) start on the ECP logic.
   const [name, setName] = useState(stream)
-  const [logic, setLogic] = useState<WindchillLogic>(stream === ecpStream ? 'ecp' : 'standard')
+  const [logic, setLogic] = useState<WindchillLogic>(streamNamed(stream)?.project ? 'ecp' : 'standard')
   const [projectLevel, setProjectLevel] = useState(2)
-  const [error, setError] = useState('')
-  const [fromGit, setFromGit] = useState<{ tone: 'info' | 'success' | 'warning' | 'error'; text: string } | null>(null)
+  const [error, setErrorText] = useState('')
+  // An import that fails stays in the form above its button until fixed (§8) and is a Background jobs entry too.
+  const setError = (text: string) => { setErrorText(text); if (text) recordJob('windchill-import', `Import Windchill export · ${name.trim() || stream || 'new export'}`, { text, failed: true }) }
+  const loading = useSyncExternalStore(subscribeJobs, () => isRunning('windchill-git:all'))
   // Restore every export saved to Git (e.g. on a new computer): missing ones are added, newer results replace older.
-  async function loadAll() {
+  // QV-63: a Background job; its result names what was loaded.
+  function loadAll() {
     if (!git) return
-    setFromGit({ tone: 'info', text: 'Loading from Git…' })
-    try {
-      const result = await git.pullWindchill()
-      windchill.reload()
-      setFromGit({ tone: result.failed.length ? 'warning' : result.files ? 'success' : 'info', text: result.files ? `${result.files} export${result.files === 1 ? '' : 's'} in Git; ${result.applied.length ? `newer results loaded for ${result.applied.join(', ')}` : 'the results here are already up to date'}.${result.added ? ` ${result.added} added to Release Details.` : ''}${result.failed.length ? ` Not readable: ${result.failed.join(', ')}.` : ''}` : 'No Windchill exports saved in Git yet.' })
-    } catch (failure) { setFromGit({ tone: 'error', text: `Load from Git failed: ${failure instanceof Error ? failure.message : String(failure)}` }) }
+    runInBackground('windchill-git:all', 'Load all Windchill exports from Git', async (progress) => {
+      progress('Loading from Git…')
+      try {
+        const result = await git.pullWindchill()
+        windchill.reload()
+        return { failed: result.failed.length > 0, text: result.files ? `${result.files} export${result.files === 1 ? '' : 's'} in Git; ${result.applied.length ? `newer results loaded for ${result.applied.join(', ')}` : 'the results here are already up to date'}.${result.added ? ` ${result.added} added to Release Details.` : ''}${result.failed.length ? ` Not readable: ${result.failed.join(', ')}.` : ''}` : 'No Windchill exports saved in Git yet.' }
+      } catch (failure) { return { text: `Load from Git failed: ${failure instanceof Error ? failure.message : String(failure)}`, failed: true } }
+    })
   }
   return <Panel className="connection-panel" eyebrow="RELEASE DETAILS" title={stream ? `Import the ${stream} export` : 'Import a Windchill export'} info="In Windchill, run your search (e.g. a saved search), export the result list to a CSV file, then import it here. The columns are kept as in the file; with Git storage connected the export is also saved to Git for the web app.">
     <div className="connection-form">
       <label>Logic<select value={logic} onChange={(event) => setLogic(event.target.value as WindchillLogic)}><option value="standard">Standard (releases, e.g. S&amp;S IT)</option><option value="ecp">ECP setup (projects)</option></select></label>
       {logic === 'ecp' && <label>Project details at<select value={projectLevel} onChange={(event) => setProjectLevel(Number(event.target.value))}>{projectLevels.map((level) => <option key={level} value={level}>{level}{level === 2 ? 'nd' : level === 3 ? 'rd' : 'th'} folder of the Location</option>)}</select></label>}
       <label>Name<input value={name} onChange={(event) => setName(event.target.value)} placeholder={logic === 'ecp' ? 'e.g. ECP - Type 1' : 'e.g. GSS_BST released documents (default: the file name)'} /></label>
-      <div className="connection-actions"><ExportFileButton label="Choose CSV export…" onFile={(text, file) => { onImported(windchill.importExport(text, file, name, undefined, { logic, ...(logic === 'ecp' ? { projectLevel } : {}) })); setName(stream) }} onError={setError} />{git?.connected && <button type="button" className="ghost" disabled={fromGit?.text === 'Loading from Git…'} onClick={() => void loadAll()}>Load all exports from Git</button>}</div>
+      <div className="connection-actions"><ExportFileButton label="Choose CSV export…" onFile={(text, file) => { onImported(windchill.importExport(text, file, name, undefined, { logic, ...(logic === 'ecp' ? { projectLevel } : {}) })); setName(stream) }} onError={setError} />{git?.connected && <button type="button" className="ghost" disabled={loading} onClick={loadAll}>Load all exports from Git</button>}{loading && <small className="muted" role="status">Loading from Git… (Background jobs)</small>}</div>
     </div>
     {error && <Notice tone="error">{error}</Notice>}
-    {fromGit && <Notice tone={fromGit.tone}>{fromGit.text}</Notice>}
     {logic === 'ecp' ? <p className="muted">ECP: each project is the Location's {projectLevel}{projectLevel === 2 ? 'nd' : projectLevel === 3 ? 'rd' : 'th'} folder, "Project number Project name" (e.g. Parent folder/123456 Patient Monitor/Phase), with every document under it. Each ECP export is listed on its own under Windchill exports, in Pulse Check and in the Monthly pack — name it after its type, e.g. "ECP - Type 1".</p>
       : stream && <p className="muted">Saved as <strong>{name.trim() || stream}</strong>: keep the name starting with “{stream}” so that the export is the {stream} page, Pulse Check and Monthly pack use it.</p>}
     <p className="muted">CSV or tab-separated text. Excel files: open them and save as CSV first.</p>

@@ -5,6 +5,7 @@ import { compareCells, moveId, moveIdTo, orderedIds, readLayout, saveLayout, tab
 import { useColumnWidths } from './columnWidths'
 import { downloadCsv, downloadXlsx } from '../download'
 import { writeXlsx } from '../xlsx'
+import { Info } from './ui'
 
 // The one table of the app (UI-07…12). Every table is built on it and follows the design default (Settings → Table
 // defaults): resizable columns, columns moved by dragging a heading or with ↑ ↓ in the Columns list, columns ticked on
@@ -23,6 +24,10 @@ export interface DataColumn<T> {
   export?: boolean | 'always'
   // Hidden until the viewer ticks it in the Columns list.
   defaultHidden?: boolean
+  // What the column holds or how to fill it, behind ⓘ next to the heading (e.g. an On-Demand column's description).
+  hint?: string
+  // The value written by Export when it differs from the one sorted by (e.g. "1,200.00 EUR" sorted by 1200).
+  exportValue?: (row: T) => CellValue
   // The first click sorts descending (newest / largest first), e.g. a date or a count.
   firstSortDesc?: boolean
   align?: 'left' | 'right' | 'center'
@@ -122,7 +127,7 @@ export function DataTable<T>({ id, columns, rows, rowKey, exportName, toolbar, s
     })}</tr>, ...(detail ? [<tr key={`${key}/detail`} className="data-table-detail"><td colSpan={shownColumns.length}>{detail}</td></tr>] : []), ...(subRows?.(row) ?? []).flatMap((child, childIndex) => rowLines(child, childIndex))]
   }
   const exported = [...fixed, ...ordered].filter((column) => column.value && (column.export === 'always' || (column.export !== false && shownColumns.includes(column))))
-  const exportRows = () => sorted.map((row) => exported.map((column) => valueOf(column, row)))
+  const exportRows = () => sorted.map((row) => exported.map((column) => column.exportValue ? column.exportValue(row) : valueOf(column, row)))
   const runExport = (format: ExportFormat) => {
     setExporting(false)
     if (!exportName) return
@@ -166,6 +171,7 @@ export function DataTable<T>({ id, columns, rows, rowKey, exportName, toolbar, s
         return <th key={column.id} style={defaults.resize ? widths.style(column.id) : undefined} className={[column.align ? `align-${column.align}` : '', dragging && dragging !== column.id && !column.fixed ? 'drop-target' : ''].filter(Boolean).join(' ') || undefined} aria-sort={active ? (sort!.desc ? 'descending' : 'ascending') : canSort ? 'none' : undefined} {...dropProps(column)}>
           {canSort ? <button type="button" className="sort-button" title={defaults.reorder && !column.fixed ? 'Click to sort; drag onto another heading to move the column' : 'Click to sort'} {...dragProps(column)} onClick={() => toggleSort(column)}>{column.label}{active ? (sort!.desc ? ' ▾' : ' ▴') : ''}</button>
             : <span className="sort-button" title={defaults.reorder && !column.fixed ? 'Drag onto another heading to move the column' : undefined} {...dragProps(column)}>{column.label}</span>}
+          {column.hint && <Info iconOnly label={`About ${column.label}`}>{column.hint}</Info>}
           {defaults.resize && widths.handle(column.id, column.label)}
         </th>
       })}</tr></thead>

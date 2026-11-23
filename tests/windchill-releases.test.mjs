@@ -234,3 +234,20 @@ test('ECP setups: several ECP exports, each with its own name and project folder
   assert.deepEqual(windchillSupported(rows, columns, '2026-10', windchillOptionsForView(type2)), ['123456 Patient Monitor'])
   assert.deepEqual(windchillReleases(rows, columns, windchillOptionsForView(type1)).releases.map((entry) => entry.name), ['Programs'], 'the same rows read at the 2nd folder give the parent folder: the setup matters')
 })
+
+test('QV-64: a Windchill page counts the releases with a document dated in the month — the Releases table list and Pulse Check\'s Supported line (TC-QV-45)', () => {
+  const columns = ['Name', 'Location', 'Last Modified']
+  const rows = [
+    { Name: 'Plan', Location: '/Products/Remote Diagnostics 1.6/DHF', 'Last Modified': '27-Oct-2026 09:15' },
+    { Name: 'Report', Location: '/Products/Remote Diagnostics 1.6/DHF', 'Last Modified': '02-Sep-2026 10:00' },
+    { Name: 'SRS', Location: '/Products/CareLink/R3.2/DHF', 'Last Modified': '30-Sep-2026 23:30' },
+    { Name: 'Notes', Location: '/Products/Viewer 2.0/DHF', 'Last Modified': '01-Oct-2026 00:10' },
+  ]
+  const { releases } = windchillReleases(rows, columns)
+  const count = (month) => releasesInMonth(releases, month).length
+  assert.deepEqual([count('2026-10'), count('2026-09'), count('2026-08')], [2, 2, 0], 'a release counts in every month one of its documents is dated in')
+  for (const month of ['2026-10', '2026-09', '2026-08']) assert.equal(count(month), windchillSupported(rows, columns, month).length, `${month}: the same number as Pulse Check's Supported line`)
+  const undated = windchillReleases(rows.map(({ Name, Location }) => ({ Name, Location })), ['Name', 'Location'])
+  assert.equal(undated.dateColumn, undefined, 'without a date column nothing can be counted for a month (the tiles show —)')
+  assert.equal(releasesInMonth(undated.releases, '2026-10').length, 0)
+})

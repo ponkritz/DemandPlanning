@@ -30,12 +30,15 @@ const fileNames: [RegExp, string][] = [
   [/(^|\/)feature-setup\/[^/]+\.json$/, 'Your Feature setup'],
   [/(^|\/)qe-mapping\.json$/, 'QE Mapping'],
   [/(^|\/)azure-views\.json$/, 'Stream mapping and connections'],
+  [/(^|\/)custom-streams\.json$/, 'Custom streams'],
   [/(^|\/)monthly-pack-setup\.json$/, 'Monthly pack setup'],
   [/(^|\/)monthly-pack\/(\d{4}-\d{2})\.json$/, 'Monthly pack $2'],
   [/(^|\/)personal-views-defaults\.json$/, 'Default views'],
   [/(^|\/)personal-views\/[^/]+\.json$/, 'Your views'],
   [/(^|\/)history-hours\.json$/, 'Historical hours'],
   [/(^|\/)kpi-tracker\.json$/, 'KPI tracker'],
+  [/(^|\/)on-demand\/([a-z0-9-]+)\.json$/, 'On-Demand page $2'],
+  [/(^|\/)menu-layout\.json$/, 'Pages & menu'],
 ]
 export function fileLabel(path: string, planningPath: string) {
   if (path === planningPath) return 'Planning data (capacity, calculation profiles, resources, table defaults)'

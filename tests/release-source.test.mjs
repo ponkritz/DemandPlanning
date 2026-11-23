@@ -206,3 +206,47 @@ test('QV-52: Content releases are named by the Title — one per unique Title, n
   assert.equal(tracksRelease('Content | Cardiology Pathways 2026', 'Cardiology Pathways 2026', ''), true, 'a Feature whose title holds the Title tracks it')
   assert.equal(tracksRelease('Content | Cardiology', 'Cardiology Pathways 2026', ''), false)
 })
+
+import { timeWritingHours, monthReleaseCount, attachFeatures } from '../src/releaseSource.ts'
+test('QV-65: the hours of a matched Feature are its Time Writing Tasks, all months, each once — as the releases matched by name (TC-QV-46)', () => {
+  const backlog = [
+    doc(100, 'X', { workItemType: 'Feature', title: 'DP | DoseNav | v2.1' }),
+    doc(110, 'X', { workItemType: 'User Story', title: 'DP | DoseNav | v2.1 - Time Writing', parentId: 100 }),
+    doc(111, 'X', { workItemType: 'Task', title: 'September 2026 | DoseNav 2.1', parentId: 110, originalEstimate: 10, completedWork: 8 }),
+    doc(112, 'X', { workItemType: 'Task', title: 'October 2026 | DoseNav 2.1', parentId: 110, originalEstimate: 6, completedWork: 9 }),
+    doc(113, 'X', { workItemType: 'Task', title: 'Review comments', parentId: 100, originalEstimate: 50, completedWork: 50 }),
+    doc(114, 'X', { workItemType: 'Task', title: 'November 2026 | DoseNav 2.1', parentId: 110, originalEstimate: 4, completedWork: -1, state: 'Removed' }),
+    doc(200, 'X', { workItemType: 'Feature', title: 'CP | Care Pathways | 3.2' }),
+    doc(201, 'X', { workItemType: 'Task', title: 'October 2026 | Care Pathways', parentId: 200, originalEstimate: 3, completedWork: 4.5 }),
+  ]
+  const hoursOf = timeWritingHours(backlog)
+  assert.deepEqual(hoursOf([100]), { planned: 16, booked: 17, hourTasks: 2 }, 'the month Tasks under its Time Writing story; not the plain Task, not the removed one')
+  assert.deepEqual(hoursOf([100, 100]), { planned: 16, booked: 17, hourTasks: 2 }, 'a Feature named twice counts once')
+  assert.deepEqual(hoursOf([200]), { planned: 3, booked: 4.5, hourTasks: 1 }, 'a month Task right under the Feature')
+  assert.deepEqual(hoursOf([100, 200]), { planned: 19, booked: 21.5, hourTasks: 3 })
+  assert.deepEqual(hoursOf([999]), { planned: 0, booked: 0, hourTasks: 0 }, 'no Feature, no hours')
+  assert.deepEqual(hoursOf([]), { planned: 0, booked: 0, hourTasks: 0 })
+  // The same rule as the releases matched by name (attachFeatures): the hours of IOCC, Content and Tool Validations.
+  const [entry] = attachFeatures([{ key: 'DoseNav 2.1', name: 'DoseNav', release: '2.1', documents: 1, items: [], tracked: false, trackedBy: [], features: [], planned: 0, booked: 0, hourTasks: 0 }], backlog)
+  assert.deepEqual([entry.planned, entry.booked, entry.hourTasks], [16, 17, 2])
+})
+
+test('QV-64: Content and Tool Validations count the releases of the month as their Releases table lists them — approved in the month, else changed in it (TC-QV-45)', () => {
+  const items = [
+    doc(1, 'Content', { title: 'Clinical Library 7.0', approvalDate: '2026-10-02T09:00:00Z' }),
+    doc(2, 'Content', { title: 'Clinical  Library 7.0', approvalDate: '2026-10-20T09:00:00Z' }),
+    doc(3, 'Content', { title: 'Order Sets 2026', changedDate: '2026-10-05T09:00:00Z' }),
+    doc(4, 'Content', { title: 'Order Sets 2026', approvalDate: '2026-09-30T09:00:00Z' }),
+    doc(5, 'Content', { title: 'Late approval', approvalDate: '2026-11-01T01:00:00Z', changedDate: '2026-10-30T09:00:00Z' }),
+  ]
+  assert.equal(monthReleaseCount(items, '2026-10', 'title'), 2, 'one per Title (spaces tidied); a changed date counts without an approval date; an approval in November does not')
+  assert.equal(monthReleaseCount(items, '2026-09', 'title'), 1)
+  assert.equal(monthReleaseCount(items, '2026-12', 'title'), 0)
+  const tools = [
+    doc(10, 'Tool Validations\\Minitab', { title: 'Minitab 21 Validation Report', approvalDate: '2026-10-03T09:00:00Z' }),
+    doc(11, 'Tool Validations\\Minitab', { title: 'Minitab 21 Validation Plan', approvalDate: '2026-10-09T09:00:00Z' }),
+    doc(12, 'Tool Validations\\JMP', { title: 'JMP 18 Validation Report', approvalDate: '2026-09-09T09:00:00Z' }),
+  ]
+  assert.equal(monthReleaseCount(tools, '2026-10', 'tool'), 1, 'one tool with two documents in the month')
+  assert.equal(monthReleaseCount(tools, '2026-10', 'tool'), releaseRegister(tools.filter((item) => viewMonthOf(item) === '2026-10'), [], { rule: 'tool' }).length, 'the same list as the Releases table and Pulse Check')
+})

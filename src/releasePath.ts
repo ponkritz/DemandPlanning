@@ -51,9 +51,12 @@ export function dpRelease(item: Pick<AzureWorkItem, 'areaPath' | 'iterationPath'
 const ioccDocumentWords = /\b(?:release\s*notes?|notes?|verification(?:\s+summary)?\s*report|release\s*plan|plan)\b/gi
 const separator = /\s*[|:_–-]\s*/.source
 const withoutDocumentWords = (name: string) => name.replace(ioccDocumentWords, ' ').replace(new RegExp(`(?:${separator}){2,}`, 'g'), ' - ').replace(new RegExp(`^(?:${separator})+|(?:${separator})+$`, 'g'), '').replace(/\s+/g, ' ').trim()
-export function ioccRelease(item: Pick<AzureWorkItem, 'areaPath' | 'title'>): StreamRelease | undefined {
-  const area = segments(item.areaPath), at = area.findIndex((part) => part.toLowerCase() === 'iocc')
-  const group = at >= 0 ? area[at + 1] : undefined
+// area (STR-03): a custom stream "Like IOCC" groups by the segment after its own name (or an earlier name) in the Area
+// Path, else by the Area Path's last segment below the project.
+const segmentKey = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, '')
+export function ioccRelease(item: Pick<AzureWorkItem, 'areaPath' | 'title'>, area?: string[]): StreamRelease | undefined {
+  const path = segments(item.areaPath), anchors = (area ?? ['iocc']).map(segmentKey), at = path.findIndex((part) => anchors.includes(segmentKey(part)))
+  const group = at >= 0 ? path[at + 1] : area && path.length > 1 ? path.at(-1) : undefined
   const title = (item.title ?? '').trim()
   if (!group || !title) return undefined
   const found = versionPart.exec(title)
@@ -88,11 +91,11 @@ export function toolRelease(item: Pick<AzureWorkItem, 'areaPath' | 'iterationPat
   return { name, release }
 }
 // patterns (QV-55): the stream's naming patterns, tried first on the Title; a Title none fits keeps the rule.
-export function releaseFor(item: Pick<AzureWorkItem, 'areaPath' | 'iterationPath' | 'title'>, rule: 'path' | 'dp' | 'iocc' | 'tool' | 'cp' | 'title' = 'path', patterns: NamingPattern[] = []): StreamRelease | undefined {
+export function releaseFor(item: Pick<AzureWorkItem, 'areaPath' | 'iterationPath' | 'title'>, rule: 'path' | 'dp' | 'iocc' | 'tool' | 'cp' | 'title' = 'path', patterns: NamingPattern[] = [], area?: string[]): StreamRelease | undefined {
   const matched = patterns.length ? matchPatterns(item.title ?? '', patterns) : undefined
   if (matched) return { ...(matched.group ? { group: matched.group } : {}), name: matched.name, release: '' }
   // QV-52 Content: the document's Title is the release (no name and number from its paths).
   if (rule === 'title') { const title = (item.title ?? '').replace(/\s+/g, ' ').trim(); return title ? { name: title, release: '' } : undefined }
   // CP is reported from its release-folder tree (cpReporting); read alone, its items follow the general path rule.
-  return rule === 'dp' ? dpRelease(item) : rule === 'iocc' ? ioccRelease(item) : rule === 'tool' ? toolRelease(item) : releaseOf(item)
+  return rule === 'dp' ? dpRelease(item) : rule === 'iocc' ? ioccRelease(item, area) : rule === 'tool' ? toolRelease(item) : releaseOf(item)
 }

@@ -41,7 +41,8 @@ test('access file: round trip, unknown entries dropped, broken files refused, ed
   assert.equal(parsed.defaultRole, null)
   // An older file (no split permissions): azure.write brings the work-item permissions it covered, and the actions the
   // app did not check before are allowed (CON-94).
-  assert.deepEqual(parsed.roles['Scrum Master'], { areas: ['health'], actions: ['azure.write', 'work.edit', 'work.state', 'work.move', 'work.hours', 'work.comment', 'work.bulk', 'qemapping.edit', 'data.export', 'setup.feature', 'pack.text'] })
+  // CON-103: the On-Demand area (permissions 4) is shown to every role the older file lists.
+  assert.deepEqual(parsed.roles['Scrum Master'], { areas: ['health', 'ondemand'], actions: ['azure.write', 'work.edit', 'work.state', 'work.move', 'work.hours', 'work.comment', 'work.bulk', 'qemapping.edit', 'data.export', 'setup.feature', 'pack.text'] })
   assert.deepEqual(parsed.roles.Admin, { areas: [], actions: ['qemapping.edit', 'data.export', 'setup.feature', 'pack.text'] }, 'a role missing from an older file keeps only what the app did not check then')
   assert.deepEqual(parsed.members, { 'a@b.com': ['Scrum Master'] })
   assert.throws(() => parseAccess('{'), /not valid JSON/)
@@ -123,7 +124,7 @@ test('CON-94: every permission is Allow, Deny or Not set per role; a denial wins
   // A file saved by this version is never migrated again, even when its roles list old keys only.
   const saved = defaultPolicy('lead@example.com'); saved.roles['Team Member'].actions = ['azure.write']
   for (const rights of Object.values(saved.roles)) if (rights !== saved.roles['Team Member']) rights.actions = []
-  assert.match(serializeAccess(saved), /"permissions": ?3/)
+  assert.match(serializeAccess(saved), /"permissions": ?5/)
   assert.deepEqual(parseAccess(serializeAccess(saved)).roles['Team Member'].actions, ['azure.write'], 'Not set stays Not set')
 
   // Deny wins over another role's allow, for actions and areas alike; it round-trips through the file.
@@ -152,7 +153,7 @@ test('CON-94: every permission is Allow, Deny or Not set per role; a denial wins
   // Settings pages and View as follow their own permissions.
   const pages = (rights) => settingsPagesFor((key) => rights.actions.has(key)).map((page) => page.key)
   const smOnly = defaultPolicy('lead@example.com'); smOnly.members['sm@example.com'] = ['Scrum Master']
-  assert.deepEqual(pages(rightsFor(smOnly, 'sm@example.com')), ['home', 'connections', 'options', 'epics', 'resources', 'storage'])
+  assert.deepEqual(pages(rightsFor(smOnly, 'sm@example.com')), ['home', 'connections', 'options', 'epics', 'resources', 'storage', 'pages'])
   setCell(smOnly.roles['Scrum Master'], 'capacity.periods', 'allow')
   assert.ok(pages(rightsFor(smOnly, 'sm@example.com')).includes('capacity'), 'one capacity permission opens the page')
   assert.ok(canViewAs(rightsFor(smOnly, 'lead@example.com')) && !canViewAs(rightsFor(smOnly, 'sm@example.com')))
@@ -209,7 +210,7 @@ test('CON-101: until a roles file is loaded the app is read-only (every menu are
   const none = rightsFor(null, 'lead@example.com')
   assert.equal(none.areas.size, areas.length, 'every menu area stays visible')
   for (const { key } of actions) assert.equal(none.actions.has(key), false, `${key} is denied without a policy`)
-  assert.deepEqual(settingsPagesFor((key) => none.actions.has(key)).map((page) => page.key), ['home', 'connections', 'options', 'epics', 'resources', 'storage'], 'Data & sharing (to connect Git storage) and People & roles stay open')
+  assert.deepEqual(settingsPagesFor((key) => none.actions.has(key)).map((page) => page.key), ['home', 'connections', 'options', 'epics', 'resources', 'storage', 'pages'], 'Data & sharing (to connect Git storage), People & roles and Pages & menu (PGB-12: read only, with the reasons) stay open')
   assert.equal(canViewAs(none), false)
   // Bootstrap: Git storage read that no access.json exists — Manage access only, nothing else.
   const first = rightsFor(null, 'lead@example.com', true)
@@ -252,4 +253,19 @@ test('CON-102: why a button that writes to Azure DevOps is disabled — read-onl
   // What the reason is shown for: no roles file gives no action (CON-101), so every write button is disabled.
   const none = rightsFor(null, 'anyone@example.com')
   for (const action of ['azure.write', 'work.edit', 'work.state', 'work.move', 'work.hours', 'work.comment', 'work.bulk']) assert.equal(none.actions.has(action), false, action)
+})
+
+test('CON-104: a person can hold several roles — the People section sets them all, in the matrix order; none removes the person; their rights are the union (TC-CON-65)', async () => {
+  const { withMemberRoles } = await import('../src/access.ts')
+  const start = defaultPolicy('lead@example.com')
+  const two = withMemberRoles(start, 'Ana@Example.com', ['Scrum Master', 'Product Owner'])
+  assert.deepEqual(two.members['ana@example.com'], ['Product Owner', 'Scrum Master'], 'both kept, matrix order, email normalised')
+  assert.equal(start.members['ana@example.com'], undefined, 'the policy passed in is not changed')
+  const rights = rightsFor(two, 'ana@example.com')
+  assert.deepEqual(rights.roles, ['Product Owner', 'Scrum Master'])
+  for (const role of ['Product Owner', 'Scrum Master']) for (const area of two.roles[role].areas) assert.ok(rights.areas.has(area), `${area} from ${role}`)
+  const one = withMemberRoles(two, 'ana@example.com', ['Scrum Master'])
+  assert.deepEqual(one.members['ana@example.com'], ['Scrum Master'], 'unticking one keeps the other')
+  assert.equal(withMemberRoles(one, 'ana@example.com', []).members['ana@example.com'], undefined, 'none: the default role applies')
+  assert.deepEqual(parseAccess(serializeAccess(two)).members['ana@example.com'], ['Product Owner', 'Scrum Master'], 'saved and read back')
 })

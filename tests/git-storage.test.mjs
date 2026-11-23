@@ -1,10 +1,31 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { decodeBase64, encodeBase64, GitConflictError, historyUrl, parsePlanning, planningData, readPlanningFile, serializePlanning, validateGitConfig, defaultGitRepository, writePlanningFile, loadGitConfig, saveGitConfig } from '../src/gitStorage.ts'
+import { privateGitWrites, decodeBase64, encodeBase64, GitConflictError, historyUrl, parsePlanning, planningData, readPlanningFile, serializePlanning, validateGitConfig, defaultGitRepository, writePlanningFile, loadGitConfig, saveGitConfig } from '../src/gitStorage.ts'
 
 const config = { owner: 'acme', repo: 'demand-planning-data', branch: 'main', path: 'planning-data.json' }
 const state = { baselineRules: [{ stream: 'CP', types: {}, items: [{ label: 'Documents', hoursPerUnit: 2, baseUnits: 14, driver: 'assets', unitsPerDriver: 11 }] }], releaseScopes: [{ release: 'CP | Care Pathways | v3.1', stream: 'CP', history: [{ at: '2026-10-01T10:00:00Z', drivers: { assets: 10 }, reason: 'Initial' }] }], resourceProfiles: { 'Zoë Müller': { region: 'Netherlands', role: 'QE' }, 'Arjun Rao': { region: 'India', role: 'Lead', peopleManager: true } } }
 const response = (status, body) => ({ ok: status >= 200 && status < 300, status, json: async () => body })
+
+test('TC-OND-02 and TC-PGB-02: page and menu writes require a confirmed private repository', async () => {
+  const url = 'https://api.github.com/repos/acme/demand-planning-data/contents/menu-layout.json'
+  const repoUrl = 'https://api.github.com/repos/acme/demand-planning-data'
+  for (const metadata of [response(200, { visibility: 'public' }), response(200, { visibility: 'internal', private: true }), response(200, {}), response(403, {})]) {
+    const calls = []
+    const send = privateGitWrites(config, 'synthetic', async (target, init) => {
+      calls.push([target, init?.method ?? 'GET'])
+      return metadata
+    })
+    await assert.rejects(send(url, { method: 'PUT', body: '{}' }), /private Git data repository/)
+    assert.deepEqual(calls, [[repoUrl, 'GET']])
+  }
+  const calls = []
+  const send = privateGitWrites(config, 'synthetic', async (target, init) => {
+    calls.push([target, init?.method ?? 'GET'])
+    return target === repoUrl ? response(200, { visibility: 'private' }) : response(201, {})
+  })
+  assert.equal((await send(url, { method: 'PUT', body: '{}' })).status, 201)
+  assert.deepEqual(calls, [[repoUrl, 'GET'], [url, 'PUT']])
+})
 
 test('config validation and browser persistence', () => {
   assert.deepEqual(validateGitConfig({ owner: ' acme ', repo: 'demand-planning-data.git', branch: '', path: '/planning-data.json' }), config)

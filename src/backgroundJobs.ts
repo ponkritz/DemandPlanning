@@ -1,5 +1,7 @@
 // Azure DevOps writes that take a while (New Feature, Bulk actions, Monthly Time Writing) run as background jobs: the
 // form or page hands the work over and stays usable, and the top bar lists each job with its progress and result.
+// UI-STANDARDS §8 (QV-63): the results of other actions (an import, Load from Git, Save to Git, Refresh) are entries
+// of the same list — long work as a job, an instant result as a finished entry (recordJob) — not notices on the page.
 // Jobs live for this page load only (nothing is stored); while one runs, leaving the page asks first.
 export type JobState = 'running' | 'done' | 'error'
 export interface Job { id: number; key: string; label: string; state: JobState; detail: string; started: number; finished?: number }
@@ -34,6 +36,14 @@ export function runInBackground(key: string, label: string, work: (progress: (te
     }
   })()
   return true
+}
+// An instant result (an import, a check that failed before any work started) as a finished entry; returns its id.
+export function recordJob(key: string, label: string, result: JobResult, now = Date.now): number {
+  const id = nextId++, at = now()
+  const job: Job = { id, key, label, state: result.failed ? 'error' : 'done', detail: result.text, started: at, finished: at }
+  jobs = [job, ...jobs].slice(0, 20)
+  emit()
+  return id
 }
 export function clearFinishedJobs() { jobs = jobs.filter((job) => job.state === 'running'); emit() }
 // For tests: start from an empty list.

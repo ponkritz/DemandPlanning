@@ -17,7 +17,8 @@ export function Page({ children, className = '', intro, actions }: { children: R
 
 // "ⓘ Info": explanations and rules of a view, shown on hover or keyboard focus (and on tap) instead of on the page.
 // Rendered in a portal so a scrolling table panel cannot clip it; it stays open while the pointer is on it, so links work.
-export function Info({ children, label = 'Info' }: { children: ReactNode; label?: string }) {
+// iconOnly: just ⓘ, the label as its accessible name (UI-STANDARDS §6), e.g. next to a table heading.
+export function Info({ children, label = 'Info', iconOnly = false }: { children: ReactNode; label?: string; iconOnly?: boolean }) {
   const id = useId()
   const anchor = useRef<HTMLButtonElement>(null)
   const timer = useRef<number | undefined>(undefined)
@@ -33,7 +34,7 @@ export function Info({ children, label = 'Info' }: { children: ReactNode; label?
   }, [at])
   useEffect(() => () => window.clearTimeout(timer.current), [])
   return <>
-    <button type="button" ref={anchor} className="info-button" aria-describedby={at ? id : undefined} aria-expanded={Boolean(at)} onMouseEnter={open} onMouseLeave={close} onFocus={open} onBlur={close} onClick={(event) => { event.preventDefault(); if (at) setAt(null); else open() }}>ⓘ {label}</button>
+    <button type="button" ref={anchor} className="info-button" aria-label={iconOnly ? label : undefined} aria-describedby={at ? id : undefined} aria-expanded={Boolean(at)} onMouseEnter={open} onMouseLeave={close} onFocus={open} onBlur={close} onClick={(event) => { event.preventDefault(); if (at) setAt(null); else open() }}>{iconOnly ? 'ⓘ' : `ⓘ ${label}`}</button>
     {at && createPortal(<div id={id} role="tooltip" className="info-pop" style={{ top: at.top, left: at.left }} onMouseEnter={open} onMouseLeave={close}>{children}</div>, document.body)}
   </>
 }

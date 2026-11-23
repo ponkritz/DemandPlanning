@@ -50,14 +50,14 @@ export function signatureDateFor(fields: Record<string, unknown>, field: string)
 }
 
 // Azure DevOps stream items (the read-only views): one entry per document signed by the person.
-export function azureSignatures(items: AzureWorkItem[], stream: string, signer: Signer, rule: ReleaseRule, patterns: NamingPattern[] = [], timeZone?: string): SignedDocument[] {
+export function azureSignatures(items: AzureWorkItem[], stream: string, signer: Signer, rule: ReleaseRule, patterns: NamingPattern[] = [], timeZone?: string, area?: string[]): SignedDocument[] {
   const found: SignedDocument[] = []
   for (const item of items) {
     const fields = item.fields ?? {}
     const field = Object.keys(fields).find((key) => isSignatureField(key) && namesSigner(fields[key], signer))
     if (!field) continue
     const date = signatureDateFor(fields, field) ?? item.approvalDate ?? approvalDateFrom(fields) ?? item.closedDate
-    const release = releaseFor(item, rule, patterns)
+    const release = releaseFor(item, rule, patterns, area)
     found.push({ stream, release: release ? [release.group, release.name, release.release].filter(Boolean).join(' ') : item.title, document: item.title, id: item.id, url: item.url, field, ...(date ? { date, month: approvalMonthOf(date, timeZone) } : {}) })
   }
   return found

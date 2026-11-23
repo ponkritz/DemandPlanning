@@ -230,6 +230,12 @@ export function approvalMonthOf(date: string | undefined, timeZone: string = bus
   return month
 }
 
+// QV-64: the releases of a month as a stream's Releases table lists them and Pulse Check counts them (Content: one per
+// Title or naming pattern; Tool Validations: one per tool) — its documents approved in the month, else changed in it.
+export function monthReleaseCount(items: AzureWorkItem[], month: string, rule?: ReleaseRule, patterns?: NamingPattern[], timeZone?: string, area?: string[]) {
+  return releaseRegister(items.filter((item) => viewMonthOf(item, timeZone) === month), [], { rule, patterns, area }).length
+}
+
 // Releases completed in a month: those whose approval date falls in it.
 export function completedReleases(register: ReleaseEntry[], month: string) {
   return register.filter((release) => release.approvalMonth === month).sort((a, b) => (a.approvalDate ?? '').localeCompare(b.approvalDate ?? '') || a.key.localeCompare(b.key, undefined, { numeric: true }))
@@ -334,11 +340,12 @@ export function matchScore(title: string | PreparedTitle, name: string | Prepare
 
 // rule: how the stream reads its releases (streams.ts); fuzzy: match Features by matchScore, the best one tracking the
 // release when it reaches the threshold (%), instead of the exact rule.
-export interface RegisterOptions { rule?: ReleaseRule; fuzzy?: boolean; threshold?: number; patterns?: NamingPattern[] }
+// area: a custom stream “Like IOCC” groups by the Area Path segment after its own name (STR-03).
+export interface RegisterOptions { rule?: ReleaseRule; fuzzy?: boolean; threshold?: number; patterns?: NamingPattern[]; area?: string[] }
 export function releaseRegister(source: AzureWorkItem[] | undefined, backlog: AzureWorkItem[], options: RegisterOptions = {}): ReleaseEntry[] {
   const entries = new Map<string, ReleaseEntry>()
   for (const item of source ?? []) {
-    const found = releaseFor(item, options.rule, options.patterns)
+    const found = releaseFor(item, options.rule, options.patterns, options.area)
     if (!found) continue
     const key = `${found.group ?? ''}\u0000${found.name}\u0000${normalizeVersion(found.release)}`.toLowerCase()
     const entry = entries.get(key) ?? { key: [found.group, found.name, found.release].filter(Boolean).join(' '), ...(found.group ? { group: found.group } : {}), name: found.name, release: found.release, documents: 0, items: [], tracked: false, trackedBy: [], features: [], planned: 0, booked: 0, hourTasks: 0 }
@@ -349,6 +356,34 @@ export function releaseRegister(source: AzureWorkItem[] | undefined, backlog: Az
   return attachFeatures([...entries.values()], backlog, options)
 }
 
+// Planned and booked hours of Features (QV-65): Original Estimate and Completed Work, all months, on the Time Writing
+// Tasks (month Tasks, or Tasks under a Time Writing story) whose nearest Feature above them is one of the Features;
+// each Task once; removed items do not count. The board is read once: the result answers for any list of Feature IDs.
+// Used for the releases matched by name (attachFeatures) and for the releases matched on QMS-0025 (DP, CP, Windchill).
+export interface FeatureHours { planned: number; booked: number; hourTasks: number }
+export function timeWritingHours(backlog: AzureWorkItem[]): (featureIds: readonly number[]) => FeatureHours {
+  const live = backlog.filter((item) => item.state.trim().toLowerCase() !== 'removed')
+  const byId = new Map(live.map((item) => [item.id, item]))
+  const featureOf = (item: AzureWorkItem) => { let current: AzureWorkItem | undefined = item; for (let depth = 0; current && depth < 8; depth += 1) { if (current.workItemType === 'Feature') return current; current = current.parentId == null ? undefined : byId.get(current.parentId) } return undefined }
+  const storyIds = timeWritingStoryIds(live)
+  const hours = (value: number | undefined) => typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0
+  const byFeature = new Map<number, Map<number, AzureWorkItem>>()
+  for (const task of live) {
+    if (task.workItemType !== 'Task' || !(isMonthTask(task) || (task.parentId != null && storyIds.has(task.parentId)))) continue
+    const feature = featureOf(task)
+    if (!feature) continue
+    const tasks = byFeature.get(feature.id) ?? new Map<number, AzureWorkItem>()
+    tasks.set(task.id, task); byFeature.set(feature.id, tasks)
+  }
+  return (featureIds: readonly number[]): FeatureHours => {
+    const tasks = new Map<number, AzureWorkItem>()
+    for (const id of new Set(featureIds)) for (const [key, task] of byFeature.get(id) ?? []) tasks.set(key, task)
+    let planned = 0, booked = 0
+    for (const task of tasks.values()) { planned += hours(task.originalEstimate); booked += hours(task.completedWork) }
+    return { planned, booked, hourTasks: tasks.size }
+  }
+}
+
 // The Features tracking each release (exact rule, or the best fuzzy match at the threshold) and their Time Writing
 // hours, for release entries read from any source (document paths, or the Pedestal register — see dpReleases).
 export function attachFeatures(entries: ReleaseEntry[], backlog: AzureWorkItem[], options: RegisterOptions = {}): ReleaseEntry[] {
@@ -357,11 +392,7 @@ export function attachFeatures(entries: ReleaseEntry[], backlog: AzureWorkItem[]
   // numbers, and stories or tasks naming a release do not attach it to whatever Feature they sit under.
   const names = (text: string, entry: ReleaseEntry) => tracksRelease(text, entry.name, entry.release)
   const live = backlog.filter((item) => item.state.trim().toLowerCase() !== 'removed')
-  const byId = new Map(live.map((item) => [item.id, item]))
-  const featureOf = (item: AzureWorkItem) => { let current: AzureWorkItem | undefined = item; for (let depth = 0; current && depth < 8; depth += 1) { if (current.workItemType === 'Feature') return current; current = current.parentId == null ? undefined : byId.get(current.parentId) } return undefined }
-  const storyIds = timeWritingStoryIds(live)
-  const timeWritingTasks = live.filter((item) => item.workItemType === 'Task' && (isMonthTask(item) || (item.parentId != null && storyIds.has(item.parentId))))
-  const hours = (value: number | undefined) => typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0
+  const hoursOf = timeWritingHours(backlog)
   // Each Feature counts for the release(s) with the longest name its title matches.
   const features = live.filter((item) => item.workItemType === 'Feature')
   const bestNameLength = new Map<number, number>()
@@ -375,10 +406,7 @@ export function attachFeatures(entries: ReleaseEntry[], backlog: AzureWorkItem[]
     const best = name ? candidates(name).map(({ feature, ready }) => ({ feature, score: matchScore(ready, name, entry.release) })).sort((a, b) => b.score - a.score || a.feature.id - b.feature.id)[0] : undefined
     const tracking = options.fuzzy ? best && best.score >= threshold ? [best.feature] : [] : features.filter((feature) => names(feature.title, entry) && bestNameLength.get(feature.id) === entry.name.trim().length).sort((a, b) => a.id - b.id)
     const trackedBy = tracking
-    const featureIds = new Set(tracking.map((feature) => feature.id))
-    const tasks = new Map(timeWritingTasks.filter((task) => featureIds.has(featureOf(task)?.id ?? -1)).map((task) => [task.id, task]))
-    const planned = [...tasks.values()].reduce((sum, task) => sum + hours(task.originalEstimate), 0)
-    const booked = [...tasks.values()].reduce((sum, task) => sum + hours(task.completedWork), 0)
-    return { ...entry, ...(best ? { match: best } : {}), tracked: trackedBy.length > 0, trackedBy, features: tracking, planned, booked, hourTasks: tasks.size }
+    const { planned, booked, hourTasks } = hoursOf(tracking.map((feature) => feature.id))
+    return { ...entry, ...(best ? { match: best } : {}), tracked: trackedBy.length > 0, trackedBy, features: tracking, planned, booked, hourTasks }
   }).sort((a, b) => a.name.localeCompare(b.name) || b.release.localeCompare(a.release, undefined, { numeric: true }))
 }

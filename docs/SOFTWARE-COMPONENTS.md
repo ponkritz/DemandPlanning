@@ -16,7 +16,7 @@ This document lists every software component of the system: the in-house source 
 | Component | Path | Purpose | Requirement areas |
 |---|---|---|---|
 | main | `src/main.tsx` | Entry point: applies the remembered theme before first paint, then renders App inside StrictMode and the ErrorBoundary. | UI |
-| App | `src/App.tsx` | App shell: sidebar (foldable to icons), header, month picker and page routing; loads shared setup from Git at start, removes duplicate connections, fetches cloud connections, saves on-prem fetches to Git. | NAV, CON, FET, GIT |
+| App | `src/App.tsx` | App shell: sidebar (foldable to icons), header, month picker and page routing; loads shared setup from Git at start, removes duplicate connections, fetches cloud connections, saves on-prem fetches to Git. | NAV, CON, FET, GIT, OND, PGB |
 | index | `src/index.css` | Global styles and colour tokens for light and dark themes. | UI |
 | App | `src/App.css` | Layout styles for the shell, sidebar, top bar, panels, tables, forms, modals and responsive breakpoints. | UI |
 | fresh | `src/fresh.css` | Final "fresh look" style layer (white sidebar, soft canvas, borderless cards) built on the index.css tokens. | UI |
@@ -26,12 +26,12 @@ This document lists every software component of the system: the in-house source 
 | workEmail | `src/workEmail.ts` | Your work email as its own setting on the computer: read, save, and the one-time take-over from the Time Writing connection (CON-82). | CON, ATM |
 | settingsTabs | `src/settingsTabs.ts` | The Settings pages (menu order, shared ones), the remembered page and the remembered section of each page (SET-14). | SET, CON, NAV |
 | index | `src/docs/index.ts` | Bundles docs/*.md at build time into the list of project documents shown on the Documentation page. | DOC |
-| registry | `src/pages/registry.ts` | Single source of page ids, labels, icons, sidebar groups, header text and month-picker use. | NAV |
+| registry | `src/pages/registry.ts` | Single source of page ids, labels, icons, sidebar groups, header text and month-picker use. | NAV, OND |
 | types | `src/pages/types.ts` | `PageProps` shared by pages: the app store, the selected month and its setter. | — |
 | AdminPage | `src/pages/AdminPage.tsx` | Settings pages (one per menu entry, SET-14), with sections for Azure DevOps connections, Git storage, Access, Feature setup, capacity/absence, periods, resources, master data and audit. | SET, CON, GIT, SNP, CAP |
 | BacklogHealthPage | `src/pages/BacklogHealthPage.tsx` | Backlog Health: open work in ended Sprints, Features without DoD and unassigned work, with person filter, chosen columns, sorting and CSV. | CON |
 | BaselinesPage | `src/pages/BaselinesPage.tsx` | Baselines: estimation rules editor, release baselines vs booked hours, and the monthly Time Writing task plan check. | BAS, GIT |
-| BoardPage | `src/pages/BoardPage.tsx` | Backlogs / Release Details: editable Time Writing tree, read-only query views, release views, the CP release report and the DP table with DDT month filter and board match. | CON, FET, QV, ATM |
+| BoardPage | `src/pages/BoardPage.tsx` | Backlogs / Release Details: editable Time Writing tree, read-only query views and every Azure stream's Release page (UI-STANDARDS §10, QV-62: source bar, counts, Releases | Source data tabs), the CP release report and the DP table with DDT month filter, board match and bulk selection. | CON, FET, QV, ATM, STR |
 | SprintCheckPage | `src/pages/SprintCheckPage.tsx` | Sprint check (formerly Bulk actions): move my User Stories from past Sprints to the current PI + Sprint, and the state checks of my Features and User Stories as a backlog tree (expand, set my New User Story Active). | ATM, CON |
 | DashboardPage | `src/pages/DashboardPage.tsx` | Dashboard: demand vs capacity for a period and filters — utilization, overload, rebalancing, trends, Epic mix, insights and releases. | OVR, CAP |
 | DocsPage | `src/pages/DocsPage.tsx` | Documentation page: reads the bundled project documents in-app, remembers the chosen one, keeps document and anchor links in the page. | DOC |
@@ -48,6 +48,9 @@ This document lists every software component of the system: the in-house source 
 | mySignatures | `src/mySignatures.ts` | The documents a person signed as Author, Reviewer or Approver in the Azure DevOps views and Windchill exports, their dates and the counts per period (MYD-13). | MYD |
 | PersonalLayout | `src/components/PersonalLayout.tsx` | Customize a page's sections (show, hide, order, reset, default for everyone) and the menu (pin, hide). | MYD |
 | QeMappingPage | `src/pages/QeMappingPage.tsx` | QE Mapping: upload Excel/CSV, edit cells/rows/columns, filter and group, then save to Git or export. | QEM |
+| OnDemandPage | `src/pages/OnDemandPage.tsx` | On-Demand page (CoNQ and the pages added): the work table, the row pop-up (with the row's ID, who added it, History, Long text and Currency fields, the column descriptions), the Columns pop-up with types, options, default currency and descriptions, add / rename / remove a page, Save to Git with the unsaved-changes bar. | OND, CON, PGB |
+| OnDemandInsights | `src/pages/OnDemandInsights.tsx` | The Insights tab of an On-Demand page: the list of charts and tables, ＋ Add chart / table and Edit pop-up with a live preview, reorder and remove, read only without the setup right. | OND, CON |
+| PagesMenuPage | `src/pages/PagesMenuPage.tsx` | Admin → Pages & menu (page builder): your rights here, the menu groups and the added pages as lists in the shared table with their row actions (add a page to a group, edit, reorder, remove), the group and page pop-ups and the remove confirmations; every button the viewer may not use disabled with the reason. | PGB, CON |
 | KpiTrackerPage | `src/pages/KpiTrackerPage.tsx` | KPI tracker page: the Git copy or a live read in the desktop app, sheet choice, table, save to Git for admins. | KPT |
 | DpBulkCreate | `src/components/DpBulkCreate.tsx` | DP Create Features dialog: the plan per selected release, PI / Sprint, creation as a background job. | DPF |
 | FormulaBar | `src/components/FormulaBar.tsx` | The fx bar of a calculation profile: typed formula, insert buttons, check as typed. | CAP |
@@ -66,8 +69,10 @@ This document lists every software component of the system: the in-house source 
 | Component | Path | Purpose | Requirement areas |
 |---|---|---|---|
 | AccessPanel | `src/components/AccessPanel.tsx` | Settings → Access: shows roles and per-role rights; editable and saved to Git (access.json) only by a role that may manage access. | CON |
+| PageDialogs | `src/components/PageDialogs.tsx` | The page builder's pop-ups: ＋ Add page (type, name, description, icon, menu group or a new group, page co-owners), Edit the page (name, type, icon, group, co-owners) and Add / Edit a group (name, accepts added pages, co-owners). | PGB |
 | AssigneeConfirm | `src/components/AssigneeConfirm.tsx` | Confirmation before creating work items: what is created and to whom it is assigned; never blank. | CON, ATM |
-| AzureConnections | `src/components/AzureConnections.tsx` | Settings → Azure DevOps connection setup: servers, presets, add/clone/edit connections, PATs, stream mapping (admins: saved to Git on every change, Save stream mapping to Git) and duplicate clean-up. | CON |
+| AzureConnections | `src/components/AzureConnections.tsx` | Settings → Azure DevOps connection setup: servers, presets, add/clone/edit connections, PATs, stream mapping of the built-in and custom streams (admins: saved to Git on every change, Save stream mapping to Git) and duplicate clean-up. | CON, STR |
+| CustomStreamsPanel | `src/components/CustomStreamsPanel.tsx` | Settings → Streams → Custom streams: ＋ Add stream… (name, source, release rule, fuzzy matching, earlier names, Epics), Edit / rename and Remove (asks first) saved to custom-streams.json in Git; disabled with the reason without “Change the stream mapping”. | STR |
 | RemovedConnections | `src/components/RemovedConnections.tsx` | Settings → Streams → Removed connections: connections dropped from the shared setup in Git, found in its history and restored (CON-99). | CON |
 | AzureViewsGit | `src/components/AzureViewsGit.tsx` | Settings panel to save Azure DevOps connection definitions to Git and restore them elsewhere, never writing PATs; Back up and clean up (download / dated Git backup, remove all with a reset marker). | CON, GIT |
 | AzureWorkItemTree | `src/components/AzureWorkItemTree.tsx` | Expandable Epic → Feature → Story → Task tree with Feature creation and child completion; read-only for other connections. | CON, ATM |
@@ -78,9 +83,9 @@ This document lists every software component of the system: the in-house source 
 | Clock | `src/components/Clock.tsx` | Header clock in the viewer's time zone and the theme toggle button. | NAV, UI |
 | DataStatus | `src/components/DataStatus.tsx` | Header data-status chip with ⟳ Time Writing and Refresh (FET-22), and the data notices shown once under the header. | FET, NAV |
 | DesktopDownload | `src/components/DesktopDownload.tsx` | Sidebar entry and dialog to download the desktop app; hidden inside the desktop app. | DSK |
-| CpReportView | `src/components/CpReportView.tsx` | Release Details → CP: Supported / Completed counts, the month's releases with names, evidence, QMS-0025 match and Create Feature, shared activity, data issues and the evidence CSV. | QV |
+| CpReportView | `src/components/CpReportView.tsx` | Release Details → CP: the Releases table of the month's releases (the counts are the page's, QV-62) with names, evidence, QMS-0025 match and Create Feature, shared activity, data issues and the evidence CSV. | QV |
 | DpBoardColumn | `src/components/DpBoardColumn.tsx` | DP table and Windchill releases cell showing the matching QMS-0025 Feature/User Story, or Create Feature when nothing matches. | QV |
-| DpMonthCounts | `src/components/DpMonthCounts.tsx` | Table of a month's DP Supported Releases with milestones passed (DT, SFV, PRD, RPE) and dates. | QV, OVR |
+| DpMonthCounts | `src/components/DpMonthCounts.tsx` | Table of a month's DP Supported Releases with milestones passed (DT, SFV, PRD, RPE) and dates (DP page, folded under its counts; Pulse Check). | QV, OVR |
 | ErrorBoundary | `src/components/ErrorBoundary.tsx` | Catches render errors in a view and shows what failed with a way back instead of a blank app. | UI |
 | FeatureEditor | `src/components/FeatureEditor.tsx` | The one New Feature form (BKL-26): add a Feature under an Epic or complete a Feature's children (its Epic's stories none ticked, BKL-38), used by Backlogs, My Tasks [Board], Release Details and Time Writing; the Parent Epic starts blank. | ATM, CON, BKL, ACT |
 | MonthTasksDialog | `src/components/MonthTasksDialog.tsx` | ＋ Time Writing Task: the months (header month first, ＋ Add month) and the hours of each (BKL-34); Assigned to and the warning on a month that already has a Task (BKL-35). | BKL |
@@ -107,15 +112,17 @@ This document lists every software component of the system: the in-house source 
 | StoryEditor | `src/components/StoryEditor.tsx` | New User Story form under a Feature (Backlogs, My Tasks [Board]), laid out like New Feature with the Azure DevOps story fields and an optional comment; adds the story with addUserStory (BKL-27), as a background job. | BKL, ATM |
 | ReleaseFeatureEditor | `src/components/ReleaseFeatureEditor.tsx` | Create Feature button from Release Details, pre-filling the default Feature form from the release. | QV |
 | ReleaseQuadrants | `src/components/ReleaseQuadrants.tsx` | Releases summary lines, the Supported summary next to them (DP Supported Releases, S&S IT export releases of the month), and a 2×2 quadrant per stream with documents approved in the month and totals. | OVR, QV |
-| ReleaseView | `src/components/ReleaseView.tsx` | Release source view: releases derived from document paths or Titles (per stream rule), with the Time Writing Feature match and hours and the QMS-0025 match column with Create Feature (QV-46). | QV |
-| ResultTabs | `src/components/ResultTabs.tsx` | The two tabs of a Release Details page: the consolidation (Releases, CP report, Projects) and the raw rows (Query output / Raw data), the choice kept per page in the browser tab (QV-47). | QV |
-| ViewActions | `src/components/ViewActions.tsx` | The compact actions of a Release Details page: the main action as a small icon button with its name as tooltip, the others in a ⋯ menu (QV-48). | QV |
-| DataTable | `src/components/DataTable.tsx` | The one table component (UI-07…13): resize, move by dragging a heading or ↑ ↓ in the Columns list, choose columns, Wrap text, Compact / Comfortable, Reset layout, sort, expandable, grouped and tree rows, a totals row that follows the columns, and one Export offering Excel or CSV. | UI, QV, CON |
+| ReleasePage | `src/components/ReleasePage.tsx` | The shared parts of every stream's Release page (UI-STANDARDS §10): the source bar with Show: {month} / All months, ↻ and ⋯, and the counts Releases in the month, Completed, Supported (each optional, QV-64) with ⓘ What was counted (QV-62). | QV |
+| matchedFeatureColumns | `src/components/matchedFeatureColumns.tsx` | The Time Writing Feature, Planned (h) and Booked (h) columns of a release matched on QMS-0025 (DP, CP, S&S IT, ECP; QV-65): the matched Feature with its match % and the hours of its Time Writing Tasks. | QV |
+| ReleaseView | `src/components/ReleaseView.tsx` | Release source view: releases derived from document paths or Titles (per stream rule), with the Time Writing Feature match and hours and the QMS-0025 match column with Create Feature (QV-46). | QV, STR |
+| ResultTabs | `src/components/ResultTabs.tsx` | The two tabs of a Release page, Releases | Source data (n): the Releases table and the raw query or imported rows, the choice kept per page in the browser tab (QV-47). | QV |
+| ViewActions | `src/components/ViewActions.tsx` | The compact actions of a Release page's source bar: the main action as a small ↻ icon button with its name as tooltip, the others in a ⋯ menu (QV-48). | QV |
+| DataTable | `src/components/DataTable.tsx` | The one table component (UI-07…13): an ⓘ hint next to a heading (OND-25), an export value apart from the sort value (OND-23), resize, move by dragging a heading or ↑ ↓ in the Columns list, choose columns, Wrap text, Compact / Comfortable, Reset layout, sort, expandable, grouped and tree rows, a totals row that follows the columns, and one Export offering Excel or CSV. | UI, QV, CON |
 | tableDesign | `src/components/tableDesign.ts` | The React context that hands the shared table design default to every DataTable (UI-12). | UI |
 | TableDefaultsPanel | `src/components/TableDefaultsPanel.tsx` | Settings → Table defaults: the shared, audited design default of every table (UI-12) and of chart data labels (UI-17). | UI, SET |
 | chartLabels (component) | `src/components/chartLabels.tsx` | The Data labels box and the X / Y axis names of a chart (UI-17). | UI |
 | chartLabels | `src/chartLabels.ts` | Chart data labels: each chart's own choice kept per computer, else the shared default (UI-17). | UI |
-| useStreamEpics | `src/useStreamEpics.ts` | The shared release-source settings in a React context and the hook giving a stream's Epics for the board match (QV-57). | QV |
+| useStreamEpics | `src/useStreamEpics.ts` | The shared release-source settings in a React context and the hook giving a stream's Epics for the board match (QV-57). | QV, STR |
 | useCan | `src/useCan.ts` | The viewer's permissions in a React context, for the controls deep in the page tree (bulk create, QE Mapping, Monthly pack text, shared Feature setup, export) (CON-94); nothing allowed without a provider (CON-101). | CON |
 | myViews | `src/myViews.ts` | My views: the servers with a PAT, a new view checked (no stream names, no duplicates), and the app data without My views' data for backups (SET-17). | SET |
 | epicSetup | `src/epicSetup.ts` | The Epic setup file (fields, value lists, title pattern), the Title and Description of a new Feature from its fields, Block / Warn, bulk creation and Copy to Epics (EPS-01…05). | EPS |
@@ -140,10 +147,11 @@ This document lists every software component of the system: the in-house source 
 | SetupGuide | `src/components/SetupGuide.tsx` | "Get started" pop-up listing setup steps with live status, fields to enter the Git token, PAT and work email right there (NAV-38), the email detected from the token (NAV-39) and buttons to the right place. | NAV |
 | SharedTimePanel | `src/components/SharedTimePanel.tsx` | Settings → Capacity: map Epics/Features as regional holidays or common activities applied to people in scope. | CAP, SET |
 | TeamFilterBar | `src/components/TeamFilterBar.tsx` | Region switch and role multi-select filter for team views. | OVR |
-| WindchillReleasesPanel | `src/components/WindchillReleasesPanel.tsx` | Lists a Windchill export's unique releases from Location or document names (source and columns chosen), filtered to the header month, sortable, with draggable widths and a QMS-0025 match column with Create Feature; the unique locations, CSV exports and Save locations to Git. | CON, QV |
+| WindchillReleasesPanel | `src/components/WindchillReleasesPanel.tsx` | Lists a Windchill export's unique releases from Location or document names (source and columns chosen), filtered to the header month (Show in the page's source bar), columns in the UI-STANDARDS §10 order, sortable, with draggable widths and a QMS-0025 match column with Create Feature; the unique locations, CSV exports and Save locations to Git. | CON, QV |
 | WindchillSettingsPanel | `src/components/WindchillSettingsPanel.tsx` | Windchill host and service path setup with connection test and sign-in (browser or desktop). | CON |
-| WindchillViews | `src/components/WindchillViews.tsx` | Windchill views settings, the Windchill export page and import of results saved or copied from the browser. | CON |
-| WorkloadCharts | `src/components/WorkloadCharts.tsx` | SVG charts: utilization, Epic mix, Epic bullet, Pareto, utilization heatmap and donut. | OVR |
+| WindchillViews | `src/components/WindchillViews.tsx` | Windchill views settings, the Windchill export page as a Release page (UI-STANDARDS §10, QV-62) and import of results saved or copied from the browser. | CON |
+| WorkloadCharts | `src/components/WorkloadCharts.tsx` | SVG charts: utilization, Epic mix, Epic bullet, Pareto, utilization heatmap and donut; the shared chart frame (legend, Data labels, Table / Chart) and tooltip used by the On-Demand insights. | OVR, OND |
+| InsightCharts | `src/components/InsightCharts.tsx` | On-Demand insights drawn: bar / column (stacked), line over time, pie / donut and the summary (pivot) table, in the chart frame, with the message of a broken insight. | OND |
 | columnWidths | `src/components/columnWidths.tsx` | `useColumnWidths` hook: draggable table column widths kept per table in this browser. | UI |
 | ui | `src/components/ui.tsx` | Shared UI primitives: Page, Panel, TablePanel, Metrics, Pill, Notice, EmptyState, Modal, Info, SettingsSummary. | UI |
 
@@ -152,11 +160,12 @@ This document lists every software component of the system: the in-house source 
 | Component | Path | Purpose | Requirement areas |
 |---|---|---|---|
 | access | `src/access.ts` | Role-based access policy (access.json): roles, areas, actions, parsing/serialising and rights per person email. | CON |
+| menuLayout | `src/menuLayout.ts` | Page builder model: page types (Table, Table + Insights), the built-in and custom menu groups, the menu layout file menu-layout.json (parse, validate, serialise, merge by group and page with co-owners as sets), placing, moving, reordering and removing pages and groups, and the rights of the Tool Owner, group and page co-owners (fail closed, with the reasons). | PGB, CON, GIT |
 | azureHierarchy | `src/azureHierarchy.ts` | Builds the filtered Epic→Task work-item tree with ancestor context, missing-parent and cycle handling. | CON |
 | azureInsights | `src/azureInsights.ts` | Time Writing month-task detection, month story plans, working days, Azure insights and Time Writing gaps. | MON, TWN, CAP |
 | backlogHealth | `src/backlogHealth.ts` | Backlog Health lists (older-Sprint work, Features without DoD, unassigned), columns and CSV. | CON |
 | backlogView | `src/backlogView.ts` | Backlog table columns, normalisation, plain-text rendering and visible row flattening. | CON |
-| backlogViews | `src/backlogViews.ts` | Azure DevOps menu entries: the editable Time Writing backlog and read-only views, remembered tab. | NAV, CON |
+| backlogViews | `src/backlogViews.ts` | Azure DevOps menu entries: the editable Time Writing backlog and read-only views, remembered tab. | NAV, CON, STR |
 | baseline | `src/baseline.ts` | Per-stream estimation rules, dated release scopes and release baseline vs actual rows. | BAS |
 | capacity | `src/capacity.ts` | Capacity model: month tasks, absence, shared time, regions/roles, per-person and per-stream load and status. | CAP, SET |
 | calculationProfiles | `src/calculationProfiles.ts` | Calculation profiles (CAP-41, CAP-42): bucket treatment, plan source, capacity base, built-in Current (v4) and Old Calculation, the default profile, the formula in words; locked figures (CAP-43) and their normaliser. | CAP |
@@ -196,6 +205,8 @@ This document lists every software component of the system: the in-house source 
 | useHistory | `src/useHistory.ts` | Historical hours state: read from Git, save (conflict retried once) and remove. | HIS, GIT |
 | viewAs | `src/viewAs.ts` | View as: who may use it, the rights of the viewed person or role, the people to choose from, the read-only write guard. | CON |
 | qeMapping | `src/qeMapping.ts` | QE Mapping table model: sheets with stable column/row ids, edits, filter, group, CSV, Git file parse/serialise. | QEM |
+| onDemand | `src/onDemand.ts` | On-Demand page model: columns (Text, Long text, Number, Currency, Date, Dropdown, Multi-select, each with an optional description) and rows with stable ids, keys, sequential IDs, who added them and their update log, value checks and type changes that keep values, the Git file parse / validate / serialise and the merge of two saves. | OND |
+| onDemandInsights | `src/onDemandInsights.ts` | On-Demand insights: the columns each part may use, reference checks (broken insights), the aggregation of rows (count / sum / average, a Currency column one currency at a time, Multi-select per value, months, "(none)", "Other", totals) and the filters, and their wording. | OND |
 | kpiTracker | `src/kpiTracker.ts` | KPI tracker model: link check, workbook to text sheets within limits, Git file parse/serialise, sheet table. | KPT |
 | dpBulk | `src/dpBulk.ts` | DP releases: release type from x.y.z.a, QE from the QE Mapping, possible QEs, bulk Create Features plan. | DPF |
 | formula | `src/formula.ts` | Typed utilization formula: tokenizer and parser (figures, operators, MAX/MIN/ROUND/IF), check as typed, starting formula from the ticks. | CAP |
@@ -204,11 +215,12 @@ This document lists every software component of the system: the in-house source 
 | desktopZoom | `src/desktopZoom.ts` | Desktop zoom: Auto fit, steps and limits, the setting kept per computer. | UI |
 | pageLayout | `src/pageLayout.ts` | Page margins (top, right, bottom, left) and border: defaults, limits, kept per computer, applied as CSS variables (NAV-50). | NAV |
 | queryView | `src/queryView.ts` | Query-view layout from WIQL SELECT/ORDER BY (flat and tree / links queries), field resolution, cell formatting, sorting, summary, CSV, column order. | QV |
-| releaseOverview | `src/releaseOverview.ts` | Releases with documents approved in the month per stream (CP from QA/QE signatures, cpReporting), with counts and totals. | OVR, QV |
+| releaseOverview | `src/releaseOverview.ts` | Releases with documents approved in the month per stream (CP from QA/QE signatures, cpReporting), with counts and totals. | OVR, QV, STR |
 | releasePath | `src/releasePath.ts` | Reads release name and number from Area/Iteration Paths; DP, IOCC and Tool Validations (one entry per tool) stream rules. | QV |
 | rules | `src/rules.ts` | Period lock rules, demand classification, baseline lookup, variance flag and capacity utilization. | SET, BAS |
 | setupGuide | `src/setupGuide.ts` | "Get started" setup steps with live status and required-step logic. | NAV |
-| streams | `src/streams.ts` | Release stream definitions and data sets, name matching and connection/export lookup per stream. | QV, OVR |
+| streams | `src/streams.ts` | Release stream definitions and data sets, the built-in and custom streams (allStreams), name matching (longest name wins) and connection/export lookup per stream. | QV, OVR, STR |
+| customStreams | `src/customStreams.ts` | Custom streams file (custom-streams.json): the offered release rules, validation of each stream (unknown rule, CP, built-in names refused), add / rename / remove, parse and serialize. | STR |
 | viewSources | `src/viewSources.ts` | Picks the saved fetch snapshot for a read-only connection, with legacy shared release snapshot rule. | QV, FET |
 | windchillReleases | `src/windchillReleases.ts` | Unique releases of a Windchill export from the Location column (deepest folder with a version) or the document names (clubbed names included); unique locations; the windchill-locations analysis file. | CON |
 | xlsx | `src/xlsx.ts` | Library-free .xlsx zip reader/writer and CSV reader with inflate size limit; the writer writes numbers and real dates (a serial with a date format, UI-11). | QEM, UI |
@@ -242,10 +254,10 @@ This document lists every software component of the system: the in-house source 
 | pptxTemplate | `src/pptxTemplate.ts` | Fills the team's PowerPoint template (kept in Storage) with the Monthly pack: Performance Pulse and 2x2 boxes found by label and position, status colours, KPI rows, shrink to fit; checks an uploaded template. | PCK |
 | workItemEdit | `src/workItemEdit.ts` | The fields an edit may change, their checks, the revision-tested JSON patch, rich text as editable text, the Feature DoD split and the edit locks. | BKL |
 | planningLock | `src/planningLock.ts` | The planning / actuals lock rule of a month (deadline, extension, explicit lock) shared by the Monthly page and the Task creation paths, and whether a new month Task is ad-hoc. | MON |
-| backgroundJobs | `src/backgroundJobs.ts` | Background jobs of a page load: runs long Azure DevOps writes off the form, one per key, with progress and the result; nothing stored. | NAV, BKL, ATM, MON |
+| backgroundJobs | `src/backgroundJobs.ts` | Background jobs of a page load: runs long Azure DevOps writes off the form, one per key, with progress and the result, and records an instant result as a finished entry (QV-63); nothing stored. | NAV, BKL, ATM, MON, QV |
 | azureCredentials | `src/azureCredentials.ts` | Browser-local PATs per server and connection profiles (role, view name, show in menu, shared from Git); never in app data. | CON |
 | connectionPresets | `src/connectionPresets.ts` | Pre-filled team connection presets and dismissed-preset storage. | CON |
-| releaseSource | `src/releaseSource.ts` | Read-only release source: paged flat WIQL queries and tree / direct-links (WorkItemLinks) queries, approval month, completed releases, fuzzy Feature name matching. | QV |
+| releaseSource | `src/releaseSource.ts` | Read-only release source: paged flat WIQL queries and tree / direct-links (WorkItemLinks) queries, approval month, completed releases and the month's release count, fuzzy Feature name matching, Features' Time Writing hours. | QV |
 | windchill | `src/windchill.ts` | Windchill host/service path settings, normalisation and browser storage. | CON |
 | windchillBridge | `src/windchillBridge.ts` | Bookmarklet bridge to run Windchill searches in a signed-in Windchill tab and return verified results. | CON |
 | windchillBrowser | `src/windchillBrowser.ts` | Windchill test and query from the browser with its own sign-in (CORS, read-only GETs). | CON |
@@ -263,13 +275,17 @@ This document lists every software component of the system: the in-house source 
 | useAzureWorkspace | `src/useAzureWorkspace.ts` | Azure connections state: fetch, save, preview, sample data, Git-backed on-prem data and fetch listeners. | CON, FET, SMP |
 | useDpBoardColumn | `src/useDpBoardColumn.tsx` | DP table "QMS-0025 match" column with search/export text and Create Feature. | QV |
 | useFeatureSetup | `src/useFeatureSetup.ts` | Shared and personal Feature setup from Git, cached locally, saved with a writable token. | CON |
-| useGitStorage | `src/useGitStorage.ts` | Git storage state: load/save planning data, views file, access, Feature setup, QE Mapping and Windchill files, including the windchill-analysis locations file; the save queue of the merged shared files (GIT-17). | GIT, CON, QEM |
+| useGitStorage | `src/useGitStorage.ts` | Git storage state: load/save planning data, views file, access, Feature setup, QE Mapping and Windchill files, including the windchill-analysis locations file; the save queue of the merged shared files (GIT-17). | GIT, CON, QEM, OND |
 | useMyWork | `src/useMyWork.ts` | Who "me" is: Time Writing connection email plus a remembered display name. | ATM |
 | useNow | `src/useNow.ts` | Date that re-renders on an interval for clock and freshness labels. | NAV |
 | usePersonScope | `src/usePersonScope.ts` | Team / Individual scope and team filter, remembered per page. | MON, OVR |
 | useQeMapping | `src/useQeMapping.ts` | QE Mapping table from Git, cached locally, saved with a writable token. | QEM |
+| useCustomStreams | `src/useCustomStreams.ts` | Custom streams from Git (custom-streams.json), the last good file cached locally and made the app's streams; saved with a writable token, a concurrent change refused. | STR |
+| useOnDemand | `src/useOnDemand.ts` | The On-Demand pages from Git (on-demand/ folder), cached locally, CoNQ while none exists, drafts per page, queued merged saves and removal. | OND |
+| useMenuLayout | `src/useMenuLayout.ts` | The menu layout from Git (menu-layout.json), cached locally, saved with the queued, merged saves; creating a page (its file, then its place in the menu and a new group). | PGB, GIT |
 | useMonthlyPack | `src/useMonthlyPack.ts` | Monthly pack setup (cached locally) and the month's text from Git, saved with a writable token. | PCK |
-| useWindchill | `src/useWindchill.ts` | Windchill views: searches, fetching via desktop/browser/bridge, importing results. | CON |
+| useWindchill | `src/useWindchill.ts` | Windchill views: searches, fetching via desktop/browser/bridge, importing results; each fetch and import a Background jobs entry (QV-63). | CON, QV |
+| useWindchillReading | `src/useWindchillReading.ts` | How a Windchill export's releases are read (Read from, name / Location column) and the releases read, held by the export's page so that its counts follow its Releases table (QV-64). | CON, QV |
 
 ### 1.7 Desktop shell (Electron)
 
@@ -314,7 +330,7 @@ This document lists every software component of the system: the in-house source 
 | pptx-template.test | `tests/pptx-template.test.mjs` | Filling a synthetic template (labels, KPI rows, status, footer kept, file properties), template checks, shrink to fit, the pack's fill. | PCK |
 | work-item-edit.test | `tests/work-item-edit.test.mjs` | Edit checks and patch, locks, revision conflict, Monthly lock rules on Task hours, Discussion, both transports. | BKL |
 | planning-lock.test | `tests/planning-lock.test.mjs` | Planning / actuals lock rule and the ad-hoc check for a new month Task. | MON |
-| background-jobs.test | `tests/background-jobs.test.mjs` | Background jobs: progress, result, failure, one job per key, Clear finished. | NAV |
+| background-jobs.test | `tests/background-jobs.test.mjs` | Background jobs: progress, result, failure, one job per key, Clear finished, recorded results. | NAV, QV |
 | azure-insights.test | `tests/azure-insights.test.mjs` | Month Task plan/actual mapping, Time Writing stories, NPRA reporting and utilization. | MON, TWN, CAP |
 | backlog-health.test | `tests/backlog-health.test.mjs` | Backlog Health lists, columns, plain-text descriptions and CSV. | CON |
 | baseline.test | `tests/baseline.test.mjs` | Baseline formula, caps, normalisation, release rows and sample scopes. | BAS, SMP |
@@ -372,6 +388,10 @@ This document lists every software component of the system: the in-house source 
 | nested-groups.test | `tests/nested-groups.test.mjs` | Nested grouping: levels, order, blank last, unique keys. | QV |
 | monthly-pack.test | `tests/monthly-pack.test.mjs` | Monthly pack files, Epic counts, lines, YoY, slide text and the .pptx writer. | PCK |
 | qe-mapping.test | `tests/qe-mapping.test.mjs` | xlsx/CSV read/write and QE Mapping editing and Git file handling. | QEM |
+| on-demand.test | `tests/on-demand.test.mjs` | On-Demand pages: the Git file validated, rows, column type changes and option renames that keep values, the merge of two saves, the On-Demand rights and older access.json files (TC-OND-02…06). | OND, CON |
+| on-demand-rows.test | `tests/on-demand-rows.test.mjs` | On-Demand row details: sequential IDs (order, never changing, unique after a merge clash, older rows numbered), who added a row and when, the update log and its merge, Long text and Currency values, Currency in the insights (one currency at a time), column descriptions (TC-OND-16…20). | OND |
+| on-demand-insights.test | `tests/on-demand-insights.test.mjs` | On-Demand insights: count, sum, average, stacking and pivot totals, months, Multi-select per value, filters, "(none)" and "Other", broken references, the insights in the page file and their merge (TC-OND-09…12, TC-OND-14). | OND |
+| page-builder.test | `tests/page-builder.test.mjs` | Page builder: the menu layout file validated, written and merged (co-owners as sets), the groups and the order of pages, group rules, the rights of the Tool Owner, a group co-owner, a page co-owner and nobody, “Manage pages and menu groups” for older access.json files, CoNQ migrated in place (TC-PGB-02…08). | PGB, CON |
 | kpi-tracker.test | `tests/kpi-tracker.test.mjs` | SharePoint link and read (one GET, sign-in detection), the Git copy and its limits, sheet tables. | KPT, IF |
 | dp-bulk.test | `tests/dp-bulk.test.mjs` | DP release type and sets, QE match, possible QEs, bulk plan. | DPF |
 | formula.test | `tests/formula.test.mjs` | Typed formula: evaluation, functions, blank on / 0, error messages. | CAP |
@@ -388,10 +408,11 @@ This document lists every software component of the system: the in-house source 
 | chart-labels.test | `tests/chart-labels.test.mjs` | Chart data labels: shared default, per-chart choice, stored values checked (TC-UI-10). | UI |
 | query-view.test | `tests/query-view.test.mjs` | Query layout, field resolution, sorting, summary, CSV and column order. | QV |
 | release-overview.test | `tests/release-overview.test.mjs` | Releases per stream approved in the month for Overview and Pulse Check. | OVR |
-| release-source.test | `tests/release-source.test.mjs` | Release-source WIQL paging, tree / links queries, path parsing, register and approval dates. | QV, CON |
+| release-source.test | `tests/release-source.test.mjs` | Release-source WIQL paging, tree / links queries, path parsing, register and approval dates, Feature hours and month release counts. | QV, CON |
 | sample-data.test | `tests/sample-data.test.mjs` | Synthetic sample is deterministic and exercises every model. | SMP |
 | setup-guide.test | `tests/setup-guide.test.mjs` | Get started step statuses for new, partly and fully set-up users. | NAV |
 | streams.test | `tests/streams.test.mjs` | Stream definitions, DP/IOCC/Tool Validations rules, fuzzy Feature match and Pulse Check streams. | QV, OVR |
+| custom-streams.test | `tests/custom-streams.test.mjs` | Custom streams: the file read from Git (validation, refused entries), add / rename / remove, allStreams and the longest-name match, a custom “Like IOCC” stream reading documents into releases, custom Windchill streams. | STR |
 | theme.test | `tests/theme.test.mjs` | Theme preference parsing/cycling/`?theme=` and relative freshness labels. | UI |
 | work-email.test | `tests/work-email.test.mjs` | The work email setting: saved and read on its own, unchanged by Git syncs and connection edits, taken over once from the Time Writing connection only after the shared-email clean-up. | CON |
 | view-definitions.test | `tests/view-definitions.test.mjs` | Views file in Git, restore PAT rules, Git setup sync (stream mapping enforced), pending admin changes and Time Writing promotion. | CON, GIT |
@@ -399,7 +420,7 @@ This document lists every software component of the system: the in-house source 
 | windchill-bridge.test | `tests/windchill-bridge.test.mjs` | Windchill bookmarklet and result verification. | CON |
 | windchill-browser.test | `tests/windchill-browser.test.mjs` | Windchill test and search from the web app with browser sign-in. | CON |
 | windchill-export.test | `tests/windchill-export.test.mjs` | Windchill CSV export parsing. | CON |
-| windchill-releases.test | `tests/windchill-releases.test.mjs` | Release extraction from document names, unique and clubbed releases. | CON |
+| windchill-releases.test | `tests/windchill-releases.test.mjs` | Release extraction from document names, unique and clubbed releases, the month counts. | CON, QV |
 | windchill-views.test | `tests/windchill-views.test.mjs` | Windchill OData queries, desktop query paging, Git results and browser route. | CON |
 | windchill.test | `tests/windchill.test.mjs` | Windchill host normalisation and desktop connection test. | CON, DSK |
 
@@ -411,9 +432,12 @@ The end-to-end suite (`pnpm test:e2e`, after `pnpm build:web`) drives the built 
 |---|---|---|---|
 | helpers | `e2e/helpers.mjs` | Starts `vite preview` on a free port, opens Chromium pages with clean storage, records page errors, throttles the CPU when `E2E_CPU_SLOWDOWN` is set (CI-12), shared actions (navigate — waiting for the page's code —, load sample, reload with the sample kept), a cached roles file for scenarios that change something (CON-101). | CI |
 | shell.e2e | `e2e/shell.e2e.mjs` | Sidebar groups and footer, header and month picker, Get started pop-up, synthetic sample, theme toggle, phone width, Force Update dialog, Git storage form defaults, refresh while open (TC-GIT-08), KPI tracker hidden from the menu (TC-KPT-01), typed formula (TC-CAP-27), release naming patterns (TC-QV-37), desktop zoom (TC-UI-07), manager not on the board (TC-GIT-06, TC-SET-05, TC-NAV-01, 03, 31, 33, TC-UI-01, TC-SMP-01, TC-UPD-02); Removed connections restored from the Git history (TC-CON-61); the sample reset asks first and is recorded (TC-SMP-02). | NAV, UI, SMP, UPD |
-| documents-and-data.e2e | `e2e/documents-and-data.e2e.mjs` | Documentation tabs, links and download; Windchill export releases from names and from Location with the locations CSV; "＋ ECP" import named after the stream with the ECP CSV, Project No / Project Name columns, an ECP setup at the 3rd folder with the type-2 CSV (TC-CON-53, 54, 55); the table default on the Windchill raw data — move, hide, density, Excel export with dates, Settings → Table defaults (TC-UI-04, 05); My Work tree, Backlog Health and Baselines on the default (TC-UI-06); neutralised CSV; JSON backup without credentials (TC-DOC-01, 02, TC-CON-39, 40, 37, TC-STO-04, TC-INS-01); Windchill releases' QMS-0025 match column (TC-QV-23); auto-fit tables and Wrap text (TC-CON-42); the DP Supported Releases list in Pulse Check folded until Show list (TC-QV-17). | DOC, CON, STO, NFR, QV |
+| documents-and-data.e2e | `e2e/documents-and-data.e2e.mjs` | Documentation tabs, links and download; Windchill export releases from names and from Location with the locations CSV; "＋ ECP" import named after the stream with the ECP CSV and the common Release name / Release columns, an ECP setup at the 3rd folder with the type-2 CSV (TC-CON-53, 54, 55); the table default on the Windchill raw data — move, hide, density, Excel export with dates, Settings → Table defaults (TC-UI-04, 05); My Work tree, Backlog Health and Baselines on the default (TC-UI-06); neutralised CSV; JSON backup without credentials (TC-DOC-01, 02, TC-CON-39, 40, 37, TC-STO-04, TC-INS-01); Windchill releases' QMS-0025 match column (TC-QV-23); auto-fit tables and Wrap text (TC-CON-42); the DP Supported Releases list in Pulse Check folded until Show list (TC-QV-17); every Release page (DP, IOCC, Content, S&S IT) with the source bar, counts, Releases | Source data tabs and the common columns in order (TC-QV-43). | DOC, CON, STO, NFR, QV |
 | backlog.e2e | `e2e/backlog.e2e.mjs` | New User Story form from a Feature row of the Backlogs (TC-BKL-10); the Edit form from Feature, User Story and Task rows (TC-BKL-11); New Feature sections, Start date and the Time Writing months with hours per month (TC-BKL-19, TC-BKL-21); DoD and User Stories per Release Classification value (TC-DPF-06); User Story templates (TC-STT-01). | CI, BKL |
 | monthly-pack.e2e | `e2e/monthly-pack.e2e.mjs` | Monthly pack tab with the synthetic sample, the .pptx download and the setup tab (TC-PCK-04). | CI |
+| on-demand.e2e | `e2e/on-demand.e2e.mjs` | On-Demand → CoNQ against a mocked GitHub: columns with options, a row, Save to Git of on-demand/conq.json and reading it back (TC-OND-01); read only without the rights (TC-OND-07); Insights — a bar chart and a summary table saved in the page file and read back (TC-OND-09); Insights read only and a broken chart (TC-OND-13); row details — Long text and Currency columns with descriptions, the row ID on Save to Git, who added it and when, an edit in History and in the file (TC-OND-16). | OND, CON |
+| custom-streams.e2e | `e2e/custom-streams.e2e.mjs` | Custom streams against a mocked GitHub and Azure DevOps: the Tool Owner adds “Labeling” (Like Content), maps its connection and opens its Release page with the §10 parts (TC-STR-06); a viewer without the right sees ＋ Add stream… disabled with the reason (TC-STR-07). | STR |
+| page-builder.e2e | `e2e/page-builder.e2e.mjs` | Page builder against a mocked GitHub: a Tool Owner adds the group Quality with a Table page, names a group co-owner, sets the page up and adds a row (TC-PGB-01); the group co-owner adds a page but cannot change the group (TC-PGB-09); no ownership — everything disabled with the reason (TC-PGB-10). | PGB |
 
 ## 2. Third-party components (SOUP)
 

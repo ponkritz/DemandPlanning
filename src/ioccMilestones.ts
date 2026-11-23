@@ -21,10 +21,10 @@ export function ioccDocumentOf(title: string | undefined): IoccDocument | undefi
 
 // The release a document belongs to: the Type of Release (Area Path after IOCC), the Title without its version and
 // without the document words (ioccRelease), and the version — so a release's plan, notes and report are one release.
-export function ioccReleaseOf(item: Pick<AzureWorkItem, 'areaPath' | 'title'>, patterns: NamingPattern[] = []) {
+export function ioccReleaseOf(item: Pick<AzureWorkItem, 'areaPath' | 'title'>, patterns: NamingPattern[] = [], area?: string[]) {
   // QV-55: the IOCC naming patterns first (Conformance Verification <name>, Test Tools <name>), else the IOCC rule.
   const matched = patterns.length ? matchPatterns(item.title ?? '', patterns) : undefined
-  const found = matched ? { group: matched.group, name: matched.name, release: '' } : ioccRelease(item)
+  const found = matched ? { group: matched.group, name: matched.name, release: '' } : ioccRelease(item, area)
   if (!found) return undefined
   return { group: found.group ?? '', name: found.name, release: found.release, key: `${found.group ?? ''}\u0000${found.name}\u0000${found.release}`.toLowerCase() }
 }
@@ -32,10 +32,10 @@ export function ioccReleaseOf(item: Pick<AzureWorkItem, 'areaPath' | 'title'>, p
 export interface IoccSigned { item: AzureWorkItem; document: IoccDocument; date: string }
 export interface IoccRelease { key: string; group: string; name: string; release: string; documents: IoccSigned[]; date: string }
 
-function unique(entries: IoccSigned[], patterns: NamingPattern[] = []): IoccRelease[] {
+function unique(entries: IoccSigned[], patterns: NamingPattern[] = [], area?: string[]): IoccRelease[] {
   const byKey = new Map<string, IoccRelease>()
   for (const entry of entries) {
-    const release = ioccReleaseOf(entry.item, patterns)
+    const release = ioccReleaseOf(entry.item, patterns, area)
     if (!release) continue
     const found = byKey.get(release.key)
     if (found) { found.documents.push(entry); if (entry.date > found.date) found.date = entry.date; continue }
@@ -44,7 +44,8 @@ function unique(entries: IoccSigned[], patterns: NamingPattern[] = []): IoccRele
   return [...byKey.values()].sort((a, b) => a.date.localeCompare(b.date) || a.key.localeCompare(b.key))
 }
 
-export function ioccMonthCounts(items: AzureWorkItem[], month: string, timeZone?: string, patterns: NamingPattern[] = []) {
+// area: a custom stream “Like IOCC” (STR-03), see ioccRelease.
+export function ioccMonthCounts(items: AzureWorkItem[], month: string, timeZone?: string, patterns: NamingPattern[] = [], area?: string[]) {
   const signed: IoccSigned[] = []
   for (const item of items) {
     const document = ioccDocumentOf(item.title)
@@ -52,5 +53,5 @@ export function ioccMonthCounts(items: AzureWorkItem[], month: string, timeZone?
     if (document && date && approvalMonthOf(date, timeZone) === month) signed.push({ item, document, date })
   }
   signed.sort((a, b) => a.date.localeCompare(b.date) || a.item.id - b.item.id)
-  return { completed: unique(signed.filter((entry) => completing.includes(entry.document)), patterns), supported: unique(signed, patterns), documents: signed }
+  return { completed: unique(signed.filter((entry) => completing.includes(entry.document)), patterns, area), supported: unique(signed, patterns, area), documents: signed }
 }

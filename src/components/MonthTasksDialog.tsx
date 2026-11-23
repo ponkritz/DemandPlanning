@@ -1,3 +1,4 @@
+import { useWriteBlock } from '../useCan'
 import { useMemo, useState } from 'react'
 import type { AzureWorkItem } from '../domain'
 import type { AzureConfig } from '../azureDevOps'
@@ -7,7 +8,7 @@ import { isFutureMonth, monthKeyOfLabel, monthLabelOfKey } from '../featureMonth
 import { existingMonthNotice, existingMonthTasks, overrideConfirmText, startMonthTasksJob } from '../monthTaskAction'
 import { assignablePeople, featureOf } from '../myWork'
 import { adhocAfterLock } from '../planningLock'
-import { Modal, Notice } from './ui'
+import { Modal, Notice, WriteBlocked } from './ui'
 import { PersonPicker } from './PersonPicker'
 
 // BKL-34 "＋ Time Writing Task": the months to add a Time Writing Task for — the month in the header first — each with
@@ -25,6 +26,8 @@ export function MonthTasksDialog({ item, items, config, pat, me, canChoose = fal
   const start = month && /^\d{4}-\d{2}$/.test(month) ? month : monthKeyOfLabel(todayLabel) ?? ''
   const [rows, setRows] = useState<Row[]>([{ key: start, plan: '', done: '' }])
   const [error, setError] = useState('')
+  // CON-102: the hours need "Enter planned and actual hours"; without it the Tasks can still be created, without hours.
+  const write = useWriteBlock(), hoursReason = write.why('work.hours')
   const feature = featureOf(items, item)
   const people = useMemo(() => assignablePeople(items), [items])
   const self = me.trim().toLowerCase()
@@ -69,13 +72,14 @@ export function MonthTasksDialog({ item, items, config, pat, me, canChoose = fal
         ? <label className="month-tasks-assignee">Assigned to<PersonPicker label="Assigned to" value={assigneeName} people={people.filter((person) => person.email !== self).map((person) => person.name)} onChange={setAssigneeName} meLabel={self ? `Me (${self})` : 'Choose a person…'} /></label>
         : <p className="month-tasks-assignee"><strong>Assigned to:</strong> {self || '—'} <small className="muted">(you; assigning work to others needs the right “Assign new work to other people”)</small></p>}
       {assignee && <small className="muted">Assigned To of the Task and its Time Writing story in Azure DevOps: {assignee}</small>}
+      {hoursReason && <WriteBlocked reason={`${hoursReason} The month Tasks are created without hours.`} />}
       <table className="nf-month-hours"><thead><tr><th scope="col">Month</th><th scope="col">Original Estimate (h)</th><th scope="col">Completed Work (h)</th><th scope="col"><span className="sr-only">Remove</span></th></tr></thead>
         <tbody>{rows.map((row, index) => { const label = row.key ? monthLabelOfKey(row.key) : '', future = Boolean(label) && isFutureMonth(label, todayLabel), existing = mine.get(row.key); return <tr key={index}>
           <th scope="row"><input type="month" aria-label={`Month ${index + 1}`} value={row.key} onChange={(event) => set(index, { key: event.target.value })} />
             {existing && <small className="month-tasks-note month-tasks-exists" role="note">{existingMonthNotice(monthLabelOfKey(row.key), existing, forOther)}</small>}
             {label && adhocAfterLock(label) && !existing && <small className="muted month-tasks-note">Planning is locked: tagged ad-hoc</small>}</th>
-          <td><input type="number" aria-label={`Original Estimate (h) ${label || index + 1}`} min="0" max="1000000" step="0.25" value={row.plan} placeholder={existing?.originalEstimate != null ? String(existing.originalEstimate) : defaultHours != null ? `${defaultHours} (setup)` : 'Optional'} onChange={(event) => set(index, { plan: event.target.value })} /></td>
-          <td><input type="number" aria-label={`Completed Work (h) ${label || index + 1}`} min="0" max="1000000" step="0.25" value={future ? '' : row.done} disabled={future} placeholder={future ? '—' : existing?.completedWork != null ? String(existing.completedWork) : 'Optional'} onChange={(event) => set(index, { done: event.target.value })} /></td>
+          <td><input type="number" aria-label={`Original Estimate (h) ${label || index + 1}`} min="0" max="1000000" step="0.25" value={row.plan} disabled={Boolean(hoursReason)} title={hoursReason || undefined} placeholder={existing?.originalEstimate != null ? String(existing.originalEstimate) : defaultHours != null ? `${defaultHours} (setup)` : 'Optional'} onChange={(event) => set(index, { plan: event.target.value })} /></td>
+          <td><input type="number" aria-label={`Completed Work (h) ${label || index + 1}`} min="0" max="1000000" step="0.25" value={future ? '' : row.done} disabled={future || Boolean(hoursReason)} title={hoursReason || undefined} placeholder={future ? '—' : existing?.completedWork != null ? String(existing.completedWork) : 'Optional'} onChange={(event) => set(index, { done: event.target.value })} /></td>
           <td>{rows.length > 1 && <button type="button" className="text-button danger-text" aria-label={`Remove ${label || `month ${index + 1}`}`} onClick={() => setRows((now) => now.filter((_, at) => at !== index))}>✕</button>}</td>
         </tr> })}</tbody>
       </table>

@@ -20,7 +20,8 @@ import { HomePage } from './pages/HomePage'
 import { loadStartView, saveStartView, startPageOf, visibleTiles, type HomeLink, type HomeTile, type StartView } from './homeTiles'
 import { lookLabel, mySettingsLabel, readSettingsTab, resolveSettings, saveSettingsSection, saveSettingsTab, settingsLabel, settingsPagesFor, type SettingsTab } from './settingsTabs'
 import { normalizeReleaseSourceSettings } from './releaseSource'
-import { dataSets, defaultMatchThreshold, defaultStreams, profileForDataSet, profileForStream, windchillStreamExports } from './streams'
+import { allStreams, dataSets, defaultMatchThreshold, defaultStreams, profileForDataSet, profileForStream, windchillStreamExports } from './streams'
+import { CustomStreamsContext, useCustomStreams, useStreamsVersion } from './useCustomStreams'
 import { connectionPresets } from './connectionPresets'
 import { gitSyncedIds, markViewsSynced, removeDuplicateConnections } from './viewDefinitions'
 import { listAzureConnectionProfiles } from './azureCredentials'
@@ -40,9 +41,13 @@ import { myPatternsVersion, subscribeMyPatterns } from './myNamingPatterns'
 import { useAccess } from './useAccess'
 import { useFeatureSetup } from './useFeatureSetup'
 import { useQeMapping } from './useQeMapping'
+import { useOnDemand } from './useOnDemand'
+import { createPage, useMenuLayout } from './useMenuLayout'
+import { addPageReason, builtInGroupOf, findGroup, gitReasonOf, kindOf, menuGroups, pagesOfGroup, placementOf, type Viewer } from './menuLayout'
+import { AddPageDialog } from './components/PageDialogs'
 import { useMonthlyPack } from './useMonthlyPack'
 import { previousMonth } from './pulseCheck'
-import type { Area } from './access'
+import { canManagePages, type Area } from './access'
 import { useMyWork } from './useMyWork'
 import { setLockSettings } from './planningLock'
 import { DesktopDownload } from './components/DesktopDownload'
@@ -81,6 +86,8 @@ const PiReviewPage = lazy(() => import('./pages/PiReviewPage').then((module) => 
 const BritePage = lazy(() => import('./pages/BritePage').then((module) => ({ default: module.BritePage })))
 const KpiTrackerPage = lazy(() => import('./pages/KpiTrackerPage').then((module) => ({ default: module.KpiTrackerPage })))
 const QeMappingPage = lazy(() => import('./pages/QeMappingPage').then((module) => ({ default: module.QeMappingPage })))
+const OnDemandPage = lazy(() => import('./pages/OnDemandPage').then((module) => ({ default: module.OnDemandPage })))
+const PagesMenuPage = lazy(() => import('./pages/PagesMenuPage').then((module) => ({ default: module.PagesMenuPage })))
 const MyWorkPage = lazy(() => import('./pages/MyWorkPage').then((module) => ({ default: module.MyWorkPage })))
 const WindchillPage = lazy(() => import('./components/WindchillViews').then((module) => ({ default: module.WindchillPage })))
 const WindchillExportImport = lazy(() => import('./components/WindchillViews').then((module) => ({ default: module.WindchillExportImport })))
@@ -202,6 +209,19 @@ export default function App() {
   // QV-60: my own naming patterns changing redraws the figures.
   useSyncExternalStore(subscribeMyPatterns, myPatternsVersion)
   const qeMapping = useQeMapping(git)
+  // STR-01…06: the custom streams from Git; a change redraws the menu, Home and every stream list.
+  const customStreams = useCustomStreams(git)
+  useStreamsVersion()
+  // OND-01…10: the On-Demand pages (CoNQ, and those added), each in the menu by its name.
+  const onDemand = useOnDemand(git)
+  const [onDemandId, setOnDemandId] = useState(() => { try { return localStorage.getItem('demand-planning-on-demand-page-v1') ?? '' } catch { return '' } })
+  const onDemandPage = onDemand.pages.find((entry) => entry.id === onDemandId) ?? onDemand.pages[0]
+  // PGB-02…PGB-11: the menu layout (menu-layout.json): custom groups, group settings, each added page's place, type and
+  // co-owners; and the viewer as its rights see them (the work email, the role rights, the Tool Owner right, CON-106).
+  const menu = useMenuLayout(git)
+  const viewedEmail = access.viewingAs?.kind === 'person' ? (access.viewingAs.email ?? '').trim().toLowerCase() : access.viewingAs ? '' : access.email
+  const viewer: Viewer = { email: viewedEmail, can: access.can, readOnly: access.readOnly, manager: canManagePages(access.policy, access.rights) }
+  const [addPageFor, setAddPageFor] = useState<string | null>(null)
   // Who creates new work items (the email on the Time Writing connection) and whether they may assign them to others.
   const assign = { me: azure.creatorEmail.trim().toLowerCase(), canChoose: access.can('azure.createForOthers') }
   // NAV-42, NAV-46: the start page — Home (the tiles) in the tile view, My dashboard in the classic view.
@@ -229,6 +249,7 @@ export default function App() {
   const [viewId, setViewId] = useState(loadBacklogTab)
   const view = views.find((entry) => entry.id === viewId) ?? views[0] ?? timeWriting
   const openView = (id: string) => { setViewId(id); saveBacklogTab(id); setPage('board') }
+  const openOnDemand = (id: string) => { setOnDemandId(id); try { localStorage.setItem('demand-planning-on-demand-page-v1', id) } catch { /* this visit only */ } setPage('ondemand') }
   // Access roles: each menu entry belongs to an area; Settings is always there (each person's own connections and tokens).
   // A page the viewer's roles do not include falls back to the first one they do.
   const areaOf = (id: Page): Area | null => id === 'admin' || id === 'home' ? null : id === 'board' ? (view.onPrem ? 'release' : 'board') : id === 'windchill' || id === 'brite' ? 'release' : id === 'overview' || id === 'pulse' || id === 'pireview' || id === 'kpitracker' ? 'insights' : id === 'mydash' ? 'overview' : id === 'activities' ? 'monthly' : id === 'planover' || id === 'capactual' ? 'insights' : id
@@ -259,15 +280,26 @@ export default function App() {
   // UI-16: the side menu folded to icons on wide screens (« / »), kept per computer.
   const [menuMini, setMenuMini] = useState(() => { try { return localStorage.getItem(menuMiniKey) === '1' } catch { return false } })
   const toggleMenuMini = () => setMenuMini((current) => { const next = !current; try { localStorage.setItem(menuMiniKey, next ? '1' : '0') } catch { /* this visit only */ } return next })
-  useEffect(() => { setNavOpen(false) }, [page, viewId, windchillId])
+  useEffect(() => { setNavOpen(false) }, [page, viewId, windchillId, onDemandId])
   useEffect(() => { if (!navOpen) return; const close = (event: KeyboardEvent) => { if (event.key === 'Escape') setNavOpen(false) }; window.addEventListener('keydown', close); return () => window.removeEventListener('keydown', close) }, [navOpen])
   const [collapsed, setCollapsed] = useState<string[]>(() => { try { const saved = JSON.parse(localStorage.getItem('demand-planning-nav-collapsed-v1') ?? '[]'); return Array.isArray(saved) ? saved.filter((key): key is string => typeof key === 'string') : [] } catch { return [] } })
   const saveCollapsed = (next: string[]) => { try { localStorage.setItem('demand-planning-nav-collapsed-v1', JSON.stringify(next)) } catch { /* this visit only */ } return next }
   const toggleNav = (key: string) => setCollapsed((now) => saveCollapsed(now.includes(key) ? now.filter((entry) => entry !== key) : [...now, key]))
   // Expand all / Collapse all (NAV-37): every heading and both Release Details lists at once.
-  const navKeys = [...pageGroups, 'release:ads', 'release:windchill']
+  // PGB-04: the menu groups — the built-in ones, with the custom groups of the menu layout after On-Demand.
+  const customGroups = menuGroups(menu.layout).filter((group) => !group.builtIn)
+  const navGroups: string[] = pageGroups.flatMap((group): string[] => group === 'On-Demand' ? [group, ...customGroups.map((entry) => entry.name)] : [group])
+  const groupIdOf = (name: string) => builtInGroupOf(name) || customGroups.find((entry) => entry.name === name)?.id || ''
+  const groupNameOf = (id: string) => findGroup(menu.layout, id)?.name ?? 'On-Demand'
+  const navKeys = [...navGroups, 'release:ads', 'release:windchill']
   const allCollapsed = navKeys.every((key) => collapsed.includes(key))
   const navButton = (key: string, icon: string, label: string, active: boolean, onClick: () => void) => <button key={key} title={menuMini ? label : undefined} className={active ? 'nav-active' : ''} aria-current={active ? 'page' : undefined} onClick={onClick}><span className="nav-icon">{icon}</span>{label}</button>
+  // PGB-04: the added pages of a group that the viewer sees — the On-Demand area (all added pages share it, CON-103), in
+  // Testing for the Admin role only — less the ones hidden in their own menu (MYD-08: "On-Demand" hides them all).
+  const addedPages = (groupId: string) => !allowed('ondemand') || personalViews.menu.hidden.includes('ondemand') || (groupId === 'testing' && !testing) ? [] : pagesOfGroup(menu.layout, onDemand.pages, groupId).filter((entry) => !personalViews.menu.hidden.includes(`ondemand:${entry.id}`))
+  const addedButtons = (groupId: string) => addedPages(groupId).map((entry) => navButton(`ondemand:${entry.id}`, placementOf(menu.layout, entry.id).icon, entry.name, page === 'ondemand' && onDemandPage?.id === entry.id, () => openOnDemand(entry.id)))
+  const addedLinks = (groupId: string): HomeLink[] => addedPages(groupId).map((entry) => ({ key: `ondemand:${entry.id}`, label: entry.name, icon: placementOf(menu.layout, entry.id).icon, open: () => openOnDemand(entry.id) }))
+  const menuGitReason = gitReasonOf(git)
   // Settings pages (SET-14): one menu entry each; opening one on a given section (e.g. Stream mapping) shows that
   // section. The page is remounted so it picks up the section asked for.
   const [settingsTab, setSettingsTab] = useState<SettingsTab>(readSettingsTab)
@@ -309,20 +341,23 @@ export default function App() {
   const tileOf = (tile: Omit<HomeTile, 'open'> & { open?: () => void }): HomeTile | null => tile.open ? { ...tile, open: tile.open } : tile.links.length ? { ...tile, open: tile.links[0].open } : null
   const firstAllowed = (...ids: Page[]) => { const id = ids.find((entry) => allowed(entry)); return id ? () => setPage(id) : undefined }
   const streamLinks: HomeLink[] = access.sees('release') ? [
-    ...defaultStreams.filter((stream) => stream.source === 'azure').map((stream) => { const profile = profileForStream(stream, azure.connectionProfiles), entry = profile && views.find((item) => item.id === profile.id); return entry ? { key: `stream:${stream.name}`, label: stream.name, icon: pageMeta('board').icon, open: () => openView(entry.id) } : { key: `stream:${stream.name}`, label: stream.name, icon: '＋', note: 'not set up yet — opens Stream mapping', open: openConnection } }),
+    ...allStreams().filter((stream) => stream.source === 'azure').map((stream) => { const profile = profileForStream(stream, azure.connectionProfiles), entry = profile && views.find((item) => item.id === profile.id); return entry ? { key: `stream:${stream.name}`, label: stream.name, icon: pageMeta('board').icon, open: () => openView(entry.id) } : { key: `stream:${stream.name}`, label: stream.name, icon: '＋', note: 'not set up yet — opens Stream mapping', open: openConnection } }),
     ...windchillStreamExports(windchillViews).map(({ stream, name, view: entry }) => ({ key: `windchill:${entry?.id ?? stream.name}`, label: name, icon: entry ? pageMeta('windchill').icon : '＋', ...(entry ? {} : { note: 'not imported yet' }), open: () => entry ? openWindchill(entry.id) : openWindchill('', stream.name) })),
     ...pageLink('brite'),
   ] : []
   const settingsLinks: HomeLink[] = settingsPagesFor(access.can).map((entry) => ({ key: `settings:${entry.key}`, label: entry.label, icon: pageMeta('admin').icon, open: () => openSettings(entry.key) }))
   const homeTiles = visibleTiles([
-    tileOf({ key: 'mywork', title: 'My Work', detail: 'Time Writing, your tasks and the Sprint check.', tone: 'sky', open: firstAllowed('activities', 'mywork'), links: [...pageLink('activities'), ...pageLink('mywork'), ...pageLink('bulk')], ...(my.known && azure.items.length ? { badge: `${my.pending.length} open` } : {}) }),
+    tileOf({ key: 'mywork', title: 'My Work', detail: 'Time Writing, your tasks and the Sprint check.', tone: 'sky', open: firstAllowed('activities', 'mywork'), links: [...pageLink('activities'), ...pageLink('mywork'), ...pageLink('bulk'), ...addedLinks('my-work')], ...(my.known && azure.items.length ? { badge: `${my.pending.length} open` } : {}) }),
     tileOf({ key: 'mydash', title: 'My dashboard', detail: 'Your hours against your capacity, your open work and your streams.', tone: 'peach', open: firstAllowed('mydash'), links: [] }),
-    tileOf({ key: 'insights', title: 'Team Insights', detail: 'Team overview, Pulse Check and PI Review.', tone: 'lilac', links: [...pageLink('overview'), ...pageLink('pulse'), ...pageLink('pireview'), ...pageLink('kpitracker')] }),
-    tileOf({ key: 'board', title: 'I&D Board', detail: 'The QMS-0025 backlog and its health.', tone: 'mint', open: allowed('board') && access.sees('board') ? () => openView(timeWriting.id) : undefined, links: [...(access.sees('board') ? [{ key: 'board', label: timeWriting.name, icon: pageMeta('board').icon, open: () => openView(timeWriting.id) }] : []), ...pageLink('health')] }),
-    tileOf({ key: 'release', title: 'Release Details', detail: 'The releases of each stream: DP, CP, IOCC, Content, Tool Validations and the Windchill exports.', tone: 'lemon', links: streamLinks }),
-    tileOf({ key: 'planning', title: 'Planning & Baselines', detail: 'Release baselines against booked hours, and the pages being tried out.', tone: 'teal', links: [...pageLink('baselines'), ...pageLink('planover'), ...pageLink('capactual')] }),
+    tileOf({ key: 'insights', title: 'Team Insights', detail: 'Team overview, Pulse Check and PI Review.', tone: 'lilac', links: [...pageLink('overview'), ...pageLink('pulse'), ...pageLink('pireview'), ...pageLink('kpitracker'), ...addedLinks('data-insights')] }),
+    tileOf({ key: 'board', title: 'I&D Board', detail: 'The QMS-0025 backlog and its health.', tone: 'mint', open: allowed('board') && access.sees('board') ? () => openView(timeWriting.id) : undefined, links: [...(access.sees('board') ? [{ key: 'board', label: timeWriting.name, icon: pageMeta('board').icon, open: () => openView(timeWriting.id) }] : []), ...pageLink('health'), ...addedLinks('i-d-board'), ...addedLinks('other-views')] }),
+    tileOf({ key: 'release', title: 'Release Details', detail: 'The releases of each stream: DP, CP, IOCC, Content, Tool Validations and the Windchill exports.', tone: 'lemon', links: [...streamLinks, ...addedLinks('release-details')] }),
+    tileOf({ key: 'planning', title: 'Planning & Baselines', detail: 'Release baselines against booked hours, and the pages being tried out.', tone: 'teal', links: [...pageLink('baselines'), ...pageLink('planover'), ...pageLink('capactual'), ...addedLinks('testing')] }),
     tileOf({ key: 'qe', title: 'QE Mapping', detail: 'Which QE covers which platform or product.', tone: 'rose', open: firstAllowed('qemapping'), links: [] }),
-    tileOf({ key: 'records', title: 'Snapshots & Documents', detail: 'Point-in-time snapshots and the project documents of this build.', tone: 'sand', links: [...pageLink('snapshots'), ...pageLink('docs')] }),
+    tileOf({ key: 'ondemand', title: 'On-Demand', detail: 'Tables the team sets up itself: CoNQ (Cost of Non-Quality) and more.', tone: 'peach', links: addedLinks('on-demand') }),
+    // PGB-04: a tile for each group of your own, with its pages.
+    ...customGroups.map((group) => tileOf({ key: `group:${group.id}`, title: group.name, detail: `Pages added to ${group.name}.`, tone: 'lilac', links: addedLinks(group.id) })),
+    tileOf({ key: 'records', title: 'Snapshots & Documents', detail: 'Point-in-time snapshots and the project documents of this build.', tone: 'sand', links: [...pageLink('snapshots'), ...pageLink('docs'), ...addedLinks('data-governance')] }),
     tileOf({ key: 'admin', title: 'Admin', detail: 'Streams, Epic & Feature setup, people and roles, capacity, reports and sharing.', tone: 'sky', open: () => openSettings('home'), links: settingsLinks }),
     tileOf({ key: 'my', title: mySettingsLabel, detail: 'Your work email, servers and tokens, your views and naming patterns.', tone: 'mint', open: () => openSettings('my'), links: [] }),
   ])
@@ -363,12 +398,21 @@ export default function App() {
   if (!store.ready) return <main className="content"><h1>I&amp;D Quality Demand Planning</h1>{store.loadError ? <Notice tone="error"><p>{store.loadError}</p><p>Do not clear browser data. If you still have an older tab open with unsaved changes, export its JSON backup first.</p><button className="primary" onClick={store.retryLoad}>Retry loading saved data</button></Notice> : <p role="status">Loading saved browser data…</p>}{buildStatus}</main>
 
   // UI-12: every table follows the shared design default.
-  return <TableDefaultsContext.Provider value={tableDesign}><ReleaseSettingsContext.Provider value={store.state.releaseSourceSettings}><CanContext.Provider value={access.can}><ReadOnlyContext.Provider value={access.readOnly}><EpicSetupContext.Provider value={epicSetup.file}><OnPremContext.Provider value={onPremSources}><HeaderSlot.Provider value={headerSlot}><div className={`app-shell${navOpen ? ' nav-open' : ''}${menuMini ? ' nav-mini' : ''}`}>
+  return <TableDefaultsContext.Provider value={tableDesign}><CustomStreamsContext.Provider value={customStreams}><ReleaseSettingsContext.Provider value={store.state.releaseSourceSettings}><CanContext.Provider value={access.can}><ReadOnlyContext.Provider value={access.readOnly}><EpicSetupContext.Provider value={epicSetup.file}><OnPremContext.Provider value={onPremSources}><HeaderSlot.Provider value={headerSlot}><div className={`app-shell${navOpen ? ' nav-open' : ''}${menuMini ? ' nav-mini' : ''}`}>
     {navOpen && <div className="nav-backdrop" onClick={() => setNavOpen(false)} aria-hidden="true" />}
     <aside className="sidebar" id="primary-navigation">
       <div className="brand" title="I&amp;D Quality Demand Planning"><div className="brand-mark"><BrandMark /></div><div><strong>I&amp;D Quality</strong><span>Demand Planning</span></div><button type="button" className="nav-mini-toggle" aria-pressed={menuMini} aria-label={menuMini ? 'Expand the menu' : 'Collapse the menu'} title={menuMini ? 'Show the menu with names' : 'Fold the menu to icons'} onClick={toggleMenuMini}>{menuMini ? '»' : '«'}</button></div>
       <div className="nav-fold" role="group" aria-label="Menu headings"><button type="button" className="text-button" disabled={!collapsed.length} onClick={() => setCollapsed(saveCollapsed([]))}>Expand all</button><button type="button" className="text-button" disabled={allCollapsed} onClick={() => setCollapsed(saveCollapsed(navKeys))}>Collapse all</button></div>
-      <nav aria-label="Primary navigation">{startView === 'tiles' && <div className="nav-section nav-home"><div className="nav-items">{navButton('home', pageMeta('home').icon, 'Home', page === 'home', () => setPage('home'))}</div></div>}{(() => { const pinned = personalViews.menu.pinned.map((id) => pages.find((item) => item.id === id)).filter((item): item is typeof pages[number] => Boolean(item && !item.hidden && allowed(item.id))); return pinned.length ? <div className="nav-section nav-pinned"><span className="nav-group">PINNED</span><div className="nav-items">{pinned.map((item) => <button key={`pin:${item.id}`} className={page === item.id ? 'nav-active' : ''} aria-current={page === item.id ? 'page' : undefined} onClick={() => setPage(item.id)}><span className="nav-icon">{item.icon}</span>{item.label}</button>)}</div></div> : null })()}{pageGroups.map((group) => {
+      <nav aria-label="Primary navigation">{startView === 'tiles' && <div className="nav-section nav-home"><div className="nav-items">{navButton('home', pageMeta('home').icon, 'Home', page === 'home', () => setPage('home'))}</div></div>}{(() => {
+        // MYD-08, PGB-04: pinned pages — built-in ones by their id, added pages as ondemand:<page id>.
+        const pinned = personalViews.menu.pinned.flatMap((id) => {
+          const added = id.startsWith('ondemand:') ? onDemand.pages.find((entry) => `ondemand:${entry.id}` === id) : undefined
+          if (added) return allowed('ondemand') ? [{ key: id, icon: placementOf(menu.layout, added.id).icon, label: added.name, active: page === 'ondemand' && onDemandPage?.id === added.id, open: () => openOnDemand(added.id) }] : []
+          const item = pages.find((entry) => entry.id === id)
+          return item && !item.hidden && allowed(item.id) ? [{ key: id, icon: item.icon, label: item.label, active: page === item.id, open: () => setPage(item.id) }] : []
+        })
+        return pinned.length ? <div className="nav-section nav-pinned"><span className="nav-group">PINNED</span><div className="nav-items">{pinned.map((item) => <button key={`pin:${item.key}`} className={item.active ? 'nav-active' : ''} aria-current={item.active ? 'page' : undefined} onClick={item.open}><span className="nav-icon">{item.icon}</span>{item.label}</button>)}</div></div> : null
+      })()}{navGroups.map((group) => {
         const pageButton = (item: typeof pages[number]) => !allowed(item.id) ? [] : [<button key={item.id} title={menuMini ? item.label : undefined} className={page === item.id ? 'nav-active' : ''} aria-current={page === item.id ? 'page' : undefined} onClick={() => setPage(item.id)}><span className="nav-icon">{item.icon}</span>{item.label}{item.id === 'mywork' && my.pending.length > 0 && <span className="nav-badge" aria-label={`${my.pending.length} pending`}>{my.pending.length}</span>}</button>]
         const windchillMeta = pageMeta('windchill')
         // Release Details has two sub-lists: the default Azure streams (DP, CP, IOCC, Content, Tool Validations) and the
@@ -377,20 +421,26 @@ export default function App() {
           // The default streams in order; one without a connection (shown in the menu) leads to Settings to set it up.
           // BRITE (CON-84): planned, at the root of Release Details until its exports and rules are known.
           { key: 'release:root', entries: access.sees('release') ? [navButton('brite', pageMeta('brite').icon, 'BRITE', page === 'brite', () => setPage('brite'))] : [] },
-          { key: 'release:ads', label: 'Azure DevOps Server', entries: access.sees('release') ? defaultStreams.filter((stream) => stream.source === 'azure').map((stream) => { const profile = profileForStream(stream, azure.connectionProfiles), entry = profile && views.find((item) => item.id === profile.id); return entry ? navButton(`view:${entry.id}`, pageMeta('board').icon, stream.name, page === 'board' && view.id === entry.id, () => openView(entry.id)) : <button key={`stream:${stream.name}`} className="nav-missing" title={`Not set up: add a connection named “${stream.name}”`} onClick={openConnection}><span className="nav-icon">＋</span>{stream.name}</button> }) : [] },
+          { key: 'release:ads', label: 'Azure DevOps Server', entries: access.sees('release') ? allStreams().filter((stream) => stream.source === 'azure').map((stream) => { const profile = profileForStream(stream, azure.connectionProfiles), entry = profile && views.find((item) => item.id === profile.id); return entry ? navButton(`view:${entry.id}`, pageMeta('board').icon, stream.name, page === 'board' && view.id === entry.id, () => openView(entry.id)) : <button key={`stream:${stream.name}`} className="nav-missing" title={`Not set up: add a connection named “${stream.name}”`} onClick={openConnection}><span className="nav-icon">＋</span>{stream.name}</button> }) : [] },
           { key: 'release:windchill', label: 'Windchill exports', entries: access.sees('release') ? [...windchillStreamExports(windchillViews).flatMap(({ stream, name, view: entry }, index, all) => [entry ? navButton(entry.id, windchillMeta.icon, name, page === 'windchill' && windchillView?.id === entry.id, () => openWindchill(entry.id)) : <button key={`stream:${stream.name}`} className="nav-missing" title={`Not imported yet: import the ${stream.name} export`} onClick={() => openWindchill('', stream.name)}><span className="nav-icon">＋</span>{stream.name}</button>,
             // Several ECP exports (CON-87): after the last one, "＋ ECP export" adds another with its own name and setup.
             ...(entry && stream.project && all[index + 1]?.stream !== stream ? [<button key={`stream:${stream.name}:add`} className="nav-missing" title={`Import another ${stream.name} export (its own name and project folder)`} onClick={() => openWindchill('', stream.name)}><span className="nav-icon">＋</span>{stream.name} export</button>] : [])]), ...(access.can('windchill.import') ? [navButton('windchill', '＋', windchillMeta.label, page === 'windchill' && !windchillView, () => openWindchill(''))] : [])] : [] },
         ] : group === 'Other views' ? [{ key: group, entries: [
           ...others.azure.filter((entry) => access.sees(entry.onPrem ? 'release' : 'board')).map((entry) => navButton(`view:${entry.id}`, pageMeta('board').icon, entry.name, page === 'board' && view.id === entry.id, () => openView(entry.id))),
           ...(access.sees('release') ? others.windchill.map((entry) => navButton(entry.id, pageMeta('windchill').icon, entry.name, page === 'windchill' && windchillView?.id === entry.id, () => openWindchill(entry.id))) : []),
-        ] }] : group === 'Settings' ? [{ key: group, entries: settingsPagesFor(access.can).map((entry) => navButton(`settings:${entry.key}`, pageMeta('admin').icon, entry.label, page === 'admin' && settingsTab === entry.key, () => openSettings(entry.key))) }] : [{ key: group, entries: pages.filter((item) => !personalViews.menu.hidden.includes(item.id) && item.group === group && !item.hidden).flatMap((item) => item.id === 'board' ? (access.sees('board') ? views.filter((entry) => !entry.readOnly).map((entry) => navButton(`view:${entry.id}`, item.icon, entry.name, page === 'board' && view.id === entry.id, () => openView(entry.id))) : []) : pageButton(item)) }]
+        ] }] : group === 'On-Demand' ? [{ key: group, entries: addedButtons('on-demand') }] : group === 'Settings' ? [{ key: group, entries: settingsPagesFor(access.can).map((entry) => navButton(`settings:${entry.key}`, pageMeta('admin').icon, entry.label, page === 'admin' && settingsTab === entry.key, () => openSettings(entry.key))) }] : [{ key: group, entries: pages.filter((item) => !personalViews.menu.hidden.includes(item.id) && item.group === group && !item.hidden).flatMap((item) => item.id === 'board' ? (access.sees('board') ? views.filter((entry) => !entry.readOnly).map((entry) => navButton(`view:${entry.id}`, item.icon, entry.name, page === 'board' && view.id === entry.id, () => openView(entry.id))) : []) : pageButton(item)) }]
+        // PGB-04: the pages added to a built-in group follow its own entries (On-Demand and the custom groups hold only those).
+        const groupId = groupIdOf(group)
+        if (group !== 'On-Demand' && group !== 'Settings' && groupId) sections.push({ key: `${group}:added`, entries: addedButtons(groupId) })
         const shown = sections.filter((section) => section.entries.length)
         if (!shown.length) return null
         const open = !collapsed.includes(group)
-        const holdsActive = group === (isOther ? 'Other views' : page === 'board' ? (view.onPrem ? 'Release Details' : 'I&D Board') : meta.group)
+        const holdsActive = group === (isOther ? 'Other views' : page === 'board' ? (view.onPrem ? 'Release Details' : 'I&D Board') : page === 'ondemand' && onDemandPage ? groupNameOf(placementOf(menu.layout, onDemandPage.id).group) : meta.group)
+        // PGB-05: ⋯ on a group the viewer may add a page to opens ＋ Add page for it.
+        const canAdd = Boolean(groupId) && !menuGitReason && !addPageReason(viewer, menu.layout, groupId)
         return <div key={group} className="nav-section">
-          <button type="button" className={`nav-group${holdsActive && !open ? ' nav-group-active' : ''}`} aria-expanded={open} onClick={() => toggleNav(group)}><span aria-hidden="true">{open ? '▾' : '▸'}</span>{group === 'Settings' ? <>ADMIN{git.dirty && <span className="nav-badge" title="Shared changes not yet saved to Git" aria-label="1 unsaved shared change">1</span>}</> : group.toUpperCase()}</button>
+          <div className="nav-group-row"><button type="button" className={`nav-group${holdsActive && !open ? ' nav-group-active' : ''}`} aria-expanded={open} onClick={() => toggleNav(group)}><span aria-hidden="true">{open ? '▾' : '▸'}</span>{group === 'Settings' ? <>ADMIN{git.dirty && <span className="nav-badge" title="Shared changes not yet saved to Git" aria-label="1 unsaved shared change">1</span>}</> : group.toUpperCase()}</button>
+          {canAdd && <button type="button" className="nav-group-more" aria-label={`Add a page to ${group}`} title={`Add a page to ${group}`} onClick={() => setAddPageFor(groupId)}>⋯</button>}</div>
           {/* Collapsed lists stay in the page but are hidden on wide screens only: the narrow sidebar has no headings. */}
           <div className={`nav-items${open ? '' : ' nav-collapsed'}`}>{shown.map((section) => section.label ? <div key={section.key} className="nav-subsection">
             <button type="button" className="nav-subgroup" aria-expanded={!collapsed.includes(section.key)} onClick={() => toggleNav(section.key)}><span aria-hidden="true">{collapsed.includes(section.key) ? '▸' : '▾'}</span>{section.label}</button>
@@ -400,9 +450,9 @@ export default function App() {
       })}</nav>
     </aside>
     {searchOpen && <SettingsSearch allowed={(entry) => entry.tab === 'my' || settingsPagesFor(access.can).some((item) => item.key === entry.tab)} onOpen={openSettings} onClose={() => setSearchOpen(false)} />}
-    {menuEditor && <MenuCustomizer pages={pages.filter((item) => !item.hidden && item.id !== 'admin' && allowed(item.id)).map(({ id, label, group }) => ({ id, label, group }))} menu={personalViews.menu} onChange={personalViews.setMenu} onClose={() => setMenuEditor(false)} />}
+    {menuEditor && <MenuCustomizer pages={[...pages.filter((item) => !item.hidden && item.id !== 'admin' && allowed(item.id)).map(({ id, label, group }) => ({ id, label, group: group as string })), ...(allowed('ondemand') ? onDemand.pages.map((entry) => ({ id: `ondemand:${entry.id}`, label: entry.name, group: groupNameOf(placementOf(menu.layout, entry.id).group) })) : [])]} menu={personalViews.menu} onChange={personalViews.setMenu} onClose={() => setMenuEditor(false)} />}
     <main>
-      <header className="topbar" ref={topbarRef}><button type="button" className="menu-button" aria-label={navOpen ? 'Close menu' : 'Open menu'} aria-expanded={navOpen} aria-controls="primary-navigation" onClick={() => setNavOpen((open) => !open)}>{navOpen ? '✕' : '☰'}</button><h1 title={meta.detail}>{page === 'board' ? view.name : page === 'windchill' && windchillView ? windchillView.name : page === 'admin' ? settingsLabel(settingsTab) : meta.label}</h1><div className="topbar-slot" ref={setHeaderSlot} /><div className="topbar-actions">{openSteps > 0 && <button type="button" className="ghost setup-button" title="What to configure and how" onClick={() => setGuideOpen(true)}>Setup · {steps.filter((step) => step.required && step.state === 'done').length}/{steps.filter((step) => step.required).length}</button>}<JobsIndicator /><DataStatus azure={azure} />{(meta.usesMonth || (page === 'board' && view.readOnly)) && <label className="month-picker"><span className="sr-only">Month</span><input type="month" aria-label="Month" value={month} onChange={(event) => /^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value) && setMonth(event.target.value)} /></label>}{personPage && <label className="topbar-person">Person<PersonPicker label="Person" value={my.chosenName} people={my.people} onChange={my.setName} meLabel={azure.creatorEmail.trim() ? 'Me' : 'Choose a person…'} /></label>}<ThemeToggle /><ProfileMenu name={my.self.me.name ?? ''} email={azure.creatorEmail.trim()} actions={profileActions} /></div></header>
+      <header className="topbar" ref={topbarRef}><button type="button" className="menu-button" aria-label={navOpen ? 'Close menu' : 'Open menu'} aria-expanded={navOpen} aria-controls="primary-navigation" onClick={() => setNavOpen((open) => !open)}>{navOpen ? '✕' : '☰'}</button><h1 title={page === 'ondemand' && onDemandPage ? onDemandPage.description || `${onDemandPage.name}, in ${groupNameOf(placementOf(menu.layout, onDemandPage.id).group)}` : meta.detail}>{page === 'board' ? view.name : page === 'windchill' && windchillView ? windchillView.name : page === 'admin' ? settingsLabel(settingsTab) : page === 'ondemand' && onDemandPage ? onDemandPage.name : meta.label}</h1><div className="topbar-slot" ref={setHeaderSlot} /><div className="topbar-actions">{openSteps > 0 && <button type="button" className="ghost setup-button" title="What to configure and how" onClick={() => setGuideOpen(true)}>Setup · {steps.filter((step) => step.required && step.state === 'done').length}/{steps.filter((step) => step.required).length}</button>}<JobsIndicator /><DataStatus azure={azure} />{(meta.usesMonth || (page === 'board' && view.readOnly)) && <label className="month-picker"><span className="sr-only">Month</span><input type="month" aria-label="Month" value={month} onChange={(event) => /^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value) && setMonth(event.target.value)} /></label>}{personPage && <label className="topbar-person">Person<PersonPicker label="Person" value={my.chosenName} people={my.people} onChange={my.setName} meLabel={azure.creatorEmail.trim() ? 'Me' : 'Choose a person…'} /></label>}<ThemeToggle /><ProfileMenu name={my.self.me.name ?? ''} email={azure.creatorEmail.trim()} actions={profileActions} /></div></header>
       {access.viewingAs && <div className="view-as-banner" role="status"><span>👁 Viewing as <strong>{viewAsLabel(access.viewingAs)}</strong>{access.viewingAs.kind === 'role' ? '' : access.rights.roles.length ? ` (${access.rights.roles.join(', ')})` : ' (default role)'} — read only: nothing is saved to Azure DevOps or Git.</span><button type="button" className="ghost" onClick={() => setViewAsOpen(true)}>Change</button><button type="button" className="primary" onClick={() => setViewAs(null)}>Exit View as</button></div>}
       {viewAsOpen && <ViewAsDialog current={access.viewingAs} people={viewAsPeople(azure.items, access.policy)} onStart={(next) => { setViewAs(next); setViewAsOpen(false); setPage(startPageOf(startView)) }} onClose={() => setViewAsOpen(false)} />}
       <DataNotices azure={azure} onOpenConnection={openConnection} />
@@ -419,6 +469,7 @@ export default function App() {
       {page === 'pireview' && <PiReviewPage />}
       {page === 'brite' && <BritePage />}
       {page === 'kpitracker' && <KpiTrackerPage git={git} canManage={access.can('storage.shared')} who={my.me.name || 'Admin'} />}
+      {page === 'ondemand' && onDemandPage && <OnDemandPage key={onDemandPage.id} git={git} store={onDemand} pageId={onDemandPage.id} me={azure.isSample ? '' : azure.creatorEmail.trim().toLowerCase() || my.self.me.name?.trim() || ''} onOpen={openOnDemand} kind={kindOf(menu.layout, onDemandPage.id)} menu={menu} viewer={viewer} addPageReason={addPageReason(viewer, menu.layout, placementOf(menu.layout, onDemandPage.id).group)} onAddPage={() => setAddPageFor(placementOf(menu.layout, onDemandPage.id).group)} />}
       {page === 'qemapping' && <QeMappingPage git={git} store={qeMapping} resources={qeResources} />}
       {page === 'mywork' && <MyWorkPage azure={azure} store={store} my={my} month={month} onOpenActivities={() => setPage('activities')} assign={assign} featureSetup={featureSetup.setups} />}
       {page === 'bulk' && <SprintCheckPage azure={azure} store={store} my={my} />}
@@ -430,10 +481,12 @@ export default function App() {
       {page === 'health' && <BacklogHealthPage azure={azure} store={store} />}
       {page === 'board' && <BoardPage views={personalViews} canSetDefault={access.can('layout.defaults') && git.connected && !git.readOnly && !git.isSample} azure={azure} store={store} current={view} month={month} git={git} onOpenConnection={openConnection} assign={assign} featureSetup={featureSetup.setups} qeMapping={qeMapping.file} />}
       {page === 'snapshots' && <SnapshotsPage {...pageProps} git={git} who={my.me.email || my.me.name || 'unknown'} />}
-      {page === 'admin' && <AdminPage look={{ startView, onStartView: switchView, onCustomizeMenu: () => setMenuEditor(true) }} key={`${settingsTab}:${settingsVisit}`} tab={settingsTab} onOpenTab={openSettings} {...pageProps} azure={azure} git={git} access={access} featureSetup={featureSetup} epicSetup={epicSetup} setupSteps={steps} onSearch={() => setSearchOpen(true)} qeColumnNames={[...new Set((qeMapping.file?.sheets ?? []).flatMap((sheet) => sheet.columns.map((column) => column.name)))]} monthlyPack={monthlyPack} history={history} loadEverything={loadEverything} onOpenBoard={() => setPage('board')} />}
+      {page === 'admin' && settingsTab === 'pages' && <PagesMenuPage git={git} store={onDemand} menu={menu} viewer={viewer} onOpen={openOnDemand} onAddPage={(group) => setAddPageFor(group ?? '')} />}
+      {page === 'admin' && settingsTab !== 'pages' && <AdminPage look={{ startView, onStartView: switchView, onCustomizeMenu: () => setMenuEditor(true) }} key={`${settingsTab}:${settingsVisit}`} tab={settingsTab} onOpenTab={openSettings} {...pageProps} azure={azure} git={git} access={access} featureSetup={featureSetup} epicSetup={epicSetup} setupSteps={steps} onSearch={() => setSearchOpen(true)} qeColumnNames={[...new Set((qeMapping.file?.sheets ?? []).flatMap((sheet) => sheet.columns.map((column) => column.name)))]} monthlyPack={monthlyPack} history={history} loadEverything={loadEverything} onOpenBoard={() => setPage('board')} />}
       {page === 'docs' && <DocsPage git={git} onConfigure={() => openSettings('storage', 'git')} />}
       </Suspense>
+      {addPageFor != null && <AddPageDialog viewer={viewer} layout={menu.layout} group={addPageFor || undefined} onCancel={() => setAddPageFor(null)} onCreate={async (input) => { const id = await createPage(onDemand, menu, input); setAddPageFor(null); openOnDemand(id) }} />}
       <footer className="app-footer" aria-label="Version" ref={footerRef}><ZoomControl /><DesktopDownload />{buildStatus}</footer>
     </main>
-  </div></HeaderSlot.Provider></OnPremContext.Provider></EpicSetupContext.Provider></ReadOnlyContext.Provider></CanContext.Provider></ReleaseSettingsContext.Provider></TableDefaultsContext.Provider>
+  </div></HeaderSlot.Provider></OnPremContext.Provider></EpicSetupContext.Provider></ReadOnlyContext.Provider></CanContext.Provider></ReleaseSettingsContext.Provider></CustomStreamsContext.Provider></TableDefaultsContext.Provider>
 }
