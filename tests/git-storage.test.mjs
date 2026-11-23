@@ -6,25 +6,27 @@ const config = { owner: 'acme', repo: 'demand-planning-data', branch: 'main', pa
 const state = { baselineRules: [{ stream: 'CP', types: {}, items: [{ label: 'Documents', hoursPerUnit: 2, baseUnits: 14, driver: 'assets', unitsPerDriver: 11 }] }], releaseScopes: [{ release: 'CP | Care Pathways | v3.1', stream: 'CP', history: [{ at: '2026-10-01T10:00:00Z', drivers: { assets: 10 }, reason: 'Initial' }] }], resourceProfiles: { 'Zoë Müller': { region: 'Netherlands', role: 'QE' }, 'Arjun Rao': { region: 'India', role: 'Lead', peopleManager: true } } }
 const response = (status, body) => ({ ok: status >= 200 && status < 300, status, json: async () => body })
 
-test('TC-OND-02 and TC-PGB-02: page and menu writes require a confirmed private repository', async () => {
-  const url = 'https://api.github.com/repos/acme/demand-planning-data/contents/menu-layout.json'
+test('TC-OND-02, TC-PGB-02 and TC-DSH-03: page, menu and dashboard writes require a confirmed private repository', async () => {
   const repoUrl = 'https://api.github.com/repos/acme/demand-planning-data'
+  const urls = ['on-demand/example.json', 'menu-layout.json', 'dashboards/example.json'].map((path) => `${repoUrl}/contents/${path}`)
   for (const metadata of [response(200, { visibility: 'public' }), response(200, { visibility: 'internal', private: true }), response(200, {}), response(403, {})]) {
     const calls = []
     const send = privateGitWrites(config, 'synthetic', async (target, init) => {
       calls.push([target, init?.method ?? 'GET'])
       return metadata
     })
-    await assert.rejects(send(url, { method: 'PUT', body: '{}' }), /private Git data repository/)
-    assert.deepEqual(calls, [[repoUrl, 'GET']])
+    for (const url of urls) {
+      await assert.rejects(send(url, { method: 'PUT', body: '{}' }), /private Git data repository/)
+    }
+    assert.deepEqual(calls, urls.map(() => [repoUrl, 'GET']))
   }
   const calls = []
   const send = privateGitWrites(config, 'synthetic', async (target, init) => {
     calls.push([target, init?.method ?? 'GET'])
     return target === repoUrl ? response(200, { visibility: 'private' }) : response(201, {})
   })
-  assert.equal((await send(url, { method: 'PUT', body: '{}' })).status, 201)
-  assert.deepEqual(calls, [[repoUrl, 'GET'], [url, 'PUT']])
+  for (const url of urls) assert.equal((await send(url, { method: 'PUT', body: '{}' })).status, 201)
+  assert.deepEqual(calls, urls.flatMap((url) => [[repoUrl, 'GET'], [url, 'PUT']]))
 })
 
 test('config validation and browser persistence', () => {

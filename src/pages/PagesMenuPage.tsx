@@ -4,8 +4,9 @@ import { DataTable, type DataColumn } from '../components/DataTable'
 import { EditPageDialog, GroupDialog, type GroupEdit, type PageEdit } from '../components/PageDialogs'
 import { Modal, Notice, Page, Pill, SaveQueueStatus, SettingsSummary, Panel, TablePanel, WriteBlocked } from '../components/ui'
 import { outcomeText } from '../gitSaveQueue'
-import { addGroup, addPageReason, findGroup, gitReasonOf, groupReason, groupsForAdding, isGroupOwner, isPageOwner, kindLabel, menuGroups, moveGroup, movePage, pageMenuReason, pagesOfGroup, placePage, placementOf, removeGroup, removeGroupReason, removePlacement, renameGroup, setGroupSettings, type MenuGroup, type MenuLayout, type Viewer } from '../menuLayout'
+import { addGroup, addPageReason, findGroup, gitReasonOf, groupReason, groupsForAdding, isDashboard, isGroupOwner, isPageOwner, kindLabel, menuGroups, moveGroup, movePage, pageMenuReason, pagesOfGroup, placePage, placementOf, removeGroup, removeGroupReason, removePlacement, renameGroup, setGroupSettings, type MenuGroup, type MenuLayout, type Viewer } from '../menuLayout'
 import { onDemandPath, renamePage, type OnDemandPage } from '../onDemand'
+import { dashboardPath } from '../dashboardPages'
 import type { GitStorage } from '../useGitStorage'
 import type { MenuLayoutStore } from '../useMenuLayout'
 import type { OnDemandStore } from '../useOnDemand'
@@ -144,7 +145,9 @@ export function PagesMenuPage({ git, store, menu, viewer, onOpen, onAddPage }: {
     }} />}
     {removing && <RemovePageDialog page={removing} inGit={store.inGit(removing.id)} onCancel={() => setRemoving(null)} onRemove={async () => {
       await store.remove(removing.id, `Pages & menu: remove the page ${removing.name} (${removing.rows.length} rows)`)
-      recordJob(`pages:${removing.id}`, `Remove page · ${removing.name}`, { text: `Removed ${onDemandPath(removing.id)} with its ${removing.rows.length} row${removing.rows.length === 1 ? '' : 's'}; its history stays in GitHub.` })
+      // DSH-01: a Dashboard page's blocks (dashboards/<page-id>.json) go with it.
+      const dashboard = isDashboard(layout, removing.id) && await git.removeDashboard(removing.id, `Pages & menu: remove the dashboard ${removing.name}`)
+      recordJob(`pages:${removing.id}`, `Remove page · ${removing.name}`, { text: `Removed ${onDemandPath(removing.id)}${dashboard ? ` and ${dashboardPath(removing.id)}` : ` with its ${removing.rows.length} row${removing.rows.length === 1 ? '' : 's'}`}; its history stays in GitHub.` })
       if (layout.pages[removing.id]) await saveLayout(removePlacement(layout, removing.id), `Remove page · ${removing.name}`, `Pages & menu: remove the page ${removing.name}`)
       setRemoving(null)
     }} />}

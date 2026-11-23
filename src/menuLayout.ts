@@ -8,13 +8,14 @@ import { pageGroups } from './pages/registry.ts'
 // page): the custom groups (name, order), each group's settings (accepts added pages, co-owners — built-in groups too)
 // and each page's placement (group, order, icon, type, co-owners). The pages' tables stay in on-demand/<page-id>.json.
 
-// PGB-01: the page types. Phase 1: Table and Table + Insights; Dashboard and a Release page for a new stream are later
-// kinds (a new key here, its own page component), so a file naming a kind this build does not know keeps it as written
-// and shows the page as Table + Insights.
-export type PageKind = 'table' | 'table-insights'
+// PGB-01: the page types: Table, Table + Insights and (DSH-01) On-Demand Dashboard; a Release page for a new stream is a later kind
+// (a new key here, its own page component), so a file naming a kind this build does not know keeps it as written and
+// shows the page as Table + Insights.
+export type PageKind = 'table' | 'table-insights' | 'dashboard'
 export const pageKinds: { key: PageKind; label: string; detail: string }[] = [
   { key: 'table', label: 'Table', detail: 'A table the team sets up itself: columns, rows, search, export.' },
   { key: 'table-insights', label: 'Table + Insights', detail: 'The same table with an Insights tab of charts and summary tables from its rows.' },
+  { key: 'dashboard', label: 'On-Demand Dashboard', detail: 'Read only: KPI tiles, charts and summary tables over the rows of table pages, with a period filter.' },
 ]
 export const kindLabel = (kind: string) => pageKinds.find((entry) => entry.key === kind)?.label ?? 'Table + Insights'
 export const defaultKind: PageKind = 'table-insights'
@@ -115,7 +116,9 @@ export function placementOf(layout: MenuLayout, pageId: string): Placement & { p
   const base = placed ?? { type: defaultKind, group: onDemandGroup, order: Number.MAX_SAFE_INTEGER, icon: defaultIcon, owners: [] }
   return { ...base, group: findGroup(layout, base.group) ? base.group : onDemandGroup, placed: Boolean(placed) }
 }
-export const kindOf = (layout: MenuLayout, pageId: string): PageKind => placementOf(layout, pageId).type === 'table' ? 'table' : 'table-insights'
+export const kindOf = (layout: MenuLayout, pageId: string): PageKind => { const type = placementOf(layout, pageId).type; return type === 'table' || type === 'dashboard' ? type : 'table-insights' }
+// DSH-01: an On-Demand Dashboard page holds no rows; it is never a data source of another dashboard.
+export const isDashboard = (layout: MenuLayout, pageId: string) => layout.pages[pageId]?.type === 'dashboard'
 // The pages of a group in menu order: by their order, then by name.
 export function pagesOfGroup<T extends { id: string; name: string }>(layout: MenuLayout, pages: T[], groupId: string): T[] {
   return pages.filter((page) => placementOf(layout, page.id).group === groupId)

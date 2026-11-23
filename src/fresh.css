@@ -962,7 +962,7 @@ td .od-flag{display:inline-block;margin-top:0}
 .od-multi .check{margin:0;font-size:12px;color:var(--text)}
 @media(max-width:640px){.od-column-head{grid-template-columns:1fr 1fr}}
 /* On-Demand Insights (OND-11…OND-15): one panel per chart or table, two side by side on a wide screen */
-.od-insights{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(560px,100%),1fr));gap:0 18px;align-items:start}
+.od-insights{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(560px,100%),1fr));gap:18px;align-items:start}.od-insights>.panel{margin:0}
 .od-insight .panel-heading .muted{font-size:12px}.od-insight-filters{color:var(--text-3)}
 .od-insight-count{font-size:12px;margin:0 0 6px}
 .od-rules{margin:0;padding-left:18px;display:grid;gap:4px}

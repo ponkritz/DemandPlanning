@@ -1752,6 +1752,30 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-PGB-11 Edit, move, reorder and remove pages; pin and hide them** — Req PGB-07, PGB-04, PGB-06, PGB-14 — browser check as a Tool Owner: Edit a page → change its icon and type to Table + Insights, move it to On-Demand — the menu follows and the Insights tab appears; with unsaved changes on the page a rename is refused with "Save or discard the unsaved changes …"; ↑ ↓ reorder pages in a group and groups of your own; Remove a page names its rows and columns and deletes its file; Remove an empty group asks first; a group holding pages cannot be removed ("Move or remove its N pages first …"); a group set to not accept added pages hides its ⋯ and its co-owners' buttons; Customize menu pins an added page under PINNED and hides another; a page placed in Testing is shown to the Admin role only; the co-owners' emails are shown only in Admin → Pages & menu and the page's ⓘ and are removed with Edit.
 
+### 6.31 On-Demand Dashboard pages
+
+**TC-DSH-01 A Tool Owner adds an On-Demand Dashboard, builds it and filters it by period** — Req DSH-01, DSH-02, DSH-03, DSH-05, DSH-06, DSH-07, DSH-08, DSH-10, DSH-11, DSH-12 — **UAT** — L1 `dashboard-pages.test.mjs` ("DSH-07: the period keeps the rows whose month is in it; rows without a date are counted apart; the filter row narrows its source (TC-DSH-05)"); E2E `dashboard-pages.e2e.mjs` ("TC-DSH-01: a Tool Owner adds a Dashboard page, builds it from a KPI tile, a bar chart and a summary table over a table page’s rows and filters it by period — saved in Git"); UAT: with your work email set, Git storage that can save and the Tool Owner role, and a table page with a Dropdown, a Currency and a Date column and rows of this year and last year: ＋ Add page… → Page type **On-Demand Dashboard**, name "Quality dashboard" — the page opens with "No blocks yet."; ＋ Add block… → KPI tile "Issues" over the table page (Period filter on: the Date column), Add block — the tile shows this year's rows; add a **Bar chart** by the Dropdown column and a **Summary table** with Sum of the Currency column — largest first, the first 10 rows with Show all, Export (CSV) opens in Excel with the values as text where they look like formulas; Background jobs names `dashboards/quality-dashboard.json`; tick last year in **Year** — the tile, chart and table follow and the line names the period; a month without rows shows "No data for this selection."; Reset filters goes back to this year; reload — your period comes back; Tabs and filters… → tabs Overview and Cost and a filter on the Dropdown column: tiles open their tab; a colleague without the right sees the dashboard read only with the reason; on a phone and in dark mode the tiles, charts and the pop-up are readable.
+
+**TC-DSH-02 On-Demand Dashboard is a page type; a page keeps its family** — Req DSH-01 — L1 `dashboard-pages.test.mjs` ("DSH-01: On-Demand Dashboard is a page type of the page builder; a dashboard page is never a data source (TC-DSH-02)"); browser check: Edit a Table page in Admin → Pages & menu — On-Demand Dashboard is disabled with "A table page cannot become an On-Demand Dashboard: its rows would be hidden. …"; Edit a dashboard — Table and Table + Insights disabled with the reason; a dashboard is not offered as a data source.
+
+**TC-DSH-03 The dashboard file is validated** — Req DSH-08 — L1 `dashboard-pages.test.mjs` ("DSH-08: the dashboard file is validated when read — a file that is not a dashboard refused whole, bad blocks dropped with a message, caps (TC-DSH-03)"); browser check: a hand-edited `dashboards/<page>.json` with one block of an unknown type shows the other blocks and the warning "Dashboard: dashboards/… — “…” has an unknown type …: left out."; a file that is not JSON is reported and the dashboard last read kept. L1 `git-storage.test.mjs` verifies that an unverified or non-private destination receives no dashboard upload.
+
+**TC-DSH-04 Two saves of a dashboard merged** — Req DSH-08, GIT-17 — L1 `dashboard-pages.test.mjs` ("DSH-08, GIT-17: two saves of a dashboard are merged by block — fields three ways, the later save where both changed, removal against change by time (TC-DSH-04)").
+
+**TC-DSH-05 Period and filter row** — Req DSH-07 — L1 `dashboard-pages.test.mjs` ("DSH-07: the period keeps the rows whose month is in it; rows without a date are counted apart; the filter row narrows its source (TC-DSH-05)").
+
+**TC-DSH-06 KPI tiles, charts and summary tables aggregate as the insights** — Req DSH-05, DSH-06 — L1 `dashboard-pages.test.mjs` ("DSH-05: KPI tiles, charts and summary tables aggregate as the On-Demand insights — one currency at a time, largest first (TC-DSH-06)").
+
+**TC-DSH-07 The block editor and broken references** — Req DSH-05, DSH-10 — L1 `dashboard-pages.test.mjs` ("DSH-05, DSH-06: the block editor — a blank block, a type change, the checks before Add block and broken references (TC-DSH-07)"); browser check: remove a column a block uses on its table page — the block says "This block cannot be shown: …" while the others are drawn.
+
+**TC-DSH-08 Table pages are the data sources** — Req DSH-03, DSH-04 — L1 `dashboard-pages.test.mjs` ("DSH-03, DSH-04: the data sources are the table pages as saved in Git — not dashboards, not the page itself, not unsaved changes (TC-DSH-08)"); browser check: the Data source list of ＋ Add block… names every table page and no On-Demand Dashboard; a block saved by hand with a source `tw:people` is dropped with "… has no known data source: left out."; with unsaved changes on a table page the dashboard shows its rows as saved; Team overview, My dashboard and a table page's Insights tab look and work as before.
+
+**TC-DSH-09 Without the right: read only, builder disabled with the reason** — Req DSH-09, DSH-02 — L1 `dashboard-pages.test.mjs` ("DSH-09: whoever may set up the page builds its dashboard — fail closed without the roles file (TC-DSH-09)"); E2E `dashboard-pages.e2e.mjs` ("TC-DSH-09: a viewer without the right sees the dashboard read only, every builder button disabled with the reason"); browser check: with the roles not loaded every builder button says "Read only: the access roles are not loaded yet …".
+
+**TC-DSH-10 Arrange, tabs and remove** — Req DSH-06, DSH-12, DSH-01 — browser check as a Tool Owner: Arrange blocks… → ↑ ↓ reorder the tiles and panels, Edit opens the block, Remove asks naming the block; Tabs and filters… → add, rename, reorder and remove tabs (the removed tab's blocks show on the first tab); each change is one entry in Background jobs; Remove page… asks naming the blocks and deletes `on-demand/<page>.json` and `dashboards/<page>.json`, the table page untouched.
+
+**TC-DSH-11 A missing data source** — Req DSH-03, DSH-10 — browser check: remove the table page a block uses — the dashboard shows "This block cannot be shown: The table page “…” is no longer there (removed), or you cannot see it." on that block only.
+
 ## 7. Requirements coverage matrix
 
 | Requirement | Test cases |
@@ -2053,7 +2077,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | GIT-15 | TC-GIT-08, TC-OND-02 |
 | GIT-16 | TC-GIT-09 |
 | GIT-17, HIS-04, MYD-09, KPT-03, CON-88, PCK-08 | TC-GIT-10 |
-| GIT-17 (On-Demand pages) | TC-OND-05, TC-OND-11, TC-OND-17, TC-PGB-08 |
+| GIT-17 (On-Demand pages) | TC-OND-05, TC-OND-11, TC-OND-17, TC-PGB-08, TC-DSH-04 |
 | GIT-05, GIT-07, GIT-11 | TC-GIT-03 |
 | GIT-09, GIT-10 | TC-GIT-04 |
 | SNP-01…03 | TC-SNP-01 |
@@ -2292,6 +2316,18 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | PGB-12 | TC-PGB-01, TC-PGB-09, TC-PGB-10 |
 | PGB-13 | TC-PGB-07 |
 | PGB-14 | TC-PGB-02, TC-PGB-11 |
+| DSH-01 | TC-DSH-01, TC-DSH-02, TC-DSH-10 |
+| DSH-02 | TC-DSH-01, TC-DSH-09 |
+| DSH-03 | TC-DSH-01, TC-DSH-08, TC-DSH-11 |
+| DSH-04 | TC-DSH-08 |
+| DSH-05 | TC-DSH-01, TC-DSH-06, TC-DSH-07 |
+| DSH-06 | TC-DSH-01, TC-DSH-06, TC-DSH-10 |
+| DSH-07 | TC-DSH-01, TC-DSH-05 |
+| DSH-08 | TC-DSH-01, TC-DSH-03, TC-DSH-04 |
+| DSH-09 | TC-DSH-09 |
+| DSH-10 | TC-DSH-01, TC-DSH-07, TC-DSH-11 |
+| DSH-11 | TC-DSH-01 |
+| DSH-12 | TC-DSH-01, TC-DSH-10 |
 | IF-05 | TC-KPT-02 |
 | NFR-02 | TC-STO-01 |
 | NFR-03…05 | TC-DSK-02, TC-INS-01 |
@@ -2343,7 +2379,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-35 | TC-ADM-01, TC-ADM-02, TC-ADM-03 |
 | UC-36 | TC-STT-01, TC-STT-02, TC-STT-03 |
 | UC-37 | TC-OND-01…20 |
-| UC-38 | TC-PGB-01…11 |
+| UC-38 | TC-PGB-01…11, TC-DSH-01…11 |
 
 ## 8. Result record
 

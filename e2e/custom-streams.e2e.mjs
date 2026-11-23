@@ -109,7 +109,10 @@ test('TC-STR-06: as Tool Owner add a stream “Labeling” (Azure DevOps, Like C
   await form.locator('label', { hasText: /^Server/ }).locator('select').selectOption('https://dev.azure.com/example')
   await form.locator('label', { hasText: /^Project/ }).locator('input').fill('Labeling')
   await form.locator('label.query-field textarea').fill("SELECT [System.Id], [System.Title] FROM WorkItems WHERE [System.WorkItemType] = 'Document'")
-  await form.getByRole('button', { name: 'Save and refresh data' }).click()
+  await Promise.all([
+    page.waitForResponse((response) => response.ok() && response.request().method() === 'PUT' && new URL(response.url()).pathname.endsWith('/contents/azure-views.json')),
+    form.getByRole('button', { name: 'Save and refresh data' }).click(),
+  ])
   await form.waitFor({ state: 'detached' })
   await row.getByText('Fetched').or(row.getByText('Data saved')).first().waitFor()
   const views = writes.filter((entry) => entry.path === 'azure-views.json').pop()
@@ -134,7 +137,18 @@ test('TC-STR-06: as Tool Owner add a stream “Labeling” (Azure DevOps, Like C
   await table.waitFor()
   const headers = (await table.locator('thead th').allTextContents()).map((label) => label.replace(/[▲▼↕]/g, '').trim()).filter(Boolean)
   assert.deepEqual(headers, ['Select', 'Release name', 'Approved', 'Documents', 'Time Writing Feature', 'Planned (h)', 'Booked (h)', 'QMS-0025 match'], '(4) the common columns in order, Select for bulk Create Features')
-  assert.match(await text(table.locator('tbody')), /IFU Patient Monitor Labels \w+ \d+, \d{4} 1 .*Create Feature.*Label Set ABC_RELEASE v4 \w+ \d+, \d{4} 2 .*Create Feature/s, 'each document a release by its Title, with Create Feature')
+  const dates = await page.evaluate(() => {
+    const month = new Date().toISOString().slice(0, 7)
+    const format = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'long', year: 'numeric' })
+    return ['04', '03'].map((day) => format.format(new Date(`${month}-${day}T09:00:00Z`)))
+  })
+  for (const [index, [title, count]] of [['IFU Patient Monitor Labels', '1'], ['Label Set ABC_RELEASE v4', '2']].entries()) {
+    const release = table.locator('tbody tr', { hasText: title })
+    const cells = release.getByRole('cell')
+    assert.equal(await text(cells.nth(2)), dates[index], 'approval date uses browser locale')
+    assert.equal(await text(cells.nth(3)), count, 'documents are grouped by release title')
+    assert.equal(await release.getByRole('button', { name: 'Create Feature' }).count(), 1)
+  }
   await shot(page, 'release-page')
   assert.deepEqual(errors, [])
   await context.close()

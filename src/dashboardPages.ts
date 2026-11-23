@@ -1,0 +1,344 @@
+import { csvCell } from './csv.ts'
+import { merge3 } from './gitSaveQueue.ts'
+import { hasOptions, moneyOf, valuesOf, type Insight, type InsightFilter, type InsightMeasure, type OnDemandColumn, type OnDemandPage, type OnDemandRow } from './onDemand.ts'
+import { aggregate, bucketsOf, categoryColumns, filterColumns, formatValue, insightProblems, measureText, noneKey, numberOf, otherKey, passesFilter, secondColumns, valueColumns, type InsightData } from './onDemandInsights.ts'
+
+// DSH-01…DSH-12 On-Demand Dashboard pages: a page type of the page builder (PGB-01) that is read only for everyone and
+// built by its owners from blocks — KPI tiles, bar, line and pie charts and summary tables — over the rows of any table
+// page (On-Demand, Table, Table + Insights). A block is an On-Demand insight (OND-11…OND-17)
+// with a data source, the Date column the dashboard's period applies to and the tab it is on, so the aggregation, the
+// currency rule and the charts are the On-Demand ones. The definition is one file per page in the Git data repository,
+// dashboards/<page-id>.json, next to the page's own file (on-demand/<page-id>.json keeps its name and description).
+// Kept free of React so that every rule is tested on its own (tests/dashboard-pages.test.mjs).
+
+export type BlockType = 'kpi' | 'bar' | 'line' | 'pie' | 'table'
+export const blockTypes: { key: BlockType; label: string; hint: string }[] = [
+  { key: 'kpi', label: 'KPI tile', hint: 'One number: the count, sum or average of the rows, shown as a tile above the tabs.' },
+  { key: 'bar', label: 'Bar chart', hint: 'A value per category, optionally stacked by a Dropdown or Multi-select.' },
+  { key: 'line', label: 'Line chart', hint: 'A value per month of a Date column.' },
+  { key: 'pie', label: 'Pie chart', hint: 'Each category’s share of the total; more than 5 categories: the 5 largest and “Other”.' },
+  { key: 'table', label: 'Summary table', hint: 'Rows by one field (largest first), optional columns by another, with totals; the first 10 rows, Show all, Export.' },
+]
+export const blockTypeLabel = (type: BlockType) => blockTypes.find((entry) => entry.key === type)?.label ?? type
+const blockTypeKeys = blockTypes.map((entry) => entry.key)
+
+export interface DashboardBlock {
+  id: string; title: string; type: BlockType
+  source: string // 'page:<page id>' (DSH-04: the only kind of data source so far)
+  category: string; second: string; measure: InsightMeasure; value: string; filters: InsightFilter[]; sort: 'value' | 'label'
+  period: string // the Date column the dashboard's period filters on; '' = not filtered by period
+  tab: string // the tab the block is on (a KPI tile: the tab it opens); '' = the first tab
+}
+export interface DashboardTab { id: string; name: string }
+// A filter of the filter row: the viewer ticks values of a Dropdown / Multi-select column of one data source.
+export interface ViewerFilter { id: string; source: string; column: string }
+export interface Dashboard { schema: 1; kind: 'dashboard'; id: string; tabs: DashboardTab[]; filters: ViewerFilter[]; blocks: DashboardBlock[] }
+
+export const dashboardFolder = 'dashboards'
+export const dashboardPath = (id: string) => `${dashboardFolder}/${id}.json`
+export const maxBlocks = 40, maxTabs = 10, maxViewerFilters = 6, maxBlockFilters = 10, maxTitle = 120, maxTabName = 40
+export const dashboardMaxBytes = 200_000
+const idPattern = /^[A-Za-z0-9][\w-]{0,39}$/
+const pageIdPattern = /^[a-z0-9][a-z0-9-]{0,39}$/
+const monthPattern = /^\d{4}-(0[1-9]|1[0-2])$/
+export const emptyDashboard = (id: string): Dashboard => ({ schema: 1, kind: 'dashboard', id, tabs: [], filters: [], blocks: [] })
+export function dashId(prefix: 'b' | 't' | 'f', random: () => number = Math.random, now: () => number = Date.now) {
+  return `${prefix}${now().toString(36)}${Math.floor(random() * 36 ** 5).toString(36).padStart(5, '0')}`
+}
+const clean = (value: unknown, max: number) => typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').slice(0, max) : ''
+
+// ---- data sources (DSH-03, DSH-04) ----
+// A data source is a table page, named 'page:<page id>'; the pattern is the one place where a later kind of source
+// (e.g. the Time Writing hours) would be added. A file naming another kind is dropped block by block (DSH-08).
+export const pageSource = (pageId: string) => `page:${pageId}`
+export const sourcePattern = /^page:[a-z0-9][a-z0-9-]{0,39}$/
+export const pageOfSource = (source: string) => source.startsWith('page:') ? source.slice(5) : ''
+
+// A data source as the blocks see it: rows in the shape of an On-Demand page, so the On-Demand aggregation applies.
+export interface Dataset { key: string; name: string; page: OnDemandPage; problem?: string }
+const asPage = (id: string, name: string, columns: OnDemandColumn[], rows: OnDemandRow[]): OnDemandPage => ({ schema: 1, kind: 'on-demand-page', id, name, description: '', keyPrefix: 'DSH', columns, rows, insights: [] })
+// A table page's rows as saved in Git (the viewer's unsaved changes are not shown).
+export const pageDataset = (page: OnDemandPage): Dataset => ({ key: pageSource(page.id), name: page.name, page })
+export const missingDataset = (source: string, problem: string): Dataset => ({ key: source, name: pageOfSource(source), page: asPage('missing', '', [], []), problem })
+// DSH-03: the data sources offered — every table page as saved in Git, except dashboards and the page itself, by name.
+export function dataSources(pages: OnDemandPage[], saved: (id: string) => OnDemandPage | null, isDashboard: (id: string) => boolean, self: string): Dataset[] {
+  return pages.filter((page) => page.id !== self && !isDashboard(page.id)).flatMap((page) => { const stored = saved(page.id); return stored ? [pageDataset(stored)] : [] })
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }))
+}
+
+// ---- the file (DSH-08) ----
+// Read and validated: a file that is not a dashboard is refused whole (the dashboard last read is kept); a bad block is
+// dropped with a message saying why (unknown type, bad id, repeated id, no title, unknown data source); at most 40
+// blocks, 10 tabs and 6 filters; a reference to a column is kept as written and the block says when it no longer fits
+// (as OND-17). expectedId: the file's name, which wins over the id inside.
+export interface ParsedDashboard { dashboard: Dashboard; dropped: string[] }
+const ref = (value: unknown) => typeof value === 'string' && idPattern.test(value) ? value : ''
+export function parseDashboard(raw: string, expectedId?: string): ParsedDashboard {
+  const where = expectedId ? dashboardPath(expectedId) : 'The dashboard'
+  let data: unknown
+  try { data = JSON.parse(raw) } catch { throw new Error(`${where} is not valid JSON.`) }
+  const file = data as Partial<Record<keyof Dashboard, unknown>> | null
+  if (!file || typeof file !== 'object' || Array.isArray(file) || file.kind !== 'dashboard' || file.schema !== 1 || !Array.isArray(file.blocks ?? [])) throw new Error(`${where} is not a dashboard (schema 1, kind dashboard).`)
+  const id = expectedId ?? (typeof file.id === 'string' && pageIdPattern.test(file.id) ? file.id : '')
+  if (!pageIdPattern.test(id)) throw new Error('The dashboard has no valid id.')
+  const dropped: string[] = []
+  const tabIds = new Set<string>()
+  const tabs = (Array.isArray(file.tabs) ? file.tabs : []).flatMap((entry): DashboardTab[] => {
+    const tab = entry as Partial<DashboardTab> | null
+    const name = clean(tab?.name, maxTabName)
+    if (!tab || !ref(tab.id) || tabIds.has(tab.id!) || !name) { dropped.push('A tab without a valid id or name was left out.'); return [] }
+    tabIds.add(tab.id!); return [{ id: tab.id!, name }]
+  })
+  if (tabs.length > maxTabs) dropped.push(`Only the first ${maxTabs} tabs are shown.`)
+  const keptTabs = tabs.slice(0, maxTabs)
+  const filterIds = new Set<string>()
+  const filters = (Array.isArray(file.filters) ? file.filters : []).flatMap((entry): ViewerFilter[] => {
+    const filter = entry as Partial<ViewerFilter> | null
+    if (!filter || !ref(filter.id) || filterIds.has(filter.id!) || typeof filter.source !== 'string' || !sourcePattern.test(filter.source) || !ref(filter.column)) { dropped.push('A filter of the filter row without a valid id, data source or column was left out.'); return [] }
+    filterIds.add(filter.id!); return [{ id: filter.id!, source: filter.source, column: filter.column! }]
+  })
+  if (filters.length > maxViewerFilters) dropped.push(`Only the first ${maxViewerFilters} filters are shown.`)
+  const blockIds = new Set<string>()
+  const blocks = ((file.blocks as unknown[] | undefined) ?? []).flatMap((entry, index): DashboardBlock[] => {
+    const item = entry as Partial<Record<keyof DashboardBlock, unknown>> | null
+    const label = item && typeof item.title === 'string' && item.title.trim() ? `“${clean(item.title, maxTitle)}”` : `Block ${index + 1}`
+    if (!item || typeof item !== 'object') { dropped.push(`${label} is not a block: left out.`); return [] }
+    if (!blockTypeKeys.includes(item.type as BlockType)) { dropped.push(`${label} has an unknown type (${String(item.type).slice(0, 20)}): left out.`); return [] }
+    if (!ref(item.id) || blockIds.has(item.id as string)) { dropped.push(`${label} has no valid id, or the id of another block: left out.`); return [] }
+    if (typeof item.source !== 'string' || !sourcePattern.test(item.source)) { dropped.push(`${label} has no known data source: left out.`); return [] }
+    const title = clean(item.title, maxTitle)
+    if (!title) { dropped.push(`${label} has no title: left out.`); return [] }
+    blockIds.add(item.id as string)
+    const type = item.type as BlockType
+    const measure: InsightMeasure = item.measure === 'sum' || item.measure === 'average' ? item.measure : 'count'
+    const blockFilters = (Array.isArray(item.filters) ? item.filters : []).flatMap((raw): InsightFilter[] => {
+      const filter = raw as Partial<Record<keyof InsightFilter, unknown>> | null
+      const column = ref(filter?.column)
+      if (!filter || !column) return []
+      const values = Array.isArray(filter.values) ? [...new Set(filter.values.filter((value): value is string => typeof value === 'string').map((value) => value.trim().slice(0, 120)))].slice(0, 200) : undefined
+      const from = typeof filter.from === 'string' && monthPattern.test(filter.from) ? filter.from : undefined
+      const to = typeof filter.to === 'string' && monthPattern.test(filter.to) ? filter.to : undefined
+      if (!values?.length && !from && !to) return []
+      return [{ column, ...(values?.length ? { values } : {}), ...(from ? { from } : {}), ...(to ? { to } : {}) }]
+    }).slice(0, maxBlockFilters)
+    const tab = ref(item.tab)
+    return [{ id: item.id as string, title, type, source: item.source, category: type === 'kpi' ? '' : ref(item.category), second: type === 'kpi' || type === 'pie' ? '' : ref(item.second), measure, value: measure === 'count' ? '' : ref(item.value), filters: blockFilters,
+      sort: type === 'line' ? 'label' : type === 'table' || type === 'kpi' ? 'value' : item.sort === 'label' ? 'label' : 'value', period: ref(item.period), tab: tab && tabIds.has(tab) ? tab : '' }]
+  })
+  if (blocks.length > maxBlocks) dropped.push(`Only the first ${maxBlocks} blocks are shown (${blocks.length} in the file).`)
+  return { dashboard: { schema: 1, kind: 'dashboard', id, tabs: keptTabs, filters: filters.slice(0, maxViewerFilters), blocks: blocks.slice(0, maxBlocks) }, dropped }
+}
+const blockOut = ({ id, title, type, source, category, second, measure, value, filters, sort, period, tab }: DashboardBlock) =>
+  ({ id, title, type, source, ...(category ? { category } : {}), ...(second ? { second } : {}), measure, ...(value ? { value } : {}), ...(filters.length ? { filters } : {}), sort, ...(period ? { period } : {}), ...(tab ? { tab } : {}) })
+export function serializeDashboard(dashboard: Dashboard) {
+  const out = `${JSON.stringify({ schema: 1, kind: 'dashboard', id: dashboard.id, tabs: dashboard.tabs.map(({ id, name }) => ({ id, name })), filters: dashboard.filters.map(({ id, source, column }) => ({ id, source, column })), blocks: dashboard.blocks.map(blockOut) }, null, 1)}\n`
+  if (new TextEncoder().encode(out).length > dashboardMaxBytes) throw new Error(`The dashboard is too large to save (over ${Math.round(dashboardMaxBytes / 1000)} KB). Remove blocks or filters.`)
+  return out
+}
+
+// ---- merging two saves (DSH-08, GIT-17) ----
+// Blocks, tabs and filters are merged by id; each field of an entry three ways (a field only one save changed takes that
+// change, one both changed the later save's); an entry one save removed and the other changed: the later save wins
+// (removed and untouched by the other: removed); added by either: kept. The order of each list follows the save that
+// changed it (the later one when both did); entries the order does not name go last. Without a base (never read here),
+// every entry of both saves stays.
+const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+function later<T>(base: T | undefined, mine: T | undefined, theirs: T | undefined, mineLater: boolean): T | undefined {
+  if (same(mine, base)) return theirs
+  if (same(theirs, base)) return mine
+  return mineLater ? mine : theirs
+}
+export function mergeById<T extends { id: string }>(base: T[] | null, mine: T[], theirs: T[], mineLater: boolean): T[] {
+  const index = (list: T[] | null) => new Map((list ?? []).map((entry) => [entry.id, entry]))
+  const b = index(base), m = index(mine), t = index(theirs)
+  const ids = [...new Set([...theirs.map((entry) => entry.id), ...mine.map((entry) => entry.id)])]
+  const merged = ids.flatMap((id): T[] => {
+    const before = b.get(id), a = m.get(id), c = t.get(id)
+    if (!base) return [(a && c ? (mineLater ? { ...c, ...a } : { ...a, ...c }) : a ?? c)!]
+    if (!a || !c) {
+      const kept = a ?? c!
+      if (!before) return [kept]
+      const changed = !same(kept, before), keptIsMine = Boolean(a)
+      return changed && keptIsMine === mineLater ? [kept] : []
+    }
+    const keys = [...new Set([...Object.keys(before ?? {}), ...Object.keys(a), ...Object.keys(c)])]
+    return [Object.fromEntries(keys.flatMap((key) => { const value = merge3((before as Record<string, unknown> | undefined)?.[key], (a as Record<string, unknown>)[key], (c as Record<string, unknown>)[key], mineLater); return value === undefined ? [] : [[key, value]] })) as T]
+  })
+  const order = later(base?.map((entry) => entry.id), mine.map((entry) => entry.id), theirs.map((entry) => entry.id), mineLater) ?? mine.map((entry) => entry.id)
+  // An entry the order does not name (kept from the other save) goes after the entry it followed there.
+  const placed = order.filter((id) => merged.some((entry) => entry.id === id))
+  for (const entry of merged) {
+    if (placed.includes(entry.id)) continue
+    const from = theirs.some((other) => other.id === entry.id) ? theirs : mine
+    const before = from.slice(0, from.findIndex((other) => other.id === entry.id)).map((other) => other.id).reverse().find((id) => placed.includes(id))
+    placed.splice(before ? placed.indexOf(before) + 1 : 0, 0, entry.id)
+  }
+  return placed.map((id) => merged.find((entry) => entry.id === id)!)
+}
+export function mergeDashboardText(baseText: string | null, mineText: string, theirsText: string, mineLater: boolean): string {
+  const read = (raw: string | null) => { if (!raw) return null; try { return parseDashboard(raw).dashboard } catch { return null } }
+  const mine = read(mineText), theirs = read(theirsText), base = read(baseText)
+  if (!mine || !theirs) return mineText
+  const tabs = mergeById(base?.tabs ?? null, mine.tabs, theirs.tabs, mineLater)
+  const filters = mergeById(base?.filters ?? null, mine.filters, theirs.filters, mineLater)
+  const blocks = mergeById(base?.blocks ?? null, mine.blocks, theirs.blocks, mineLater)
+  // Read back through the parser: every rule of the file applies to the merged result (a tab removed by one save takes
+  // the other's blocks on it to the first tab; the caps apply).
+  return serializeDashboard(parseDashboard(JSON.stringify({ schema: 1, kind: 'dashboard', id: mine.id, tabs, filters, blocks: blocks.map(blockOut) }), mine.id).dashboard)
+}
+
+// ---- changing the dashboard (DSH-05, DSH-06) ----
+export function upsertBlock(dashboard: Dashboard, block: DashboardBlock): Dashboard {
+  const exists = dashboard.blocks.some((entry) => entry.id === block.id)
+  if (!exists && dashboard.blocks.length >= maxBlocks) throw new Error(`A dashboard holds at most ${maxBlocks} blocks: remove one first.`)
+  return { ...dashboard, blocks: exists ? dashboard.blocks.map((entry) => entry.id === block.id ? block : entry) : [...dashboard.blocks, block] }
+}
+export const removeBlock = (dashboard: Dashboard, id: string): Dashboard => ({ ...dashboard, blocks: dashboard.blocks.filter((entry) => entry.id !== id) })
+export function moveBlock(dashboard: Dashboard, id: string, by: -1 | 1): Dashboard {
+  const from = dashboard.blocks.findIndex((entry) => entry.id === id), to = from + by
+  if (from < 0 || to < 0 || to >= dashboard.blocks.length) return dashboard
+  const blocks = [...dashboard.blocks];[blocks[from], blocks[to]] = [blocks[to], blocks[from]]
+  return { ...dashboard, blocks }
+}
+// Tabs: names unique (case-insensitive) and up to 40 characters; a removed tab's blocks go to the first tab.
+export function tabsError(tabs: DashboardTab[]) {
+  if (tabs.length > maxTabs) return `At most ${maxTabs} tabs.`
+  const names = tabs.map((tab) => tab.name.trim().toLowerCase())
+  if (names.some((name) => !name)) return 'Give every tab a name.'
+  const twice = names.find((name, index) => names.indexOf(name) !== index)
+  return twice ? `Two tabs are named “${tabs.find((tab) => tab.name.trim().toLowerCase() === twice)!.name.trim()}”.` : ''
+}
+export function setTabsAndFilters(dashboard: Dashboard, tabs: DashboardTab[], filters: ViewerFilter[]): Dashboard {
+  const problem = tabsError(tabs)
+  if (problem) throw new Error(problem)
+  if (filters.length > maxViewerFilters) throw new Error(`At most ${maxViewerFilters} filters in the filter row.`)
+  const kept = tabs.map((tab) => ({ id: tab.id, name: clean(tab.name, maxTabName) }))
+  return { ...dashboard, tabs: kept, filters, blocks: dashboard.blocks.map((block) => block.tab && !kept.some((tab) => tab.id === block.tab) ? { ...block, tab: '' } : block) }
+}
+
+// ---- a block's fields (DSH-05) ----
+export const asInsight = (block: DashboardBlock): Insight => ({ id: block.id, title: block.title, type: block.type === 'kpi' ? 'bar' : block.type, category: block.category, second: block.second, measure: block.measure, value: block.value, filters: block.filters, sort: block.type === 'table' ? 'value' : block.sort })
+export const periodColumns = (page: OnDemandPage) => page.columns.filter((column) => column.type === 'date')
+export function blankBlock(dataset: Dataset, id: string, type: BlockType = 'kpi', tab = ''): DashboardBlock {
+  const page = dataset.page
+  const chart = type === 'kpi' ? undefined : type
+  return { id, title: '', type, source: dataset.key, category: chart ? categoryColumns(page, chart)[0]?.id ?? '' : '', second: '', measure: 'count', value: '', filters: [], sort: type === 'line' ? 'label' : 'value', period: periodColumns(page)[0]?.id ?? '', tab }
+}
+// The block after its type or data source changed: fields that no longer fit are cleared or replaced by the first that fits.
+export function withBlockType(dataset: Dataset, block: DashboardBlock, type: BlockType): DashboardBlock {
+  const page = dataset.page
+  if (type === 'kpi') return { ...block, type, category: '', second: '', sort: 'value' }
+  const category = categoryColumns(page, type).some((column) => column.id === block.category) ? block.category : categoryColumns(page, type)[0]?.id ?? ''
+  const second = type !== 'pie' && secondColumns(page, type).some((column) => column.id === block.second) && block.second !== category ? block.second : ''
+  const measure = type === 'pie' && block.measure === 'average' ? 'sum' : block.measure
+  return { ...block, type, category, second, measure, sort: type === 'line' ? 'label' : type === 'table' ? 'value' : block.sort }
+}
+export function withSource(dataset: Dataset, block: DashboardBlock): DashboardBlock {
+  const fresh = blankBlock(dataset, block.id, block.type, block.tab)
+  return { ...fresh, title: block.title, measure: block.measure !== 'count' && valueColumns(dataset.page).length ? block.measure : 'count', value: block.measure !== 'count' ? valueColumns(dataset.page)[0]?.id ?? '' : '' }
+}
+
+// Why a block cannot be shown with its data source as it is now — empty when it can (OND-17 for the columns, plus the
+// data source and the period column).
+export function blockProblems(dataset: Dataset, block: DashboardBlock): string[] {
+  if (dataset.problem) return [dataset.problem]
+  const page = dataset.page
+  const problems: string[] = []
+  if (block.type === 'kpi') {
+    // A KPI tile has no category: only the measure and the filters are checked (as for an insight).
+    const probe = insightProblems({ ...page, columns: [...page.columns, { id: 'dsh-all', name: 'All', type: 'text', options: [], required: false }] }, { ...asInsight(block), type: 'table', category: 'dsh-all', second: '' })
+    problems.push(...probe)
+  } else problems.push(...insightProblems(page, asInsight(block)))
+  if (block.period) {
+    const column = page.columns.find((entry) => entry.id === block.period)
+    if (!column) problems.push('The Date column for the period is no longer on the page (removed).')
+    else if (column.type !== 'date') problems.push(`“${column.name}” for the period is now a ${column.type} column; it needs a Date column.`)
+  }
+  return problems
+}
+export function blockError(dataset: Dataset, block: DashboardBlock): string {
+  if (!block.title.trim()) return 'Give the block a title.'
+  if (dataset.problem) return dataset.problem
+  if (block.type === 'line' && !categoryColumns(dataset.page, 'line').length) return 'A line chart needs a Date column in the data source.'
+  if (block.type !== 'kpi' && !categoryColumns(dataset.page, block.type).length) return 'The data source has no column to group by (a Dropdown, Multi-select, Text or Date column).'
+  const empty = block.filters.find((filter) => !filter.values?.length && !filter.from && !filter.to)
+  if (empty) return `The filter on “${dataset.page.columns.find((column) => column.id === empty.column)?.name ?? '?'}” has nothing chosen: tick a value or give a month, or remove it.`
+  if (block.filters.some((filter) => filter.from && filter.to && filter.from > filter.to)) return 'A date filter ends before it starts: check From and To.'
+  return blockProblems(dataset, block)[0] ?? ''
+}
+export { filterColumns, valueColumns, categoryColumns, secondColumns }
+
+// ---- the period and the filter row (DSH-07) ----
+// The rows a block counts: those whose month in the block's Date column is one of the period's months (rows without a
+// valid date are left out and counted), and those that pass the viewer's filters of the block's data source.
+export interface Narrowed { page: OnDemandPage; all: number; outside: number; noDate: number; filtered: number; byPeriod: boolean }
+export function narrowRows(dataset: Dataset, block: DashboardBlock, months: string[] | null, filters: ViewerFilter[] = [], chosen: Record<string, string[]> = {}): Narrowed {
+  const page = dataset.page
+  const periodColumn = block.period ? page.columns.find((column) => column.id === block.period && column.type === 'date') : undefined
+  const wanted = months ? new Set(months) : null
+  let outside = 0, noDate = 0, filtered = 0
+  const active = filters.filter((filter) => filter.source === dataset.key && chosen[filter.id]?.length)
+  const rows = page.rows.filter((row) => {
+    if (periodColumn && wanted) {
+      const [bucket] = bucketsOf(periodColumn, row.cells[periodColumn.id])
+      if (!bucket || bucket.key === noneKey) { noDate++; return false }
+      if (!wanted.has(bucket.key)) { outside++; return false }
+    }
+    for (const filter of active) {
+      const column = page.columns.find((entry) => entry.id === filter.column)
+      if (column && hasOptions(column.type) && !passesFilter(column, { column: column.id, values: chosen[filter.id] }, row)) { filtered++; return false }
+    }
+    return true
+  })
+  return { page: { ...page, rows }, all: page.rows.length, outside, noDate, filtered, byPeriod: Boolean(periodColumn && wanted) }
+}
+
+// ---- aggregation (DSH-05) ----
+// A KPI tile: the measure over the rows (each row once), one currency at a time for a Currency column (OND-24).
+export interface KpiValue { value: number | null; rows: number; used: number; currency: string; currencies: { code: string; rows: number }[]; otherCurrency: number; noNumber: number }
+export function kpiValue(page: OnDemandPage, block: DashboardBlock, currency = ''): KpiValue {
+  const probe: OnDemandPage = { ...page, columns: [...page.columns, { id: 'dsh-all', name: 'All', type: 'text', options: [], required: false }] }
+  const data = aggregate(probe, { ...asInsight(block), type: 'table', category: 'dsh-all', second: '' }, { currency })
+  return { value: data.total, rows: data.rows.matched, used: data.rows.used, currency: data.currency, currencies: data.currencies, otherCurrency: data.rows.otherCurrency, noNumber: data.rows.noNumber }
+}
+export const blockData = (page: OnDemandPage, block: DashboardBlock, currency = ''): InsightData => aggregate(page, asInsight(block), { ...(block.type === 'pie' ? { maxCategories: 5 } : block.type === 'table' ? {} : { maxCategories: block.type === 'bar' ? 20 : undefined, maxSeries: 5 }), currency })
+export const kpiText = (value: KpiValue) => value.value == null ? '—' : `${formatValue(value.value)}${value.currency ? ` ${value.currency}` : ''}`
+// DSH-06: a summary table — one row per category, largest total first ("(none)" and "Other" last), the first 10
+// shown unless Show all; the shared table exports every row through the neutralising CSV helper (csv.ts).
+export const tableLimit = 10
+export interface SummaryRow { key: string; label: string; values: (number | null)[]; total: number | null; rank: number }
+export function summaryRows(data: InsightData): SummaryRow[] {
+  const rank = (key: string) => key === otherKey ? 2 : key === noneKey ? 1 : 0
+  return data.categories.map((cat, index) => ({ key: cat.key, label: cat.label, values: data.values[index], total: data.categoryTotals[index], rank: rank(cat.key) }))
+    .sort((a, b) => a.rank - b.rank || (b.total ?? -Infinity) - (a.total ?? -Infinity) || a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' }))
+}
+export const summaryCsv = (head: string[], rows: SummaryRow[]) => [head, ...rows.map((row) => [row.label, ...(row.values.length > 1 ? row.values : []), row.total])].map((line) => line.map((value) => csvCell(value == null ? '' : typeof value === 'number' ? String(Number(value.toFixed(2))) : value)).join(',')).join('\r\n')
+
+// DSH-10: the empty state of a block, the same everywhere.
+export const noData = { title: 'No data for this selection.', detail: 'Change the period or the filters above, or Reset filters (the current year, no filter).' }
+
+// ---- words (DSH-05) ----
+export function sourceName(datasets: Dataset[], source: string) {
+  return datasets.find((entry) => entry.key === source)?.name || `the page ${pageOfSource(source)} (no longer there)`
+}
+export function blockSubject(dataset: Dataset, block: DashboardBlock, currency = '') {
+  const page = dataset.page
+  const column = (id: string) => page.columns.find((entry) => entry.id === id)?.name ?? '(removed column)'
+  const measure = measureText(page, asInsight(block), currency)
+  if (block.type === 'kpi') return measure
+  const by = block.type === 'line' ? `per month of ${column(block.category)}` : `by ${column(block.category)}`
+  const split = block.second ? `, ${block.type === 'table' ? 'columns by' : block.type === 'line' ? 'one line per' : 'stacked by'} ${column(block.second)}` : ''
+  return `${measure} ${by}${split}`
+}
+export function periodNote(dataset: Dataset, block: DashboardBlock) {
+  const column = dataset.page.columns.find((entry) => entry.id === block.period)
+  return column ? `Period on ${column.name}` : 'Not filtered by the period (no Date column chosen)'
+}
+// A cell of a Currency or Number column (for a KPI's hint): used by tests and the editor's preview.
+export const cellNumber = (column: OnDemandColumn, value: OnDemandRow['cells'][string] | undefined) => column.type === 'currency' ? moneyOf(value, column.currency)?.amount ?? null : numberOf(value)
+export const cellValues = valuesOf
+
+// ---- rights (DSH-09) ----
+// Whoever may set up the page builds its dashboard (PGB-08…PGB-11: the role right "Set up On-Demand pages", a co-owner of
+// the page or of its group); the menu reasons (rename, remove) are those of the page builder.
+export const viewerKey = (pageId: string) => `dashboard-page:${pageId}`

@@ -17,12 +17,12 @@ function layout() {
 test('PGB-03: the menu layout file is validated when read — bad groups, ids, emails and icons dropped, a file that is not a layout refused — and written in a stable order (TC-PGB-02)', () => {
   const file = parseMenuLayout(JSON.stringify({ schema: 1, kind: 'menu-layout',
     groups: { 'g-quality': { name: '  Quality  ', order: 2, acceptsPages: true, owners: ['Group.Lead@Example.com', 'not an email', 'group.lead@example.com'] }, 'g-nameless': { order: 1 }, 'bad id': { name: 'X' }, 'on-demand': { acceptsPages: false, owners: [] }, 'data-insights': { acceptsPages: true, owners: [owner] } },
-    pages: { 'supplier-issues': { type: 'table', group: 'g-quality', order: 1, icon: '⚑', owners: [pageOwner] }, 'Bad Id': { type: 'table' }, odd: { type: 'dashboard', group: 'g-gone', icon: '🙂', order: -4 } } }))
+    pages: { 'supplier-issues': { type: 'table', group: 'g-quality', order: 1, icon: '⚑', owners: [pageOwner] }, 'Bad Id': { type: 'table' }, odd: { type: 'release-stream', group: 'g-gone', icon: '🙂', order: -4 } } }))
   assert.deepEqual(Object.keys(file.groups).sort(), ['data-insights', 'g-quality', 'on-demand'])
   assert.deepEqual(file.groups['g-quality'], { name: 'Quality', order: 2, acceptsPages: true, owners: [groupOwner] }, 'emails lower case, each once; not an email dropped')
   assert.equal(file.groups['on-demand'].acceptsPages, false)
   assert.deepEqual(Object.keys(file.pages).sort(), ['odd', 'supplier-issues'])
-  assert.deepEqual(file.pages.odd, { type: 'dashboard', group: 'g-gone', order: 0, icon: '▦', owners: [] }, 'a later kind kept as written, an unknown icon the default')
+  assert.deepEqual(file.pages.odd, { type: 'release-stream', group: 'g-gone', order: 0, icon: '▦', owners: [] }, 'a later kind kept as written, an unknown icon the default')
   assert.equal(kindOf(file, 'odd'), 'table-insights', 'shown as Table + Insights by this build')
   assert.equal(placementOf(file, 'odd').group, 'on-demand', 'a group that no longer exists falls back to On-Demand')
   for (const bad of ['not json', '[]', JSON.stringify({ schema: 2, kind: 'menu-layout' }), JSON.stringify({ schema: 1, kind: 'on-demand-page' })]) assert.throws(() => parseMenuLayout(bad), /menu-layout\.json is not/)

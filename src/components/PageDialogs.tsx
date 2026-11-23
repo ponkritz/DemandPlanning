@@ -11,10 +11,13 @@ const ownersHelp = 'Work emails, separated by commas or new lines.'
 function OwnersField({ label, value, onChange, help }: { label: string; value: string; onChange: (value: string) => void; help: string }) {
   return <label>{label}<textarea aria-label={label} rows={2} value={value} placeholder="name@example.com" onChange={(event) => onChange(event.target.value)} /><small>{help} {ownersHelp}</small></label>
 }
-function KindField({ value, onChange }: { value: PageKind; onChange: (kind: PageKind) => void }) {
+// DSH-01: an On-Demand Dashboard holds blocks, a table page rows — a page keeps its family: Edit offers Table and Table + Insights
+// for a table page and On-Demand Dashboard only for a dashboard; the other choice is disabled with the reason.
+const lockedReason = (locked: 'dashboard' | 'table' | undefined, key: PageKind) => locked === 'dashboard' && key !== 'dashboard' ? 'An On-Demand Dashboard stays a dashboard: it holds blocks, not rows. Add a Table page instead.' : locked === 'table' && key === 'dashboard' ? 'A table page cannot become an On-Demand Dashboard: its rows would be hidden. Add an On-Demand Dashboard page instead.' : ''
+function KindField({ value, onChange, locked }: { value: PageKind; onChange: (kind: PageKind) => void; locked?: 'dashboard' | 'table' }) {
   return <fieldset className="pgb-kinds"><legend>Page type</legend>
-    {pageKinds.map((kind) => <div key={kind.key} className="pgb-kind"><label className="check"><input type="radio" name="page-kind" aria-describedby={`page-kind-${kind.key}`} checked={value === kind.key} onChange={() => onChange(kind.key)} />{kind.label}</label><small id={`page-kind-${kind.key}`}>{kind.detail}</small></div>)}
-    <small className="muted">More page types (Dashboard, a Release page for a new stream) come later.</small>
+    {pageKinds.map((kind) => { const reason = lockedReason(locked, kind.key); return <div key={kind.key} className="pgb-kind"><label className="check" title={reason || undefined}><input type="radio" name="page-kind" aria-describedby={`page-kind-${kind.key}`} disabled={Boolean(reason)} checked={value === kind.key} onChange={() => onChange(kind.key)} />{kind.label}</label><small id={`page-kind-${kind.key}`}>{reason || kind.detail}</small></div> })}
+    <small className="muted">A Release page for a new stream comes later.</small>
   </fieldset>
 }
 function IconField({ value, onChange }: { value: string; onChange: (icon: string) => void }) {
@@ -58,8 +61,8 @@ export function AddPageDialog({ viewer, layout, group: preset, onCancel, onCreat
         {viewer.manager && <option value={newGroupKey}>＋ New group…</option>}
       </select><small>The groups that accept added pages{viewer.manager ? ', or a new group of your own' : ' and that you co-own'}.</small></label>
       {group === newGroupKey && <label>New group name<input aria-label="New group name" required maxLength={40} value={groupName} onChange={(event) => { setGroupName(event.target.value); setError('') }} /><small>Shown as a heading of its own in the menu, after On-Demand; it accepts added pages.</small></label>}
-      <OwnersField label="Page co-owners (optional)" value={owners} onChange={setOwners} help="They may set up this page (columns, options, key prefix, insights) and edit its rows." />
-      <small className="muted">The page is created in Git at once (on-demand/page-id.json) and its place in the menu is saved to menu-layout.json.</small>
+      <OwnersField label="Page co-owners (optional)" value={owners} onChange={setOwners} help={kind === 'dashboard' ? 'They may build this dashboard (add, edit, reorder and remove its blocks, tabs and filters).' : 'They may set up this page (columns, options, key prefix, insights) and edit its rows.'} />
+      <small className="muted">The page is created in Git at once (on-demand/page-id.json) and its place in the menu is saved to menu-layout.json{kind === 'dashboard' ? '; its blocks are saved to dashboards/page-id.json when the first one is added' : ''}.</small>
       {error && <Notice tone="error">{error}</Notice>}
       <div className="modal-actions"><button type="button" className="ghost" disabled={busy} onClick={onCancel}>Cancel</button><button className="primary" disabled={busy}>{busy ? 'Saving to Git…' : 'Add page'}</button></div>
     </form>
@@ -73,7 +76,7 @@ export function EditPageDialog({ viewer, layout, page, pending, onCancel, onSave
   const placement = placementOf(layout, page.id)
   const [name, setName] = useState(page.name)
   const [description, setDescription] = useState(page.description)
-  const [kind, setKind] = useState<PageKind>(placement.type === 'table' ? 'table' : 'table-insights')
+  const [kind, setKind] = useState<PageKind>(placement.type === 'table' || placement.type === 'dashboard' ? placement.type : 'table-insights')
   const [icon, setIcon] = useState(placement.icon)
   const [group, setGroup] = useState(placement.group)
   const [owners, setOwners] = useState(placement.owners.join(', '))
@@ -92,13 +95,13 @@ export function EditPageDialog({ viewer, layout, page, pending, onCancel, onSave
   }
   return <Modal eyebrow={`PAGES & MENU · ${page.name.toUpperCase()}`} title="Edit the page" onClose={() => { if (!busy) onCancel() }}>
     <form onSubmit={(event) => void submit(event)} className="pgb-form">
-      <KindField value={kind} onChange={setKind} />
+      <KindField value={kind} onChange={setKind} locked={placement.type === 'dashboard' ? 'dashboard' : 'table'} />
       {kind === 'table' && placement.type !== 'table' && <small className="muted">The Insights tab is hidden, its charts and tables kept in the page’s file.</small>}
       <label>Page name<input autoFocus required maxLength={80} value={name} onChange={(event) => { setName(event.target.value); setError('') }} /></label>
       <label>Description (optional)<input maxLength={300} value={description} onChange={(event) => setDescription(event.target.value)} /></label>
       <IconField value={icon} onChange={setIcon} />
       <label>Menu group<select aria-label="Menu group" value={group} onChange={(event) => setGroup(event.target.value)}>{targets.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}</select><small>{viewer.manager ? 'Any group that accepts added pages.' : 'A group co-owner moves pages within the groups they co-own.'}</small></label>
-      <OwnersField label="Page co-owners (optional)" value={owners} onChange={setOwners} help="They may set up this page and edit its rows." />
+      <OwnersField label="Page co-owners (optional)" value={owners} onChange={setOwners} help={kind === 'dashboard' ? 'They may build this dashboard.' : 'They may set up this page and edit its rows.'} />
       {error && <Notice tone="error">{error}</Notice>}
       <div className="modal-actions"><button type="button" className="ghost" disabled={busy} onClick={onCancel}>Cancel</button><button className="primary" disabled={busy}>{busy ? 'Saving to Git…' : 'Save to Git'}</button></div>
     </form>

@@ -307,7 +307,7 @@ function CurrencyDefault({ index, value, onChange }: { index: number; value: str
 }
 
 // OND-10: add a page (name and description; created in Git at once) or rename one (a change saved with Save to Git).
-function PageNameDialog({ title, action, name = '', description = '', note, onCancel, onSave }: { title: string; action: string; name?: string; description?: string; note?: string; onCancel: () => void; onSave: (name: string, description: string) => void | Promise<void> }) {
+export function PageNameDialog({ title, action, name = '', description = '', note, onCancel, onSave }: { title: string; action: string; name?: string; description?: string; note?: string; onCancel: () => void; onSave: (name: string, description: string) => void | Promise<void> }) {
   const [value, setValue] = useState(name)
   const [text, setText] = useState(description)
   const [error, setError] = useState('')

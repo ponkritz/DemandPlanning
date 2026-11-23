@@ -39,6 +39,7 @@ const fileNames: [RegExp, string][] = [
   [/(^|\/)kpi-tracker\.json$/, 'KPI tracker'],
   [/(^|\/)on-demand\/([a-z0-9-]+)\.json$/, 'On-Demand page $2'],
   [/(^|\/)menu-layout\.json$/, 'Pages & menu'],
+  [/(^|\/)dashboards\/([a-z0-9-]+)\.json$/, 'Dashboard $2'],
 ]
 export function fileLabel(path: string, planningPath: string) {
   if (path === planningPath) return 'Planning data (capacity, calculation profiles, resources, table defaults)'
