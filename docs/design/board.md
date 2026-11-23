@@ -8,7 +8,9 @@ The Time Writing connection supplies the editable team backlog. The toolbar show
 
 The hierarchy table pages expanded rows at 200, keeps Title fixed, uses configured column widths and stores shown columns and order per organization/project/team in the browser. This tree has its own Column Options with up/down controls. Query views use the shared DataTable and its table defaults and export. [Tree view](../../src/components/AzureWorkItemTree.tsx) · [Tree construction](../../src/azureHierarchy.ts) · [Hierarchy table](../../src/components/BacklogTable.tsx) · [Columns and visible rows](../../src/backlogView.ts)
 
-The initial columns are Order, ID, Work Item Type, Title, Description, State, Story Points and Actions. A separate collapsed Source details and dates panel shows per-type counts and up to 100 matching fetched records with parent, target, close and fetch information.
+The initial columns are Order, ID, Work Item Type, Title, Description, State, Story Points and Actions. The Source details tab shows per-type counts and up to 100 matching fetched records with parent, target, close and fetch information.
+
+On desktop, the table fits to the footer and adjusts for any residual page overflow from fonts or display scaling. It retains a 120 px minimum so about three rows stay visible. At phone widths, the page scrolls vertically and the table scrolls sideways. The regression check expands the board at 1440 × 900 and adds 40 px below the content to verify that the table absorbs the extra space (BKL-45, TC-BKL-34).
 
 ## Writes and data lifecycle
 

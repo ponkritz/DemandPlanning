@@ -459,7 +459,11 @@ test('TC-BKL-34: QMS-0025 has one scroll bar — the board fills the screen — 
   const scroll = page.locator('.backlog-table-scroll')
   await page.waitForFunction(() => { const box = document.querySelector('.backlog-table-scroll'); return box && box.scrollHeight > box.clientHeight })
   const sizes = await page.evaluate(() => ({ page: document.documentElement.scrollHeight, view: window.innerHeight }))
-  assert.ok(sizes.page <= sizes.view + 1, `the page itself does not scroll (${sizes.page} in ${sizes.view})`)
+  assert.ok(sizes.page <= sizes.view, `the page itself does not scroll (${sizes.page} in ${sizes.view})`)
+  // Taller text above the board (Windows fonts, 125 % scaling) or spacing the measurement misses must not add a few
+  // pixels of page scrolling either (KB-74): 40 px more below the page is taken off the table.
+  await page.addStyleTag({ content: '.app-shell>main{padding-bottom:40px}' })
+  await page.waitForFunction(() => document.documentElement.scrollHeight <= window.innerHeight)
   assert.ok(await scroll.evaluate((box) => box.scrollHeight > box.clientHeight), 'the table scrolls')
   assert.equal(await page.locator('details.source-details').count(), 0, 'no collapsible section under the board any more')
   await tabs.getByRole('tab', { name: /^Source details \(\d+\)$/ }).click()

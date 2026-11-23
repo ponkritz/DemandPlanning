@@ -6,6 +6,8 @@ import { Modal } from './ui'
 
 // BKL-45: one scroll bar on the board — the table fills the screen down to the footer, so the page itself does not scroll
 // and the table's own scroll bars (with its sticky headers) are the only ones. Phones (≤ 700 px) scroll the page instead.
+// The table is never shorter than about three rows; only a window too short for that scrolls the page as well.
+const minTableHeight = 120
 function useFitToScreen() {
   const ref = useRef<HTMLDivElement | null>(null)
   useLayoutEffect(() => {
@@ -15,8 +17,12 @@ function useFitToScreen() {
       if (window.matchMedia('(max-width: 700px)').matches) { element.style.removeProperty('max-height'); return }
       const box = element.getBoundingClientRect(), content = element.closest('.content'), footer = document.querySelector('.app-footer')
       const below = content ? content.getBoundingClientRect().bottom + (parseFloat(getComputedStyle(content).marginBottom) || 0) - box.bottom : 0
-      const height = `${Math.max(240, Math.floor(window.innerHeight - (box.top + window.scrollY) - below - (footer?.getBoundingClientRect().height ?? 0)))}px`
+      const height = `${Math.max(minTableHeight, Math.floor(window.innerHeight - (box.top + window.scrollY) - below - (footer?.getBoundingClientRect().height ?? 0)))}px`
       if (element.style.maxHeight !== height) element.style.maxHeight = height
+      // Whatever the measurement above misses (rounding at 125 % display scaling, a platform's own spacing) still
+      // shows as page overflow: take exactly that off the table, so the page never scrolls by a few pixels.
+      const over = document.documentElement.scrollHeight - window.innerHeight
+      if (over > 0) { const fitted = `${Math.max(minTableHeight, parseFloat(element.style.maxHeight) - over)}px`; if (element.style.maxHeight !== fitted) element.style.maxHeight = fitted }
     }
     fit()
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(fit)
