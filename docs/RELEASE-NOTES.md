@@ -2,6 +2,16 @@
 
 Version history of the I&D Quality Demand Planning app, newest first. Every merged change bumps the version in `package.json` and adds its entry here, in the same pull request (CI-09; [CONFIGURATION-MANAGEMENT.md](CONFIGURATION-MANAGEMENT.md) §4): **major** for a change that breaks existing data, shared setup files or the way users work; **minor** for a new or changed feature; **patch** for a fix, a dependency update or documentation only. `pnpm test` fails when the newest version here is not the version in `package.json`. CI tags each version `vX.Y.Z` on its merge commit and publishes its GitHub release with the installers and this entry (CI-10); the build number of a version is the CI build of that merge (shown in the app under Force Update, and in `latest.json`). Open bugs and accepted limitations of every version are in [KNOWN-ISSUES.md](KNOWN-ISSUES.md); the third-party components of every version are in [SWBOM.md](SWBOM.md).
 
+## v5.0.0 — 2026-11-23
+
+**Added**
+- Filter On-Demand charts by period and configured fields, with viewer-specific selections and currency filtering (OND-50…60).
+- Save table pages as one file per row, lock rows while editing, and hide or show pages and rows (OND-31…40, PGB-19…20, GIT-21).
+
+**Changed**
+- GitHub must confirm private storage before row data, locks, or viewer filter settings are written (OND-08, OND-31, OND-35, OND-55).
+- Update all clients before converting existing table pages to row files. Conversion changes the saved format (OND-32).
+
 ## v4.3.0 — 2026-11-23
 
 **Added**
