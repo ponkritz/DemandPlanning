@@ -5,7 +5,7 @@ import { saveAzureConnectionProfile } from '../azureCredentials'
 import { EmptyState, Notice, Panel, Pill } from './ui'
 
 // SET-17 My settings → My views: a person's own read-only views on a server they already have a PAT for. Shown under
-// Other views in the menu; kept on this computer only (never in Git, backups or SharePoint); never a stream.
+// Other views in the menu; kept on this computer only (never in Git or backups); never a stream.
 export function MyViewsPanel({ azure }: { azure: AzureWorkspace }) {
   const profiles = azure.connectionProfiles
   const mine = profiles.filter((profile) => profile.mine)
@@ -22,7 +22,7 @@ export function MyViewsPanel({ azure }: { azure: AzureWorkspace }) {
     setForm({ name: '', server: form.server, project: form.project, query: '' }); setProblem(''); setDone(`“${view.reason}” added under Other views in the menu. Fetching it…`)
     void azure.fetchConnection(view.id)
   }
-  return <Panel className="connection-panel my-views" eyebrow="MY VIEWS" title="My views" info="Your own read-only views: a name, a server you already have a PAT for, a project and a WIQL query. They are listed under Other views in your menu, kept in this browser or desktop app only — never shared, never saved to Git, a backup or SharePoint — and never replace or change a stream (DP, CP, IOCC, Content, Tool Validations). Nothing is written to Azure DevOps.">
+  return <Panel className="connection-panel my-views" eyebrow="MY VIEWS" title="My views" info="Your own read-only views: a name, a server you already have a PAT for, a project and a WIQL query. They are listed under Other views in your menu, kept in this browser or desktop app only — never shared, never saved to Git or a backup — and never replace or change a stream (DP, CP, IOCC, Content, Tool Validations). Nothing is written to Azure DevOps.">
     {mine.length ? <div className="azure-table"><table className="connection-table"><thead><tr><th>View</th><th>Server / project</th><th>Status</th><th /></tr></thead><tbody>{mine.map((profile) => {
       const status = azure.connectionStatus[profile.id]
       return <tr key={profile.id}>

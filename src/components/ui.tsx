@@ -61,8 +61,21 @@ export function Metric({ label, value, hint, tone }: { label: string; value: Rea
   return <article><span>{label}</span><strong className={tone ?? ''}>{value}</strong>{hint && <small>{hint}</small>}</article>
 }
 
+// CON-102, UI-STANDARDS §3: the visible line next to (or above) buttons disabled because the viewer lacks a permission
+// — one line for a toolbar or a table of row buttons; nothing when reason is empty.
+export function WriteBlocked({ reason }: { reason: string }) {
+  return reason ? <small className="muted write-blocked" role="note">{reason}</small> : null
+}
+
 export function Notice({ children, tone = 'info', className = '' }: { children: ReactNode; tone?: 'info' | 'success' | 'warning' | 'error'; className?: string }) {
   return <div className={`notice ${tone === 'info' ? '' : tone} ${className}`} role={tone === 'error' ? 'alert' : 'status'}>{children}</div>
+}
+
+// GIT-17: the save queue of a shared Git file, shown where the save happens: how many saves are waiting, or the changes
+// kept after a failed save, with Retry. Nothing when the queue is empty.
+export function SaveQueueStatus({ state, onRetry }: { state: { waiting: number; failed: number }; onRetry: () => void }) {
+  if (state.failed) return <Notice tone="warning">Not saved to Git: {state.failed} change{state.failed === 1 ? '' : 's'} kept in the queue. <button type="button" className="ghost" onClick={onRetry}>Retry</button></Notice>
+  return state.waiting > 1 ? <p className="muted" role="status">Waiting to save ({state.waiting} in queue).</p> : null
 }
 
 export function EmptyState({ title, detail }: { title: string; detail?: string }) {
@@ -71,10 +84,50 @@ export function EmptyState({ title, detail }: { title: string; detail?: string }
 
 // Every dialog is rendered into <body> above all page layers (sticky sidebar, top bar, cards), so nothing behind it
 // can draw over it, wherever in the page the dialog is opened from.
-// A pop-up window. Forms pass wide (settings editors) and form (a click beside it does not close it and lose what was
-// typed; × and Cancel do).
-export function Modal({ title, eyebrow, onClose, children, wide = false, form = false }: { title: string; eyebrow: string; onClose: () => void; children: ReactNode; wide?: boolean; form?: boolean }) {
-  return createPortal(<div className="modal-backdrop" role="presentation" onMouseDown={form ? undefined : onClose}><div className={wide ? 'modal modal-wide' : 'modal'} role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}><div className="modal-heading"><div><p className="eyebrow">{eyebrow}</p><h2>{title}</h2></div><button type="button" className="icon-button" onClick={onClose} aria-label="Close">×</button></div>{children}</div></div>, document.body)
+// A pop-up window. Forms pass wide (settings editors). A click beside a pop-up does not close it, so what was typed is
+// not lost (UI-19); pop-ups without input pass form={false} to close on that click too. × and Cancel close it.
+// Keyboard (UI-18): the first field (else the pop-up) takes the focus, Tab and Shift+Tab stay inside, Escape closes the
+// topmost pop-up as × does (not while a list inside it is open), and on close the focus goes back to what opened it.
+const openDialogs: object[] = []
+const focusable = 'a[href],button:not([disabled]),input:not([disabled]):not([type="hidden"]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'
+const fieldSelector = 'input:not([disabled]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([role="combobox"]),select:not([disabled]),textarea:not([disabled])'
+export function Modal({ title, eyebrow, onClose, children, wide = false, form = true }: { title: string; eyebrow: string; onClose: () => void; children: ReactNode; wide?: boolean; form?: boolean }) {
+  const dialog = useRef<HTMLDivElement>(null)
+  const close = useRef(onClose)
+  useEffect(() => { close.current = onClose })
+  useEffect(() => {
+    const me = {}
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    openDialogs.push(me)
+    const box = dialog.current
+    if (box && !box.contains(document.activeElement)) {
+      const body = box.querySelector('.modal-heading')?.nextElementSibling ?? box
+      const first = body.querySelector<HTMLElement>('[autofocus]') ?? body.querySelector<HTMLElement>(fieldSelector)
+      ;(first ?? box).focus()
+    }
+    const key = (event: KeyboardEvent) => {
+      if (openDialogs[openDialogs.length - 1] !== me || !box) return
+      const target = event.target instanceof HTMLElement ? event.target : null
+      if (event.key === 'Escape') {
+        // A list open inside the pop-up (person picker, search select, multi-select) closes first.
+        if (event.defaultPrevented || target?.getAttribute('aria-expanded') === 'true' || target?.closest('.multi-select, .person-picker')?.querySelector('[aria-expanded="true"]')) return
+        event.preventDefault(); close.current()
+      } else if (event.key === 'Tab') {
+        const items = [...box.querySelectorAll<HTMLElement>(focusable)].filter((item) => item.offsetParent !== null || item === document.activeElement)
+        if (!items.length) { event.preventDefault(); box.focus(); return }
+        const at = items.indexOf(document.activeElement as HTMLElement)
+        if (event.shiftKey && at <= 0) { event.preventDefault(); items[items.length - 1].focus() }
+        else if (!event.shiftKey && (at === -1 || at === items.length - 1)) { event.preventDefault(); items[0].focus() }
+      }
+    }
+    document.addEventListener('keydown', key)
+    return () => {
+      document.removeEventListener('keydown', key)
+      openDialogs.splice(openDialogs.indexOf(me), 1)
+      if (opener?.isConnected && (!document.activeElement || document.activeElement === document.body || box?.contains(document.activeElement) || !document.activeElement.isConnected)) opener.focus()
+    }
+  }, [])
+  return createPortal(<div className="modal-backdrop" role="presentation" onMouseDown={form ? undefined : onClose}><div ref={dialog} tabIndex={-1} className={wide ? 'modal modal-wide' : 'modal'} role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}><div className="modal-heading"><div><p className="eyebrow">{eyebrow}</p><h2>{title}</h2></div><button type="button" className="icon-button" onClick={onClose} aria-label="Close">×</button></div>{children}</div></div>, document.body)
 }
 // The saved values of a setting, shown on the page while its editor is a pop-up.
 export function SettingsSummary({ rows }: { rows: [string, ReactNode][] }) {

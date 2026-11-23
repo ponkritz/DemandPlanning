@@ -7,6 +7,7 @@ import { defaultHealthColumns, descriptionText, featuresWithoutDoD, healthColumn
 import { PersonPicker } from '../components/PersonPicker'
 import { downloadCsv } from '../download'
 import { formatDate, todayIso } from '../format'
+import { utcToday } from '../businessTime'
 import type { AzureWorkItem } from '../domain'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import { capacityContext } from '../capacity'
@@ -76,7 +77,7 @@ export function BacklogHealthPage({ azure, store }: { azure: AzureWorkspace; sto
       case 'state': return <Pill tone={stateTone(item.state)}>{item.state}</Pill>
       case 'assignedTo': return item.assignedTo || <span className="muted">Unassigned</span>
       case 'createdDate': case 'changedDate': return item[column] ? formatDate(item[column]) : none
-      case 'sprintEnd': { const end = sprintEnd(item, dated); return end ? <>{end}<small>{end < todayIso() ? 'ended' : 'ends'}</small></> : none }
+      case 'sprintEnd': { const end = sprintEnd(item, dated); return end ? <>{end}<small>{end < utcToday() ? 'ended' : 'ends'}</small></> : none }
       case 'parent': return item.parentId != null ? byId.get(item.parentId) ? link(byId.get(item.parentId)) : `#${item.parentId}` : none
       case 'epic': return link(hierarchyOf(item, byId).Epic)
       case 'feature': return link(hierarchyOf(item, byId).Feature)

@@ -24,7 +24,7 @@ export const contentSecurityPolicy = [
   "img-src 'self' data: blob: https: file:",
   "font-src 'self' data: file:",
   "connect-src 'self' https: file:",
-  "frame-src https://login.microsoftonline.com",
+  "frame-src 'none'",
   "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",

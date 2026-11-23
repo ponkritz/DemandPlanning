@@ -6,7 +6,8 @@ import { GitSyncBar } from '../components/GitStorage'
 import type { GitStorage } from '../useGitStorage'
 import { azureInsights } from '../azureInsights'
 import { baselineHours, describeRule, normalizeRules, normalizeScopes, releaseBaselines, type BaselineRule, type ReleaseBaselineRow, type ScopeEntry } from '../baseline'
-import { formatDate, formatHours, todayIso } from '../format'
+import { formatDate, formatHours } from '../format'
+import { utcToday } from '../businessTime'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { PageProps } from './types'
 
@@ -15,7 +16,7 @@ const scopeText = (rule: BaselineRule, entry: Pick<ScopeEntry, 'drivers'>) => ru
 // canEdit: the viewer's access roles include editing baselines (a read-only Git token makes the page view-only too).
 export function BaselinesPage({ azure, month, store, git, onOpenSettings, canEdit = true }: { azure: AzureWorkspace; month: string; store: PageProps['store']; git: GitStorage; onOpenSettings: () => void; canEdit?: boolean }) {
   const readOnly = git.readOnly || !canEdit
-  const [today] = useState(todayIso)
+  const [today] = useState(utcToday)
   const [editing, setEditing] = useState<string | null>(null)
   const [open, setOpen] = useState<string | null>(null)
   const rules = normalizeRules(store.state.baselineRules)

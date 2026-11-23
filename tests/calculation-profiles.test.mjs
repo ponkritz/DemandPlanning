@@ -44,7 +44,7 @@ test('CAP-41: the built-in "Old Calculation" profile gives the Old Calculation f
     assert.deepEqual([entry.available, entry.utilizedPlanned, entry.utilized, entry.plannedUtilization, entry.utilization, entry.status], [row.netCapacity, row.planned, row.actual, row.plannedUtilization, row.actualUtilization, row.status], row.name)
   }
   // Ana: 176 − 32 Standard Hours = 144; plan 120 + 24 absence (no estimate: Completed Work); recorded 160 + 24.
-  assert.deepEqual(figures(person(model, 'Ana')), [144, 184, 144, 127.78, 100, 'Overloaded'])
+  assert.deepEqual(figures(person(model, 'Ana')), [144, 184, 144, 127.78, 100, 'Balanced'] /* exactly at 100%: not overloaded (strictly above) */)
 })
 
 test('CAP-41: a custom profile — fixed base, Standard Hours, a deducted, counted and ignored bucket, plan source, status from the plan', () => {
@@ -123,7 +123,7 @@ test('CAP-44: viewing a page with another profile changes only the settings that
   const viewed = withViewedProfile(shared, 'old-calculation')
   assert.equal(defaultProfile(viewed).name, 'Old Calculation')
   assert.equal(defaultProfile(shared).name, 'Current (v4)', 'the shared settings are not changed')
-  assert.deepEqual(figures(person(capacityModel(backlog, '2026-10', viewed), 'Ana')), [144, 184, 144, 127.78, 100, 'Overloaded'])
+  assert.deepEqual(figures(person(capacityModel(backlog, '2026-10', viewed), 'Ana')), [144, 184, 144, 127.78, 100, 'Balanced'] /* exactly at 100%: not overloaded (strictly above) */)
   assert.equal(withViewedProfile(shared, ''), shared, 'no choice: the default')
   assert.equal(withViewedProfile(shared, 'missing'), shared, 'an unknown profile: the default')
   assert.equal(defaultProfile(withViewedProfile(shared, 'finance')).name, 'Finance view')

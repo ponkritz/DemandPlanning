@@ -41,7 +41,7 @@ export async function prepareWebReload(href: string, request: typeof fetch = fet
 
 export function reloadBlockReason({ pending, failed, busy, preview, exported, acknowledged }: { pending: boolean; failed: boolean; busy: boolean; preview: boolean; exported: boolean; acknowledged: boolean }) {
   if (busy) return 'Wait for the Azure fetch to finish before updating.'
-  if (pending && !failed) return 'Wait for pending saves or SharePoint synchronization to finish.'
+  if (pending && !failed) return 'Wait for pending saves to finish.'
   if ((failed || preview) && !exported) return 'Export a JSON backup first to preserve in-memory data and the fetched preview.'
   if (!acknowledged) return 'Confirm that you have saved or backed up your work before reloading.'
   return ''

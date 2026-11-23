@@ -38,7 +38,7 @@ test('My views: on a server with a PAT, never named after a stream, never a stre
   assert.deepEqual(removeAllConnections(storage).map((entry) => entry.id), ['tw'])
   assert.deepEqual(listAzureConnectionProfiles(storage).map((entry) => entry.id), ['my-1'])
 
-  // Their data is left out of what goes to SharePoint and backups.
+  // Their data is left out of what goes to backups.
   const state = { azureSources: [{ connectionId: 'my-1', items: [] }, { connectionId: 'dp', items: [] }] }
   assert.deepEqual(withoutMyViews(state, new Set(['my-1'])).azureSources.map((source) => source.connectionId), ['dp'])
   assert.equal(withoutMyViews(state, new Set()), state, 'unchanged without My views')
@@ -51,12 +51,14 @@ test('Admin and My settings: the pages, and older links opening where they moved
   assert.deepEqual(resolveSettings('connections', 'email'), { tab: 'my', section: 'email' })
   assert.deepEqual(resolveSettings('connections', 'mapping'), { tab: 'connections', section: 'mapping' })
   assert.deepEqual(resolveSettings('connections', 'views'), { tab: 'storage', section: 'views' })
-  assert.deepEqual(resolveSettings('tables'), { tab: 'pack', section: 'tables' })
+  assert.deepEqual(resolveSettings('tables'), { tab: 'look', section: 'tables' }, 'SET-18: Table and chart defaults moved to Look & feel')
+  assert.deepEqual(resolveSettings('pack', 'tables'), { tab: 'look', section: 'tables' })
   assert.deepEqual(resolveSettings('history'), { tab: 'capacity', section: 'history' })
   assert.deepEqual(resolveSettings('access'), { tab: 'resources', section: 'rights' })
   assert.deepEqual(resolveSettings('storage', 'git'), { tab: 'storage', section: 'git' })
   assert.equal(settingsLabel('my'), 'My settings')
-  assert.equal(settingsLabel('tables'), 'Reports')
+  assert.equal(settingsLabel('tables'), 'Look & feel')
+  assert.equal(settingsLabel('look'), 'Look & feel')
   assert.deepEqual(resolveSettings('masters'), { tab: 'epics', section: 'setup' }, 'Master data is replaced by the Epic setup (EPS-01)')
   assert.equal(settingsLabel('masters'), 'Epic & Feature setup')
   assert.deepEqual(resolveSettings('features'), { tab: 'epics', section: 'setup' }, 'EPS-08: Feature setup is a section of Epic & Feature setup')

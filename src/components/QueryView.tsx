@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import type { AzureWorkItem } from '../domain'
 import { cellValue, columnName, columnOrderKey, defaultViewColumns, extraColumnRef, formatCell, hiddenColumnsKey, sortItems, viewSummary, withReleaseColumns, type QueryColumn, type QueryOrder } from '../queryView'
-import { todayIso } from '../format'
+import { utcToday } from '../businessTime'
 import { EmptyState } from './ui'
 
 // A field's value for sorting and export: dates as they are (exported as date-times), numbers as numbers, the rest as shown.
@@ -28,7 +28,7 @@ export function QueryView({ name, items, columns, orderBy = [], unresolved = [],
   const [state, setState] = useState('')
   const [type, setType] = useState('')
   const [sort, setSort] = useState<QueryOrder[]>(orderBy)
-  const [today] = useState(todayIso)
+  const [today] = useState(utcToday)
   const summary = useMemo(() => viewSummary(items, today), [items, today])
   const shown = useMemo(() => {
     const text = search.trim().toLowerCase()

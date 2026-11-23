@@ -1,6 +1,7 @@
 import { listJobs, runInBackground, subscribeJobs } from '../backgroundJobs'
 import { useState, useSyncExternalStore } from 'react'
-import { EmptyState, Notice, Page, Panel, Pill } from '../components/ui'
+import { EmptyState, Notice, Page, Panel, Pill, WriteBlocked } from '../components/ui'
+import { useWriteBlock } from '../useCan'
 import { currentIterationPairs, readAzureIterations, updateAzureWorkItem, type AzureIteration } from '../azureDevOps'
 import { capacityContext } from '../capacity'
 import { canActivateHere, isMine, moveCandidates, stateCheckChildren, nextStateFor, stateChecks, type MoveStates, type StateCheck } from '../myWork'
@@ -52,6 +53,8 @@ export function SprintCheckPage({ azure, store, my }: { azure: AzureWorkspace; s
   const toggle = (id: number) => setOpen((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next })
   const { config, pat } = azure
   const absenceEpicId = capacityContext(store.state).absenceEpicId
+  // CON-102: Move needs work.move, the state buttons work.state; disabled with the reason when the viewer lacks it.
+  const write = useWriteBlock(), moveWhy = write.why('work.move'), stateWhy = write.why('work.state')
   const blocked = azure.isSample ? 'Synthetic sample data is loaded: changes to Azure DevOps are disabled.' : !config || !pat.trim() ? 'Connect the Time Writing connection (with its PAT) to change items in Azure DevOps.' : ''
   // Both lists in ascending ID order.
   const toMove = (target ? moveCandidates(azure.items, my.me, target, iterations, absenceEpicId, undefined, moveStates) : []).toSorted((a, b) => a.item.id - b.item.id)
@@ -73,6 +76,8 @@ export function SprintCheckPage({ azure, store, my }: { azure: AzureWorkspace; s
     try {
       const result = await closeChosen(config, pat, selection)
       if (result.closed.length) { azure.applyWorkItems(result.closed, 'State check', result.closed.map((entry) => `#${entry.id} → ${entry.state}`).join(', ')); note({ tone: 'success', text: `Closed ${result.closed.map((entry) => `#${entry.id}`).join(', ')}.` }) }
+      // BKL-43: the later months' Time Writing Tasks removed with 0 h.
+      if (result.removed.length) { azure.applyWorkItems(result.removed, 'State check', result.removed.map((entry) => `#${entry.id} → Removed, 0 h`).join(', ')); note({ tone: 'success', text: `Removed the later months' Time Writing Tasks ${result.removed.map((entry) => `#${entry.id}`).join(', ')} (0 h).` }) }
       for (const text of [...result.failed, ...result.skipped]) note({ tone: result.failed.includes(text) ? 'error' : 'info', text })
       note({ tone: 'info', text: 'Refreshing data…' }); await azure.refresh()
     } finally { setBusy('') }
@@ -157,11 +162,12 @@ export function SprintCheckPage({ azure, store, my }: { azure: AzureWorkspace; s
                   <div className="view-switch" role="group" aria-label="States to move"><span>States</span><div className="segmented">{([['new', 'New'], ['active', 'Active'], ['both', 'Both']] as const).map(([value, text]) => <button key={value} type="button" aria-pressed={moveStates === value} onClick={() => { setMoveStates(value); setSkipMove(new Set()) }}>{text}</button>)}</div></div>
                   <label>Target<select value={target} onChange={(event) => { setTarget(event.target.value); setSkipMove(new Set()) }}>{pairs.map((pair) => <option key={pair.sprint.path} value={pair.sprint.path}>{pair.pi.name} › {pair.sprint.name} ({pair.sprint.attributes?.startDate?.slice(0, 10)} – {pair.sprint.attributes?.finishDate?.slice(0, 10)})</option>)}</select></label>
                   {toMove.length ? <ul className="pick-list">{toMove.map(({ item }) => <li key={item.id}><label className="check"><input type="checkbox" checked={!skipMove.has(item.id)} onChange={(event) => setSkipMove((current) => { const next = new Set(current); if (event.target.checked) next.delete(item.id); else next.add(item.id); return next })} /><Pill>{item.workItemType}</Pill><ItemLink item={item} /> {item.title}<small>{shortPath(item.iterationPath)}</small></label></li>)}</ul> : <p className="muted">All your pending items are already in this Sprint.</p>}
-                  <div className="button-row"><button type="button" className="primary" disabled={Boolean(blocked) || moving || !toMove.some(({ item }) => !skipMove.has(item.id))} onClick={() => void moveAll()}>{moving ? 'Moving…' : ((count) => `Move ${count} item${count === 1 ? '' : 's'}`)(toMove.filter(({ item }) => !skipMove.has(item.id)).length)}</button></div>
+                  <div className="button-row"><WriteBlocked reason={moveWhy} /><button type="button" className="primary" title={moveWhy || undefined} disabled={Boolean(blocked) || Boolean(moveWhy) || moving || !toMove.some(({ item }) => !skipMove.has(item.id))} onClick={() => void moveAll()}>{moving ? 'Moving…' : ((count) => `Move ${count} item${count === 1 ? '' : 's'}`)(toMove.filter(({ item }) => !skipMove.has(item.id)).length)}</button></div>
                 </>}
           </Panel>
         </div>
         <Panel className="action-card state-checks" eyebrow="CHECK" title="State checks" info="Your Features and User Stories whose state does not match their children: all User Stories Closed → close the Feature; all Tasks Closed → close the User Story; an Active Feature needs at least one Active User Story; an Active Feature still in an older PI than its Active User Stories is moved to their PI. A Feature is closed only from Active.">
+          {checks.length > 0 && <WriteBlocked reason={write.note('work.state', 'work.move')} />}
           {checks.length ? <div className="backlog-table-scroll"><table className="backlog-table state-tree" aria-label="State checks">
             <thead><tr><th style={{ width: 70 }}>ID</th><th>Title</th><th style={{ width: 110 }}>State</th><th style={{ width: 150 }}>Assigned To</th><th>Check</th><th style={{ width: 200 }} aria-label="Action" /></tr></thead>
             <tbody>{checks.map((check) => {
@@ -175,8 +181,8 @@ export function SprintCheckPage({ azure, store, my }: { azure: AzureWorkspace; s
                 <td><StateDot state={item.state} /></td>
                 <td>{item.assignedTo || 'Unassigned'}</td>
                 <td><span className={`state-check-text${check.kind === 'feature-needs-active-story' ? ' warning-text' : ''}`}>{checkText[check.kind](check)}</span></td>
-                <td>{check.kind === 'feature-old-pi' && check.targetPi ? <button type="button" className="backlog-action" disabled={Boolean(blocked) || saving} onClick={() => void moveToPi(item, check.targetPi!)}>{saving ? 'Saving…' : `Move Feature to ${shortPath(check.targetPi)}`}</button>
-                  : next ? <button type="button" className="backlog-action" disabled={(Boolean(blocked) && !(azure.isSample && next.state === 'Closed' && (item.workItemType === 'Feature' || item.workItemType === 'User Story'))) || saving} onClick={() => void applyState(item, next.state)}>{saving ? 'Saving…' : next.label}</button>
+                <td>{check.kind === 'feature-old-pi' && check.targetPi ? <button type="button" className="backlog-action" title={moveWhy || undefined} disabled={Boolean(blocked) || Boolean(moveWhy) || saving} onClick={() => void moveToPi(item, check.targetPi!)}>{saving ? 'Saving…' : `Move Feature to ${shortPath(check.targetPi)}`}</button>
+                  : next ? <button type="button" className="backlog-action" disabled={(Boolean(blocked) && !(azure.isSample && next.state === 'Closed' && (item.workItemType === 'Feature' || item.workItemType === 'User Story'))) || Boolean(stateWhy) || saving} title={stateWhy || undefined} onClick={() => void applyState(item, next.state)}>{saving ? 'Saving…' : next.label}</button>
                   : check.kind === 'feature-needs-active-story' && below.length ? <button type="button" className="backlog-action" aria-expanded={expanded} onClick={() => toggle(item.id)}>{expanded ? 'Hide User Stories' : 'Choose a User Story'}</button>
                   : <a href={item.url} target="_blank" rel="noreferrer">Open in Azure DevOps</a>}</td>
               </tr>, ...(expanded ? below.map((child) => {
@@ -188,7 +194,7 @@ export function SprintCheckPage({ azure, store, my }: { azure: AzureWorkspace; s
                   <td><StateDot state={child.state} /></td>
                   <td>{child.assignedTo || 'Unassigned'}</td>
                   <td className="muted">{child.workItemType === 'User Story' && child.state.trim().toLowerCase() === 'new' && !mine ? 'Not yours: set it Active in Azure DevOps or ask its owner.' : ''}</td>
-                  <td>{activate && <button type="button" className="backlog-action" disabled={Boolean(blocked) || childSaving} onClick={() => void applyState(child, 'Active')}>{childSaving ? 'Saving…' : 'Set User Story to Active'}</button>}</td>
+                  <td>{activate && <button type="button" className="backlog-action" disabled={Boolean(blocked) || Boolean(stateWhy) || childSaving} title={stateWhy || undefined} onClick={() => void applyState(child, 'Active')}>{childSaving ? 'Saving…' : 'Set User Story to Active'}</button>}</td>
                 </tr>
               }) : [])]
             })}</tbody>

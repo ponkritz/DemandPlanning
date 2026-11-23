@@ -108,3 +108,11 @@ export function editLocks(item: { workItemType: string; title: string }) {
 const hasTag = (tags: string, tag: string) => tags.split(';').some((entry) => entry.trim().toLowerCase() === tag)
 export const isAdhocTask = (tags: string) => hasTag(tags, 'ad-hoc')
 export const withAdhocTag = (tags: string) => [...tags.split(';').map((tag) => tag.trim()).filter(Boolean), 'ad-hoc'].join('; ')
+
+// BKL-44: who Save assigns the item to — '' means Assigned to is not sent (it stays as it is). Assigned to starts blank:
+// only a person picked in the form (with the right to assign others), or "Assign to me" on an unassigned item (without
+// it), is written. An unassigned item is never assigned to the editor by default.
+export function editAssignee({ canChoose, chosen, assigned, assignToMe, me }: { canChoose: boolean; chosen: string; assigned: boolean; assignToMe: boolean; me: string }) {
+  if (canChoose) return chosen
+  return !assigned && assignToMe ? me : ''
+}

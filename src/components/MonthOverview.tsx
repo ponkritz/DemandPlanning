@@ -23,7 +23,7 @@ export function UtilizationTable({ people, profileLine = () => '', terms = defau
 export function CapacityMetrics({ model, settings, label }: { model: CapacityModel; settings: CapacitySettings; label: string }) {
   const terms = termsOf(settings, model.profile.definition.id), hint = termHints(model.profile.definition, settings)
   return <Metrics>
-    <Metric label={label} value={formatPercent(model.totals.utilization)} hint={hint.utilization} tone={model.totals.utilization != null && model.totals.utilization >= settings.overloadedAt ? 'negative' : undefined} />
+    <Metric label={label} value={formatPercent(model.totals.utilization)} hint={hint.utilization} tone={model.totals.utilization != null && model.totals.utilization > settings.overloadedAt ? 'negative' : undefined} />
     <Metric label={terms.funded} value={`${formatHours(model.totals.funded)}h`} hint={hint.funded} />
     <Metric label={terms.absence} value={`${formatHours(model.totals.absence)}h`} hint={hint.absence} />
     <Metric label={terms.npra} value={`${formatHours(model.totals.npra)}h`} hint={hint.npra} tone={model.counts.npraOver ? 'negative' : undefined} />
@@ -84,7 +84,7 @@ export function MonthSections({ items, month, settings, navigate, utilizationOnl
     <p>{terms.funded} per person: {model.workingDays} working days × {settings.hoursPerDay}h funded hours per day = {formatHours(model.fundedPerPerson)}h.</p>
     <p>{model.profile.formula}</p>
     {model.locked && <p>The figures of {monthName(month)} are locked: they stay as they were on {formatDateTime(model.locked.lockedOn)} whatever changes later (Team overview → Utilization).</p>}
-    <p>Status: overloaded at ≥ {settings.overloadedAt}%; has capacity below {settings.availableBelow}%.</p>
+    <p>Status: overloaded above {settings.overloadedAt}%; has capacity below {settings.availableBelow}%.</p>
     <p className="muted">Tasks are matched to the month when their title starts or ends with the month and year (e.g. “{monthName(month)} | …” or “… | {monthName(month)}”, any delimiter). Thresholds and the absence Epic are set under Admin → Capacity & time and absence.</p>
     <div className="button-row"><button className="text-button" onClick={() => navigate('activities')}>Open Time Writing →</button><button className="text-button" onClick={() => navigate('admin')}>Capacity settings →</button></div>
   </Info></div>

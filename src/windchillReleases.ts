@@ -1,3 +1,4 @@
+import { utcMonthKey } from './businessTime.ts'
 import { normalizeVersion } from './releaseSource.ts'
 import { windchillCell } from './windchillViews.ts'
 
@@ -191,7 +192,7 @@ export function windchillReleases(rows: Record<string, unknown>[], columns: stri
       // The latest date by value; text that is not a date is compared as text, only among such texts.
       const at = parseExportDate(when)
       // Every month a document of the release is dated in (CON-73): the release is supported in each of them.
-      if (at !== undefined) { const month = new Date(at).toISOString().slice(0, 7); if (!entry.months.includes(month)) entry.months.push(month) }
+      if (at !== undefined) { const month = utcMonthKey(at)!; if (!entry.months.includes(month)) entry.months.push(month) }
       if (at !== undefined ? entry.latestAt === undefined || at > entry.latestAt : entry.latestAt === undefined && when > entry.latest) { entry.latest = when; entry.latestAt = at }
       byKey.set(key, entry)
     }
@@ -203,8 +204,9 @@ export function windchillReleases(rows: Record<string, unknown>[], columns: stri
   return { releases, unmatched, clubbed, nameColumn, locationColumn: location, source, locations, dateColumn: date }
 }
 
-// The month (YYYY-MM) of a release's latest date, from the parsed value; undefined when no date could be read.
-export const releaseMonth = (entry: Pick<WindchillRelease, 'latestAt'>) => entry.latestAt === undefined ? undefined : new Date(entry.latestAt).toISOString().slice(0, 7)
+// The month (YYYY-MM) of a release's latest date, from the parsed value (the date as written, read as UTC: NAV-51);
+// undefined when no date could be read.
+export const releaseMonth = (entry: Pick<WindchillRelease, 'latestAt'>) => entry.latestAt === undefined ? undefined : utcMonthKey(entry.latestAt)
 // The releases with a document dated in the month (YYYY-MM), as chosen in the header month picker (CON-73): a
 // document signed in the month counts its release for that month, whatever the release's newer documents.
 export const releasesInMonth = <T extends Pick<WindchillRelease, 'latestAt'> & { months?: string[] }>(releases: T[], month: string) => releases.filter((entry) => entry.months ? entry.months.includes(month) : releaseMonth(entry) === month)

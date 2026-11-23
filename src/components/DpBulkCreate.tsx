@@ -11,7 +11,7 @@ import { useBulkEpic } from '../useStreamEpics'
 import type { QeMappingFile } from '../qeMapping'
 import { bulkPlan, pickQe } from '../dpBulk'
 import type { BoardHit } from '../dpBoardMatch'
-import { createFeatureFromSetup, currentIndiaMonth, currentIterationPairs, futureIterationPairs, readAzureIterations, withFeatureDoD, HierarchyCreationError, type AzureIteration } from '../azureDevOps'
+import { createFeatureFromSetup, utcMonthLabel, currentIterationPairs, futureIterationPairs, readAzureIterations, withFeatureDoD, HierarchyCreationError, type AzureIteration } from '../azureDevOps'
 import { runInBackground } from '../backgroundJobs'
 import { adhocAfterLock } from '../planningLock'
 import { Modal, Notice } from './ui'
@@ -59,7 +59,7 @@ export function DpBulkCreate({ rows, azure, featureSetup, qeMapping, featureMatc
 
   function create() {
     if (blocked || !azure.config || !epic || !pair) return
-    const config = azure.config, token = azure.pat, month = currentIndiaMonth(), adhoc = adhocAfterLock(month)
+    const config = azure.config, token = azure.pat, month = utcMonthLabel(), adhoc = adhocAfterLock(month)
     const started = runInBackground(`dp-bulk:${ready.map((line) => line.row.id).join(',')}`, `Create ${ready.length} DP Feature${ready.length === 1 ? '' : 's'}`, async (progress) => {
       const done: string[] = [], failed: string[] = []
       for (const [index, line] of ready.entries()) {

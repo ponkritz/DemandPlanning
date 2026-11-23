@@ -52,7 +52,7 @@ For every L3 test, start from a clean browser profile unless the case says other
 | TD-01 | Synthetic sample | "Load synthetic sample" (deterministic): 6 people, 9 Epics, 14 Features, absence Epic 37778, holidays for India, Netherlands and US, DHFI release documents, 5 release scopes |
 | TD-02 | Azure DevOps test project | A project with a team backlog containing the fixture items in TD-02a. Use a PAT with Work Items Read & Write. |
 | TD-03 | Git test repository | A private repository with an empty branch `main`, plus a fine-grained token with Contents: Read and write |
-| TD-04 | SharePoint test site | A test site and an SPA app registration, where available. Otherwise mark SNP cases "Not run — no environment". |
+| TD-04 | Git data repository for snapshots | A private test repository with a fine-grained token (Contents: Read and write) for the snapshot cases; a read-only token for the disabled case. *(The SharePoint test site is no longer needed: SharePoint is in the backlog.)* |
 | TD-05 | Backup files | (a) a valid export; (b) `[]`; (c) schemaVersion 2; (d) `people` not an array; (e) an Azure item without `title`; (f) a file over 200 MB |
 | TD-06 | Desktop releases | Two consecutive `desktop-latest` builds (N installed, N+1 published) |
 
@@ -148,7 +148,7 @@ Cases marked **UAT** are also run in acceptance testing.
   - Hovering the title shows the page description.
   - No page repeats a header inside its content.
   - `2026-13` is not accepted. `2026-09` updates the page.
-  - On first load the month is the current India month.
+  - On first load the month is the current UTC month (NAV-51).
 
 **TC-NAV-04 Notices once, below the header** — Req NAV-13, FET-12…14
 - Pre: Clean profile.
@@ -287,13 +287,15 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-ACC-02 New work is always assigned; creating for others** — Req CON-50, CON-51 — L1 `my-work.test.mjs` (the month story and task carry the assignee; ＋ User Story / ＋ Task go under the right parent type with the chosen email and iteration; no assignee → refused in the browser transport before sending and in the Windows app request builder; people to choose: everyone with an email, a shared name shows the email), `azure-devops.test.mjs` (every item of a new Feature hierarchy is assigned), `access.test.mjs` (Scrum Master has the right, Team Member not); browser check with Azure DevOps mocked: ＋ User Story on a Feature → the picker starts on the Feature's assignee, choosing Ben creates the story assigned to ben@x.com. **UAT**
 
-**TC-OV-11 Dashboard: period, filters and six tabs** — Req OV-11 — L1 `dashboard.test.mjs` (periods: a year with any quarters and months, none = whole year; month status against today; person-month plan, actual, capacity, region, role, plan lines and blank actuals; filters incl. stream; streams and month-on-month change); browser check on sample data at 1500 px and 390 px: the tabs Summary, Insights, Months, People, Streams and Definitions open without console errors or horizontal page scroll; Months switches Recorded / Planned and hides months without entries; People groups by person, role or region; Streams shows the Epic mix and the overrun and ad-hoc Pareto for the period; each tab shows an empty state when nothing is planned or recorded. **UAT**
+**TC-OV-11 Dashboard: period, filters and six tabs** — Req OV-11 — L1 `dashboard.test.mjs` (periods: Year, Quarter and Month, see TC-OV-15; month status against today; person-month plan, actual, capacity, region, role, plan lines and blank actuals; filters incl. stream; streams and month-on-month change); browser check on sample data at 1500 px and 390 px: the tabs Summary, Insights, Months, People, Streams and Definitions open without console errors or horizontal page scroll; Months switches Recorded / Planned and hides months without entries; People groups by person, role or region; Streams shows the Epic mix and the overrun and ad-hoc Pareto for the period; each tab shows an empty state when nothing is planned or recorded. **UAT**
 
 **TC-OV-12 Rebalancing within role and month** — Req OV-12 — L1 `dashboard.test.mjs` ("overload, persistent overload, concentration and rebalancing within role and month"; "rebalancing leaves people without a role out of the relief and receiver lists, and counts them apart"); browser check: Summary → relief needs and receivers are full width, cut at 8 rows with "Show all (+N more)".
 
 **TC-OV-13 Insights** — Req OV-13 — L1 `insights.test.mjs` (elapsed share; month-end forecast; plan accuracy; stream momentum; resilience; unusual months; health score); browser check: every Insights section has its Info text, and the Delivery section says the Dashboard filters do not apply there. **UAT**
 
 **TC-OV-14 One utilization model from Settings** — Req OV-14 — L1 `dashboard.test.mjs` ("bandOf and plannedOverload follow the Settings thresholds"), `insights.test.mjs` ("the Settings bands decide what counts as over capacity and balanced"); browser check: with Settings → Capacity at 90 / 70, 92% shows ↑ red, 80% green and 65% ↓ blue on every tab, and differences in hours (+ / −) carry no colour.
+
+**TC-OV-15 Team overview period: Year, Quarter and Month drop-downs** — Req OV-15, OV-16 — L1 `dashboard.test.mjs` ("periods: Year → Quarter → Month, a hierarchy of multi-selects; nothing ticked in Year = the current year (OV-15, OV-16, TC-OV-15)"; "a saved period loads in this format and the earlier ones, keeping its months (OV-15, OV-16, MYD-08, TC-OV-15)"); E2E `shell.e2e.mjs` ("TC-OV-15: Team overview — Year, Quarter and Month are the first drop-downs of the filter row; Month follows Quarter; no year = the current year; Reset filters restores the period"); browser check at 1440 px and 390 px: Year, Quarter and Month are the first three drop-downs of the one filter row and the row wraps without horizontal page scroll; Q1 limits Month to Jan–Mar; choosing Mar and then Q2 instead of Q1 drops Mar; Reset filters returns to the header month's year and quarter and is disabled again; Year with nothing ticked counts the current year; two years ticked offer "Q1 2025" … "Q4 2026" and "Jan 2025" … months, and choosing Q4 2025 + Q1 2026 counts exactly those six months; a period saved before this change still opens with the same months. **UAT**
 
 **TC-NAV-21 Pulse Check ongoing activities** — Req NAV-20 — L1 `pulse-check.test.mjs` (in-progress Features and User Stories per stream, booked hours this month, overdue; absence and finished items left out); browser check: tabs Releases (last month), Last month, Ongoing activities, Current month releases. **UAT**
 
@@ -335,11 +337,15 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-NAV-48 Profile menu and footer** — Req NAV-48, NAV-49, NAV-15 — E2E `shell.e2e.mjs` ("TC-NAV-48: the profile at the top right holds My settings, the view switch and the tools; the footer shows the version and ends the page without covering it; Person only on person-based pages"); browser check: the profile button at the top right opens My settings, Classic / Tile view, View as… (Admin), Search settings, Customize menu; the footer shows only the desktop app download, “v{x.y.z} (Build n)” and Force Update, whose window shows the build ID, build time and where data is saved; scrolled to the end, the last row of a long table is fully visible above it; in Admin → Epic & Feature setup the Unsaved changes bar sits above the footer; every My settings section has the same width and starts under the tabs (KB-61).
 
+**TC-NAV-51 Business time is UTC** — Req NAV-51, NAV-11, NAV-12, QV-18, MON-06, MON-07, ATM-08, BKL-43 — L1 `business-time.test.mjs` ("NAV-51: the business helpers work in UTC; a plain date never shifts by a day (TC-NAV-51)"; "NAV-51: months of dates, new month Tasks, the current Sprint and the locks change at midnight UTC (TC-NAV-51)"; "NAV-51: the same months, Sprint and locks with TZ=Pacific/Auckland / America/Los_Angeles / Asia/Kolkata at month boundaries (TC-NAV-51)"), `planning-lock.test.mjs`, `azure-devops.test.mjs` ("release naming and UTC month rollover …"; "current dates resolve PI and nested Sprint with inclusive UTC-day boundaries (NAV-51)"), `azure-insights.test.mjs`, `release-source.test.mjs`, `release-overview.test.mjs`; the whole unit suite also passes with `TZ=Pacific/Auckland` and `TZ=America/Los_Angeles`; E2E `backlog.e2e.mjs` (New Feature and ＋ Time Writing Task months are the UTC month); browser check with the computer set to America/New_York on the last day of a month after 19:00 (20:00 in winter): the header month is already the next month, a new month Task is titled for the next month, the Period control shows the month's plan locked from midnight UTC, and the fetched-at times in the header and the view bars still show local time (EST / EDT).
+
+**TC-NAV-50 Pages fill the width inside a border, with set margins** — Req NAV-50 — L1 `page-layout.test.mjs` ("NAV-50: the page margins default to 10 / 20 / 10 / 20 px with a border"; "NAV-50: each side is kept between 0 and 64 px; anything else falls back to its default"; "NAV-50: a saved layout is read back; a broken saved value gives the defaults"; "NAV-50: applying sets one CSS variable per side and turns the border off only when asked"); E2E `shell.e2e.mjs` ("TC-NAV-50: every page fills the width beside the menu inside a border, with the margins of Look & feel, also when the menu is folded"); browser check in the desktop app: fold the menu — the page widens; set Left to 40 — the gap grows at once.
+
 **TC-NAV-45 My page usage** — Req NAV-45 — L1 `usage-counts.test.mjs` ("NAV-45: page usage is off until turned on; nothing is counted or stored while off (TC-NAV-45)"; "NAV-45: on, each opening of a page counts; off deletes the counts; most used first (TC-NAV-45)"; "NAV-45: a tampered or broken entry is read safely (TC-NAV-45)"); E2E `shell.e2e.mjs` ("TC-NAV-45: My page usage is off by default; turned on, it counts the pages opened in this browser; off deletes the counts"); inspection: an exported JSON backup and a Git snapshot contain no usage counts.
 
 **TC-NAV-36 Background jobs** — Req NAV-36 — L1 `background-jobs.test.mjs` ("background jobs: run, report progress and the result; the same job is not started twice"; "… a failed result or a thrown error marks the job; Clear finished keeps the running ones"); browser check (QMS-0025 with a saved PAT): New Feature → Save closes the form at once and the top bar shows “⟳ 1 running” with its progress, then “✓ Jobs done” with “#id … Hierarchy complete”; the menu and other pages stay usable meanwhile; Bulk actions → Create month tasks and Move run the same way and their buttons wait while the job runs; Monthly Time Writing → Save leaves a failed Task staged; reloading while a job runs asks first.
 
-**TC-NAV-34 Settings editors as pop-ups** — Req NAV-34 — browser check: Settings → Storage shows the Git storage and SharePoint summaries; "Connect Git storage…" and "Connect to SharePoint…" open pop-ups, a click beside them keeps them open, Cancel closes them; Settings → Azure DevOps: Edit on the Time Writing row and "＋ Add server" open pop-ups; Settings → Capacity & periods: "Edit capacity settings…" opens the form in a pop-up; "＋ Map an Epic or Feature…" maps #424242 and closes, the mapping's Edit opens "Change the mapping of #424242"; Settings → Feature setup: Go to Epic #13946 → the summary and "View setup…" (no Git) open "Shared Feature setup · Epic #13946", Close closes it; every pop-up form is one column (title, input, explanation per field) with Cancel then the main action at the bottom right; at 390 × 844 the connection pop-up fits without horizontal scrolling; no page errors. **UAT**
+**TC-NAV-34 Settings editors as pop-ups** — Req NAV-34 — browser check: Data & sharing shows the Git storage summary; "Connect Git storage…" opens a pop-up, a click beside them keeps them open, Cancel closes them; Settings → Azure DevOps: Edit on the Time Writing row and "＋ Add server" open pop-ups; Settings → Capacity & periods: "Edit capacity settings…" opens the form in a pop-up; "＋ Map an Epic or Feature…" maps #424242 and closes, the mapping's Edit opens "Change the mapping of #424242"; Settings → Feature setup: Go to Epic #13946 → the summary and "View setup…" (no Git) open "Shared Feature setup · Epic #13946", Close closes it; every pop-up form is one column (title, input, explanation per field) with Cancel then the main action at the bottom right; at 390 × 844 the connection pop-up fits without horizontal scrolling; no page errors. **UAT**
 
 **TC-CON-28 Work email required for Time Writing** — Req CON-60, CON-02 — browser check: a saved Time Writing connection without an email shows "Work email missing: Edit to add it" in the Stream mapping; Edit → Save without the email is blocked ("Please fill out this field"); with me@company.com it saves, the pop-up closes, the connection stores the email and the hint disappears; in the form at 1300px the PAT and email titles are one line and the inputs of each row line up. **UAT**
 
@@ -395,7 +401,7 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-CON-24 Load everything from Git; roles by the connection email; QE Mapping** — Req CON-55, CON-41, NAV-19 — browser check with GitHub mocked: Settings → Storage → Load everything from Git reads planning-data.json, azure-views.json, azure-data, windchill-data, access.json and feature-setup.json once each and lists what was loaded; Settings → Access says "You are me@x.com (the email on your Time Writing connection)"; QE Mapping appears under Data & governance (its content: TC-QEM-04). **UAT**
 
-**TC-ACC-01 Roles and access** — Req CON-41, CON-42, CON-43, CON-44 — L1 `access.test.mjs` (no policy = no restrictions; union of roles; default role for unknown or unlisted email; no default role = nothing; Backlog Health only for its roles; unknown roles, areas, actions and invalid emails dropped; broken file refused; the editor cannot remove their own "manage access"; a role without "change work items" is refused before anything is sent while reads still work); browser check with mocked GitHub and Azure DevOps: email shown from the connection's email field, Set up roles → add a member, tick Scrum Master → Save to Git commits access.json once; with a cached Team Member policy the menu has no Backlog Health, Bulk actions, Release Details, Baselines or Snapshots and Settings shows only Azure DevOps, Storage and Access. **UAT**
+**TC-ACC-01 Roles and access** — Req CON-41, CON-42, CON-43, CON-44 — L1 `access.test.mjs` (no policy = read-only, CON-101; union of roles; default role for unknown or unlisted email; no default role = nothing; Backlog Health only for its roles; unknown roles, areas, actions and invalid emails dropped; broken file refused; the editor cannot remove their own "manage access"; a role without "change work items" is refused before anything is sent while reads still work); browser check with mocked GitHub and Azure DevOps: email shown from the connection's email field, Set up roles → add a member, tick Scrum Master → Save to Git commits access.json once; with a cached Team Member policy the menu has no Backlog Health, Bulk actions, Release Details, Baselines or Snapshots and Settings shows only Azure DevOps, Storage and Access. **UAT**
 
 **TC-ACC-03 Add members by name** — Req CON-74 — browser check with the Time Writing backlog loaded: Settings → Access → Choose a person lists the people Assigned To an item in QMS-0025 by name (members already listed left out; two people with the same name show their email); pick one and Add member adds their email with the everyone-else role; the table shows the name with the email under it, sorted by name; Other (enter an email)… shows the email field and adds a person not in the backlog; without the backlog loaded only the email field and the hint are shown.
 
@@ -403,9 +409,9 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-ACC-05 View as a person, read only** — Req CON-90, CON-92 — L1 `view-as.test.mjs` ("View as: a person gets the roles of their work email (else the default role); a role gets that role only (CON-90, CON-91)"; "View as is read only: writes to Git storage and Azure DevOps are refused while it is on (CON-92)"); browser check with the Time Writing data fetched: view as a team member — My dashboard and My Tasks [Board] show their hours and work, the menu follows their roles; Save in Monthly Time Writing, a state change in My Tasks [Board] and Save to Git all report "Read only while viewing as …" and nothing changes in Azure DevOps or Git.
 
-**TC-NAV-12 Freshness in the viewer's time zone** — Req NAV-12 — L1 `format.test.mjs` and `app-update.test.mjs` (the same instant in Asia/Kolkata, America/New_York and UTC; local "today"); browser check in America/New_York: a fetch at 09:00 UTC shows "05:00 AM EDT".
+**TC-NAV-12 Freshness in the viewer's time zone** — Req NAV-12 — L1 `format.test.mjs` and `app-update.test.mjs` (the same instant in Asia/Kolkata, America/New_York and UTC; the business "today" is UTC, TC-NAV-51); browser check in America/New_York: a fetch at 09:00 UTC shows "05:00 AM EDT".
 
-**TC-OV-10 Releases summary, tracking Feature and local approval dates** — Req QV-18, QV-19, OV-10 — L1 `release-overview.test.mjs`, `format.test.mjs`, `release-source.test.mjs` (the same UTC instant is 30 September in New York and 1 October in India); browser check in Asia/Kolkata with CP, DP and IOCC loaded from Git: October shows three stream quadrants and the total (3 releases, 4 documents); September shows the CP release approved 29 Sep 18:30 UTC as “September 30, 2026”, in both the quadrant and the CP view.
+**TC-OV-10 Releases summary, tracking Feature and approval dates** — Req QV-18, QV-19, OV-10 — L1 `release-overview.test.mjs`, `format.test.mjs`, `release-source.test.mjs` (the same UTC instant is shown as 30 September in New York and 1 October in India, and counted in its UTC month for everyone); browser check in Asia/Kolkata with CP, DP and IOCC loaded from Git: October shows three stream quadrants and the total (3 releases, 4 documents); September shows the CP release approved 29 Sep 18:30 UTC as “September 30, 2026”, in both the quadrant and the CP view.
 
 **TC-PERF-01 Pages load on demand** — Req NFR-08 — L1 `bundle-split.test.mjs` ("NFR-08: pages load on demand — the shell imports only the start pages; the documents come with the Documentation page (TC-PERF-01)"); E2E every page opened through `navigate` (helpers.mjs waits for the page's code) and "TC-DOC-01" (the documents load with the page); browser check: `pnpm build:web` lists the main script under 1 MB and one chunk per page.
 
@@ -486,6 +492,8 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-FET-10 Fetch Time Writing from the top bar** — Req FET-22 — L1 `app-frame.test.mjs` ("FET-22: Refresh fetches the Time Writing connection first, then the read-only ones; a duplicate Time Writing connection is left out (TC-FET-10)"); browser check with a Time Writing connection and its PAT: ⟳ Time Writing in the top bar fetches it and says it was saved (as Admin → Streams → Fetch does); ↻ Refresh with an on-prem view and no VPN still updates Time Writing first.
 
+**TC-FET-11 Finished states and the close date** — Req FET-23, FET-24, DSK-04 — L1 `closed-history.test.mjs` ("Owner decision 10: finished is Closed, Resolved, Completed or Done — not Removed, Cut, Active"; "Owner decision 10: a finished item without a Closed Date takes its State Change Date, else Resolved Date"; "Owner decision 10: the history gives the change that moved the item into a finished state, the last such one"; "Owner decision 10: history is read only for finished items without a date, at most the limit, and kept per revision"; "Owner decision 10: the desktop proxy reads a work item's history with one GET, nothing else"); browser check with a Time Writing connection: a Resolved Feature with no Closed Date counts in Pulse Check in the month it was resolved, not the month it was last edited.
+
 **TC-FET-08 Cloud fetch at start** — Req FET-20, CON-45 — browser check with Azure DevOps mocked: with a cloud Time Writing connection and an on-prem connection, opening the app sends the cloud fetch once and nothing to the on-prem server; a rejected PAT shows the usual error and keeps the saved data. Settings shows one tab at a time, the shared tabs only with "manage shared settings", and reopens on the last tab; "Fetch work items from Azure DevOps →" opens the Azure DevOps tab. Live check needed: the QMS-0025 data refreshes after Force Update. **UAT**
 
 **TC-FET-07 Query fields and names** — Req FET-18, FET-19, QV-04
@@ -550,7 +558,7 @@ Cases marked **UAT** are also run in acceptance testing.
   - The columns are as in MON-05, and the links open the Azure items.
   - The planning and actuals pills show.
 
-**TC-MON-03 Lock boundaries** — Req MON-06, MON-07, MON-09, MON-10. L1 for the rule, plus L3 with the system clock or the period settings:
+**TC-MON-03 Lock boundaries** — Req MON-06, MON-07, MON-09, MON-10, NAV-51. L1 for the rule (`planning-lock.test.mjs`, `business-time.test.mjs`), plus L3 with the system clock or the period settings; every time below is UTC (NAV-51), whatever the computer's time zone:
 
 | Situation | Planning (OE) | Actuals (CW) |
 |---|---|---|
@@ -713,7 +721,7 @@ Cases marked **UAT** are also run in acceptance testing.
   - An Epic → Feature → Story → Task tree with the heading "QMS-0025" (or the View name).
   - Removed items are absent.
   - A changed column preference survives a reload.
-  - "Source details and dates" lists at most 100 rows and searches by ID, title, type and state.
+  - The "Source details (n)" tab lists at most 100 rows and searches by ID, title, type and state (see TC-BKL-34).
 
 **TC-BKL-02 Create Feature hierarchy** — Req BKL-04…09, BKL-11 — **UAT**
 - Steps:
@@ -750,7 +758,7 @@ Cases marked **UAT** are also run in acceptance testing.
   - (3) The Feature and its open User Stories move; the Time Writing story does not.
   - (4) Original Estimate is locked; the Task is tagged ad-hoc when it had no estimate; the iteration and the month in the title cannot change.
 
-**TC-BKL-12 Backlog filtered to me; ＋ Time Writing Task** — Req BKL-21, BKL-22 — E2E `backlog.e2e.mjs` ("TC-BKL-12: QMS-0025 opens filtered to the person browsing; clearing the filter shows everyone; rows offer ＋ Time Writing Task"); L1 `my-work.test.mjs` ("QMS-0025 shows mine by default: my items with everything above and below; featureOf finds the Feature of a Story (TC-BKL-12)"); browser check with the QMS-0025 board and your work email: the backlog shows your items with their Epic / Feature above and the work below; Assigned to me ✕ clears to everyone and a restart filters again; ＋ Time Writing Task on a Feature (and on a Story) creates this month's Task for you under your own Time Writing story, or reports that it exists; the same button on My Tasks [Board] rows.
+**TC-BKL-12 Backlog filtered to me; ＋ Time Writing Task** — Req BKL-21, BKL-22 — E2E `backlog.e2e.mjs` ("TC-BKL-12: QMS-0025 opens filtered to the person browsing; clearing the filter shows everyone; rows offer ＋ Time Writing Task"); L1 `my-work.test.mjs` ("QMS-0025 shows mine by default: my items with everything above and below; featureOf finds the Feature of a Story (TC-BKL-12)"); browser check with the QMS-0025 board and your work email: the backlog shows your items with their Epic / Feature above and the work below; choosing All in Assigned to shows everyone and a restart filters again; ＋ Time Writing Task on a Feature (and on a Story) creates this month's Task for you under your own Time Writing story, or reports that it exists; the same button on My Tasks [Board] rows.
 
 **TC-BKL-13 Parent Epic blank on New Feature** — Req BKL-23 — E2E `backlog.e2e.mjs` ("TC-BKL-13: New Feature opens with the Parent Epic blank; every Epic is offered"); browser check: the same from My Tasks [Board] and from Create Feature on Release Details; Create without an Epic says "Choose the parent Epic."
 
@@ -781,6 +789,22 @@ Cases marked **UAT** are also run in acceptance testing.
 **TC-BKL-27 Complete children per Epic** — Req BKL-38, BKL-10 — L1 `feature-setup.test.mjs` ("BKL-38: Complete children per Epic — on unless the shared setup turns it off; kept through a save; mine cannot turn it off (TC-BKL-27)"); E2E `backlog.e2e.mjs` ("TC-EPS-01: Epic setup — its fields appear in New Feature (a value list, required and warning fields), the title follows its pattern, and Admin → Epic setup shows them": the Complete children setting, on and read-only without Git storage); browser check with Git storage: turn it off for an Epic and Save — its Features no longer offer Complete children on Backlogs and My Tasks [Board], another Epic's still do; turn it on — Complete children opens with the Epic's User Stories unticked and Your own User Story, and only the ticked ones (and your own) are created.
 
 **TC-BKL-28 The Close pop-up** — Req BKL-39, ACT-18 — L1 `close-list.test.mjs` ("BKL-39: Close Feature lists everything open under it, parents before children; yours ticked, others’ not (TC-BKL-28)", "BKL-39: Close User Story — the story alone, or with the Feature, Time Writing story and Tasks when it is the last open one (TC-BKL-28)", "BKL-39: closing runs children first; a parent stays open when an item below it could not be closed (TC-BKL-28)"); E2E `shell.e2e.mjs` ("TC-BKL-28: Close on a Feature lists what would close with tick boxes and #ID links — yours ticked, others’ not; ticking the Feature ticks all; hours are confirmed first"); browser check with a Time Writing connection: Close Features on Time Writing and Close on a Feature row list the Feature, its User Stories and Tasks with tick boxes and #ID links; another person's Task is unticked and keeps its story and the Feature unticked; ticking the Feature ticks everything; a month Task ticked asks to confirm the hours; closing the last open User Story lists the Feature, Time Writing story and Tasks; closing another lists the story alone.
+
+**TC-BKL-29 Edit form keeps the PAT field while typing** — Req BKL-40 — E2E `backlog.e2e.mjs` ("TC-BKL-29: Edit without a saved PAT keeps the PAT field while it is typed in; nothing is read until Load"); browser check: Edit on a row without a saved PAT, type a token — the field stays, no "Reading #…" until Load.
+
+**TC-BKL-30 Hours make the Time Writing Task and story Active** — Req BKL-41 — L1 `hours-active.test.mjs` ("BKL-41: hours on a month Task make the Task and its Time Writing story Active, and say so"; "BKL-41: a Closed Task or story is reopened to Active and named; Active ones are left alone; Removed stays Removed"; "BKL-41: nothing changes without hours, for a Task that is not a month Task, or under a story that is not Time Writing"; "BKL-41: a failed write is reported, not thrown"); browser check with a Time Writing connection: enter hours on a New month Task and Save — the message names the Task and the story set to Active; close the story, enter hours again — the story is reopened and named.
+
+**TC-BKL-31 Close Task on Time Writing and My Tasks [Board]** — Req BKL-42 — L1 `close-list.test.mjs` ("BKL-42: Close Tasks lists the ticked Task alone, with the hours question; a User Story close removes later months only when it closes the Feature"); E2E `shell.e2e.mjs` ("TC-ACT-02: Time Writing shows the person's KPI cards, month tasks, hours and deadline", Close Tasks steps); browser check: My Tasks [Board] → Close on a month Task opens the pop-up with the hours question.
+
+**TC-BKL-32 Early close removes later months' Time Writing Tasks** — Req BKL-43 — L1 `close-list.test.mjs` ("BKL-43: closing a Feature early lists its later months’ Time Writing Tasks to remove (everyone’s, ticked; not those with Completed Work)"; "BKL-43: a later month that cannot be removed keeps its story and the Feature open"); browser check with a Feature whose Time Writing runs to next year: Close Feature — the later months are listed "→ Removed, 0 h", ticked; after Close they are Removed with 0 h Original Estimate.
+
+**TC-BKL-33 Edit keeps an unassigned item unassigned** — Req BKL-44 — L1 `work-item-edit.test.mjs` ("BKL-44: Assigned to starts blank — an unassigned item stays unassigned unless someone is picked"); browser check with a Time Writing connection: Edit an unassigned Task, change only the title, Save — Assigned to is still empty in Azure DevOps; pick a person — that person is set.
+
+**TC-BKL-34 One scroll bar on the board; Source details is its own tab** — Req BKL-45, BKL-12 — E2E `backlog.e2e.mjs` ("TC-BKL-34: QMS-0025 has one scroll bar — the board fills the screen — and Source details is its own tab"); browser check: at 1440 × 900 and with the menu folded, Expand all leaves the page without a scroll bar and the table scrolls; at 390 px the page scrolls.
+
+**TC-BKL-35 State and Assigned to multi-select filters** — Req BKL-46, BKL-21 — E2E `backlog.e2e.mjs` ("TC-BKL-35: QMS-0025 filters State and Assigned to with multi-select drop-downs; Reset filters goes back to New + Active and me"); L1 `my-work.test.mjs` ("QMS-0025 shows mine by default: my items with everything above and below; featureOf finds the Feature of a Story (TC-BKL-12)"); browser check with real data: two people chosen show only their work with its Epics and Features; Unassigned shows unassigned items; Closed added to State shows closed items.
+
+**TC-BKL-36 Column order saved for everyone** — Req BKL-47, BKL-03 — L1 `personal-views.test.mjs` ("BKL-47: Save for everyone sets one entry (the QMS-0025 column order) in the defaults and keeps every other default (TC-BKL-36)"); E2E `backlog.e2e.mjs` ("TC-BKL-36: QMS-0025 starts on the column order saved for everyone; Apply keeps my own; Reset to the team default goes back"); browser check with Git storage as a Tool Owner: Save for everyone writes personal-views-defaults.json with the order; another person (no own order) sees it after a reload; a person without the right sees no Save for everyone.
 
 **TC-BKL-14 Release number without "v" in Feature titles** — Req BKL-24 — L1 `release-source.test.mjs` ("Create Feature title from a release: \"Stream | Name | Release\" without a \"v\", mapping back to the release (BKL-24)"), `dp-board-match.test.mjs`, `cp-reporting.test.mjs`; browser check: Create Feature on a DP, CP and Windchill row pre-fills the title with the number and no "v".
 
@@ -819,6 +843,12 @@ Cases marked **UAT** are also run in acceptance testing.
 **TC-CON-60 Setup per Epic** — Req CON-97, CON-95 — L1 `feature-setup-inheritance.test.mjs` ("Feature setup layers: Mine → Epic (shared) → All Epics → Built in, per field (CON-95, TC-CON-59)" — an Epic without its own setup uses All Epics); E2E `shell.e2e.mjs` ("TC-CON-60: Setup per Epic — All Epics defaults, and an Epic showing which sections it customizes, with a preview"), `backlog.e2e.mjs` ("TC-EPS-01: …" — the Epic's fields in Setup per Epic); browser check with Git storage: Admin → Epic & Feature setup → Setup per Epic: All Epics — set a DoD and a story; an Epic: switch on Customize for User Stories (it starts from All Epics' story), add one, change its DoD; the preview follows; one Save to Git writes the setup files; Use my own version — customize the estimate, Save; New Feature under the Epic uses your estimate; Remove my own version; Reset this Epic to the defaults. The Epic list scrolls on its own, stays in view and is at most 600 px tall (KB-57).
 
 **TC-CON-61 Shared connections merged, removed ones restored** — Req CON-98, CON-99 — **UAT** — L1 `removed-connections.test.mjs` ("CON-98: sharing merges with the setup in Git — a connection only in Git stays; only named ones are removed (TC-CON-61)", "CON-99: connections in older versions of the shared setup that are gone now are found once, newest version first (TC-CON-61)", "CON-99: the history of the shared setup is read from GitHub — commits of the file, then the file at a commit; nothing is written"); E2E `shell.e2e.mjs` ("TC-CON-61: Streams → Removed connections finds a connection dropped from the shared setup in Git and restores it, for everyone"); UAT: on the computer that lost the second CP query, Settings → Streams → Removed connections → Look in Git history, Restore it, Fetch, and check it is back in the menu and on a second computer after its next start.
+
+**TC-CON-62 A connection without a role is read-only** — Req CON-100 — L1 `azure-devops.test.mjs` ("CON-100: a connection without a role is read-only, except the one older Time Writing setup"; "ADS configurations retain URL, reason and PAT as one selectable browser-local set"); `app-frame.test.mjs` ("FET-22: Refresh fetches the Time Writing connection first, then the read-only ones; a duplicate Time Writing connection is left out").
+
+**TC-CON-63 Read-only until the roles file is loaded (fail closed)** — Req CON-101, CON-43, CON-44 — **UAT** — L1 `access.test.mjs` ("CON-101: until a roles file is loaded the app is read-only (every menu area, no action, Azure writes refused); only the confirmed absence of access.json lets the viewer set up the first one (TC-CON-63)"; "CON-101: the Azure write guard is closed before the app sets it"; "access: no policy means read-only (CON-101); …"); E2E `shell.e2e.mjs` ("TC-CON-63: without a roles file the app is read-only — a notice says why on every page, every menu area is shown, write actions are disabled"); UAT: in a new browser without Git storage, every page is in the menu, the top says "Read-only" with Connect Git storage, and a change (New Feature, an hours cell, Role rights) cannot be saved; connect Git storage to a repository with access.json — the notice goes and the roles apply; connect a test repository without access.json — the notice offers Set up roles, Role rights → Set up roles → Save to Git writes access.json with you as Admin, and the app then follows it.
+
+**TC-CON-64 Write buttons disabled with the reason when the action is missing** — Req CON-102, CON-101 — L1 `access.test.mjs` ("CON-102: why a button that writes to Azure DevOps is disabled — read-only before the roles load, else the missing permissions (TC-CON-64)"); E2E `shell.e2e.mjs` ("TC-CON-64: before the roles load, the buttons that write to Azure DevOps are disabled and say why; with roles they are enabled"); browser check: without roles, ＋ New Feature on the QMS-0025 board, Edit / ＋ User Story / ＋ Task on its rows, ＋ New Feature / Edit / Close on My Tasks [Board], Save / Close / ＋ Add a new activity on Time Writing, Move and the state buttons on Sprint check, Create Feature and Create Features on the release pages are disabled and a line says why; with a role that lacks one action (e.g. Deny *Edit the fields of a work item*) only its buttons are disabled and the line names it; with every action nothing changes.
 
 
 **TC-CON-44 DP and DHFI defaults** — Req CON-76 — L1 `connections.test.mjs` ("pre-filled connections from the shared setup …": DP reads the Release work items of DHP with DDTDate, SourceProgram, PsName and Release; DHFI [Approved] reads the DHP.Vault documents, hidden from the menu); browser check in a fresh browser with only the on-prem PAT: Settings → Azure DevOps → Stream mapping → Set up DP, Pedestal and DHFI from their defaults; Release Details → DP lists Release items for the DDT month; Get started shows the release streams step done.
@@ -872,7 +902,7 @@ Cases marked **UAT** are also run in acceptance testing.
   2. Open Overview, Monthly and My Tasks [Board].
 - Expected: that Task appears on none of them.
 
-**TC-QV-05 Releases, Name/Release columns and month filter** — Req QV-12…17 — per-view snapshots: `view-sources.test.mjs`; month: `viewMonthOf` (approval date in India time, else approval-date field, else Changed Date); browser check: picker shown on read-only views and not on QMS-0025, “All months” shows every item — L1 `release-source.test.mjs` (incl. planned/booked hours per release: month Tasks only, Removed excluded, no double counting), `query-view.test.mjs`.
+**TC-QV-05 Releases, Name/Release columns and month filter** — Req QV-12…17 — per-view snapshots: `view-sources.test.mjs`; month: `viewMonthOf` (approval date in UTC, NAV-51, else approval-date field, else Changed Date); browser check: picker shown on read-only views and not on QMS-0025, “All months” shows every item — L1 `release-source.test.mjs` (incl. planned/booked hours per release: month Tasks only, Removed excluded, no double counting), `query-view.test.mjs`.
 - L3 steps:
   1. Open the release-source view (TD-01).
   2. Open another read-only view whose items have "…\Name\Release x.y.z" in their Area or Iteration Path.
@@ -896,7 +926,7 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-QV-12 Rich-text cells as plain text** — Req QV-27 — L1 `query-view.test.mjs` ("rich-text values (Acceptance Criteria) show as text: tags removed, entities decoded, lines joined"; "rich text of any size becomes text in linear time; script and style blocks are dropped (KB-03, TC-QV-12)"); browser check with Azure DevOps mocked (a query with [Microsoft.VSTS.Common.AcceptanceCriteria] holding `<div><b>Given</b>…</div>`): the cell reads "Given … · When … · Then …" with no tags, the hover shows the same, the CSV holds the text; no page errors.
 
-**TC-QV-13 View notes behind Info** — Req QV-28 — browser check with Azure DevOps mocked (DP view, October, a Git save note): no info banners above the counts; the ⓘ Info next to "DP" lists "Month filter: by DDT Date in your time zone." and the legend "DT = Design Transfer (DDT) · SFV = … · PRD = … · RPE = …"; a fetch error still shows as a banner; no page errors.
+**TC-QV-13 View notes behind Info** — Req QV-28 — browser check with Azure DevOps mocked (DP view, October, a Git save note): no info banners above the counts; the ⓘ Info next to "DP" lists "Month filter: by DDT Date in UTC." and the legend "DT = Design Transfer (DDT) · SFV = … · PRD = … · RPE = …"; a fetch error still shows as a banner; no page errors.
 
 **TC-QV-14 DP rows matched to the QMS-0025 board** — Req QV-29 — L1 `dp-board-match.test.mjs` ("DP row → QMS-0025: SourceProgram + Title, or Title alone when the board title has no SourceProgram"; "name and version must both match: another version or none on the board stays below 80%"; "no match at 80%: the closest item is kept as a hint; nothing in common is no match"; "a new Feature title maps back when it holds the Title; the service part drops the version"; "a Title unlike the PsName: the search combines PsName and Release, so the Feature Create Feature made is found"); browser check with Azure DevOps mocked (QMS-0025 board with a Feature and a User Story naming one DP row's Title, one DP row without a match): the matched row shows "Feature id n%" and "Story id n%" as links; the other shows "no match" and Create Feature, whose opens the default Create Feature form (TC-QV-16); the CSV holds the "QMS-0025 match" column; no page errors. **UAT**
 
@@ -1122,6 +1152,10 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
   - `data.txt` is rejected (path).
   - `repo.git` is accepted as `repo`.
 
+**TC-GIT-09 Loading from Git asks before replacing unsaved changes** — Req GIT-16 — L1 `git-storage.test.mjs` ("GIT-16: loading from Git asks first only when there are unsaved changes, and names what is replaced"); browser check with a writable Git connection: change a person's region, then Load latest — the confirmation names what is replaced; Cancel keeps the change; OK loads the copy in Git.
+
+**TC-GIT-10 Saves to shared files are queued and merged, never written over** — Req GIT-17, HIS-04, MYD-09, KPT-03, CON-88, PCK-08 — L1 `git-save-queue.test.mjs` ("GIT-17: the save time is to the second and travels in the commit message"; "GIT-17: merging by key keeps both sides; the later time wins only for an entry both changed"; "GIT-17 / HIS-04: two history imports both survive; the later one wins for the same row and the import details"; "GIT-17: default views by page, the KPI tracker by sheet and backups by connection id"; "GIT-17: two saves with different times are both written, in the order of their time, each as its own commit"; "GIT-17: a conflict at write time reads the file again, merges and saves both changes"; "GIT-17: after the retries the save fails with a clear error and stays in the queue until Retry"; "GIT-17: the Monthly pack template is not merged: an older save never replaces a newer one"); browser check with two browsers A and B on the same writable repository: open My dashboard → Customize in both; in A use as default with one section hidden, in B (without reloading) move another section and use as default — B says "Saved as the default for everyone — merged with a change by someone else", and `personal-views-defaults.json` in GitHub has both changes in two commits ending `[saved …]` in time order; upload a template in A, then another in B: both are commits in GitHub with their `[saved …]` times and B's (the later) is the template (an older-timed save arriving last is covered by L1).
+
 **TC-GIT-02 Connect, create, save, load** — Req GIT-02…04, GIT-06, GIT-08, GIT-12 — **UAT**
 - Pre: TD-03.
 - Steps:
@@ -1151,25 +1185,20 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
   - With TD-01 loaded, Save to Git is refused with the sample message.
   - Disconnect removes both localStorage keys, and the repository is unchanged.
 
-### 6.12 SharePoint and snapshots (requires TD-04)
+### 6.12 Snapshots (requires TD-04)
 
-**TC-SNP-01 Connect and central save** — Req SNP-01…03
-- Expected:
-  - Saving without a client ID gives "Application (client) ID is required."
-  - Connecting to an empty site offers "Initialize central data".
-  - A change is saved after about 900 ms, with "Saved to SharePoint at …".
-  - A save after a concurrent change gives the SNP-03 message.
+**TC-SNP-01 SharePoint central storage** — Req SNP-01…03 — *(Retired with SNP-01…03: SharePoint is in the backlog; nothing to run.)*
 
-**TC-SNP-02 Snapshot upload** — Req SNP-04…07 — L1 `cloud-snapshots.test.mjs`.
-- Expected (L3):
-  - The buttons are disabled when disconnected.
-  - An LTE snapshot creates "{month}-LTE-{id}.json" in "…/Snapshots".
+**TC-SNP-02 Snapshot saved to Git** — Req SNP-04…07 — L1 `cloud-snapshots.test.mjs` ("SNP-06: snapshots go to lte-snapshots/ beside the planning data in the Git data repository"; "SNP-06: a snapshot is a new file (no version id sent), read back and compared before success, nothing kept in the browser"; "SNP-06: failures, an existing file and a mismatched read-back never report success"; "SNP-04: the page saves only with Git connected and a token that can write; no SharePoint code is left"; "snapshot freezes source data and excludes history/connection secrets"; "SNP-05 (owner decision 11): a snapshot holds all the data present at the moment, hours and release data included").
+- Expected (L3, with TD-04):
+  - The buttons are disabled without Git storage, with a read-only token and with the synthetic sample.
+  - An LTE snapshot creates "lte-snapshots/{month}-LTE-{id}.json" in the data repository as one commit.
   - Success is reported only after the read-back.
   - The file contains exactly the SNP-05 data fields.
 
-**TC-SNP-03 History** — Req SNP-08
+**TC-SNP-03 History** — Req SNP-08 — L1 `cloud-snapshots.test.mjs` ("SNP-08: history lists only snapshot files, newest month first; a missing folder is empty; errors are reported").
 - Expected:
-  - Only matching files are listed, newest first.
+  - Only matching files are listed, newest month first, each linked to GitHub.
   - A non-matching file placed in the folder is not listed.
 
 **TC-SNP-04 Exports** — Req SNP-09, STO-06
@@ -1214,6 +1243,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-SET-07 My views** — Req SET-17, CON-42 — L1 `my-views.test.mjs` ("My views: on a server with a PAT, never named after a stream, never a stream connection, never in Git, kept when the shared setup is reset (SET-17, TC-SET-07)"); E2E `shell.e2e.mjs` ("TC-SET-07: My views — a view of your own on a server you have a PAT for, under Other views in the menu, never a stream and never in the shared setup"); browser check: My settings → My views offers only servers with a PAT; a view named DP is refused; a view with a name, project and WIQL query is added, fetched and listed under Other views in the menu; it is not in Data & sharing → Other views, not in Shared setup in Git (Save stream mapping to Git leaves it out), not in a JSON backup; Back up and remove all keeps it.
 
+**TC-SET-08 Look & feel** — Req SET-18, UI-12 — L1 `my-views.test.mjs` ("Admin and My settings: the pages, and older links opening where they moved (SET-15, TC-SET-06)"); E2E `shell.e2e.mjs` ("TC-SET-08: Look & feel switches the theme with the top-bar button in step, and the start view"; "TC-NAV-50: every page fills the width beside the menu inside a border, with the margins of Look & feel, also when the menu is folded" — the four tabs); `documents-and-data.e2e.mjs` (Table and chart defaults opened from Look & feel).
+
 **TC-SET-04 Master data, audit, reset** — Req SET-10…12, OI-06, OI-09
 - Expected:
   - An added value appears with "Active".
@@ -1242,7 +1273,6 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 - Expected:
   - (a) restores after the checkbox is ticked.
   - (b)–(f) are each rejected with the message of STO-07, and the data is unchanged.
-  - Restore is refused while SharePoint is connected.
 
 ### 6.15 Web update
 
@@ -1333,9 +1363,11 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
   - Step 3 downloads a file with the document's file name and identical content.
   - After step 4 the last document opened is still shown.
 
-**TC-DOC-03 Validation Package: documents, traceability and consistency checks** — Req DOC-09, DOC-10, DOC-11 — **UAT** — L1 `traceability.test.mjs` ("requirement IDs expand ranges and keep their width"; "the requirements have three levels, chained without gaps, with unique IDs"; "every test case names known requirements, every UAT day live test cases, every known issue known requirements"; "every source file is a listed software component, with requirement areas that exist"; "the committed traceability matrix is complete and current"), `validation-package.test.mjs` ("every package document has its required sections"; "mitigations, DFMEA rows, findings, risks and issues have unique IDs and the summary counts match"; "every ID cited in the package exists where it is defined"; "the package index lists every document in docs/, and the app bundles them all"); inspection: `node scripts/traceability.mjs --check` prints "Traceability: complete and current."; editing a requirement row without regenerating the matrix, or removing a test case that covers a requirement, makes `pnpm test` fail with the gap named.
-
 **TC-DOC-04 Private Tool Validation Package downloads** — Req DOC-12 — L1 `tool-validation.test.mjs`: configured repository and branch, authenticated read-only GET, fixed folders, path rejection, binary fidelity above 1 MB and safe errors. E2E `tool-validation.e2e.mjs`: missing configuration, list/search, DOCX download bytes, denied access, refresh and connection settings. Execute the same workflow in Web and Windows Desktop; verify downloaded PDF, Word and CSV files open in their native viewers. No private content or PAT is included in app exports or the public build.
+
+**TC-DOC-05 Design documents in the app** — Req DOC-13 — L1 `markdown.test.mjs` ("TC-DOC-05: design links resolve by document path and keep repository source links on GitHub"); E2E `documents-and-data.e2e.mjs` ("TC-DOC-05: open, browse and download bundled design documents"). Open Documentation → Design documents and verify the index, an in-app view link, the source link to GitHub, a nested Settings design in the selector, and an original Markdown download. Inspect the build registry for recursive design-document inclusion.
+
+**TC-DOC-03 Validation Package: documents, traceability and consistency checks** — Req DOC-09, DOC-10, DOC-11 — **UAT** — L1 `traceability.test.mjs` ("requirement IDs expand ranges and keep their width"; "the requirements have three levels, chained without gaps, with unique IDs"; "every test case names known requirements, every UAT day live test cases, every known issue known requirements"; "every source file is a listed software component, with requirement areas that exist"; "the committed traceability matrix is complete and current"), `validation-package.test.mjs` ("every package document has its required sections"; "mitigations, DFMEA rows, findings, risks and issues have unique IDs and the summary counts match"; "every ID cited in the package exists where it is defined"; "the package index lists every document in docs/, and the app bundles them all"); inspection: `node scripts/traceability.mjs --check` prints "Traceability: complete and current."; editing a requirement row without regenerating the matrix, or removing a test case that covers a requirement, makes `pnpm test` fail with the gap named.
 - Steps:
   1. Open Documentation → Validation package.
   2. Open Traceability matrix; read the header table and §8.
@@ -1346,8 +1378,6 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
   - The matrix header shows 0 requirements in force without a test case and 0 trace gaps; §8 says "None".
   - Every document opens, rendered; the Known issues register has the KB, OI, residual-risk and limitation tables; the components inventory lists the in-house files by layer, the SOUP table with versions and licences, and the audit result.
   - The IDs resolve: the requirement row exists and the test case exists and names that requirement.
-
-**TC-DOC-05 Design documents in the app** — Req DOC-13 — L1 `markdown.test.mjs` ("TC-DOC-05: design links resolve by document path and keep repository source links on GitHub"); E2E `documents-and-data.e2e.mjs` ("TC-DOC-05: open, browse and download bundled design documents"). Open Documentation → Design documents and verify the index, an in-app view link, the source link to GitHub, a nested Settings design in the selector, and an original Markdown download. Inspect the build registry for recursive design-document inclusion.
 
 ### 6.19 User interface
 
@@ -1370,6 +1400,10 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 **TC-UI-09 Side menu folds to icons** — Req UI-16 — E2E `shell.e2e.mjs` ("TC-UI-09: the side menu folds to icons and back, names on hover, kept after a reload"); browser check at 1440 px: « folds the menu to icons, hovering shows the page name, » shows the names again, a reload keeps the choice; below 1000 px the toggle is hidden.
 
 **TC-UI-10 Chart axis names and data labels** — Req UI-17 — L1 `chart-labels.test.mjs` ("UI-17: data labels — off by default, the shared default from Table defaults, each chart's own choice wins (TC-UI-10)"); E2E `shell.e2e.mjs` ("TC-UI-10: charts name their axes and show values when Data labels is ticked, kept per chart"); browser check: every chart shows its X and Y axis names; tick Data labels on a chart — its values appear; Settings → Table defaults → Charts → Data labels on — every chart without its own choice shows values.
+
+**TC-UI-11 Pop-ups work with the keyboard** — Req UI-18 — E2E `shell.e2e.mjs` ("TC-UI-11: a pop-up takes the focus, keeps Tab inside, closes on Escape and gives the focus back to its button"); browser check: open a write pop-up with a person picker, open the picker list, Escape closes only the list, a second Escape closes the pop-up.
+
+**TC-UI-12 A click beside a pop-up keeps what was typed** — Req UI-19 — E2E `shell.e2e.mjs` ("TC-UI-12: a click beside a pop-up with input keeps it open with what was typed; pop-ups without input close"); browser check: New Feature, type a title, click beside the pop-up — it stays open with the title.
 
 - L3 steps:
   1. Click the toggle three times.
@@ -1459,7 +1493,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 **TC-PCK-10 Capabilities count in Key takeaways** — Req PCK-12, PCK-11 — L1 `monthly-pack.test.mjs` ("PCK-12: Key takeaways — the Capabilities count joins the Supported line"); browser check with the team data: with the Capabilities Epics set, Pulse Check → Monthly pack → Key takeaways shows "Supported: … ; Capabilities (Projects & Services) = n" with n the number of Features in the Capabilities bullet; the .pptx carries it.
 - Expected: the characters appear as they are typed; no month of releases is read again while typing; the generated lines and KPIs follow the typed text.
 
-**TC-PCK-06 The pack in the team's PowerPoint template** — Req PCK-01, PCK-08 — L1 `pptx-template.test.mjs` (all tests, with a synthetic template — the real one is never in this repository); browser check with the team template:
+**TC-PCK-06 The pack in the team's PowerPoint template** — Req PCK-01, PCK-08 — L1 `pptx-template.test.mjs` (all tests, with a synthetic template — the real one is never in this repository); browser check with the team template: Also L1 `pptx-template.test.mjs` ("PCK-08: no status chosen is written as \"Not set\" with a grey circle, never a green On Track").
 - Steps: (1) Settings → Monthly pack: Upload template… (the team .pptx), set the Department name, Save to Git. (2) Pulse Check → Monthly pack: choose At Risk, type text in every box and a long Risks list; Download .pptx; open it in PowerPoint. (3) Upload a .txt renamed .pptx.
 - Expected:
   - (1) "Template saved to Storage", the file is in the data repository only.
@@ -1556,7 +1590,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-ACT-16 Time Writing in order of Feature number** — Req ACT-21 — L1 `my-work.test.mjs` ("ACT-21: Time Writing lists in order of Feature number — a Task or story by the Feature above it; rows without a Feature after (TC-ACT-16)"); E2E `shell.e2e.mjs` ("TC-ACT-02: Time Writing shows the person's KPI cards, month tasks, hours and deadline": the #IDs of Your activities rise); browser check: Your activities, the suggestions and Leave and training list by Feature #ID, lowest first.
 
-**TC-ACT-17 Time Writing cards stay at the top; Add a new activity in the list** — Req ACT-22, ACT-20 — E2E `shell.e2e.mjs` ("TC-ACT-02: Time Writing shows the person's KPI cards, month tasks, hours and deadline": scrolled to the end, the cards sit under the top bar; ＋ Add a new activity is in the list's heading row and there is no “Add activities” heading); browser check: scroll a long month — the cards stay at the top.
+**TC-ACT-17 Time Writing cards stay at the top; Add a new activity in the list** — Req ACT-22, ACT-20 — E2E `shell.e2e.mjs` ("TC-ACT-17: the top-bar Person list opens over the sticky Time Writing cards, nothing of it hidden"; "TC-ACT-02: Time Writing shows the person's KPI cards, month tasks, hours and deadline": scrolled to the end, the cards sit under the top bar; ＋ Add a new activity is in the list's heading row and there is no “Add activities” heading); browser check: scroll a long month — the cards stay at the top.
 
 **TC-ACT-05 Suggestions by state, Add all** — Req ACT-09, ACT-10 — E2E `shell.e2e.mjs` ("TC-ACT-05: suggestions filter by Active / New / Both and Add all moves them into Your activities"); browser check with the Time Writing connection: with a New and an Active Feature of yours without a task, Active / New / Both narrow the suggestions; Add all puts the shown ones in Your activities and Save creates their tasks; the Features keep their state (ATM-28: a New Feature becomes Active only through an Active User Story).
 
@@ -1657,6 +1691,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | NAV-47 | TC-NAV-47 |
 | NAV-48 | TC-NAV-48 |
 | NAV-49 | TC-NAV-48 |
+| NAV-50 | TC-NAV-50 |
+| NAV-51 | TC-NAV-51, TC-NAV-03, TC-MON-03 |
 | CON-01…03 | TC-CON-01 |
 | CON-04…08, CON-19 | TC-CON-02 |
 | CON-09 | TC-CON-03 |
@@ -1712,6 +1748,9 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CON-97 | TC-CON-60 |
 | CON-98 | TC-CON-61 |
 | CON-99 | TC-CON-61 |
+| CON-100 | TC-CON-62 |
+| CON-101 | TC-CON-63, TC-CON-64 |
+| CON-102 | TC-CON-64 |
 | QV-20 | TC-QV-06 |
 | QV-21 | TC-QV-07 |
 | CON-21, CON-22 | TC-CON-08 |
@@ -1741,6 +1780,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | FET-20 | TC-FET-08, TC-FET-09 |
 | FET-21 | TC-FET-09 |
 | FET-22 | TC-FET-10 |
+| FET-23, FET-24 | TC-FET-11 |
 | TWN-01…06 | TC-TWN-01 |
 | TWN-07, TWN-08 | TC-TWN-02 |
 | TWN-09 | TC-TWN-03, TC-ATM-05 |
@@ -1777,7 +1817,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | ATM-28 | TC-ATM-21 |
 | ATM-29 | TC-ATM-22 |
 | ATM-30 | TC-ATM-23 |
-| BKL-01…03, BKL-12 | TC-BKL-01 |
+| BKL-01…03, BKL-12 | TC-BKL-01, TC-BKL-34 |
 | BKL-04…09, BKL-11 | TC-BKL-02 |
 | BKL-10 | TC-BKL-03, TC-ATM-11 |
 | BKL-13 | TC-BKL-04 |
@@ -1807,6 +1847,14 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | BKL-37 | TC-BKL-26 |
 | BKL-38 | TC-BKL-27 |
 | BKL-39 | TC-BKL-28 |
+| BKL-40 | TC-BKL-29 |
+| BKL-41 | TC-BKL-30 |
+| BKL-42 | TC-BKL-31 |
+| BKL-43 | TC-BKL-32 |
+| BKL-44 | TC-BKL-33 |
+| BKL-45 | TC-BKL-34 |
+| BKL-46 | TC-BKL-35 |
+| BKL-47 | TC-BKL-36 |
 | QV-01, QV-02 | TC-QV-01 |
 | QV-03, QV-05 | TC-QV-02 |
 | QV-04 | TC-FET-07 |
@@ -1857,6 +1905,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | OV-12 | TC-OV-12 |
 | OV-13 | TC-OV-13 |
 | OV-14 | TC-OV-14 |
+| OV-15 | TC-OV-15 |
+| OV-16 | TC-OV-15 |
 | OVR-09, CAP-01…09 | TC-CAP-01 |
 | CAP-04, CAP-05, CAP-10…12 | TC-CAP-02 |
 | CAP-13 | TC-CAP-03 |
@@ -1901,6 +1951,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | GIT-13 | TC-GIT-06 |
 | GIT-14 | TC-GIT-07 |
 | GIT-15 | TC-GIT-08 |
+| GIT-16 | TC-GIT-09 |
+| GIT-17, HIS-04, MYD-09, KPT-03, CON-88, PCK-08 | TC-GIT-10 |
 | GIT-05, GIT-07, GIT-11 | TC-GIT-03 |
 | GIT-09, GIT-10 | TC-GIT-04 |
 | SNP-01…03 | TC-SNP-01 |
@@ -1915,6 +1967,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | SET-15 | TC-SET-06 |
 | SET-16 | TC-SET-06 |
 | SET-17 | TC-SET-07 |
+| SET-18 | TC-SET-08 |
 | SET-10…12 | TC-SET-04 |
 | STO-01, STO-02 | TC-STO-01 |
 | STO-03 | TC-STO-02 |
@@ -1933,9 +1986,9 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | SMP-06 | TC-SMP-02 |
 | DOC-01…03, DOC-05 | TC-DOC-01 |
 | DOC-04, DOC-06…08 | TC-DOC-02 |
-| DOC-09…11 | TC-DOC-03 |
 | DOC-12 | TC-DOC-04 |
 | DOC-13 | TC-DOC-05 |
+| DOC-09…11 | TC-DOC-03 |
 | UI-01, UI-02 | TC-UI-01 |
 | UI-03, UI-04 | TC-INS-03 |
 | UI-05 | TC-UI-02 |
@@ -1951,6 +2004,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UI-15 | TC-UI-08 |
 | UI-16 | TC-UI-09 |
 | UI-17 | TC-UI-10 |
+| UI-18 | TC-UI-11 |
+| UI-19 | TC-UI-12 |
 | CI-01…04 | TC-INS-04, TC-CI-01 |
 | CI-05 | TC-UPD-01 |
 | CI-06 | TC-CI-02 |
@@ -2098,18 +2153,18 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 | Use case | Test cases |
 |---|---|
-| UC-01 | TC-NAV-01…06, TC-NAV-33, TC-NAV-37, TC-UI-01, TC-UI-02, TC-UI-03, TC-CON-36, TC-CON-38, TC-NAV-38, TC-NAV-39, TC-NAV-40, TC-NAV-41, TC-NAV-42, TC-NAV-45, TC-NAV-46, TC-NAV-47, TC-NAV-48, TC-UI-09, TC-UI-10 |
-| UC-02 | TC-CON-01…07, TC-CON-17…19, TC-CON-44, TC-CON-28, TC-NAV-02, TC-NAV-34, TC-QV-14, TC-QV-16, TC-QV-23, TC-QV-24, TC-CON-46, TC-QV-25, TC-CON-47, TC-QV-38, TC-QV-39, TC-QV-40 |
+| UC-01 | TC-NAV-01…06, TC-NAV-33, TC-NAV-37, TC-UI-01, TC-UI-02, TC-UI-03, TC-CON-36, TC-CON-38, TC-NAV-38, TC-NAV-39, TC-NAV-40, TC-NAV-41, TC-NAV-42, TC-NAV-45, TC-NAV-46, TC-NAV-47, TC-NAV-48, TC-UI-09, TC-UI-10, TC-UI-11, TC-UI-12, TC-NAV-50, TC-SET-08, TC-NAV-51 |
+| UC-02 | TC-CON-01…07, TC-CON-17…19, TC-CON-44, TC-CON-28, TC-NAV-02, TC-NAV-34, TC-QV-14, TC-QV-16, TC-QV-23, TC-QV-24, TC-CON-46, TC-QV-25, TC-CON-47, TC-QV-38, TC-QV-39, TC-QV-40, TC-FET-11 |
 | UC-03 | TC-CON-03, TC-FET-01…06, TC-FET-09 |
-| UC-04 | TC-TWN-01, TC-TWN-02, TC-MON-01…06, TC-MON-09, TC-MON-10, TC-ATM-19, TC-BKL-18, TC-ACT-14, TC-ACT-15, TC-ACT-16, TC-ACT-17 |
-| UC-05 | TC-MON-07 |
-| UC-06 | TC-ATM-01…11, TC-ATM-21, TC-ATM-22, TC-ATM-23, TC-TWN-03, TC-CON-20, TC-CON-33, TC-CON-34, TC-CON-43 |
-| UC-07 | TC-BKL-01…09, TC-BKL-15, TC-BKL-16, TC-BKL-17, TC-BKL-18, TC-BKL-19, TC-BKL-20, TC-BKL-21, TC-BKL-22, TC-BKL-23, TC-BKL-24, TC-BKL-25, TC-BKL-26, TC-BKL-27, TC-BKL-28, TC-DPF-06, TC-NAV-36, TC-CON-23, TC-CON-25…27, TC-CON-29…32, TC-CON-35 |
-| UC-08 | TC-QV-01…05, TC-FET-07, TC-CON-08, TC-CON-11…16, TC-QV-08, TC-QV-09, TC-QV-10, TC-QV-11, TC-QV-12, TC-QV-13, TC-QV-14, TC-QV-15, TC-QV-16, TC-CON-37, TC-CON-38, TC-CON-39, TC-CON-40, TC-CON-41, TC-QV-18, TC-QV-19, TC-QV-20, TC-QV-21, TC-QV-22, TC-CON-42, TC-QV-41, TC-QV-42, TC-CON-61 |
-| UC-09 | TC-OV-11…14, TC-CAP-01, TC-CAP-02, TC-CAP-03, TC-CAP-08, TC-CAP-10, TC-CAP-11, TC-CAP-12, TC-CAP-13, TC-CAP-14, TC-CAP-15, TC-CAP-16, TC-CAP-17, TC-CAP-18, TC-CAP-19, TC-CAP-20, TC-CAP-21, TC-CAP-22, TC-CAP-23, TC-CAP-24, TC-CAP-25, TC-CAP-26, TC-CAP-27, TC-QV-17, TC-CON-21, TC-QV-10, TC-QV-11, TC-QV-21 |
+| UC-04 | TC-TWN-01, TC-TWN-02, TC-MON-01…06, TC-MON-09, TC-MON-10, TC-ATM-19, TC-BKL-18, TC-ACT-14, TC-ACT-15, TC-ACT-16, TC-ACT-17, TC-BKL-29, TC-BKL-30, TC-BKL-31, TC-BKL-33, TC-NAV-51 |
+| UC-05 | TC-MON-07, TC-FET-11 |
+| UC-06 | TC-ATM-01…11, TC-ATM-21, TC-ATM-22, TC-ATM-23, TC-TWN-03, TC-CON-20, TC-CON-33, TC-CON-34, TC-CON-43, TC-BKL-30, TC-BKL-31, TC-BKL-32 |
+| UC-07 | TC-BKL-01…09, TC-BKL-34, TC-BKL-35, TC-BKL-36, TC-BKL-15, TC-BKL-16, TC-BKL-17, TC-BKL-18, TC-BKL-19, TC-BKL-20, TC-BKL-21, TC-BKL-22, TC-BKL-23, TC-BKL-24, TC-BKL-25, TC-BKL-26, TC-BKL-27, TC-BKL-28, TC-DPF-06, TC-NAV-36, TC-CON-23, TC-CON-25…27, TC-CON-29…32, TC-CON-35 |
+| UC-08 | TC-QV-01…05, TC-FET-07, TC-CON-08, TC-CON-11…16, TC-QV-08, TC-QV-09, TC-QV-10, TC-QV-11, TC-QV-12, TC-QV-13, TC-QV-14, TC-QV-15, TC-QV-16, TC-CON-37, TC-CON-38, TC-CON-39, TC-CON-40, TC-CON-41, TC-QV-18, TC-QV-19, TC-QV-20, TC-QV-21, TC-QV-22, TC-CON-42, TC-QV-41, TC-QV-42, TC-CON-61, TC-NAV-51 |
+| UC-09 | TC-OV-11…15, TC-CAP-01, TC-CAP-02, TC-CAP-03, TC-CAP-08, TC-CAP-10, TC-CAP-11, TC-CAP-12, TC-CAP-13, TC-CAP-14, TC-CAP-15, TC-CAP-16, TC-CAP-17, TC-CAP-18, TC-CAP-19, TC-CAP-20, TC-CAP-21, TC-CAP-22, TC-CAP-23, TC-CAP-24, TC-CAP-25, TC-CAP-26, TC-CAP-27, TC-QV-17, TC-CON-21, TC-QV-10, TC-QV-11, TC-QV-21 |
 | UC-10 | TC-OV-11 (Months, Streams), TC-OV-13 |
 | UC-11 | TC-BAS-01…04 |
-| UC-12 | TC-GIT-01…04, TC-GIT-05, TC-GIT-06, TC-GIT-07, TC-GIT-08, TC-ACC-03…05 |
+| UC-12 | TC-GIT-01…04, TC-GIT-05, TC-GIT-06, TC-GIT-07, TC-GIT-08, TC-ACC-03…05, TC-GIT-09, TC-GIT-10, TC-CON-62 |
 | UC-13 | TC-SNP-01…03 |
 | UC-14 | TC-SET-01…07, TC-CAP-02, TC-CAP-03, TC-NAV-34, TC-CAP-07, TC-CAP-09 |
 | UC-15 | TC-STO-01…04, TC-SNP-04 |
@@ -2117,9 +2172,9 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-17 | TC-DSK-01…03, TC-INS-02 |
 | UC-18 | TC-SMP-01, TC-ATM-06, TC-GIT-04, TC-SMP-02 |
 | UC-19 | TC-INS-04, TC-CI-01, TC-CI-02, TC-CI-03, TC-CI-07, TC-CI-08, TC-DOC-03 |
-| UC-20 | TC-DOC-01, TC-DOC-02, TC-DOC-03, TC-DOC-04, TC-DOC-05 |
+| UC-20 | TC-DOC-01, TC-DOC-02, TC-DOC-03 |
 | UC-21 | TC-SCR-01 |
-| UC-22 | TC-ACC-01, TC-ACC-02, TC-CON-57, TC-CON-58 |
+| UC-22 | TC-ACC-01, TC-ACC-02, TC-CON-57, TC-CON-58, TC-CON-63, TC-CON-64 |
 | UC-23 | TC-QEM-01…08 |
 | UC-24 | TC-PCK-01…10 |
 | UC-25 | TC-WSP-01…07 |

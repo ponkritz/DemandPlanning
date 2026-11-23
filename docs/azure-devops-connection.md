@@ -9,7 +9,7 @@ Open **Azure DevOps** in the app. The supplied organization/project/team are pre
 3. Select **Fetch preview**. The app reads the team's configured area paths, queries all work-item types in that scope, and reads their details in batches of at most 200. **Include all accessible project Epics** is enabled by default, adding Epics outside team areas without duplicate IDs. Their out-of-team children are not fetched automatically. Parent IDs and hierarchy relations are preserved.
 4. Open **Board** from the sidebar or **Review in Board**. Review the hierarchy, states and source dates. Select **Save fetched work items** to retain the source records. Unsaved previews survive navigation between Board and connection settings within the app session. Re-fetching upserts by organization/project/ID without creating duplicate source records. Previously saved items missing from a later fetch are retained for review.
 
-The PAT is saved in a separate localStorage entry scoped to the organization/project, as requested for this trial. Fetch and create reuse it across sessions on the same browser profile. It is never included in AppState, JSON backups, SharePoint state sync or audit records. **Forget PAT** removes that local copy; revocation must be done in Azure DevOps. Anyone with access to the browser profile can use the saved token. It is not a managed credential vault. GitHub Secrets are not needed.
+The PAT is saved in a separate localStorage entry scoped to the organization/project, as requested for this trial. Fetch and create reuse it across sessions on the same browser profile. It is never included in AppState, JSON backups or audit records. **Forget PAT** removes that local copy; revocation must be done in Azure DevOps. Anyone with access to the browser profile can use the saved token. It is not a managed credential vault. GitHub Secrets are not needed.
 
 ## Hierarchy and Feature creation
 
@@ -29,7 +29,7 @@ Feature titles use `Program | Service | vRelease`. The review identifier is `Ser
 - Full Release: optional PRD, SFV, DT and IQOQ review User Stories.
 - Each selected review is named `<Milestone> : Review of Deliverables (<Service> <Release>)`.
 - Both types always include `<Feature title> - Time Writing` as a User Story, even if all milestones are skipped.
-- That story always gets a Task named `<Month Year> | <Feature title>`, for the current calendar month in Asia/Kolkata.
+- That story always gets a Task named `<Month Year> | <Feature title>`, for the current calendar month in UTC (NAV-51).
 - User Stories inherit the Feature's area and resolved iteration. The Time Writing Task inherits its area but uses the **project-root iteration** (`Patient Safety and Quality` for the configured project).
 
 Every child is validated, saved, linked and read back. Multi-item creation is not atomic: Azure DevOps cannot create this entire hierarchy in one transaction. If a later child fails, known successful IDs are retained and reported. **Complete children** on the existing Feature checks direct children by type/title/parent and creates only missing selected stories and the current month Task. Duplicates or conflicting area/iteration values stop completion for review. Using it in a later month creates only that missing Task. No rollback or deletion is performed automatically.
@@ -38,7 +38,7 @@ Every child is validated, saved, linked and read back. Multi-item creation is no
 
 The web app sends HTTPS requests directly to `dev.azure.com`; organization/network/browser restrictions can block cross-origin requests. The desktop package uses a narrow preload/IPC bridge for source reads and explicitly requested Feature creation. Neither mode sends tokens through GitHub. Requests do not follow redirects with credentials; errors are shown without logging tokens.
 
-Saved source records use the existing app store: local browser/device storage by default, or the central SharePoint file when already connected. Azure DevOps connectivity does not by itself centralize planning data or enforce app roles.
+Saved source records use the existing app store: local browser/device storage; shared setup goes to the Git data repository. Azure DevOps connectivity does not by itself centralize planning data or enforce app roles.
 
 ## Mapping still to confirm with live evidence
 

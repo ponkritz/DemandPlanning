@@ -9,7 +9,8 @@ import { ScopeSwitch } from '../components/ScopeSwitch'
 import { TeamFilterBar } from '../components/TeamFilterBar'
 import { defaultStreamReleases, type ReleaseStream } from '../releaseOverview'
 import { defaultStreams, windchillOptionsForView, windchillStreamExports } from '../streams'
-import { formatDate, formatDateTime, formatHours, monthName, todayIso } from '../format'
+import { formatDate, formatDateTime, formatHours, monthName } from '../format'
+import { utcToday } from '../businessTime'
 import type { WindchillWorkspace } from '../useWindchill'
 import { ongoingWork, previousMonth, releaseComparison, workFlow } from '../pulseCheck'
 import { periodComparison, periodKinds, periodStreams, periodWorkFlow, previousPeriod, recentPeriods, type PeriodKind } from '../pulsePeriods'
@@ -67,7 +68,7 @@ export function PulseCheckPage({ month, azure, store, my, navigate, windchill, o
   ]
   const releases = (shown: ReleaseStream[], at: string) => <>
     {shown.length ? <ReleaseQuadrants streams={shown} month={at} supported={supportedLines(shown, at)} /> : <><EmptyState title="No Azure DevOps Server views under Release Details." detail="Add an on-prem connection shown in the menu (Admin → Streams); fetch it in the desktop app or load its data from Git." />{supportedLines(shown, at).some((line) => line.releases.length) && <SupportedSummary lines={supportedLines(shown, at)} month={at} />}</>}
-    {shown.filter((stream) => stream.supportedReleases).map((stream) => <TablePanel key={`supported:${stream.id}`} title={`Supported Releases · ${stream.name} · ${monthName(at)}`} info={<p>Each release once that passed at least one milestone in {monthName(at)} — DT (Design Transfer), SFV (Start of Verification / Hardening), PRD (PRD Milestone) or RPE (Release Planning Event) — with that milestone's Status Done and its Date in the month (your time zone). A release passing several milestones in the month counts once; two rows with the same PsName and Release are one release. Completed Releases are those whose DT is among them.</p>} count={`${stream.supportedReleases!.length} release${stream.supportedReleases!.length === 1 ? '' : 's'} · ${stream.milestones ?? 0} milestone${stream.milestones === 1 ? '' : 's'}`} action={<button type="button" className="text-button" aria-expanded={dpList} onClick={() => setDpList(!dpList)}>{dpList ? 'Hide list' : 'Show list'}</button>} empty={!dpList ? undefined : stream.supportedReleases!.length ? undefined : stream.fetchedAt ? `No release passed a milestone in ${monthName(at)}.` : 'The DP view has not been fetched yet (Release Details → DP).'}>
+    {shown.filter((stream) => stream.supportedReleases).map((stream) => <TablePanel key={`supported:${stream.id}`} title={`Supported Releases · ${stream.name} · ${monthName(at)}`} info={<p>Each release once that passed at least one milestone in {monthName(at)} — DT (Design Transfer), SFV (Start of Verification / Hardening), PRD (PRD Milestone) or RPE (Release Planning Event) — with that milestone's Status Done and its Date in the month (UTC). A release passing several milestones in the month counts once; two rows with the same PsName and Release are one release. Completed Releases are those whose DT is among them.</p>} count={`${stream.supportedReleases!.length} release${stream.supportedReleases!.length === 1 ? '' : 's'} · ${stream.milestones ?? 0} milestone${stream.milestones === 1 ? '' : 's'}`} action={<button type="button" className="text-button" aria-expanded={dpList} onClick={() => setDpList(!dpList)}>{dpList ? 'Hide list' : 'Show list'}</button>} empty={!dpList ? undefined : stream.supportedReleases!.length ? undefined : stream.fetchedAt ? `No release passed a milestone in ${monthName(at)}.` : 'The DP view has not been fetched yet (Release Details → DP).'}>
       {dpList && stream.supportedReleases!.length > 0 && <SupportedReleasesTable releases={stream.supportedReleases!} />}
     </TablePanel>)}
     {exports.length > 0 && <TablePanel title="Windchill exports" info={<p>The Windchill streams (S&amp;S IT; ECP later): the export named like the stream, rows as last imported, and the unique releases read from the document names (release name, release number, then the document name). Open one for the release list, its columns, search and filters.</p>} count={`${exports.length} stream${exports.length === 1 ? '' : 's'}`}>
@@ -106,7 +107,7 @@ export function PulseCheckPage({ month, azure, store, my, navigate, windchill, o
 
 // Features and User Stories in progress now, per stream, with this month's booked hours and overdue Target Dates.
 function Ongoing({ azure, month, absenceEpicId }: { azure: AzureWorkspace; month: string; absenceEpicId: number }) {
-  const today = todayIso()
+  const today = utcToday()
   const work = ongoingWork(azure.items, month, today, timeWritingMonth, absenceEpicId)
   const [stream, setStream] = useState('')
   const shown = stream ? work.items.filter((entry) => entry.stream === stream) : work.items
@@ -162,7 +163,7 @@ function LastMonth({ month, last, azure, store, my, navigate, current, canPickPr
           {releases.map((row) => <tr key={row.name}><td><strong>{row.name}</strong></td><td>{row.previousReleases}{row.previousSupported != null && <small>completed</small>}</td><td>{row.previousSupported != null ? <>{row.previousSupported}<small>supported</small></> : row.previousDocuments}</td><td>{row.releases}{row.supported != null && <small>completed</small>}</td><td>{row.supported != null ? <>{row.supported}<small>supported</small></> : row.documents}</td><td>{change(row.releases, row.previousReleases)} · {row.supported != null ? change(row.supported, row.previousSupported ?? 0) : change(row.documents, row.previousDocuments)}</td></tr>)}
         </tbody></table>}
       </TablePanel>
-      <TablePanel title={`Work closed and opened · ${lastName}`} info={<ul><li>Features and User Stories created in {lastName} (Created Date) and closed in it (Closed Date; an item in a finished state without one counts by its last change), per stream — the Epic above them — in your time zone.</li><li>Removed items and work under the absence Epic are left out.</li><li>Team counts the assignees in the team filter; Individual counts the person’s own items.</li></ul>}
+      <TablePanel title={`Work closed and opened · ${lastName}`} info={<ul><li>Features and User Stories created in {lastName} (Created Date) and closed in it (Closed Date; an item in a finished state without one counts by its last change), per stream — the Epic above them — in UTC.</li><li>Removed items and work under the absence Epic are left out.</li><li>Team counts the assignees in the team filter; Individual counts the person’s own items.</li></ul>}
         count={`Features +${flow.totals.Feature.created} / ✓${flow.totals.Feature.closed} · Stories +${flow.totals['User Story'].created} / ✓${flow.totals['User Story'].closed}`} empty={flow.streams.length ? undefined : `No Features or User Stories created or closed in ${lastName}.`}>
         {flow.streams.length > 0 && <table><thead><tr><th>Stream (Epic)</th><th>Features opened</th><th>Features closed</th><th>Stories opened</th><th>Stories closed</th></tr></thead><tbody>
           {flow.streams.map((stream) => <tr key={stream.key}><td>{stream.epic ? <a href={stream.epic.url} target="_blank" rel="noreferrer">#{stream.epic.id} {stream.title}</a> : stream.title}</td><td>{stream.counts.Feature.created}</td><td>{stream.counts.Feature.closed}</td><td>{stream.counts['User Story'].created}</td><td>{stream.counts['User Story'].closed}</td></tr>)}
@@ -182,7 +183,7 @@ function PeriodPulse({ label, previous, months, rows, azure, absenceEpicId }: { 
   const monthsKey = months.join(',')
   const flow = useMemo(() => periodWorkFlow(azure.items, monthsKey.split(','), absenceEpicId), [azure.items, monthsKey, absenceEpicId])
   const total = rows.reduce((sum, row) => sum + row.releases, 0), totalBefore = rows.reduce((sum, row) => sum + row.previousReleases, 0)
-  const elapsed = months.filter((entry) => entry <= todayIso().slice(0, 7)).length
+  const elapsed = months.filter((entry) => entry <= utcToday().slice(0, 7)).length
   return <>
     <Metrics>
       <Metric label={`Releases · ${label}`} value={total} hint={`${previous}: ${totalBefore}`} />

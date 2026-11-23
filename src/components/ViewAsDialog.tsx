@@ -9,7 +9,7 @@ export function ViewAsDialog({ current, people, onStart, onClose }: { current: V
   const [person, setPerson] = useState(current?.kind === 'person' ? current.email || current.name : '')
   const [role, setRole] = useState<Role>(current?.kind === 'role' ? current.role : 'Team Member')
   const chosen = people.find((entry) => (entry.email || entry.name) === person)
-  return <Modal title="View as" eyebrow="ADMIN" onClose={onClose}>
+  return <Modal title="View as" eyebrow="ADMIN" form={false} onClose={onClose}>
     <p className="muted">See the app as someone else sees it — read only: nothing you do is saved to Azure DevOps or Git while View as is on. It ends when you choose Exit or reload the page.</p>
     <div className="view-as-form">
       <div className="segmented" role="radiogroup" aria-label="View as">

@@ -33,6 +33,8 @@ export function parseViews(text: string | null | undefined): PersonalViews {
   if (input.filters && typeof input.filters === 'object') for (const [page, value] of Object.entries(input.filters as Record<string, unknown>)) { const kept = keyOk(page) ? plain(value) : undefined; if (kept !== undefined) filters[page] = kept }
   return { schema: 1, kind, sections, menu: { pinned: ids(menu.pinned), hidden: ids(menu.hidden) }, filters }
 }
+// BKL-47: the defaults file with one page's entry set (as everyone's default), every other default kept.
+export const withDefaultEntry = (current: PersonalViews, page: string, value: unknown): PersonalViews => ({ ...current, filters: { ...current.filters, [page]: value } })
 export const serializeViews = (views: PersonalViews) => `${JSON.stringify({ schema: 1, kind, sections: views.sections, menu: views.menu, filters: views.filters }, null, 2)}\n`
 
 // My views over the defaults: a page I changed keeps my layout, any other page uses the default one; the same for

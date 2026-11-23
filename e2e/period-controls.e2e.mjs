@@ -8,7 +8,7 @@ after(async () => { await app.stop() })
 
 async function controls(page, month) {
   page.setDefaultTimeout(15_000)
-  await navigate(page, 'Capacity & periods')
+  await navigate(page, 'Capacity & time')
   await page.locator('input[type=month]').fill(month)
   await page.getByRole('tab', { name: 'Period control', exact: true }).click()
   const monthLabel = new Intl.DateTimeFormat('en', { month: 'long', year: 'numeric' }).format(new Date(`${month}-01T00:00:00`))
@@ -16,7 +16,7 @@ async function controls(page, month) {
 }
 
 test('TC-SET-02: each selected month has independent plan and actual lock dates which persist in this browser', async () => {
-  const { page, context, errors } = await openPage(app)
+  const { page, context, errors } = await openPage(app, { roles: true })
   try {
     await controls(page, '2030-11')
     const plan = page.getByLabel('Planning last day to update of November 2030', { exact: true })
@@ -45,7 +45,7 @@ test('TC-SET-02: each selected month has independent plan and actual lock dates 
 })
 
 test('TC-SET-02: month locks can be returned independently to their configured defaults', async () => {
-  const { page, context, errors } = await openPage(app)
+  const { page, context, errors } = await openPage(app, { roles: true })
   try {
     await controls(page, '2030-11')
     const plan = page.getByLabel('Planning last day to update of November 2030', { exact: true })

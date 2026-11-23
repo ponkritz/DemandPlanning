@@ -1,4 +1,7 @@
 // Reading from Azure DevOps: iterations, the backlog fetch and its mapping to work items, field names and team members.
+import { isFinishedState } from './workStates.ts'
+import { utcToday } from './businessTime.ts'
+import { fillClosedDates } from './closedHistory.ts'
 import type { AzureWorkItem } from './domain'
 import { collectionUrl, isCloudBase, normalizeBaseUrl, projectApiBase, requestAzure, type AzureConfig, type AzureRequest, type AzureTransport } from './azureClient.ts'
 
@@ -36,12 +39,9 @@ export async function readAzureIterations(config: AzureConfig, pat: string, tran
   if (!options.size) throw new Error('Could not load iteration paths. Check Azure DevOps access or enter the full path from Project settings → Project configuration → Iterations.')
   return [...options.values()].sort((a, b) => a.path.localeCompare(b.path))
 }
-function indiaDate(date: Date) {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date)
-}
 
 function scheduledIterationPairs(iterations: AzureIteration[], date: Date, schedule: 'current' | 'future') {
-  const today = indiaDate(date)
+  const today = utcToday(date) // the current Sprint / PI is decided in UTC (NAV-51)
   const dated = iterations.filter((item) => {
     const start = item.attributes?.startDate?.slice(0, 10), finish = item.attributes?.finishDate?.slice(0, 10)
     return Boolean(start && finish && /^\d{4}-\d{2}-\d{2}$/.test(start) && /^\d{4}-\d{2}-\d{2}$/.test(finish))
@@ -157,7 +157,9 @@ export async function fetchAzureWorkItems(config: AzureConfig, pat: string, tran
     frontier = next
   }
   const asOf = new Date().toISOString(), areaPaths = areas.values.map((area) => area.value)
-  return { items, areaPaths, asOf, scope: { organization: config.organization, project: config.project, team: config.team, itemKeys: items.map((item) => item.key), areaPaths, fetchedAt: asOf } }
+  // Owner decision 10: finished items without a Closed Date get it from their history.
+  const filled = await fillClosedDates(items, request)
+  return { items: filled, areaPaths, asOf, scope: { organization: config.organization, project: config.project, team: config.team, itemKeys: items.map((item) => item.key), areaPaths, fetchedAt: asOf } }
 }
 
 export function sameAzureScope(left: AzureConfig | undefined | null, right: AzureConfig | undefined | null) {
@@ -208,11 +210,21 @@ export function mapAzureWorkItem(item: RawItem, config: AzureConfig): AzureWorkI
     storyPoints: typeof fields['Microsoft.VSTS.Scheduling.StoryPoints'] === 'number' && Number.isFinite(fields['Microsoft.VSTS.Scheduling.StoryPoints']) ? fields['Microsoft.VSTS.Scheduling.StoryPoints'] as number : undefined,
     areaPath: text('System.AreaPath'), iterationPath: text('System.IterationPath'),
     parentId: typeof fields['System.Parent'] === 'number' ? fields['System.Parent'] : parentFromRelation(item),
-    targetDate: date('Microsoft.VSTS.Scheduling.TargetDate'), closedDate: date('Microsoft.VSTS.Common.ClosedDate'),
+    targetDate: date('Microsoft.VSTS.Scheduling.TargetDate'),
+    // Owner decision 10: a finished item without a Closed Date takes the day it entered that state (State Change Date,
+    // else Resolved Date); when neither is there, fillClosedDates reads its history.
+    ...(closedOf(text('System.State'), date('Microsoft.VSTS.Common.ClosedDate'), date('Microsoft.VSTS.Common.StateChangeDate'), date('Microsoft.VSTS.Common.ResolvedDate'))),
     changedDate: date('System.ChangedDate'), tags: text('System.Tags'),
     url: `${projectApiBase(config)}/_workitems/edit/${item.id}`,
     syncedAt: new Date().toISOString(),
   }
+}
+
+function closedOf(state: string, closed?: string, stateChange?: string, resolved?: string): Pick<AzureWorkItem, 'closedDate' | 'closedDateFrom'> {
+  if (closed) return { closedDate: closed }
+  if (!isFinishedState(state)) return {}
+  const fallback = stateChange ?? resolved
+  return fallback ? { closedDate: fallback, closedDateFrom: stateChange ? 'state-change' : 'resolved' } : {}
 }
 
 function parentFromRelation(item: RawItem) {

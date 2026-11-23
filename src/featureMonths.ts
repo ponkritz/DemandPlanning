@@ -1,5 +1,5 @@
 // BKL-31, BKL-32: the months a new Feature gets a Time Writing Task for, from its Start Date and Target date.
-// - Start: the Start Date's month, never before the current month (India time); without a Start Date the month the form
+// - Start: the Start Date's month, never before the current month (UTC, NAV-51); without a Start Date the month the form
 //   was opened for (Time Writing: the month shown), else the current month — "today".
 // - End: the Target date's month; without one (or one before the start month) the start month only.
 // No limit on the number of months (the user's choice); the form shows every month before Save.

@@ -8,8 +8,8 @@ import { approvalMonthOf } from './releaseSource.ts'
 // Supported Releases: the releases with at least one milestone (DDT, DRfH, DRPC, DRPE) Done with its own Date in the
 // month — each release once, however many of its milestones fell in the month. A release is its PsName + Release
 // (two rows naming the same release count once), else its work item.
-// Field names may carry a prefix (Custom.DDTDate); "Done" is matched ignoring case and spaces; months are in the
-// viewer's time zone, as everywhere else.
+// Field names may carry a prefix (Custom.DDTDate); "Done" is matched ignoring case and spaces; months are in UTC
+// (NAV-51), as everywhere else.
 export const dpMilestones = [['DDT', 'DDTDate', 'DDTStatus'], ['DRfH', 'DRfHDate', 'DRfHStatus'], ['DRPC', 'DRPCDate', 'DRPCStatus'], ['DRPE', 'DRPEDate', 'DRPEStatus']] as const
 export type DpMilestone = typeof dpMilestones[number][0]
 // What the DP team calls each milestone (the field names stay DDT / DRfH / DRPC / DRPE).

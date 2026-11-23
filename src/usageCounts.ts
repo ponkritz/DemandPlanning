@@ -1,5 +1,5 @@
 // NAV-45 My page usage: an opt-in count of the pages this person opens, kept only in this browser's local storage —
-// never sent, shared through Git or SharePoint, or put in a backup. Off by default; turning it off deletes the counts.
+// never sent, shared through Git, or put in a backup. Off by default; turning it off deletes the counts.
 // It shows which pages are used, to decide what to improve or retire.
 import { pages, type Page } from './pages/registry.ts'
 

@@ -9,7 +9,7 @@ export function DesktopDownload() {
   const os = detectOs(typeof navigator === 'undefined' ? '' : navigator.userAgent)
   return <>
     <button type="button" className="download-link" onClick={() => setOpen(true)}>⬇ Desktop app</button>
-    {open && <Modal title="Download the desktop app" eyebrow="WINDOWS · MAC" onClose={() => setOpen(false)}>
+    {open && <Modal title="Download the desktop app" eyebrow="WINDOWS · MAC" form={false} onClose={() => setOpen(false)}>
       <p className="muted">The desktop app works like this site, but sends Azure DevOps requests itself. Use it for on-prem servers (on VPN), which usually block requests from a web page. Your data and PATs stay on your computer.</p>
       <div className="download-grid">
         <a className={`download-card ${os === 'windows' ? 'download-recommended' : ''}`} href={desktopDownloads.windows}>

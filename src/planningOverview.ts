@@ -1,3 +1,4 @@
+import { isFinishedState } from './workStates.ts'
 import type { AzureWorkItem } from './domain'
 import { releaseBaselines, type BaselineRule, type ReleaseScope } from './baseline.ts'
 import type { CapacitySettings, Region } from './capacity.ts'
@@ -15,8 +16,7 @@ export interface OverviewException { kind: ExceptionKind; item?: AzureWorkItem; 
 export interface DeliveryCounts { due: number; completed: number; atRisk: number; overdue: number; rate: number | null }
 export interface EpicHealth { epic: AzureWorkItem; completed: number; atRisk: number; overdue: number; total: number }
 
-const done = new Set(['closed', 'resolved', 'done', 'completed'])
-export const isDone = (item: Pick<AzureWorkItem, 'state'>) => done.has(item.state.trim().toLowerCase())
+export const isDone = (item: Pick<AzureWorkItem, 'state'>) => isFinishedState(item.state) // owner decision 10
 const live = (item: AzureWorkItem) => item.state.trim().toLowerCase() !== 'removed'
 const percent = (part: number, whole: number) => whole > 0 ? Math.round(part / whole * 1000) / 10 : null
 export const previousMonth = (month: string) => { const date = new Date(`${month}-01T00:00:00Z`); date.setUTCMonth(date.getUTCMonth() - 1); return date.toISOString().slice(0, 7) }

@@ -4,12 +4,14 @@ import { MonthTasksDialog } from '../components/MonthTasksDialog'
 import { CloseItemsDialog } from '../components/CloseItemsDialog'
 import { closeChosen, closeTree, storyCloseRows, type CloseRow, type closeSelection } from '../closeList'
 type CloseSelection = ReturnType<typeof closeSelection>
-import { EmptyState, Metric, Metrics, Notice, Page, Pill, TablePanel, type Tone } from '../components/ui'
-import { currentIndiaMonth, updateAzureWorkItem } from '../azureDevOps'
+import { EmptyState, Metric, Metrics, Notice, Page, Pill, TablePanel, WriteBlocked, type Tone } from '../components/ui'
+import { useWriteBlock } from '../useCan'
+import { utcMonthLabel, updateAzureWorkItem } from '../azureDevOps'
 import { capacityContext } from '../capacity'
 import { featureChildren, hasOptionalStories, isMine, matchesWork, monthTaskCandidates, nextStateFor, workTypes } from '../myWork'
 import { activateFeatureOf, closeRelated, type FollowUpResult } from '../closeChain'
 import { formatHours } from '../format'
+import { timeWritingMonth } from '../azureInsights'
 import type { AzureWorkItem } from '../domain'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { MyWork } from '../useMyWork'
@@ -25,6 +27,8 @@ const shortPath = (path: string) => path.split('\\').slice(1).join(' › ') || p
 
 export function MyWorkPage({ azure, store, my, month: headerMonth, onOpenActivities, assign, featureSetup }: { azure: AzureWorkspace; store: PageProps['store']; my: MyWork; month?: string; onOpenActivities: () => void; assign?: { me: string; canChoose: boolean }; featureSetup?: FeatureSetups | null }) {
   const [busy, setBusy] = useState('')
+  // CON-102: every button that changes Azure DevOps is disabled when the viewer lacks its permission (one line says why).
+  const write = useWriteBlock()
   const [log, setLog] = useState<Log[]>([])
   // Opens on Features; the list is always in ascending ID order.
   const [typeFilter, setTypeFilter] = useState('Feature')
@@ -45,7 +49,7 @@ export function MyWorkPage({ azure, store, my, month: headerMonth, onOpenActivit
   const meEmail = (assign?.me || azure.creatorEmail).trim().toLowerCase()
   const toggle = (key: string) => setExpanded((current) => current.includes(key) ? current.filter((entry) => entry !== key) : [...current, key])
   const { config, pat } = azure
-  const month = currentIndiaMonth()
+  const month = utcMonthLabel()
   const absenceEpicId = capacityContext(store.state).absenceEpicId
   const blocked = azure.isSample ? 'Synthetic sample data is loaded: changes to Azure DevOps are disabled.' : !config || !pat.trim() ? 'Connect the Time Writing connection (with its PAT) to change items in Azure DevOps.' : ''
   const pending = my.pending
@@ -66,7 +70,7 @@ export function MyWorkPage({ azure, store, my, month: headerMonth, onOpenActivit
   // Time Writing story and Tasks); a Task or Bug is closed after one confirmation as before.
   const [closeAsk, setCloseAsk] = useState<{ item: AzureWorkItem; rows: CloseRow[] } | null>(null)
   // With sample data Close on a Feature or User Story still opens the pop-up, to see what would close (nothing is written).
-  const previewClose = (entry: AzureWorkItem, state: string) => azure.isSample && state === 'Closed' && (entry.workItemType === 'Feature' || entry.workItemType === 'User Story')
+  const previewClose = (entry: AzureWorkItem, state: string) => azure.isSample && state === 'Closed' && (entry.workItemType === 'Feature' || entry.workItemType === 'User Story' || (entry.workItemType === 'Task' && timeWritingMonth(entry.title) != null))
   async function closeSelected(item: AzureWorkItem, selection: CloseSelection) {
     setCloseAsk(null)
     if (blocked || !config) return
@@ -74,14 +78,18 @@ export function MyWorkPage({ azure, store, my, month: headerMonth, onOpenActivit
     try {
       const result = await closeChosen(config, pat, selection)
       if (result.closed.length) { azure.applyWorkItems(result.closed, 'Close item', result.closed.map((entry) => `#${entry.id} → ${entry.state}`).join(', ')); note({ tone: 'success', text: `Closed ${result.closed.map((entry) => `#${entry.id}`).join(', ')}.` }) }
+      // BKL-43: the later months' Time Writing Tasks removed with 0 h.
+      if (result.removed.length) { azure.applyWorkItems(result.removed, 'Close item', result.removed.map((entry) => `#${entry.id} → Removed, 0 h`).join(', ')); note({ tone: 'success', text: `Removed the later months' Time Writing Tasks ${result.removed.map((entry) => `#${entry.id}`).join(', ')} (0 h).` }) }
       for (const text of [...result.failed, ...result.skipped]) note({ tone: result.failed.includes(text) ? 'error' : 'info', text })
       note({ tone: 'info', text: 'Refreshing data…' }); await azure.refresh()
     } finally { setBusy('') }
   }
   async function finish(item: AzureWorkItem, state: string) {
     // BKL-39: the pop-up opens with sample data too (to see what would close); its Close is disabled then.
-    if (state === 'Closed' && (item.workItemType === 'Feature' || item.workItemType === 'User Story')) {
-      const rows = item.workItemType === 'Feature' ? closeTree(azure.items, item, my.me) : storyCloseRows(azure.items, item, my.me)
+    // BKL-42: a month Time Writing Task closes through the same pop-up (with the question whether its hours are entered).
+    const monthTask = item.workItemType === 'Task' && timeWritingMonth(item.title) != null
+    if (state === 'Closed' && (item.workItemType === 'Feature' || item.workItemType === 'User Story' || monthTask)) {
+      const rows = item.workItemType === 'User Story' ? storyCloseRows(azure.items, item, my.me) : closeTree(azure.items, item, my.me)
       if (rows.length) { setCloseAsk({ item, rows }); return }
     }
     if (blocked || !config) return
@@ -123,14 +131,14 @@ export function MyWorkPage({ azure, store, my, month: headerMonth, onOpenActivit
           <li>Close &lt;type&gt; sets the State to Closed. A Feature or User Story in New offers Set … to Active; only an Active one can be closed (other states say Set to Active first). Only the State is written, after confirmation, then the data is refreshed.</li>
           <li>Azure DevOps refuses a change its process does not allow; the error is shown.</li>
         </ul>} count={`${shown.length} of ${pending.length}`}
-          action={<div className="chip-row"><button type="button" className="primary" disabled={Boolean(blocked) || !epics.length} title={epics.length ? 'Create a Feature under an Epic with its User Stories and Time Writing task' : 'No Epic in the Time Writing backlog yet'} onClick={() => setEditor({ parent: epics[0] })}>＋ New Feature</button>{['All', ...workTypes, 'Other'].map((type) => <button type="button" key={type} className={`chip ${!searching && typeFilter === type ? 'chip-on' : ''}`} onClick={() => { setTypeFilter(type); setSearch('') }}>{type}{type !== 'All' && type !== 'Other' ? ` ${counts[type] ?? 0}` : ''}</button>)}</div>}
+          action={<div className="chip-row"><WriteBlocked reason={write.note('azure.write', 'work.edit', 'work.state')} /><button type="button" className="primary" disabled={Boolean(blocked) || !epics.length || Boolean(write.why('azure.write'))} title={write.why('azure.write') || (epics.length ? 'Create a Feature under an Epic with its User Stories and Time Writing task' : 'No Epic in the Time Writing backlog yet')} onClick={() => setEditor({ parent: epics[0] })}>＋ New Feature</button>{['All', ...workTypes, 'Other'].map((type) => <button type="button" key={type} className={`chip ${!searching && typeFilter === type ? 'chip-on' : ''}`} onClick={() => { setTypeFilter(type); setSearch('') }}>{type}{type !== 'All' && type !== 'Other' ? ` ${counts[type] ?? 0}` : ''}</button>)}</div>}
           empty={shown.length ? undefined : searching ? `Nothing matches “${search.trim()}” in any type.` : pending.length ? 'Nothing of this type.' : 'No pending work assigned to you.'}>
           <div className="query-toolbar my-work-search"><input type="search" className="search" aria-label="Search all assigned work" placeholder="Search all types (ID, title, state, Feature, path…)" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setSearch('') }} />{searching && <span className="muted">{shown.length} of {pending.length} match, all types</span>}</div>
           {/* UI-07: the work list on the table default; a Feature opens its children as rows of the same table. */}
           {shown.length > 0 && (() => {
-            const monthButton = (entry: AzureWorkItem) => (entry.workItemType === 'Feature' || entry.workItemType === 'User Story') && config && meEmail ? <button type="button" className="text-button" disabled={Boolean(blocked) || busy.startsWith('month-')} title="Add your Time Writing Task for the month in the header under this Feature (or the Feature above this Story)" onClick={() => setMonthFor(entry)}>＋ Time Writing Task</button> : null
-            const editButton = (entry: AzureWorkItem) => ['Feature', 'User Story', 'Task'].includes(entry.workItemType) ? <button type="button" className="text-button" disabled={Boolean(blocked)} title={`Edit ${entry.workItemType} #${entry.id}`} onClick={() => setEditing(entry)}>Edit</button> : null
-            const action = (entry: AzureWorkItem) => { const next = nextStateFor(entry, azure.items); return next ? <button type="button" className="ghost" disabled={(Boolean(blocked) && !previewClose(entry, next.state)) || busy === `state-${entry.id}`} onClick={() => void finish(entry, next.state)}>{busy === `state-${entry.id}` ? 'Saving…' : next.label}</button> : entry.workItemType === 'Feature' && /new/i.test(entry.state) ? <small className="muted" title="A Feature becomes Active only when one of its User Stories is Active">Set a User Story to Active first</small> : <small className="muted" title="Only an Active Feature or User Story can be closed">Set to Active first</small> }
+            const monthButton = (entry: AzureWorkItem) => (entry.workItemType === 'Feature' || entry.workItemType === 'User Story') && config && meEmail ? <button type="button" className="text-button" disabled={Boolean(blocked) || busy.startsWith('month-') || Boolean(write.why('azure.write'))} title={write.why('azure.write') || 'Add your Time Writing Task for the month in the header under this Feature (or the Feature above this Story)'} onClick={() => setMonthFor(entry)}>＋ Time Writing Task</button> : null
+            const editButton = (entry: AzureWorkItem) => ['Feature', 'User Story', 'Task'].includes(entry.workItemType) ? <button type="button" className="text-button" disabled={Boolean(blocked) || Boolean(write.why('work.edit'))} title={write.why('work.edit') || `Edit ${entry.workItemType} #${entry.id}`} onClick={() => setEditing(entry)}>Edit</button> : null
+            const action = (entry: AzureWorkItem) => { const next = nextStateFor(entry, azure.items); return next ? <button type="button" className="ghost" disabled={(Boolean(blocked) && !previewClose(entry, next.state)) || busy === `state-${entry.id}` || Boolean(write.why('work.state'))} title={write.why('work.state') || undefined} onClick={() => void finish(entry, next.state)}>{busy === `state-${entry.id}` ? 'Saving…' : next.label}</button> : entry.workItemType === 'Feature' && /new/i.test(entry.state) ? <small className="muted" title="A Feature becomes Active only when one of its User Stories is Active">Set a User Story to Active first</small> : <small className="muted" title="Only an Active Feature or User Story can be closed">Set to Active first</small> }
             type WorkRow = { item: AzureWorkItem; feature?: AzureWorkItem; depth: 0 | 1 | 2; below: AzureWorkItem[]; top: AzureWorkItem }
             const topRows: WorkRow[] = shown.map(({ item, feature }) => ({ item, feature, depth: 0, below: [], top: item }))
             const childrenOf = (row: WorkRow): WorkRow[] => {
@@ -151,7 +159,7 @@ export function MyWorkPage({ azure, store, my, month: headerMonth, onOpenActivit
                 { id: 'state', label: 'State', value: (row) => row.item.state, render: (row) => <Pill tone={stateTone(row.item.state)}>{row.item.state}</Pill> },
                 { id: 'feature', label: 'Feature', value: (row) => row.depth ? row.top.title : row.feature && row.feature.id !== row.item.id ? row.feature.title : '', render: (row) => row.depth ? <small className="plain">{row.top.title}</small> : row.feature && row.feature.id !== row.item.id ? <small className="plain">{row.feature.title}</small> : '—' },
                 { id: 'iteration', label: 'Iteration', value: (row) => shortPath(row.item.iterationPath), render: (row) => <small className="plain">{shortPath(row.item.iterationPath)}</small> },
-                { id: 'action', label: 'Action', sortable: false, export: false, render: (row) => { if (row.depth === 0) { const item = row.item; return <>{action(item)}{item.workItemType === 'Feature' && completeChildrenOn(featureSetup, item.parentId) && !hasOptionalStories(azure.items, item) && <button type="button" className="text-button" disabled={Boolean(blocked)} title="Add the missing User Stories and this month's Time Writing task under this Feature" onClick={() => setEditor({ resume: item })}>Complete children</button>}{editButton(item)}{monthButton(item)}{item.workItemType === 'Feature' && <button type="button" className="text-button" disabled={Boolean(blocked)} title="Create a User Story under this Feature" onClick={() => setStoryOf(item)}>＋ User Story</button>}</> } const entry = row.item; return <>{isMine(entry, my.me) && nextStateFor(entry, azure.items) && /new|active/i.test(entry.state) ? action(entry) : <small className="muted">{isMine(entry, my.me) ? '—' : 'Not mine'}</small>}{editButton(entry)}{monthButton(entry)}</> } },
+                { id: 'action', label: 'Action', sortable: false, export: false, render: (row) => { if (row.depth === 0) { const item = row.item; return <>{action(item)}{item.workItemType === 'Feature' && completeChildrenOn(featureSetup, item.parentId) && !hasOptionalStories(azure.items, item) && <button type="button" className="text-button" disabled={Boolean(blocked) || Boolean(write.why('azure.write'))} title={write.why('azure.write') || "Add the missing User Stories and this month's Time Writing task under this Feature"} onClick={() => setEditor({ resume: item })}>Complete children</button>}{editButton(item)}{monthButton(item)}{item.workItemType === 'Feature' && <button type="button" className="text-button" disabled={Boolean(blocked) || Boolean(write.why('azure.write'))} title={write.why('azure.write') || 'Create a User Story under this Feature'} onClick={() => setStoryOf(item)}>＋ User Story</button>}</> } const entry = row.item; return <>{isMine(entry, my.me) && nextStateFor(entry, azure.items) && /new|active/i.test(entry.state) ? action(entry) : <small className="muted">{isMine(entry, my.me) ? '—' : 'Not mine'}</small>}{editButton(entry)}{monthButton(entry)}</> } },
               ]} />
           })()}
         </TablePanel>

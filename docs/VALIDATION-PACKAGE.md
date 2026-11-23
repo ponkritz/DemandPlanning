@@ -27,9 +27,10 @@ Every document of the package lives in `docs/`, is versioned with the code, is b
 | 8 | [SECURITY-ASSESSMENT.md](SECURITY-ASSESSMENT.md) | SA-DPH-001 | Code analysis and penetration test of the build (findings and confirmed controls); product security risk assessment (threats, likelihood, impact, residual risk); mitigations traced to requirements and tests | ISO 14971 vocabulary; IEC 62304 §7 |
 | 9 | [DFMEA.md](DFMEA.md) | DFMEA-DPH-001 | Design failure mode and effects analysis per function, with S/O/D ratings, design controls traced to requirements, residual ratings and open actions | ISO 13485 §7.3.3(c), §7.1; IEC 62304 §7 |
 | 10 | [DEVELOPMENT-PROCESS.md](DEVELOPMENT-PROCESS.md) | SDP-DPH-001 | The development life cycle mapped to ISO 13485 §7.3, IEC 62304 and FDA CSA; the change procedure; verification strategy; configuration management; problem resolution; gaps | ISO 13485 §7.3.2; IEC 62304 §5.1 |
-| 11 | [PROJECT-PLAN.md](PROJECT-PLAN.md) | — | Objective, phases, dependencies, project risks, operating ownership, backlog | ISO 13485 §7.3.2 |
+| 11 | [PROJECT-PLAN.md](PROJECT-PLAN.md) | — | Objective, phases, dependencies, project risks, operating ownership, backlog (with the [Code Review Backlog](CODE-REVIEW-BACKLOG.md)) | ISO 13485 §7.3.2 |
+| 11a | [UI-STANDARDS.md](UI-STANDARDS.md) | UIS-DPH-001 | One way for each component type (pages, panels, forms, pop-ups, tables, buttons, tabs, messages, KPI tiles and charts, Release pages, colours and type) and the UI defaults; checked by the UI/UX reviewer | Design control (usability, consistency) |
 | 12 | [azure-devops-connection.md](azure-devops-connection.md) | — | Set-up guide for the Azure DevOps connections | User documentation |
-| 13 | [README.md](https://github.com/ponkritz/DemandPlanning/blob/main/README.md) (repository root) | — | User-facing description of every feature, storage model and roles | User documentation |
+| 13 | [README.md](https://github.com/neurolooom-eng/Test2/blob/main/README.md) (repository root) | — | User-facing description of every feature, storage model and roles | User documentation |
 
 ## 2. How the package is kept valid
 

@@ -10,7 +10,7 @@ const policy = { ...defaultPolicy('lead@example.com'), members: { 'lead@example.
 test('View as: only the Admin role may use it, and only with an access policy (CON-89)', () => {
   assert.equal(canViewAs(rightsFor(policy, 'lead@example.com')), true)
   assert.equal(canViewAs(rightsFor(policy, 'pm@example.com')), false, 'People Manager: no')
-  assert.equal(canViewAs(rightsFor(null, 'lead@example.com')), false, 'no policy: nobody (nothing is restricted anyway)')
+  assert.equal(canViewAs(rightsFor(null, 'lead@example.com')), false, 'no policy: nobody (CON-101: read-only)')
 })
 
 test('View as: a person gets the roles of their work email (else the default role); a role gets that role only (CON-90, CON-91)', () => {

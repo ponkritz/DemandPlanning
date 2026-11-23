@@ -6,7 +6,7 @@ import type { AzureWorkItem } from './domain'
 // change reaches Azure DevOps or Git storage while it is on.
 export type ViewAs = { kind: 'person'; name: string; email?: string } | { kind: 'role'; role: Role }
 
-// CON-94: only people allowed "View as another person or role" (a policy must exist: without one nothing is restricted).
+// CON-94: only people allowed "View as another person or role" (a policy must exist: without one nobody may, CON-101).
 export const canViewAs = (rights: Rights) => rights.restricted && rights.actions.has('access.viewAs')
 
 export function viewAsRights(policy: AccessPolicy | null, viewAs: ViewAs): Rights {

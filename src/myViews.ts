@@ -5,7 +5,7 @@ import type { AppState } from './domain'
 
 // SET-17 My views: a person's own read-only views (a name, a server they already have a PAT for, a project and a
 // query). Kept in this browser or desktop app only: never in the shared setup in Git, never a stream's connection
-// (so the stream counts cannot change because of them), their data never saved to Git, SharePoint or a backup.
+// (so the stream counts cannot change because of them), their data never saved to Git or a backup.
 
 // The servers a view can use: those with a PAT here, from the saved connections (one entry per server).
 export interface MyViewServer { key: string; base: string; onPrem: boolean }
@@ -43,7 +43,7 @@ export function newMyView(input: MyViewInput, profiles: AzureConnectionProfileSu
   return view
 }
 
-// The app data without the data of My views: what is saved to SharePoint and to a JSON backup.
+// The app data without the data of My views: what is saved to a JSON backup.
 export function withoutMyViews<T extends Pick<AppState, 'azureSources'>>(state: T, mine: Set<string> = myViewIds()): T {
   if (!mine.size || !state.azureSources?.some((source) => mine.has(source.connectionId))) return state
   return { ...state, azureSources: state.azureSources.filter((source) => !mine.has(source.connectionId)) }

@@ -1,47 +1,56 @@
 import type { AppState, Snapshot } from './domain'
+import { listFolder, readRawFile, siblingConfig, writeTextFile, type GitConfig } from './gitStorage.ts'
+import { withoutMyViews } from './myViews.ts'
 
-export interface CloudSnapshotFile { id: string; name: string; webUrl: string; createdDateTime?: string }
-export type SnapshotRequest = (path: string, options?: RequestInit) => Promise<Response>
+// SNP-04…08: LTE, PI Review and Monthly Pack snapshots are JSON files in the Git data repository (the private
+// repository of Git storage, beside the planning data), in the folder lte-snapshots/ — one commit per snapshot. They
+// replaced the SharePoint library (SharePoint is in the backlog). Nothing is kept in the browser.
+export const snapshotFolder = 'lte-snapshots'
+export const maxSnapshotBytes = 50 * 1024 * 1024
+export interface CloudSnapshotFile { id: string; name: string; path: string; webUrl: string; month: string; type: string }
+type Fetch = (input: string, init?: RequestInit) => Promise<Response>
 
-export function snapshotFolder(stateFilePath: string) {
-  const parts = stateFilePath.split('/').filter(Boolean)
-  if (!parts.length || parts.some(part => part === '.' || part === '..' || /[\\?#]/.test(part))) throw new Error('Invalid SharePoint data file path.')
-  return [...parts.slice(0, -1), 'Snapshots'].join('/')
-}
+const namePattern = /^(\d{4}-\d{2})-(LTE|PI-Review|Monthly-Pack)-[\da-f-]+\.json$/
+const fileUrl = (config: GitConfig) => `https://github.com/${config.owner}/${config.repo}/blob/${encodeURIComponent(config.branch)}/${config.path.split('/').map(encodeURIComponent).join('/')}`
 
+// SNP-05 (owner decision 11): a snapshot holds all the data present at the moment — the hours (the work items with their
+// Original Estimate and Completed Work), the release data (release source, release views, Windchill exports, plans),
+// capacity, people, baselines and settings. An explicit list keeps out earlier snapshots, anything that is not app data
+// and the data of My views (personal, never shared); credentials are never part of the app data (STO-09).
+export const snapshotDataKeys = ['schemaVersion', 'people', 'activities', 'efforts', 'baselines', 'periods', 'releases', 'audits', 'masters',
+  'azureWorkItems', 'azureBacklogScope', 'setupLinks', 'capacitySettings', 'baselineRules', 'releaseScopes', 'resourceProfiles',
+  'releaseSource', 'tableDefaults', 'releaseSourceSettings', 'releasePlans', 'windchillSources', 'azureSources'] as const satisfies readonly (keyof AppState)[]
 export function freezeSnapshot(state: AppState, type: Snapshot['type'], month: string, createdBy: string, build: unknown) {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error('Choose a valid snapshot month.')
-  // Explicit data whitelist: no connection settings, authentication or recursive snapshot history.
-  const { schemaVersion, people, activities, efforts, baselines, periods, releases, audits, masters, azureWorkItems, azureBacklogScope } = state
-  return structuredClone({ format: 'demand-planning-snapshot', formatVersion: 1, id: crypto.randomUUID(),
-    title: `${type} — ${month}`, type, month, createdAt: new Date().toISOString(), createdBy, build,
-    data: { schemaVersion, people, activities, efforts, baselines, periods, releases, audits, masters, azureWorkItems, azureBacklogScope } })
+  const source = withoutMyViews(state)
+  const data = Object.fromEntries(snapshotDataKeys.filter((key) => source[key] !== undefined).map((key) => [key, source[key]])) as Partial<AppState>
+  return structuredClone({ format: 'demand-planning-snapshot', formatVersion: 2, id: crypto.randomUUID(),
+    title: `${type} — ${month}`, type, month, createdAt: new Date().toISOString(), createdBy, build, data })
 }
 
-export async function uploadSnapshot(request: SnapshotRequest, folder: string, snapshot: ReturnType<typeof freezeSnapshot>): Promise<CloudSnapshotFile> {
-  const path = [...folder.split('/'), `${snapshot.month}-${snapshot.type.replaceAll(' ', '-')}-${snapshot.id}.json`].map(encodeURIComponent).join('/')
+export const snapshotFileName = (snapshot: Pick<ReturnType<typeof freezeSnapshot>, 'month' | 'type' | 'id'>) => `${snapshot.month}-${snapshot.type.replaceAll(' ', '-')}-${snapshot.id}.json`
+const describe = (config: GitConfig, name: string, id: string): CloudSnapshotFile => {
+  const target = siblingConfig(config, `${snapshotFolder}/${name}`)
+  const match = namePattern.exec(name)
+  return { id, name, path: target.path, webUrl: fileUrl(target), month: match?.[1] ?? '', type: (match?.[2] ?? '').replace('-', ' ') }
+}
+
+// A new file only (no version id is sent, so an existing file is never replaced); read back and compared before
+// success is reported.
+export async function uploadSnapshot(config: GitConfig, token: string, snapshot: ReturnType<typeof freezeSnapshot>, fetchImpl: Fetch = fetch): Promise<CloudSnapshotFile> {
+  const name = snapshotFileName(snapshot)
   const body = JSON.stringify(snapshot, null, 2)
-  if (new Blob([body]).size > 200 * 1024 * 1024) throw new Error('Snapshot exceeds the 200 MB upload limit.')
-  const response = await request(`/root:/${path}:/content?@microsoft.graph.conflictBehavior=fail`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body })
-  if (!response.ok) throw new Error(`Snapshot upload failed (${response.status}). No browser snapshot was saved.`)
-  const item = await response.json() as CloudSnapshotFile
-  if (!item.id) throw new Error('SharePoint did not confirm a snapshot file ID. Refresh history before retrying.')
-  const check = await request(`/items/${encodeURIComponent(item.id)}/content`, { cache: 'no-store' })
-  if (!check.ok || await check.text() !== body) throw new Error('Snapshot may exist in SharePoint, but read-back verification failed. Refresh history before retrying. No browser snapshot was saved.')
-  return item
+  if (new Blob([body]).size > maxSnapshotBytes) throw new Error('Snapshot exceeds the 50 MB limit for a file in Git. Nothing was saved.')
+  const target = siblingConfig(config, `${snapshotFolder}/${name}`)
+  const written = await writeTextFile(target, token, body, null, `${snapshot.title} snapshot`, fetchImpl)
+  const check = await readRawFile(target, token, fetchImpl)
+  if (check !== body) throw new Error('The snapshot may be in Git, but reading it back did not match. Refresh history before retrying. Nothing was saved in the browser.')
+  return describe(config, name, written.sha)
 }
 
-export async function listSnapshots(request: SnapshotRequest, folder: string): Promise<CloudSnapshotFile[]> {
-  const path = folder.split('/').map(encodeURIComponent).join('/')
-  const files: CloudSnapshotFile[] = []
-  let next = `/root:/${path}:/children?$select=id,name,webUrl,createdDateTime,file&$top=200`
-  while (next) {
-    const response = await request(next, { cache: 'no-store' })
-    if (response.status === 404 && !files.length) return []
-    if (!response.ok) throw new Error(`Unable to load SharePoint snapshot history (${response.status}).`)
-    const page = await response.json()
-    files.push(...(page.value ?? []).filter((item: { name: string; file?: unknown }) => item.file && /^\d{4}-\d{2}-(LTE|PI-Review|Monthly-Pack)-[\da-f-]+\.json$/.test(item.name)))
-    next = page['@odata.nextLink'] ?? ''
-  }
-  return files.sort((a, b) => (b.createdDateTime ?? '').localeCompare(a.createdDateTime ?? ''))
+// Snapshot history: only snapshot files of the folder, newest month first (then by name).
+export async function listSnapshots(config: GitConfig, token: string, fetchImpl: Fetch = fetch): Promise<CloudSnapshotFile[]> {
+  const entries = await listFolder(siblingConfig(config, snapshotFolder), token, fetchImpl)
+  return entries.filter((entry) => namePattern.test(entry.name)).map((entry) => describe(config, entry.name, entry.sha))
+    .sort((a, b) => b.month.localeCompare(a.month) || a.name.localeCompare(b.name))
 }

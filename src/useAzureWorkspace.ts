@@ -1,13 +1,14 @@
 import { fetchProblemKind, type FetchProblem } from './setupGuide'
 import { useEffect, useRef, useState } from 'react'
 import { initialWorkEmail, saveWorkEmail } from './workEmail'
+import { activateAfterHours } from './closeChain'
 import { dependencyFields, fetchAzureWorkItems, guardSampleWrites, isCloudBase, mapAzureWorkItem, mergeAzureWorkItems, parseAzureProjectUrl, readFieldNames, savedBacklogItems, sameAzureScope, updateAzureTimeWritingEffort, type AzureFetchResult, type AzureConfig } from './azureDevOps'
 import type { PageProps } from './pages/types'
 import type { AzureWorkItem } from './domain'
 import { loadAzurePat, saveAzurePat, forgetAzurePat, listAzureConnectionProfiles, loadAzureConnectionProfile, saveAzureConnectionProfile, forgetAzureConnectionProfile, composeAzureUrl, collectionUrlFrom, type AzureConnectionProfile, type AzureConnectionProfileSummary, type AzureConnectionRole, loadServerPat, serverKey } from './azureCredentials'
 import { approvalDateFrom, checkWorkItemQuery, defaultReleaseQuery, fetchReleaseSource, normalizeReleaseSourceSettings, projectQuery, runWorkItemQuery, withAncestors } from './releaseSource'
 import { sampleDataset, sampleProfiles, sampleReleaseScopes } from './sampleData'
-import { indiaMonth } from './azureInsights'
+import { utcMonthKey } from './businessTime'
 import { fetchAllOrder } from './fetchOrder'
 import { syncTitlesAfterSave } from './monthTaskAction'
 import { columnName, pickFields, queryLayout } from './queryView'
@@ -75,7 +76,7 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
   // Synthetic dataset for demonstrations: replaces the Azure cache and the release source; never touches Azure DevOps.
   function loadSampleData() {
     if (!config) { setError('Enter a valid Azure DevOps project URL first.'); return }
-    const sampleMonth = indiaMonth(new Date().toISOString())!
+    const sampleMonth = utcMonthKey()!
     const sample = sampleDataset(config, sampleMonth)
     setPreview(null); setLastRefreshed('')
     store.update((draft) => {
@@ -141,7 +142,7 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
   function selectConnectionProfile(id: string) {
     const profile = id ? loadAzureConnectionProfile(id) : null
     if (!profile) { setActiveConnectionProfileId(''); setError(''); return }
-    setProjectUrl(profile.url); setPreview(null); setActiveConnectionProfileId(id); setPat(profile.token); setRole(profile.role ?? 'time-tracking'); setError('')
+    setProjectUrl(profile.url); setPreview(null); setActiveConnectionProfileId(id); setPat(profile.token); setRole(profile.role); setError('')
     setServer({ baseUrl: profile.baseUrl, apiVersion: profile.apiVersion })
     try { setTeam(connectionConfig(profile).team) } catch { /* saved profile validation already prevents this */ }
   }
@@ -195,15 +196,18 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
     const updated = await updateAzureTimeWritingEffort(config, pat, workItemId, planHours, actualHours, markAdhoc)
     // BKL-36: a month Task saved: its Feature's Time Writing titles follow the Feature name (silently).
     const titles = await syncTitlesAfterSave(config, pat, items, updated)
-    const changed = [updated, ...titles.renamed]
+    // BKL-41: hours make the Task and its Time Writing story Active (a Closed one is reopened; the person is told).
+    const hours = await activateAfterHours(config, pat, items, updated)
+    const saved = hours.activated.find((entry) => entry.id === updated.id) ?? updated
+    const changed = [saved, ...hours.activated.filter((entry) => entry.id !== updated.id), ...titles.renamed]
     setPreview((current) => current ? { ...current, items: mergeAzureWorkItems(current.items, changed), scope: { ...current.scope, itemKeys: [...new Set([...current.scope.itemKeys, ...changed.map((entry) => entry.key)])] } } : current)
     store.update((draft) => {
       draft.azureWorkItems = mergeAzureWorkItems(draft.azureWorkItems ?? [], changed)
       draft.audits.unshift({ id: crypto.randomUUID(), timestamp: new Date().toISOString(), actor: 'u-owner', action: 'Update Azure effort', entity: 'AzureDevOps Time Writing Task', entityId: String(updated.id), detail: `Updated Original Estimate to ${planHours ?? 'unchanged'}h and Completed Work to ${actualHours ?? 'unchanged'}h on Azure DevOps Task #${updated.id}${markAdhoc ? '; tagged ad-hoc' : ''}.${titles.note}` })
       return draft
     })
-    setMessage(`Azure DevOps Task #${updated.id} saved and verified.${titles.note}`); setError('')
-    return updated
+    setMessage(`Azure DevOps Task #${updated.id} saved and verified.${titles.note}${[...hours.notes, ...hours.failed].map((note) => ` ${note}`).join('')}`); setError('')
+    return { updated: saved, notes: [...hours.notes, ...hours.failed] }
   }
 
   // Connection sets: base URL + project (+ team), PAT, optional query and what the data is used for.
@@ -267,7 +271,7 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
   // Writing) joins the one already running and gets its result, instead of failing.
   const timeWritingRun = useRef<Promise<boolean> | null>(null)
   function fetchConnection(id: string): Promise<boolean> {
-    if ((loadAzureConnectionProfile(id)?.role ?? 'time-tracking') !== 'time-tracking') return fetchConnectionNow(id)
+    if ((loadAzureConnectionProfile(id)?.role ?? 'reference') !== 'time-tracking') return fetchConnectionNow(id)
     if (timeWritingRun.current) return timeWritingRun.current
     const run = fetchConnectionNow(id).finally(() => { if (timeWritingRun.current === run) timeWritingRun.current = null })
     timeWritingRun.current = run

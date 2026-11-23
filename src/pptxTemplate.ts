@@ -97,6 +97,9 @@ const statusLook: Record<OverallStatus, { symbol: string; circle: string; text?:
   'At Risk': { symbol: '!', circle: 'E8A317', text: 'B26B00' },
   'Off Track': { symbol: '✕', circle: 'C00000', text: 'C00000' },
 }
+// PCK-08: no status chosen is "Not set" in grey — never a green On Track nobody judged.
+export const notSetStatus = 'Not set'
+const notSetLook = { symbol: '–', circle: '7F7F7F', text: '595959' }
 
 // ---- The two slides ----
 const pulseLabels = ['SUMMARY', 'OVERALL STATUS', 'KEY TAKEAWAYS', 'Demonstrated value', 'Key next steps', 'DECISION REQUIRED', 'RISKS', 'LEADERSHIP SUPPORT REQUESTED', 'KPI PULSE']
@@ -131,8 +134,9 @@ export function fillPulseSlide(slide: string, fill: PulseFill): { xml: string; m
   change(detail, 'Decision required (detail)', (shape) => fillList(shape, fill.decision.slice(1)))
   // Overall status: the word, the symbol in the circle, and the circle's colour.
   const word = shapes.find((shape) => overallStatuses.some((status) => norm(status) === norm(shape.text)))
-  const look = statusLook[overallStatuses.find((status) => norm(status) === norm(fill.status)) ?? 'On Track']
-  change(word, 'Overall status', (shape) => { const xml = setRunText(shape.xml, /<a:t>[^<]*<\/a:t>/, fill.status.trim() || 'On Track'); return look.text ? xml.replace(/<a:srgbClr val="[0-9A-F]{6}"\/>/gi, `<a:srgbClr val="${look.text}"/>`) : xml })
+  const chosen = overallStatuses.find((status) => norm(status) === norm(fill.status))
+  const look = chosen ? statusLook[chosen] : notSetLook
+  change(word, 'Overall status', (shape) => { const xml = setRunText(shape.xml, /<a:t>[^<]*<\/a:t>/, chosen ?? notSetStatus); return look.text ? xml.replace(/<a:srgbClr val="[0-9A-F]{6}"\/>/gi, `<a:srgbClr val="${look.text}"/>`) : xml })
   const symbol = shapes.find((shape) => /^[✓✔!✕✖×]$/.test(shape.text))
   change(symbol, 'Overall status symbol', (shape) => setRunText(shape.xml, /<a:t>[^<]*<\/a:t>/, look.symbol))
   const circle = symbol && shapes.find((shape) => /prst="ellipse"/.test(shape.xml) && Math.abs(shape.x - symbol.x) < 50_000 && Math.abs(shape.y - symbol.y) < 50_000)
@@ -200,7 +204,7 @@ export async function checkTemplate(bytes: Uint8Array): Promise<{ problems: stri
   const slides = (await slidesOf(files)).map((path) => decoder.decode(files.get(path)!))
   const pulse = slides.find((slide) => /KPI PULSE/i.test(slide)), grid = slides.find((slide) => /Actions\/Deliverables Realized/i.test(slide))
   const problems = [...(pulse ? [] : ['No Performance Pulse slide (with KPI PULSE) was found.']), ...(grid ? [] : ['No 2x2 slide (with "Actions/Deliverables Realized") was found.'])]
-  const empty: PulseFill = { department: '', monthLine: '', summary: [], status: 'On Track', takeaways: [], nextSteps: [], decision: [], risks: [], mitigation: [], leadership: [], kpis: [], twoByTwo: { deliverables: [], observations: [], focus: [], support: [] } }
+  const empty: PulseFill = { department: '', monthLine: '', summary: [], status: '', takeaways: [], nextSteps: [], decision: [], risks: [], mitigation: [], leadership: [], kpis: [], twoByTwo: { deliverables: [], observations: [], focus: [], support: [] } }
   const warnings = [...(pulse ? fillPulseSlide(pulse, empty).missing.filter((entry) => !entry.startsWith('KPI rows')) : []), ...(grid ? fillTwoByTwoSlide(grid, empty.twoByTwo).missing : [])]
   return { problems, warnings: warnings.map((entry) => `Not found in the template: ${entry}.`) }
 }

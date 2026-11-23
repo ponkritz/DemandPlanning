@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { azureInsights, timeWritingMonth, indiaMonth } from '../src/azureInsights.ts'
+import { azureInsights, timeWritingMonth, closedMonth } from '../src/azureInsights.ts'
 import { mapAzureWorkItem } from '../src/azureDevOps.ts'
 
 const item = (id, extra = {}) => ({ key: `org/project/${id}`, id, title: 'Release - Time Writing', workItemType: 'User Story', state: 'Active', assignedTo: 'QE', ...extra })
@@ -75,10 +75,11 @@ test('utilization uses funded month hours over all Actuals less Absence Actuals 
   assert.equal(data.available, 80)
   assert.equal(data.utilization, 220)
 })
-test('closures use India month and completed state; overdue excludes completed items and today', () => {
+test('closures use the UTC month (NAV-51) and completed state; overdue excludes completed items and today', () => {
   const data = azureInsights([item(1, { workItemType: 'Feature', state: 'Closed', closedDate: '2026-09-30T20:00:00Z', targetDate: '2026-10-01' }), item(2, { workItemType: 'Feature', state: 'Active', closedDate: '2026-10-01', targetDate: '2026-10-16' }), item(3, { targetDate: '2026-10-17' })], '2026-10', '2026-10-17')
-  assert.equal(data.closures.length, 1); assert.equal(data.overdue.length, 1)
-  assert.equal(indiaMonth('2026-12-31T20:00:00Z'), '2027-01')
+  assert.equal(data.closures.length, 0, 'closed 30 September 20:00 UTC: September, not October'); assert.equal(data.overdue.length, 1)
+  assert.equal(azureInsights([item(1, { workItemType: 'Feature', state: 'Closed', closedDate: '2026-10-31T20:00:00Z' })], '2026-10', '2026-10-17').closures.length, 1, '31 October 20:00 UTC is October (November in India)')
+  assert.equal(closedMonth('2026-12-31T20:00:00Z'), '2026-12'); assert.equal(closedMonth('2026-12-31'), '2026-12'); assert.equal(closedMonth(undefined), undefined)
   assert.throws(() => azureInsights([], '', '2026-10-17'))
 })
 test('source maps numeric scheduling fields preserving zero and rejecting string/negative/nonfinite estimates', () => {

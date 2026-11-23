@@ -1,4 +1,5 @@
 import type { AzureWorkItem } from './domain'
+import { utcMonthLabel } from './businessTime.ts'
 import { featureDoD, fillTitle, missingValues, reviewStoryTitle, titleValues, fieldPlaceholders, type TitleField } from './featureSetup.ts'
 import { isTimeWritingStory, planMonthStory, timeWritingMonth } from './azureInsights.ts'
 import { editLocks, editProblem, editableText, isAdhocTask, withAdhocTag, type WorkItemEdit } from './workItemEdit.ts'
@@ -106,9 +107,8 @@ export function releaseHierarchyTitles(title: string, kind: 'PU' | 'Release', mo
   }
 }
 
-export function currentIndiaMonth(date = new Date()) {
-  return new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' }).format(date)
-}
+// The month of new month Time Writing Tasks ("November 2026"): the current UTC month (NAV-51).
+export { utcMonthLabel }
 
 export class HierarchyCreationError extends Error {
   createdItems: AzureWorkItem[]
@@ -278,7 +278,7 @@ export type MonthTaskResult = { status: 'exists' | 'created'; task: AzureWorkIte
 // BKL-28: the one Time Writing Task rule of every page — "<Month> | <Feature>" under "<Feature> - Time Writing" (the
 // person's own story first), assigned to the person, in the Feature's Area Path and the project root; any month Task of
 // theirs is reused. defaultHours: the Epic setup's Original Estimate, put on a newly created Task only.
-export async function ensureMonthTask(config: AzureConfig, pat: string, featureId: number, assignee: string, monthLabel = currentIndiaMonth(), transport: AzureTransport = requestAzure, adhoc = false, defaultHours?: number): Promise<MonthTaskResult> {
+export async function ensureMonthTask(config: AzureConfig, pat: string, featureId: number, assignee: string, monthLabel = utcMonthLabel(), transport: AzureTransport = requestAzure, adhoc = false, defaultHours?: number): Promise<MonthTaskResult> {
   if (!pat.trim()) throw new Error('Enter a Work Items (Read & Write) PAT.')
   const email = assignee.trim().toLowerCase()
   if (!isAssignee(email)) throw new Error('Choose who the month Task is assigned to (an email), or set your Azure DevOps email (Feature creator email on the Time Writing connection).')
@@ -388,7 +388,7 @@ export async function addMonthTasks(config: AzureConfig, pat: string, featureId:
 // This month's Task for the person under one given User Story (ATM-26): a leave story ("PTO", "Sick Leave") of a
 // person's own leave Feature, or a story chosen on its row. The story's children are re-read now: a month Task of theirs
 // for the month (any title or delimiter) is reused, else "<Month> | <story title>" is created and assigned to them.
-export async function ensureStoryMonthTask(config: AzureConfig, pat: string, storyId: number, assignee: string, monthLabel = currentIndiaMonth(), transport: AzureTransport = requestAzure, adhoc = false, defaultHours?: number): Promise<MonthTaskResult> {
+export async function ensureStoryMonthTask(config: AzureConfig, pat: string, storyId: number, assignee: string, monthLabel = utcMonthLabel(), transport: AzureTransport = requestAzure, adhoc = false, defaultHours?: number): Promise<MonthTaskResult> {
   if (!pat.trim()) throw new Error('Enter a Work Items (Read & Write) PAT.')
   const email = assignee.trim().toLowerCase()
   if (!isAssignee(email)) throw new Error('Choose who the month Task is assigned to (an email), or set your work email (Admin → Streams → Your work email).')
@@ -409,7 +409,7 @@ export async function ensureStoryMonthTask(config: AzureConfig, pat: string, sto
 // A person's leave or training story of one type under their own Feature of the absence Epic (ATM-27): the Feature's
 // stories are re-read now; a story of theirs of that type (typeOf) is used, else "<Name> | <Type> | Time Writing" is
 // created and assigned to them; then that month's Task goes under it, never duplicated.
-export async function ensureAbsenceStoryMonthTask(config: AzureConfig, pat: string, featureId: number, kind: string, storyTitle: string, typeOf: (story: AzureWorkItem) => string | undefined, assignee: string, monthLabel = currentIndiaMonth(), transport: AzureTransport = requestAzure, adhoc = false): Promise<MonthTaskResult> {
+export async function ensureAbsenceStoryMonthTask(config: AzureConfig, pat: string, featureId: number, kind: string, storyTitle: string, typeOf: (story: AzureWorkItem) => string | undefined, assignee: string, monthLabel = utcMonthLabel(), transport: AzureTransport = requestAzure, adhoc = false): Promise<MonthTaskResult> {
   if (!pat.trim()) throw new Error('Enter a Work Items (Read & Write) PAT.')
   const email = assignee.trim().toLowerCase()
   if (!isAssignee(email)) throw new Error('Choose who the month Task is assigned to (an email), or set your work email (Admin → Streams → Your work email).')
@@ -440,7 +440,7 @@ async function createChildItem(config: AzureConfig, pat: string, parent: AzureWo
 }
 
 // The children are assigned to `assignee`, else to whoever the Feature is assigned to; never left blank.
-export async function completeReleaseHierarchy(config: AzureConfig, pat: string, featureId: number, kind: 'PU' | 'Release', milestones?: string[], monthLabel = currentIndiaMonth(), transport: AzureTransport = requestAzure, storyIterationPath?: string, assignee?: string, reviewStory = true, adhoc = false) {
+export async function completeReleaseHierarchy(config: AzureConfig, pat: string, featureId: number, kind: 'PU' | 'Release', milestones?: string[], monthLabel = utcMonthLabel(), transport: AzureTransport = requestAzure, storyIterationPath?: string, assignee?: string, reviewStory = true, adhoc = false) {
   const items: AzureWorkItem[] = []
   try {
     if (!pat.trim()) throw new Error('Enter a Work Items (Read & Write) PAT.')
@@ -467,7 +467,7 @@ export async function completeReleaseHierarchy(config: AzureConfig, pat: string,
   }
 }
 
-export async function createAzureReleaseHierarchy(config: AzureConfig, pat: string, input: FeatureInput, kind: 'PU' | 'Release', milestones?: string[], monthLabel = currentIndiaMonth(), transport: AzureTransport = requestAzure, reviewStory = true, adhoc = false) {
+export async function createAzureReleaseHierarchy(config: AzureConfig, pat: string, input: FeatureInput, kind: 'PU' | 'Release', milestones?: string[], monthLabel = utcMonthLabel(), transport: AzureTransport = requestAzure, reviewStory = true, adhoc = false) {
   const titles = releaseHierarchyTitles(input.title.trim(), kind, monthLabel)
   if ([...titles.reviews.map((review) => review.title), titles.review, titles.timeWriting, titles.task].some((title) => title.length > 255)) throw new Error('An automatic child title exceeds 255 characters. Shorten the Feature title.')
   if (milestones?.some((milestone) => !titles.reviews.some((review) => review.milestone === milestone))) throw new Error('Unsupported milestone selection for this release classification.')
@@ -496,7 +496,7 @@ export async function createAzureReleaseHierarchy(config: AzureConfig, pat: stri
 // and the month Task with the setup's defaults. Titles may carry placeholders ({feature}, {program}, {service},
 // {version}, {month}). Existing children with the same title are reused, so it can also complete a Feature.
 export interface SetupChildren { stories: { title: string; description: string }[]; reviewStory?: boolean; titleFields?: TitleField[]; fieldValues?: string[]; timeWritingStory?: { title: string; description: string; assignedTo: string; areaPath: string; iterationPath: string }; task: { title: string; description: string; originalEstimate?: number; assignedTo: string; areaPath: string; iterationPath: string } }
-export async function completeFeatureFromSetup(config: AzureConfig, pat: string, featureId: number, setup: SetupChildren, monthLabel = currentIndiaMonth(), transport: AzureTransport = requestAzure, storyIterationPath?: string, assignee?: string, adhoc = false) {
+export async function completeFeatureFromSetup(config: AzureConfig, pat: string, featureId: number, setup: SetupChildren, monthLabel = utcMonthLabel(), transport: AzureTransport = requestAzure, storyIterationPath?: string, assignee?: string, adhoc = false) {
   const items: AzureWorkItem[] = []
   try {
     if (!pat.trim()) throw new Error('Enter a Work Items (Read & Write) PAT.')
@@ -535,7 +535,7 @@ export async function completeFeatureFromSetup(config: AzureConfig, pat: string,
   }
 }
 
-export async function createFeatureFromSetup(config: AzureConfig, pat: string, input: FeatureInput, setup: SetupChildren, monthLabel = currentIndiaMonth(), transport: AzureTransport = requestAzure, adhoc = false) {
+export async function createFeatureFromSetup(config: AzureConfig, pat: string, input: FeatureInput, setup: SetupChildren, monthLabel = utcMonthLabel(), transport: AzureTransport = requestAzure, adhoc = false) {
   const feature = await createAzureFeature(config, pat, input, transport)
   try { return await completeFeatureFromSetup(config, pat, feature.id, setup, monthLabel, transport, input.storyIterationPath, input.assignedTo, adhoc) }
   catch (failure) {

@@ -52,5 +52,11 @@ Deferred on request; to be decided again when needed:
 - **People from Holidays and Trainings (planning only, 4 November 2026).** Use the names in the Holidays and Trainings Epic as an additional source for the user list, Reports to choices and resource mapping. Confirm the exact Epic/source and deduplication against existing Azure identities before implementation.
 - **Ad-hoc hierarchy (planning only).** Extend the late-work rule from monthly Tasks to the complete Feature → User Story → Task hierarchy, including new descendants of existing work. Determine applicability by the work month; future-month work follows its own period controls. This is separate from the month-control persistence fix.
 
+- **Baseline rules with nothing saved** (design defaults review DEF-16, OI-12): whether the example rules apply or none — to be decided later.
+
+- **Dates typed as text in imports** (DEF-20, DEF-51): the history import reads "05/10/2026" as day/month, the Windchill import as month/day; the owner checks the real files before one rule is chosen.
+
+- **SharePoint central storage and SharePoint snapshots** (SNP-01…03, IF-04; moved here on 2026-11-23 because SharePoint is not functional). The app no longer keeps its data in a SharePoint file or signs in to Microsoft; LTE / PI Review snapshots are saved to the private Git data repository (`ponkritz/DemandPlanningStorage`, folder `lte-snapshots/`) instead (SNP-04…08), and the shared setup already lives there. To bring SharePoint back: an Entra app registration with a site-scoped permission (`Sites.Selected`, PT-13), atomic first creation and etag checks (CR-P1-05/06), and no autosave with sample data. The KPI tracker still reads its workbook from SharePoint in the desktop app (KPT-02, unchanged).
+
 - **DP release matching and DHFI linking (Release Details → DP).** The DP page now shows only the DP connection's query with chosen columns (QV-22). Each DP row is matched again to its QMS-0025 Feature / User Story by SourceProgram + Title at 80%, with Create Feature when none matches (QV-29). Linking the DHFI documents and the Pedestal register stays off the page (OI-14). Pulse Check and the Dashboard count DP from its query by its milestones (QV-24, QV-25).
 

@@ -45,7 +45,7 @@ test('absence kinds are read from task and ancestor titles', () => {
   assert.equal(absenceKind(['Unplanned leave', 'Ana - PTO']), 'Unplanned Leave'); assert.equal(absenceKind(['Something else']), 'Other absence')
 })
 test('status thresholds and settings normalisation', () => {
-  assert.equal(loadStatus(null, defaultCapacitySettings), 'No bookings'); assert.equal(loadStatus(100, defaultCapacitySettings), 'Overloaded')
+  assert.equal(loadStatus(null, defaultCapacitySettings), 'No bookings'); assert.equal(loadStatus(100, defaultCapacitySettings), 'Balanced', 'exactly at the limit is not overloaded'); assert.equal(loadStatus(100.1, defaultCapacitySettings), 'Overloaded', 'strictly above the limit')
   assert.equal(loadStatus(79.9, defaultCapacitySettings), 'Has capacity'); assert.equal(loadStatus(80, defaultCapacitySettings), 'Balanced')
   assert.deepEqual(normalizeCapacitySettings(undefined), defaultCapacitySettings)
   assert.deepEqual(normalizeCapacitySettings({ absenceEpicId: '123', hoursPerDay: 7.5, overloadedAt: 110, availableBelow: 70 }), { absenceEpicId: 123, hoursPerDay: 7.5, overloadedAt: 110, availableBelow: 70, npraHoursPerMonth: 20, defaultJoinedOn: '2026-05-01' })
@@ -323,6 +323,6 @@ test('CAP-56: my capacity is found under every name my work email carries; when 
   assert.equal(capacityGap({ ...empty, people: [{ name: 'Costa, Ana' }] }, ['Ana Costa', 'Costa, Ana']), undefined, 'counted under one of the names')
   assert.match(capacityGap({ ...empty, removed: [{ name: 'Ana Costa' }] }, ['Ana Costa']), /removed/)
   assert.match(capacityGap({ ...empty, notCounted: [{ name: 'Ana Costa', reason: 'role Lead' }] }, ['Ana Costa']), /Not counted for capacity: role Lead/)
-  assert.match(capacityGap({ ...empty, outsideEmployment: [{ name: 'Ana Costa', joinedOn: '2026-12-01' }] }, ['Ana Costa']), /Joined on 2026-12-01/)
+  assert.match(capacityGap({ ...empty, outsideEmployment: [{ name: 'Ana Costa', joinedOn: '2026-12-01' }] }, ['Ana Costa']), /Time tracking started 2026-12-01/)
   assert.match(capacityGap(empty, ['Ana Costa']), /No month Time Writing Task/)
 })

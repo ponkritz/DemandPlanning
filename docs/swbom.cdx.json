@@ -17,66 +17,6 @@
   "components": [
     {
       "type": "library",
-      "name": "@azure/msal-browser",
-      "version": "5.30.0",
-      "purl": "pkg:npm/%40azure/msal-browser@5.30.0",
-      "scope": "required",
-      "licenses": [
-        {
-          "license": {
-            "id": "MIT"
-          }
-        }
-      ],
-      "hashes": [
-        {
-          "alg": "SHA-512",
-          "content": "a3f003c56c4415c56b13ae5aeecb0e1aec678afabc95ccbeda148694e3b0b67d2019dea28b0977abcfc1315468ad813cd5407faf807ef161845315a7a8feebc8"
-        }
-      ],
-      "properties": [
-        {
-          "name": "swbom:scope",
-          "value": "runtime"
-        },
-        {
-          "name": "swbom:direct",
-          "value": "true"
-        }
-      ]
-    },
-    {
-      "type": "library",
-      "name": "@azure/msal-common",
-      "version": "16.17.0",
-      "purl": "pkg:npm/%40azure/msal-common@16.17.0",
-      "scope": "required",
-      "licenses": [
-        {
-          "license": {
-            "id": "MIT"
-          }
-        }
-      ],
-      "hashes": [
-        {
-          "alg": "SHA-512",
-          "content": "acdbed126ec0c738f5f277889340bc923af56576c9b079160ea19e7427ce88b5418d20b158171b276ebf23b83da30a1e18a528cab3a0b3bddc224ed6c4b77da8"
-        }
-      ],
-      "properties": [
-        {
-          "name": "swbom:scope",
-          "value": "runtime"
-        },
-        {
-          "name": "swbom:direct",
-          "value": "false"
-        }
-      ]
-    },
-    {
-      "type": "library",
       "name": "@electron-internal/extract-zip",
       "version": "1.0.8",
       "purl": "pkg:npm/%40electron-internal/extract-zip@1.0.8",

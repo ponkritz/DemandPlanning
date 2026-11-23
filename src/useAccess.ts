@@ -14,8 +14,11 @@ function cachePolicy(text: string | null) { try { if (text == null) localStorage
 type PolicyState = { scope: string; policy: AccessPolicy | null; sha: string | null; error: string; loaded: boolean }
 
 // The viewer's access: who they are (the email entered on the Time Writing connection, the same one new work is
-// assigned to) and the roles policy in Git (access.json). Without Git storage or without the file, nothing is
-// restricted. Without an email, the policy's default role applies. The email is typed in, not verified.
+// assigned to) and the roles policy in Git (access.json, or the copy cached in this browser from an earlier read).
+// CON-101 (fail closed): until a policy is loaded everyone is read-only — every menu area, no action. Bootstrap: when
+// Git storage read that no access.json exists (the read succeeded, the file is absent), the viewer may set up the
+// first roles file (access.manage only). Without an email, the policy's default role applies. The email is typed in,
+// not verified.
 export function useAccess(git: GitStorage, azure: AzureWorkspace, viewAs: ViewAs | null = null) {
   const email = azure.isSample ? '' : azure.creatorEmail.trim().toLowerCase()
 
@@ -38,12 +41,15 @@ export function useAccess(git: GitStorage, azure: AzureWorkspace, viewAs: ViewAs
   useEffect(() => { if (scope && !gitLoading) void Promise.resolve().then(load) }, [scope, gitLoading, load])
   const [cached] = useState(cachedPolicy)
   const current = state.scope === scope && scope ? state : { policy: cached, sha: null, error: '', loaded: !scope }
+  // CON-101: Git storage confirmed that there is no access.json (not an error, not still loading).
+  const bootstrap = Boolean(scope) && state.scope === scope && state.loaded && !state.error && !state.policy
 
   // The viewer's own rights decide who may use View as; while it is on, the page follows the person's or role's rights.
-  const ownRights = rightsFor(current.policy, email)
+  const ownRights = rightsFor(current.policy, email, bootstrap)
   const active = viewAs && canViewAs(ownRights) ? viewAs : null
   const rights = active ? viewAsRights(current.policy, active) : ownRights
-  useEffect(() => { guardAzureWrites((permission) => rights.actions.has(permission)) })
+  const readOnly = !current.policy
+  useEffect(() => { guardAzureWrites((permission) => rights.actions.has(permission), readOnly ? 'The app is read-only until the access roles (access.json) are loaded: connect Git storage in Admin → Data & sharing. Nothing was changed.' : undefined) })
   useEffect(() => { setViewAsGuard(active ? viewAsLabel(active) : ''); return () => setViewAsGuard('') }, [active])
 
   async function save(policy: AccessPolicy, message: string) {
@@ -61,6 +67,8 @@ export function useAccess(git: GitStorage, azure: AzureWorkspace, viewAs: ViewAs
   return {
     email,
     policy: current.policy, loaded: current.loaded, error: current.error, path: git.accessPath, history: git.accessHistory,
+    // CON-101: no roles file loaded, so the app is read-only; bootstrap: none exists yet, so the viewer may set one up.
+    readOnly, bootstrap,
     rights, ownRights, canViewAs: canViewAs(ownRights), viewingAs: active,
     sees: (area: Area) => rights.areas.has(area),
     can: (action: Action) => rights.actions.has(action),

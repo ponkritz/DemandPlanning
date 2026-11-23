@@ -23,7 +23,6 @@
     "build:mac": "pnpm build:web && electron-builder --mac dmg --universal"
   },
   "dependencies": {
-    "@azure/msal-browser": "^5.29.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },

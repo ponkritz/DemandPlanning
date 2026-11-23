@@ -8,7 +8,7 @@ export function SettingsSearch({ allowed, onOpen, onClose }: { allowed: (entry: 
   const [query, setQuery] = useState('')
   const found = searchSettings(query).filter(allowed)
   const open = (entry: SettingsEntry) => { onOpen(entry.tab, entry.section); onClose() }
-  return <Modal title="Search settings" eyebrow="SETTINGS" onClose={onClose}>
+  return <Modal title="Search settings" eyebrow="SETTINGS" form={false} onClose={onClose}>
     <input className="search settings-search-input" aria-label="Search settings" autoFocus placeholder="e.g. PAT, IOCC, capacity, DoD" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && found[0]) { event.preventDefault(); open(found[0]) } }} />
     <ul className="settings-search-results" role="listbox" aria-label="Settings found">{found.map((entry) => <li key={`${entry.tab}:${entry.section ?? ''}`}><button type="button" role="option" aria-selected="false" onClick={() => open(entry)}><strong>{entry.label}</strong><small>{entry.page}</small></button></li>)}</ul>
     {!found.length && <p className="muted">No setting matches “{query}”.</p>}

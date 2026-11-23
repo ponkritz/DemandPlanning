@@ -2,8 +2,9 @@
 export function formatHours(value: number | null | undefined) { return value == null ? '—' : Number(value.toFixed(2)).toLocaleString() }
 export function formatPercent(value: number | null | undefined, digits = 1) { return value == null ? '—' : `${value.toFixed(digits)}%` }
 // Long date in the viewer's time zone, e.g. "30 September 2026". Azure DevOps dates (Author Approval Date, Target
-// Date, …) are stored in UTC, so the local calendar date can differ from the UTC one; this is the date the month
-// filters and counts use. A plain YYYY-MM-DD is shown as that calendar date. timeZone is for tests only.
+// Date, …) are stored in UTC, so the local calendar date can differ from the UTC one; the month filters and counts use
+// the UTC month (NAV-51, businessTime.ts). A plain YYYY-MM-DD is shown as that calendar date. timeZone is for
+// tests only.
 export function formatDate(value: string | undefined, fallback = '—', timeZone?: string) {
   if (!value) return fallback
   const plain = /^\d{4}-\d{2}-\d{2}$/.test(value)
@@ -17,7 +18,8 @@ export function formatDateTime(value: string | undefined, fallback = '—', time
   return new Intl.DateTimeFormat(undefined, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZoneName: 'short', ...(timeZone ? { timeZone } : {}) }).format(new Date(value))
 }
 export function monthName(month: string) { return new Intl.DateTimeFormat('en', { month: 'long', year: 'numeric' }).format(new Date(`${month}-01T00:00:00`)) }
-// Today's date (YYYY-MM-DD) in the viewer's time zone.
+// Today's date (YYYY-MM-DD) in the viewer's time zone, for display and file names only; the business "today" (months,
+// overdue, current Sprint, locks) is utcToday() of businessTime.ts (NAV-51).
 export function todayIso(now = new Date(), timeZone?: string) { return new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit', ...(timeZone ? { timeZone } : {}) }).format(now) }
 export function localTimeZone() { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local time' } catch { return 'Local time' } }
 export function timeZoneLabel(date = new Date()) {

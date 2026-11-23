@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { DataTable, type DataColumn } from '../components/DataTable'
-import { EmptyState, Notice, Page, Panel } from '../components/ui'
+import { EmptyState, Notice, Page, Panel, SaveQueueStatus } from '../components/ui'
 import type { GitStorage } from '../useGitStorage'
 import { readXlsx } from '../xlsx'
 import { formatDateTime } from '../format'
-import { checkTrackerUrl, parseTracker, serializeTracker, sheetTable, trackerFromWorkbook, type KpiTracker } from '../kpiTracker'
+import { checkTrackerUrl, kpiTrackerFile, parseTracker, serializeTracker, sheetTable, trackerFromWorkbook, type KpiTracker } from '../kpiTracker'
 
 // KPI tracker (KPT-01…KPT-05): the team's KPI tracker workbook from SharePoint, read only. The page shows the copy kept
 // in Git (kpi-tracker.json); in the desktop app it reads the file live from SharePoint, and a read by a role with
@@ -43,13 +43,17 @@ export function KpiTrackerPage({ git, canManage, who }: { git: GitStorage; canMa
       if (!result.ok || !result.bytes) { setNotice({ tone: 'error', text: result.message, signIn: result.signIn }); return }
       const tracker = trackerFromWorkbook(await readXlsx(result.bytes), { fileUrl, fileName: result.name ?? 'KPI tracker.xlsx', readAt: new Date().toISOString(), readBy: who, modified: result.modified })
       if (!tracker.sheets.length) { setNotice({ tone: 'warning', text: `${tracker.fileName} has no sheet with data.` }); return }
-      let saved = false, note = ''
+      let saved = false, note = '', shownTracker = tracker
       if (canSave) {
-        try { await git.writeKpiTracker(serializeTracker(tracker), `KPI tracker read from SharePoint (${tracker.fileName})`); saved = true }
+        try {
+          const result = await git.writeKpiTracker(serializeTracker(tracker), `KPI tracker read from SharePoint (${tracker.fileName})`); saved = true
+          // GIT-17: merged with a read saved by someone else in between: the page shows the merged copy.
+          if (result.merged) { try { shownTracker = parseTracker(result.text) } catch { /* the read here is shown */ } note = ' Merged with a read saved by someone else in between: both are kept, the later read wins for a sheet in both.' }
+        }
         catch (failure) { note = ` Not saved to Git: ${failure instanceof Error ? failure.message : String(failure)}` }
       }
-      setShown({ tracker, from: 'live', saved }); setSheetIndex(0)
-      setNotice({ tone: note ? 'warning' : 'success', text: `${result.message}${saved ? ' Saved to Git: everyone sees this copy.' : canSave ? '' : ' Shown here only (saving to Git needs Manage shared settings and a Git token that can write).'}${note}${tracker.truncated ? ' The workbook is larger than the limits (20 sheets, 2,000 rows, 100 columns): the rest is not shown.' : ''}` })
+      setShown({ tracker: shownTracker, from: 'live', saved }); setSheetIndex(0)
+      setNotice({ tone: note && !saved ? 'warning' : 'success', text: `${result.message}${saved ? ' Saved to Git: everyone sees this copy.' : canSave ? '' : ' Shown here only (saving to Git needs Manage shared settings and a Git token that can write).'}${note}${tracker.truncated ? ' The workbook is larger than the limits (20 sheets, 2,000 rows, 100 columns): the rest is not shown.' : ''}` })
     } catch (failure) { setNotice({ tone: 'error', text: failure instanceof Error ? failure.message : String(failure) }) }
     finally { setBusy(false) }
   }
@@ -80,6 +84,7 @@ export function KpiTrackerPage({ git, canManage, who }: { git: GitStorage; canMa
         </div>
       </div> : <Notice tone="info">Reading the file live from SharePoint needs the desktop app (it signs in with your company account). Here the page shows the copy saved in Git.</Notice>}
       {notice && <Notice tone={notice.tone}>{notice.text}</Notice>}
+      <SaveQueueStatus state={git.queueState(kpiTrackerFile)} onRetry={() => void git.retryQueued(kpiTrackerFile).then(loadGit)} />
       {!connected && <Notice tone="warning">Connect Git storage (Admin → Data & sharing) to see the copy saved in Git{desktop ? ' and to save the reads' : ''}.</Notice>}
       {gitState.error && <Notice tone="error">{gitState.error}</Notice>}
     </Panel>

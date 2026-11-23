@@ -30,3 +30,14 @@ test('sections in my order: removed sections dropped, new ones placed after thei
   assert.deepEqual(moveSection(['a', 'b', 'c'], 'c', -1), ['a', 'c', 'b'])
   assert.deepEqual(moveSection(['a', 'b', 'c'], 'a', -1), ['a', 'b', 'c'], 'no move past the ends')
 })
+
+test('BKL-47: Save for everyone sets one entry (the QMS-0025 column order) in the defaults and keeps every other default (TC-BKL-36)', async () => {
+  const { emptyViews, parseViews, serializeViews, withDefaultEntry, withDefaults } = await import('../src/personalViews.ts')
+  const current = { ...emptyViews(), sections: { team: { order: ['b', 'a'], hidden: [] } }, menu: { pinned: ['board'], hidden: [] }, filters: { team: { tab: 'streams' } } }
+  const next = parseViews(serializeViews(withDefaultEntry(current, 'backlog-columns', ['title', 'state', 'id'])))
+  assert.deepEqual(next.filters['backlog-columns'], ['title', 'state', 'id'])
+  assert.deepEqual(next.sections, current.sections, 'other defaults kept')
+  assert.deepEqual(next.menu, current.menu)
+  assert.deepEqual(next.filters.team, { tab: 'streams' })
+  assert.deepEqual(withDefaults(emptyViews(), next).filters['backlog-columns'], ['title', 'state', 'id'], 'everyone without their own choice gets it')
+})

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { GitConflictError } from './gitStorage'
-import { emptyViews, parseViews, personalViewsPath, serializeViews, withDefaults, type MenuLayout, type PersonalViews, type SectionLayout } from './personalViews'
+import { emptyViews, parseViews, withDefaultEntry, personalViewsPath, serializeViews, viewsDefaultsPath, withDefaults, type MenuLayout, type PersonalViews, type SectionLayout } from './personalViews'
 import type { GitStorage } from './useGitStorage'
 
 // Each person's views (MYD-06…MYD-09): kept in this browser at once (so a change shows immediately and survives without
@@ -66,12 +66,28 @@ export function usePersonalViews(git: GitStorage, myEmail: string) {
     setMenu: (menu: MenuLayout) => change((current) => ({ ...current, menu })),
     filter: <T,>(page: string, check: (value: unknown) => T | undefined): T | undefined => check(views.filters[page]),
     setFilter: (page: string, value: unknown) => change((current) => ({ ...current, filters: { ...current.filters, [page]: value } })),
-    // Admins: my sections and menu become everyone's default (filters stay personal).
+    // BKL-47: one entry (e.g. the QMS-0025 column order) as everyone's default; the defaults file is read fresh first so
+    // the other defaults in it are kept.
+    saveEntryAsDefault: async (page: string, value: unknown) => {
+      const fresh = await readViewsDefaults()
+      const current = fresh.text != null ? parseViews(fresh.text) : defaults
+      const text = serializeViews(withDefaultEntry(current, page, value))
+      const saved = await git.writeViewsDefaults(text, `Default ${page} from ${email || 'a Tool Owner'}`)
+      const parsed = parseViews(saved.text)
+      setDefaults(parsed); write(cacheKey('defaults'), parsed)
+      return saved
+    },
+    // Admins: my sections and menu become everyone's default (filters stay personal). GIT-17: queued and merged with a
+    // default saved by someone else in between (per page; the later save wins for a page both changed).
     saveAsDefault: async () => {
       const text = serializeViews({ ...emptyViews(), sections: views.sections, menu: views.menu })
-      await git.writeViewsDefaults(text, `Default views from ${email || 'an admin'}`)
-      setDefaults(parseViews(text)); write(cacheKey('defaults'), parseViews(text))
+      const saved = await git.writeViewsDefaults(text, `Default views from ${email || 'an admin'}`)
+      const parsed = parseViews(saved.text)
+      setDefaults(parsed); write(cacheKey('defaults'), parsed)
+      return saved
     },
+    defaultsQueue: git.queueState(viewsDefaultsPath),
+    retryDefaults: () => git.retryQueued(viewsDefaultsPath),
   }
 }
 export type PersonalViewsStore = ReturnType<typeof usePersonalViews>

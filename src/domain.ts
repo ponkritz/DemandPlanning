@@ -182,6 +182,8 @@ export interface AzureWorkItem {
   parentId?: number
   targetDate?: string
   closedDate?: string
+  // Where closedDate came from when the item has no Closed Date (owner decision 10).
+  closedDateFrom?: 'state-change' | 'resolved' | 'history'
   changedDate?: string
   changedBy?: string
   approvalDate?: string

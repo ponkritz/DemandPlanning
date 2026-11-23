@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNow } from '../useNow'
 import { localTimeZone, timeZoneLabel } from '../format'
-import { applyTheme, nextThemePreference, readThemePreference, storeThemePreference, type ThemePreference } from '../theme'
+import { applyTheme, chooseTheme, nextThemePreference, readThemePreference, themeEvent, type ThemePreference } from '../theme'
 
 // System clock in the viewer's own time zone; every freshness label in the app is relative to this.
 export function Clock() {
@@ -19,8 +19,9 @@ const icons: Record<ThemePreference, string> = { system: '◐', light: '☀', da
 export function ThemeToggle() {
   const [preference, setPreference] = useState<ThemePreference>(() => readThemePreference())
   useEffect(() => { applyTheme(preference) }, [preference])
+  useEffect(() => { const follow = (event: Event) => setPreference((event as CustomEvent<ThemePreference>).detail); window.addEventListener(themeEvent, follow); return () => window.removeEventListener(themeEvent, follow) }, [])
   const next = nextThemePreference(preference)
-  return <button type="button" className="theme-toggle" onClick={() => { setPreference(next); storeThemePreference(next) }} aria-label={`Theme: ${labels[preference]}. Switch to ${labels[next]}.`} title={`Theme: ${labels[preference]} (click for ${labels[next]})`}>
+  return <button type="button" className="theme-toggle" onClick={() => chooseTheme(next)} aria-label={`Theme: ${labels[preference]}. Switch to ${labels[next]}.`} title={`Theme: ${labels[preference]} (click for ${labels[next]})`}>
     <span aria-hidden="true">{icons[preference]}</span>{labels[preference]}
   </button>
 }

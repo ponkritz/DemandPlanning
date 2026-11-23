@@ -24,8 +24,8 @@ export const pages: PageMeta[] = [
   { id: 'windchill', label: 'Import Windchill export', icon: '◇', group: 'Release Details', detail: 'A Windchill search exported to CSV and imported here: its results with the file’s columns, and its releases for the chosen month.', usesMonth: true },
   { id: 'brite', label: 'BRITE', icon: '◇', group: 'Release Details', detail: 'BRITE releases (planned): the exports and their rules are still to be defined.', usesMonth: false },
   { id: 'qemapping', label: 'QE Mapping', icon: '⇄', group: 'Data & governance', detail: 'QE mapping (planned).', usesMonth: false },
-  { id: 'snapshots', label: 'Snapshots', icon: '▣', group: 'Data & governance', detail: 'Save point-in-time app data to SharePoint for LTE and PI Review; manage browser backups.', usesMonth: true },
-  { id: 'admin', label: 'Settings', icon: '⚙', group: 'Settings', detail: 'Azure DevOps connections, Git and SharePoint storage, capacity, periods, resources, master data and audit.', usesMonth: true },
+  { id: 'snapshots', label: 'Snapshots', icon: '▣', group: 'Data & governance', detail: 'Save point-in-time app data to Git for LTE and PI Review; manage browser backups.', usesMonth: true },
+  { id: 'admin', label: 'Settings', icon: '⚙', group: 'Settings', detail: 'Azure DevOps connections, Git storage, capacity, periods, resources, master data and audit.', usesMonth: true },
   { id: 'docs', label: 'Documentation', icon: '☰', group: 'Data & governance', detail: 'Requirements, test plan and the other project documents of this build.', usesMonth: false },
 ]
 

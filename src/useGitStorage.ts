@@ -1,6 +1,7 @@
+import { listValidationDocuments as listPackage, readValidationDocument as readPackage } from './toolValidation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { useAppStore } from './store'
-import { canWrite, deleteFile, fileCommits, fileSha, forgetGitStorage, GitConflictError, historyUrl, listFolder, loadGitConfig, loadGitToken, planningData, readBinaryFile, readPlanningFile, readRawFile, readTextAt, readTextFile, saveGitConfig, saveGitToken, serializePlanning, siblingConfig, validateGitConfig, writeBinaryFile, writePlanningFile, writeTextFile, type GitConfig } from './gitStorage'
+import { canWrite, deleteFile, fileCommits, fileSha, readTextAt, forgetGitStorage, GitConflictError, historyUrl, listFolder, loadGitConfig, loadGitToken, planningData, readBinaryFile, readPlanningFile, readRawFile, readTextFile, saveGitConfig, saveGitToken, serializePlanning, siblingConfig, validateGitConfig, writePlanningFile, writeTextFile, type GitConfig } from './gitStorage'
 import { historyPath } from './history'
 import { packTemplateFile } from './pptxTemplate'
 import { applySnapshots, parseSnapshot, serializeSnapshot, snapshotDigest, snapshotFile, snapshotFileName, snapshotFolder, type SnapshotFile, type ViewSnapshot } from './gitSnapshots'
@@ -9,13 +10,14 @@ import { applyWindchillSnapshots, parseWindchillSnapshot, windchillDigest, windc
 import { loadWindchillViews, saveWindchillViews, type WindchillView } from './windchillViews'
 import { windchillAnalysisFolder } from './windchillReleases'
 import { loadAzureConnectionProfile, saveAzureConnectionProfile, type AzureConnectionProfileSummary, listAzureConnectionProfiles } from './azureCredentials'
-import { applyViewsReset, resetPending, parseViews, parseViewsReset, serializeViews, serializeViewsReset, sharedEmails, syncViewsFromGit, connectionKey, mergeViews, removedFromGit, viewsBackupFolder, viewsFile, viewsResetPath, type RemovedView } from './viewDefinitions'
+import { applyViewsReset, resetPending, parseViews, parseViewsReset, serializeViews, serializeViewsReset, sharedEmails, syncViewsFromGit, connectionKey, viewsBackupFolder, viewsFile, viewsResetPath, mergeViews, removedFromGit, type GitVersion } from './viewDefinitions'
 import { personalSetupPath } from './featureSetup'
-import { listValidationDocuments as listPackage, readValidationDocument as readPackage } from './toolValidation'
-import type { PeriodControl } from './domain'
-import { normalizePeriods, replacePeriod } from './planningLock'
 import { personalViewsPath, viewsDefaultsPath } from './personalViews'
 import { kpiTrackerFile } from './kpiTracker'
+import { freezeSnapshot, listSnapshots as listLteSnapshots, uploadSnapshot } from './cloudSnapshots'
+import { appBuild } from './buildInfo'
+import type { Snapshot } from './domain'
+import { mergeHistoryText, mergeKpiTrackerText, mergeViewsBackupText, mergeViewsDefaultsText, saveStamp, SaveQueue, writeQueuedBinary, writeQueuedText, type Merge, type QueueState } from './gitSaveQueue'
 import { changedFiles, fileLabel, watchedFolders, watchFocusGapMs, watchIntervalMs, type FolderEntry, type SeenVersions } from './gitWatch'
 
 export type GitStatus = 'off' | 'loading' | 'synced' | 'empty' | 'saving' | 'error' | 'conflict'
@@ -35,9 +37,26 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
   const seen = useRef<SeenVersions>({})
   // Newer versions in Git not loaded here yet (path → version), named in the banner; reading or saving a file drops it.
   const [remote, setRemote] = useState<Record<string, string | null>>({})
+  // GIT-17: the text last read or written here per file: the base a queued save is merged from.
+  const seenText = useRef<Record<string, string | null>>({})
   const remember = (path: string, version: string | null) => { seen.current[path] = version; setRemote((current) => path in current ? Object.fromEntries(Object.entries(current).filter(([key]) => key !== path)) : current) }
-  async function trackRead(target: GitConfig, key: string) { const read = await readTextFile(target, key); remember(target.path, read.sha); return read }
-  async function trackWrite(target: GitConfig, key: string, text: string, version: string | null, commitMessage: string) { const written = await writeTextFile(target, key, text, version, commitMessage); remember(target.path, written.sha); return written }
+  async function trackRead(target: GitConfig, key: string) { const read = await readTextFile(target, key); remember(target.path, read.sha); seenText.current[target.path] = read.text; return read }
+  // GIT-17: saves to the shared files that are merged rather than refused, queued per file in the order of their time.
+  const queue = useRef(new SaveQueue())
+  const [queueStates, setQueueStates] = useState<Record<string, QueueState>>({})
+  const queued = useRef(new Set<string>())
+  useEffect(() => queue.current.subscribe(() => setQueueStates(Object.fromEntries([...queued.current].map((path) => [path, queue.current.state(path)])))), [])
+  function queueText(target: GitConfig, key: string, text: string, commitMessage: string, merge: Merge, at = saveStamp()) {
+    queued.current.add(target.path)
+    return queue.current.enqueue(target.path, at, async () => {
+      const result = await writeQueuedText(target, key, { text, base: seenText.current[target.path] ?? null, at, message: commitMessage, merge })
+      remember(target.path, result.sha); seenText.current[target.path] = result.text
+      return { sha: result.sha ?? '', commitUrl: result.commitUrl || historyUrl(target), merged: result.merged, unchanged: result.unchanged, keptNewer: false, text: result.text }
+    })
+  }
+  const queueState = (file: string): QueueState => (config ? queueStates[siblingConfig(config, file).path] : undefined) ?? { waiting: 0, failed: 0, error: '' }
+  const retryQueued = (file: string) => config ? queue.current.retry(siblingConfig(config, file).path) : Promise.resolve([])
+  async function trackWrite(target: GitConfig, key: string, text: string, version: string | null, commitMessage: string) { const written = await writeTextFile(target, key, text, version, commitMessage); remember(target.path, written.sha); seenText.current[target.path] = text; return written }
   const current = serializePlanning(planningData(store.state))
   const connected = Boolean(config && token)
   // A read-only token (e.g. the viewers' shared token): baselines are shown but not edited here.
@@ -66,7 +85,7 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
       sha.current = file.sha; remember(target.path, file.sha)
       if (!file.data) { setSynced(''); setStatus('empty'); setMessage(`${target.path} does not exist yet in ${target.owner}/${target.repo}. Save to create it from the data in this app.`); return }
       const data = file.data
-      store.update((draft) => { draft.baselineRules = data.baselineRules; draft.releaseScopes = data.releaseScopes; draft.resourceProfiles = data.resourceProfiles; if (data.capacitySettings) draft.capacitySettings = data.capacitySettings; if (data.periods) draft.periods = data.periods; draft.setupLinks = data.setupLinks; if (data.tableDefaults) draft.tableDefaults = data.tableDefaults; if (data.releaseSourceSettings) draft.releaseSourceSettings = data.releaseSourceSettings; return draft })
+      store.update((draft) => { draft.baselineRules = data.baselineRules; draft.releaseScopes = data.releaseScopes; draft.resourceProfiles = data.resourceProfiles; if (data.capacitySettings) draft.capacitySettings = data.capacitySettings; draft.setupLinks = data.setupLinks; if (data.tableDefaults) draft.tableDefaults = data.tableDefaults; if (data.releaseSourceSettings) draft.releaseSourceSettings = data.releaseSourceSettings; return draft })
       setSynced(serializePlanning(data)); setCommitUrl(historyUrl(target)); setStatus('synced'); setMessage(`Loaded from ${target.owner}/${target.repo} · ${target.path}`)
     } catch (error) { setStatus('error'); setMessage(error instanceof Error ? error.message : String(error)) }
   }, [config, token, store])
@@ -140,22 +159,6 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     }
   }
 
-  // Save one month's controls against the latest shared data, preserving every other shared setting.
-  async function savePeriod(period: PeriodControl, expected?: PeriodControl) {
-    if (!config || !token) throw new Error('Connect Git storage first.')
-    if (!period.extensionReason?.trim()) throw new Error('Enter a reason for the period-control change.')
-    if (isSample) throw new Error('Synthetic sample data cannot be saved to shared storage.')
-    if ((await writeCheck.current) === false) throw new Error('The configured Git token is read-only. Contents: Read and write is required to save period controls.')
-    const file = await readPlanningFile(config, token)
-    const data = file.data ?? planningData(store.state)
-    const periods = replacePeriod(data.periods ?? normalizePeriods(store.state.periods), period, expected)
-    const next = { ...data, periods }
-    const result = await writePlanningFile(config, token, next, file.sha, `Update ${period.month} Plan/Actual controls: ${period.extensionReason}`)
-    sha.current = result.sha; setSynced(serializePlanning(next)); setCommitUrl(result.commitUrl)
-    store.update((draft) => { draft.periods = periods; return draft })
-    return result
-  }
-
   async function listValidationDocuments() {
     if (!config || !token) throw new Error('Connect Git storage first.')
     return listPackage(config, token)
@@ -185,8 +188,31 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     // A connection removed in Git goes with its data here, as a connection removed in Settings does.
     if (result.removedIds.length) store.update((draft) => { if (draft.azureSources?.some((source) => result.removedIds.includes(source.connectionId))) draft.azureSources = draft.azureSources.filter((source) => !result.removedIds.includes(source.connectionId)); return draft })
     const parts = [result.added.length && `${result.added.length} added (${result.added.join(', ')})`, result.updated.length && `${result.updated.length} updated (${result.updated.join(', ')})`, result.enforced.length && `stream mapping set by your admin applied: ${result.enforced.join(', ')}`, result.kept.length && `kept as changed here: ${result.kept.join(', ')}`, result.removed.length && `${result.removed.length} removed as in Git (${result.removed.join(', ')})`].filter(Boolean)
-    setViewsSync(resetNote + (result.emailCleared ? 'Your Time Writing connection had another person\'s email from the shared setup; it was removed — enter your own work email in Settings → Azure DevOps. ' : '') + (parts.length ? `Connections from Git: ${parts.join('; ')}.${result.noPat.length ? ` No PAT here yet for ${result.noPat.join(', ')}: they show the data saved to Git; add a PAT in Settings to fetch.` : ''}` : 'Connections are the same as in Git.'))
+    setViewsSync(resetNote + (result.emailCleared ? 'Your Time Writing connection had another person\'s email from the shared setup; it was removed — enter your own work email in My settings → Servers and PATs. ' : '') + (parts.length ? `Connections from Git: ${parts.join('; ')}.${result.noPat.length ? ` No PAT here yet for ${result.noPat.join(', ')}: they show the data saved to Git; add a PAT in Settings to fetch.` : ''}` : 'Connections are the same as in Git.'))
     return result
+  }
+  // CON-98: shares this computer's connections by merging them into the setup in Git (never dropping one only because
+  // it is not here); `removed` names the ones to take out. Returns the views now in Git.
+  async function shareViews(here: AzureConnectionProfileSummary[], commitMessage: string, removed: string[] = []) {
+    if (!viewsConfig || !token) throw new Error('Connect Git storage first.')
+    const current = await trackRead(viewsConfig, token)
+    const inGit = current.text ? parseViews(current.text) : []
+    const merged = mergeViews(inGit, here, removed)
+    const result = await writeViews(serializeViews(viewsFile(merged)), commitMessage)
+    return { ...result, views: merged }
+  }
+  // CON-99: connections in older versions of the shared setup that are neither in it now nor here (read only).
+  async function removedViews(here: AzureConnectionProfileSummary[], count = 30) {
+    if (!viewsConfig || !token) throw new Error('Connect Git storage first.')
+    const current = await trackRead(viewsConfig, token)
+    const inGit = current.text ? parseViews(current.text) : []
+    const versions: GitVersion[] = []
+    for (const commit of await fileCommits(viewsConfig, token, count)) {
+      const text = await readTextAt(viewsConfig, token, commit.sha)
+      if (!text) continue
+      try { versions.push({ ...commit, views: parseViews(text) }) } catch { /* an unreadable version is skipped */ }
+    }
+    return removedFromGit(versions, inGit, here)
   }
   async function writeViews(text: string, commitMessage: string) {
     if (!viewsConfig || !token) throw new Error('Connect Git storage first.')
@@ -194,27 +220,6 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     const current = await trackRead(viewsConfig, token)
     if (current.text === text) return { changed: false, commitUrl: historyUrl(viewsConfig) }
     return { changed: true, ...(await trackWrite(viewsConfig, token, text, current.sha, commitMessage)) }
-  }
-  // CON-98: saving the shared setup merges connections already in Git, unless the caller explicitly removed one.
-  async function shareViews(views: AzureConnectionProfileSummary[], commitMessage: string, removed: string[] = []) {
-    if (!viewsConfig || !token) throw new Error('Connect Git storage first.')
-    if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
-    const current = await trackRead(viewsConfig, token)
-    const inGit = current.text == null ? [] : parseViews(current.text)
-    const text = serializeViews(viewsFile(mergeViews(inGit, views, removed)))
-    if (current.text === text) return { changed: false, commitUrl: historyUrl(viewsConfig) }
-    return { changed: true, ...(await trackWrite(viewsConfig, token, text, current.sha, commitMessage)) }
-  }
-  // CON-99: inspect prior versions of the shared setup without writing credentials or connection data.
-  async function removedViews(here: AzureConnectionProfileSummary[]): Promise<RemovedView[]> {
-    if (!viewsConfig || !token) throw new Error('Connect Git storage first.')
-    const current = await readViews()
-    const commits = await fileCommits(viewsConfig, token)
-    const versions = (await Promise.all(commits.map(async (commit) => {
-      const text = await readTextAt(viewsConfig, token, commit.sha)
-      return text == null ? null : { ...commit, views: parseViews(text) }
-    }))).filter((entry): entry is { sha: string; date: string; message: string; views: AzureConnectionProfileSummary[] } => entry != null)
-    return removedFromGit(versions, current.text == null ? [] : parseViews(current.text), here)
   }
 
   // Back up and clean up (CON-88). backupViews: the connection setup as it is now, as a new dated file in
@@ -224,7 +229,7 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     if (!config || !token) throw new Error('Connect Git storage first.')
     if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
     const target = siblingConfig(config, `${viewsBackupFolder}/${name}`)
-    return { path: target.path, ...(await writeTextFile(target, token, text, await fileSha(target, token), commitMessage)) }
+    return { path: target.path, ...(await queueText(target, token, text, commitMessage, mergeViewsBackupText)) }
   }
   async function resetViews(resetAt: string, commitMessage: string) {
     if (!config || !token || !viewsConfig) throw new Error('Connect Git storage first.')
@@ -252,20 +257,20 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     if (!config || !token) throw new Error('Connect Git storage first.')
     return trackRead(siblingConfig(config, 'feature-setup.json'), token)
   }, [config, token])
-  // The per-Epic creation setup is a separate shared file from the Feature setup.
-  const readEpicSetup = useCallback(async () => {
-    if (!config || !token) throw new Error('Connect Git storage first.')
-    return trackRead(siblingConfig(config, 'epic-setup.json'), token)
-  }, [config, token])
-  async function writeEpicSetup(text: string, version: string | null, commitMessage: string) {
-    if (!config || !token) throw new Error('Connect Git storage first.')
-    if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
-    return trackWrite(siblingConfig(config, 'epic-setup.json'), token, text, version, commitMessage)
-  }
   async function writeFeatureSetup(text: string, sha: string | null, commitMessage: string) {
     if (!config || !token) throw new Error('Connect Git storage first.')
     if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
     return trackWrite(siblingConfig(config, 'feature-setup.json'), token, text, sha, commitMessage)
+  }
+  // EPS-01: the Epic setup (epic-setup.json): the same rules as the shared Feature setup.
+  const readEpicSetup = useCallback(async () => {
+    if (!config || !token) throw new Error('Connect Git storage first.')
+    return trackRead(siblingConfig(config, 'epic-setup.json'), token)
+  }, [config, token])
+  async function writeEpicSetup(text: string, sha: string | null, commitMessage: string) {
+    if (!config || !token) throw new Error('Connect Git storage first.')
+    if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
+    return trackWrite(siblingConfig(config, 'epic-setup.json'), token, text, sha, commitMessage)
   }
   // The QE Mapping table (qe-mapping.json): read and saved like the shared Feature setup.
   const readQeMapping = useCallback(async () => {
@@ -285,19 +290,27 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
   async function writeKpiTracker(text: string, commitMessage: string) {
     if (!config || !token) throw new Error('Connect Git storage first.')
     if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
-    const target = siblingConfig(config, kpiTrackerFile)
-    return trackWrite(target, token, text, await fileSha(target, token), commitMessage)
+    return queueText(siblingConfig(config, kpiTrackerFile), token, text, commitMessage, mergeKpiTrackerText)
   }
+  // SNP-04…08: LTE / PI Review snapshots as new files in lte-snapshots/ of the Git data repository (SharePoint is in the
+  // backlog). Only with a token that can write, never with the synthetic sample; nothing is kept in the browser.
+  async function saveSnapshot(type: Snapshot['type'], month: string, createdBy: string) {
+    if (!config || !token) throw new Error('Connect Git storage first (Admin → Data & sharing → Git storage). Snapshots are not kept in the browser.')
+    if (isSample) throw new Error('Synthetic sample data is loaded. Snapshots are not saved to Git.')
+    if ((await writeCheck.current) === false) throw new Error('Your Git token can read but not save, so the snapshot was not saved.')
+    return uploadSnapshot(config, token, freezeSnapshot(store.state, type, month, createdBy, appBuild))
+  }
+  const listSnapshots = useCallback(async () => (config && token ? listLteSnapshots(config, token) : []), [config, token])
   // Historical hours (HIS-04): the imported history (history-hours.json), read by everyone, saved or removed by roles
   // with Manage shared settings (checked on the page).
   const readHistory = useCallback(async () => {
     if (!config || !token) throw new Error('Connect Git storage first.')
     return trackRead(siblingConfig(config, historyPath), token)
   }, [config, token])
-  async function writeHistory(text: string, sha: string | null, commitMessage: string) {
+  async function writeHistory(text: string, commitMessage: string) {
     if (!config || !token) throw new Error('Connect Git storage first.')
     if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
-    return trackWrite(siblingConfig(config, historyPath), token, text, sha, commitMessage)
+    return queueText(siblingConfig(config, historyPath), token, text, commitMessage, mergeHistoryText)
   }
   // The planning workbooks kept in the data repository (HIS-11): .xlsx files in its folder and in history/, read for the
   // import without downloading them first.
@@ -320,7 +333,7 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
   async function removeHistory(commitMessage: string) {
     if (!config || !token) throw new Error('Connect Git storage first.')
     if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
-    const removed = await deleteFile(siblingConfig(config, historyPath), token, commitMessage); remember(siblingConfig(config, historyPath).path, null); return removed
+    const removed = await deleteFile(siblingConfig(config, historyPath), token, commitMessage); remember(siblingConfig(config, historyPath).path, null); seenText.current[siblingConfig(config, historyPath).path] = null; return removed
   }
   // The Monthly pack: its shared setup (monthly-pack-setup.json) and a month's text (monthly-pack/<YYYY-MM>.json),
   // read and saved like the shared Feature setup.
@@ -335,7 +348,7 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     return trackWrite(siblingConfig(config, packPath(name)), token, text, sha, commitMessage)
   }
   // The Monthly pack's PowerPoint template (monthly-pack-template.pptx): kept only in this private data repository,
-  // never in the app's source; read when the pack is exported, replaced or removed from Settings → Monthly pack.
+  // never in the app's source; read when the pack is exported, replaced or removed from Admin → Reports → Monthly pack.
   const readPackTemplate = useCallback(async () => {
     if (!config || !token) throw new Error('Connect Git storage first.')
     return readBinaryFile(siblingConfig(config, packTemplateFile), token)
@@ -343,9 +356,10 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
   async function writePackTemplate(bytes: Uint8Array | null, commitMessage: string) {
     if (!config || !token) throw new Error('Connect Git storage first.')
     if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
-    const target = siblingConfig(config, packTemplateFile)
-    if (!bytes) { await deleteFile(target, token, commitMessage); return null }
-    return writeBinaryFile(target, token, bytes, await fileSha(target, token), commitMessage)
+    const target = siblingConfig(config, packTemplateFile), at = saveStamp()
+    queued.current.add(target.path)
+    const result = await queue.current.enqueue(target.path, at, () => writeQueuedBinary(target, token, { bytes, at, message: commitMessage }))
+    return { ...result, commitUrl: result.commitUrl || historyUrl(target) }
   }
   // A person's own Feature setup (feature-setup/<email>.json): read and saved like the shared one.
   const readPersonalFeatureSetup = useCallback(async (email: string) => {
@@ -375,8 +389,7 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
   async function writeViewsDefaults(text: string, commitMessage: string) {
     if (!config || !token) throw new Error('Connect Git storage first.')
     if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
-    const target = siblingConfig(config, viewsDefaultsPath)
-    return trackWrite(target, token, text, await fileSha(target, token), commitMessage)
+    return queueText(siblingConfig(config, viewsDefaultsPath), token, text, commitMessage, mergeViewsDefaultsText)
   }
   async function writePersonalFeatureSetup(email: string, text: string, sha: string | null, commitMessage: string) {
     if (!config || !token) throw new Error('Connect Git storage first.')
@@ -416,7 +429,8 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     return run
   }
   async function pushSnapshotNow(profile: AzureConnectionProfileSummary, source: ViewSnapshot) {
-    if (!config || !token || isSample) return
+    // SET-17: My views stay on this computer: their data is never saved to Git.
+    if (!config || !token || isSample || profile.mine) return
     const target = siblingConfig(config, `${snapshotFolder}/${snapshotFileName(profile.id)}`)
     try {
       if ((await writeCheck.current) === false) { note(profile.id, 'info', 'Not saved to Git: the Git token here is read-only.'); return }
@@ -491,7 +505,7 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
   // replaced only by newer ones, and an export not set up here is added.
   // The Location analysis of an export (windchillLocationsFile) to windchill-analysis/<export>-locations.json.
   async function pushWindchillAnalysis(viewId: string, text: string, message: string): Promise<string> {
-    if (!config || !token) throw new Error('Connect Git storage (Settings → Storage) first.')
+    if (!config || !token) throw new Error('Connect Git storage (Admin → Data & sharing) first.')
     if (isSample) throw new Error('Not saved while the sample data is shown.')
     const target = siblingConfig(config, `${windchillAnalysisFolder}/${viewId}-locations.json`)
     const sha = await fileSha(target, token)
@@ -529,6 +543,6 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     setConfig(null); setToken(''); setSynced(null); setStatus('off'); setMessage('Git storage disconnected in this browser. The data stays in the app and in the repository.'); sha.current = null
   }
 
-  return { readPersonalViews, writePersonalViews, readViewsDefaults, writeViewsDefaults, savePeriod, listValidationDocuments, readValidationDocument, backupViews, resetViews, readPackTemplate, writePackTemplate, packTemplateHistory: config ? historyUrl(siblingConfig(config, packTemplateFile)) : '', config, connected, readOnly, status, message, dirty, commitUrl, history: config ? historyUrl(config) : '', isSample, load: () => load(), connect, remoteChanges, save, disconnect, viewsPath: viewsConfig?.path ?? '', viewsHistory: viewsConfig ? historyUrl(viewsConfig) : '', readViews, writeViews, shareViews, removedViews, syncViews, pushWindchillAnalysis, accessScope: accessConfig && token ? `${accessConfig.owner}/${accessConfig.repo}@${accessConfig.branch}:${accessConfig.path}` : '', accessPath: accessConfig?.path ?? '', accessHistory: accessConfig ? historyUrl(accessConfig) : '', readAccess, writeAccess, readFeatureSetup, writeFeatureSetup, readEpicSetup, writeEpicSetup, readPersonalFeatureSetup, writePersonalFeatureSetup, featureSetupHistory: config ? historyUrl(siblingConfig(config, 'feature-setup.json')) : '', epicSetupHistory: config ? historyUrl(siblingConfig(config, 'epic-setup.json')) : '', readQeMapping, writeQeMapping, readKpiTracker, writeKpiTracker, kpiTrackerHistory: config ? historyUrl(siblingConfig(config, kpiTrackerFile)) : '', readHistory, writeHistory, removeHistory, listWorkbooks, readWorkbook, historyFileHistory: config ? historyUrl(siblingConfig(config, historyPath)) : '', readMonthlyPack, writeMonthlyPack, monthlyPackHistory: (name: string) => config ? historyUrl(siblingConfig(config, name)) : '', qeMappingHistory: config ? historyUrl(siblingConfig(config, 'qe-mapping.json')) : '', removeSnapshots, viewsSync, snapshotNotes, pushSnapshot, pullSnapshot, pullSnapshots, pushWindchill, pullWindchill, pullWindchillOne, snapshotsHistory: config ? historyUrl(siblingConfig(config, snapshotFolder)) : '' }
+  return { listValidationDocuments, readValidationDocument, queueState, retryQueued, saveSnapshot, listSnapshots, readPersonalViews, writePersonalViews, readViewsDefaults, writeViewsDefaults, backupViews, resetViews, readPackTemplate, writePackTemplate, packTemplateHistory: config ? historyUrl(siblingConfig(config, packTemplateFile)) : '', config, connected, readOnly, status, message, dirty, commitUrl, history: config ? historyUrl(config) : '', isSample, load: () => load(), connect, remoteChanges, save, disconnect, viewsPath: viewsConfig?.path ?? '', viewsHistory: viewsConfig ? historyUrl(viewsConfig) : '', readViews, writeViews, shareViews, removedViews, syncViews, pushWindchillAnalysis, accessScope: accessConfig && token ? `${accessConfig.owner}/${accessConfig.repo}@${accessConfig.branch}:${accessConfig.path}` : '', accessPath: accessConfig?.path ?? '', accessHistory: accessConfig ? historyUrl(accessConfig) : '', readAccess, writeAccess, readFeatureSetup, writeFeatureSetup, readEpicSetup, writeEpicSetup, epicSetupHistory: config ? historyUrl(siblingConfig(config, 'epic-setup.json')) : '', readPersonalFeatureSetup, writePersonalFeatureSetup, featureSetupHistory: config ? historyUrl(siblingConfig(config, 'feature-setup.json')) : '', readQeMapping, writeQeMapping, readKpiTracker, writeKpiTracker, kpiTrackerHistory: config ? historyUrl(siblingConfig(config, kpiTrackerFile)) : '', readHistory, writeHistory, removeHistory, listWorkbooks, readWorkbook, historyFileHistory: config ? historyUrl(siblingConfig(config, historyPath)) : '', readMonthlyPack, writeMonthlyPack, monthlyPackHistory: (name: string) => config ? historyUrl(siblingConfig(config, name)) : '', qeMappingHistory: config ? historyUrl(siblingConfig(config, 'qe-mapping.json')) : '', removeSnapshots, viewsSync, snapshotNotes, pushSnapshot, pullSnapshot, pullSnapshots, pushWindchill, pullWindchill, pullWindchillOne, snapshotsHistory: config ? historyUrl(siblingConfig(config, snapshotFolder)) : '' }
 }
 export type GitStorage = ReturnType<typeof useGitStorage>

@@ -15,11 +15,9 @@ This plan says what is under configuration control, how each item is identified 
 | Build and release definition | `.github/workflows/build-and-deploy.yml`, `electron-builder` settings in `package.json` | Git revision | Pull request |
 | Build outputs | GitHub Pages (web app), GitHub release `desktop-latest` (installers, `SHA256SUMS`, `latest.json`), tagged releases `vX.Y.Z` | Version, CI build number and Git revision in `build-info.json` and `latest.json`; SHA-256 per installer | Only by CI (§5); never by hand |
 | Shared team configuration | The private data repository (default `ponkritz/DemandPlanningStorage`): `azure-views.json` (connections and stream mapping), `access.json` (roles), `feature-setup.json`, `qe-mapping.json`, the Monthly pack setup and template, planning data, snapshots and analysis files | Git commit history of that repository | The app, by users whose role allows it (Manage shared settings for the setup files); every save is a commit |
-| Per-user configuration | Browser or desktop local storage: PATs (one per server), connections, view preferences | Not identified; never shared | The user; PATs never leave the device (no Git, backups or SharePoint) |
+| Per-user configuration | Browser or desktop local storage: PATs (one per server), connections, view preferences | Not identified; never shared | The user; PATs never leave the device (no Git or backups) |
 
-Not configuration items: local `node_modules`, `dist/` and `release/` build folders, and data in Azure DevOps, Windchill or SharePoint (owned by those systems).
-
-The separate Philips Tool Validation Package is stored under `tool-validation/demandplanning` in the private data repository, identified by that repository's commit history. Documentation → Tool Validation Package uses the Git storage PAT to list and download files in Web and Windows Desktop. Contents: Read is sufficient; write access is not required. Package files are fetched on request, retain their original formats and are not bundled in this public app repository or app backups. Blank templates and draft records are distinct from executed, approved validation evidence. Configure the PAT locally on each browser/desktop installation in Settings → Storage; never add it to repository files. The UI supports the package root and the process-references, blank-templates, records, supporting and planning folders.
+Not configuration items: local `node_modules`, `dist/` and `release/` build folders, and data in Azure DevOps, Windchill or SharePoint — the KPI tracker workbook — (owned by those systems).
 
 ## 2. Identification
 
@@ -85,5 +83,5 @@ The shared setup files in the data repository are configuration of the running a
 
 - Only roles with **Manage shared settings** change the stream mapping and the other shared setup files in the app; every change is a commit, so it can be inspected and reverted in the data repository.
 - The admin's **stream mapping** is enforced on every user at their next start (CON-79); a user's own connections outside it stay local.
-- PATs are never written to the data repository, backups or SharePoint; one PAT per server stays in each user's browser or desktop app.
+- PATs are never written to the data repository or backups; one PAT per server stays in each user's browser or desktop app.
 - Writes to Azure DevOps go to dev.azure.com only; on-premises servers are read-only.

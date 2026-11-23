@@ -1,11 +1,12 @@
 import { useMemo, useRef, useState } from 'react'
 import type { AzureWorkItem } from '../domain'
-import { buildHistoryFile, defaultCutoff, featureChecks, groupOf, matchPeople, parseHistorySheet, pickHistorySheet, streamsWithoutEpic, withHistory, type HistoryRow, type SkippedRow, type UnreadableId } from '../history'
+import { buildHistoryFile, defaultCutoff, historyPath, featureChecks, groupOf, matchPeople, parseHistorySheet, pickHistorySheet, streamsWithoutEpic, withHistory, type HistoryRow, type SkippedRow, type UnreadableId } from '../history'
 import type { HistoryStore } from '../useHistory'
 import type { GitStorage } from '../useGitStorage'
 import { readXlsx } from '../xlsx'
 import { formatDateTime, formatHours, monthName } from '../format'
-import { EmptyState, Metric, Metrics, Notice, Panel, SettingsSummary } from './ui'
+import { EmptyState, Metric, Metrics, Notice, Panel, SaveQueueStatus, SettingsSummary } from './ui'
+import { outcomeText } from '../gitSaveQueue'
 
 interface Draft { source: string; sheet: string; rows: HistoryRow[]; skipped: SkippedRow[]; unreadable: UnreadableId[]; cutoff: string; people: Record<string, string>; streamEpics: Record<string, number> }
 
@@ -65,8 +66,8 @@ export function HistoryPanel({ history, git, items, profileNames, editable, impo
     setBusy(true); setStatus('Saving to Git…')
     try {
       const next = buildHistoryFile({ rows: draft.rows.filter((row) => row.month < draft.cutoff), cutoff: draft.cutoff, source: draft.source, sheet: draft.sheet, importedBy, streamEpics: draft.streamEpics, people: draft.people })
-      await history.save(next, `Historical hours from ${draft.source} (${next.rows.length} rows before ${draft.cutoff})`)
-      setDraft(null); setStatus('Saved to Git. The reports now count the history before the cut-off month.')
+      const saved = await history.save(next, `Historical hours from ${draft.source} (${next.rows.length} rows before ${draft.cutoff})`)
+      setDraft(null); setStatus(`${outcomeText(saved)} The reports now count the history before the cut-off month.`)
     } catch (failure) { setStatus(`Not saved: ${failure instanceof Error ? failure.message : String(failure)}`) }
     setBusy(false)
   }
@@ -121,6 +122,7 @@ export function HistoryPanel({ history, git, items, profileNames, editable, impo
     </div>}
     {!editable && git.connected && <small className="muted">Only roles with Manage shared settings can upload, replace or remove the historical hours.</small>}
     {status && <Notice tone={/^Not /.test(status) ? 'error' : 'info'}>{status}</Notice>}
+    <SaveQueueStatus state={git.queueState(historyPath)} onRetry={() => void git.retryQueued(historyPath).then(() => history.reload())} />
     {draft && <div className="history-draft">
       <h3>Check before saving · {draft.source} · sheet {draft.sheet}</h3>
       <label className="inline-field">Cut-off month (first month from Azure DevOps)<input type="month" value={draft.cutoff} onChange={(event) => /^\d{4}-\d{2}$/.test(event.target.value) && setDraft({ ...draft, cutoff: event.target.value })} /></label>

@@ -1,5 +1,5 @@
 import { IoccBulkCreate } from './IoccBulkCreate'
-import { useCan } from '../useCan'
+import { useWriteBlock } from '../useCan'
 import type { QeMappingFile } from '../qeMapping'
 import { useMemo, useState, type ReactNode } from 'react'
 import { ContentBulkCreate } from './ContentBulkCreate'
@@ -13,7 +13,7 @@ import type { AzureWorkspace } from '../useAzureWorkspace'
 import { formatDate, formatHours } from '../format'
 import { QueryView } from './QueryView'
 import { ResultTabs } from './ResultTabs'
-import { EmptyState, Pill, TablePanel } from './ui'
+import { EmptyState, Pill, TablePanel, WriteBlocked } from './ui'
 import type { QueryColumn, QueryOrder } from '../queryView'
 import { DataTable, type DataColumn } from './DataTable'
 import { useStreamEpics } from '../useStreamEpics'
@@ -61,9 +61,9 @@ function ReleaseTable({ name, title = 'Releases', detail, register, azure, assig
   // UI-07…12: the release table follows the shared design default; the documents of a release open under it.
   // CNB-01: Content releases are ticked for Create Features (all assigned to one person, chosen in the pop-up).
   // QV-59: IOCC releases too, by the DP rules (IoccBulkCreate).
-  // CON-94: bulk creation needs "Bulk create Features".
-  const can = useCan()
-  const bulk = (titled || Boolean(typed)) && Boolean(azure) && can('work.bulk')
+  // CON-94: bulk creation needs "Bulk create Features"; CON-102: without it Create Features is disabled and says why.
+  const write = useWriteBlock(), bulkWhy = write.why('work.bulk')
+  const bulk = (titled || Boolean(typed)) && Boolean(azure)
   const [picked, setPicked] = useState<string[]>([])
   const [bulkOpen, setBulkOpen] = useState(false)
   const featureMatch = (release: ReleaseEntry) => matches.get(release.key)?.feature
@@ -93,7 +93,7 @@ function ReleaseTable({ name, title = 'Releases', detail, register, azure, assig
   </> : null
   return <TablePanel title={title} detail={detail} info={info} action={action}>
       {bulkOpen && azure && (typed ? <IoccBulkCreate releases={register.filter((release) => picked.includes(release.key))} featureTitle={featureTitle} featureMatch={featureMatch} azure={azure} featureSetup={featureSetup} qeMapping={qeMapping} onClose={() => { setBulkOpen(false); setPicked([]) }} /> : <ContentBulkCreate releases={register.filter((release) => picked.includes(release.key))} featureTitle={featureTitle} featureMatch={featureMatch} azure={azure} onClose={() => { setBulkOpen(false); setPicked([]) }} />)}
-      {register.length ? <DataTable id={`releases:${name}:${title}`} className="release-register" columns={columns} rows={register} rowKey={(release) => release.key} exportName={`${name} ${title}`} toolbar={bulk ? <><span className="muted">{picked.length} selected</span><button type="button" className="ghost" disabled={!register.length} onClick={() => setPicked(register.filter((release) => !fullMatch(featureMatch(release))).map((release) => release.key))}>Select all</button><button type="button" className="ghost" disabled={!picked.length} onClick={() => setPicked([])}>Clear</button><button type="button" className="primary" disabled={!picked.length || !assign?.canChoose} title={assign?.canChoose ? 'Create a Feature for each selected release, all assigned to one person' : 'Needs the right to create work items for other people (Admin → People & roles → Role rights)'} onClick={() => setBulkOpen(true)}>Create Features ({picked.length})</button></> : grouping} expand={documents} group={groups ? (_, row, span) => groupLines(groups, row, span) : undefined} /> : empty ?? <EmptyState title="No releases." />}
+      {register.length ? <DataTable id={`releases:${name}:${title}`} className="release-register" columns={columns} rows={register} rowKey={(release) => release.key} exportName={`${name} ${title}`} toolbar={bulk ? <><span className="muted">{picked.length} selected</span><button type="button" className="ghost" disabled={!register.length} onClick={() => setPicked(register.filter((release) => !fullMatch(featureMatch(release))).map((release) => release.key))}>Select all</button><button type="button" className="ghost" disabled={!picked.length} onClick={() => setPicked([])}>Clear</button><WriteBlocked reason={bulkWhy} /><button type="button" className="primary" disabled={!picked.length || !assign?.canChoose || Boolean(bulkWhy)} title={bulkWhy || (assign?.canChoose ? 'Create a Feature for each selected release, all assigned to one person' : 'Needs the right to create work items for other people (Admin → People & roles → Role rights)')} onClick={() => setBulkOpen(true)}>Create Features ({picked.length})</button></> : grouping} expand={documents} group={groups ? (_, row, span) => groupLines(groups, row, span) : undefined} /> : empty ?? <EmptyState title="No releases." />}
     </TablePanel>
 }
 

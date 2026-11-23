@@ -1,7 +1,7 @@
 import test, { after, before } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { loadSample, navigate, openPage, startApp, text } from './helpers.mjs'
+import { loadSample, navigate, openPage, rolesFile, startApp, text } from './helpers.mjs'
 
 // Monthly pack scenarios of the UAT (TC-PCK-04), automated against the built web app with the synthetic sample.
 let app
@@ -12,7 +12,7 @@ const previousMonthName = () => { const now = new Date(); return new Date(now.ge
 const previousMonthKey = () => { const now = new Date(); const at = new Date(now.getFullYear(), now.getMonth() - 1, 1); return `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, '0')}` }
 
 test('TC-PCK-04: Pulse Check → Monthly pack shows both slides for the month before the header month, with the generated lines, and downloads them as .pptx', async () => {
-  const { page, context, errors } = await openPage(app)
+  const { page, context, errors } = await openPage(app, { roles: true })
   await loadSample(page)
   await navigate(page, 'Pulse Check')
   const tab = page.getByRole('tab', { name: /^Monthly pack/ })
@@ -30,7 +30,7 @@ test('TC-PCK-04: Pulse Check → Monthly pack shows both slides for the month be
   assert.equal(await panel.locator('.pack-plus, .pack-add, .pack-bullets input').count(), 0, 'the bullets are read-only without a Git token that can save: no + and no fields (PCK-10)')
   assert.equal(await panel.locator('.pack-box > textarea').count(), 0, 'no free-text boxes any more: bullets with + (PCK-10)')
   assert.equal(await panel.locator('ul.pack-bullets').count(), 11, 'one bullet list per typed slide box, Actions/Deliverables Realized included; Overall status is chosen (PCK-08)')
-  assert.deepEqual(await panel.getByLabel(/^Overall status for /).locator('option').allInnerTexts(), ['On Track (default)', 'On Track', 'At Risk', 'Off Track'])
+  assert.deepEqual(await panel.getByLabel(/^Overall status for /).locator('option').allInnerTexts(), ['Not set', 'On Track', 'At Risk', 'Off Track'])
   assert.match(body, /Performance Pulse update .*2x2 /, 'page 1 the Performance Pulse, page 2 the 2x2 (PCK-01)')
   const [download] = await Promise.all([page.waitForEvent('download'), panel.getByRole('button', { name: 'Download .pptx' }).click()])
   assert.equal(download.suggestedFilename(), `pulse-check-${previousMonthKey()}.pptx`)
@@ -41,7 +41,8 @@ test('TC-PCK-04: Pulse Check → Monthly pack shows both slides for the month be
   assert.ok(bytes.toString('utf8').includes('<a:t>Actions/Deliverables Realized</a:t>') && bytes.toString('utf8').includes('<a:t>KPI Pulse</a:t>'), 'the boxes are in the slides')
   // Admin → Reports → Monthly pack lists the default slide lines and KPI rows (read-only with the sample).
   await page.locator('.sidebar nav button', { hasText: /^.Reports$/ }).first().click()
-  await page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'Monthly pack' }).click()
+  // Reports holds only the Monthly pack since Table and chart defaults moved to Look & feel (SET-18): no section row.
+  await page.locator('.admin-section', { hasText: 'Monthly pack setup' }).waitFor()
   const setup = await text(page.locator('.admin-section', { hasText: 'Monthly pack setup' }))
   for (const line of ['Serviceability', 'Digital Platform', 'Clinical Platform', 'IOCC', 'PPU', 'Content', 'Tool validation', 'Utilization (YTD)', 'Overall CAPA Health']) assert.ok(setup.includes(line) || await page.locator(`input[value="${line}"]`).count() === 1, line)
   assert.match(setup, /Capabilities bullet.*unique Features under these Epics that have hours recorded in the month/s, 'PCK-11: the Capabilities bullet and its Epics')
@@ -51,12 +52,12 @@ test('TC-PCK-04: Pulse Check → Monthly pack shows both slides for the month be
 })
 
 test('TC-PCK-08: every Monthly pack box adds bullets with + (below a bullet) and + Add bullet (at the end); Enter adds one below, ✕ removes; Save to Git turns on', async () => {
-  // Git storage connected with a token (no sample): the text can be typed. Git answers 404 (nothing saved yet), so nothing is written.
-  const { page, context, errors } = await openPage(app, { init: () => {
+  // Git storage connected with a token (no sample): the text can be typed. Git answers 404 (nothing saved yet) except for the roles file (CON-101), so nothing is written.
+  const { page, context, errors } = await openPage(app, { roles: true, init: () => {
     localStorage.setItem('demand-planning-git-storage-v1', JSON.stringify({ owner: 'example', repo: 'storage', branch: 'main', path: 'planning-data.json' }))
     localStorage.setItem('demand-planning-git-token-v1', 'test-token')
   } })
-  await context.route('https://api.github.com/**', (route) => route.fulfill({ status: 404, contentType: 'application/json', body: '{"message":"Not Found"}' }))
+  await context.route('https://api.github.com/**', (route) => /\/contents\/access\.json/.test(route.request().url()) ? route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(rolesFile()) }) : route.fulfill({ status: 404, contentType: 'application/json', body: '{"message":"Not Found"}' }))
   await page.reload()
   await navigate(page, 'Pulse Check')
   await page.getByRole('tab', { name: /^Monthly pack/ }).click()

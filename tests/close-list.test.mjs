@@ -59,3 +59,51 @@ test('BKL-39: closing runs children first; a parent stays open when an item belo
   assert.deepEqual(result.skipped, ['#13 left open: an item below it could not be closed', '#10 left open: an item below it could not be closed'])
   assert.deepEqual(writes.map(([id]) => id), [12, 14, 11])
 })
+
+test('BKL-43: closing a Feature early lists its later months’ Time Writing Tasks to remove (everyone’s, ticked; not those with Completed Work) (TC-BKL-32)', async () => {
+  const now = new Date('2026-11-23T10:00:00Z')
+  const items = [...world(),
+    item(20, 'Task', 'December 2026 | DP | Core | 5.2', 13),
+    item(21, 'Task', 'January 2027 | DP | Core | 5.2', 13, { ...ben, state: 'New' }),
+    item(22, 'Task', 'December 2026 | DP | Core | 5.2', 13, { ...ben, completedWork: 3 })]
+  const rows = closeTree(items, items[1], me, 0, undefined, now)
+  assert.deepEqual(rows.filter((row) => row.remove).map((row) => row.item.id), [20, 21], 'later months without Completed Work; this month (#14, #15) and #22 (3 h done) are closed as usual')
+  const ticks = defaultTicks(rows)
+  assert.ok(ticks.has(20) && ticks.has(21), 'ticked whoever they belong to')
+  assert.ok(!ticks.has(22), 'Ben’s Task with hours is not ticked')
+  const all = toggleTick(rows, ticks, 10, true)
+  const selection = closeSelection(rows, all)
+  assert.deepEqual(selection.removals.map((entry) => entry.id), [20, 21])
+  assert.ok(!selection.items.some((entry) => [20, 21].includes(entry.id)), 'removed, not closed')
+  const writes = []
+  const write = async (_c, _p, id, update) => { writes.push(`${id}:${update.state}`); return { ...items.find((entry) => entry.id === id), state: update.state } }
+  const zero = async (_c, _p, id) => { writes.push(`${id}:0h`); return { ...items.find((entry) => entry.id === id), originalEstimate: 0 } }
+  const result = await closeChosen({}, 'pat', selection, write, undefined, zero)
+  assert.deepEqual(writes.slice(0, 4), ['20:0h', '20:Removed', '21:0h', '21:Removed'], 'first 0 h, then Removed, before anything closes')
+  assert.deepEqual(result.removed.map((entry) => entry.id), [20, 21])
+  assert.ok(result.closed.some((entry) => entry.id === 10), 'then the Feature closes')
+  assert.equal(closeTree(items, items[1], me, 0, undefined, new Date('2027-02-01T00:00:00Z')).some((row) => row.remove), false, 'nothing later once those months have come')
+})
+
+test('BKL-43: a later month that cannot be removed keeps its story and the Feature open (TC-BKL-32)', async () => {
+  const now = new Date('2026-11-23T10:00:00Z')
+  const items = [...world(), item(20, 'Task', 'December 2026 | DP | Core | 5.2', 13)]
+  const rows = closeTree(items, items[1], me, 0, undefined, now)
+  const selection = closeSelection(rows, toggleTick(rows, defaultTicks(rows), 10, true))
+  const write = async (_c, _p, id, update) => ({ ...items.find((entry) => entry.id === id), state: update.state })
+  const zero = async () => { throw new Error('refused') }
+  const result = await closeChosen({}, 'pat', selection, write, undefined, zero)
+  assert.match(result.failed.join(), /#20: refused/)
+  assert.ok(!result.closed.some((entry) => [13, 10].includes(entry.id)), 'the Time Writing story and the Feature stay open')
+})
+
+test('BKL-42: Close Tasks lists the ticked Task alone, with the hours question; a User Story close removes later months only when it closes the Feature (TC-BKL-31)', () => {
+  const items = [...world(), item(20, 'Task', 'December 2026 | DP | Core | 5.2', 13)]
+  const rows = closeTree(items, items.find((entry) => entry.id === 14), me)
+  assert.deepEqual(rows.map((row) => row.item.id), [14])
+  assert.equal(rows[0].remove, undefined)
+  assert.equal(closeSelection(rows, defaultTicks(rows)).needsHours, true, 'a month Task asks whether its hours are entered')
+  assert.equal(closeTree(items, items.find((entry) => entry.id === 20), me)[0].remove, undefined, 'a Task closed on its own is closed, not removed')
+  assert.equal(storyCloseRows([...items, item(18, 'User Story', 'IQOQ', 10)], items.find((entry) => entry.id === 11), me).some((row) => row.remove), false, 'not the last open story: nothing removed')
+  assert.equal(storyCloseRows(items, items.find((entry) => entry.id === 11), me, new Date('2026-11-23T10:00:00Z')).filter((row) => row.remove).map((row) => row.item.id).join(), '20', 'the last open story closes the Feature: the later month is removed')
+})

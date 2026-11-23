@@ -7,11 +7,10 @@ import { existsSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
+import { defaultPolicy, serializeAccess } from '../src/access.ts'
 
 const root = new URL('../', import.meta.url)
-// URL.pathname keeps a leading slash before a Windows drive ("/C:/…"), which Playwright then treats as
-// "C:\\C:\\…". Convert the file URL instead so the same browser suite works on Windows and CI.
-export const fixture = (name) => fileURLToPath(new URL(`fixtures/${name}`, import.meta.url))
+export const fixture = (name) => new URL(`fixtures/${name}`, import.meta.url).pathname
 
 const freePort = () => new Promise((resolve, reject) => {
   const server = createServer()
@@ -37,11 +36,20 @@ export async function startApp() {
   return { url, browser, stop }
 }
 
+// CON-101: the app is read-only until a roles file is loaded. A scenario that changes something opens with one cached in
+// this browser (as after an earlier read from Git), the starting matrix with everyone else in `role` (Tool Owner: every
+// right, no Testing pages, as the app had before without a file).
+export const cachedRoles = (role = 'Tool Owner') => { const policy = defaultPolicy(); policy.defaultRole = role; return serializeAccess(policy) }
+// The same roles as access.json in a mocked GitHub contents answer (a read that finds no file would drop the cached copy).
+export const rolesFile = (role = 'Tool Owner') => ({ type: 'file', encoding: 'base64', content: Buffer.from(cachedRoles(role)).toString('base64'), sha: 'roles' })
+
 // A fresh browser context (clean storage) with the Get started pop-up dismissed unless asked for, and page errors recorded.
-export async function openPage(app, { width = 1300, height = 1000, guide = false, init, initArg } = {}) {
+// roles: a role name (or true for Tool Owner) caches a roles file first (cachedRoles); a scenario's own init runs after.
+export async function openPage(app, { width = 1300, height = 1000, guide = false, roles, init, initArg } = {}) {
   const context = await app.browser.newContext({ viewport: { width, height }, acceptDownloads: true })
   const errors = []
   if (!guide) await context.addInitScript(() => { localStorage.setItem('demand-planning-setup-guide-v1', 'dismissed') })
+  if (roles) await context.addInitScript((text) => { localStorage.setItem('demand-planning-access-v1', text) }, cachedRoles(roles === true ? 'Tool Owner' : roles))
   if (init) await context.addInitScript(init, initArg)
   const page = await context.newPage()
   page.on('pageerror', (error) => errors.push(error.message))

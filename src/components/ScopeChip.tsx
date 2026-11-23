@@ -3,7 +3,7 @@
 // computer, or everyone's in Git, as chosen on the panel; tool-owner: everyone, changed by the Tool Owner only.
 export type Scope = 'you' | 'computer' | 'everyone' | 'both' | 'tool-owner'
 const scopes: Record<Scope, { label: string; detail: string }> = {
-  you: { label: 'Only you · This computer', detail: 'Kept in this browser or desktop app only: never saved to Git, backups or SharePoint.' },
+  you: { label: 'Only you · This computer', detail: 'Kept in this browser or desktop app only: never saved to Git or backups.' },
   computer: { label: 'This computer', detail: 'Applies to this browser or desktop app only.' },
   everyone: { label: 'Everyone · Shared in Git', detail: 'Saved to the Git data repository: a change applies to everyone at their next start.' },
   both: { label: 'Yours or everyone’s', detail: 'Your own choice is kept on this computer; the shared one is saved to Git for everyone. Yours wins for you.' },

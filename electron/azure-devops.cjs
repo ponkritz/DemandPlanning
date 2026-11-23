@@ -37,8 +37,12 @@ function azureReadRequest(input) {
   } else if (input.operation === 'items') {
     if (!Array.isArray(input.ids) || !input.ids.length || input.ids.length > 200 || input.ids.some((id) => !Number.isSafeInteger(id) || id < 1)) throw new Error('Invalid work-item batch.')
     endpoint = '_apis/wit/workitemsbatch'; body = { ids: input.ids, errorPolicy: 'Fail', $expand: 'Relations' }
+  } else if (input.operation === 'updates') {
+    // Owner decision 10: one work item's history, read only, to find when it was finished.
+    if (!Number.isSafeInteger(input.workItemId) || input.workItemId < 1) throw new Error('Invalid work item.')
+    endpoint = `_apis/wit/workItems/${input.workItemId}/updates`
   } else throw new Error('Only read operations are supported.')
-  return { url: `${base}/${endpoint}?api-version=${apiVersion(input)}${input.operation === 'query' ? `&$top=${/\bFROM\s+WorkItemLinks\b/i.test(input.query) ? 20000 : 1000}` : ''}${input.operation === 'iteration-tree' ? '&$depth=10' : ''}`, options: {
+  return { url: `${base}/${endpoint}?api-version=${apiVersion(input)}${input.operation === 'query' ? `&$top=${/\bFROM\s+WorkItemLinks\b/i.test(input.query) ? 20000 : 1000}` : ''}${input.operation === 'iteration-tree' ? '&$depth=10' : ''}${input.operation === 'updates' ? '&$top=200' : ''}`, options: {
     method: body ? 'POST' : 'GET', redirect: 'error',
     headers: { Authorization: `Basic ${Buffer.from(`:${input.pat.trim()}`).toString('base64')}`, Accept: 'application/json', 'Content-Type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,

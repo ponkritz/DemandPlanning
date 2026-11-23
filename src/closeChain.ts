@@ -1,4 +1,5 @@
 import type { AzureWorkItem } from './domain.ts'
+import { isTimeWritingStory, timeWritingMonth } from './azureInsights.ts'
 import { updateAzureWorkItem, type AzureConfig } from './azureDevOps.ts'
 import { closeFollowUp, closeStates, followUpQuestion, isMine, isPending, type CloseFollowUp, type Me } from './myWork.ts'
 
@@ -80,4 +81,27 @@ export async function closeFeatureItems(config: AzureConfig, pat: string, plan: 
   }
   function markUp(item: AzureWorkItem) { for (let parent = plan.parentOf.get(item.id); parent != null && !bad.has(parent) && parent !== item.id; parent = plan.parentOf.get(parent)) bad.add(parent) }
   return { closed, failed, skipped }
+}
+
+// BKL-41: hours entered on a month Time Writing Task (Original Estimate or Completed Work above 0) make the Task and its
+// Time Writing story Active: New (or any other state) → Active, and a Closed one is reopened to Active — each named in
+// the notes, so the person is told. A Removed item stays Removed (named too). Only items not yet Active are written.
+export interface HoursActivation { activated: AzureWorkItem[]; notes: string[]; failed: string[] }
+export async function activateAfterHours(config: AzureConfig, pat: string, items: AzureWorkItem[], task: AzureWorkItem, write: (config: AzureConfig, pat: string, id: number, update: { state: string }) => Promise<AzureWorkItem> = updateAzureWorkItem): Promise<HoursActivation> {
+  const result: HoursActivation = { activated: [], notes: [], failed: [] }
+  if (task.workItemType !== 'Task' || timeWritingMonth(task.title) == null) return result
+  if (!((task.originalEstimate ?? 0) > 0 || (task.completedWork ?? 0) > 0)) return result
+  const story = task.parentId == null ? undefined : items.find((item) => item.id === task.parentId && item.organization === task.organization && item.project === task.project && isTimeWritingStory(item))
+  for (const [item, label] of [[task, 'Task'], [story, 'Time Writing story']] as const) {
+    if (!item) continue
+    const state = item.state.trim().toLowerCase()
+    if (state === 'active') continue
+    if (state === 'removed') { result.notes.push(`${label} #${item.id} is Removed and stays Removed.`); continue }
+    try {
+      const updated = await write(config, pat, item.id, { state: 'Active' })
+      result.activated.push(updated)
+      result.notes.push(state === 'closed' ? `${label} #${item.id} was Closed and is reopened to Active, because hours were entered.` : `${label} #${item.id} set to Active (${item.state} before), because hours were entered.`)
+    } catch (failure) { result.failed.push(`${label} #${item.id} not set to Active: ${failure instanceof Error ? failure.message : 'update failed'}`) }
+  }
+  return result
 }

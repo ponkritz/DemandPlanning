@@ -1,3 +1,4 @@
+import { finishedStates } from './workStates.ts'
 import type { AzureWorkItem } from './domain'
 import { completedCount, supportedCount, type ReleaseStream } from './releaseOverview.ts'
 import { approvalMonthOf } from './releaseSource.ts'
@@ -23,9 +24,10 @@ export function releaseComparison(current: ReleaseStream[], previous: ReleaseStr
 }
 
 // Features and User Stories created and closed in a month, per stream (the Epic above them), in the viewer's time
-// zone. Closed = Closed Date in the month (an item in a finished state without one counts by its last change). Removed
+// zone. Closed = Closed Date in the month (a finished item without one: its State Change Date or its history — see
+// closedHistory.ts; its last change only when nothing else tells). Removed
 // items and work under the absence Epic are left out.
-const finished = new Set(['closed', 'done', 'completed', 'resolved'])
+const finished = new Set<string>(finishedStates) // owner decision 10: Closed, Resolved, Completed, Done
 export const flowTypes = ['Feature', 'User Story'] as const
 export type FlowType = typeof flowTypes[number]
 export interface FlowCount { created: number; closed: number }

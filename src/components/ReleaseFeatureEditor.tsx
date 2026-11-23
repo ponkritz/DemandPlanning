@@ -3,6 +3,7 @@ import type { FeatureSetups } from '../featureSetup'
 import type { AzureWorkItem } from '../domain'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import { FeatureEditor } from './FeatureEditor'
+import { useWriteBlock } from '../useCan'
 
 // Create Feature from Release Details (DP rows, CP / IOCC / … releases): always the one default Create Feature form
 // (FeatureEditor, as on the QMS-0025 board and My Tasks [Board]), pre-filled with the release's title and the Epic named
@@ -16,7 +17,8 @@ export function ReleaseFeatureButton({ stream, title, items, azure, assign, feat
   const word = new RegExp(`(^|[^a-z0-9])${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^a-z0-9]|$)`)
   const epic = epics.find((item) => item.title.trim().toLowerCase() === key) ?? epics.find((item) => word.test(item.title.toLowerCase())) ?? epics[0]
   const me = (assign?.me || azure.creatorEmail).trim().toLowerCase()
-  const blocked = azure.isSample ? 'Synthetic sample data is loaded: creating in Azure DevOps is disabled.' : !azure.config ? 'Connect the QMS-0025 Time Writing connection first (Admin → Streams).' : !epic ? 'Load the QMS-0025 board first: no Epic to put the Feature under.' : ''
+  // CON-102: creating needs "Create Features, User Stories and Tasks"; without it the button is disabled and says why.
+  const blocked = useWriteBlock().why('azure.write') || (azure.isSample ? 'Synthetic sample data is loaded: creating in Azure DevOps is disabled.' : !azure.config ? 'Connect the QMS-0025 Time Writing connection first (Admin → Streams).' : !epic ? 'Load the QMS-0025 board first: no Epic to put the Feature under.' : '')
   return <>
     <button type="button" className="ghost small" disabled={Boolean(blocked)} title={blocked || `Create a Feature “${title}” on QMS-0025`} onClick={() => { setNote(''); setOpen(true) }}>Create Feature</button>
     {blocked && <small className="muted">{blocked}</small>}

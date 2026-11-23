@@ -58,7 +58,7 @@ export function UtilizationChart({ series, selected, onSelect, overloadedAt, ava
   const current = series[active]
   const indexAt = (event: PointerEvent<SVGSVGElement>) => { const rect = event.currentTarget.getBoundingClientRect(); return Math.min(series.length - 1, Math.max(0, Math.floor((event.clientX - rect.left - pad.left) / band))) }
   const line = series.map((point, index) => point.plannedUtilization == null ? null : `${index === 0 || series[index - 1].plannedUtilization == null ? 'M' : 'L'}${x(index).toFixed(1)},${y(point.plannedUtilization).toFixed(1)}`).filter(Boolean).join(' ')
-  const references = [{ value: overloadedAt, label: `Overloaded ≥ ${overloadedAt}%` }, { value: availableBelow, label: `Capacity < ${availableBelow}%` }]
+  const references = [{ value: overloadedAt, label: `Overloaded > ${overloadedAt}%` }, { value: availableBelow, label: `Capacity < ${availableBelow}%` }]
   const legend = <><LegendBar color="var(--viz-series-1)" label="Actual utilization" /><LegendLine color="var(--viz-series-2)" label="Planned utilization" /></>
   return <ChartFrame legend={legend} table={table} setTable={setTable}><div ref={wrap}>
     {table ? <div className="azure-table"><table className="viz-table"><thead><tr><th>Month</th><th>Actual utilization</th><th>Planned utilization</th><th>Booked (h)</th><th>Planned (h)</th><th>Available (h)</th></tr></thead><tbody>{series.map((point) => <tr key={point.month} className={point.month === selected ? 'matrix-total' : ''}><td>{longMonth(point.month)}</td><td>{formatPercent(point.utilization)}</td><td>{formatPercent(point.plannedUtilization)}</td><td>{formatHours(point.actual)}</td><td>{formatHours(point.planned)}</td><td>{formatHours(point.available)}</td></tr>)}</tbody></table></div>

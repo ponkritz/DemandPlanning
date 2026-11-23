@@ -5,7 +5,8 @@ import { normalizeRules, normalizeScopes } from '../baseline'
 import { capacityContext } from '../capacity'
 import { EmptyState, Page } from '../components/ui'
 import type { AzureWorkItem } from '../domain'
-import { formatDate, formatHours, monthName, todayIso } from '../format'
+import { formatDate, formatHours, monthName } from '../format'
+import { utcToday } from '../businessTime'
 import { allFilter, planningOverview, type ExceptionKind, type OverviewFilter } from '../planningOverview'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { PageProps } from './types'
@@ -29,7 +30,7 @@ export function PlanningOverviewPage({ azure, store, month, onOpenPack }: { azur
   const [hover, setHover] = useState<number | null>(null)
   const [labels, setLabels] = useDataLabels('overview-trend')
   const settings = capacityContext(store.state)
-  const model = useMemo(() => planningOverview({ items: azure.items, month, today: todayIso(), settings, rules: normalizeRules(store.state.baselineRules), scopes: normalizeScopes(store.state.releaseScopes) }, filter),
+  const model = useMemo(() => planningOverview({ items: azure.items, month, today: utcToday(), settings, rules: normalizeRules(store.state.baselineRules), scopes: normalizeScopes(store.state.releaseScopes) }, filter),
     [azure.items, month, settings, store.state.baselineRules, store.state.releaseScopes, filter])
   if (!azure.items.length) return <Page><EmptyState title="No work items yet" detail="Fetch the Time Writing data from Azure DevOps (Admin → Streams), or load the synthetic sample, to see the overview." /></Page>
   const set = (key: keyof OverviewFilter) => (value: string) => setFilter((current) => ({ ...current, [key]: value }))

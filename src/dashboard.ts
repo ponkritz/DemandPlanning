@@ -29,13 +29,59 @@ export function monthStatus(month: string, today: string): MonthStatus {
   return month < current ? 'elapsed' : month === current ? 'partial' : 'future'
 }
 
-// Period: a year with any quarters and months of it (multi-select); nothing chosen = the whole year.
-export interface Period { year: number; quarters: number[]; months: number[] }
-export function periodMonths(period: Period) {
-  const chosen = new Set(period.months.filter((month) => month >= 1 && month <= 12))
-  for (const quarter of period.quarters) if (quarter >= 1 && quarter <= 4) for (let index = 0; index < 3; index += 1) chosen.add((quarter - 1) * 3 + 1 + index)
-  const months = chosen.size ? [...chosen].sort((a, b) => a - b) : Array.from({ length: 12 }, (_, index) => index + 1)
-  return months.map((month) => `${period.year}-${String(month).padStart(2, '0')}`)
+// Period (OV-15, OV-16): Year → Quarter → Month, a hierarchy of multi-selects. Quarters belong to a year ("2026-Q1")
+// and months to a year ("2026-01"): the Quarter list offers the quarters of the chosen years, the Month list the months
+// of the chosen quarters. Nothing ticked: Year = the current year; Quarter = every quarter of the chosen years; Month =
+// every month of the chosen quarters. A choice outside the level above it is ignored (and dropped when that changes).
+export interface Period { years: number[]; quarters: string[]; months: string[] }
+const pad = (value: number) => String(value).padStart(2, '0')
+const yearsIn = (values: unknown) => Array.isArray(values) ? [...new Set(values.filter((entry): entry is number => Number.isInteger(entry) && entry > 2000 && entry < 2100))].sort((a, b) => a - b) : []
+const keysIn = (values: unknown, pattern: RegExp) => Array.isArray(values) ? [...new Set(values.filter((entry): entry is string => typeof entry === 'string' && pattern.test(entry)))].sort() : []
+const quarterKey = /^\d{4}-Q[1-4]$/, monthKey = /^\d{4}-(0[1-9]|1[0-2])$/
+export const quarterOfMonthKey = (month: string) => `${month.slice(0, 4)}-Q${Math.ceil(Number(month.slice(5, 7)) / 3)}`
+// The years that count: those chosen, else the current year.
+export const periodYears = (period: Pick<Period, 'years'>, currentYear: number) => period.years.length ? yearsIn(period.years) : [currentYear]
+// The quarters the Quarter list offers, and those that count (chosen within the years, else all of them).
+export const offeredQuarters = (years: number[]) => years.flatMap((year) => [1, 2, 3, 4].map((quarter) => `${year}-Q${quarter}`))
+export function periodQuarters(period: Pick<Period, 'years' | 'quarters'>, currentYear: number) {
+  const offered = offeredQuarters(periodYears(period, currentYear))
+  const chosen = period.quarters.filter((quarter) => offered.includes(quarter))
+  return chosen.length ? chosen : offered
+}
+// The months the Month list offers (those of the counting quarters), and the months of the period.
+export const offeredMonths = (quarters: string[]) => quarters.flatMap((quarter) => { const year = quarter.slice(0, 4), first = (Number(quarter.slice(6)) - 1) * 3 + 1; return [0, 1, 2].map((step) => `${year}-${pad(first + step)}`) }).sort()
+export function periodMonths(period: Period, currentYear: number) {
+  const offered = offeredMonths(periodQuarters(period, currentYear))
+  const chosen = period.months.filter((month) => offered.includes(month))
+  return chosen.length ? [...chosen].sort() : offered
+}
+// A choice made consistent after a level above changed: quarters outside the years and months outside the quarters go.
+export function narrowPeriod(period: Period, currentYear: number): Period {
+  const years = yearsIn(period.years)
+  const quartersOffered = offeredQuarters(years.length ? years : [currentYear])
+  const quarters = period.quarters.filter((quarter) => quartersOffered.includes(quarter))
+  const monthsOffered = offeredMonths(quarters.length ? quarters : quartersOffered)
+  return { years, quarters, months: period.months.filter((month) => monthsOffered.includes(month)) }
+}
+// A saved period in this format or an earlier one — { year, quarters: [1…4], months: [1…12] } (quarters and months
+// added up), or { years, quarters: [1…4], months: [1…12] } — keeps its months.
+export function periodOf(value: unknown, fallback: Period): Period {
+  if (!value || typeof value !== 'object') return fallback
+  const saved = value as { years?: unknown; year?: unknown; quarters?: unknown; months?: unknown }
+  const numbers = (values: unknown, max: number) => Array.isArray(values) ? [...new Set(values.filter((entry): entry is number => Number.isInteger(entry) && entry >= 1 && entry <= max))].sort((a, b) => a - b) : []
+  if (Array.isArray(saved.years) && (keysIn(saved.quarters, quarterKey).length || keysIn(saved.months, monthKey).length || (!numbers(saved.quarters, 4).length && !numbers(saved.months, 12).length))) {
+    return { years: yearsIn(saved.years), quarters: keysIn(saved.quarters, quarterKey), months: keysIn(saved.months, monthKey) }
+  }
+  const years = Array.isArray(saved.years) ? yearsIn(saved.years) : yearsIn([Number(saved.year)])
+  if (!years.length) return fallback
+  const quarters = numbers(saved.quarters, 4), months = numbers(saved.months, 12)
+  const old = !Array.isArray(saved.years) && months.length
+  const chosen = old ? [...new Set([...months, ...quarters.flatMap((quarter) => [1, 2, 3].map((step) => (quarter - 1) * 3 + step))])].sort((a, b) => a - b) : months
+  return {
+    years,
+    quarters: old ? [] : years.flatMap((year) => quarters.map((quarter) => `${year}-Q${quarter}`)),
+    months: years.flatMap((year) => chosen.map((month) => `${year}-${pad(month)}`)),
+  }
 }
 export const quarterOf = (month: string) => Math.ceil(Number(month.slice(5)) / 3)
 
@@ -106,7 +152,7 @@ export function groupBy<K extends string>(rows: PersonMonth[], key: (row: Person
   return [...groups].map(([name, entries]) => ({ name, rows: entries, ...totals(entries) }))
 }
 
-// One utilization model for the whole Dashboard, from Admin → Capacity & time: overloaded at or above `overloadedAt` %
+// One utilization model for the whole Dashboard, from Admin → Capacity & time: overloaded strictly above `overloadedAt` %
 // of capacity, spare below `availableBelow` %, balanced in between.
 // CAP-47: the insight thresholds travel with the utilization bands (built-in values when absent).
 export interface Bands { overloadedAt: number; availableBelow: number; thresholds?: InsightThresholds }
@@ -114,7 +160,7 @@ export const defaultBands: Bands = { overloadedAt: 100, availableBelow: 80 }
 export type Band = 'over' | 'balanced' | 'spare'
 export function bandOf(utilization: number | null | undefined, bands: Bands = defaultBands): Band | null {
   if (utilization == null) return null
-  return utilization >= bands.overloadedAt ? 'over' : utilization < bands.availableBelow ? 'spare' : 'balanced'
+  return utilization > bands.overloadedAt ? 'over' : utilization < bands.availableBelow ? 'spare' : 'balanced'
 }
 const utilOf = (hours: number, capacity: number) => capacity > 0 ? hours / capacity * 100 : null
 
@@ -124,7 +170,7 @@ export function plannedOverload(rows: PersonMonth[], bands: Bands = defaultBands
   return { over: people.filter((person) => bandOf(person.planUtil, bands) === 'over').map((person) => person.name), people: people.length }
 }
 
-// Persistent overload: at or above the overloaded threshold in at least `streak` consecutive elapsed months (missing
+// Persistent overload: strictly above the overloaded threshold in at least `streak` consecutive elapsed months (missing
 // months break it).
 export function persistentOverload(rows: PersonMonth[], months: string[], measure: 'actual' | 'plan', streak = 3, bands: Bands = defaultBands) {
   const elapsed = months.filter((month) => rows.some((row) => row.month === month && row.status === 'elapsed'))

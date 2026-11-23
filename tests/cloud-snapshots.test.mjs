@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { freezeSnapshot, snapshotFolder, uploadSnapshot, listSnapshots } from '../src/cloudSnapshots.ts'
+import { freezeSnapshot, snapshotFolder, uploadSnapshot, listSnapshots, maxSnapshotBytes } from '../src/cloudSnapshots.ts'
 
 const state = { schemaVersion: 1, people: [], activities: [{ id: 'a' }], efforts: [{ month: '2026-10', actualHours: 5 }], baselines: [], periods: [], releases: [], audits: [], masters: [], snapshots: [{ payload: 'previous large payload' }], pat: 'must-not-copy', connection: { token: 'secret' } }
 const capture = () => freezeSnapshot(state, 'LTE', '2026-10', 'tester@example.test', { version: '0.3.0' })
@@ -18,51 +18,74 @@ test('snapshot freezes source data and excludes history/connection secrets', () 
   assert.throws(() => freezeSnapshot(state, 'LTE', '2026-13', 'x', {}))
 })
 
-test('snapshot folder follows configured state folder and rejects traversal', () => {
-  assert.equal(snapshotFolder('Demand Planning MVP/state.json'), 'Demand Planning MVP/Snapshots')
-  assert.equal(snapshotFolder('state.json'), 'Snapshots')
-  for (const path of ['', '../state.json', 'a/./state.json', 'a\\state.json', 'a?x/state.json']) assert.throws(() => snapshotFolder(path))
+const config = { owner: 'acme', repo: 'DemandPlanningStorage', branch: 'main', path: 'data/planning-data.json' }
+
+test('SNP-06: snapshots go to lte-snapshots/ beside the planning data in the Git data repository', () => {
+  assert.equal(snapshotFolder, 'lte-snapshots')
+  assert.equal(maxSnapshotBytes, 50 * 1024 * 1024)
 })
 
-test('upload reports success only after exact read-back, using unique paths and no browser writes', async () => {
-  const calls = []; let body
-  const file = { id: 'file1', name: 'saved.json', webUrl: 'https://example.test/saved.json' }
-  const request = async (path, options) => {
-    calls.push({ path, options })
-    if (options.method === 'PUT') { body = options.body; return Response.json(file) }
-    return new Response(body)
+test('SNP-06: a snapshot is a new file (no version id sent), read back and compared before success, nothing kept in the browser', async () => {
+  const calls = []; let stored
+  const fetchImpl = async (url, options = {}) => {
+    calls.push({ url, options })
+    if (options.method === 'PUT') { stored = Buffer.from(JSON.parse(options.body).content, 'base64').toString('utf8'); return Response.json({ content: { sha: 'abc123' }, commit: { html_url: 'https://github.com/x' } }) }
+    return new Response(stored)
   }
-  assert.deepEqual(await uploadSnapshot(request, 'Demand Planning/Snapshots', capture()), file)
-  assert.match(calls[0].path, /Demand%20Planning\/Snapshots\/2026-10-LTE-/)
-  assert.match(calls[0].path, /conflictBehavior=fail/)
-  assert.equal(calls[1].path, '/items/file1/content')
-  assert.equal(calls[1].options.cache, 'no-store')
+  const item = capture()
+  const file = await uploadSnapshot(config, 'token', item, fetchImpl)
+  assert.match(calls[0].url, /\/repos\/acme\/DemandPlanningStorage\/contents\/data\/lte-snapshots\/2026-10-LTE-[\da-f-]+\.json$/)
+  assert.equal(JSON.parse(calls[0].options.body).sha, undefined, 'a new file only: an existing file is never replaced')
+  assert.match(JSON.parse(calls[0].options.body).message, /^LTE — 2026-10 snapshot$/)
+  assert.equal(calls[1].options.headers.Accept, 'application/vnd.github.raw+json', 'read back raw (works above 1 MB)')
+  assert.equal(file.id, 'abc123')
+  assert.equal(file.month, '2026-10')
+  assert.equal(file.type, 'LTE')
+  assert.match(file.webUrl, /^https:\/\/github\.com\/acme\/DemandPlanningStorage\/blob\/main\/data\/lte-snapshots\/2026-10-LTE-/)
 })
 
-test('upload failures, denial, missing receipts and mismatched read-back never report success', async () => {
-  for (const status of [401, 403, 409, 500]) {
-    await assert.rejects(uploadSnapshot(async () => new Response('', { status }), 'Snapshots', capture()), /upload failed/)
+test('SNP-06: failures, an existing file and a mismatched read-back never report success', async () => {
+  for (const status of [401, 403, 422, 500]) {
+    await assert.rejects(uploadSnapshot(config, 'token', capture(), async () => new Response('{}', { status })))
   }
-  await assert.rejects(uploadSnapshot(async () => { throw Error('offline') }, 'Snapshots', capture()), /offline/)
-  await assert.rejects(uploadSnapshot(async () => Response.json({}), 'Snapshots', capture()), /Refresh history/)
-  await assert.rejects(uploadSnapshot(async (path, options) => options.method === 'PUT' ? Response.json({ id: 'x' }) : new Response('{}'), 'Snapshots', capture()), /read-back verification failed/)
+  await assert.rejects(uploadSnapshot(config, 'token', capture(), async () => { throw Error('offline') }), /offline/)
+  await assert.rejects(uploadSnapshot(config, 'token', capture(), async (url, options = {}) => options.method === 'PUT' ? Response.json({ content: { sha: 'x' } }) : new Response('{}')), /reading it back did not match/)
 })
 
-test('shared history handles pagination, empty folder, errors and excludes unrelated files', async () => {
-  let count = 0
-  const files = await listSnapshots(async () => ++count === 1 ? Response.json({ value: [{ id: 'a', name: '2026-10-LTE-abc.json', file: {}, createdDateTime: '2026-10-01' }, { name: 'other.json', file: {} }], '@odata.nextLink': 'https://graph.microsoft.com/v1.0/next' }) : Response.json({ value: [{ id: 'b', name: '2026-10-PI-Review-def.json', file: {}, createdDateTime: '2026-10-02' }] }), 'Snapshots')
-  assert.deepEqual(files.map(x => x.id), ['b', 'a'])
-  assert.equal(count, 2)
-  assert.deepEqual(await listSnapshots(async () => new Response('', { status: 404 }), 'Snapshots'), [])
-  await assert.rejects(listSnapshots(async () => new Response('', { status: 403 }), 'Snapshots'), /history/)
+test('SNP-08: history lists only snapshot files, newest month first; a missing folder is empty; errors are reported', async () => {
+  const listing = [
+    { type: 'file', name: '2026-09-LTE-aaa.json', path: 'data/lte-snapshots/2026-09-LTE-aaa.json', sha: '1' },
+    { type: 'file', name: '2026-10-PI-Review-bbb.json', path: 'data/lte-snapshots/2026-10-PI-Review-bbb.json', sha: '2' },
+    { type: 'file', name: 'notes.json', path: 'data/lte-snapshots/notes.json', sha: '3' },
+    { type: 'dir', name: '2026-11-LTE-ccc.json', path: 'x', sha: '4' },
+  ]
+  const files = await listSnapshots(config, 'token', async () => Response.json(listing))
+  assert.deepEqual(files.map((file) => [file.name, file.type]), [['2026-10-PI-Review-bbb.json', 'PI Review'], ['2026-09-LTE-aaa.json', 'LTE']])
+  assert.deepEqual(await listSnapshots(config, 'token', async () => new Response('', { status: 404 })), [])
+  await assert.rejects(listSnapshots(config, 'token', async () => new Response('{}', { status: 403 })))
 })
 
-test('UI disables disconnected writes and store does not persist snapshot payloads in app state', () => {
+test('SNP-04: the page saves only with Git connected and a token that can write; no SharePoint code is left', () => {
   const ui = readFileSync(new URL('../src/pages/SnapshotsPage.tsx', import.meta.url), 'utf8')
-  assert.match(ui, /disabled=\{!connected \|\| busy\}/)
+  assert.match(ui, /disabled=\{!writable \|\| busy\}/)
   assert.doesNotMatch(ui, /snapshots\.unshift/)
-  const source = readFileSync(new URL('../src/store.ts', import.meta.url), 'utf8')
-  const method = source.slice(source.indexOf('async function saveSnapshot'), source.indexOf('const listSnapshots'))
-  assert.match(method, /await target.saveSnapshot/)
-  assert.doesNotMatch(method, /setState|localStorage|writer\.current/)
+  const hook = readFileSync(new URL('../src/useGitStorage.ts', import.meta.url), 'utf8')
+  const method = hook.slice(hook.indexOf('async function saveSnapshot'), hook.indexOf('const listSnapshots'))
+  assert.match(method, /isSample/)
+  assert.match(method, /writeCheck/)
+  assert.doesNotMatch(method, /setState|localStorage|store\.update/)
+  const store = readFileSync(new URL('../src/store.ts', import.meta.url), 'utf8')
+  assert.doesNotMatch(store, /SharePointStateClient|connectSharePoint|initializeSharePoint/, 'the SharePoint central storage is removed (backlog)')
+})
+
+test('SNP-05 (owner decision 11): a snapshot holds all the data present at the moment, hours and release data included (TC-SNP-02)', async () => {
+  const { snapshotDataKeys } = await import('../src/cloudSnapshots.ts')
+  const full = { ...state, azureWorkItems: [{ id: 1, originalEstimate: 8, completedWork: 6 }], capacitySettings: { hoursPerDay: 8 }, resourceProfiles: { Ana: { region: 'India' } }, baselineRules: [{ id: 'r' }], releaseScopes: [{ id: 's' }], releaseSource: { items: [{ id: 9 }] }, releasePlans: [{ id: 'p' }], windchillSources: [{ viewId: 'w', rows: [{ Name: 'x' }] }], azureSources: [{ connectionId: 'c', items: [] }], tableDefaults: { density: 'compact' }, releaseSourceSettings: { matchThreshold: 80 } }
+  const item = freezeSnapshot(full, 'LTE', '2026-10', 'tester@example.test', {})
+  assert.equal(item.formatVersion, 2)
+  for (const key of ['azureWorkItems', 'capacitySettings', 'resourceProfiles', 'baselineRules', 'releaseScopes', 'releaseSource', 'releasePlans', 'windchillSources', 'azureSources', 'tableDefaults', 'releaseSourceSettings', 'efforts', 'periods']) assert.ok(item.data[key] !== undefined, `${key} is in the snapshot`)
+  assert.equal(item.data.azureWorkItems[0].completedWork, 6, 'the hours are there')
+  assert.equal(item.data.snapshots, undefined, 'never earlier snapshots')
+  assert.equal(item.data.pat, undefined, 'nothing outside the app data')
+  assert.ok(!snapshotDataKeys.includes('snapshots'))
 })

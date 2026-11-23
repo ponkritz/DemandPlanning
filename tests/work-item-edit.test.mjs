@@ -1,8 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
-import { editLocks, editPatch, editProblem, editableText, joinDoD, splitDoD, statesFor } from '../src/workItemEdit.ts'
-import { addComment, editWorkItem, readComments, readWorkItemForEdit, requestAzure } from '../src/azureDevOps.ts'
+import { editAssignee, editLocks, editPatch, editProblem, editableText, joinDoD, splitDoD, statesFor } from '../src/workItemEdit.ts'
+import { guardAzureWrites, addComment, editWorkItem, readComments, readWorkItemForEdit, requestAzure } from '../src/azureDevOps.ts'
+// CON-101: the write guard starts closed (as before the app loads the roles); these tests check the requests, so allow them.
+guardAzureWrites(() => true)
 
 const config = { organization: 'org', project: 'Quality', team: 'T' }
 const open = { planningLocked: () => false, actualsLocked: () => false }
@@ -114,4 +116,14 @@ test('both transports: the edit and comment requests are constrained; writes go 
     await assert.rejects(requestAzure({ ...base, operation: 'add-comment', comment: ' ' }), /Enter a comment/)
     await assert.rejects(requestAzure({ ...base, operation: 'edit-work-item', rev: 5, baseUrl: 'https://tfs.corp.example/tfs/Coll', edit: { title: 'T' } }), /dev\.azure\.com\) only/)
   } finally { delete globalThis.window }
+})
+
+test('BKL-44: Assigned to starts blank — an unassigned item stays unassigned unless someone is picked (TC-BKL-33)', () => {
+  const me = 'ana@x.com'
+  assert.equal(editAssignee({ canChoose: true, chosen: '', assigned: false, assignToMe: false, me }), '', 'nothing picked: not assigned to the editor')
+  assert.equal(editAssignee({ canChoose: true, chosen: 'ben@x.com', assigned: false, assignToMe: false, me }), 'ben@x.com', 'a picked person is written')
+  assert.equal(editAssignee({ canChoose: true, chosen: '', assigned: true, assignToMe: false, me }), '', 'an assigned item keeps its assignee')
+  assert.equal(editAssignee({ canChoose: false, chosen: '', assigned: false, assignToMe: false, me }), '', 'without the right to assign: stays unassigned')
+  assert.equal(editAssignee({ canChoose: false, chosen: '', assigned: false, assignToMe: true, me }), me, '"Assign to me" ticked: the editor')
+  assert.equal(editAssignee({ canChoose: false, chosen: '', assigned: true, assignToMe: true, me }), '', 'an assigned item is never taken over')
 })

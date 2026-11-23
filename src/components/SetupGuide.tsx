@@ -80,7 +80,7 @@ export function SetupGuide({ steps, busy, problem, inputs, links, linkDefaults, 
       </div>
     </>}
   </li>
-  return <Modal title="Get started" eyebrow={`SETUP · ${doneCount} OF ${required.length} REQUIRED STEPS DONE`} onClose={onClose}>
+  return <Modal title="Get started" form={false} eyebrow={`SETUP · ${doneCount} OF ${required.length} REQUIRED STEPS DONE`} onClose={onClose}>
     <div className="setup-guide">
       {problem && <Notice tone="error" className="setup-problem"><strong>Could not fetch from Azure DevOps.</strong> {problem.kind === 'auth' ? 'Your token is missing, wrong or expired: create a new one and Save PAT in step 2, then Fetch now.' : problem.kind === 'network' ? 'Azure DevOps could not be reached: check your network or VPN, then Fetch now in step 4.' : 'Check steps 2 and 4, then Fetch now.'} <Info label="Details">{problem.message}</Info></Notice>}
       {!problem && <p className="muted">{doneCount === required.length ? 'You are set up.' : 'Four steps. ⓘ explains each one.'}</p>}

@@ -8,7 +8,8 @@ import type { WindchillWorkspace } from '../useWindchill'
 import { capacityContext, capacityGap, capacityModel, itemsForPerson, problemBreakdown } from '../capacity'
 import { monthRange, personMonths, streamTotals, totals } from '../dashboard'
 import { isMine, isPending, myNames, stateChecks } from '../myWork'
-import { formatDate, formatHours, formatPercent, monthName, todayIso } from '../format'
+import { formatDate, formatHours, formatPercent, monthName } from '../format'
+import { utcToday } from '../businessTime'
 import { EmptyState, Metric, Metrics, Notice, Page, Pill, TablePanel } from '../components/ui'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { MyWork } from '../useMyWork'
@@ -22,7 +23,7 @@ import { CustomizableSections } from '../components/PersonalLayout'
 export function MyDashboardPage({ month, azure, store, my, navigate, views, canSetDefault = false, windchill }: { month: string; azure: AzureWorkspace; store: PageProps['store']; my: MyWork; navigate: (page: PageId) => void; views: PersonalViewsStore; canSetDefault?: boolean; windchill?: Pick<WindchillWorkspace, 'views' | 'sources'> }) {
   if (!my.known) return <Page><EmptyState title="Who are you in Azure DevOps?" detail="Set your work email in Admin → Streams → Your work email, or choose your name on My Tasks [Board]. My dashboard then shows your own hours and work." /></Page>
   const settings = capacityContext(store.state)
-  const today = todayIso()
+  const today = utcToday()
   const name = my.me.name ?? ''
   const months = monthRange(month, 6)
   // CAP-56: the person's rows under every name they go by (their work email's Assigned To names too).
@@ -63,7 +64,7 @@ export function MyDashboardPage({ month, azure, store, my, navigate, views, canS
       <Metrics>
         <Metric label="Planned" value={`${formatHours(now.plan)}h`} hint={`Capacity ${formatHours(now.capacity)}h`} />
         <Metric label="Recorded" value={`${formatHours(now.actual)}h`} hint={now.absence ? `${formatHours(now.absence)}h absence` : 'No absence booked'} />
-        <Metric label="Utilization" value={formatPercent(now.actualUtil ?? now.planUtil)} hint={now.actualUtil != null ? 'Recorded ÷ capacity' : 'Planned ÷ capacity'} tone={(now.actualUtil ?? now.planUtil ?? 0) >= settings.overloadedAt ? 'negative' : undefined} />
+        <Metric label="Utilization" value={formatPercent(now.actualUtil ?? now.planUtil)} hint={now.actualUtil != null ? 'Recorded ÷ capacity' : 'Planned ÷ capacity'} tone={(now.actualUtil ?? now.planUtil ?? 0) > settings.overloadedAt ? 'negative' : undefined} />
         <Metric label="Overrun · ad-hoc" value={`${formatHours(problems.overrun.total)}h · ${formatHours(problems.adhoc.total)}h`} hint="Above estimate · tagged ad-hoc" />
       </Metrics>
       {rows.length > 0 ? <div className="azure-table"><table><thead><tr><th>Month</th><th>Planned</th><th>Recorded</th><th>Capacity</th><th>Utilization</th></tr></thead><tbody>

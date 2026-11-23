@@ -1,7 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { isMine, isPending, matchesWork, mentions, myPendingWork, monthTaskCandidates, moveCandidates, assignablePeople, byFeatureNumber } from '../src/myWork.ts'
-import { ensureMonthTask, updateAzureWorkItem, workItemUpdatePatch, addChildWorkItem, requestAzure, createUserStory } from '../src/azureDevOps.ts'
+import { guardAzureWrites, ensureMonthTask, updateAzureWorkItem, workItemUpdatePatch, addChildWorkItem, requestAzure, createUserStory } from '../src/azureDevOps.ts'
+// CON-101: the write guard starts closed (as before the app loads the roles); these tests check the requests, so allow them.
+guardAzureWrites(() => true)
 import { createRequire } from 'node:module'
 
 const base = { organization: 'org', project: 'Quality', state: 'Active', assignedTo: '', areaPath: 'Quality\\A', iterationPath: 'Quality\\PI 2026.4\\Sprint 1', tags: '', url: '', syncedAt: '' }
@@ -430,6 +432,21 @@ test('QMS-0025 shows mine by default: my items with everything above and below; 
   assert.equal(featureOf(tree, tree[3]).id, 2, 'a Task finds its Feature through its Story')
   assert.equal(featureOf(tree, tree[1]).id, 2, 'a Feature is its own')
   assert.equal(featureOf(tree, tree[0]), undefined, 'an Epic has none')
+})
+
+test('BKL-46: the Assigned to filter keeps the chosen people’s items with everything above and below; Unassigned picks items with no one (TC-BKL-35)', async () => {
+  const { withContext } = await import('../src/myWork.ts')
+  const cara = { assignedTo: 'Cara Diaz', assignedToEmail: 'cara@x.com' }
+  const tree = [
+    item(1, 'Epic', 'CP'), item(2, 'Feature', 'CP | A', { parentId: 1, ...ben }), item(3, 'User Story', 'Ana', { parentId: 2, ...ana }), item(4, 'Task', 'Under Ana', { parentId: 3, ...cara }),
+    item(5, 'Feature', 'CP | B', { parentId: 1, ...cara }), item(6, 'User Story', 'Cara only', { parentId: 5, ...cara }),
+    item(7, 'Feature', 'CP | C', { parentId: 1 }), item(8, 'Epic', 'Other'),
+  ]
+  const of = (emails) => withContext(tree, (row) => emails.includes(row.assignedToEmail ?? '')).map((row) => row.id)
+  assert.deepEqual(of(['ana@x.com', 'ben@x.com']), [1, 2, 3, 4], 'Ben’s Feature with all below it, Ana’s Story inside it; nothing of Cara’s own Feature')
+  assert.deepEqual(of(['cara@x.com']), [1, 2, 3, 4, 5, 6], 'Cara’s Task brings its Story, Feature and Epic as context')
+  assert.deepEqual(withContext(tree, (row) => !row.assignedTo, (row) => Boolean(row.assignedTo)).map((row) => row.id), [1, 7, 8], 'Unassigned: the unassigned items with their context above, not everything below an unassigned Epic')
+  assert.deepEqual(of([]), [], 'nobody chosen by the predicate: nothing (the board then shows everyone without calling it)')
 })
 
 test('a shared leave Feature where everyone keeps a story of the same title: mine is used, or a new one of mine — never "Choose story" (TC-ATM-17)', async () => {

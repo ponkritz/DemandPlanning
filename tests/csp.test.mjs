@@ -9,7 +9,7 @@ test('NFR-09: the built page carries a Content-Security-Policy — scripts from 
   assert.equal(policy['object-src'], "'none'")
   assert.equal(policy['form-action'], "'none'")
   assert.equal(policy['base-uri'], "'self'")
-  assert.equal(policy['frame-src'], 'https://login.microsoftonline.com', 'only the Microsoft sign-in may be framed')
+  assert.equal(policy['frame-src'], "'none'", 'nothing may be framed (the Microsoft sign-in for SharePoint is in the backlog)')
   assert.match(policy['connect-src'], /https:/, 'requests to https hosts only (Azure DevOps, on-premises servers, GitHub, Graph)')
   assert.doesNotMatch(Object.values(policy).join(' '), /unsafe-eval|\*/, 'no eval, no wildcard host')
   assert.match(config, /name: 'content-security-policy',\s*apply: 'build',[\s\S]*?'http-equiv': 'Content-Security-Policy'[\s\S]*?injectTo: 'head-prepend'/, 'added to the built page, before its scripts')

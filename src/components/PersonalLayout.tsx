@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { arrangeSections, moveSection, type MenuLayout } from '../personalViews'
 import type { PersonalViewsStore } from '../usePersonalViews'
-import { Modal, Notice } from './ui'
+import { Modal, Notice, SaveQueueStatus } from './ui'
 
 export interface LayoutSection { id: string; label: string; node: ReactNode }
 
@@ -26,10 +26,11 @@ export function CustomizableSections({ page, sections, views, canSetDefault }: {
       </li>)}</ol>
       <div className="button-row">
         <button type="button" className="ghost" onClick={() => views.resetSections(page)}>Reset to default</button>
-        {canSetDefault && <button type="button" className="ghost" onClick={() => { setStatus('Saving…'); views.saveAsDefault().then(() => setStatus('Saved as the default for everyone.'), (failure: unknown) => setStatus(`Not saved: ${failure instanceof Error ? failure.message : String(failure)}`)) }}>Use as default for everyone</button>}
+        {canSetDefault && <button type="button" className="ghost" onClick={() => { setStatus('Saving…'); views.saveAsDefault().then((saved) => setStatus(saved.merged ? 'Saved as the default for everyone — merged with a change by someone else.' : 'Saved as the default for everyone.'), (failure: unknown) => setStatus(`Not saved: ${failure instanceof Error ? failure.message : String(failure)}`)) }}>Use as default for everyone</button>}
       </div>
       <small className="muted">{views.inGit ? 'Kept in Git for you, on every computer.' : 'Kept in this browser (connect Git storage and set your work email to keep it everywhere).'}</small>
       {status && <Notice tone={status.startsWith('Not saved') ? 'warning' : 'info'}>{status}</Notice>}
+      {canSetDefault && <SaveQueueStatus state={views.defaultsQueue} onRetry={() => void views.retryDefaults()} />}
     </div>}
     {views.note && <Notice tone="warning">{views.note}</Notice>}
     {layout.shown.map((id) => <div key={id} className="layout-section" data-section={id}>{byId.get(id)!.node}</div>)}

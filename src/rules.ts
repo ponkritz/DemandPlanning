@@ -1,9 +1,8 @@
+import { utcMonthKey } from './businessTime'
 import type { Activity, Baseline, DemandClassification, MonthlyEffort, PeriodControl, UserRole } from './domain'
 
-export const monthKey = (date: string | Date) => {
-  const value = typeof date === 'string' ? new Date(date) : date
-  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}`
-}
+// The month (YYYY-MM) of a date in UTC (NAV-51).
+export const monthKey = (date: string | Date) => utcMonthKey(date) ?? ''
 
 export const hasElevatedRole = (role: UserRole) => ['Owner', 'Admin', 'ProcessOwner'].includes(role)
 

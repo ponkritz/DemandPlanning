@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { AzureWorkItem } from '../domain'
 import type { AzureConfig } from '../azureDevOps'
-import { currentIndiaMonth } from '../azureDevOps'
+import { utcMonthLabel } from '../azureDevOps'
 import { setupHours, type FeatureSetups } from '../featureSetup'
 import { isFutureMonth, monthKeyOfLabel, monthLabelOfKey } from '../featureMonths'
 import { existingMonthNotice, existingMonthTasks, overrideConfirmText, startMonthTasksJob } from '../monthTaskAction'
@@ -21,7 +21,7 @@ type Row = { key: string; plan: string; done: string }
 const nextKey = (key: string) => { const [year, month] = key.split('-').map(Number); return month === 12 ? `${year + 1}-01` : `${year}-${String(month + 1).padStart(2, '0')}` }
 
 export function MonthTasksDialog({ item, items, config, pat, me, canChoose = false, month, featureSetup, onDone, onFailed, onClose }: { item: AzureWorkItem; items: AzureWorkItem[]; config: AzureConfig; pat: string; me: string; canChoose?: boolean; month?: string; featureSetup?: FeatureSetups | null; onDone: (text: string, changed: AzureWorkItem[]) => void; onFailed?: (text: string, changed: AzureWorkItem[]) => void; onClose: () => void }) {
-  const todayLabel = currentIndiaMonth()
+  const todayLabel = utcMonthLabel()
   const start = month && /^\d{4}-\d{2}$/.test(month) ? month : monthKeyOfLabel(todayLabel) ?? ''
   const [rows, setRows] = useState<Row[]>([{ key: start, plan: '', done: '' }])
   const [error, setError] = useState('')

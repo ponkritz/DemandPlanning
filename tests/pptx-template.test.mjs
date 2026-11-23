@@ -77,11 +77,21 @@ test('template checks and shrink to fit: not a .pptx, a template without the sli
   assert.ok(scale < 0.7 && scale >= 0.3, `long text shrinks (${scale})`)
 })
 
-test('the pack fills the template: department from the setup, status default On Track, KPI values (TC-PCK-06)', () => {
+test('the pack fills the template: department from the setup, status Not set until chosen, KPI values (TC-PCK-06)', () => {
   const setup = parsePackSetup(serializePackSetup({ ...defaultPackSetup, department: '  I&D Quality ' }))
   assert.equal(setup.department, 'I&D Quality')
   assert.equal(parsePackSetup(serializePackSetup(defaultPackSetup)).department, undefined)
   const pack = buildMonthlyPack({ month: '2026-10', setup, notes: emptyNotes('2026-10'), items: [], streamsOf: () => [], utilization: { month: 104.5, ytd: 101.2, qeMonth: null } })
   const filled = packFill(pack, setup.department)
-  assert.deepEqual([filled.department, filled.monthLine, filled.status, filled.summary[0], filled.kpis[0]], ['I&D Quality', 'October 2026 Update', 'On Track', 'Actual utilization was 104.5% in October 2026.', { label: 'Utilization (YTD)', value: '101.2%' }])
+  assert.deepEqual([filled.department, filled.monthLine, filled.status, filled.summary[0], filled.kpis[0]], ['I&D Quality', 'October 2026 Update', '', 'Actual utilization was 104.5% in October 2026.', { label: 'Utilization (YTD)', value: '101.2%' }])
+})
+
+test('PCK-08: no status chosen is written as "Not set" with a grey circle, never a green On Track (TC-PCK-06)', async () => {
+  const out = await fillTemplate(template(), { ...fill, status: '' }, new Date('2026-11-02T10:00:00Z'))
+  const files = await unzip(out.bytes)
+  const pulse = new TextDecoder().decode(files.get('ppt/slides/slide1.xml'))
+  assert.ok(textOf(pulse).split('|').includes('Not set'), 'the status word reads Not set')
+  assert.ok(!textOf(pulse).split('|').includes('On Track'), 'not On Track')
+  assert.ok(textOf(pulse).split('|').includes('–'), 'a neutral symbol')
+  assert.match(pulse, /prst="ellipse"[\s\S]*?<a:srgbClr val="7F7F7F"\/>/, 'the circle is grey')
 })

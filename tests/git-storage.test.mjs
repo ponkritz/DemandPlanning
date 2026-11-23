@@ -109,14 +109,6 @@ test('the default data repository is a valid config: ponkritz/DemandPlanningStor
   assert.deepEqual(validateGitConfig(defaultGitRepository), { owner: 'ponkritz', repo: 'DemandPlanningStorage', branch: 'main', path: 'planning-data.json' })
 })
 
-test('monthly controls round-trip in shared planning data; old files without controls remain compatible (TC-SET-02)', () => {
-  const periods = [{ controlVersion: 2, month: '2026-11', planningDeadline: '2026-11-05T23:59:59Z', actualsDeadline: '2026-12-05T23:59:59Z', planningLocked: false, actualsLocked: true, planningOverride: 'unlocked', extensionReason: 'Allowed extension', updatedAt: '2026-11-04T11:00:00Z', updatedBy: 'owner@example.invalid' }]
-  const data = planningData({ ...state, periods })
-  assert.deepEqual(parsePlanning(serializePlanning(data)).periods, periods)
-  assert.equal(parsePlanning(serializePlanning(planningData(state))).periods, undefined, 'older shared files do not erase local settings')
-  assert.throws(() => parsePlanning(JSON.stringify({ ...data, periods: 'corrupt' })), /Period controls/)
-})
-
 test('GIT-14: Table defaults and the release-source settings are shared in the planning file; an older file leaves them alone', () => {
   const state = { baselineRules: [], releaseScopes: [], resourceProfiles: {}, tableDefaults: { defaultDensity: 'compact', exportFormats: ['csv'], bogus: 1 }, releaseSourceSettings: { matchThreshold: 70, approvalDateField: 'Custom.Approved', streamSegment: 2 } }
   const text = serializePlanning(planningData(state))
@@ -129,4 +121,19 @@ test('GIT-14: Table defaults and the release-source settings are shared in the p
   const old = parsePlanning(serializePlanning(planningData({ baselineRules: [], releaseScopes: [], resourceProfiles: {} })))
   assert.equal('tableDefaults' in old, false); assert.equal('releaseSourceSettings' in old, false)
   assert.equal('releaseSourceSettings' in parsePlanning(serializePlanning(planningData({ ...state, releaseSourceSettings: { matchThreshold: 500 } }))), false, 'an invalid threshold is not shared')
+})
+
+test('GIT-16: loading from Git asks first only when there are unsaved changes, and names what is replaced', async () => {
+  const { confirmReplace, replaceUnsavedText } = await import('../src/gitStorage.ts')
+  const asked = []
+  const yes = (text) => { asked.push(text); return true }
+  const no = (text) => { asked.push(text); return false }
+  assert.equal(confirmReplace(false, false, no), true, 'nothing unsaved: loads without asking')
+  assert.equal(asked.length, 0)
+  assert.equal(confirmReplace(true, false, no), false, 'unsaved and declined: nothing is loaded')
+  assert.equal(confirmReplace(true, false, yes), true, 'unsaved and confirmed: loads')
+  assert.match(asked[0], /not saved to Git yet \(baselines, release scope, the region \/ role mapping, the capacity settings/)
+  assert.match(asked[0], /replaces them with the copy in Git, and they are lost/)
+  assert.doesNotMatch(asked[0], /Someone else saved/)
+  assert.match(replaceUnsavedText(true), /^Someone else saved the planning data in Git after you started editing\./, 'a save conflict says why')
 })

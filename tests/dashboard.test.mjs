@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { personMonths, applyFilter, totals, plannedOverload, persistentOverload, concentration, rebalancing, streamTotals, change, byRole, byStream, periodMonths, quarterOf, monthStatus, noFilter } from '../src/dashboard.ts'
+import { personMonths, applyFilter, totals, plannedOverload, persistentOverload, concentration, rebalancing, streamTotals, change, byRole, byStream, narrowPeriod, offeredMonths, offeredQuarters, periodMonths, periodOf, periodQuarters, quarterOf, monthStatus, noFilter } from '../src/dashboard.ts'
 
 const base = { organization: 'o', project: 'p', state: 'Active', assignedTo: '', areaPath: 'p', iterationPath: 'p', tags: '', url: '', syncedAt: '' }
 let next = 1
@@ -18,12 +18,33 @@ const items = [cp, dp, f1, f2, s1, s2,
 const months = ['2026-07', '2026-08', '2026-09', '2026-10']
 const rows = personMonths(items, months, '2026-10-22', settings)
 
-test('periods: a year with any quarters and months (none = whole year); month status against today', () => {
-  assert.deepEqual(periodMonths({ year: 2026, quarters: [1], months: [] }), ['2026-01', '2026-02', '2026-03'])
-  assert.deepEqual(periodMonths({ year: 2026, quarters: [4], months: [2, 11] }), ['2026-02', '2026-10', '2026-11', '2026-12'], 'quarters and months combine, without duplicates, in order')
-  assert.equal(periodMonths({ year: 2025, quarters: [], months: [] }).length, 12)
+test('periods: Year → Quarter → Month, a hierarchy of multi-selects; nothing ticked in Year = the current year (OV-15, OV-16, TC-OV-15)', () => {
+  const p = (years, quarters, months) => ({ years, quarters, months })
+  assert.deepEqual(periodMonths(p([2026], ['2026-Q1'], []), 2026), ['2026-01', '2026-02', '2026-03'])
+  assert.deepEqual(periodMonths(p([2026], ['2026-Q1', '2026-Q4'], ['2026-02', '2026-11']), 2026), ['2026-02', '2026-11'], 'chosen months narrow the chosen quarters')
+  assert.deepEqual(periodMonths(p([2026], ['2026-Q4'], ['2026-02']), 2026), ['2026-10', '2026-11', '2026-12'], 'a month outside the chosen quarters is ignored: the quarter')
+  assert.equal(periodMonths(p([2025], [], []), 2026).length, 12, 'no quarter = the whole chosen year')
+  assert.deepEqual(periodMonths(p([], [], []), 2026), offeredMonths(offeredQuarters([2026])), 'no year ticked = the current year')
+  assert.equal(periodMonths(p([], [], []), 2026)[0], '2026-01')
+  assert.deepEqual(periodMonths(p([2025, 2026], ['2025-Q4', '2026-Q1'], []), 2026), ['2025-10', '2025-11', '2025-12', '2026-01', '2026-02', '2026-03'], 'quarters belong to their year')
+  assert.deepEqual(periodMonths(p([2025, 2026], [], ['2026-03']), 2026), ['2026-03'], 'a month belongs to its year')
+  assert.deepEqual(offeredQuarters([2026]), ['2026-Q1', '2026-Q2', '2026-Q3', '2026-Q4'], 'Quarter offers the quarters of the years')
+  assert.deepEqual(periodQuarters(p([2026], ['2025-Q1'], []), 2026), offeredQuarters([2026]), 'a quarter of another year does not count')
+  assert.deepEqual(offeredMonths(['2026-Q3']), ['2026-07', '2026-08', '2026-09'], 'Month offers the months of the quarters')
+  assert.deepEqual(narrowPeriod(p([2026], ['2025-Q4', '2026-Q1'], ['2026-02', '2026-05']), 2026), p([2026], ['2026-Q1'], ['2026-02']), 'changing a level drops what no longer fits below it')
   assert.equal(quarterOf('2026-08'), 3)
   assert.deepEqual(['2026-09', '2026-10', '2026-11'].map((month) => monthStatus(month, '2026-10-22')), ['elapsed', 'partial', 'future'])
+})
+
+test('a saved period loads in this format and the earlier ones, keeping its months (OV-15, OV-16, MYD-08, TC-OV-15)', () => {
+  const fallback = { years: [2026], quarters: ['2026-Q4'], months: [] }
+  assert.deepEqual(periodOf({ year: 2025, quarters: [1], months: [] }, fallback), { years: [2025], quarters: ['2025-Q1'], months: [] })
+  const old = { year: 2026, quarters: [4], months: [2, 11] }
+  assert.deepEqual(periodOf(old, fallback), { years: [2026], quarters: [], months: ['2026-02', '2026-10', '2026-11', '2026-12'] }, 'the earliest quarters + months become the same months')
+  assert.deepEqual(periodMonths(periodOf(old, fallback), 2026), ['2026-02', '2026-10', '2026-11', '2026-12'], 'the same months as before')
+  assert.deepEqual(periodOf({ years: [2026], quarters: [1], months: [2] }, fallback), { years: [2026], quarters: ['2026-Q1'], months: ['2026-02'] }, 'the v8 numbers become keys of each year')
+  assert.deepEqual(periodOf({ years: [2026, 1990], quarters: ['2026-Q1', 'x'], months: ['2026-02', '2026-13'] }, fallback), { years: [2026], quarters: ['2026-Q1'], months: ['2026-02'] }, 'cleaned')
+  for (const bad of [null, 'x', { year: 'abc' }, { year: 1999 }]) assert.deepEqual(periodOf(bad, fallback), fallback)
 })
 
 test('person-month records: plan, actual, capacity, region and role, lines and blank actuals', () => {
@@ -70,11 +91,11 @@ test('rebalancing leaves people without a role out of the relief and receiver li
 
 test('bandOf and plannedOverload follow the Settings thresholds', async () => {
   const { bandOf, plannedOverload, persistentOverload } = await import('../src/dashboard.ts')
-  assert.deepEqual([bandOf(100), bandOf(99.9), bandOf(80), bandOf(79.9), bandOf(null)], ['over', 'balanced', 'balanced', 'spare', null])
-  assert.deepEqual([bandOf(90, { overloadedAt: 90, availableBelow: 70 }), bandOf(69, { overloadedAt: 90, availableBelow: 70 })], ['over', 'spare'])
+  assert.deepEqual([bandOf(100.1), bandOf(100), bandOf(99.9), bandOf(80), bandOf(79.9), bandOf(null)], ['over', 'balanced', 'balanced', 'balanced', 'spare', null], 'overloaded is strictly above the limit')
+  assert.deepEqual([bandOf(90.5, { overloadedAt: 90, availableBelow: 70 }), bandOf(90, { overloadedAt: 90, availableBelow: 70 }), bandOf(69, { overloadedAt: 90, availableBelow: 70 })], ['over', 'balanced', 'spare'])
   const pm = (person, month, plan, actual) => ({ month, status: 'elapsed', person, role: 'QE', plan, actual, capacity: 100, absence: 0, tasks: 1, planLines: 1, blankActuals: 0, streams: [] })
   const rows = [pm('Ana', '2026-07', 95, 95), pm('Ana', '2026-08', 95, 95), pm('Ana', '2026-09', 95, 95), pm('Ben', '2026-07', 100, 50)]
-  assert.deepEqual(plannedOverload(rows).over, ['Ben'])
+  assert.deepEqual(plannedOverload(rows).over, [], 'Ben at exactly 100% is not overloaded')
   assert.deepEqual(plannedOverload(rows, { overloadedAt: 90, availableBelow: 70 }).over.sort(), ['Ana', 'Ben'])
   const months = ['2026-07', '2026-08', '2026-09']
   assert.deepEqual(persistentOverload(rows, months, 'actual'), [])

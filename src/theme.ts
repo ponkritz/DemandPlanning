@@ -30,3 +30,11 @@ export function applyTheme(preference: ThemePreference, root: HTMLElement = docu
 export function storeThemePreference(preference: ThemePreference, storage: Pick<Storage, 'setItem'> = localStorage) {
   try { storage.setItem(themeStorageKey, preference) } catch { /* theme is a convenience; storage may be unavailable */ }
 }
+
+// NAV-50 / SET-18: the theme can be chosen in the top bar and on My settings → Look & feel; a change in one place is
+// announced so the other follows.
+export const themeEvent = 'demand-planning-theme'
+export function chooseTheme(preference: ThemePreference) {
+  storeThemePreference(preference); applyTheme(preference)
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(themeEvent, { detail: preference }))
+}

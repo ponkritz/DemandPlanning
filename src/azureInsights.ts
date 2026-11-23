@@ -1,3 +1,5 @@
+import { isFinishedState } from './workStates.ts'
+import { utcMonthKey } from './businessTime.ts'
 import type { AzureWorkItem } from './domain'
 
 const months = ['January','February','March','April','May','June','July','August','September','October','November','December']
@@ -73,11 +75,8 @@ export function planMonthStory<T extends Pick<AzureWorkItem, 'id' | 'workItemTyp
   if (open.length === 1) return { status: 'use', story: open[0].story }
   return open.length ? mineOrNew() : { status: 'create' }
 }
-export function indiaMonth(date?: string) {
-  if (!date || !Number.isFinite(Date.parse(date))) return undefined
-  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit' }).formatToParts(new Date(date))
-  return `${parts.find(p => p.type === 'year')!.value}-${parts.find(p => p.type === 'month')!.value}`
-}
+// The month (YYYY-MM) a Feature closed in: its Closed Date's UTC month (NAV-51).
+export function closedMonth(date?: string) { return date ? utcMonthKey(date) : undefined }
 export function workingDays(month: string) {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error('Choose a valid month.')
   const [year, index] = month.split('-').map(Number), last = new Date(Date.UTC(year, index, 0)).getUTCDate()
@@ -102,11 +101,11 @@ export function azureInsights(source: AzureWorkItem[], month: string, today: str
   const plan = total(monthlyTasks, 'originalEstimate'), actual = total(monthlyTasks, 'completedWork')
   const paired = monthlyTasks.filter(item => item.originalEstimate != null && item.completedWork != null)
   const variance = paired.length ? paired.reduce((sum, item) => sum + item.completedWork! - item.originalEstimate!, 0) : null
-  const closed = (item: AzureWorkItem) => ['closed', 'done', 'completed'].includes(item.state.trim().toLowerCase())
+  const closed = (item: AzureWorkItem) => isFinishedState(item.state) // owner decision 10: Resolved counts too
   const overdue = items.filter(item => !closed(item) && item.targetDate && item.targetDate.slice(0, 10) < today)
   const flags = paired.filter(item => item.originalEstimate! > 0 && item.completedWork! > item.originalEstimate! * 1.25)
-  const closures = features.filter(item => closed(item) && indiaMonth(item.closedDate) === month)
-  const priorClosures = features.filter(item => closed(item) && indiaMonth(item.closedDate) === `${Number(month.slice(0,4)) - 1}${month.slice(4)}`).length
+  const closures = features.filter(item => closed(item) && closedMonth(item.closedDate) === month)
+  const priorClosures = features.filter(item => closed(item) && closedMonth(item.closedDate) === `${Number(month.slice(0,4)) - 1}${month.slice(4)}`).length
   const byId = new Map(items.map(item => [item.id, item]))
   const epicOf = (item: AzureWorkItem) => {
     const seen = new Set<number>(); let current: AzureWorkItem | undefined = item
@@ -131,7 +130,7 @@ export function azureInsights(source: AzureWorkItem[], month: string, today: str
   const trend = Array.from({ length: 6 }, (_, index) => {
     const date = new Date(`${month}-01T00:00:00Z`); date.setUTCMonth(date.getUTCMonth() - 5 + index)
     const key = date.toISOString().slice(0, 7), rows = timeWritingTasks.filter(item => timeWritingMonth(item.title) === key)
-    return { month: key, plan: total(rows, 'originalEstimate'), actual: total(rows, 'completedWork'), closures: features.filter(item => closed(item) && indiaMonth(item.closedDate) === key).length }
+    return { month: key, plan: total(rows, 'originalEstimate'), actual: total(rows, 'completedWork'), closures: features.filter(item => closed(item) && closedMonth(item.closedDate) === key).length }
   })
   const epicGroups = new Map<string, { epic?: AzureWorkItem; stories: AzureWorkItem[] }>()
   for (const story of storiesForMonth) { const epic = epicOf(story); const key = epic?.key ?? 'unmapped'; const group = epicGroups.get(key) ?? { epic, stories: [] }; group.stories.push(story); epicGroups.set(key, group) }
@@ -148,7 +147,7 @@ export function timeWritingGaps(source: AzureWorkItem[], month: string) {
   const byId = new Map(items.map(item => [item.id, item]))
   const storyIds = timeWritingStoryIds(items), stories = items.filter(item => storyIds.has(item.id))
   const tasks = items.filter(item => item.workItemType === 'Task')
-  const finished = (item: AzureWorkItem) => ['closed', 'done', 'completed', 'resolved'].includes(item.state.trim().toLowerCase())
+  const finished = (item: AzureWorkItem) => isFinishedState(item.state)
   const hasFeature = (item: AzureWorkItem) => { const seen = new Set<number>(); let current = item.parentId == null ? undefined : byId.get(item.parentId); while (current && !seen.has(current.id)) { if (current.workItemType === 'Feature') return true; seen.add(current.id); current = current.parentId == null ? undefined : byId.get(current.parentId) } return false }
   return {
     storiesWithoutTask: stories.filter(story => !finished(story) && !tasks.some(task => task.parentId === story.id && timeWritingMonth(task.title) === month)),

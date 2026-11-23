@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
-import { parseAzureProjectUrl, fetchAzureWorkItems, mergeAzureWorkItems, buildWorkItemQuery, createAzureFeature, featurePatch, featureDescription, withFeatureDoD, releaseClassifications, releaseHierarchyTitles, currentIndiaMonth, createAzureReleaseHierarchy, completeReleaseHierarchy, HierarchyCreationError, readAzureIterations, projectIterationPaths, currentIterationPairs, futureIterationPairs, mapAzureWorkItem, savedBacklogItems, sameAzureScope, updateAzureTimeWritingEffort } from '../src/azureDevOps.ts'
+import { parseAzureProjectUrl, fetchAzureWorkItems, mergeAzureWorkItems, buildWorkItemQuery, createAzureFeature, featurePatch, featureDescription, withFeatureDoD, releaseClassifications, releaseHierarchyTitles, utcMonthLabel, createAzureReleaseHierarchy, completeReleaseHierarchy, HierarchyCreationError, readAzureIterations, projectIterationPaths, currentIterationPairs, futureIterationPairs, mapAzureWorkItem, savedBacklogItems, sameAzureScope, updateAzureTimeWritingEffort } from '../src/azureDevOps.ts'
 import { buildWorkItemTree } from '../src/azureHierarchy.ts'
 import { loadAzurePat, saveAzurePat, forgetAzurePat, listAzurePatProfiles, loadAzurePatProfile, saveAzurePatProfile, forgetAzurePatProfile, listAzureConnectionProfiles, loadAzureConnectionProfile, saveAzureConnectionProfile, forgetAzureConnectionProfile } from '../src/azureCredentials.ts'
 import { normalizeBacklogColumns, defaultBacklogColumns, plainAzureText, visibleBacklogRows } from '../src/backlogView.ts'
@@ -49,9 +49,9 @@ test('ADS configurations retain URL, reason and PAT as one selectable browser-lo
   const first = { id: 'quality-read', url: 'https://dev.azure.com/example-org/Quality%20Project/_backlogs/backlog/Team%20A/Epics', reason: 'Quality backlog read', token: 'quality-read-token' }
   const second = { id: 'release-write', url: 'https://dev.azure.com/another-org/Release%20Project/_backlogs/backlog/Release%20Team/Epics', reason: 'Release work-item write', token: 'release-write-token' }
   saveAzureConnectionProfile(first, storage); saveAzureConnectionProfile(second, storage)
-  assert.deepEqual(listAzureConnectionProfiles(storage), [{ id: first.id, url: first.url, reason: first.reason, role: 'time-tracking' }, { id: second.id, url: second.url, reason: second.reason, role: 'time-tracking' }])
+  assert.deepEqual(listAzureConnectionProfiles(storage), [{ id: first.id, url: first.url, reason: first.reason, role: 'time-tracking' }, { id: second.id, url: second.url, reason: second.reason, role: 'reference' }], 'CON-100: only the first role-less connection (an older Time Writing setup) keeps the writing role; another one is read-only')
   assert.equal(JSON.stringify(listAzureConnectionProfiles(storage)).includes('token'), false)
-  assert.deepEqual(loadAzureConnectionProfile(second.id, storage), second)
+  assert.deepEqual(loadAzureConnectionProfile(second.id, storage), { ...second, role: 'reference' }, 'loaded with the role it is used with (CON-100)')
   forgetAzureConnectionProfile(first.id, storage)
   assert.deepEqual(listAzureConnectionProfiles(storage), [{ id: second.id, url: second.url, reason: second.reason, role: 'time-tracking' }])
 })
@@ -384,7 +384,7 @@ function fakeHierarchyServer() {
   return { transport, records, writes, failOn: (title) => { failureTitle = title } }
 }
 
-test('release naming and India month rollover implement the final task-title correction', () => {
+test('release naming and UTC month rollover implement the final task-title correction (NAV-51)', () => {
   const pu = releaseHierarchyTitles('Example | Service | v1.0', 'PU', 'October 2026')
   assert.deepEqual(pu.reviews.map((item) => item.milestone), ['SFV', 'DT', 'IQOQ'])
   assert.equal(pu.reviews[0].title, 'SFV : Review of Deliverables (Service 1.0)')
@@ -396,8 +396,9 @@ test('release naming and India month rollover implement the final task-title cor
   const free = releaseHierarchyTitles('Audit readiness 2027', 'PU', 'October 2026')
   assert.deepEqual([free.reviews[0].title, free.timeWriting, free.task], ['SFV : Review of Deliverables (Audit readiness 2027)', 'Audit readiness 2027 - Time Writing', 'October 2026 | Audit readiness 2027'])
   assert.throws(() => releaseHierarchyTitles('  ', 'PU', 'October 2026'), /Enter the Feature title/)
-  assert.equal(currentIndiaMonth(new Date('2026-10-31T18:29:00Z')), 'October 2026')
-  assert.equal(currentIndiaMonth(new Date('2026-10-31T18:30:00Z')), 'November 2026')
+  assert.equal(utcMonthLabel(new Date('2026-10-31T18:30:00Z')), 'October 2026', 'already November in India, still October in UTC')
+  assert.equal(utcMonthLabel(new Date('2026-10-31T23:59:59Z')), 'October 2026')
+  assert.equal(utcMonthLabel(new Date('2026-11-01T00:00:00Z')), 'November 2026')
 })
 
 for (const [kind, milestones, expectedStories] of [['PU', undefined, 5], ['Release', undefined, 6], ['PU', [], 2], ['Release', [], 2], ['Release', ['PRD', 'IQOQ'], 4]]) {
@@ -466,10 +467,11 @@ test('multi-select state filters include both New and Active, with ancestor cont
   assert.equal(buildWorkItemTree(data, ['All'], '')[0].children[0].children[0].children.length, 1)
 })
 
-test('current dates resolve PI and nested Sprint with inclusive India-day boundaries', () => {
+test('current dates resolve PI and nested Sprint with inclusive UTC-day boundaries (NAV-51)', () => {
   const iterations = projectIterationPaths({ name: 'Quality Project', children: [{ name: 'PI A', attributes: { startDate: '2026-10-01T00:00:00Z', finishDate: '2026-12-31T00:00:00Z' }, children: [{ name: 'Sprint 1', attributes: { startDate: '2026-10-01T00:00:00Z', finishDate: '2026-10-16T00:00:00Z' } }, { name: 'Sprint 2', attributes: { startDate: '2026-10-17T00:00:00Z', finishDate: '2026-10-30T00:00:00Z' } }] }] })
-  assert.equal(currentIterationPairs(iterations, new Date('2026-10-16T18:29:59Z'))[0].sprint.name, 'Sprint 1')
-  assert.equal(currentIterationPairs(iterations, new Date('2026-10-16T18:30:00Z'))[0].sprint.name, 'Sprint 2')
+  assert.equal(currentIterationPairs(iterations, new Date('2026-10-16T18:30:00Z'))[0].sprint.name, 'Sprint 1', 'already 17 October in India, still the 16th in UTC')
+  assert.equal(currentIterationPairs(iterations, new Date('2026-10-16T23:59:59Z'))[0].sprint.name, 'Sprint 1')
+  assert.equal(currentIterationPairs(iterations, new Date('2026-10-17T00:00:00Z'))[0].sprint.name, 'Sprint 2')
   assert.equal(currentIterationPairs(iterations, new Date('2027-01-01T00:00:00Z')).length, 0)
   assert.equal(currentIterationPairs([{ name: 'No dates', path: 'Quality Project\\Unknown' }]).length, 0)
 })
@@ -733,4 +735,14 @@ test('BKL-28: a new month Task gets the Epic setup\'s default hours; an existing
   assert.deepEqual([november.status, november.task.title, november.task.originalEstimate, november.story.title], ['created', 'November 2026 | Example | Service | v1.0', 4, 'Example | Service | v1.0 - Time Writing'])
   const again = await ensure(config, pat, created.feature.id, feature.assignedTo, 'November 2026', server.transport, false, 9)
   assert.deepEqual([again.status, again.task.id, again.task.originalEstimate], ['exists', november.task.id, 4], 'reused, hours unchanged')
+})
+
+test('CON-100: a connection without a role is read-only, except the one older Time Writing setup (TC-CON-100)', async () => {
+  const { roleOf } = await import('../src/azureCredentials.ts')
+  const tw = { id: 'tw', role: 'time-tracking' }, old = { id: 'old' }, onprem = { id: 'tfs', baseUrl: 'https://tfs.example.com/tfs/Collection' }
+  assert.equal(roleOf(old, [tw, old]), 'reference', 'another connection already writes: read-only')
+  assert.equal(roleOf(old, [old]), 'time-tracking', 'the only, older cloud connection keeps working as Time Writing')
+  assert.equal(roleOf(onprem, [onprem]), 'reference', 'an on-premises server is never the writing one')
+  assert.equal(roleOf(old, [old], new Set(['old'])), 'reference', 'a role-less connection from the shared setup in Git is read-only')
+  assert.equal(roleOf({ id: 'x', role: 'documents' }, []), 'documents', 'a saved role is kept')
 })

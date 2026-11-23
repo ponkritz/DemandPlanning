@@ -5,7 +5,8 @@ import { Modal, Notice } from './ui'
 
 // BKL-39: the pop-up of Close Feature / Close User Story — every open item that would close, with a tick box (yours
 // ticked, other people's not), its type, #ID (opens it in Azure DevOps), title, owner and state. Close shows how many
-// are ticked; a month Time Writing Task among them asks first whether its hours are up to date.
+// are ticked; a month Time Writing Task among them asks first whether its hours are up to date. BKL-43: a later month's
+// Time Writing Task under a Feature closed early is listed to be Removed with 0 h (ticked, whoever it belongs to).
 export function CloseItemsDialog({ title, intro, rows, asked, blocked, onConfirm, onClose }: { title: string; intro: string; rows: CloseRow[]; asked?: number; blocked?: string; onConfirm: (items: ReturnType<typeof closeSelection>) => void; onClose: () => void }) {
   const [ticked, setTicked] = useState(() => defaultTicks(rows, asked))
   const [hoursDone, setHoursDone] = useState(false)
@@ -21,15 +22,16 @@ export function CloseItemsDialog({ title, intro, rows, asked, blocked, onConfirm
           </label>
           <a href={row.item.url} target="_blank" rel="noreferrer" className="close-id" title={`Open #${row.item.id} in Azure DevOps`}>#{row.item.id}</a>
           <span className="close-title">{row.item.title}</span>
-          <small className="muted">{row.mine ? 'yours' : owner(row.item)} · {row.item.state}</small>
+          <small className="muted">{row.mine ? 'yours' : owner(row.item)} · {row.remove ? `${row.item.state} → Removed, 0 h (later month)` : row.item.state}</small>
         </li>)}
       </ul>
-      {rows.some((row) => !row.mine) && <p className="muted">Other people’s items are not ticked: tick them only if you mean to close them. A parent closes only with everything open below it.</p>}
+      {rows.some((row) => row.remove) && <p className="muted">The Feature closes before these months: their Time Writing Tasks (everyone’s, without Completed Work) are set to 0 h Original Estimate and Removed.</p>}
+      {rows.some((row) => !row.mine && !row.remove) && <p className="muted">Other people’s items are not ticked: tick them only if you mean to close them. A parent closes only with everything open below it.</p>}
       {selection.needsHours && <label className="checkbox-label close-hours"><input type="checkbox" checked={hoursDone} onChange={(event) => setHoursDone(event.target.checked)} />I have updated the hours (Original Estimate and Completed Work) of the Time Writing Tasks being closed — they become read-only.</label>}
-      {!selection.items.length && <Notice tone="info">Tick what to close.</Notice>}
+      {!selection.items.length && !selection.removals.length && <Notice tone="info">Tick what to close.</Notice>}
       {blocked && <Notice tone="warning">{blocked}</Notice>}
       <div className="modal-actions"><button type="button" className="ghost" onClick={onClose}>Cancel</button>
-        <button type="button" className="primary" disabled={Boolean(blocked) || !selection.items.length || (selection.needsHours && !hoursDone)} onClick={() => onConfirm(selection)}>{`Close ${selection.items.length} item${selection.items.length === 1 ? '' : 's'}`}</button></div>
+        <button type="button" className="primary" disabled={Boolean(blocked) || (!selection.items.length && !selection.removals.length) || (selection.needsHours && !hoursDone)} onClick={() => onConfirm(selection)}>{`Close ${selection.items.length} item${selection.items.length === 1 ? '' : 's'}${selection.removals.length ? `, remove ${selection.removals.length}` : ''}`}</button></div>
     </div>
   </Modal>
 }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { AzureWorkItem } from '../domain'
-import { mergeAzureWorkItems, completeFeatureFromSetup, createFeatureFromSetup, addMonthTasks, addUserStory, updateAzureTimeWritingEffort,  currentIndiaMonth, HierarchyCreationError, withFeatureDoD, readAzureIterations, currentIterationPairs, futureIterationPairs, type AzureIteration, type AzureConfig, type FeatureInput } from '../azureDevOps'
+import { mergeAzureWorkItems, completeFeatureFromSetup, createFeatureFromSetup, addMonthTasks, addUserStory, updateAzureTimeWritingEffort,  utcMonthLabel, HierarchyCreationError, withFeatureDoD, readAzureIterations, currentIterationPairs, futureIterationPairs, type AzureIteration, type AzureConfig, type FeatureInput } from '../azureDevOps'
 import { Modal, Info, Notice } from './ui'
 import { PersonPicker } from './PersonPicker'
 import { assignablePeople } from '../myWork'
@@ -17,7 +17,7 @@ import { chooseSetup, setForClass, withLinkedStories, emptySetup, fieldKey, fiel
 // children of an existing Feature. The Feature and every new child are assigned to the person chosen, else to me.
 // initialTitle: the Feature title to start from (Release Details: "Program | Service | Release" of the release).
 // releaseItems: the on-prem work items of that release; they fill the Epic setup's title fields (their source field).
-// month: the Time Writing month of the new Task (Time Writing: the month shown); default the current month (India).
+// month: the Time Writing month of the new Task (Time Writing: the month shown); default the current month (UTC, NAV-51).
 // Every new Feature, from any page, is created here (BKL-26): the Epic's setup (else the built-in rules), the Epic's
 // Area Path, the PI chosen (the current one preselected) and the stories in its Sprint.
 export type FeatureEditorMode = { parent: AzureWorkItem; resume?: undefined } | { resume: AzureWorkItem; parent?: undefined }
@@ -58,7 +58,7 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
   const pairs = currentIterationPairs(iterationChoices)
   const futurePairs = futureIterationPairs(iterationChoices)
   const selectablePairs = [...pairs, ...futurePairs]
-  const todayMonth = currentIndiaMonth()
+  const todayMonth = utcMonthLabel()
   const baseMonth = month || todayMonth
   let months: string[] = [baseMonth], monthsError = ''
   if (!resumeFeature) { try { months = featureMonths({ startDate, targetDate, formMonth: baseMonth, currentMonth: todayMonth }) } catch (failure) { monthsError = failure instanceof Error ? failure.message : 'Check the dates.' } }
@@ -328,7 +328,7 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
           <small className="muted">Created under {resumeFeature ? 'the' : 'the new'} Feature in the Sprint chosen, assigned like the Feature.</small>
         </fieldset>}
         {missingNote(2)}
-        <p className="info-line"><Info label="Paths and assignment">Feature → {resumeFeature ? resumeFeature.iterationPath : iterationPath || 'the PI chosen'}. Optional User Stories → {sprintPath || 'the Sprint chosen'}. Time Writing story and Task → {config.project}, never the Sprint, in the Feature’s Area Path (the same on every page; an existing month Task of the person is reused). Area: the Feature and its User Stories take the Epic’s Area Path. Every new item is assigned to {assignee || 'the person chosen'}. {month ? `Time Writing month: ${monthLabel}.` : 'Current date uses India time.'}</Info></p>
+        <p className="info-line"><Info label="Paths and assignment">Feature → {resumeFeature ? resumeFeature.iterationPath : iterationPath || 'the PI chosen'}. Optional User Stories → {sprintPath || 'the Sprint chosen'}. Time Writing story and Task → {config.project}, never the Sprint, in the Feature’s Area Path (the same on every page; an existing month Task of the person is reused). Area: the Feature and its User Stories take the Epic’s Area Path. Every new item is assigned to {assignee || 'the person chosen'}. {month ? `Time Writing month: ${monthLabel}.` : 'The current month is the UTC month.'}</Info></p>
       </section>
       {isNew && <section className={sectionClass(3)} hidden={!shown(3)} aria-label={`Section 4: Estimates for ${monthRange}`} tabIndex={-1}>
         {heading(3)}

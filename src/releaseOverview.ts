@@ -11,7 +11,7 @@ import { dpMilestoneLabel, dpMonthCounts, type SupportedRelease } from './dpMile
 import { ioccDocumentNames, ioccMonthCounts } from './ioccMilestones.ts'
 
 // Overview "Releases this month": for each read-only view whose documents carry releases in their paths (DP, CP,
-// IOCC, …), the releases with documents approved (else changed) in the month, in the viewer's time zone — the same
+// IOCC, …), the releases with documents approved (else changed) in the month, in UTC (NAV-51) — the same
 // month rule as the views — with the document count; plus the totals across streams.
 export interface StreamRelease { type?: string; name: string; release: string; documents: number; approvalDate?: string }
 export interface StreamDocument { id: number; title: string; url: string; release: string; approvalDate?: string }

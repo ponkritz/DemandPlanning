@@ -1,3 +1,4 @@
+import { finishedStates } from './workStates.ts'
 import { formatDate } from './format.ts'
 import { csvCell } from './csv.ts'
 import type { AzureWorkItem } from './domain'
@@ -155,7 +156,8 @@ export function sortItems(items: AzureWorkItem[], order: QueryOrder[]) {
 
 // Summary strip: counts by State, Work Item Type and Assigned To; overdue = open with a passed target date;
 // changed in the last 7 days.
-const closedStates = new Set(['closed', 'done', 'completed', 'resolved', 'removed', 'cut', 'approved'])
+// Not open: finished (owner decision 10), gone (Removed, Cut) or an approved release.
+const closedStates = new Set<string>([...finishedStates, 'removed', 'cut', 'approved'])
 export function viewSummary(items: AzureWorkItem[], today: string) {
   const count = (key: (item: AzureWorkItem) => string) => [...items.reduce((map, item) => map.set(key(item) || '—', (map.get(key(item) || '—') ?? 0) + 1), new Map<string, number>())].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
   const weekAgo = new Date(Date.parse(`${today}T00:00:00Z`) - 7 * 86400000).toISOString().slice(0, 10)

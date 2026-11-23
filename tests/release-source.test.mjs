@@ -76,8 +76,10 @@ test('Author Approval Date is read from the configured field or any approval-dat
   assert.equal(approvalDateFrom({ 'Custom.Other': '2026-10-09T10:00:00Z' }), undefined)
   assert.equal(approvalDateFrom({ 'Custom.Other': '2026-10-09T10:00:00Z' }, { approvalDateField: 'Custom.Other' }), '2026-10-09T10:00:00Z')
   assert.equal(approvalDateFrom({ 'Custom.AuthorApprovalDate': 'not a date' }), undefined)
-  assert.equal(approvalMonthOf('2026-10-31T20:00:00Z', 'Asia/Kolkata'), '2026-11', 'approval month is bucketed in the viewer’s time zone')
+  assert.equal(approvalMonthOf('2026-10-31T20:00:00Z'), '2026-10', 'approval month is bucketed in UTC for every viewer (NAV-51)')
+  assert.equal(approvalMonthOf('2026-10-31T20:00:00Z', 'Asia/Kolkata'), '2026-11', 'the zone parameter is a test hook only')
   assert.equal(approvalMonthOf('2026-10-31T20:00:00Z', 'America/New_York'), '2026-10')
+  assert.equal(approvalMonthOf('2026-11-01', 'America/New_York'), '2026-11', 'a plain date keeps its own month, never a day earlier')
 })
 test('completed releases are those approved in the selected month', () => {
   const source = [doc(1, 'DHFI\\Dose Planning\\Release 4.2', { title: 'Design Review Approval', approvalDate: '2026-10-12T09:00:00Z' }), doc(2, 'DHFI\\Dose Planning\\Release 4.2', { title: 'Verification Summary', approvalDate: '2026-10-20T09:00:00Z' }), doc(3, 'DHFI\\Care Pathways\\Release 3.1', { approvalDate: '2026-09-12T09:00:00Z' }), doc(4, 'DHFI\\Clinical Library\\Release 7.0', { title: 'No approval yet' })]
@@ -105,9 +107,10 @@ test('planned and booked hours per release come from the Time Writing Tasks unde
 })
 
 import { viewMonthOf } from '../src/releaseSource.ts'
-test('ADS month filter: approval date (India time), else any approval-date field, else Changed Date', () => {
-  assert.equal(viewMonthOf({ approvalDate: '2026-09-30T20:00:00Z', changedDate: '2026-10-05T00:00:00Z' }, 'Asia/Kolkata'), '2026-10', 'late 30 Sep UTC is October for a viewer in India')
-  assert.equal(viewMonthOf({ approvalDate: '2026-09-30T20:00:00Z' }, 'America/New_York'), '2026-09', 'and still September for a viewer in New York')
+test('ADS month filter: approval date (UTC, NAV-51), else any approval-date field, else Changed Date', () => {
+  assert.equal(viewMonthOf({ approvalDate: '2026-09-30T20:00:00Z', changedDate: '2026-10-05T00:00:00Z' }), '2026-09', 'late 30 Sep UTC is September for every viewer')
+  assert.equal(viewMonthOf({ approvalDate: '2026-09-30T20:00:00Z', changedDate: '2026-10-05T00:00:00Z' }, 'Asia/Kolkata'), '2026-10', 'the zone parameter (tests only) still works')
+  assert.equal(viewMonthOf({ approvalDate: '2026-09-30T20:00:00Z' }, 'America/New_York'), '2026-09')
   assert.equal(viewMonthOf({ fields: { 'Custom.AuthorApprovalDate': '2026-08-12T00:00:00Z' }, changedDate: '2026-10-05T00:00:00Z' }), '2026-08')
   assert.equal(viewMonthOf({ changedDate: '2026-10-05T00:00:00Z' }), '2026-10')
   assert.equal(viewMonthOf({}), undefined)

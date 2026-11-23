@@ -4,8 +4,8 @@ import type { GitStorage } from '../useGitStorage'
 import type { MonthlyPackStore } from '../useMonthlyPack'
 import { defaultCapabilitiesLabel, kpiMetrics, type KpiMetric, type KpiRow, type MonthlyPackSetup, type PackLine } from '../monthlyPack'
 import { defaultStreams } from '../streams'
-import { Notice, Panel } from './ui'
-import { checkTemplate, maxTemplateBytes } from '../pptxTemplate'
+import { Notice, Panel, SaveQueueStatus } from './ui'
+import { checkTemplate, maxTemplateBytes, packTemplateFile } from '../pptxTemplate'
 
 // Admin → Reports → Monthly pack: which streams and Epics feed each slide line, and which Epic (with which metric) each KPI
 // row reads. Shared in Git as monthly-pack-setup.json. Also the department name of the exported title and the team's
@@ -45,6 +45,8 @@ export function MonthlyPackSetupPanel({ pack, git, items }: { pack: MonthlyPackS
       if (check.problems.length) throw new Error(check.problems.join(' '))
       setStatus({ tone: 'info', text: 'Saving the template to Storage…' })
       const result = await git.writePackTemplate(bytes, 'Monthly pack template')
+      // GIT-17: a template saved by someone else after this one was chosen is newer: it is kept, never replaced.
+      if (result.keptNewer) { setTemplate({ state: 'present' }); setStatus({ tone: 'error', text: 'Not replaced: a newer template saved by someone else is in Storage and is kept.', url: git.packTemplateHistory }); return }
       setTemplate({ state: 'present', size: bytes.length })
       setStatus({ tone: check.warnings.length ? 'error' : 'success', text: `Template saved to Storage.${check.warnings.length ? ` ${check.warnings.join(' ')} Those boxes stay as in the template.` : ''}`, url: result?.commitUrl })
     } catch (failure) { setStatus({ tone: 'error', text: failure instanceof Error ? failure.message : String(failure) }) }
@@ -53,7 +55,11 @@ export function MonthlyPackSetupPanel({ pack, git, items }: { pack: MonthlyPackS
   async function removeTemplate() {
     if (!window.confirm('Remove the PowerPoint template from Storage? The export then uses the plain layout.')) return
     setBusy(true)
-    try { await git.writePackTemplate(null, 'Remove Monthly pack template'); setTemplate({ state: 'none' }); setStatus({ tone: 'success', text: 'Template removed; the export uses the plain layout.' }) }
+    try {
+      const result = await git.writePackTemplate(null, 'Remove Monthly pack template')
+      if (result.keptNewer) setStatus({ tone: 'error', text: 'Not removed: a newer template saved by someone else is in Storage and is kept.', url: git.packTemplateHistory })
+      else { setTemplate({ state: 'none' }); setStatus({ tone: 'success', text: 'Template removed; the export uses the plain layout.' }) }
+    }
     catch (failure) { setStatus({ tone: 'error', text: failure instanceof Error ? failure.message : String(failure) }) }
     finally { setBusy(false) }
   }
@@ -68,6 +74,7 @@ export function MonthlyPackSetupPanel({ pack, git, items }: { pack: MonthlyPackS
     {pack.setupError && <Notice tone="warning">{pack.setupError}</Notice>}
     {!editable && <p className="muted">{git.connected ? 'View only: your Git token can read but not save.' : 'Connect Git storage to change the setup.'}</p>}
     {status && <Notice tone={status.tone === 'error' ? 'warning' : 'info'}><span role="status">{status.text}</span>{status.url && <> <a href={status.url} target="_blank" rel="noreferrer">View commit</a></>}</Notice>}
+    <SaveQueueStatus state={git.queueState(packTemplateFile)} onRetry={() => void git.retryQueued(packTemplateFile)} />
     <fieldset className="plain-fieldset" disabled={!editable || busy}>
       <h3>PowerPoint template</h3>
       <p className="muted">The .pptx the export fills: page 1 the Performance Pulse (Summary), page 2 the 2x2, with the template's own design. It is kept only in Storage ({git.config ? `${git.config.owner}/${git.config.repo}` : 'the data repository'}), never in the app. {template.state === 'present' ? `In Storage (${Math.round((template.size ?? 0) / 1024)} KB).` : template.state === 'none' ? 'None yet: the export uses the plain layout.' : ''}</p>

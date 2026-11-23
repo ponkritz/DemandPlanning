@@ -1,7 +1,7 @@
 import test, { after, before } from 'node:test'
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
-import { fixture, navigate, openPage, startApp, text } from './helpers.mjs'
+import { fixture, navigate, openPage, profileItem, startApp, text } from './helpers.mjs'
 
 // UI-10: every table has one Export that offers Excel or CSV.
 const exportFrom = async (page, scope, format = 'CSV (.csv)') => { await scope.getByRole('button', { name: /^Export/ }).first().click(); const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('menuitem', { name: format }).click()]); return download }
@@ -50,35 +50,8 @@ test('TC-DOC-02: a link to another document opens it at the linked section, and 
   await context.close()
 })
 
-test('TC-DOC-05: open, browse and download bundled design documents', async () => {
-  const { page, context, errors } = await openPage(app)
-  await navigate(page, 'Documentation')
-  await page.getByRole('button', { name: 'Design documents', exact: true }).click()
-  const panel = page.locator('.docs-panel')
-  await panel.getByRole('heading', { name: 'DemandPlanning as-built design', exact: true }).waitFor()
-  await panel.getByRole('link', { name: 'Home', exact: true }).click()
-  await panel.getByRole('heading', { name: 'Home', exact: true }).waitFor()
-  assert.match(await panel.getByRole('link', { name: 'App.tsx', exact: true }).getAttribute('href'), /^https:\/\/github\.com\/ponkritz\/DemandPlanning\/blob\/[^/]+\/src\/App\.tsx$/)
-  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download .md', exact: true }).click()])
-  assert.equal(download.suggestedFilename(), 'home.md')
-  assert.equal(readFileSync(await download.path(), 'utf8'), readFileSync(new URL('../docs/design/home.md', import.meta.url), 'utf8'))
-  const picker = page.getByLabel('Design document', { exact: true })
-  const files = readdirSync(new URL('../docs/design/', import.meta.url), { recursive: true })
-    .filter((file) => file.endsWith('.md'))
-    .map((file) => `design/${file.replaceAll('\\', '/')}`)
-    .sort()
-  const choices = await picker.locator('option').evaluateAll((options) => options.map((option) => option.value).sort())
-  assert.deepEqual(choices, files)
-  await picker.selectOption('design/settings/home.md')
-  await panel.getByRole('heading', { name: 'Admin Overview', exact: true }).waitFor()
-  await page.getByRole('button', { name: 'Design index', exact: true }).click()
-  await panel.getByRole('heading', { name: 'DemandPlanning as-built design', exact: true }).waitFor()
-  assert.deepEqual(errors, [])
-  await context.close()
-})
-
 test('TC-CON-39 / TC-CON-37 / TC-QV-27: a Windchill export lists its unique releases, clubbed names included, its raw rows on their own tab, and exports a neutralised CSV', async () => {
-  const { page, context, errors } = await openPage(app)
+  const { page, context, errors } = await openPage(app, { roles: true })
   await navigate(page, 'Import Windchill export')
   await page.locator('input[type=file]').first().setInputFiles(fixture('windchill-export.csv'))
   const releases = page.locator('.panel').filter({ has: page.locator('h2, h3', { hasText: /^Releases/ }) }).first()
@@ -130,7 +103,7 @@ test('TC-STO-04 / TC-INS-01: a JSON backup contains the app state but no PAT, co
 })
 
 test('TC-CON-40: an export with a Location column reads its releases from Location, lists the unique locations and exports them', async () => {
-  const { page, context, errors } = await openPage(app)
+  const { page, context, errors } = await openPage(app, { roles: true })
   await navigate(page, 'Import Windchill export')
   await page.locator('input[type=file]').first().setInputFiles(fixture('windchill-locations.csv'))
   const releases = page.locator('.panel').filter({ has: page.locator('h2, h3', { hasText: /^Releases/ }) }).first()
@@ -160,7 +133,7 @@ test('TC-CON-40: an export with a Location column reads its releases from Locati
 })
 
 test('TC-CON-41: the export page follows the header month, sorts by any column and has draggable column widths', async () => {
-  const { page, context, errors } = await openPage(app)
+  const { page, context, errors } = await openPage(app, { roles: true })
   await navigate(page, 'Import Windchill export')
   await page.locator('input[type=file]').first().setInputFiles(fixture('windchill-export.csv'))
   const releases = page.locator('.panel').filter({ has: page.locator('h2, h3', { hasText: /^Releases/ }) }).first()
@@ -188,7 +161,7 @@ test('TC-CON-41: the export page follows the header month, sorts by any column a
 })
 
 test('TC-QV-23: the export\'s releases have a QMS-0025 match column with Create Feature, sortable, as on the DP table', async () => {
-  const { page, context, errors } = await openPage(app)
+  const { page, context, errors } = await openPage(app, { roles: true })
   await navigate(page, 'Import Windchill export')
   await page.locator('input[type=file]').first().setInputFiles(fixture('windchill-export.csv'))
   const releases = page.locator('.panel').filter({ has: page.locator('h2, h3', { hasText: /^Releases/ }) }).first()
@@ -211,7 +184,7 @@ test('TC-QV-23: the export\'s releases have a QMS-0025 match column with Create 
 })
 
 test('TC-CON-53 / TC-CON-54: "＋ ECP" imports the export as the ECP page whatever the file is called, read by project, with Project No / Project Name columns', async () => {
-  const { page, context, errors } = await openPage(app)
+  const { page, context, errors } = await openPage(app, { roles: true })
   await page.locator('nav button', { hasText: /^＋\s*ECP$/ }).click()
   assert.equal(await page.getByLabel(/^Name/).first().inputValue(), 'ECP', 'the import is named after the stream')
   await page.locator('input[type=file]').first().setInputFiles(fixture('windchill-ecp.csv'))
@@ -232,7 +205,7 @@ test('TC-CON-53 / TC-CON-54: "＋ ECP" imports the export as the ECP page whatev
 })
 
 test('TC-CON-55 / TC-QV-28: an ECP setup named "ECP - Type 2" reads projects from the 3rd Location folder, is listed on its own, with compact page actions', async () => {
-  const { page, context, errors } = await openPage(app)
+  const { page, context, errors } = await openPage(app, { roles: true })
   await page.locator('nav button', { hasText: /^＋\s*ECP$/ }).click()
   assert.equal(await page.getByLabel('Logic').inputValue(), 'ecp', 'opened from ＋ ECP: the ECP setup')
   await page.getByLabel('Project details at').selectOption('3')
@@ -263,7 +236,7 @@ test('TC-CON-55 / TC-QV-28: an ECP setup named "ECP - Type 2" reads projects fro
 })
 
 test('TC-UI-04 / TC-UI-05: every table follows the table default — move, hide, density, one Export with Excel dates; Settings → Table defaults changes them all', async () => {
-  const { page, context, errors } = await openPage(app)
+  const { page, context, errors } = await openPage(app, { roles: true })
   await navigate(page, 'Import Windchill export')
   await page.locator('input[type=file]').first().setInputFiles(fixture('windchill-export.csv'))
   await page.getByRole('tab', { name: /^Raw data/ }).click()
@@ -285,8 +258,8 @@ test('TC-UI-04 / TC-UI-05: every table follows the table default — move, hide,
   const [sheet] = await readXlsx(new Uint8Array(readFileSync(await xlsx.path())))
   assert.deepEqual(sheet.rows[0], ['Name', 'Number', 'Last Modified'], 'the export follows the shown columns and order')
   assert.match(sheet.rows[1][2], /^\d{4}-\d{2}-\d{2}/, 'the date cell is a real date in the workbook (read back as a date)')
-  // Admin → Reports → Table and chart defaults: without CSV, every Export offers Excel only.
-  await navigate(page, 'Reports')
+  // Look & feel → Table and chart defaults (SET-18): without CSV, every Export offers Excel only.
+  await profileItem(page, 'Look & feel')
   await page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'Table and chart defaults' }).click()
   await page.getByRole('checkbox', { name: 'CSV (.csv)' }).uncheck()
   await navigate(page, 'Import Windchill export')
@@ -298,7 +271,7 @@ test('TC-UI-04 / TC-UI-05: every table follows the table default — move, hide,
 })
 
 test('TC-UI-06: the page tables follow the table default too — My Work keeps its tree, Backlog Health its lists, each with Columns and one Export', async () => {
-  const { page, context, errors } = await openPage(app)
+  const { page, context, errors } = await openPage(app, { roles: true })
   await page.getByRole('button', { name: 'Load synthetic sample' }).click()
   await navigate(page, 'My Tasks [Board]')
   const pick = page.locator('input[placeholder^="Choose a person"]').first()
@@ -318,7 +291,7 @@ test('TC-UI-06: the page tables follow the table default too — My Work keeps i
 })
 
 test('TC-QV-18: Pulse Check shows the Supported summary next to Releases, with the S&S IT export\'s releases of the month', async () => {
-  const { page, context, errors } = await openPage(app)
+  const { page, context, errors } = await openPage(app, { roles: true })
   await navigate(page, 'Import Windchill export')
   // The export page names the import after the stream so that Pulse Check finds it.
   await page.getByLabel(/name/i).first().fill('S&S IT').catch(() => {})
@@ -365,7 +338,7 @@ test('TC-QV-17: Pulse Check folds the DP Supported Releases list; Show list open
 })
 
 test('TC-CON-42: tables fit their columns — widening a column widens the table — and Wrap text wraps long cells', async () => {
-  const { page, context, errors } = await openPage(app, { width: 1300 })
+  const { page, context, errors } = await openPage(app, { roles: true, width: 1300 })
   await navigate(page, 'Import Windchill export')
   await page.locator('input[type=file]').first().setInputFiles(fixture('windchill-export.csv'))
   const releases = page.locator('.panel').filter({ has: page.locator('h2, h3', { hasText: /^Releases/ }) }).first()
@@ -391,6 +364,33 @@ test('TC-CON-42: tables fit their columns — widening a column widens the table
   assert.equal(await table.locator('tbody td').first().evaluate((cell) => getComputedStyle(cell).whiteSpace), 'pre-wrap')
   await releases.getByLabel('Wrap text').uncheck()
   assert.equal(await table.locator('tbody td').first().evaluate((cell) => getComputedStyle(cell).whiteSpace), 'nowrap')
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
+test('TC-DOC-05: open, browse and download bundled design documents', async () => {
+  const { page, context, errors } = await openPage(app)
+  await navigate(page, 'Documentation')
+  await page.getByRole('button', { name: 'Design documents', exact: true }).click()
+  const panel = page.locator('.docs-panel')
+  await panel.getByRole('heading', { name: 'DemandPlanning as-built design', exact: true }).waitFor()
+  await panel.getByRole('link', { name: 'Home', exact: true }).click()
+  await panel.getByRole('heading', { name: 'Home', exact: true }).waitFor()
+  assert.match(await panel.getByRole('link', { name: 'App.tsx', exact: true }).getAttribute('href'), /^https:\/\/github\.com\/ponkritz\/DemandPlanning\/blob\/[^/]+\/src\/App\.tsx$/)
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download .md', exact: true }).click()])
+  assert.equal(download.suggestedFilename(), 'home.md')
+  assert.equal(readFileSync(await download.path(), 'utf8'), readFileSync(new URL('../docs/design/home.md', import.meta.url), 'utf8'))
+  const picker = page.getByLabel('Design document', { exact: true })
+  const files = readdirSync(new URL('../docs/design/', import.meta.url), { recursive: true })
+    .filter((file) => file.endsWith('.md'))
+    .map((file) => `design/${file.replaceAll('\\', '/')}`)
+    .sort()
+  const choices = await picker.locator('option').evaluateAll((options) => options.map((option) => option.value).sort())
+  assert.deepEqual(choices, files)
+  await picker.selectOption('design/settings/home.md')
+  await panel.getByRole('heading', { name: 'Admin Overview', exact: true }).waitFor()
+  await page.getByRole('button', { name: 'Design index', exact: true }).click()
+  await panel.getByRole('heading', { name: 'DemandPlanning as-built design', exact: true }).waitFor()
   assert.deepEqual(errors, [])
   await context.close()
 })

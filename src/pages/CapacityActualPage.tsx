@@ -4,7 +4,8 @@ import { useDataLabels } from '../useDataLabels'
 import { capacityContext } from '../capacity'
 import { allCva, capacityVsActual, type CvaFilter } from '../capacityActual'
 import { EmptyState, Page } from '../components/ui'
-import { formatHours, monthName, todayIso } from '../format'
+import { formatHours, monthName } from '../format'
+import { utcToday } from '../businessTime'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { PageProps } from './types'
 
@@ -24,7 +25,7 @@ export function CapacityActualPage({ azure, store, month }: { azure: AzureWorksp
   const [hover, setHover] = useState<number | null>(null)
   const [labels, setLabels] = useDataLabels('capacity-actual-trend')
   const settings = capacityContext(store.state)
-  const model = useMemo(() => capacityVsActual({ items: azure.items, month, today: todayIso(), settings }, filter), [azure.items, month, settings, filter])
+  const model = useMemo(() => capacityVsActual({ items: azure.items, month, today: utcToday(), settings }, filter), [azure.items, month, settings, filter])
   if (!azure.items.length) return <Page><EmptyState title="No work items yet" detail="Fetch the Time Writing data from Azure DevOps (Admin → Streams), or load the synthetic sample, to compare capacity with actual hours." /></Page>
   const set = (key: keyof CvaFilter) => (value: string) => setFilter((current) => ({ ...current, [key]: value }))
   const { tiles, trend } = model

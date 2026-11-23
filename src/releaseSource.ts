@@ -1,3 +1,5 @@
+import { fillClosedDates } from './closedHistory.ts'
+import { businessTimeZone } from './businessTime.ts'
 import { normalizeBulkEpics, type BulkStream } from './bulkEpics.ts'
 import { myPatternsFor } from './myNamingPatterns.ts'
 import { normalizeNamingPatterns, patternsFor, type NamingPattern, type NamingPatterns } from './namingPatterns.ts'
@@ -152,7 +154,7 @@ export async function runWorkItemQuery(config: AzureConfig, pat: string, wiql: s
     const ids = [...new Set(result.workItemRelations.flatMap((link) => [link.source?.id, link.target?.id]).filter((id): id is number => id != null))]
     if (ids.some((id) => !Number.isSafeInteger(id) || id < 1)) throw new Error('Unexpected tree or links query response. Nothing was saved.')
     if (ids.length > limit) throw new Error(`The query returned more than ${limit.toLocaleString()} items. Narrow the query.`)
-    return ids.length ? readWorkItems(request, ids, map) : []
+    return ids.length ? fillClosedDates(await readWorkItems(request, ids, map), request) : []
   }
   const where = releaseQueryWhere(wiql)
   const items: AzureWorkItem[] = []
@@ -167,7 +169,7 @@ export async function runWorkItemQuery(config: AzureConfig, pat: string, wiql: s
     afterId = Math.max(...ids)
     if (items.length > limit) throw new Error(`The query returned more than ${limit.toLocaleString()} items. Narrow the query.`)
   }
-  return items
+  return fillClosedDates(items, request)
 }
 
 type ItemRequest = (operation: AzureRequest['operation'], extra?: Partial<AzureRequest>) => Promise<unknown>
@@ -205,23 +207,24 @@ export async function fetchReleaseSource(config: AzureConfig, pat: string, wiql:
   return { organization: config.organization, project: config.project, query: wiql.trim(), fetchedAt: new Date().toISOString(), items }
 }
 
-// Month of an item in the read-only ADS views, in the viewer's time zone: its approval date (Author Approval Date or
-// any approval-date field), else its Changed Date. timeZone is for tests only.
+// Month of an item in the read-only ADS views, in UTC (NAV-51): its approval date (Author Approval Date or any
+// approval-date field), else its Changed Date. timeZone is for tests only.
 export function viewMonthOf(item: Pick<AzureWorkItem, 'approvalDate' | 'changedDate' | 'fields'>, timeZone?: string) {
   return approvalMonthOf(item.approvalDate ?? approvalDateFrom(item.fields ?? {}) ?? item.changedDate, timeZone)
 }
 
-// Month (YYYY-MM) of a date in the viewer's time zone.
-// One formatter per time zone: creating one per date was the main cost of Pulse Check on large views (KB-27).
+// Month (YYYY-MM) of a date in the business time zone, UTC (NAV-51); a plain date (YYYY-MM-DD) keeps its own month.
+// timeZone is for tests only. One formatter per time zone: creating one per date was the main cost of Pulse Check on large views (KB-27).
 const monthFormats = new Map<string, Intl.DateTimeFormat>()
 const monthFormat = (timeZone?: string) => { let format = monthFormats.get(timeZone ?? ''); if (!format) { format = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', ...(timeZone ? { timeZone } : {}) }); monthFormats.set(timeZone ?? '', format) } return format }
 const monthsOf = new Map<string, string | undefined>()
-export function approvalMonthOf(date: string | undefined, timeZone?: string) {
+export function approvalMonthOf(date: string | undefined, timeZone: string = businessTimeZone) {
   if (!date) return undefined
   const key = `${timeZone ?? ''}\u0000${date}`
   if (monthsOf.has(key)) return monthsOf.get(key)
   let month: string | undefined
-  if (Number.isFinite(Date.parse(date))) { const parts = monthFormat(timeZone).formatToParts(new Date(date)); month = `${parts.find((part) => part.type === 'year')!.value}-${parts.find((part) => part.type === 'month')!.value}` }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date)) month = date.slice(0, 7)
+  else if (Number.isFinite(Date.parse(date))) { const parts = monthFormat(timeZone).formatToParts(new Date(date)); month = `${parts.find((part) => part.type === 'year')!.value}-${parts.find((part) => part.type === 'month')!.value}` }
   if (monthsOf.size >= 200000) monthsOf.clear()
   monthsOf.set(key, month)
   return month

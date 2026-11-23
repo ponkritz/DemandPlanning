@@ -4,7 +4,7 @@ import type { GitStorage } from '../useGitStorage'
 import { GitSyncBar } from './GitStorage'
 import { Panel } from './ui'
 
-// Admin → Reports → Table and chart defaults (UI-12): the design default every table follows, shared with everyone (saved with the
+// My settings → Look & feel → Table and chart defaults (UI-12): the design default every table follows, shared with everyone (saved with the
 // shared app data; Save to Git shares it) and audited. Changing it changes every table at once.
 export function TableDefaultsPanel({ store, git, canEdit }: { store: ReturnType<typeof useAppStore>; git: GitStorage; canEdit: boolean }) {
   const current = normalizeTableDefaults(store.state.tableDefaults)

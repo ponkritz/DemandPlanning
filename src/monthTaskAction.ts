@@ -1,5 +1,5 @@
 import type { AzureWorkItem } from './domain'
-import { addMonthTasks, currentIndiaMonth, ensureMonthTask, HierarchyCreationError, syncTimeWritingTitles, type AzureConfig, type AzureTransport } from './azureDevOps.ts'
+import { addMonthTasks, utcMonthLabel, ensureMonthTask, HierarchyCreationError, syncTimeWritingTitles, type AzureConfig, type AzureTransport } from './azureDevOps.ts'
 import { runInBackground } from './backgroundJobs.ts'
 import { setupHours, type FeatureSetups } from './featureSetup.ts'
 import { adhocAfterLock } from './planningLock.ts'
@@ -11,7 +11,7 @@ import { timeWritingMonth } from './azureInsights.ts'
 // theirs is reused, their own Time Writing story first) — the same as Bulk actions, one Feature at a time. Leave and
 // training under the Team Holidays and Training Epic work the same way. After the planning lock the new Task is ad-hoc.
 // BKL-28: for the month selected in the header; a new Task gets the Epic setup's default hours.
-export async function addMonthTask(config: AzureConfig, pat: string, items: AzureWorkItem[], item: AzureWorkItem, assignee: string, month = currentIndiaMonth(), setups?: FeatureSetups | null) {
+export async function addMonthTask(config: AzureConfig, pat: string, items: AzureWorkItem[], item: AzureWorkItem, assignee: string, month = utcMonthLabel(), setups?: FeatureSetups | null) {
   const feature = featureOf(items, item)
   if (!feature) throw new Error(`#${item.id} has no Feature above it to hold a Time Writing Task.`)
   const byId = new Map(items.map((entry) => [entry.id, entry]))

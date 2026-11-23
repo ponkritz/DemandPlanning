@@ -11,7 +11,7 @@ import { useBulkEpic } from '../useStreamEpics'
 import type { QeMappingFile } from '../qeMapping'
 import { ioccPlan, pickQe } from '../dpBulk'
 import type { BoardHit } from '../dpBoardMatch'
-import { createFeatureFromSetup, currentIndiaMonth, currentIterationPairs, futureIterationPairs, readAzureIterations, withFeatureDoD, HierarchyCreationError, type AzureIteration } from '../azureDevOps'
+import { createFeatureFromSetup, utcMonthLabel, currentIterationPairs, futureIterationPairs, readAzureIterations, withFeatureDoD, HierarchyCreationError, type AzureIteration } from '../azureDevOps'
 import { runInBackground } from '../backgroundJobs'
 import { adhocAfterLock } from '../planningLock'
 import { Modal, Notice } from './ui'
@@ -57,7 +57,7 @@ export function IoccBulkCreate({ releases, azure, featureSetup, qeMapping, featu
 
   function create() {
     if (blocked || !azure.config || !epic || !pair) return
-    const config = azure.config, token = azure.pat, month = currentIndiaMonth(), adhoc = adhocAfterLock(month)
+    const config = azure.config, token = azure.pat, month = utcMonthLabel(), adhoc = adhocAfterLock(month)
     const started = runInBackground(`iocc-bulk:${ready.map((line) => line.release.key).join(',')}`, `Create ${ready.length} IOCC Feature${ready.length === 1 ? '' : 's'}`, async (progress) => {
       const done: string[] = [], failed: string[] = []
       for (const [index, line] of ready.entries()) {

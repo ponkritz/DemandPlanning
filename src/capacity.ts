@@ -20,7 +20,7 @@ export interface SharedTimeRule { id: number; kind: SharedTimeKind; scope: Share
 // "NPRA" ("NPRA", "NPRA Hours", "NPRA - Training") or "Training" (CAP-32). The hours booked on NPRA Tasks come off the person's available
 // hours (only what is booked, nothing is reserved up front) and are tracked against npraHoursPerMonth (20 by default),
 // the maximum per person per month; hours over it are flagged. 0 tracks without a maximum.
-// defaultJoinedOn: the Joined on of everyone without their own (YYYY-MM-DD; '' for none): months before it give them no
+// defaultJoinedOn: the Time tracking started of everyone without their own (YYYY-MM-DD; '' for none): months before it give them no
 // capacity (CAP-15).
 // Month locks (MON-06, MON-07, MON-21…MON-24): each month's plan and actuals lock dates (YYYY-MM-DD, the day itself still
 // open), an early lock per month, and the reason and who changed it — kept with the capacity settings in Git.
@@ -144,7 +144,7 @@ export interface PersonLoad {
 export interface StreamSummary extends StreamLoad { people: number; features: number; share: number | null }
 
 type ThresholdKey = 'absenceEpicId' | 'hoursPerDay' | 'overloadedAt' | 'availableBelow' | 'npraHoursPerMonth'
-// The default Joined on: a valid day, '' when cleared, else the built-in default (1 May 2026).
+// The default Time tracking started: a valid day, '' when cleared, else the built-in default (1 May 2026).
 const defaultJoinedOf = (value: unknown) => value === '' ? '' : typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && new Date(`${value}T00:00:00Z`).toISOString().startsWith(value) ? value : defaultCapacitySettings.defaultJoinedOn!
 export function normalizeCapacitySettings(value: unknown): CapacitySettings {
   const input = (value && typeof value === 'object' ? value : {}) as Partial<Record<ThresholdKey, unknown>>
@@ -255,7 +255,7 @@ export const absenceKind = (titles: string[], rules: BucketRules = defaultBucket
 
 export function loadStatus(utilization: number | null, settings: CapacitySettings): LoadStatus {
   if (utilization == null) return 'No bookings'
-  if (utilization >= settings.overloadedAt) return 'Overloaded'
+  if (utilization > settings.overloadedAt) return 'Overloaded' // CAP: strictly above the limit (owner decision 9)
   if (utilization < settings.availableBelow) return 'Has capacity'
   return 'Balanced'
 }
@@ -279,7 +279,7 @@ export function capacityModel(source: AzureWorkItem[], month: string, settings: 
   const outside = new Map<string, { name: string; tasks: number; hours: number; joinedOn?: string; leftOn?: string }>()
   const removedPeople = new Map<string, { name: string; tasks: number; hours: number }>()
   const notCounted = new Map<string, { name: string; tasks: number; hours: number; reason: string }>()
-  // A person's own Joined on wins; without one, the default Joined on of the settings applies.
+  // A person's own Time tracking started wins; without one, the default Time tracking started of the settings applies.
   const employmentOf = (name: string) => ({ joinedOn: profiles[name]?.joinedOn ?? (settings.defaultJoinedOn || undefined), leftOn: profiles[name]?.leftOn })
   // Settings read before the NPRA allowance existed (or built by hand) take the default allowance.
   const npraAllowance = typeof settings.npraHoursPerMonth === 'number' && Number.isFinite(settings.npraHoursPerMonth) && settings.npraHoursPerMonth >= 0 ? settings.npraHoursPerMonth : defaultCapacitySettings.npraHoursPerMonth
@@ -580,7 +580,7 @@ export function capacityGap(model: Pick<CapacityModel, 'people' | 'removed' | 'n
   const excluded = model.notCounted.find(named)
   if (excluded) return `Not counted for capacity: ${excluded.reason}`
   const outside = model.outsideEmployment.find(named)
-  if (outside) return `Not employed on a working day of the month (Joined on ${outside.joinedOn ?? '—'}${outside.leftOn ? `, Left on ${outside.leftOn}` : ''})`
+  if (outside) return `Not employed on a working day of the month (Time tracking started ${outside.joinedOn ?? '—'}${outside.leftOn ? `, Left on ${outside.leftOn}` : ''})`
   return 'No month Time Writing Task of yours in this month yet'
 }
 

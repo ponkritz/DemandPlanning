@@ -28,7 +28,7 @@ export const projectApiBase = (config: Pick<AzureConfig, 'organization' | 'proje
 // Azure DevOps Services accepts 7.1; older Azure DevOps Server versions need a lower version (e.g. 6.0 or 5.0).
 export const apiVersionOf = (config: Pick<AzureConfig, 'apiVersion'>) => config.apiVersion && /^\d{1,2}\.\d(-preview(\.\d)?)?$/.test(config.apiVersion) ? config.apiVersion : '7.1'
 export interface AzureRequest extends AzureConfig {
-  operation: 'backlog-epics' | 'areas' | 'team-members' | 'iterations' | 'iteration-tree' | 'fields' | 'query' | 'items' | 'create-feature' | 'create-child' | 'update-time-writing-effort' | 'update-work-item' | 'edit-work-item' | 'comments' | 'add-comment'
+  operation: 'backlog-epics' | 'updates' | 'areas' | 'team-members' | 'iterations' | 'iteration-tree' | 'fields' | 'query' | 'items' | 'create-feature' | 'create-child' | 'update-time-writing-effort' | 'update-work-item' | 'edit-work-item' | 'comments' | 'add-comment'
   pat: string
   query?: string
   ids?: number[]
@@ -143,8 +143,10 @@ export const isApiVersionError = (text: string) => /api[- ]?version|version of t
 
 // Set by the app from the viewer's access roles; while it returns false, nothing is changed in Azure DevOps.
 // CON-94: each change needs its own permission (a request that changes the state and the iteration needs both).
-let writesAllowed: (permission: AzureWritePermission) => boolean = () => true
-export function guardAzureWrites(check: (permission: AzureWritePermission) => boolean) { writesAllowed = check }
+// CON-101 (fail closed): nothing is allowed until the app sets the guard; refused tells why (no roles file loaded).
+let writesAllowed: (permission: AzureWritePermission) => boolean = () => false
+let refusedBecause = 'The access roles are not loaded yet, so the app is read-only. Nothing was changed.'
+export function guardAzureWrites(check: (permission: AzureWritePermission) => boolean, refused = 'Your role does not allow this change in Azure DevOps. An Admin can change this in Admin → People & roles → Role rights.') { writesAllowed = check; refusedBecause = refused }
 // OI-10: with the synthetic sample loaded nothing is written to Azure DevOps, from any page (set by the workspace).
 let sampleLoaded = () => false
 export function guardSampleWrites(isSample: () => boolean) { sampleLoaded = isSample }
@@ -169,29 +171,29 @@ export function assertWritableBase(config: Pick<AzureConfig, 'organization' | 'b
 export async function requestAzure(request: AzureRequest): Promise<unknown> {
   if (changesAzure(request.operation)) assertNotViewingAs()
   if (changesAzure(request.operation) && sampleLoaded()) throw new Error('Synthetic sample data is loaded: nothing is written to Azure DevOps. Fetch your data first.')
-  if (changesAzure(request.operation) && !writePermissions(request).every((permission) => writesAllowed(permission))) throw new Error('Your role does not allow this change in Azure DevOps. An Admin can change this in Admin → People & roles → Role rights.')
+  if (changesAzure(request.operation) && !writePermissions(request).every((permission) => writesAllowed(permission))) throw new Error(refusedBecause)
   assertWritableBase(request, request.operation)
   if ((request.operation === 'create-feature' || request.operation === 'create-child') && !isAssignee(request.feature?.assignedTo)) throw new Error('A new work item must be assigned to someone (an email). Nothing was created.')
   const storyProblem = storyFieldsProblem(request.feature, request.operation === 'create-child' && request.workItemType === 'User Story')
   if (storyProblem) throw new Error(`${storyProblem} Nothing was created.`)
   if (request.feature?.adhoc != null && (request.feature.adhoc !== true || request.operation !== 'create-child' || request.workItemType !== 'Task')) throw new Error('Only a new Task can be tagged ad-hoc. Nothing was created.')
   if (request.operation === 'edit-work-item') { const problem = !Number.isSafeInteger(request.workItemId) || request.workItemId! < 1 || !Number.isSafeInteger(request.rev) || request.rev! < 1 ? 'Invalid work item or revision.' : editProblem(request.edit ?? {}); if (problem) throw new Error(`${problem} Nothing was changed.`) }
-  if ((request.operation === 'comments' || request.operation === 'add-comment') && (!Number.isSafeInteger(request.workItemId) || request.workItemId! < 1)) throw new Error('Invalid work item.')
+  if ((request.operation === 'comments' || request.operation === 'add-comment' || request.operation === 'updates') && (!Number.isSafeInteger(request.workItemId) || request.workItemId! < 1)) throw new Error('Invalid work item.')
   if (request.operation === 'add-comment' && (typeof request.comment !== 'string' || !request.comment.trim() || request.comment.length > 100_000)) throw new Error('Enter a comment (at most 100,000 characters). Nothing was added.')
   if (window.azureDevOps) return window.azureDevOps.request(request)
   if (request.operation === 'comments' || request.operation === 'add-comment') return requestComments(request)
   const base = projectApiBase(request)
   const updating = request.operation === 'update-time-writing-effort' || request.operation === 'update-work-item' || request.operation === 'edit-work-item'
   const writing = request.operation === 'create-feature' || request.operation === 'create-child' || updating
-  const readingMetadata = request.operation === 'backlog-epics' || request.operation === 'areas' || request.operation === 'team-members' || request.operation === 'iterations' || request.operation === 'iteration-tree' || request.operation === 'fields'
+  const readingMetadata = request.operation === 'updates' || request.operation === 'backlog-epics' || request.operation === 'areas' || request.operation === 'team-members' || request.operation === 'iterations' || request.operation === 'iteration-tree' || request.operation === 'fields'
   const create = request.operation === 'create-feature' || request.operation === 'create-child'
-  const endpoint = updating ? `_apis/wit/workitems/${request.workItemId}` : create ? `_apis/wit/workitems/$${request.operation === 'create-feature' ? 'Feature' : encodeURIComponent(request.workItemType!)}` : request.operation === 'backlog-epics' ? `${encodeURIComponent(request.team)}/_apis/work/backlogs/Microsoft.EpicCategory/workItems` : request.operation === 'iteration-tree' ? '_apis/wit/classificationnodes/iterations' : request.operation === 'fields' ? '_apis/wit/fields' : readingMetadata ? `${encodeURIComponent(request.team)}/_apis/work/teamsettings/${request.operation === 'areas' ? 'teamfieldvalues' : 'iterations'}` : request.operation === 'query' ? '_apis/wit/wiql' : '_apis/wit/workitemsbatch'
+  const endpoint = request.operation === 'updates' ? `_apis/wit/workItems/${request.workItemId}/updates` : updating ? `_apis/wit/workitems/${request.workItemId}` : create ? `_apis/wit/workitems/$${request.operation === 'create-feature' ? 'Feature' : encodeURIComponent(request.workItemType!)}` : request.operation === 'backlog-epics' ? `${encodeURIComponent(request.team)}/_apis/work/backlogs/Microsoft.EpicCategory/workItems` : request.operation === 'iteration-tree' ? '_apis/wit/classificationnodes/iterations' : request.operation === 'fields' ? '_apis/wit/fields' : readingMetadata ? `${encodeURIComponent(request.team)}/_apis/work/teamsettings/${request.operation === 'areas' ? 'teamfieldvalues' : 'iterations'}` : request.operation === 'query' ? '_apis/wit/wiql' : '_apis/wit/workitemsbatch'
   const body = request.operation === 'edit-work-item' ? editPatch(request.edit!, request.rev!) : request.operation === 'update-work-item' ? workItemUpdatePatch(request) : request.operation === 'update-time-writing-effort' ? [{ ...(request.planHours == null ? {} : { op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.OriginalEstimate', value: request.planHours }) }, { ...(request.actualHours == null ? {} : { op: 'add', path: '/fields/Microsoft.VSTS.Scheduling.CompletedWork', value: request.actualHours }) }, ...(request.tags ? [{ op: 'add', path: '/fields/System.Tags', value: request.tags }] : [])].filter(patch => 'op' in patch) : create ? featurePatch(request, request.feature!) : request.operation === 'query' ? { query: request.query } : { ids: request.ids, errorPolicy: 'Fail', $expand: 'Relations' }
   const versions = versionsToTry(request)
   let response: Response | undefined
   for (const [attempt, version] of versions.entries()) {
     try {
-      const url = request.operation === 'team-members' ? `${collectionUrl(request)}/_apis/projects/${encodeURIComponent(request.project)}/teams/${encodeURIComponent(request.team)}/members?api-version=${version}&$top=1000` : `${base}/${endpoint}?api-version=${version}${request.operation === 'query' ? `&$top=${/\bFROM\s+WorkItemLinks\b/i.test(request.query ?? '') ? 20000 : 1000}` : ''}${request.operation === 'iteration-tree' ? '&$depth=10' : ''}${create ? `&validateOnly=${request.validateOnly === true}` : ''}`
+      const url = request.operation === 'team-members' ? `${collectionUrl(request)}/_apis/projects/${encodeURIComponent(request.project)}/teams/${encodeURIComponent(request.team)}/members?api-version=${version}&$top=1000` : `${base}/${endpoint}?api-version=${version}${request.operation === 'query' ? `&$top=${/\bFROM\s+WorkItemLinks\b/i.test(request.query ?? '') ? 20000 : 1000}` : ''}${request.operation === 'iteration-tree' ? '&$depth=10' : ''}${request.operation === 'updates' ? '&$top=200' : ''}${create ? `&validateOnly=${request.validateOnly === true}` : ''}`
       response = await fetch(url, {
         method: readingMetadata ? 'GET' : updating ? 'PATCH' : 'POST', redirect: 'error', credentials: 'omit',
         headers: { Authorization: `Basic ${btoa(`:${request.pat}`)}`, 'Content-Type': writing ? 'application/json-patch+json' : 'application/json', Accept: 'application/json' },

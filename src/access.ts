@@ -1,8 +1,9 @@
 // Role-based access: which menu areas each role sees and which actions it may take, and which roles each person
 // (by the email of their Azure DevOps PAT) has. The policy is access.json in the Git data repository, next to the
-// planning data, so only people who can write to that repository can change it. Without the file, everyone has every
-// right (the app works as before). This decides what the app shows; Azure DevOps and GitHub still decide what each
-// person's own tokens can read and change.
+// planning data, so only people who can write to that repository can change it. CON-101 (fail closed): until a policy
+// is loaded everyone is read-only — every menu area is shown, no action is allowed — except that, once Git storage
+// confirmed that no access.json exists, the viewer may create the first one (access.manage only). This decides what
+// the app shows; Azure DevOps and GitHub still decide what each person's own tokens can read and change.
 // CON-93: Tool Owner — the only role that changes the stream mapping and its query logic (streams.manage).
 export const roles = ['Tool Owner', 'Admin', 'Product Owner', 'People Manager', 'Scrum Master', 'Team Member'] as const
 export type Role = typeof roles[number]
@@ -68,6 +69,7 @@ export type Action = typeof actions[number]['key']
 export type Permission = Area | Action
 export interface RoleRights { areas: Area[]; actions: Action[]; deny?: Permission[] }
 export interface AccessPolicy { schema: 1; defaultRole: Role | null; roles: Record<Role, RoleRights>; members: Record<string, Role[]> }
+// restricted: a loaded policy decides the rights (false: no policy loaded, so the fail-closed rights apply).
 export interface Rights { areas: Set<Area>; actions: Set<Action>; roles: Role[]; restricted: boolean }
 
 const allAreas = areas.map((entry) => entry.key) as Area[]
@@ -154,9 +156,10 @@ export function serializeAccess(policy: AccessPolicy) {
 }
 
 // A person's rights: the union of their roles, or the default role when their email is not listed (or not known yet).
-// No policy = no restrictions.
-export function rightsFor(policy: AccessPolicy | null, email: string): Rights {
-  if (!policy) return { areas: new Set(allAreas), actions: new Set(allActions), roles: [], restricted: false }
+// CON-101: no policy = read-only (every menu area, no action); bootstrap (Git storage confirmed that there is no
+// access.json yet) adds access.manage alone, so the first roles file can be set up.
+export function rightsFor(policy: AccessPolicy | null, email: string, bootstrap = false): Rights {
+  if (!policy) return { areas: new Set(allAreas), actions: new Set<Action>(bootstrap ? ['access.manage'] : []), roles: [], restricted: false }
   const listed = email ? policy.members[normalEmail(email)] ?? [] : []
   const assigned = listed.length ? listed : policy.defaultRole ? [policy.defaultRole] : []
   // CON-94: the union of the roles' allows, less anything any of them denies (a denial wins).
@@ -167,6 +170,16 @@ export function rightsFor(policy: AccessPolicy | null, email: string): Rights {
     roles: assigned,
     restricted: true,
   }
+}
+
+// CON-102: why a button that starts a change in Azure DevOps is disabled — '' when nothing is missing. Read-only (no
+// roles file loaded, CON-101) says so; otherwise it names the missing permissions and where an Admin changes them.
+export const readOnlyReason = 'Read only: the access roles are not loaded yet, so nothing can be changed in Azure DevOps.'
+export function writeBlockedReason(readOnly: boolean, missing: Action[]) {
+  if (!missing.length) return ''
+  if (readOnly) return readOnlyReason
+  const labels = [...new Set(missing)].map((key) => `“${actions.find((entry) => entry.key === key)?.label ?? key}”`)
+  return `Your role does not allow ${labels.join(', ')}. An Admin can change this in Admin → People & roles → Role rights.`
 }
 
 // CON-94: one cell of the matrix — Allow, Deny or Not set — and changing it (an allow and a deny never coexist).
@@ -185,12 +198,13 @@ export function setCell(rights: RoleRights, key: Permission, cell: Cell) {
 }
 
 // CON-94 "Check access": whether a person may do one thing, and which of their roles allow or deny it.
+// CON-101: without a policy nothing is allowed (noPolicy), menu areas aside.
 export function explainAccess(policy: AccessPolicy | null, email: string, key: Permission) {
-  if (!policy) return { allowed: true, roles: [] as Role[], allowedBy: [] as Role[], deniedBy: [] as Role[], open: true }
+  if (!policy) return { allowed: isArea(key), roles: [] as Role[], allowedBy: [] as Role[], deniedBy: [] as Role[], noPolicy: true }
   const { roles: assigned } = rightsFor(policy, email)
   const allowedBy = assigned.filter((role) => cellOf(policy.roles[role], key) === 'allow')
   const deniedBy = assigned.filter((role) => cellOf(policy.roles[role], key) === 'deny')
-  return { allowed: allowedBy.length > 0 && deniedBy.length === 0, roles: assigned, allowedBy, deniedBy, open: false }
+  return { allowed: allowedBy.length > 0 && deniedBy.length === 0, roles: assigned, allowedBy, deniedBy, noPolicy: false }
 }
 
 // A policy may not lock its editor out: the person saving it must keep a role that can manage access.
@@ -205,8 +219,10 @@ export function toolOwnerExists(policy: AccessPolicy | null) {
   const holds = (role: Role) => policy.roles[role]?.actions.includes('streams.manage')
   return Object.values(policy.members).some((assigned) => assigned.some(holds)) || Boolean(policy.defaultRole && holds(policy.defaultRole))
 }
+// CON-101: without a policy nobody changes the stream mapping (fail closed).
 export function canManageStreams(policy: AccessPolicy | null, rights: Pick<Rights, 'actions'>) {
-  return !policy || rights.actions.has('streams.manage') || (!toolOwnerExists(policy) && rights.actions.has('access.manage'))
+  if (!policy) return false
+  return rights.actions.has('streams.manage') || (!toolOwnerExists(policy) && rights.actions.has('access.manage'))
 }
 // CON-93: who holds the stream mapping (members with streams.manage, and the default role's) and whether a change to
 // the policy touches it — only someone who may change the stream mapping may change who holds it, and a policy that

@@ -24,7 +24,7 @@ export function adminHealth(steps: SetupStep[], facts: AdminFacts): HealthItem[]
   const checks: HealthItem[] = []
   if (facts.unsaved) checks.push({ id: 'unsaved', title: 'Shared changes not yet in Git', detail: 'The planning data has changes made here that others do not see until they are saved to Git (Save to Git, below or on any shared page).', tone: 'warn' })
   if (facts.gitConnected && facts.gitReadOnly) checks.push({ id: 'readonly', title: 'Git token can read but not save', detail: 'Shared setup can be viewed but not changed from this computer.', tone: 'info', fix: { tab: 'storage', section: 'git', label: 'Git storage' } })
-  if (!facts.policy) checks.push({ id: 'access', title: 'No access roles yet', detail: 'Without access.json everyone sees every page and may do everything.', tone: 'info', fix: { tab: 'resources', section: 'rights', label: 'Role rights' } })
+  if (!facts.policy) checks.push({ id: 'access', title: 'No access roles yet', detail: 'Without access.json the app is read-only: everyone sees every page, nobody can make changes (CON-101).', tone: 'warn', fix: { tab: 'resources', section: 'rights', label: 'Role rights' } })
   else if (!facts.toolOwner) checks.push({ id: 'toolowner', title: 'No Tool Owner', detail: 'Nobody holds the Tool Owner role: those who manage access change the stream mapping until one is named (CON-93).', tone: 'warn', fix: { tab: 'resources', section: 'rights', label: 'Role rights' } })
   for (const gap of facts.bulkWithoutSetup ?? []) checks.push({ id: `bulk-setup:${gap.stream}`, title: `${gap.stream} bulk creation Epic #${gap.epicId} has no Feature setup`, detail: `${gap.stream} Create Features skips every row until Epic #${gap.epicId} has a shared Feature setup (or All Epics sets one).`, tone: 'warn', fix: { tab: 'epics', section: 'setup', label: 'Feature setup' } })
   if (facts.withoutDoD?.length) checks.push({ id: 'no-dod', title: `Feature setup without a Feature DoD: ${ids(facts.withoutDoD)}`, detail: 'New Features under these Epics start without a Definition of Done; fill it in the setup (or in All Epics).', tone: 'warn', fix: { tab: 'epics', section: 'setup', label: 'Feature setup' } })
@@ -64,10 +64,12 @@ export const settingsIndex: SettingsEntry[] = [
   { tab: 'capacity', section: 'period', page: 'Capacity & time', label: 'Period control', words: 'lock month plan actuals' },
   { tab: 'capacity', section: 'history', page: 'Capacity & time', label: 'Historical hours', words: 'import excel history' },
   { tab: 'pack', section: 'pack', page: 'Reports', label: 'Monthly pack', words: 'pptx slides kpi template' },
-  { tab: 'pack', section: 'tables', page: 'Reports', label: 'Table and chart defaults', words: 'export csv excel columns data labels' },
+  { tab: 'look', section: 'tables', page: 'Look & feel', label: 'Table and chart defaults', words: 'export csv excel columns data labels' },
+  { tab: 'look', section: 'layout', page: 'Look & feel', label: 'Page layout', words: 'margins border width padding' },
+  { tab: 'look', section: 'theme', page: 'Look & feel', label: 'Theme and zoom', words: 'dark light zoom' },
+  { tab: 'look', section: 'start', page: 'Look & feel', label: 'Start view and menu', words: 'tiles classic home customize menu' },
   { tab: 'storage', section: 'git', page: 'Data & sharing', label: 'Git storage', words: 'github token repository' },
   { tab: 'storage', section: 'shared', page: 'Data & sharing', label: 'Shared setup in Git', words: 'backup clean up connections' },
-  { tab: 'storage', section: 'sharepoint', page: 'Data & sharing', label: 'SharePoint', words: 'microsoft graph snapshot' },
   { tab: 'storage', section: 'views', page: 'Data & sharing', label: 'Other views', words: 'connections queries backlog' },
   { tab: 'storage', section: 'sample', page: 'Data & sharing', label: 'Synthetic sample', words: 'demo test data' },
   { tab: 'audit', page: 'History', label: 'History', words: 'audit changes who when' },

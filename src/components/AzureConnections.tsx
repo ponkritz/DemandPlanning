@@ -1,4 +1,4 @@
-import { todayIso } from '../format'
+import { utcMonthKey } from '../businessTime'
 import { useState } from 'react'
 import { EmptyState, Modal, Notice, Panel, Pill, type Tone, Info } from './ui'
 import { formatDateTime } from '../format'
@@ -187,9 +187,9 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
   }
 
   return <section id="settings-connections" className="settings-section">
-    <div className="settings-section-heading"><div><p className="eyebrow">SETTINGS</p><h2>Azure DevOps <Info>Each connection is one set: base URL (Azure DevOps Services or an on-prem Azure DevOps Server collection), project, PAT and an optional query, plus what its data is used for. Add as many as you need; Fetch all reads every connection read-only, one after another. PATs stay in this browser and are excluded from backups, SharePoint and Git.</Info></h2></div><button className="primary" onClick={onOpenBoard}>Open {timeWritingView(connectionProfiles, activeConnectionProfileId).name} →</button></div>
+    <div className="settings-section-heading"><div><p className="eyebrow">SETTINGS</p><h2>Azure DevOps <Info>Each connection is one set: base URL (Azure DevOps Services or an on-prem Azure DevOps Server collection), project, PAT and an optional query, plus what its data is used for. Add as many as you need; Fetch all reads every connection read-only, one after another. PATs stay in this browser and are excluded from backups and Git.</Info></h2></div><button className="primary" onClick={onOpenBoard}>Open {timeWritingView(connectionProfiles, activeConnectionProfileId).name} →</button></div>
     {show('email') && <WorkEmailPanel email={azure.creatorEmail} onSave={azure.setCreatorEmail} />}
-    {show('servers') && <Panel className="connection-panel" eyebrow="STEP 1" title="Servers and PATs" action={<button type="button" className="ghost" onClick={() => setNewServer({ serverUrl: '', organization: '', pat: '' })}>＋ Add server</button>} info={<ul><li>One PAT per server: an on-prem collection (e.g. tfsapac04 · DHPCollection, for DHP.Vault and DHP) or a cloud organization (dev.azure.com/ALMP-ORG-MSTP01). Every connection on the server uses it, so it is entered once.</li><li>PATs stay in this browser or desktop app only; they are never saved to Git, backups or SharePoint, and each user enters their own.</li></ul>}>
+    {show('servers') && <Panel className="connection-panel" eyebrow="STEP 1" title="Servers and PATs" action={<button type="button" className="ghost" onClick={() => setNewServer({ serverUrl: '', organization: '', pat: '' })}>＋ Add server</button>} info={<ul><li>One PAT per server: an on-prem collection (e.g. tfsapac04 · DHPCollection, for DHP.Vault and DHP) or a cloud organization (dev.azure.com/ALMP-ORG-MSTP01). Every connection on the server uses it, so it is entered once.</li><li>PATs stay in this browser or desktop app only; they are never saved to Git or backups, and each user enters their own.</li></ul>}>
       <div className="azure-table"><table><thead><tr><th>Server</th><th>Projects</th><th>Used by</th><th>PAT</th><th /></tr></thead><tbody>
         {servers.map((server) => <tr key={server.key}>
           <td><strong>{server.label}</strong>{server.onPrem && <Pill tone="info">On-prem</Pill>}</td>
@@ -248,7 +248,7 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
     {show('mapping') && <NamingPatternsPanel store={store} canManage={canManageStreams} />}
     {show('epics') && <FeatureEpicsPanel store={store} items={azure.items} canManage={canManage} />}
     {show('bulk') && <BulkEpicsPanel store={store} items={azure.items} canManage={canManage} />}
-    {show('counts') && <ReleaseCountsAdmin store={store} canManage={canEnterCounts} month={todayIso().slice(0, 7)} />}
+    {show('counts') && <ReleaseCountsAdmin store={store} canManage={canEnterCounts} month={utcMonthKey()!} />}
     {show('views') && <Panel className="connection-panel" eyebrow="STEP 3" title="Other views" info="Any other Azure DevOps view: custom queries, backlog views and background sources such as the DHP release register (Pedestal). Each is saved as soon as it is fetched (an empty Time Writing result never replaces saved data without asking). Nothing is written to Azure DevOps when fetching. Connections on a server with a PAT need no PAT of their own."
       action={<div className="button-row"><button type="button" className="ghost" onClick={() => { setFormError(''); setForm(empty(connectionProfiles.some((profile) => profile.role === 'time-tracking') ? 'reference' : 'time-tracking')) }}>＋ Add connection</button><button type="button" className="primary" disabled={!connectionProfiles.length || fetchingAll || busy} onClick={() => { setFetchingAll(true); void azure.fetchAll().finally(() => setFetchingAll(false)) }}>{fetchingAll ? 'Fetching all…' : 'Fetch all'}</button></div>}>
       {otherPresets.length > 0 && <div className="preset-list">{otherPresets.map((preset) => <div className="preset-row" key={preset.key}>
