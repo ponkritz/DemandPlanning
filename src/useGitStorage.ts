@@ -1,7 +1,7 @@
 import { listValidationDocuments as listPackage, readValidationDocument as readPackage } from './toolValidation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { useAppStore } from './store'
-import { privateGitWrites, canWrite, deleteFile, fileCommits, fileSha, readTextAt, forgetGitStorage, GitConflictError, historyUrl, listFolder, loadGitConfig, loadGitToken, planningData, readBinaryFile, readPlanningFile, readRawFile, readTextFile, saveGitConfig, saveGitToken, serializePlanning, siblingConfig, validateGitConfig, writePlanningFile, writeTextFile, type GitConfig } from './gitStorage'
+import { privateGitWrites, canWrite, deleteFile, fileCommits, fileSha, lastCommit, readTextAt, forgetGitStorage, GitConflictError, historyUrl, listFolder, loadGitConfig, loadGitToken, planningData, readBinaryFile, readPlanningFile, readRawFile, readTextFile, saveGitConfig, saveGitToken, serializePlanning, siblingConfig, validateGitConfig, writePlanningFile, writeTextFile, type GitConfig } from './gitStorage'
 import { historyPath } from './history'
 import { packTemplateFile } from './pptxTemplate'
 import { applySnapshots, parseSnapshot, serializeSnapshot, snapshotDigest, snapshotFile, snapshotFileName, snapshotFolder, type SnapshotFile, type ViewSnapshot } from './gitSnapshots'
@@ -22,7 +22,7 @@ import { freezeSnapshot, listSnapshots as listLteSnapshots, uploadSnapshot } fro
 import { appBuild } from './buildInfo'
 import type { Snapshot } from './domain'
 import { mergeHistoryText, mergeKpiTrackerText, mergeViewsBackupText, mergeViewsDefaultsText, saveStamp, SaveQueue, writeQueuedBinary, writeQueuedText, type Merge, type QueueState } from './gitSaveQueue'
-import { changedFiles, fileLabel, watchedFolders, watchFocusGapMs, watchIntervalMs, type FolderEntry, type SeenVersions } from './gitWatch'
+import { beginSave, emptyWatch, endSave, fileLabel, newerFiles, rememberOwn, watchedFolders, watchFocusGapMs, watchIntervalMs, type FolderEntry, type RemoteChange, type WatchState } from './gitWatch'
 
 export type GitStatus = 'off' | 'loading' | 'synced' | 'empty' | 'saving' | 'error' | 'conflict'
 
@@ -37,14 +37,37 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
   const [synced, setSynced] = useState<string | null>(null)
   const sha = useRef<string | null>(null)
   const started = useRef(false)
-  // GIT-15: the version of every shared file read or written here, to notice what others save while the app is open.
-  const seen = useRef<SeenVersions>({})
-  // Newer versions in Git not loaded here yet (path → version), named in the banner; reading or saving a file drops it.
-  const [remote, setRemote] = useState<Record<string, string | null>>({})
+  // GIT-15: the version of every shared file read or written here, to notice what others save while the app is open;
+  // GIT-18 (KB-82): with the versions this window saved (and the ones they replaced) and the saves on their way.
+  const watch = useRef<WatchState>(emptyWatch())
+  // Newer versions in Git not loaded here yet (path → who and when), shown on the pages that use them (GIT-18);
+  // reading or saving a file drops it.
+  const [remote, setRemote] = useState<Record<string, RemoteChange>>({})
   // GIT-17: the text last read or written here per file: the base a queued save is merged from.
   const seenText = useRef<Record<string, string | null>>({})
-  const remember = (path: string, version: string | null) => { seen.current[path] = version; setRemote((current) => path in current ? Object.fromEntries(Object.entries(current).filter(([key]) => key !== path)) : current) }
+  const forget = (path: string) => setRemote((current) => path in current ? Object.fromEntries(Object.entries(current).filter(([key]) => key !== path)) : current)
+  const remember = (path: string, version: string | null) => { watch.current.seen[path] = version; forget(path) }
+  // A version saved here: this window's own (GIT-18), also announced to the other windows of this browser.
+  const rememberSaved = (path: string, version: string | null, replaced?: string | null) => { rememberOwn(watch.current, path, version, replaced); forget(path); announce(path, version) }
   async function trackRead(target: GitConfig, key: string) { const read = await readTextFile(target, key); remember(target.path, read.sha); seenText.current[target.path] = read.text; return read }
+  // GIT-18: a file with a save of this window on its way is left to the next check.
+  async function saving<T>(path: string, run: () => Promise<T>): Promise<T> { beginSave(watch.current, path); try { return await run() } finally { endSave(watch.current, path) } }
+  // GIT-18: the versions saved in the other windows of this browser (same repository), so their notice says so.
+  const scopeKey = config ? `${config.owner}/${config.repo}@${config.branch}` : ''
+  const otherWindows = useRef<Record<string, (string | null)[]>>({})
+  const channel = useRef<BroadcastChannel | null>(null)
+  useEffect(() => {
+    if (!scopeKey || typeof BroadcastChannel === 'undefined') return
+    const opened = new BroadcastChannel('demand-planning-git-saves-v1')
+    opened.onmessage = (event: MessageEvent<{ scope?: unknown; path?: unknown; sha?: unknown }>) => {
+      const { scope, path, sha } = event.data ?? {}
+      if (scope !== scopeKey || typeof path !== 'string' || !(typeof sha === 'string' || sha === null)) return
+      otherWindows.current[path] = [...(otherWindows.current[path] ?? []), sha].slice(-20)
+    }
+    channel.current = opened
+    return () => { opened.close(); channel.current = null }
+  }, [scopeKey])
+  function announce(path: string, version: string | null) { try { channel.current?.postMessage({ scope: scopeKey, path, sha: version }) } catch { /* another window says "someone else" */ } }
   // GIT-17: saves to the shared files that are merged rather than refused, queued per file in the order of their time.
   const queue = useRef(new SaveQueue())
   const [queueStates, setQueueStates] = useState<Record<string, QueueState>>({})
@@ -56,15 +79,15 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     // KB-80: the base is the version the change was made from — the one read or written here when it is queued — so
     // a save queued behind another save of this browser, or retried after later saves, is merged, never written over them.
     const base = seenText.current[target.path] ?? null
-    return queue.current.enqueue(target.path, at, async () => {
+    return saving(target.path, () => queue.current.enqueue(target.path, at, () => saving(target.path, async () => {
       const result = await writeQueuedText(target, key, { text, base, at, message: commitMessage, merge }, fetchImpl)
-      remember(target.path, result.sha); seenText.current[target.path] = result.text
+      rememberSaved(target.path, result.sha, result.replaced); seenText.current[target.path] = result.text
       return { sha: result.sha ?? '', commitUrl: result.commitUrl || historyUrl(target), merged: result.merged, unchanged: result.unchanged, keptNewer: false, text: result.text }
-    })
+    })))
   }
   const queueState = (file: string): QueueState => (config ? queueStates[siblingConfig(config, file).path] : undefined) ?? { waiting: 0, failed: 0, error: '' }
   const retryQueued = (file: string) => config ? queue.current.retry(siblingConfig(config, file).path) : Promise.resolve([])
-  async function trackWrite(target: GitConfig, key: string, text: string, version: string | null, commitMessage: string) { const written = await writeTextFile(target, key, text, version, commitMessage); remember(target.path, written.sha); seenText.current[target.path] = text; return written }
+  async function trackWrite(target: GitConfig, key: string, text: string, version: string | null, commitMessage: string) { return saving(target.path, async () => { const written = await writeTextFile(target, key, text, version, commitMessage); rememberSaved(target.path, written.sha, version); seenText.current[target.path] = text; return written }) }
   const current = serializePlanning(planningData(store.state))
   const connected = Boolean(config && token)
   // A read-only token (e.g. the viewers' shared token): baselines are shown but not edited here.
@@ -106,7 +129,8 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
 
   // GIT-15: every 5 minutes, and when the window comes back (at most once a minute), the folders of the shared files
   // are listed (no contents). Newer planning data is loaded at once unless this browser has unsaved changes to it;
-  // every other newer file (and planning data with unsaved changes) is named in a banner with Reload.
+  // GIT-18: every other newer file (and planning data with unsaved changes) is remembered with who saved it and when,
+  // and shown on the pages that use it (App, PageGitNotice) — never a version this window saved itself (KB-82).
   const lastCheck = useRef(0)
   const latest = useRef({ dirty: false, status: 'off' as GitStatus })
   const checkForUpdates = useRef<() => Promise<void>>(async () => {})
@@ -114,23 +138,30 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
   useEffect(() => { checkForUpdates.current = async () => {
     if (!config || !token || isSample || document.visibilityState === 'hidden' || ['loading', 'saving'].includes(latest.current.status)) return
     lastCheck.current = Date.now()
-    const tracked = { ...seen.current }
+    const tracked = { ...watch.current.seen }
     if (!Object.keys(tracked).length) return
     const listings: Record<string, FolderEntry[]> = {}
     for (const folder of watchedFolders(tracked)) {
       try { listings[folder] = (await listFolder({ ...config, path: folder }, token)).map(({ path, sha: version }) => ({ path, sha: version })) } catch { /* tried again at the next check */ }
     }
     // A file read or saved here during the check is left to the next one.
-    const changed = changedFiles(tracked, listings).filter((path) => seen.current[path] === tracked[path])
+    const unchangedHere = (path: string) => watch.current.seen[path] === tracked[path]
+    const changed = newerFiles(watch.current, listings).filter((entry) => unchangedHere(entry.path))
     if (!changed.length) return
-    const now = (path: string) => listings[path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '']?.find((entry) => entry.path === path)?.sha ?? null
     let others = changed
-    if (changed.includes(config.path) && !latest.current.dirty) {
-      others = changed.filter((path) => path !== config.path)
+    if (changed.some((entry) => entry.path === config.path) && !latest.current.dirty) {
+      others = changed.filter((entry) => entry.path !== config.path)
       await load(config, token, true)
       setMessage(`Updated from Git at ${formatDateTime(new Date().toISOString())}: newer planning data saved by someone else was loaded.`)
     }
-    if (others.length) setRemote((current) => ({ ...current, ...Object.fromEntries(others.map((path) => [path, now(path)])) }))
+    const found: RemoteChange[] = []
+    for (const entry of others) {
+      const otherWindow = (otherWindows.current[entry.path] ?? []).includes(entry.sha)
+      const commit = otherWindow ? null : await lastCommit({ ...config, path: entry.path }, token)
+      found.push({ ...entry, ...(commit?.by ? { by: commit.by } : {}), ...(commit?.at ? { at: commit.at } : {}), ...(otherWindow ? { otherWindow } : {}) })
+    }
+    // Set only for files still not read or saved here (a save that ended meanwhile has cleared them).
+    setRemote((current) => ({ ...current, ...Object.fromEntries(found.filter((entry) => unchangedHere(entry.path) && !watch.current.busy[entry.path]).map((entry) => [entry.path, entry])) }))
   } })
   useEffect(() => {
     if (!config || !token || isSample) return
@@ -141,7 +172,7 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     window.addEventListener('focus', back); document.addEventListener('visibilitychange', back)
     return () => { window.clearInterval(timer); window.removeEventListener('focus', back); document.removeEventListener('visibilitychange', back) }
   }, [config, token, isSample])
-  const remoteChanges = config ? Object.keys(remote).sort().map((path) => ({ path, label: fileLabel(path, config.path), planning: path === config.path })) : []
+  const remoteChanges = config ? Object.keys(remote).sort().map((path) => ({ ...remote[path], label: fileLabel(path, config.path), planning: path === config.path })) : []
 
   async function connect(input: Partial<Record<keyof GitConfig, unknown>>, nextToken: string, remember: boolean) {
     let target: GitConfig
@@ -159,8 +190,9 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     setStatus('saving'); setMessage('Saving to Git…')
     try {
       const data = planningData(store.state)
-      const result = await writePlanningFile(config, token, data, sha.current, commitMessage)
-      sha.current = result.sha; remember(config.path, result.sha)
+      const replaced = sha.current
+      const result = await saving(config.path, () => writePlanningFile(config, token, data, replaced, commitMessage))
+      sha.current = result.sha; rememberSaved(config.path, result.sha, replaced)
       setSynced(serializePlanning(data)); setCommitUrl(result.commitUrl); setStatus('synced'); setMessage(`Saved to ${config.owner}/${config.repo} · ${config.path}`)
     } catch (error) {
       setStatus(error instanceof GitConflictError ? 'conflict' : 'error'); setMessage(error instanceof Error ? error.message : String(error))
@@ -332,8 +364,9 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
     const target = siblingConfig(config, onDemandPath(id))
     queued.current.add(target.path)
-    const removed = await queue.current.enqueue(target.path, saveStamp(), () => deleteFile(target, token, commitMessage))
-    remember(target.path, null); seenText.current[target.path] = null
+    const replaced = watch.current.seen[target.path]
+    const removed = await saving(target.path, () => queue.current.enqueue(target.path, saveStamp(), () => deleteFile(target, token, commitMessage)))
+    rememberSaved(target.path, null, replaced); seenText.current[target.path] = null
     return removed
   }
   // PGB-03: the menu layout (menu-layout.json next to the planning data): custom groups, group settings and the added
@@ -365,8 +398,8 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     const read = await trackRead(target, token)
     if (read.text == null) return false
     queued.current.add(target.path)
-    await queue.current.enqueue(target.path, saveStamp(), () => deleteFile(target, token, commitMessage))
-    remember(target.path, null); seenText.current[target.path] = null
+    await saving(target.path, () => queue.current.enqueue(target.path, saveStamp(), () => deleteFile(target, token, commitMessage)))
+    rememberSaved(target.path, null, read.sha); seenText.current[target.path] = null
     return true
   }
   // SNP-04…08: LTE / PI Review snapshots as new files in lte-snapshots/ of the Git data repository (SharePoint is in the
@@ -410,7 +443,8 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
   async function removeHistory(commitMessage: string) {
     if (!config || !token) throw new Error('Connect Git storage first.')
     if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
-    const removed = await deleteFile(siblingConfig(config, historyPath), token, commitMessage); remember(siblingConfig(config, historyPath).path, null); seenText.current[siblingConfig(config, historyPath).path] = null; return removed
+    const path = siblingConfig(config, historyPath).path, replaced = watch.current.seen[path]
+    const removed = await saving(path, () => deleteFile(siblingConfig(config, historyPath), token, commitMessage)); rememberSaved(path, null, replaced); seenText.current[path] = null; return removed
   }
   // The Monthly pack: its shared setup (monthly-pack-setup.json) and a month's text (monthly-pack/<YYYY-MM>.json),
   // read and saved like the shared Feature setup.

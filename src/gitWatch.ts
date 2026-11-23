@@ -27,6 +27,7 @@ export function changedFiles(seen: SeenVersions, listings: Record<string, Folder
 const fileNames: [RegExp, string][] = [
   [/(^|\/)access\.json$/, 'Access'],
   [/(^|\/)feature-setup\.json$/, 'Feature setup'],
+  [/(^|\/)epic-setup\.json$/, 'Epic setup'],
   [/(^|\/)feature-setup\/[^/]+\.json$/, 'Your Feature setup'],
   [/(^|\/)qe-mapping\.json$/, 'QE Mapping'],
   [/(^|\/)azure-views\.json$/, 'Stream mapping and connections'],
@@ -45,4 +46,74 @@ export function fileLabel(path: string, planningPath: string) {
   if (path === planningPath) return 'Planning data (capacity, calculation profiles, resources, table defaults)'
   for (const [pattern, label] of fileNames) { const match = pattern.exec(path); if (match) return label.replace('$2', match[2] ?? '') }
   return path
+}
+
+// ---- GIT-18: which versions are this window's own, and which page shows a newer file ----------------------------
+// KB-82: the check used to compare a folder listing with the one version last remembered per file. A read that came
+// back with the version before this window's own save (a read still on its way while the save ran, or GitHub answering
+// for a moment with the version before the commit), a listing made while a save of this window was still on its way
+// (its commit in Git, its answer not back yet — the notice set after the save had cleared it while planning data was
+// being reloaded), or a listing that still showed the version before the save, made the window's own commit count as
+// "saved by someone else". Now every version this window wrote — and the version each save replaced — is its own, a
+// file with a save of this window on its way is left to the next check, and only a version that is none of these is newer.
+export interface WatchState { seen: SeenVersions; own: Record<string, (string | null)[]>; busy: Record<string, number> }
+export const emptyWatch = (): WatchState => ({ seen: {}, own: {}, busy: {} })
+const ownKept = 20
+// A version this window wrote (and the one it replaced): never "newer data" when a listing shows it later.
+export function rememberOwn(state: WatchState, path: string, version: string | null, replaced?: string | null) {
+  const list = (state.own[path] ?? []).filter((entry) => entry !== version && entry !== replaced)
+  state.own[path] = [...list, ...(replaced !== undefined ? [replaced] : []), version].slice(-ownKept)
+  state.seen[path] = version
+}
+export const beginSave = (state: WatchState, path: string) => { state.busy[path] = (state.busy[path] ?? 0) + 1 }
+export const endSave = (state: WatchState, path: string) => { const left = (state.busy[path] ?? 1) - 1; if (left > 0) state.busy[path] = left; else delete state.busy[path] }
+// The files with a newer version in Git than the one here, saved by someone else (or in another window): changed,
+// created or removed; not one this window wrote or replaced, not one with a save of this window on its way.
+export function newerFiles(state: WatchState, listings: Record<string, FolderEntry[]>): { path: string; sha: string | null }[] {
+  return changedFiles(state.seen, listings).flatMap((path) => {
+    if (state.busy[path]) return []
+    const now = listings[folderOf(path)]?.find((entry) => entry.path === path)?.sha ?? null
+    return (state.own[path] ?? []).includes(now) ? [] : [{ path, sha: now }]
+  })
+}
+
+// A newer file as the page notice names it: who saved it and when (from its latest commit, when known), and whether it
+// was saved in another window of this browser.
+export interface RemoteChange { path: string; sha: string | null; by?: string; at?: string; otherWindow?: boolean }
+
+// GIT-18: the pages that show each shared file. A page key is a built-in page's id ('qemapping', 'pulse' …), an Admin
+// page 'admin:<tab>', or an added page 'ondemand:<page id>' (Table, Table + Insights and On-Demand Dashboard alike).
+// '*' is every page; 'admin:*' every Admin page. quiet: loaded without a notice when nothing of it is unsaved here — the
+// menu layout (the menu is refreshed), the default and own views, and the planning data as before (GIT-15).
+// loader: how the newer file is loaded without reloading the app ('reload': only a full reload can).
+export interface FilePages { pages: string[]; quiet?: 'menu' | 'views' | 'planning'; loader: string }
+const reportPages = ['mydash', 'overview', 'pulse', 'capactual', 'planover']
+const featurePages = ['board', 'windchill', 'mywork', 'activities', 'admin:epics']
+const releasePages = ['board', 'windchill', 'home', 'admin:connections', 'admin:options']
+export function pagesOfFile(path: string, planningPath: string, dashboardsReading: (pageId: string) => string[] = () => []): FilePages {
+  const folder = folderOf(planningPath)
+  const name = folder && path.startsWith(`${folder}/`) ? path.slice(folder.length + 1) : path
+  if (path === planningPath) return { pages: ['baselines', 'admin:*'], quiet: 'planning', loader: 'planning' }
+  const onDemand = /^on-demand\/([a-z0-9-]+)\.json$/.exec(name)
+  if (onDemand) return { pages: [`ondemand:${onDemand[1]}`, ...dashboardsReading(onDemand[1]).map((id) => `ondemand:${id}`), 'admin:pages'], loader: `ondemand:${onDemand[1]}` }
+  const dashboard = /^dashboards\/([a-z0-9-]+)\.json$/.exec(name)
+  if (dashboard) return { pages: [`ondemand:${dashboard[1]}`], loader: 'remount' }
+  if (name === 'menu-layout.json') return { pages: ['admin:pages'], quiet: 'menu', loader: 'menu' }
+  if (name === 'personal-views-defaults.json' || /^personal-views\/[^/]+\.json$/.test(name)) return { pages: ['admin:my', 'admin:look'], quiet: 'views', loader: 'views' }
+  if (name === 'access.json') return { pages: ['*'], loader: 'access' }
+  if (name === 'qe-mapping.json') return { pages: ['qemapping', 'board'], loader: 'qemapping' }
+  if (name === 'feature-setup.json' || /^feature-setup\/[^/]+\.json$/.test(name)) return { pages: featurePages, loader: 'featureSetup' }
+  if (name === 'epic-setup.json') return { pages: featurePages, loader: 'epicSetup' }
+  if (name === 'custom-streams.json') return { pages: releasePages, loader: 'customStreams' }
+  if (name === 'azure-views.json') return { pages: ['admin:connections', 'admin:options'], loader: 'connections' }
+  if (name === 'monthly-pack-setup.json' || /^monthly-pack\/\d{4}-\d{2}\.json$/.test(name)) return { pages: ['pulse', 'admin:pack'], loader: 'monthlyPack' }
+  if (name === 'history-hours.json') return { pages: [...reportPages, 'admin:history', 'admin:capacity'], loader: 'history' }
+  if (name === 'kpi-tracker.json') return { pages: ['kpitracker'], loader: 'remount' }
+  // A file this build does not map: every page, and only a full reload loads it.
+  return { pages: ['*'], loader: 'reload' }
+}
+export const pageMatches = (patterns: string[], key: string) => patterns.some((pattern) => pattern === '*' || pattern === key || (pattern.endsWith(':*') && key.startsWith(pattern.slice(0, -1))))
+// The newer files the page in use shows: those of its data that are not loaded quietly.
+export function changesForPage<T extends { path: string }>(changes: T[], key: string, targetOf: (path: string) => FilePages, quiet: (target: FilePages) => boolean): T[] {
+  return changes.filter((change) => { const target = targetOf(change.path); return !quiet(target) && pageMatches(target.pages, key) })
 }

@@ -45,6 +45,18 @@ export function useOnDemand(git: GitStorage) {
       setState({ scope, pages: sortPages(pages), inGit: pages.map((page) => page.id), errors, loaded: true })
     } catch (failure) { setState((current) => ({ ...current, scope, loaded: true, errors: [messageOf(failure)] })) }
   }, [scope, listOnDemand, readOnDemand])
+  // GIT-18: one page read again from Git (Load the newer data on its notice) — the others stay as they are; a page
+  // removed in Git leaves the list.
+  const loadPage = useCallback(async (id: string) => {
+    if (!scope) return
+    const read = await readOnDemand(id)
+    const page = read.text == null ? null : parseOnDemandPage(read.text, id)
+    setState((current) => {
+      const list = sortPages([...current.pages.filter((entry) => entry.id !== id), ...(page ? [page] : [])])
+      remember(list)
+      return { ...current, scope, pages: list, inGit: page ? [...new Set([...current.inGit, id])] : current.inGit.filter((entry) => entry !== id), loaded: true }
+    })
+  }, [scope, readOnDemand])
   const gitLoading = git.status === 'loading'
   useEffect(() => { if (scope && !gitLoading) void Promise.resolve().then(load) }, [scope, gitLoading, load])
   const fresh = state.scope === scope
@@ -101,7 +113,7 @@ export function useOnDemand(git: GitStorage) {
     setState((current) => { const list = current.pages.filter((page) => page.id !== id); remember(list); return { ...current, pages: list, inGit: current.inGit.filter((entry) => entry !== id) } })
   }
   return {
-    pages, save, update, retry, remove, reload: load,
+    pages, save, update, retry, remove, reload: load, reloadPage: loadPage,
     stored: (id: string) => saved.find((page) => page.id === id) ?? null,
     // OND-28: the pending changes of a page (saves that failed before they were queued), and Discard.
     pending: (id: string) => (kept[id] ?? []).filter((entry) => entry.state === 'failed').map(({ label, error }) => ({ label, error })),

@@ -8,7 +8,7 @@ import type { GitStorage } from './useGitStorage'
 // kept; blocks that could not be read are named (dropped). Every change of the owners is saved at once, queued and
 // merged with what others saved meanwhile (GIT-17).
 const cacheKey = (id: string) => `demand-planning-dashboard-page-v1:${id}`
-function cached(id: string): Dashboard | null { try { const text = localStorage.getItem(cacheKey(id)); return text ? parseDashboard(text, id).dashboard : null } catch { return null } }
+export function cached(id: string): Dashboard | null { try { const text = localStorage.getItem(cacheKey(id)); return text ? parseDashboard(text, id).dashboard : null } catch { return null } }
 function remember(dashboard: Dashboard) { try { localStorage.setItem(cacheKey(dashboard.id), serializeDashboard(dashboard)) } catch { /* this visit only */ } }
 
 interface State { key: string; dashboard: Dashboard; inGit: boolean; error: string; dropped: string[]; loaded: boolean }

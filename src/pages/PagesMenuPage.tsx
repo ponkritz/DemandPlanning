@@ -10,12 +10,15 @@ import { dashboardPath } from '../dashboardPages'
 import type { GitStorage } from '../useGitStorage'
 import type { MenuLayoutStore } from '../useMenuLayout'
 import type { OnDemandStore } from '../useOnDemand'
+import type { MenuPageName } from '../pageNames'
 import { RemovePageDialog } from './OnDemandPage'
 
 // PGB-12: Admin → Pages & menu — the menu groups (built-in and custom) and the added pages, each a list in the shared
 // table (UI-STANDARDS §5) with its row actions; add and edit in pop-ups (§3/§4). Who may change what is shown: every
 // button the viewer may not use is disabled with the reason (CON-102), one line above each table and as the tooltip.
-export function PagesMenuPage({ git, store, menu, viewer, onOpen, onAddPage }: { git: GitStorage; store: OnDemandStore; menu: MenuLayoutStore; viewer: Viewer; onOpen: (id: string) => void; onAddPage: (group?: string) => void }) {
+// PGB-17: duplicates — page names two or more pages share (saved at the same time, or older files in Git): both pages
+// are kept and listed here, each with its group, with the suggestion to rename one.
+export function PagesMenuPage({ git, store, menu, viewer, onOpen, onAddPage, duplicates = [] }: { git: GitStorage; store: OnDemandStore; menu: MenuLayoutStore; viewer: Viewer; onOpen: (id: string) => void; onAddPage: (group?: string) => void; duplicates?: MenuPageName[][] }) {
   const layout = menu.layout
   const groups = menuGroups(layout)
   const pageIds = store.pages.map((page) => page.id)
@@ -103,6 +106,7 @@ export function PagesMenuPage({ git, store, menu, viewer, onOpen, onAddPage }: {
     {menu.error && <Notice tone="error">Pages & menu: {menu.error} The menu last read is kept.</Notice>}
     {store.errors.map((entry) => <Notice key={entry} tone="error">On-Demand: {entry}</Notice>)}
     {error && <Notice tone="error">{error}</Notice>}
+    {duplicates.length > 0 && <Notice tone="warning" className="pgb-duplicates"><p><strong>Pages with the same name:</strong> {duplicates.map((set) => `“${set[0].name}” (${set.map((entry) => entry.group).join(', ')})`).join('; ')}. Both pages are kept and the menu shows each with its group; rename one with Edit so everyone can tell them apart.</p></Notice>}
     <SaveQueueStatus state={menu.queue} onRetry={() => void menu.retry()} />
     <Panel eyebrow="PAGES & MENU" title="Your rights here" info={<>A <strong>Tool Owner</strong> (the role right “Manage pages and menu groups”) creates, renames, reorders, configures and removes groups — built-in groups only configured — and adds, moves and removes any page. A <strong>group co-owner</strong>, while the group accepts added pages, adds, renames, reorders and removes the group’s pages, names their co-owners, sets them up and edits their rows. A <strong>page co-owner</strong> sets up that page and edits its rows. The role rights “Set up On-Demand pages” and “Edit On-Demand data (rows)” apply to every such page. Saved in Git as {menu.path} (the pages’ tables as {onDemandPath('<page-id>')}); two saves at the same time are merged group by group and page by page.{menu.history && <> <a href={menu.history} target="_blank" rel="noreferrer">History in GitHub</a></>}</>}>
       <SettingsSummary rows={[

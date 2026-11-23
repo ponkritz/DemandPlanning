@@ -1,6 +1,7 @@
 import test, { after, before } from 'node:test'
 import assert from 'node:assert/strict'
-import { navigate, openPage, rolesFile, startApp, text } from './helpers.mjs'
+import { navigate, openPage, startApp, text } from './helpers.mjs'
+import { defaultPolicy, serializeAccess } from '../src/access.ts'
 
 // Page builder (PGB-01…PGB-14, CON-106) against a mocked GitHub: a Tool Owner adds the group Quality with a Table page
 // "Supplier issues", names a group co-owner, sets the page up and adds a row (TC-PGB-01, UAT); the group co-owner adds a
@@ -37,13 +38,29 @@ async function mockGitHub(context, files, role) {
       writes.push({ path, message: body.message, data: JSON.parse(files[path]) })
       return json({ content: { sha: `v${writes.length}` }, commit: { html_url: `https://github.com/example/storage/commit/v${writes.length}` } })
     }
-    if (path === 'access.json') return json(rolesFile(role))
+    if (path === 'access.json') return json(roles(role))
     const folder = Object.keys(files).filter((file) => file.startsWith(`${path}/`))
     if (folder.length) return json(folder.map((file) => ({ type: 'file', name: file.slice(path.length + 1), path: file, sha: `s${files[file].length}` })))
     if (files[path] != null) return json({ type: 'file', encoding: 'base64', content: Buffer.from(files[path]).toString('base64'), sha: `s${files[path].length}` })
     return json({ message: 'Not Found' }, 404)
   })
   return writes
+}
+// access.json with everyone in `role` and the people given roles by work email (PGB-18: offered as co-owners).
+function roles(role) {
+  const policy = defaultPolicy(); policy.defaultRole = role
+  policy.members = { [lead]: ['Team Member'], 'auditor@example.com': ['Team Member'] }
+  return { type: 'file', encoding: 'base64', content: Buffer.from(serializeAccess(policy)).toString('base64'), sha: 'roles' }
+}
+// PGB-18: co-owners are ticked in the list (type to filter), not typed.
+async function pickOwners(dialog, label, emails) {
+  await dialog.getByRole('button', { name: new RegExp(`^${label.replace(/[()]/g, '\\$&')}:`) }).click()
+  const list = dialog.getByRole('listbox', { name: label })
+  for (const email of emails) {
+    await list.getByLabel(`Filter ${label}`).fill(email.split('@')[0])
+    await list.getByRole('checkbox', { name: email }).check()
+  }
+  await dialog.getByRole('button', { name: new RegExp(`^${label.replace(/[()]/g, '\\$&')}:`) }).click()
 }
 async function open(email, files, role) {
   const { page, context, errors } = await openPage(app, { init: signIn, initArg: email })
@@ -100,10 +117,7 @@ test('TC-PGB-01: a Tool Owner adds the group Quality with the Table page “Supp
   const groups = page.locator('.pgb-groups')
   await groups.getByRole('button', { name: 'Edit group Quality' }).click()
   const edit = page.getByRole('dialog', { name: 'Edit the group Quality' })
-  await edit.getByLabel('Group co-owners (optional)').fill(`${lead}, not-an-email`)
-  await edit.getByRole('button', { name: 'Save to Git' }).click()
-  assert.match(await text(edit.locator('.notice')), /Not a work email: not-an-email\./)
-  await edit.getByLabel('Group co-owners (optional)').fill(lead)
+  await pickOwners(edit, 'Group co-owners (optional)', [lead])
   await edit.getByRole('button', { name: 'Save to Git' }).click()
   await edit.waitFor({ state: 'detached' })
   layout = lastWrite(writes, 'menu-layout.json').data
@@ -171,7 +185,7 @@ test('TC-PGB-09: a group co-owner adds a Table + Insights page to Quality and se
   assert.deepEqual(await add.getByLabel('Menu group').locator('option').allInnerTexts(), ['Quality'])
   await add.getByRole('radio', { name: 'Table + Insights' }).check()
   await add.getByLabel('Page name', { exact: true }).fill('Audit findings')
-  await add.getByLabel('Page co-owners (optional)').fill('auditor@example.com')
+  await pickOwners(add, 'Page co-owners (optional)', ['auditor@example.com'])
   await add.getByRole('button', { name: 'Add page' }).click()
   await add.waitFor({ state: 'detached' })
   await page.locator('header.topbar h1', { hasText: 'Audit findings' }).waitFor()
@@ -211,6 +225,79 @@ test('TC-PGB-10: a person with no ownership and no rights sees Pages & menu and 
   assert.equal(await text(page.locator('.od-panel .write-blocked')), 'Your role does not allow “Edit On-Demand data (rows)”, “Set up On-Demand pages (pages, columns, options)”. An Admin can change this in Admin → People & roles → Role rights.')
   assert.equal(await page.getByRole('button', { name: 'Rename page…' }).getAttribute('title'), 'Only a Tool Owner or a co-owner of the group “Quality” can change this page in the menu.')
   assert.equal(writes.length, 0, 'nothing is written')
+  assert.deepEqual(errors.filter((entry) => !/401|Unauthorized/.test(entry)), [])
+  await context.close()
+})
+
+test('TC-PGB-12: a page name already in the menu — another case, extra spaces, full-width letters, a built-in page — shows the error at the name field and Save stays disabled (Add page, Edit, Rename page)', async () => {
+  const files = qualityFiles()
+  const { page, context, errors, writes } = await open('tool.owner@example.com', files, 'Tool Owner')
+  await navigate(page, 'Pages & menu')
+  await page.locator('.pgb-pages tbody tr', { hasText: 'Supplier issues' }).waitFor()
+  await page.getByRole('button', { name: '＋ Add page…' }).click()
+  const add = page.getByRole('dialog', { name: 'Add a page' })
+  const name = add.getByLabel('Page name', { exact: true })
+  await name.fill('  supplier   ISSUES ')
+  const error = add.locator('.field-error')
+  assert.equal(await text(error), 'There is already a page named “Supplier issues” (in Quality). Choose another name.')
+  assert.equal(await name.getAttribute('aria-invalid'), 'true')
+  assert.equal(await add.getByRole('button', { name: 'Add page' }).isDisabled(), true, 'Add page stays disabled while the name clashes')
+  await name.fill('ＣｏＮＱ')
+  assert.equal(await text(error), 'There is already a page named “CoNQ” (in On-Demand). Choose another name.', 'full-width letters are the same name')
+  await name.fill('qe mapping')
+  assert.equal(await text(error), 'There is already a page named “QE Mapping” (in Data & governance). Choose another name.', 'a built-in page')
+  await name.fill('Supplier audits')
+  await error.waitFor({ state: 'detached' })
+  assert.equal(await add.getByRole('button', { name: 'Add page' }).isDisabled(), false)
+  await add.getByRole('button', { name: 'Cancel' }).click()
+  // Edit (rename or move) in Pages & menu: CoNQ cannot take Supplier issues' name; its own name is fine.
+  await page.locator('.pgb-pages').getByRole('button', { name: 'Edit page CoNQ' }).click()
+  const edit = page.getByRole('dialog', { name: 'Edit the page' })
+  await edit.getByLabel('Page name', { exact: true }).fill('Supplier Issues')
+  assert.equal(await text(edit.locator('.field-error')), 'There is already a page named “Supplier issues” (in Quality). Choose another name.')
+  assert.equal(await edit.getByRole('button', { name: 'Save to Git' }).isDisabled(), true)
+  await edit.getByLabel('Page name', { exact: true }).fill('conq')
+  await edit.locator('.field-error').waitFor({ state: 'detached' })
+  assert.equal(await edit.getByRole('button', { name: 'Save to Git' }).isDisabled(), false, 'a page may keep its own name in another case')
+  await edit.getByRole('button', { name: 'Cancel' }).click()
+  // Rename page… on the page itself.
+  await page.locator('.pgb-pages').getByRole('button', { name: 'Open Supplier issues' }).click()
+  await page.locator('.od-panel table tbody tr').first().waitFor()
+  await page.getByRole('button', { name: 'Rename page…' }).click()
+  const rename = page.getByRole('dialog', { name: 'Rename the page' })
+  await rename.getByLabel('Page name', { exact: true }).fill('CONQ')
+  assert.equal(await text(rename.locator('.field-error')), 'There is already a page named “CoNQ” (in On-Demand). Choose another name.')
+  assert.equal(await rename.getByRole('button', { name: 'Save to Git' }).isDisabled(), true)
+  await rename.getByRole('button', { name: 'Cancel' }).click()
+  assert.equal(writes.length, 0, 'nothing is written')
+  assert.deepEqual(errors.filter((entry) => !/401|Unauthorized/.test(entry)), [])
+  await context.close()
+})
+
+test('TC-PGB-13: two pages with the same name in Git (saved at the same time) are both kept, shown with their group in the menu and listed on Pages & menu with the suggestion to rename one; TC-PGB-14: co-owners picked from a list', async () => {
+  const files = qualityFiles()
+  const layout = JSON.parse(files['menu-layout.json'])
+  layout.pages['conq-quality'] = { type: 'table', group: 'g-quality', order: 2, icon: '▦', owners: ['old.owner@example.com'] }
+  files['menu-layout.json'] = JSON.stringify(layout)
+  files['on-demand/conq-quality.json'] = JSON.stringify({ ...conq, id: 'conq-quality', name: 'conq ' })
+  const { page, context, errors, writes } = await open('tool.owner@example.com', files, 'Tool Owner')
+  await menuGroup(page, 'Quality').getByRole('button', { name: 'conq (Quality)' }).waitFor()
+  assert.equal(await menuGroup(page, 'On-Demand').getByRole('button', { name: 'CoNQ (On-Demand)' }).count(), 1, 'both kept, each with its group')
+  await navigate(page, 'Pages & menu')
+  const warning = page.locator('.pgb-duplicates')
+  await warning.waitFor()
+  assert.equal(await text(warning), 'Pages with the same name: “CoNQ” (On-Demand, Quality). Both pages are kept and the menu shows each with its group; rename one with Edit so everyone can tell them apart.')
+  assert.equal(writes.length, 0, 'nothing is renamed automatically')
+  // TC-PGB-14 (PGB-18): the co-owners are a list of the people the app knows; one not in it stays ticked, marked.
+  await page.locator('.pgb-pages').getByRole('button', { name: 'Edit page conq', exact: true }).click()
+  const edit = page.getByRole('dialog', { name: 'Edit the page' })
+  await edit.getByRole('button', { name: /^Page co-owners \(optional\):/ }).click()
+  const list = edit.getByRole('listbox', { name: 'Page co-owners (optional)' })
+  assert.equal(await list.getByRole('checkbox', { name: 'old.owner@example.com — not in Azure DevOps' }).isChecked(), true)
+  assert.equal(await list.getByRole('checkbox', { name: lead }).isChecked(), false)
+  await list.getByLabel('Filter Page co-owners (optional)').fill('auditor')
+  assert.deepEqual(await list.getByRole('checkbox').count(), 1, 'type to filter')
+  await edit.getByRole('button', { name: 'Cancel' }).click()
   assert.deepEqual(errors.filter((entry) => !/401|Unauthorized/.test(entry)), [])
   await context.close()
 })

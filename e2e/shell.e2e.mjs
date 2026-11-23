@@ -1109,7 +1109,7 @@ test('TC-ATM-20: Sprint check offers the move to the current PI + Sprint and the
   await context.close()
 })
 
-test('TC-GIT-08: while the app is open, newer planning data in Git loads by itself and other newer shared files show a Reload banner', async () => {
+test('TC-GIT-08: while the app is open, newer planning data in Git loads by itself and other newer shared files show on the pages that use them (GIT-18)', async () => {
   // A fake data repository: the planning file and nothing else; the token can read, not write.
   const planning = (hoursPerDay) => JSON.stringify({ schema: 1, baselineRules: [], releaseScopes: [], resourceProfiles: {}, capacitySettings: { absenceEpicId: 1, hoursPerDay, overloadedAt: 100, availableBelow: 80, npraHoursPerMonth: 0 }, tableDefaults: { defaultDensity: 'compact' } })
   const files = { 'planning-data.json': { text: planning(8), sha: 'p1' } }
@@ -1135,17 +1135,20 @@ test('TC-GIT-08: while the app is open, newer planning data in Git loads by itse
   await page.locator('.sidebar nav button', { hasText: /^.Data & sharing$/ }).first().click()
   await page.getByText('Loaded from example/storage · planning-data.json').waitFor()
   assert.equal(listings.length, 0, 'no check right at start')
-  // Someone else saves new planning data, and creates the Monthly pack setup (read at start: not there then).
+  // Someone else saves new planning data, creates the Monthly pack setup and the access roles (read at start: not there).
   files['planning-data.json'] = { text: planning(7.5), sha: 'p2' }
   files['monthly-pack-setup.json'] = { text: '{"schema":1}', sha: 'm1' }
+  files['access.json'] = { text: '{"schema":1}', sha: 'a1' }
   await page.clock.fastForward('05:01')
   await page.getByText(/Updated from Git at .*: newer planning data saved by someone else was loaded\./).waitFor()
   assert.ok(listings.length >= 1, 'the folder was listed (no file contents)')
   const banner = page.locator('.git-update-banner')
   await banner.waitFor()
-  assert.match(await text(banner), /Newer data in Git, saved by someone else since you opened the app: Monthly pack setup\. Reload to see it\./)
-  assert.doesNotMatch(await text(banner), /Planning data/, 'the planning data was loaded, so it is not in the banner')
-  assert.equal(await banner.getByRole('button', { name: 'Reload' }).count(), 1)
+  // GIT-18: on Data & sharing only what it uses — the access roles (every page); the Monthly pack setup waits for
+  // Pulse Check and Admin → Reports.
+  assert.match(await text(banner), /^Newer data in Git for Data & sharing: Access — saved by someone else\. Load the newer data$/)
+  assert.doesNotMatch(await text(banner), /Planning data/, 'the planning data was loaded, so it is not in the notice')
+  assert.equal(await banner.getByRole('button', { name: 'Load the newer data' }).count(), 1)
   assert.deepEqual(errors, [])
   await context.close()
 })

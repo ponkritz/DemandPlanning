@@ -4,6 +4,26 @@ import { addGroup, addPageReason, builtInGroups, emptyLayout, groupReason, group
 import { canManagePages, defaultPolicy, parseAccess, rightsFor, serializeAccess } from '../src/access.ts'
 import { conqPage, emptyPage, parseOnDemandPage, serializeOnDemandPage } from '../src/onDemand.ts'
 import { fileLabel } from '../src/gitWatch.ts'
+import { duplicatePageNames, menuLabel, normalPageName, pageNameClash, pageNameError } from '../src/pageNames.ts'
+import { capReason, knownPeople, noEmailReason, ownerOptions, ownersFromList } from '../src/ownerPeople.ts'
+
+test('PGB-18: co-owners are picked from the people the app knows; owners not in the list stay, marked; no email: disabled; at most 50', () => {
+  const people = knownPeople([
+    { assignedTo: 'Ana Costa', assignedToEmail: 'Ana.Costa@Example.com' }, { assignedTo: 'Ana Costa' }, { assignedTo: 'Ben Ito' }, { assignedTo: 'Unassigned' },
+  ], [{ name: 'ana.costa@example.com', email: 'ana.costa@example.com' }, { name: 'carla@example.com', email: 'carla@example.com' }])
+  assert.deepEqual(people, [{ name: 'Ana Costa', email: 'ana.costa@example.com' }, { name: 'Ben Ito' }, { name: 'carla@example.com', email: 'carla@example.com' }], 'by name, the email of any item, a role member known by name listed once')
+  const options = ownerOptions(people, ['old.owner@example.com', 'ana.costa@example.com'])
+  assert.deepEqual(options, [
+    { key: 'ana.costa@example.com', label: 'Ana Costa (ana.costa@example.com)', disabled: '' },
+    { key: 'carla@example.com', label: 'carla@example.com', disabled: '' },
+    { key: 'old.owner@example.com', label: 'old.owner@example.com — not in Azure DevOps', disabled: '' },
+    { key: 'name:Ben Ito', label: 'Ben Ito', disabled: noEmailReason },
+  ])
+  assert.deepEqual(ownersFromList(['Ana.Costa@example.com', 'name:Ben Ito', 'old.owner@example.com']), ['ana.costa@example.com', 'old.owner@example.com'], 'lower-case emails, as stored before')
+  const fifty = Array.from({ length: 50 }, (_, index) => `p${index}@example.com`)
+  assert.equal(ownerOptions(people, fifty).find((option) => option.key === 'carla@example.com').disabled, capReason, 'at most 50')
+  assert.equal(ownersFromList([...fifty, 'carla@example.com']).length, 50)
+})
 
 const owner = 'tool.owner@example.com', groupOwner = 'group.lead@example.com', pageOwner = 'page.keeper@example.com', nobody = 'someone@example.com'
 const pages = [conqPage(), emptyPage('supplier-issues', 'Supplier issues'), emptyPage('audit-log', 'Audit log')]
@@ -190,4 +210,41 @@ test('PGB-03, GIT-17: two saves of the menu layout are merged by group and page 
   assert.deepEqual(mergeOwners(['a@x.com', 'b@x.com'], ['a@x.com', 'c@x.com'], ['a@x.com', 'b@x.com', 'd@x.com']), ['a@x.com', 'd@x.com', 'c@x.com'])
   // A side that is not a layout: my text is written as it is.
   assert.equal(mergeMenuLayoutText(baseText, serializeMenuLayout(mine), 'broken', true), serializeMenuLayout(mine))
+})
+
+test('PGB-15, PGB-16: page names are compared ignoring case, spaces and width forms; a clash names the page and its group', () => {
+  assert.equal(normalPageName('  CoNQ   Report '), 'conq report')
+  assert.equal(normalPageName('ＣｏＮＱ'), 'conq', 'full-width forms (NFKC)')
+  assert.equal(normalPageName('Co​NQ'), 'conq', 'zero-width characters')
+  assert.equal(normalPageName('Ｑｕａｌｉｔｙ　Ｄａｓｈ'), 'quality dash', 'an ideographic space')
+  const taken = [
+    { key: 'page:qemapping', name: 'QE Mapping', group: 'Data & governance' },
+    { key: 'admin:pages', name: 'Pages & menu', group: 'Admin' },
+    { key: 'stream:DP', name: 'DP', group: 'Release Details' },
+    { key: 'ondemand:conq', name: 'CoNQ', group: 'On-Demand' },
+    { key: 'ondemand:audits', name: 'Audits', group: 'Quality' },
+  ]
+  assert.equal(pageNameError('conq', taken), 'There is already a page named “CoNQ” (in On-Demand). Choose another name.')
+  assert.equal(pageNameError(' qe  mapping ', taken), 'There is already a page named “QE Mapping” (in Data & governance). Choose another name.', 'a built-in page')
+  assert.equal(pageNameClash('dp', taken)?.key, 'stream:DP', 'a release stream')
+  assert.equal(pageNameClash('AUDITS', taken)?.group, 'Quality', 'in any group')
+  assert.equal(pageNameError('CoNQ', taken, 'ondemand:conq'), '', 'a rename keeping its own name')
+  assert.equal(pageNameError('conq ', taken, 'ondemand:audits'), 'There is already a page named “CoNQ” (in On-Demand). Choose another name.', 'a rename to another page\'s name')
+  assert.equal(pageNameError('CoNQ 2', taken), '')
+  assert.equal(pageNameError('   ', taken), '', 'an empty name is not a clash (the field asks for a name)')
+})
+
+test('PGB-17: duplicate page names already in Git are kept and listed with their groups; the menu tells them apart', () => {
+  const named = [
+    { key: 'page:overview', name: 'Team overview', group: 'Data Insights' },
+    { key: 'ondemand:conq', name: 'CoNQ', group: 'On-Demand' },
+    { key: 'ondemand:conq-2', name: 'conq', group: 'Quality' },
+    { key: 'ondemand:audits', name: 'Audits', group: 'Quality' },
+  ]
+  const sets = duplicatePageNames(named)
+  assert.deepEqual(sets.map((set) => set.map((entry) => entry.key)), [['ondemand:conq', 'ondemand:conq-2']], 'both pages kept, nothing renamed')
+  assert.equal(menuLabel(named[1], sets), 'CoNQ (On-Demand)')
+  assert.equal(menuLabel(named[2], sets), 'conq (Quality)')
+  assert.equal(menuLabel(named[3], sets), 'Audits', 'a unique name as it is')
+  assert.deepEqual(duplicatePageNames([{ key: 'admin:home', name: 'Overview', group: 'Admin' }, { key: 'page:x', name: 'overview', group: 'Testing' }]), [], 'built-in names alone are not listed')
 })

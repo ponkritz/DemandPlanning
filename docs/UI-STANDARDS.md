@@ -75,6 +75,12 @@ verbs for the main action; ~9 hand-built error boxes; 154 of 174 disabled button
 
 **Today:** 35 `window.confirm` calls; footers use three different classes; two titles in Title Case.
 
+## 4a. Drawers
+
+**§4a Drawers.** One record of a table, viewed beside the page it belongs to, uses `Drawer` (`components/ui.tsx`), opened by a click on the table row or Enter / Space on it (`DataTable` `onRowOpen`) — not a pop-up. It slides in from the right (about 520 px; the full width on a phone), over a dimmed overlay. Header: eyebrow `AREA · CONTEXT` in ALL CAPS, the record's own ID as the title (sentence case for a new record, e.g. "New row"), optional ‹ › for the previous / next record in the table's current order with "n of m", and ×. Body: read-only by default — the record's facts first, then label / value pairs (with each field's help under its label), then its History. Footer, always visible, right-aligned: in view mode a destructive text button (**Remove …**) on the left and **Edit** (primary); in edit mode the form fields replace the values in place and the footer is **Cancel** then the main action (§3, e.g. **Save to Git**), with the error and Retry above the buttons. Escape, × and a click on the overlay close it; with unsaved edits closing or moving to another record asks first in a pop-up (**Keep editing** / **Discard changes**). Keyboard as in §4 (focus moves in, Tab stays inside, focus returns to the row). No sliding when the system asks for reduced motion. A missing permission disables Edit and Remove with the reason as a `WriteBlocked` line in the footer (§3). Use a drawer for viewing and editing one record of a list; keep `Modal` for confirmations, multi-record editors and settings.
+
+Approved by the product owner on 2026-11-23.
+
 ## 5. Tables
 
 - A list of records uses **`DataTable`** inside a **`TablePanel`**: sortable headers, Export (Excel / CSV), column
@@ -235,3 +241,7 @@ What a person gets without choosing (the UI/UX reviewer lists every one in its *
 The product owner approves this document and every change to it; a change is made in its own pull request with a
 change note. The UI/UX reviewer reports a case the standard does not cover under "Not covered", and a rule that is
 wrong for a real case as an Improvement to the standard.
+
+| Date | Change | Approved by |
+|---|---|---|
+| 2026-11-23 | §4a Drawers added: one record of a table viewed and edited in a drawer from the right (the On-Demand row drawer, OND-27…OND-29). | Product owner, 2026-11-23 |

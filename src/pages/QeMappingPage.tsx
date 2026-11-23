@@ -8,6 +8,7 @@ import type { QeMappingStore } from '../useQeMapping'
 import type { GitStorage } from '../useGitStorage'
 import { readCsv, readXlsx, writeXlsx } from '../xlsx'
 import { formatDateTime } from '../format'
+import { useUnsavedEdit } from '../pageEdits'
 
 // QE Mapping: upload the existing Excel (or CSV) and keep it as it is — every sheet a tab, its first row the
 // columns — then filter, edit cells, add / delete rows and columns, hide, move and group columns here. Changes are a
@@ -47,6 +48,8 @@ export function QeMappingPage({ git, store, resources = [] }: { git: GitStorage;
   const widths = useColumnWidths('qe-mapping')
   const widthKey = (id: string) => `${sheet?.id ?? ''}:${id}`
   const file = draft ?? store.file
+  // GIT-18: Load the newer data asks first while changes here are not saved to Git.
+  useUnsavedEdit(draft ? 'your changes to QE Mapping that are not saved to Git' : false)
   const sheet = file?.sheets.find((entry) => entry.id === sheetId) ?? file?.sheets[0]
   const hidden = useMemo(() => sheet ? hiddenBySheet[sheet.id] ?? [] : [], [sheet, hiddenBySheet])
   const columns = useMemo(() => sheet ? sheet.columns.filter((column) => !hidden.includes(column.id)) : [], [sheet, hidden])

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useUnsavedEdit } from '../pageEdits'
 import { recordJob } from '../backgroundJobs'
 import { DataTable, type DataColumn } from '../components/DataTable'
 import { BlockDialog, BlockPanel, KpiTile } from '../components/DashboardBlocks'
@@ -55,6 +56,8 @@ export function CustomDashboardPage({ git, store, pageId, menu, viewer, views, o
   const [setup, setSetup] = useState(false)
   const [pageDialog, setPageDialog] = useState<'rename' | 'remove' | null>(null)
   const [error, setError] = useState('')
+  // GIT-18: an open block editor, tabs and filters pop-up or rename: Load the newer data asks first.
+  useUnsavedEdit(editing ? `the block you are editing on ${page?.name ?? 'this dashboard'}` : setup ? `the tabs and filters you are setting up on ${page?.name ?? 'this dashboard'}` : pageDialog === 'rename' ? `the new name of ${page?.name ?? 'this dashboard'}` : false)
 
   // DSH-09: rights. Building the dashboard: whoever may set the page up; renaming and removing it: the page builder's.
   const gitReason = gitReasonOf(git)
@@ -163,7 +166,7 @@ export function CustomDashboardPage({ git, store, pageId, menu, viewer, views, o
       onRemove={(entry) => saveDashboard(removeBlock(dashboard, entry.id), 'Remove block', `Dashboard ${page.name}: remove the ${blockTypeLabel(entry.type)} ${entry.title}`)} />}
     {setup && <SetupDialog tabs={tabs} filters={dashboard.filters} datasets={datasets} onCancel={() => setSetup(false)}
       onSave={async (nextTabs, nextFilters) => { await saveDashboard(setTabsAndFilters(dashboard, nextTabs, nextFilters), 'Tabs and filters', `Dashboard ${page.name}: tabs and filters`); setSetup(false) }} />}
-    {pageDialog === 'rename' && <PageNameDialog title="Rename the page" action="Save to Git" name={page.name} description={page.description} onCancel={() => setPageDialog(null)} onSave={async (name, description) => {
+    {pageDialog === 'rename' && <PageNameDialog title="Rename the page" action="Save to Git" name={page.name} description={page.description} except={`ondemand:${page.id}`} onCancel={() => setPageDialog(null)} onSave={async (name, description) => {
       const stored = store.stored(page.id) ?? page
       const saved = await store.save(renamePage(stored, name, description), `Pages & menu: rename ${stored.name} to ${name.trim()}`)
       recordJob(`pages:${page.id}`, `Rename page · ${stored.name}`, { text: `${outcomeText(saved)} ${onDemandPath(page.id)}` })

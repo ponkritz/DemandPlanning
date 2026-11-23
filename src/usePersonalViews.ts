@@ -19,6 +19,8 @@ export function usePersonalViews(git: GitStorage, myEmail: string) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const latest = useRef(mine)
   const { connected, readOnly, readPersonalViews, readViewsDefaults } = git
+  // GIT-18: newer views saved elsewhere are read again quietly (reload), unless a change here is still waiting to be saved.
+  const [reads, setReads] = useState(0)
   useEffect(() => { setMine(read(cacheKey(email))); sha.current = null }, [email])
   useEffect(() => {
     if (!connected) return
@@ -35,7 +37,7 @@ export function usePersonalViews(git: GitStorage, myEmail: string) {
       } catch (failure) { if (active) setNote(`Your views were not read from Git: ${failure instanceof Error ? failure.message : String(failure)}`) }
     })()
     return () => { active = false }
-  }, [connected, email, readPersonalViews, readViewsDefaults])
+  }, [connected, email, readPersonalViews, readViewsDefaults, reads])
 
   const pushToGit = useCallback(async () => {
     if (!connected || readOnly || !email) return
@@ -52,13 +54,14 @@ export function usePersonalViews(git: GitStorage, myEmail: string) {
     const next = edit(latest.current)
     latest.current = next; setMine(next); write(cacheKey(email), next)
     if (timer.current) clearTimeout(timer.current)
-    timer.current = setTimeout(() => { void pushToGit() }, 1500)
+    timer.current = setTimeout(() => { timer.current = null; void pushToGit() }, 1500)
   }
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current) }, [])
 
   const views = withDefaults(mine, defaults)
   return {
     views, note, inGit: Boolean(connected && !readOnly && email),
+    reload: () => { if (!timer.current) setReads((count) => count + 1) },
     sections: (page: string): SectionLayout | undefined => views.sections[page],
     setSections: (page: string, layout: SectionLayout) => change((current) => ({ ...current, sections: { ...current.sections, [page]: layout } })),
     resetSections: (page: string) => change((current) => { const sections = { ...current.sections }; delete sections[page]; return { ...current, sections } }),

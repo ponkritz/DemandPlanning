@@ -113,7 +113,9 @@ export interface TextChange { text: string; base: string | null; at: string; mes
 
 // Reads the latest version, merges this change into it when someone else changed the file since `base` was read here,
 // and commits the result with the version just read. A conflict at write time starts again from the read.
-export async function writeQueuedText(target: GitConfig, token: string, change: TextChange, fetchImpl: Fetch = fetch, tries = maxSaveTries): Promise<QueuedOutcome & { text: string }> {
+// replaced (GIT-18): the version in Git this save replaced (or found already the same), so a listing that still shows it
+// is not taken for newer data saved by someone else.
+export async function writeQueuedText(target: GitConfig, token: string, change: TextChange, fetchImpl: Fetch = fetch, tries = maxSaveTries): Promise<QueuedOutcome & { text: string; replaced: string | null }> {
   for (let attempt = 1; attempt <= tries; attempt++) {
     const latest = await readTextFile(target, token, fetchImpl)
     let next = change.text
@@ -122,10 +124,10 @@ export async function writeQueuedText(target: GitConfig, token: string, change: 
       next = change.merge(change.base, change.text, latest.text, !theirs || change.at >= theirs)
     }
     const merged = next !== change.text
-    if (latest.text === next) return { sha: latest.sha, commitUrl: '', merged, unchanged: true, keptNewer: false, text: next }
+    if (latest.text === next) return { sha: latest.sha, commitUrl: '', merged, unchanged: true, keptNewer: false, text: next, replaced: latest.sha }
     try {
       const written = await writeTextFile(target, token, next, latest.sha, stampMessage(change.message, change.at), fetchImpl)
-      return { ...written, merged, unchanged: false, keptNewer: false, text: next }
+      return { ...written, merged, unchanged: false, keptNewer: false, text: next, replaced: latest.sha }
     } catch (failure) { if (!(failure instanceof GitConflictError)) throw failure }
   }
   throw new GitQueueError(`${target.path} kept changing in Git while saving (${tries} tries). Your change is kept here and not lost: choose Retry to save it again.`)

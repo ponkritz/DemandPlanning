@@ -1032,3 +1032,8 @@ body:has(.drawer-backdrop){overflow:hidden}
 @media(max-width:1000px){.sidebar nav button.nav-group-more{display:none}}
 .pgb-form{display:grid;gap:10px}.pgb-kinds{display:grid;gap:6px;border:1px solid var(--line);border-radius:8px;padding:8px 12px}.pgb-kinds legend{font-weight:600;padding:0 4px}
 .pgb-kind{display:grid;gap:0}.pgb-kind small{color:var(--text-2);padding-left:24px}
+/* GIT-18: the page notice of newer data in Git; PGB-16: a page name that clashes, shown at its field. */
+.page-git-notice p{margin:0 0 8px;overflow-wrap:anywhere}.page-git-notice .button-row{flex-wrap:wrap}
+.field-with-error{display:grid;gap:4px}.field-error{color:var(--danger-text);font-weight:600;font-size:12px}label input[aria-invalid=true]{border-color:var(--danger-line);outline-color:var(--danger-line)}
+/* PGB-18: the co-owner list: type to filter, people without a work email greyed with why. */
+.multi-search{width:100%;margin-bottom:6px}.multi-option-disabled{opacity:.65}.pgb-owners{display:grid;gap:4px}.pgb-owners .multi-list{max-height:260px;overflow:auto;min-width:min(420px,80vw)}

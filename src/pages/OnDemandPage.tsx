@@ -1,4 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
+import { useUnsavedEdit } from '../pageEdits'
+import { PageNameField } from '../components/PageDialogs'
+import { usePageNameClash } from '../usePageNames'
 import { recordJob, runInBackground } from '../backgroundJobs'
 import { DataTable, type DataColumn } from '../components/DataTable'
 import { ResultTabs } from '../components/ResultTabs'
@@ -48,6 +51,9 @@ export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-ins
   const menuReason = gitReason || (page ? pageMenuReason(viewer, menu.layout, page.id) : '')
   const blocked = [...(rights.rows ? [] : ['ondemand.edit' as const]), ...(rights.setup ? [] : ['ondemand.setup' as const])]
   const rows = useMemo(() => page ? filterRows(page, search) : [], [page, search])
+  // GIT-18: what Load the newer data would drop: the columns or the name being set up (a change kept after a failed
+  // save stays: it is applied on top of the page read again).
+  useUnsavedEdit(!page ? false : columnsOpen ? `the columns you are setting up on ${page.name}` : pageDialog === 'rename' ? `the new name of ${page.name}` : false)
   if (!page) return <Page><EmptyState title="No On-Demand page yet." /></Page>
   const placement = placementOf(menu.layout, page.id)
   const groupName = findGroup(menu.layout, placement.group)?.name ?? 'On-Demand'
@@ -158,7 +164,7 @@ export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-ins
       onClose={() => setDrawer(null)} />}
     {removing && <RemoveRowDialog page={page} row={removing} onCancel={() => setRemoving(null)} onRemove={async () => { await removeRowNow(removing); setRemoving(null) }} />}
     {columnsOpen && <ColumnsDialog page={page} onCancel={() => setColumnsOpen(false)} onSave={async (change) => { await saveChange('columns', change, `${page.name}: set up the columns`); setColumnsOpen(false) }} />}
-    {pageDialog === 'rename' && <PageNameDialog title="Rename the page" action="Save to Git" name={page.name} description={page.description} note="Saved to Git for everyone at once." onCancel={() => setPageDialog(null)} onSave={async (name, description) => { await saveChange('rename', (base) => renamePage(base, name, description), `On-Demand: rename ${page.name} to ${name.trim()}`); setPageDialog(null) }} />}
+    {pageDialog === 'rename' && <PageNameDialog title="Rename the page" action="Save to Git" name={page.name} description={page.description} except={`ondemand:${page.id}`} note="Saved to Git for everyone at once." onCancel={() => setPageDialog(null)} onSave={async (name, description) => { await saveChange('rename', (base) => renamePage(base, name, description), `On-Demand: rename ${page.name} to ${name.trim()}`); setPageDialog(null) }} />}
     {pageDialog === 'remove' && <RemovePageDialog page={page} inGit={store.inGit(page.id)} onCancel={() => setPageDialog(null)} onRemove={async () => {
       await store.remove(page.id, `On-Demand: remove the page ${page.name} (${page.rows.length} rows)`)
       // PGB-07: its place in the menu goes with it.
@@ -203,6 +209,8 @@ function RowDrawer({ page, row, isNew, startEditing, canEdit, editReason, queueF
   const bodyStart = useRef<HTMLDivElement>(null)
   const editing = form.editing && canEdit
   const dirty = editing && !sameCells(page.columns, form.cells, isNew ? {} : row.cells)
+  // GIT-18: a row being edited is dropped by Load the newer data, which asks first.
+  useUnsavedEdit(dirty ? `the ${isNew ? 'new row' : `row ${rowId(page, row) || row.key || ''}`} you are editing in ${page.name}` : false)
   const title = isNew ? 'New row' : rowId(page, row) || row.key || 'Row'
   const guard = (action: () => void) => { if (busy) return; if (dirty) setAsking(() => action); else action() }
   const set = (id: string, value: OnDemandValue) => { setForm({ ...form, cells: { ...form.cells, [id]: value } }); setError('') }
@@ -415,24 +423,27 @@ function CurrencyDefault({ index, value, onChange }: { index: number; value: str
 }
 
 // OND-10: add a page (name and description; created in Git at once) or rename one (saved to Git at once, OND-28).
-export function PageNameDialog({ title, action, name = '', description = '', note, onCancel, onSave }: { title: string; action: string; name?: string; description?: string; note?: string; onCancel: () => void; onSave: (name: string, description: string) => void | Promise<void> }) {
+// PGB-16: the name must not be another page's in the menu (except: this page's key, 'ondemand:<id>').
+export function PageNameDialog({ title, action, name = '', description = '', note, except = '', onCancel, onSave }: { title: string; action: string; name?: string; description?: string; note?: string; except?: string; onCancel: () => void; onSave: (name: string, description: string) => void | Promise<void> }) {
   const [value, setValue] = useState(name)
   const [text, setText] = useState(description)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const clash = usePageNameClash(value, except)
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
     if (!value.trim()) { setError('Give the page a name.'); return }
+    if (clash) return
     setBusy(true); setError('')
     try { await onSave(value, text) } catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); setBusy(false) }
   }
   return <Modal eyebrow="ON-DEMAND · PAGES" title={title} onClose={() => { if (!busy) onCancel() }}>
     <form onSubmit={(event) => void submit(event)}>
-      <label>Page name<input autoFocus required maxLength={80} value={value} onChange={(event) => { setValue(event.target.value); setError('') }} /></label>
+      <PageNameField value={value} clash={clash} onChange={(next) => { setValue(next); setError('') }} />
       <label>Description (optional)<input maxLength={300} value={text} onChange={(event) => setText(event.target.value)} /><small>Shown under the page name, e.g. “Cost of Non-Quality”.</small></label>
       {note && <p className="muted">{note}</p>}
       {error && <Notice tone="error">{error}</Notice>}
-      <div className="modal-actions"><button type="button" className="ghost" disabled={busy} onClick={onCancel}>Cancel</button><button className="primary" disabled={busy}>{busy ? 'Saving to Git…' : action}</button></div>
+      <div className="modal-actions"><button type="button" className="ghost" disabled={busy} onClick={onCancel}>Cancel</button><button className="primary" disabled={busy || Boolean(clash)}>{busy ? 'Saving to Git…' : action}</button></div>
     </form>
   </Modal>
 }

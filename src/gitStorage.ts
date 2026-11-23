@@ -145,6 +145,18 @@ export async function fileCommits(config: GitConfig, token: string, count = 30, 
   const body = (await response.json()) as { sha?: unknown; commit?: { message?: unknown; committer?: { date?: unknown }; author?: { date?: unknown } } }[]
   return (Array.isArray(body) ? body : []).flatMap((entry) => typeof entry?.sha === 'string' && /^[0-9a-f]{40}$/.test(entry.sha) ? [{ sha: entry.sha, date: String(entry.commit?.committer?.date ?? entry.commit?.author?.date ?? ''), message: String(entry.commit?.message ?? '').split('\n')[0].slice(0, 200) }] : [])
 }
+// GIT-18: who saved a file last and when (its latest commit's author name and date), for the page notice; null when
+// the history cannot be read. Read only.
+export async function lastCommit(config: GitConfig, token: string, fetchImpl: Fetch = fetch): Promise<{ by: string; at: string } | null> {
+  const url = `${api}/repos/${encodeURIComponent(config.owner)}/${encodeURIComponent(config.repo)}/commits?path=${encodeURIComponent(config.path)}&sha=${encodeURIComponent(config.branch)}&per_page=1`
+  try {
+    const response = await fetchImpl(url, { headers: headers(token), cache: 'no-store' })
+    if (!response.ok) return null
+    const [entry] = (await response.json()) as { commit?: { author?: { name?: unknown; date?: unknown }; committer?: { date?: unknown } } }[]
+    if (!entry?.commit) return null
+    return { by: String(entry.commit.author?.name ?? '').slice(0, 100), at: String(entry.commit.author?.date ?? entry.commit.committer?.date ?? '') }
+  } catch { return null }
+}
 export async function readTextAt(config: GitConfig, token: string, ref: string, fetchImpl: Fetch = fetch): Promise<string | null> {
   if (!/^[0-9a-f]{40}$/.test(ref)) throw new Error('Unknown version.')
   const response = await fetchImpl(`${fileUrl(config)}?ref=${ref}`, { headers: headers(token), cache: 'no-store' })

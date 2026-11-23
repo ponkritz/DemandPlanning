@@ -1157,7 +1157,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-GIT-07 Table defaults and match threshold shared in Git** — Req GIT-14, UI-12 — L1 `git-storage.test.mjs` ("GIT-14: Table defaults and the release-source settings are shared in the planning file; an older file leaves them alone"); E2E `shell.e2e.mjs` ("TC-GIT-08 …": the planning file carries Table defaults); browser check with two browsers: change Settings → Table defaults to Compact and the fuzzy match threshold to 70 %, Save to Git; the other browser (Reload, or wait for GIT-15) shows Compact and 70 %.
 
-**TC-GIT-08 Changes saved by others reach an open app** — Req GIT-15 — L1 `git-watch.test.mjs` ("GIT-15: a check names the shared files whose version in Git is not the one loaded here"; "GIT-15: the banner names the shared files as people know them"); E2E `shell.e2e.mjs` ("TC-GIT-08: while the app is open, newer planning data in Git loads by itself and other newer shared files show a Reload banner"); browser check with two browsers: keep the app open in B; in A change a calculation profile and Save to Git — within 5 minutes (or when B's window is brought back) B shows the new profile and "Updated from Git at …"; in A save the Monthly pack setup — B shows the "Newer data in Git: Monthly pack setup" banner, and Reload shows it; with an unsaved change in B, newer planning data shows in the banner instead of loading.
+**TC-GIT-08 Changes saved by others reach an open app** — Req GIT-15 — L1 `git-watch.test.mjs` ("GIT-15: a check names the shared files whose version in Git is not the one loaded here"; "GIT-15: the banner names the shared files as people know them"); E2E `shell.e2e.mjs` ("TC-GIT-08: while the app is open, newer planning data in Git loads by itself and other newer shared files show on the pages that use them (GIT-18)"); browser check with two browsers: keep the app open in B; in A change a calculation profile and Save to Git — within 5 minutes (or when B's window is brought back) B shows the new profile and "Updated from Git at …"; in A save the Monthly pack setup — B shows the "Newer data in Git: Monthly pack setup" banner, and Reload shows it; with an unsaved change in B, newer planning data shows in the banner instead of loading.
 - L3 expected:
   - `my org` is rejected (owner).
   - `a..b` is rejected (branch).
@@ -1167,6 +1167,10 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 **TC-GIT-09 Loading from Git asks before replacing unsaved changes** — Req GIT-16 — L1 `git-storage.test.mjs` ("GIT-16: loading from Git asks first only when there are unsaved changes, and names what is replaced"); browser check with a writable Git connection: change a person's region, then Load latest — the confirmation names what is replaced; Cancel keeps the change; OK loads the copy in Git.
 
 **TC-GIT-10 Saves to shared files are queued and merged, never written over** — Req GIT-17, HIS-04, MYD-09, KPT-03, CON-88, PCK-08 — L1 `git-save-queue.test.mjs` ("GIT-17: the save time is to the second and travels in the commit message"; "GIT-17: merging by key keeps both sides; the later time wins only for an entry both changed"; "GIT-17 / HIS-04: two history imports both survive; the later one wins for the same row and the import details"; "GIT-17: default views by page, the KPI tracker by sheet and backups by connection id"; "GIT-17: two saves with different times are both written, in the order of their time, each as its own commit"; "GIT-17: a conflict at write time reads the file again, merges and saves both changes"; "GIT-17: after the retries the save fails with a clear error and stays in the queue until Retry"; "GIT-17: the Monthly pack template is not merged: an older save never replaces a newer one"); browser check with two browsers A and B on the same writable repository: open My dashboard → Customize in both; in A use as default with one section hidden, in B (without reloading) move another section and use as default — B says "Saved as the default for everyone — merged with a change by someone else", and `personal-views-defaults.json` in GitHub has both changes in two commits ending `[saved …]` in time order; upload a template in A, then another in B: both are commits in GitHub with their `[saved …]` times and B's (the later) is the template (an older-timed save arriving last is covered by L1).
+
+**TC-GIT-11 Newer data in Git shown on the page that uses it** — Req GIT-18, GIT-20, KPT-05 — **UAT** — L1 `git-watch.test.mjs` ("GIT-18: each shared file is shown on the pages that use it; the menu and the views are loaded quietly"); E2E `page-notices.e2e.mjs` ("TC-GIT-11: newer data in Git shows on the page that uses it — never after your own save; on CoNQ only when someone else changed CoNQ; Load the newer data shows it without reloading the app"), `shell.e2e.mjs` ("TC-GIT-08 …": on Data & sharing only the access roles, not the Monthly pack setup); browser check with two browsers A and B (Tool Owner): B on Home; A adds a CoNQ row — within 5 minutes (or when B's window is brought back) nothing shows on Home, Admin → Data & sharing or another page; B opens CoNQ — "Newer data in Git for CoNQ: CoNQ — saved by {A's GitHub name} on {date time}" (a warning on the page, not a pop-up, not in Background jobs); Load the newer data shows the row without a reload (the menu and the page's tab stay); in B open a CoNQ row, Edit and change a value while A saves CoNQ again; after the next check click Load the newer data on the notice — a pop-up names "the row … you are editing in CoNQ" (Cancel keeps the edit; Load the newer data drops it and shows A's change); A changes Pages & menu (moves a page) — B's menu follows quietly, no notice; A saves QE Mapping — B sees the notice on QE Mapping and the Backlogs only.
+
+**TC-GIT-12 Your own saves never raise the newer-data notice** — Req GIT-19 — L1 `git-watch.test.mjs` ("KB-82, GIT-19: this window's own saves never count as newer data saved by someone else; another person's save does"); E2E `page-notices.e2e.mjs` ("TC-GIT-11 …": a row saved in the drawer, then a check — no notice on CoNQ or Home); browser check: in one window save several CoNQ rows quickly one after another, change the columns, an insight, the menu (move a page), My views and the default views, then bring the window back after 5 minutes — no notice anywhere; open the app in a second window of the same browser, save a CoNQ row there — the first window shows the notice on CoNQ "saved by you in another window of this browser".
 
 **TC-GIT-02 Connect, create, save, load** — Req GIT-02…04, GIT-06, GIT-08, GIT-12 — **UAT**
 - Pre: TD-03.
@@ -1762,6 +1766,12 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-PGB-11 Edit, move, reorder and remove pages; pin and hide them** — Req PGB-07, PGB-04, PGB-06, PGB-14 — browser check as a Tool Owner: Edit a page → change its icon and type to Table + Insights, move it to On-Demand — the menu follows and the Insights tab appears; with unsaved changes on the page a rename is refused with "Save or discard the unsaved changes …"; ↑ ↓ reorder pages in a group and groups of your own; Remove a page names its rows and columns and deletes its file; Remove an empty group asks first; a group holding pages cannot be removed ("Move or remove its N pages first …"); a group set to not accept added pages hides its ⋯ and its co-owners' buttons; Customize menu pins an added page under PINNED and hides another; a page placed in Testing is shown to the Admin role only; the co-owners' emails are shown only in Admin → Pages & menu and the page's ⓘ and are removed with Edit.
 
+**TC-PGB-12 Unique page names** — Req PGB-15, PGB-16 — L1 `page-builder.test.mjs` ("PGB-15, PGB-16: page names are compared ignoring case, spaces and width forms; a clash names the page and its group"); E2E `page-builder.e2e.mjs` ("TC-PGB-12: a page name already in the menu — another case, extra spaces, full-width letters, a built-in page — shows the error at the name field and Save stays disabled (Add page, Edit, Rename page)"); browser check as a Tool Owner: ＋ Add page… named "  conq " — "There is already a page named “CoNQ” (in On-Demand). Choose another name." under the name field, Add page disabled; "DP" (a release stream) and "Pages & menu" (an Admin page) are refused the same way; Rename page… on an On-Demand Dashboard to an existing name is refused; Edit of a page moving it to another group keeps working with its own name.
+
+**TC-PGB-13 Duplicate page names kept and listed** — Req PGB-17 — L1 `page-builder.test.mjs` ("PGB-17: duplicate page names already in Git are kept and listed with their groups; the menu tells them apart"); E2E `page-builder.e2e.mjs` ("TC-PGB-13: two pages with the same name in Git (saved at the same time) are both kept, shown with their group in the menu and listed on Pages & menu with the suggestion to rename one"); browser check: two Tool Owners on two computers add a page "Audits" at the same moment — after both saves both pages are in the menu as "Audits (On-Demand)" and "Audits (Quality)", Pages & menu warns and suggests renaming one; renaming one removes the warning and the group from the menu label.
+
+**TC-PGB-14 Co-owners picked from a list** — Req PGB-18 — L1 `page-builder.test.mjs` ("PGB-18: co-owners are picked from the people the app knows; owners not in the list stay, marked; no email: disabled; at most 50"); E2E `page-builder.e2e.mjs` ("TC-PGB-01 …": the group co-owner and the page co-owner ticked in the list; "TC-PGB-13 …; TC-PGB-14: co-owners picked from a list": an owner not in the list stays ticked, marked "not in Azure DevOps", type to filter); browser check as a Tool Owner after a fetch: Edit a group → Group co-owners lists the team by name with the work email, a person without a work email greyed with the reason; tick two, Save to Git — `menu-layout.json` holds their lower-case emails; the Add page pop-up names Admin → Streams → Stream mapping → ＋ Add stream… for a Release page.
+
 ### 6.31 On-Demand Dashboard pages
 
 **TC-DSH-01 A Tool Owner adds an On-Demand Dashboard, builds it and filters it by period** — Req DSH-01, DSH-02, DSH-03, DSH-05, DSH-06, DSH-07, DSH-08, DSH-10, DSH-11, DSH-12 — **UAT** — L1 `dashboard-pages.test.mjs` ("DSH-07: the period keeps the rows whose month is in it; rows without a date are counted apart; the filter row narrows its source (TC-DSH-05)"); E2E `dashboard-pages.e2e.mjs` ("TC-DSH-01: a Tool Owner adds a Dashboard page, builds it from a KPI tile, a bar chart and a summary table over a table page’s rows and filters it by period — saved in Git"); UAT: with your work email set, Git storage that can save and the Tool Owner role, and a table page with a Dropdown, a Currency and a Date column and rows of this year and last year: ＋ Add page… → Page type **On-Demand Dashboard**, name "Quality dashboard" — the page opens with "No blocks yet."; ＋ Add block… → KPI tile "Issues" over the table page (Period filter on: the Date column), Add block — the tile shows this year's rows; add a **Bar chart** by the Dropdown column and a **Summary table** with Sum of the Currency column — largest first, the first 10 rows with Show all, Export (CSV) opens in Excel with the values as text where they look like formulas; Background jobs names `dashboards/quality-dashboard.json`; tick last year in **Year** — the tile, chart and table follow and the line names the period; a month without rows shows "No data for this selection."; Reset filters goes back to this year; reload — your period comes back; Tabs and filters… → tabs Overview and Cost and a filter on the Dropdown column: tiles open their tab; a colleague without the right sees the dashboard read only with the reason; on a phone and in dark mode the tiles, charts and the pop-up are readable.
@@ -2113,6 +2123,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | GIT-15 | TC-GIT-08, TC-OND-02 |
 | GIT-16 | TC-GIT-09 |
 | GIT-17, HIS-04, MYD-09, KPT-03, CON-88, PCK-08 | TC-GIT-10 |
+| GIT-18, GIT-20 | TC-GIT-11 |
+| GIT-19 | TC-GIT-12 |
 | GIT-17 (On-Demand pages) | TC-OND-05, TC-OND-11, TC-OND-17, TC-OND-22, TC-PGB-08, TC-DSH-04 |
 | GIT-05, GIT-07, GIT-11 | TC-GIT-03 |
 | GIT-09, GIT-10 | TC-GIT-04 |
@@ -2273,7 +2285,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | KPT-02 | TC-KPT-02 |
 | KPT-03 | TC-KPT-03 |
 | KPT-04 | TC-KPT-01 |
-| KPT-05 | TC-KPT-03 |
+| KPT-05 | TC-KPT-03, TC-GIT-11 |
 | DPF-01 | TC-DPF-01 |
 | DPF-02 | TC-DPF-02 |
 | DPF-03 | TC-DPF-03 |
@@ -2356,6 +2368,9 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | PGB-12 | TC-PGB-01, TC-PGB-09, TC-PGB-10 |
 | PGB-13 | TC-PGB-07 |
 | PGB-14 | TC-PGB-02, TC-PGB-11 |
+| PGB-15, PGB-16 | TC-PGB-12 |
+| PGB-17 | TC-PGB-13 |
+| PGB-18 | TC-PGB-14 |
 | DSH-01 | TC-DSH-01, TC-DSH-02, TC-DSH-10 |
 | DSH-02 | TC-DSH-01, TC-DSH-09 |
 | DSH-03 | TC-DSH-01, TC-DSH-08, TC-DSH-11 |
@@ -2406,7 +2421,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-09 | TC-OV-11…15, TC-CAP-01, TC-CAP-02, TC-CAP-03, TC-CAP-08, TC-CAP-10, TC-CAP-11, TC-CAP-12, TC-CAP-13, TC-CAP-14, TC-CAP-15, TC-CAP-16, TC-CAP-17, TC-CAP-18, TC-CAP-19, TC-CAP-20, TC-CAP-21, TC-CAP-22, TC-CAP-23, TC-CAP-24, TC-CAP-25, TC-CAP-26, TC-CAP-27, TC-QV-17, TC-CON-21, TC-QV-10, TC-QV-11, TC-QV-21 |
 | UC-10 | TC-OV-11 (Months, Streams), TC-OV-13 |
 | UC-11 | TC-BAS-01…04 |
-| UC-12 | TC-GIT-01…04, TC-GIT-05, TC-GIT-06, TC-GIT-07, TC-GIT-08, TC-ACC-03…05, TC-GIT-09, TC-GIT-10, TC-CON-62 |
+| UC-12 | TC-GIT-01…04, TC-GIT-05, TC-GIT-06, TC-GIT-07, TC-GIT-08, TC-ACC-03…05, TC-GIT-09, TC-GIT-10, TC-GIT-11, TC-GIT-12, TC-CON-62 |
 | UC-13 | TC-SNP-01…03 |
 | UC-14 | TC-SET-01…07, TC-CAP-02, TC-CAP-03, TC-NAV-34, TC-CAP-07, TC-CAP-09 |
 | UC-15 | TC-STO-01…04, TC-SNP-04 |
@@ -2432,7 +2447,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-35 | TC-ADM-01, TC-ADM-02, TC-ADM-03 |
 | UC-36 | TC-STT-01, TC-STT-02, TC-STT-03 |
 | UC-37 | TC-OND-01…25, TC-CHT-01…12 |
-| UC-38 | TC-PGB-01…11, TC-DSH-01…11, TC-CHT-02, TC-CHT-11 |
+| UC-38 | TC-PGB-01…14, TC-DSH-01…11, TC-CHT-02, TC-CHT-11 |
 
 ## 8. Result record
 

@@ -3,7 +3,7 @@ import { BrandMark } from './components/BrandMark'
 import { TableDefaultsContext } from './components/tableDesign'
 import { ReleaseSettingsContext } from './useStreamEpics'
 import { normalizeTableDefaults } from './tableDefaults'
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, lazy, Suspense } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore, lazy, Suspense } from 'react'
 import { recordVisit } from './usageCounts'
 import './App.css'
 import './fresh.css'
@@ -18,7 +18,7 @@ import { pages, pageGroups, pageMeta, type Page } from './pages/registry'
 import { MyDashboardPage } from './pages/MyDashboardPage'
 import { HomePage } from './pages/HomePage'
 import { loadStartView, saveStartView, startPageOf, visibleTiles, type HomeLink, type HomeTile, type StartView } from './homeTiles'
-import { lookLabel, mySettingsLabel, readSettingsTab, resolveSettings, saveSettingsSection, saveSettingsTab, settingsLabel, settingsPagesFor, type SettingsTab } from './settingsTabs'
+import { lookLabel, mySettingsLabel, readSettingsTab, settingsPages, resolveSettings, saveSettingsSection, saveSettingsTab, settingsLabel, settingsPagesFor, type SettingsTab } from './settingsTabs'
 import { normalizeReleaseSourceSettings } from './releaseSource'
 import { allStreams, dataSets, defaultMatchThreshold, defaultStreams, profileForDataSet, profileForStream, windchillStreamExports } from './streams'
 import { CustomStreamsContext, useCustomStreams, useStreamsVersion } from './useCustomStreams'
@@ -28,6 +28,11 @@ import { listAzureConnectionProfiles } from './azureCredentials'
 import { useAzureWorkspace, type FetchListener, type GitDataSource } from './useAzureWorkspace'
 import { sharedThroughGit } from './gitSnapshots'
 import { useGitStorage } from './useGitStorage'
+import { changesForPage, pagesOfFile, type FilePages } from './gitWatch'
+import { PageGitNotice } from './components/PageGitNotice'
+import { useUnsavedEdits } from './pageEdits'
+import { cached as cachedDashboard } from './useDashboardPage'
+import { pageOfSource } from './dashboardPages'
 import { useWindchill } from './useWindchill'
 import { viewAsLabel, viewAsPeople, type ViewAs } from './viewAs'
 import { ViewAsDialog } from './components/ViewAsDialog'
@@ -45,6 +50,9 @@ import { useOnDemand } from './useOnDemand'
 import { createPage, useMenuLayout } from './useMenuLayout'
 import { addPageReason, builtInGroupOf, findGroup, gitReasonOf, kindOf, menuGroups, pagesOfGroup, placementOf, type Viewer } from './menuLayout'
 import { AddPageDialog } from './components/PageDialogs'
+import { OwnerPeopleContext, PageNamesContext } from './usePageNames'
+import { knownPeople } from './ownerPeople'
+import { duplicatePageNames, menuLabel, type MenuPageName } from './pageNames'
 import { useMonthlyPack } from './useMonthlyPack'
 import { previousMonth } from './pulseCheck'
 import { canManagePages, type Area } from './access'
@@ -298,8 +306,21 @@ export default function App() {
   // PGB-04: the added pages of a group that the viewer sees — the On-Demand area (all added pages share it, CON-103), in
   // Testing for the Admin role only — less the ones hidden in their own menu (MYD-08: "On-Demand" hides them all).
   const addedPages = (groupId: string) => !allowed('ondemand') || personalViews.menu.hidden.includes('ondemand') || (groupId === 'testing' && !testing) ? [] : pagesOfGroup(menu.layout, onDemand.pages, groupId).filter((entry) => !personalViews.menu.hidden.includes(`ondemand:${entry.id}`))
-  const addedButtons = (groupId: string) => addedPages(groupId).map((entry) => navButton(`ondemand:${entry.id}`, placementOf(menu.layout, entry.id).icon, entry.name, page === 'ondemand' && onDemandPage?.id === entry.id, () => openOnDemand(entry.id)))
-  const addedLinks = (groupId: string): HomeLink[] => addedPages(groupId).map((entry) => ({ key: `ondemand:${entry.id}`, label: entry.name, icon: placementOf(menu.layout, entry.id).icon, open: () => openOnDemand(entry.id) }))
+  // PGB-15…PGB-17: every page name in the menu, for the unique-name check of the page dialogs; an added page whose name
+  // another page also has (two saves at the same time, or older files in Git) shows its group in the menu.
+  const menuNames: MenuPageName[] = [
+    ...pages.filter((item) => !item.hidden && item.id !== 'ondemand' && item.id !== 'admin' && item.id !== 'board').map((item) => ({ key: `page:${item.id}`, name: item.label, group: item.group === 'Home' ? 'Home' : item.group })),
+    ...settingsPages.map((item) => ({ key: `admin:${item.key}`, name: item.label, group: 'Admin' })),
+    ...allStreams().map((stream) => ({ key: `stream:${stream.name}`, name: stream.name, group: 'Release Details' })),
+    ...onDemand.pages.map((entry) => ({ key: `ondemand:${entry.id}`, name: entry.name, group: groupNameOf(placementOf(menu.layout, entry.id).group) })),
+  ]
+  const duplicateNames = duplicatePageNames(menuNames)
+  // PGB-18: the people co-owners are picked from — everyone Assigned To fetched work (CAP-51), with their work email,
+  // and the people given app roles by work email (People & roles).
+  const ownerPeople = knownPeople(azure.items, Object.keys(access.policy?.members ?? {}).map((email) => ({ name: email, email })))
+  const addedLabel = (entry: { id: string; name: string }) => menuLabel({ key: `ondemand:${entry.id}`, name: entry.name, group: groupNameOf(placementOf(menu.layout, entry.id).group) }, duplicateNames)
+  const addedButtons = (groupId: string) => addedPages(groupId).map((entry) => navButton(`ondemand:${entry.id}`, placementOf(menu.layout, entry.id).icon, addedLabel(entry), page === 'ondemand' && onDemandPage?.id === entry.id, () => openOnDemand(entry.id)))
+  const addedLinks = (groupId: string): HomeLink[] => addedPages(groupId).map((entry) => ({ key: `ondemand:${entry.id}`, label: addedLabel(entry), icon: placementOf(menu.layout, entry.id).icon, open: () => openOnDemand(entry.id) }))
   const menuGitReason = gitReasonOf(git)
   // Settings pages (SET-14): one menu entry each; opening one on a given section (e.g. Stream mapping) shows that
   // section. The page is remounted so it picks up the section asked for.
@@ -396,10 +417,60 @@ export default function App() {
     { key: 'search', label: 'Search settings', icon: '⌕', detail: 'Ctrl K', onClick: () => setSearchOpen(true) },
     { key: 'menu', label: 'Customize menu', icon: '☰', onClick: () => setMenuEditor(true) },
   ]
+  // GIT-18: newer data in Git, shown on the page in use only when that page's data changed (the others keep theirs for
+  // when they are opened); the menu layout and the views are loaded quietly. A page key: the page's id, 'admin:<tab>',
+  // or 'ondemand:<page id>' for an added page.
+  const pageKey = page === 'ondemand' && onDemandPage ? `ondemand:${onDemandPage.id}` : page === 'admin' ? `admin:${settingsTab}` : page
+  const pageName = page === 'board' ? view.name : page === 'windchill' && windchillView ? windchillView.name : page === 'admin' ? settingsLabel(settingsTab) : page === 'ondemand' && onDemandPage ? onDemandPage.name : meta.label
+  // The dashboards whose blocks or filters read an On-Demand page (from the definitions last read in this browser).
+  const dashboardsReading = (pageId: string) => Object.entries(menu.layout.pages).filter(([, entry]) => entry.type === 'dashboard').map(([id]) => id).filter((id) => { const dashboard = cachedDashboard(id); return Boolean(dashboard && [...dashboard.blocks, ...dashboard.filters].some((entry) => pageOfSource(entry.source) === pageId)) })
+  const targetOf = (path: string): FilePages => pagesOfFile(path, git.config?.path ?? '', dashboardsReading)
+  const quietTarget = (target: FilePages) => target.quiet === 'menu' || target.quiet === 'views'
+  // An added page's file is named by the page's name ("CoNQ"; its blocks for a dashboard).
+  const pageChanges = changesForPage(git.remoteChanges, pageKey, targetOf, quietTarget).map((change) => {
+    const added = /(?:^|\/)(on-demand|dashboards)\/([a-z0-9-]+)\.json$/.exec(change.path), name = added && onDemand.pages.find((entry) => entry.id === added[2])?.name
+    return name ? { ...change, label: added[1] === 'dashboards' ? `the blocks of ${name}` : name } : change
+  })
+  const editsHere = useUnsavedEdits()
+  const planningChanged = pageChanges.some((change) => change.planning)
+  const unsavedHere = [...editsHere, ...(planningChanged && git.dirty ? ['the planning changes not saved to Git (baselines, release scope, the region / role mapping, the capacity settings, table defaults)'] : [])]
+  const fullReload = pageChanges.some((change) => targetOf(change.path).loader === 'reload')
+  // Load the newer data: each file read again by the area that holds it.
+  const [pageReads, setPageReads] = useState(0)
+  async function loadNewer() {
+    if (fullReload) { window.location.reload(); return }
+    const loaders = [...new Set(pageChanges.map((change) => targetOf(change.path).loader))]
+    for (const loader of loaders) {
+      if (loader === 'planning') await git.load()
+      else if (loader.startsWith('ondemand:')) await onDemand.reloadPage(loader.slice('ondemand:'.length))
+      else if (loader === 'access') await access.reload()
+      else if (loader === 'qemapping') await qeMapping.reload()
+      else if (loader === 'featureSetup') await featureSetup.reload()
+      else if (loader === 'epicSetup') await epicSetup.reload()
+      else if (loader === 'customStreams') await customStreams.reload()
+      else if (loader === 'connections') { await git.syncViews(); azure.reloadConnectionProfiles() }
+      else if (loader === 'monthlyPack') { await monthlyPack.reloadSetup(); await monthlyPack.reloadNotes() }
+      else if (loader === 'history') await history.reload()
+      else if (loader === 'menu') await menu.reload()
+      else if (loader === 'views') personalViews.reload()
+    }
+    // Pages that hold the data they show (an added page's drawer and pop-ups, a dashboard's blocks, the QE Mapping draft,
+    // the KPI tracker copy) open afresh; the others show the data just loaded and keep their open forms.
+    if (pageKey.startsWith('ondemand:') || pageKey === 'qemapping' || loaders.includes('remount')) setPageReads((count) => count + 1)
+  }
+  // The menu layout and the views: read again quietly as soon as a newer version is found.
+  const quietPaths = git.remoteChanges.filter((change) => quietTarget(targetOf(change.path))).map((change) => `${change.path}@${change.sha}`).join('|')
+  const quietLoad = useRef({ menu: menu.reload, views: personalViews.reload })
+  useEffect(() => { quietLoad.current = { menu: menu.reload, views: personalViews.reload } })
+  useEffect(() => {
+    if (!quietPaths) return
+    if (quietPaths.includes('menu-layout.json@')) void quietLoad.current.menu()
+    if (/personal-views/.test(quietPaths)) quietLoad.current.views()
+  }, [quietPaths])
   if (!store.ready) return <main className="content"><h1>I&amp;D Quality Demand Planning</h1>{store.loadError ? <Notice tone="error"><p>{store.loadError}</p><p>Do not clear browser data. If you still have an older tab open with unsaved changes, export its JSON backup first.</p><button className="primary" onClick={store.retryLoad}>Retry loading saved data</button></Notice> : <p role="status">Loading saved browser data…</p>}{buildStatus}</main>
 
   // UI-12: every table follows the shared design default.
-  return <TableDefaultsContext.Provider value={tableDesign}><CustomStreamsContext.Provider value={customStreams}><ReleaseSettingsContext.Provider value={store.state.releaseSourceSettings}><CanContext.Provider value={access.can}><ReadOnlyContext.Provider value={access.readOnly}><EpicSetupContext.Provider value={epicSetup.file}><OnPremContext.Provider value={onPremSources}><HeaderSlot.Provider value={headerSlot}><div className={`app-shell${navOpen ? ' nav-open' : ''}${menuMini ? ' nav-mini' : ''}`}>
+  return <PageNamesContext.Provider value={menuNames}><OwnerPeopleContext.Provider value={ownerPeople}><TableDefaultsContext.Provider value={tableDesign}><CustomStreamsContext.Provider value={customStreams}><ReleaseSettingsContext.Provider value={store.state.releaseSourceSettings}><CanContext.Provider value={access.can}><ReadOnlyContext.Provider value={access.readOnly}><EpicSetupContext.Provider value={epicSetup.file}><OnPremContext.Provider value={onPremSources}><HeaderSlot.Provider value={headerSlot}><div className={`app-shell${navOpen ? ' nav-open' : ''}${menuMini ? ' nav-mini' : ''}`}>
     {navOpen && <div className="nav-backdrop" onClick={() => setNavOpen(false)} aria-hidden="true" />}
     <aside className="sidebar" id="primary-navigation">
       <div className="brand" title="I&amp;D Quality Demand Planning"><div className="brand-mark"><BrandMark /></div><div><strong>I&amp;D Quality</strong><span>Demand Planning</span></div><button type="button" className="nav-mini-toggle" aria-pressed={menuMini} aria-label={menuMini ? 'Expand the menu' : 'Collapse the menu'} title={menuMini ? 'Show the menu with names' : 'Fold the menu to icons'} onClick={toggleMenuMini}>{menuMini ? '»' : '«'}</button></div>
@@ -461,8 +532,8 @@ export default function App() {
       {access.readOnly && <Notice tone="warning" className="access-read-only"><strong>Read-only:</strong> {access.bootstrap ? <>there are no access roles yet (no {access.path || 'access.json'} in Git storage), so no changes can be made. <button type="button" className="text-button" onClick={() => openSettings('resources', 'rights')}>Set up roles →</button></> : access.error ? <>the access roles ({access.path || 'access.json'}) could not be read, so no changes can be made: {access.error} <button type="button" className="text-button" onClick={() => openSettings('storage', 'git')}>Open Git storage →</button></> : git.accessScope && !access.loaded ? <>loading the access roles ({access.path || 'access.json'}) from Git storage; no changes can be made until they are loaded.</> : <>the access roles (access.json) are not loaded, so no changes can be made. <button type="button" className="text-button" onClick={() => openSettings('storage', 'git')}>Connect Git storage →</button></>}</Notice>}
       {guideOpen && <SetupGuide steps={steps} busy={azure.busy} problem={azure.fetchProblem} links={setupLinks} linkDefaults={linkDefaults} editLinks={access.can('layout.defaults') && git.connected && !git.readOnly && !azure.isSample ? { links: store.state.setupLinks ?? {}, onChange: (links) => store.update((draft) => { draft.setupLinks = links; return draft }), saveBar: <GitSyncBar git={git} /> } : undefined} inputs={{ connectGit: (token) => git.connect({ ...defaultGitRepository, ...git.config }, token, true), saveEmail: (email) => { azure.setCreatorEmail(email) }, savePat: (token) => { azure.rememberPat(token); azure.reloadConnectionProfiles() }, detectEmail: () => azure.config ? detectWorkEmail(azure.config, azure.pat) : Promise.reject(new Error('Set up the Time Writing connection first.')), gitMessage: git.status === 'error' ? git.message : undefined }} onClose={() => setGuideOpen(false)} onDismiss={dismissGuide} onOpenTab={(tab, section) => { openSettings(tab, section); setGuideOpen(false) }} onFetch={() => void azure.refresh()} />}
       {store.cache.status === 'error' && <Notice tone="error"><p>{store.cache.message}</p><div className="button-row"><button className="ghost" onClick={() => exportStateJson(store.state)}>Export JSON backup now</button><button className="primary" onClick={store.retrySave}>Retry browser save</button></div></Notice>}
-      {git.remoteChanges.length > 0 && <Notice className="git-update-banner"><p><strong>Newer data in Git</strong>, saved by someone else since you opened the app: {git.remoteChanges.map((change) => change.label).join(', ')}.{git.remoteChanges.some((change) => change.planning) && git.dirty ? ' Reloading drops the planning changes you have not saved to Git here.' : ' Reload to see it.'}</p><div className="button-row"><button type="button" onClick={() => window.location.reload()}>Reload</button></div></Notice>}
-      <Suspense fallback={<p className="muted page-loading" role="status">Loading the page…</p>}>
+      <div className="data-notices"><PageGitNotice key={pageKey} page={pageName} changes={pageChanges} unsaved={unsavedHere} fullReload={fullReload} onLoad={loadNewer} /></div>
+      <Suspense fallback={<p className="muted page-loading" role="status">Loading the page…</p>}><Fragment key={pageReads}>
       {page === 'home' && <HomePage tiles={homeTiles} name={my.me.name} />}
       {page === 'mydash' && <MyDashboardPage month={month} azure={reportAzure} store={store} my={{ ...my, ...my.self }} navigate={setPage} views={personalViews} canSetDefault={access.can('layout.defaults')} windchill={windchill} />}
       {page === 'overview' && <DashboardPage month={month} azure={reportAzure} navigate={setPage} store={store} setMonth={setMonth} my={my} views={personalViews} canSetDefault={access.can('layout.defaults')} canLock={access.can('capacity.periods')} />}
@@ -483,12 +554,12 @@ export default function App() {
       {page === 'health' && <BacklogHealthPage azure={azure} store={store} />}
       {page === 'board' && <BoardPage views={personalViews} canSetDefault={access.can('layout.defaults') && git.connected && !git.readOnly && !git.isSample} azure={azure} store={store} current={view} month={month} git={git} onOpenConnection={openConnection} assign={assign} featureSetup={featureSetup.setups} qeMapping={qeMapping.file} />}
       {page === 'snapshots' && <SnapshotsPage {...pageProps} git={git} who={my.me.email || my.me.name || 'unknown'} />}
-      {page === 'admin' && settingsTab === 'pages' && <PagesMenuPage git={git} store={onDemand} menu={menu} viewer={viewer} onOpen={openOnDemand} onAddPage={(group) => setAddPageFor(group ?? '')} />}
+      {page === 'admin' && settingsTab === 'pages' && <PagesMenuPage duplicates={duplicateNames} git={git} store={onDemand} menu={menu} viewer={viewer} onOpen={openOnDemand} onAddPage={(group) => setAddPageFor(group ?? '')} />}
       {page === 'admin' && settingsTab !== 'pages' && <AdminPage look={{ startView, onStartView: switchView, onCustomizeMenu: () => setMenuEditor(true) }} key={`${settingsTab}:${settingsVisit}`} tab={settingsTab} onOpenTab={openSettings} {...pageProps} azure={azure} git={git} access={access} featureSetup={featureSetup} epicSetup={epicSetup} setupSteps={steps} onSearch={() => setSearchOpen(true)} qeColumnNames={[...new Set((qeMapping.file?.sheets ?? []).flatMap((sheet) => sheet.columns.map((column) => column.name)))]} monthlyPack={monthlyPack} history={history} loadEverything={loadEverything} onOpenBoard={() => setPage('board')} />}
       {page === 'docs' && <DocsPage git={git} onConfigure={() => openSettings('storage', 'git')} />}
-      </Suspense>
+      </Fragment></Suspense>
       {addPageFor != null && <AddPageDialog viewer={viewer} layout={menu.layout} group={addPageFor || undefined} onCancel={() => setAddPageFor(null)} onCreate={async (input) => { const id = await createPage(onDemand, menu, input); setAddPageFor(null); openOnDemand(id) }} />}
       <footer className="app-footer" aria-label="Version" ref={footerRef}><ZoomControl /><DesktopDownload />{buildStatus}</footer>
     </main>
-  </div></HeaderSlot.Provider></OnPremContext.Provider></EpicSetupContext.Provider></ReadOnlyContext.Provider></CanContext.Provider></ReleaseSettingsContext.Provider></CustomStreamsContext.Provider></TableDefaultsContext.Provider>
+  </div></HeaderSlot.Provider></OnPremContext.Provider></EpicSetupContext.Provider></ReadOnlyContext.Provider></CanContext.Provider></ReleaseSettingsContext.Provider></CustomStreamsContext.Provider></TableDefaultsContext.Provider></OwnerPeopleContext.Provider></PageNamesContext.Provider>
 }
