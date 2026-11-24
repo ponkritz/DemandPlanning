@@ -1,9 +1,9 @@
 import test, { after, before } from 'node:test'
 import assert from 'node:assert/strict'
-import { cachedRoles, loadSample, navigate, openPage, profileItem, rolesFile, startApp, text } from './helpers.mjs'
+import { cachedRoles, loadSample, navigate, openPage, openPerson, peopleSource, profileItem, rolesFile, startApp, text, toggleFilter } from './helpers.mjs'
 
 // Shell, navigation and first-run scenarios of the UAT (TC-NAV-01, TC-NAV-03, TC-NAV-37, TC-HIS-01, TC-ACC-04, TC-NAV-31, TC-NAV-33, TC-UI-01, TC-SMP-01,
-// TC-UPD-02, TC-GIT-06, TC-SET-05), automated against the built web app.
+// TC-UPD-02, TC-GIT-06, TC-GIT-16, TC-SET-05), automated against the built web app.
 let app
 before(async () => { app = await startApp() })
 after(async () => { await app.stop() })
@@ -29,7 +29,7 @@ test('TC-NAV-48: the profile at the top right holds My settings, the view switch
   // NAV-48: the profile menu.
   await page.locator('header.topbar').getByRole('button', { name: /^Profile/ }).click()
   const menu = page.getByRole('menu', { name: 'Profile' })
-  assert.deepEqual((await menu.getByRole('menuitem').allInnerTexts()).map((entry) => entry.replace(/^\S+\s*/, '').trim()), ['My settings', 'Look & feel', 'Classic view', 'Search settings', 'Customize menu'])
+  assert.deepEqual((await menu.getByRole('menuitem').allInnerTexts()).map((entry) => entry.replace(/^\S+\s*/, '').trim()), ['My settings', 'Look & feel', 'Classic view', 'Search settings', 'Customize menu', 'User guide'])
   await page.keyboard.press('Escape')
   assert.equal(await menu.count(), 0, 'Escape closes it')
   // NAV-49: the footer — version and build — at the end of the page; the page content ends where the footer starts.
@@ -257,14 +257,14 @@ test('TC-GIT-06: Connect Git storage starts with the team repository prefilled; 
   const { page, context, errors } = await openPage(app, { guide: true })
   const guide = page.getByRole('dialog').filter({ hasText: 'Get started' })
   await guide.waitFor()
-  assert.match(await guide.getByLabel('GitHub token').getAttribute('placeholder') ?? '', /ponkritz\/DemandPlanningStorage/, 'the Git step names the prefilled repository')
+  assert.match(await guide.getByLabel('GitHub token').getAttribute('placeholder') ?? '', /philips-internal\/InD_DemandPlanningStorage/, 'the Git step names the prefilled repository')
   await guide.getByRole('button', { name: /Don.t show again automatically/ }).click()
   await navigate(page, 'Data & sharing')
   await page.getByRole('button', { name: 'Connect Git storage…' }).click()
   const form = page.getByRole('dialog').filter({ hasText: 'Connect Git storage' })
   await form.waitFor()
-  assert.equal(await form.getByLabel('Owner (user or organisation)').inputValue(), 'ponkritz')
-  assert.equal(await form.getByLabel('Repository', { exact: true }).inputValue(), 'DemandPlanningStorage')
+  assert.equal(await form.getByLabel('Owner (user or organisation)').inputValue(), 'philips-internal')
+  assert.equal(await form.getByLabel('Repository', { exact: true }).inputValue(), 'InD_DemandPlanningStorage')
   assert.equal(await form.getByLabel('Branch', { exact: true }).inputValue(), 'main')
   assert.equal(await form.getByLabel('Data file', { exact: true }).inputValue(), 'planning-data.json')
   assert.equal(await form.getByLabel('GitHub token').inputValue(), '')
@@ -272,45 +272,105 @@ test('TC-GIT-06: Connect Git storage starts with the team repository prefilled; 
   await context.close()
 })
 
+test('TC-GIT-16: a connection still saved to the old data repository shows a notice; Switch moves it to the new one, same branch and file', async () => {
+  const old = { owner: 'ponkritz', repo: 'DemandPlanningStorage', branch: 'main', path: 'planning-data.json' }
+  // The init script runs on every load: it saves the old connection only once, so a reload keeps what the app saved.
+  const { page, context, errors } = await openPage(app, { init: (config) => {
+    if (localStorage.getItem('demand-planning-git-storage-v1')) return
+    localStorage.setItem('demand-planning-git-storage-v1', JSON.stringify(config))
+    localStorage.setItem('demand-planning-git-token-v1', 'test-token')
+  }, initArg: old })
+  // GitHub answers every read with Not Found (an empty repository); the requests are recorded.
+  const asked = []
+  await context.route('https://api.github.com/**', (route) => { asked.push(new URL(route.request().url()).pathname); return route.fulfill({ status: 404, contentType: 'application/json', body: '{"message":"Not Found"}' }) })
+  await page.reload()
+  const notice = page.locator('.notice.git-moved')
+  await notice.waitFor()
+  assert.match(await text(notice), /The team data has moved to philips-internal\/InD_DemandPlanningStorage\. This app is still connected to ponkritz\/DemandPlanningStorage, which is no longer updated\./)
+  assert.deepEqual(JSON.parse(await page.evaluate(() => localStorage.getItem('demand-planning-git-storage-v1') ?? 'null')), old, 'nothing changes by itself')
+  asked.length = 0
+  const read = page.waitForRequest((request) => new URL(request.url()).pathname.startsWith('/repos/philips-internal/InD_DemandPlanningStorage/'))
+  await notice.getByRole('button', { name: 'Switch to philips-internal/InD_DemandPlanningStorage' }).click()
+  await read // the data is read from the new repository
+  await notice.waitFor({ state: 'detached' })
+  assert.deepEqual(JSON.parse(await page.evaluate(() => localStorage.getItem('demand-planning-git-storage-v1') ?? 'null')), { ...old, owner: 'philips-internal', repo: 'InD_DemandPlanningStorage' })
+  assert.equal(await page.evaluate(() => localStorage.getItem('demand-planning-git-token-v1')), 'test-token', 'the token is kept')
+  // After a reload the start-up reads go to the new repository only (reads started before the click may still finish).
+  asked.length = 0
+  const views = page.waitForRequest((request) => new URL(request.url()).pathname === '/repos/philips-internal/InD_DemandPlanningStorage/contents/planning-data.json')
+  await page.reload()
+  await views
+  assert.equal(await page.locator('.notice.git-moved').count(), 0, 'no notice after the switch')
+  assert.deepEqual(asked.filter((path) => path.startsWith('/repos/ponkritz/')), [], 'nothing is read from the old repository')
+  assert.deepEqual(errors.filter((error) => !/404|Not Found/.test(error)), [])
+  await context.close()
+})
+
 test('TC-SET-05: Reports to accepts a manager who is not on the board, shown at the top of the reporting lines', async () => {
   const { page, context, errors } = await openPage(app, { roles: true })
   await loadSample(page)
   await navigate(page, 'People & roles')
-  const select = page.getByLabel('Chen Wei reports to')
-  await select.selectOption('__other')
-  await page.getByLabel('Manager of Chen Wei').fill('Maria Lopez')
-  await page.getByRole('button', { name: 'OK', exact: true }).click()
-  assert.equal(await page.getByLabel('Chen Wei reports to').inputValue(), 'Maria Lopez')
+  // CAP-59: in the person's drawer, Edit → Reports to → Other (type a name)… → Save.
+  const drawer = await openPerson(page, 'Chen Wei')
+  await drawer.getByRole('button', { name: 'Edit', exact: true }).click()
+  await drawer.getByLabel('Reports to', { exact: true }).selectOption('__other')
+  await drawer.getByLabel('Manager\'s name').fill('Maria Lopez')
+  await drawer.getByRole('button', { name: 'Save', exact: true }).click()
+  await drawer.getByRole('button', { name: 'Edit', exact: true }).waitFor()
+  assert.match(await text(drawer.getByRole('region', { name: 'Profile' })), /Reports to Maria Lopez \(not on the board\)/)
+  await page.keyboard.press('Escape')
+  await drawer.waitFor({ state: 'detached' })
+  assert.match(await text(page.locator('.people-table tr[data-row-key="Chen Wei"]')), /Maria Lopez/, 'the list shows the new manager')
+  // CAP-62: the reporting lines on their own tab.
+  await page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'Team tree' }).click()
   const tree = page.locator('.team-tree')
   const root = tree.locator(':scope > ul > li', { hasText: 'Maria Lopez' }).first()
   assert.match(await text(root), /Maria Lopez\s*not on the board\s*Chen Wei/, 'the outside manager is a root with Chen Wei under her')
   // Offered to everyone else too, under "Not on the board".
-  assert.equal(await page.getByLabel('Diya Sharma reports to').locator('optgroup[label="Not on the board"] option', { hasText: 'Maria Lopez' }).count(), 1)
+  await page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'People' }).click()
+  const other = await openPerson(page, 'Diya Sharma')
+  await other.getByRole('button', { name: 'Edit', exact: true }).click()
+  assert.equal(await other.getByLabel('Reports to', { exact: true }).locator('optgroup[label="Not on the board"] option', { hasText: 'Maria Lopez' }).count(), 1)
   assert.deepEqual(errors, [])
   await context.close()
 })
 
-test('TC-CAP-09: Resources shows who counts in the month\'s capacity; Remove takes a person out of capacity, Restore brings them back', async () => {
+test('TC-CAP-09: Capacity & time shows who counts in the month\'s capacity; Not part of the team takes a person out of capacity, Restore brings them back', async () => {
   const { page, context, errors } = await openPage(app, { roles: true })
   await loadSample(page)
-  await navigate(page, 'People & roles')
+  // CAP-34, CAP-61: the month's capacity is on Capacity & time → Capacity and absence (no longer on People).
+  const capacityPage = async () => { await navigate(page, 'Capacity & time'); await page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'Capacity and absence' }).click() }
   const summary = page.locator('.notice', { hasText: /^Capacity in / })
   const count = async () => Number(/: (\d+) (?:people|person),/.exec(await text(summary))?.[1])
+  await capacityPage()
   const before = await count()
   assert.ok(before > 0, 'the month counts people')
   assert.match(await text(summary), /h available = .*h contractual − .*h absence/, 'CAP-38: only absence comes off the contractual hours')
-  await page.getByRole('button', { name: 'Remove Chen Wei' }).click()
-  const removeForm = page.getByRole('form', { name: 'Remove Chen Wei' })
-  assert.match(await text(removeForm), /has Chen Wei left the team, or are they not part of the team\?/)
-  await removeForm.getByRole('radio', { name: /Not part of the team/ }).check()
-  await removeForm.getByRole('button', { name: 'Confirm' }).click()
-  await page.getByRole('button', { name: 'Remove Chen Wei' }).waitFor({ state: 'detached' })
+  // CAP-59: Not part of the team, from the person's drawer, after a pop-up naming what changes.
+  await navigate(page, 'People & roles')
+  const drawer = await openPerson(page, 'Chen Wei')
+  await drawer.getByRole('button', { name: 'Not part of the team' }).click()
+  const removeForm = page.getByRole('form', { name: 'Chen Wei not part of the team' })
+  assert.match(await text(removeForm), /Chen Wei is left out of every figure, every month/)
+  await removeForm.getByRole('button', { name: 'Remove from the team' }).click()
+  await removeForm.waitFor({ state: 'detached' })
+  assert.match(await text(drawer.locator('.od-row-facts')), /Status Not part of the team/)
+  await page.keyboard.press('Escape')
+  await drawer.waitFor({ state: 'detached' })
+  await page.locator('.people-table tr[data-row-key="Chen Wei"]').waitFor({ state: 'detached' })
+  await capacityPage()
   assert.equal(await count(), before - 1, 'removed: one person fewer in capacity')
-  const removed = page.locator('details.resource-removed')
-  assert.match(await text(removed.locator('summary')), /Removed people \(1\)/)
-  await removed.locator('summary').click()
-  await removed.getByRole('button', { name: 'Restore' }).click()
-  await page.getByRole('button', { name: 'Remove Chen Wei' }).waitFor()
+  // CAP-58: the Status filter lists them (the former "Removed people" list) with Restore in the drawer.
+  await navigate(page, 'People & roles')
+  await toggleFilter(page, 'Status', 'Active')
+  await toggleFilter(page, 'Status', 'Left')
+  await toggleFilter(page, 'Status', 'Not part of the team')
+  assert.deepEqual(await page.locator('.people-table tbody tr').evaluateAll((rows) => rows.map((row) => row.dataset.rowKey)), ['Chen Wei'], 'one person not part of the team')
+  const again = await openPerson(page, 'Chen Wei')
+  await again.getByRole('button', { name: 'Restore' }).click()
+  await again.locator('.od-row-facts', { hasText: /Status\s*Active/ }).waitFor()
+  await page.keyboard.press('Escape')
+  await capacityPage()
   assert.equal(await count(), before, 'restored')
   assert.deepEqual(errors, [])
   await context.close()
@@ -508,26 +568,47 @@ test('TC-CAP-21: Settings → Insight thresholds — edited, checked, shown in T
   await context.close()
 })
 
-test('TC-CAP-22: People & access — one page; names and emails from Azure DevOps (nothing typed); Remove asks left or not in the team; capacity roles', async () => {
+// CAP-58: the People list hides the Email column by default (it fits at 1440 px); ticked on in Columns, as a person would.
+async function showPeopleEmail(page) {
+  const columns = page.locator('.people-table').locator('xpath=ancestor::*[.//button[starts-with(normalize-space(.), "Columns")]][1]').getByRole('button', { name: /^Columns/ })
+  await columns.click()
+  await page.locator('.column-chooser').getByRole('checkbox', { name: 'Email' }).check()
+  await columns.click()
+  await page.locator('.people-table thead th', { hasText: /^Email$/i }).waitFor()
+}
+
+test('TC-CAP-22: People & access — one page; names and emails from Azure DevOps (nothing typed); Mark as left; capacity roles', async () => {
   const { page, context, errors } = await openPage(app, { roles: true })
   await loadSample(page)
   await navigate(page, 'People & roles')
   const sections = page.getByRole('tablist', { name: 'Sections' })
-  assert.deepEqual((await sections.getByRole('tab').allInnerTexts()).map((label) => label.trim()), ['People', 'Capacity roles', 'Role rights'])
-  const headers = (await page.locator('table.resource-table thead th').allInnerTexts()).map((label) => label.trim().toLowerCase())
-  assert.deepEqual(headers, ['person (azure devops)', 'work email (azure devops)', 'app access role', 'region', 'role', 'reports to', 'employed'], 'setup only: the month figures are on the Team overview and Pulse Check (CAP-51)')
+  assert.deepEqual((await sections.getByRole('tab').allInnerTexts()).map((label) => label.trim()), ['People', 'Team tree', 'Capacity roles', 'Role rights'])
+  const headers = (await page.locator('.people-table thead th').allInnerTexts()).map((label) => label.trim().toLowerCase())
+  assert.deepEqual(headers, ['select', 'person ▴', 'access', 'region', 'role', 'reports to', 'status'], 'setup only: the month figures are on the Team overview and Pulse Check (CAP-51)')
   assert.equal(await page.getByRole('button', { name: /Add a person/ }).count(), 0, 'no Add a person form: everyone comes from Azure DevOps')
-  assert.equal(await page.locator('table.resource-table input[type=email]').count(), 0, 'emails are not typed')
-  assert.match(await text(page.locator('.content')), /Names and work emails come from Azure DevOps/)
-  assert.match(await text(page.locator('.content')), /Sample data: the Azure DevOps team is not read/)
-  assert.match(await text(page.getByRole('cell', { name: 'Work email of Chen Wei' })), /No email in Azure DevOps/, 'the sample has no emails')
-  assert.ok(await page.locator('table.resource-table .warning-text', { hasText: /^Mapping incomplete: / }).count() > 0, 'people without every mapping are flagged')
-  // Remove: left the team on a date sets Left on.
-  await page.getByRole('button', { name: 'Remove Chen Wei' }).click()
-  const remove = page.getByRole('form', { name: 'Remove Chen Wei' })
-  await remove.locator('input[type=date]').fill('2026-10-31')
-  await remove.getByRole('button', { name: 'Confirm' }).click()
-  assert.equal(await page.getByLabel('Chen Wei left on').inputValue(), '2026-10-31')
+  assert.equal(await page.locator('.people-table tbody').locator('select, input:not([type=checkbox]), textarea').count(), 0, 'CAP-58: a read-only list — emails and everything else are not typed in the table')
+  const source = await peopleSource(page)
+  assert.match(source, /Names and work emails come from Azure DevOps/)
+  assert.match(source, /Sample data: the Azure DevOps team is not read/)
+  await showPeopleEmail(page)
+  assert.match(await text(page.locator('.people-table tr[data-row-key="Chen Wei"] td.person-email')), /No email in Azure DevOps/, 'the sample has no emails')
+  const warnings = page.locator('.people-warnings')
+  assert.match(await text(warnings.locator('summary')), /mapping incomplete for \d+ (?:people|person)/, 'CAP-61: the warnings in one folded line')
+  await warnings.locator('summary').click()
+  assert.match(await text(warnings), /Mapping incomplete: .*Chen Wei: email in Azure DevOps/, 'people without every mapping are flagged')
+  // CAP-59: Mark as left… on a date sets Left on.
+  const drawer = await openPerson(page, 'Chen Wei')
+  await drawer.getByRole('button', { name: 'Mark as left…' }).click()
+  const remove = page.getByRole('form', { name: 'Mark Chen Wei as left' })
+  await remove.getByLabel('Left the team on').fill('2026-10-31')
+  await remove.getByRole('button', { name: 'Mark as left' }).click()
+  await remove.waitFor({ state: 'detached' })
+  await drawer.getByRole('button', { name: 'Edit', exact: true }).click()
+  assert.equal(await drawer.getByLabel('Left on', { exact: true }).inputValue(), '2026-10-31')
+  await drawer.getByRole('button', { name: 'Cancel' }).click()
+  await page.keyboard.press('Escape')
+  await drawer.waitFor({ state: 'detached' })
+  assert.match(await text(page.locator('.people-table tr[data-row-key="Chen Wei"]')), /Left on /, 'the Status column')
   // Capacity roles (CAP-57): only team roles — Lead and Manager not counted by default, QE counted; no app access roles.
   await sections.getByRole('tab', { name: 'Capacity roles' }).click()
   for (const role of ['Lead', 'Manager']) assert.equal(await page.getByRole('checkbox', { name: role, exact: true }).isChecked(), false, `${role} not counted`)
@@ -572,16 +653,19 @@ test('TC-CAP-23: People & access lists the Azure DevOps team members with the na
   await context.route('https://dev.azure.com/**', (route) => /\/teams\/[^/]+\/members/.test(route.request().url())
     ? route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ value: [{ identity: { displayName: 'Rita Gomez', uniqueName: 'Rita.Gomez@Example.com' } }, { identity: { displayName: 'Omar Haddad', uniqueName: 'omar.haddad@example.com' } }, { identity: { displayName: 'QA Group', uniqueName: 'group', isContainer: true } }] }) })
     : route.fulfill({ status: 401, contentType: 'application/json', body: '{}' }))
-  await page.reload()
   const guide = page.getByRole('dialog').filter({ hasText: 'Could not fetch from Azure DevOps' })
-  await guide.waitFor().then(() => guide.getByRole('button', { name: 'Close', exact: true }).last().click()).catch(() => undefined)
+  await page.addLocatorHandler(guide, () => guide.getByRole('button', { name: 'Close', exact: true }).last().click())
+  await page.reload()
   await navigate(page, 'People & roles')
-  await page.getByRole('cell', { name: 'Work email of Rita Gomez' }).waitFor()
-  assert.equal(await text(page.getByRole('cell', { name: 'Work email of Rita Gomez' })), 'rita.gomez@example.com', 'the email Azure gives, lower case')
-  assert.equal(await text(page.getByRole('cell', { name: 'Work email of Omar Haddad' })), 'omar.haddad@example.com')
-  assert.equal(await page.getByRole('cell', { name: 'Work email of QA Group' }).count(), 0, 'groups are not people')
-  assert.match(await text(page.locator('.content')), /2 team members read from Team A/)
-  assert.match(await text(page.locator('table.resource-table')), /Rita Gomez.*Team member · no Time Writing yet/)
+  const email = (name) => page.locator(`.people-table tr[data-row-key="${name}"] td.person-email`)
+  await page.locator('.people-table').waitFor()
+  await showPeopleEmail(page)
+  await email('Rita Gomez').waitFor()
+  assert.equal(await text(email('Rita Gomez')), 'rita.gomez@example.com', 'the email Azure gives, lower case')
+  assert.equal(await text(email('Omar Haddad')), 'omar.haddad@example.com')
+  assert.equal(await page.locator('.people-table tr[data-row-key="QA Group"]').count(), 0, 'groups are not people')
+  assert.match(await peopleSource(page), /2 team members read from Team A/, 'the team read, behind ⓘ (CAP-61)')
+  assert.match(await text(page.locator('.people-table tr[data-row-key="Rita Gomez"]')), /Rita Gomez.*Team member · no Time Writing yet/)
   assert.deepEqual(errors.filter((entry) => !/401|Unauthorized|Failed to load resource/.test(entry)), [])
   await context.close()
 })
@@ -1687,7 +1771,7 @@ test('TC-UI-11: a pop-up takes the focus, keeps Tab inside, closes on Escape and
   const dialog = page.getByRole('dialog').filter({ hasText: 'Connect Git storage' })
   await dialog.waitFor()
   const inside = () => page.evaluate(() => Boolean(document.activeElement?.closest('[role="dialog"]')))
-  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('placeholder')), 'ponkritz', 'the first field has the focus')
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('placeholder')), 'philips-internal', 'the first field has the focus')
   for (let step = 0; step < 25; step++) { await page.keyboard.press('Tab'); assert.equal(await inside(), true, `Tab ${step + 1} stays in the pop-up`) }
   for (let step = 0; step < 5; step++) { await page.keyboard.press('Shift+Tab'); assert.equal(await inside(), true, `Shift+Tab ${step + 1} stays in the pop-up`) }
   await page.keyboard.press('Escape')

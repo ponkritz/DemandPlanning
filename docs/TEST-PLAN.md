@@ -335,7 +335,7 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-NAV-47 Person picker on the person-based pages** — Req NAV-47, MYD-01, ACT-14 — L1 `app-frame.test.mjs` ("NAV-47: My dashboard always shows you — your work email, else the name you chose before an email; never the Person picked on other pages (TC-NAV-47)"); E2E `shell.e2e.mjs` ("TC-NAV-48: the profile at the top right holds My settings, the view switch and the tools; the footer shows the version and ends the page without covering it; Person only on person-based pages", "TC-ACT-10: Time Writing can show another person, chosen at the top right"); browser check: Person in the top bar on Time Writing, My Tasks [Board] and Sprint check only; choosing someone changes those pages and not My dashboard.
 
-**TC-NAV-48 Profile menu and footer** — Req NAV-48, NAV-49, NAV-15 — E2E `shell.e2e.mjs` ("TC-NAV-48: the profile at the top right holds My settings, the view switch and the tools; the footer shows the version and ends the page without covering it; Person only on person-based pages"); browser check: the profile button at the top right opens My settings, Classic / Tile view, View as… (Admin), Search settings, Customize menu; the footer shows only the desktop app download, “v{x.y.z} (Build n)” and Force Update, whose window shows the build ID, build time and where data is saved; scrolled to the end, the last row of a long table is fully visible above it; in Admin → Epic & Feature setup the Unsaved changes bar sits above the footer; every My settings section has the same width and starts under the tabs (KB-61).
+**TC-NAV-48 Profile menu and footer** — Req NAV-48, NAV-49, NAV-15 — E2E `shell.e2e.mjs` ("TC-NAV-48: the profile at the top right holds My settings, the view switch and the tools; the footer shows the version and ends the page without covering it; Person only on person-based pages"); browser check: the profile button at the top right opens My settings, Classic / Tile view, View as… (Admin), Search settings, Customize menu, User guide; the footer shows only the desktop app download, “v{x.y.z} (Build n)” and Force Update, whose window shows the build ID, build time and where data is saved; scrolled to the end, the last row of a long table is fully visible above it; in Admin → Epic & Feature setup the Unsaved changes bar sits above the footer; every My settings section has the same width and starts under the tabs (KB-61).
 
 **TC-NAV-51 Business time is UTC** — Req NAV-51, NAV-11, NAV-12, QV-18, MON-06, MON-07, ATM-08, BKL-43 — L1 `business-time.test.mjs` ("NAV-51: the business helpers work in UTC; a plain date never shifts by a day (TC-NAV-51)"; "NAV-51: months of dates, new month Tasks, the current Sprint and the locks change at midnight UTC (TC-NAV-51)"; "NAV-51: the same months, Sprint and locks with TZ=Pacific/Auckland / America/Los_Angeles / Asia/Kolkata at month boundaries (TC-NAV-51)"), `planning-lock.test.mjs`, `azure-devops.test.mjs` ("release naming and UTC month rollover …"; "current dates resolve PI and nested Sprint with inclusive UTC-day boundaries (NAV-51)"), `azure-insights.test.mjs`, `release-source.test.mjs`, `release-overview.test.mjs`; the whole unit suite also passes with `TZ=Pacific/Auckland` and `TZ=America/Los_Angeles`; E2E `backlog.e2e.mjs` (New Feature and ＋ Time Writing Task months are the UTC month); browser check with the computer set to America/New_York on the last day of a month after 19:00 (20:00 in winter): the header month is already the next month, a new month Task is titled for the next month, the Period control shows the month's plan locked from midnight UTC, and the fetched-at times in the header and the view bars still show local time (EST / EDT).
 
@@ -804,7 +804,7 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-BKL-35 State and Assigned to multi-select filters** — Req BKL-46, BKL-21 — E2E `backlog.e2e.mjs` ("TC-BKL-35: QMS-0025 filters State and Assigned to with multi-select drop-downs; Reset filters goes back to New + Active and me"); L1 `my-work.test.mjs` ("QMS-0025 shows mine by default: my items with everything above and below; featureOf finds the Feature of a Story (TC-BKL-12)"); browser check with real data: two people chosen show only their work with its Epics and Features; Unassigned shows unassigned items; Closed added to State shows closed items.
 
-**TC-BKL-36 Column order saved for everyone** — Req BKL-47, BKL-03 — L1 `personal-views.test.mjs` ("BKL-47: Save for everyone sets one entry (the QMS-0025 column order) in the defaults and keeps every other default (TC-BKL-36)"); E2E `backlog.e2e.mjs` ("TC-BKL-36: QMS-0025 starts on the column order saved for everyone; Apply keeps my own; Reset to the team default goes back"); browser check with Git storage as a Tool Owner: Save for everyone writes personal-views-defaults.json with the order; another person (no own order) sees it after a reload; a person without the right sees no Save for everyone.
+**TC-BKL-36 Column order saved for everyone** — Req BKL-47, BKL-03 — L1 `personal-views.test.mjs` ("BKL-47: Save for everyone sets one entry (the QMS-0025 column order) in the defaults and keeps every other default (TC-BKL-36)"); E2E `backlog.e2e.mjs` ("TC-BKL-36: QMS-0025 starts on the column order saved for everyone; Apply keeps my own; Reset to the team default goes back"); browser check with Git storage as a Tool Owner: Save view for everyone (before v10.6 "Save for everyone") writes personal-views-defaults.json with the order and who and when (`by:backlog-columns`), listed under Background jobs; another person (no own order) sees it after a reload; Clear the view for everyone (confirmed) removes it; a person without the right sees no Save view for everyone.
 
 **TC-BKL-14 Release number without "v" in Feature titles** — Req BKL-24 — L1 `release-source.test.mjs` ("Create Feature title from a release: \"Stream | Name | Release\" without a \"v\", mapping back to the release (BKL-24)"), `dp-board-match.test.mjs`, `cp-reporting.test.mjs`; browser check: Create Feature on a DP, CP and Windchill row pre-fills the title with the number and no "v".
 
@@ -850,7 +850,7 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-CON-64 Write buttons disabled with the reason when the action is missing** — Req CON-102, CON-101 — L1 `access.test.mjs` ("CON-102: why a button that writes to Azure DevOps is disabled — read-only before the roles load, else the missing permissions (TC-CON-64)"); E2E `shell.e2e.mjs` ("TC-CON-64: before the roles load, the buttons that write to Azure DevOps are disabled and say why; with roles they are enabled"); browser check: without roles, ＋ New Feature on the QMS-0025 board, Edit / ＋ User Story / ＋ Task on its rows, ＋ New Feature / Edit / Close on My Tasks [Board], Save / Close / ＋ Add a new activity on Time Writing, Move and the state buttons on Sprint check, Create Feature and Create Features on the release pages are disabled and a line says why; with a role that lacks one action (e.g. Deny *Edit the fields of a work item*) only its buttons are disabled and the line names it; with every action nothing changes.
 
-**TC-CON-65 Several roles per person** — Req CON-104, CON-94 — L1 `access.test.mjs` ("CON-104: a person can hold several roles — the People section sets them all, in the matrix order; none removes the person; their rights are the union (TC-CON-65)"); browser check with Git storage and Manage access: in People & roles → People tick Scrum Master and Product Owner for a person — both are saved in access.json and the person sees both roles' menu areas; unticking one keeps the other; Role rights → Check access names both roles.
+**TC-CON-65 Several roles per person** — Req CON-104, CON-94 — L1 `access.test.mjs` ("CON-104: a person can hold several roles — the People section sets them all, in the matrix order; none removes the person; their rights are the union (TC-CON-65)"); browser check with Git storage and Manage access: in People & roles → People open a person, Edit, tick Scrum Master and Product Owner and Save — both are saved in access.json and the person sees both roles' menu areas; unticking one keeps the other; Role rights → Check access names both roles.
 
 **TC-CON-66 Hours and moving disabled inside the forms** — Req CON-105, CON-102 — browser check with a role that may create and edit work items but not enter hours or move (Role rights: Allow azure.write and work.edit, Not set work.hours and work.move): Edit on a Task shows Original Estimate and Completed Work disabled with the line "Your role does not allow “Enter planned and actual hours”…"; changing a Feature's PI shows "Also move its open User Stories" disabled with the reason; ＋ Time Writing Task shows the hours fields disabled and the line "… The month Tasks are created without hours.", and Add still creates the Tasks; with the rights all are enabled.
 
@@ -1048,7 +1048,7 @@ TC-OVR-01 to TC-OVR-03 tested the earlier Overview and are **retired** with OVR-
 
 **TC-CAP-08 Training read from the User Story or a tag** — Req CAP-32 — L1 `capacity.test.mjs` ("training under the absence Epic is read from the User Story or a Training / NPRA tag, not the shared Feature (TC-CAP-08)"); browser check with the QMS-0025 board: a person's Feature under the Absence and Training Epic holds "<Name> \| PTO \| Time Writing" and "<Name> \| Training \| Time Writing" — Pulse Check counts the PTO Task as absence and the Training Task as NPRA; tag a leave Task "Training" or "NPRA" and it moves to NPRA; a Task tagged "Training" in a project stream counts as NPRA.
 
-**TC-CAP-09 Remove a person; who counts in capacity** — Req CAP-33, CAP-34 — L1 `capacity.test.mjs` ("CAP-33: a person removed in Resources is left out of capacity, utilization and team totals (hours too), listed apart; restore brings them back"); E2E `shell.e2e.mjs` ("TC-CAP-09: Resources shows who counts in the month's capacity; Remove takes a person out of capacity, Restore brings them back") — **UAT**; browser check with real data: Settings → Resources shows "Capacity in <Month>: n people, X h available" and Info lists the people; remove a person who left — the count drops by one, Pulse Check → Last month and the Team overview Utilization tile no longer count them; Save to Git, reload in another browser — still removed; Restore brings them back.
+**TC-CAP-09 Remove a person; who counts in capacity** — Req CAP-33, CAP-34 — L1 `capacity.test.mjs` ("CAP-33: a person removed in Resources is left out of capacity, utilization and team totals (hours too), listed apart; restore brings them back"); E2E `shell.e2e.mjs` ("TC-CAP-09: Capacity & time shows who counts in the month's capacity; Not part of the team takes a person out of capacity, Restore brings them back": the count on Capacity & time → Capacity and absence, Not part of the team from the person's drawer, the person under the Status filter "Not part of the team", Restore in the drawer) — **UAT**; browser check with real data: Capacity & time → Capacity and absence shows "Capacity in <Month>: n people, X h available" and Info lists the people; in People mark a person Not part of the team — the count drops by one, Pulse Check → Last month and the Team overview Utilization tile no longer count them; Save to Git, reload in another browser — still removed; Restore brings them back.
 
 **TC-CAP-10 Old Calculation tab** — Req CAP-35 — L1 `capacity.test.mjs` ("CAP-35: Old Calculation — every hour (absence, holidays, NPRA included) against working days × funded hours; status from planned") ; E2E `shell.e2e.mjs` ("TC-MYD-05: Team overview shows six headline tiles; each opens its analysis, with a trail back; Delivery opens Pulse Check": the Old Calculation tab lists people with the eight columns and a Month choice) — **UAT**; browser check with real data: Team overview → Old Calculation, choose a month — for one person check Net Capacity = working days × 8 h, Planned and Actual Hours include their PTO, holidays and NPRA, the two utilisations and Available Hours by hand; Status follows the Planned Utilisation.
 
@@ -1074,9 +1074,9 @@ TC-OVR-01 to TC-OVR-03 tested the earlier Overview and are **retired** with OVR-
 
 **TC-CAP-21 Insight thresholds** — Req CAP-47 — L1 `insight-thresholds.test.mjs` ("CAP-47: each insight threshold moves its insight; the built-in values give the results as before"; "CAP-47: insight thresholds read from Git are checked; the built-in values are not stored"), `insights.test.mjs` unchanged with the built-in values; E2E `shell.e2e.mjs` ("TC-CAP-21: Settings → Insight thresholds — edited, checked, shown in Team overview Definitions, reset": amber at or above green blocks saving; the forecast limit changed shows in Definitions; built-in values restored) — **UAT**; browser check with real data: raise the resilience limit — Team overview → Streams shows fewer streams resting on one person; a role without *Manage shared settings* sees no Edit button.
 
-**TC-CAP-22 People & access, Remove and capacity roles** — Req CAP-48, CAP-49, CAP-50, CAP-57, CAP-51, CAP-33 — L1 `people-access.test.mjs` ("CAP-49: a person's work email is kept with their profile (checked, lower case)"; "CAP-57: only the team Role decides capacity — Lead and Manager are not counted by default; app access roles and the People manager tick never count (TC-CAP-29)"; "CAP-50: capacity roles read from Git are checked; the built-in choice is not stored; access roles come from access.json"); E2E `shell.e2e.mjs` ("TC-CAP-22: People & access — one page; names and emails from Azure DevOps (nothing typed); Remove asks left or not in the team; capacity roles": sections People / Capacity roles / Role rights, the setup-only columns, no Add a person and no email fields, "No email in Azure DevOps" with the sample, Mapping incomplete, Left the team on sets Left on, Lead / Manager unticked by default, no app access roles) and ("TC-CAP-09: …": Not part of the team removes and Restore brings back) — **UAT**; browser check with real data and Git: add a new colleague to the team in Azure DevOps, refresh — they appear with the name and email from Azure DevOps; give them an app access role — access.json has their email and role; set region, role and reports to; mark a leaver Left the team at month end — the next month no longer counts them, the earlier months are unchanged; tick Lead in Capacity roles — the lead's hours and capacity appear in Pulse Check.
+**TC-CAP-22 People & access, Remove and capacity roles** — Req CAP-48, CAP-49, CAP-50, CAP-57, CAP-51, CAP-33 — L1 `people-access.test.mjs` ("CAP-49: a person's work email is kept with their profile (checked, lower case)"; "CAP-57: only the team Role decides capacity — Lead and Manager are not counted by default; app access roles and the People manager tick never count (TC-CAP-29)"; "CAP-50: capacity roles read from Git are checked; the built-in choice is not stored; access roles come from access.json"); E2E `shell.e2e.mjs` ("TC-CAP-22: People & access — one page; names and emails from Azure DevOps (nothing typed); Mark as left; capacity roles": sections People / Team tree / Capacity roles / Role rights, the setup-only columns of the read-only list, no Add a person and no field in the rows, the source line's ⓘ, "No email in Azure DevOps" with the sample, Mapping incomplete in the warning line, Mark as left… on a date sets Left on, Lead / Manager unticked by default, no app access roles) and ("TC-CAP-09: …": Not part of the team removes and Restore brings back) — **UAT**; browser check with real data and Git: add a new colleague to the team in Azure DevOps, refresh — they appear with the name and email from Azure DevOps; in their drawer give them an app access role — access.json has their email and role; set region, role and reports to; mark a leaver Mark as left… at month end — the next month no longer counts them, the earlier months are unchanged; tick Lead in Capacity roles — the lead's hours and capacity appear in Pulse Check.
 
-**TC-CAP-23 People and emails from Azure DevOps** — Req CAP-51, CAP-30, CAP-29 — L1 `people-access.test.mjs` ("CAP-51: a person's work email comes from Azure DevOps (Assigned To); one saved in the profile is used only where Azure has none"); E2E `shell.e2e.mjs` ("TC-CAP-23: People & access lists the Azure DevOps team members with the names and emails Azure gives": the team read on opening, emails lower case, groups left out, "n team members read from <team>", "Team member · no Time Writing yet"); browser check with the Time Writing connection: a PAT without Project and Team (Read) shows the hint and still lists the Assigned To people; ↻ Read the team again reads it again; a person with settings only from the historical hours is under "Not in Azure DevOps".
+**TC-CAP-23 People and emails from Azure DevOps** — Req CAP-51, CAP-30, CAP-29 — L1 `people-access.test.mjs` ("CAP-51: a person's work email comes from Azure DevOps (Assigned To); one saved in the profile is used only where Azure has none"); E2E `shell.e2e.mjs` ("TC-CAP-23: People & access lists the Azure DevOps team members with the names and emails Azure gives": the team read on opening, emails lower case, groups left out, "n team members read from <team>" behind the source line's ⓘ, "Team member · no Time Writing yet"); browser check with the Time Writing connection: a PAT without Project and Team (Read) shows the hint (ⓘ and the warning line) and still lists the Assigned To people; ↻ Read the team again reads it again; a person with settings only from the historical hours has the Status "Not in Azure DevOps".
 
 **TC-CAP-24 Calculation profile terms and cards** — Req CAP-52, CAP-45, CAP-41 — L1 `calculation-profiles.test.mjs` ("CAP-52: a profile chooses its Absence kinds and NPRA parts; the cards show its names and formulas"); E2E `shell.e2e.mjs` ("TC-CAP-13: …": the four cards Utilization, Funded Hours, Absence, NPRA Hours with their bracketed formulas; Overloaded and Has capacity counted in the Who has capacity count; the Funded Hours / Absence column names); browser check with Git: copy Current (v4), untick Sick Leave, Unplanned Leave and Other absence and Training, make it the default — the Absence card reads [Holiday + PTO] and its hours drop, NPRA Hours read [Tagged NPRA hours], Available hours rise by the unticked leave; give the profile the name "Contract hours" for Funded Hours under Names — the card, the columns and the formula use it; Save to Git.
 
@@ -1089,6 +1089,16 @@ TC-OVR-01 to TC-OVR-03 tested the earlier Overview and are **retired** with OVR-
 **TC-CAP-28 My capacity under every name; the reason when not counted** — Req CAP-56 — L1 `capacity.test.mjs` ("CAP-56: my capacity is found under every name my work email carries; when I am not counted the reason is given (TC-CAP-28)"); browser check with the Time Writing connection: Time Writing as Me shows the same Capacity as when your name is chosen at the top right; for a month without a Task of yours, or with a Joined on after it, the Capacity tile shows — and the reason, and My dashboard → My hours says “Not counted in <month>: <reason>”.
 
 **TC-CAP-29 Capacity by team Role only** — Req CAP-57, CAP-50 — L1 `people-access.test.mjs` ("CAP-57: only the team Role decides capacity — Lead and Manager are not counted by default; app access roles and the People manager tick never count (TC-CAP-29)"); E2E `shell.e2e.mjs` ("TC-CAP-22: People & access — one page; names and emails from Azure DevOps (nothing typed); Remove asks left or not in the team; capacity roles": no app access roles in Capacity roles); browser check: a person with app access role Admin / People Manager (or the People manager tick) and team Role QE has capacity on Time Writing and in Pulse Check; a person with team Role Lead is listed apart with "team role Lead".
+
+**TC-CAP-30 People list, Status and filters** — Req CAP-58, CAP-29, CAP-33 — L1 `people.test.mjs` ("CAP-58: a person's Status — Not part of the team, Not in Azure DevOps, Left on, Active since (TC-CAP-30)"; "CAP-58: the filters — nothing ticked is all, Status starts on Active and Left, \"Not set\" and \"Default role\" match empty values (TC-CAP-30)"); E2E `people.e2e.mjs` ("TC-CAP-30: the People list is read-only, filtered by Region, Role, Access role and Status (Active and Left by default), with search and Reset filters": no field in the rows, Status starts on two values, Region / Role / search narrow the list and the count, Reset filters, a person Not part of the team leaves the default list and shows under that Status); browser check with real data: Status "Not in Azure DevOps" lists the people of the historical hours who are not in the team; Export gives the columns shown.
+
+**TC-CAP-31 Edit a person in the drawer** — Req CAP-59, CAP-49, CAP-48, CON-102, CON-104 — L1 `people.test.mjs` ("CAP-59: the drawer saves only what changed — profile fields as a patch, the app access roles apart (TC-CAP-31)"); E2E `people.e2e.mjs` ("TC-CAP-31: a person is edited in the drawer — region and app access roles saved in two saves (planning data, access.json), Mark as left removes their access too": view first, Edit, region and two roles, an unsaved edit asks before moving on, Save writes access.json and the Background jobs entries, Save to Git writes the planning data, Mark as left… with "Also remove their app access" ticked removes the roles) — **UAT**; browser check with real data and Git: open a colleague, Edit, set region, role, reports to and an app access role, Save — the list shows them and access.json has the role; as a person without Manage access the roles field is disabled with the reason; ‹ › go through the filtered list; Escape with unsaved edits asks first.
+
+**TC-CAP-32 Bulk edit** — Req CAP-60, CON-102 — L1 `people.test.mjs` ("CAP-60: one change for several people merges into their profiles; one access save sets exactly the roles chosen (TC-CAP-32)"); E2E `people.e2e.mjs` ("TC-CAP-32: bulk edit — tick two people, Set region… saves both in one change; Set access role… is disabled with the reason without Git storage": the bar, the pop-up naming the people, both rows changed, one Background jobs entry and one History entry, Clear selection, the heading box selects every row shown); browser check with Git and Manage access: select three people, Set access role… Team Member — one commit of access.json with the three emails.
+
+**TC-CAP-33 Fewer boxes on People; capacity notices on Capacity & time** — Req CAP-61, CAP-34, CAP-15, CAP-30 — E2E `people.e2e.mjs` ("TC-CAP-33 / TC-CAP-34: fewer boxes — one warning line, Default Time tracking started in the ⋯ menu, the month's capacity on Capacity & time, the Team tree tab": no capacity or holiday notice on People, one folded warning line, ⋯ → Default Time tracking started… changes the Status column, the capacity and regional holidays notices on Capacity & time → Capacity and absence); E2E `shell.e2e.mjs` ("TC-CAP-23: …": the team read behind ⓘ); browser check with the Time Writing connection: a PAT without team read shows the hint in ⓘ and in the warning line.
+
+**TC-CAP-34 Team tree tab** — Req CAP-62, SET-13 — E2E `people.e2e.mjs` ("TC-CAP-33 / TC-CAP-34: …": the Team tree tab with the reporting lines, apart from the list); E2E `shell.e2e.mjs` ("TC-SET-05": the outside manager at the top of the Team tree tab); browser check: a role without "Edit people" sees no Team tree tab.
 
 **TC-CAP-01 Capacity calculation** — Req CAP-01…09, OVR-09 — L1 `capacity.test.mjs`, `monthly-hours.test.mjs`, `azure-insights.test.mjs`. Plus L3 analysis (A) with one person in October 2026:
 - 22 working days × 8 = 176 h funded.
@@ -1151,7 +1161,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-GIT-01 Config validation** — Req GIT-01 — L1 `git-storage.test.mjs`.
 
-**TC-GIT-06 Default data repository prefilled** — Req GIT-13 — L1 `git-storage.test.mjs` ("the default data repository is a valid config: ponkritz/DemandPlanningStorage, main, planning-data.json"); E2E `shell.e2e.mjs` ("TC-GIT-06": Settings → Storage → Connect Git storage… shows Owner ponkritz, Repository DemandPlanningStorage, Branch main and Data file planning-data.json prefilled with the token empty; the Get started guide's Git step names the repository); browser check: with a connection saved to another repository, Change connection… shows that repository.
+**TC-GIT-06 Default data repository prefilled** — Req GIT-13 — L1 `git-storage.test.mjs` ("the default data repository is a valid config: philips-internal/InD_DemandPlanningStorage, main, planning-data.json"); E2E `shell.e2e.mjs` ("TC-GIT-06": Settings → Storage → Connect Git storage… shows Owner philips-internal, Repository InD_DemandPlanningStorage, Branch main and Data file planning-data.json prefilled with the token empty; the Get started guide's Git step names the repository); browser check: with a connection saved to another repository, Change connection… shows that repository.
 
 **TC-GIT-05 Capacity settings and mappings in Git** — Req GIT-03, GIT-04, GIT-08, CAP-10 — L1 `git-storage.test.mjs` ("capacity settings, holidays and common activities travel in the Git planning file": round-trip without change, mappings sorted by ID, an older file without them loads as before and makes Save to Git appear, invalid mappings dropped); browser check: add a mapping on Settings → Capacity → the sync bar there says "Unsaved changes"; Save to Git; on a second browser Load latest shows the same mapping. **UAT**
 
@@ -1177,6 +1187,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 **TC-GIT-14 The notice names the app user who saved** — Req GIT-22, GIT-18, GIT-17 — L1 `git-watch.test.mjs` ("GIT-22: every commit the app writes names the app user — display name and work email — and the notice shows them; a commit made outside the app shows its GitHub author (TC-GIT-14)"); E2E `page-notices.e2e.mjs` ("TC-GIT-14: the notice names the app user who saved, not the GitHub account; TC-GIT-15: …"), `page-notices.e2e.mjs` ("TC-GIT-11: …": a commit made outside the app shows its GitHub author); browser check: save a row on CoNQ — the commit in the verified private Git repository ends with `[saved …] [by {your name} <{your work email}>]` and holds no token; the unit test confirms public, internal, and unverified targets omit attribution; in the other browser the notice says "saved by {your name}"; a commit made on github.com shows the GitHub author.
 
 **TC-GIT-15 Access changes load quietly, with an info line** — Req GIT-23, GIT-18, CON-101 — L1 `git-watch.test.mjs` ("GIT-23: a newer access.json loaded quietly — what changed in the viewer's own rights, in words (TC-GIT-15)", "GIT-18: each shared file is shown on the pages that use it; the menu and the views are loaded quietly"); E2E `page-notices.e2e.mjs` ("TC-GIT-14: …; TC-GIT-15: a change of the access roles is loaded quietly — the rights change in place with an info line, the notice only on People & roles"), `shell.e2e.mjs` ("TC-GIT-08 …": access roles created in Git are loaded quietly on Data & sharing); browser check with two browsers: B on CoNQ as a Team Member, A gives Team Members "Edit On-Demand data (rows)" — within 5 minutes B's ＋ Add row is enabled and the line "Your access was changed by {A}: you can now edit On-Demand data (rows)." shows on CoNQ only (not a pop-up, not in Background jobs) and goes on the next page; with B on Admin → People & roles the "Newer data in Git" notice for Access shows instead; with Git unreachable the rights loaded before stay.
+
+**TC-GIT-16 A connection to the old data repository is offered the switch** — Req GIT-24, GIT-13 — L1 `git-storage.test.mjs` ("GIT-24: a connection to the old data repository points to the new one, keeping its branch and data file; any other connection does not (TC-GIT-16)"); E2E `shell.e2e.mjs` ("TC-GIT-16": a connection saved to ponkritz/DemandPlanningStorage shows the notice naming both repositories and is not changed by itself; Switch saves philips-internal/InD_DemandPlanningStorage with the same branch, file and token, reads from the new repository and not the old one, and the notice goes); browser check: with unsaved changes, Switch asks first.
 
 **TC-GIT-02 Connect, create, save, load** — Req GIT-02…04, GIT-06, GIT-08, GIT-12 — **UAT**
 - Pre: TD-03.
@@ -1259,7 +1271,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
   - The circular message lists A and B.
   - The holiday notice lists the regional holidays.
 
-**TC-SET-05 Manager not on the board** — Req SET-13 — E2E `shell.e2e.mjs` ("TC-SET-05": synthetic sample, Settings → Resources, Chen Wei reports to → Other (type a name)… → "Maria Lopez" → OK; the select shows Maria Lopez, the reporting lines show Maria Lopez at the top marked "not on the board" with Chen Wei under her, and Diya Sharma's Reports to offers Maria Lopez under "Not on the board").
+**TC-SET-05 Manager not on the board** — Req SET-13 — E2E `shell.e2e.mjs` ("TC-SET-05": synthetic sample, People & roles → People, Chen Wei's drawer → Edit → Reports to → Other (type a name)… → "Maria Lopez" → Save; the drawer and the list show Maria Lopez (not on the board), the Team tree tab shows Maria Lopez at the top marked "not on the board" with Chen Wei under her, and Diya Sharma's Reports to offers Maria Lopez under "Not on the board").
 
 **TC-SET-06 Admin pages, My settings and sections** — Req SET-15, SET-16, NAV-17 — L1 `my-views.test.mjs` ("Admin and My settings: the pages, and older links opening where they moved (SET-15, TC-SET-06)"); E2E `shell.e2e.mjs` ("TC-SET-06: Admin lists the shared setup pages, My settings opens from your name; sections show one at a time with their scope, and the last one is remembered" — also opens the connection editor from Streams, KB-24; also "TC-NAV-01 / TC-NAV-17" for the Admin group and entries); browser check: the menu has an ADMIN group with Streams, Stream options, Feature setup, People & roles, Data & sharing (and, with their permissions, Capacity & time, Reports, Master data, History); each opens its page with its name in the header; your name in the sidebar opens My settings with Your work email · Servers and PATs · My views; every section shows its scope chip; after another page and back, the section last shown is open; Feature setup and Streams have no section row; Get started → Open for the token step lands on My settings → Servers and PATs, for Git on Data & sharing → Git storage; a stream not set up in the menu (＋) opens Streams; no page errors.
 
@@ -1368,7 +1380,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
   1. Open Documentation.
   2. Open each tab.
 - Expected:
-  - There is one tab per file in `docs/` (thirteen in this build), in the order of DOC-01, Validation package first.
+  - There is one tab per file in `docs/`, in the order of DOC-01, User guide first.
   - Headings, tables, nested lists, bold text and code display formatted, with no raw Markdown characters such as `|---|` or `**`.
   - The panel shows "docs/{file} · this build".
   - Inspection: the Markdown component builds React elements and does not use `dangerouslySetInnerHTML`.
@@ -1401,6 +1413,18 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
   - Every document opens, rendered; the Known issues register has the KB, OI, residual-risk and limitation tables; the components inventory lists the in-house files by layer, the SOUP table with versions and licences, and the audit result.
   - The IDs resolve: the requirement row exists and the test case exists and names that requirement.
 
+**TC-DOC-06 User guide with screenshots and clips** — Req DOC-14, DOC-15, DOC-16 — L1 `user-guide.test.mjs` ("DOC-15: every screenshot, clip and poster the guide shows is a file of docs/user-guide, and every file there is shown"; "DOC-15: every clip has a poster, a title and a caption, and its steps are written out next to it"; "DOC-15: the guide's pictures and clips stay small"; "DOC-14: every chapter is listed in Contents, and every link in the guide lands on a heading"; "DOC-14: the guide describes the features of its build: no placeholder is left, and My dashboard editing, Save view for everyone and the chart editor's tabs have their sections"; "DOC-14, DOC-16: the user guide is the first document of the Documentation page, and every picture is made by the screenshot script"), `markdown.test.mjs` ("DOC-15: images are inline parts with their alt text, and a video line is a block of plain values, never markup"), `csp.test.mjs` (media-src); E2E `documents-and-data.e2e.mjs` ("TC-DOC-06: the user guide is the first tab and the profile menu's User guide opens it; its screenshots load from the build and its clips play from the build"); inspection: `pnpm build:web && pnpm docs:shots && pnpm docs:videos` remakes every picture and clip and stops on anything but made-up data.
+- Steps:
+  1. Open the profile menu and choose **User guide**.
+  2. Scroll through the guide; open a section from "On this page".
+  3. Play a clip.
+  4. Read "Edit My dashboard", "Save view for everyone" and "Add a chart or table".
+- Expected:
+  - Documentation opens on the **User guide** tab, the first tab.
+  - Every screenshot shows (no broken image); every picture shows only made-up names (example.com emails, the synthetic sample).
+  - The clip plays from the build without sound; the steps next to it describe the same task in full.
+  - No section is a placeholder: My dashboard editing, Save view for everyone and the chart editor's tabs are described with their steps and screenshots.
+
 ### 6.19 User interface
 
 **TC-UI-01 Theme** — Req UI-01, UI-02 — L1 `theme.test.mjs`.
@@ -1426,6 +1450,24 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 **TC-UI-11 Pop-ups work with the keyboard** — Req UI-18 — E2E `shell.e2e.mjs` ("TC-UI-11: a pop-up takes the focus, keeps Tab inside, closes on Escape and gives the focus back to its button"); browser check: open a write pop-up with a person picker, open the picker list, Escape closes only the list, a second Escape closes the pop-up.
 
 **TC-UI-12 A click beside a pop-up keeps what was typed** — Req UI-19 — E2E `shell.e2e.mjs` ("TC-UI-12: a click beside a pop-up with input keeps it open with what was typed; pop-ups without input close"); browser check: New Feature, type a title, click beside the pop-up — it stays open with the title.
+
+**TC-UI-13 Which view a table shows** — Req UI-21 — L1 `table-views.test.mjs` ("views for everyone: own view > view for everyone > the table’s built-in view (TC-UI-13)"); browser check: with a view for everyone saved, a viewer who never changed the table sees it; their first change keeps the rest of it; after the Tool Owner saves it again the Columns panel says "A new view for everyone is available — Use it".
+
+**TC-UI-14 Missing and new columns, sort and the own view in the browser** — Req UI-08, UI-22 — L1 `table-views.test.mjs` ("views for everyone: columns that no longer exist are ignored, new ones come at the end shown; sort kept (TC-UI-14)", "views for everyone: only known shapes are read; the own view in the browser folds in the earlier width and wrap entries (TC-UI-14)"); browser check: a view saved before a column was added shows the new column last; a sort on a removed column falls back to the table's default sort; a table's sort is kept after a reload.
+
+**TC-UI-15 Saved and cleared in the shared views defaults** — Req UI-20, UI-23 — L1 `table-views.test.mjs` ("views for everyone: saved and cleared in the shared views defaults with who and when; merged per entry (TC-UI-15)"); browser check: Save view for everyone writes `table:<id>` and `by:table:<id>` to `personal-views-defaults.json` with one commit, listed under Background jobs; Clear the view for everyone asks first and removes both.
+
+**TC-UI-16 The Tool Owner saves a table's view for everyone** — Req UI-20, UI-21, UI-22 — **UAT** — E2E `views-for-everyone.e2e.mjs` ("TC-UI-16: the Tool Owner saves the CoNQ table’s view for everyone; another person sees it first, keeps their own changes and can use the view for everyone again"); browser check: as the Tool Owner hide, move and widen columns of a table and sort it, Save view for everyone; on another browser as a Team Member open the table — the same columns, widths and sort, no Save option; tick a column back, reload — kept; Use the view for everyone — back.
+- L3 steps:
+  1. Tool Owner (Git connected): CoNQ → Data → Columns: untick Sites, move Cost (EUR) above Category, drag the Category edge wider, sort by Found on (newest first), **Save view for everyone**.
+  2. Second person (Team Member, another browser, first visit): open CoNQ → Data, then Columns.
+  3. Tick Sites, reload, open Columns, **Use the view for everyone**.
+- Expected:
+  - Step 1: Background jobs lists the save; the panel reads "The view for everyone, saved by <email> on <date>".
+  - Step 2: the table shows the Tool Owner's columns, order, width and sort; no Save view for everyone or Clear.
+  - Step 3: Sites stays after the reload with "Your own view · Use the view for everyone"; Use the view for everyone shows the Tool Owner's view again.
+
+**TC-UI-17 Page filters and the People list for everyone** — Req UI-20, UI-23, MYD-08 — L1 `table-views.test.mjs` ("views for everyone: People filters read back only in known shapes (TC-UI-17)"); E2E `views-for-everyone.e2e.mjs` ("TC-UI-17: the People list and its filters saved for everyone by the Tool Owner; an Admin (who holds the right) sees both first and can save too"); browser check: the Team overview, an On-Demand Dashboard page and an Insights page's filter row each offer Save view for everyone beside the filters to the Tool Owner; a person who never changed them starts on the saved period and filters; one who did keeps theirs and sees "Your own view · Use the view for everyone".
 
 - L3 steps:
   1. Click the toggle three times.
@@ -1557,6 +1599,12 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 **TC-MYD-05 Team overview tiles and tabs** — Req MYD-10, MYD-11, MYD-12 — E2E `shell.e2e.mjs` ("TC-MYD-05: Team overview shows six headline tiles; each opens its analysis, with a trail back; Delivery opens Pulse Check"); unit tests of the calculations as before (`dashboard.test.mjs`, `insights.test.mjs`); inspection: the menu offers no Insights workspace and `src/workspace.ts` is gone.
 
 **TC-MYD-06 Releases and documents signed by me in a period** — Req MYD-13 — E2E `shell.e2e.mjs` ("TC-MYD-01: My dashboard is the start page: my hours, my open work, my streams and what I signed; Pulse Check offers quarter, half-year and year": the Signed by me panel, This year sets From / To, the streams listed); L1 `my-signatures.test.mjs` ("MYD-13: signature fields are Author, Reviewer or Approver names — not their dates, functions or roles (TC-MYD-06)"; "MYD-13: documents and releases I signed per stream in a from–to period; a release counts once (TC-MYD-06)"; "MYD-13: a Windchill export counts the documents I signed by its Author / Reviewer / Approver columns (TC-MYD-06)"); browser check with the stream views fetched (with their Author / Reviewer / Approver fields) and the Windchill exports imported: My dashboard → Signed by me shows releases and documents per stream for Last 12 months; choose From / To or This quarter — the figures follow; the document list names the stream, release, field and date; a stream without such fields is named.
+
+**TC-MYD-07 My dashboard with blocks of my own from every data source** — Req MYD-14, MYD-15, MYD-16, MYD-17, MYD-18, MYD-23, MYD-24 — **UAT** — E2E `my-dashboard.e2e.mjs` ("TC-MYD-07: My dashboard with blocks of my own from every data source — added, moved, resized, kept, private, per role, reset": the synthetic sample and a mocked GitHub; the default My dashboard shows its five sections in order and no block; ＋ Add block… adds a bar of Azure DevOps work by State, a KPI tile of this month's releases (Releases per stream, filter Month = this month), a line of the Average of Utilization % per month (Capacity and utilization) and a narrative over the Azure DevOps work; Customize moves the bar above Signed by me and makes it full width; a block's ⋯ Move down; the entry `my-dashboard` is kept with the personal views and a reload keeps everything; another person — with Ana's personal views file in Git — sees the default My dashboard; a Team Member (no Team insights) with the same layout sees "Not available for your role." on the capacity block and no figures; Reset to the default My dashboard brings the five sections back and removes the blocks); also run at 4x CPU slowdown (CI-12); UAT: on My dashboard choose ＋ Add block… — the Data source list offers the table pages, Time Writing hours, Azure DevOps work, Releases per stream, Capacity and utilization, QE Mapping, KPI tracker values, Historical hours and each Windchill export (those your role may not see marked "(not available)"); add a KPI tile of Capacity and utilization (Sum of Available hours, period one month) — it equals Team overview's capacity of that month with no filter; add a summary table of Releases per stream by Stream, filtered to Completed, for one month — each stream equals Pulse Check's Completed releases of that month; click a bar of Azure DevOps work — the rows behind it list each item's #ID as a link to Azure DevOps; resize a block by its corner; ask a colleague to open My dashboard — they see their own; an Admin's View as of you shows the default My dashboard; Reset to the default My dashboard.
+
+**TC-MYD-08 The data sources of My dashboard** — Req MYD-15, MYD-16, MYD-17, MYD-18, MYD-19, MYD-20, MYD-21, MYD-22 — L1 `dashboard-sources.test.mjs` ("MYD-15: the registry — every kind declares its fields and the area it needs; keys follow one pattern; a role without the area gets “Not available for your role.” and no rows (TC-MYD-08)", "MYD-16: Azure DevOps work — Features, User Stories and Tasks with their fields, #ID links; only my own for a role with My Tasks but not the backlogs (TC-MYD-08)", "MYD-17: Releases per stream — a row per release Pulse Check counts; Completed and Supported per stream and month equal Pulse Check’s, entered counts included (TC-MYD-08)", "MYD-18: Capacity and utilization — Team overview’s figures per person and month; totals equal Team overview’s (TC-MYD-08)", "MYD-19…MYD-22: QE Mapping sheets, KPI tracker values, historical hours and Windchill exports as sources with their natural fields (TC-MYD-08)"); inspection (MYD-22): Pulse Check and the Monthly pack are covered by the release and capacity sources; browser check: with the KPI tracker copy in Git, a block over KPI tracker values shows "Load the KPI tracker to see this." with **Load the KPI tracker** until chosen, then the values; the same for the QE Mapping and the historical hours.
+
+**TC-MYD-09 My dashboard's personal layout** — Req MYD-14, MYD-23 — L1 `my-dashboard.test.mjs` ("MYD-14: the default My dashboard is the built-in sections in their order; blocks of my own come after them, moved and hidden like sections (TC-MYD-09)", "MYD-23: the layout is kept as my own personal views entry, validated when read; unknown sources dropped; the shared defaults never carry it (TC-MYD-09)"); browser check (Git storage, work email, live data): after a change `personal-views/<email>.json` holds `filters.my-dashboard` with the blocks and no rows or figures; Use as default for everyone writes the sections' order and no block; View as a person shows the default My dashboard with the note that personal layouts are private and no Customize or ＋ Add block…
 
 **TC-HIS-01 Historical hours page** — Req HIS-01 — E2E `shell.e2e.mjs` ("TC-HIS-01: Settings → Historical hours explains the import and needs Git storage to upload"); browser check with Git storage and the real planning workbook: Upload Excel… reads TransformedData; the counts (rows May–Sep 2026, people, recorded hours, rows not imported with their reasons) match the workbook; Save to Git writes `history-hours.json` to the data repository (not to the app's repository); the page shows the source, cut-off and the Azure DevOps Tasks left out; Remove history removes the file.
 
@@ -1790,17 +1838,33 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-OND-59 Export PDF of an On-Demand Dashboard** — Req OND-68, OND-69, OND-70 — browser check: on a dashboard with two KPI tiles and blocks on two tabs, the page ⋯ → Export PDF… lists the tiles (KPI card) and each block with its tab; All exports every tile and block, whatever tab is open, with "Period: 2026 (whole year) · Category: Scrap." when filtered; a block over a page in Sample carries "Sample data" in the footer.
 
-**TC-OND-60 The standalone HTML file: escaped, offline, hidden rows left out** — Req OND-74, OND-77 — L1 `standalone-html.test.mjs` ("OND-74, OND-77: the file — every value escaped, no external URL, hidden rows left out, the sort and search script with its CSP hash (TC-OND-60)", "OND-77: a chart’s SVG is kept only when it is plain drawing (TC-OND-60)"); browser check: a row with `<img src=x onerror=alert(1)>` in a Text column shows that text in the file and nothing runs; the browser's developer tools show no request when the file is opened from a folder; a chart the check refuses says "This chart could not be included."
+**TC-OND-60 The standalone HTML file: escaped, offline, hidden rows left out** — *(Retired — see TC-OND-92)* Req OND-74, OND-77 — L1 `standalone-html.test.mjs` ("OND-74, OND-77: the file — every value escaped, no external URL, hidden rows left out, the sort and search script with its CSP hash (TC-OND-60)", "OND-77: a chart’s SVG is kept only when it is plain drawing (TC-OND-60)"); browser check: a row with `<img src=x onerror=alert(1)>` in a Text column shows that text in the file and nothing runs; the browser's developer tools show no request when the file is opened from a folder; a chart the check refuses says "This chart could not be included."
 
 **TC-OND-61 The schedule's due times** — Req OND-78, OND-79 — L1 `standalone-html.test.mjs` ("OND-78, OND-79: the schedule — due times with a fake clock, a missed run once at the next start, read back strictly (TC-OND-61)"); the unit test confirms that schedules and targets do not carry over between repositories or publishers; browser check: a schedule Daily at a time two minutes ahead runs once at that time (Background jobs "Scheduled publish · CoNQ"), not again in the same day; with the app closed over that time it runs once at the next start.
 
 **TC-OND-62 Desktop: one file per page, chosen and overwritten** — Req OND-76 — L1 `standalone-html.test.mjs` ("OND-76: the desktop file is chosen, scoped to the repository and publisher, and overwritten using an exclusive temporary file (TC-OND-62)"); browser check (desktop app on Windows): the first Publish now asks where to save "CoNQ.html" (Documents), the next ones overwrite it without asking; after the folder is renamed the publish fails with "The folder … is missing" and the page shows the warning for a scheduled run; `publish-targets.json` in the app's user data folder holds the path, and no Git file changes.
 
-**TC-OND-63 Publish CoNQ as a standalone HTML file** — Req OND-73, OND-74, OND-76, OND-77, OND-80 — **UAT** — E2E `standalone-html.e2e.mjs` ("TC-OND-63: the Tool Owner publishes CoNQ as a standalone HTML file — the confirmation, the file picked, the rows and charts written without external addresses, sort and search working offline"); browser check (also on a 4x slower CPU, `E2E_CPU_SLOWDOWN=4`): as the Tool Owner in Chrome or Edge, CoNQ ⋯ → Publish standalone HTML… warns "This file contains every row of CoNQ. Anyone who receives it can read them.", Publish now asks for the file (CoNQ.html) and Background jobs says "Published {n} rows of CoNQ to CoNQ.html"; the file opened from a shared folder shows "Published by {you} on {date, time, zone}", the charts and the table, sorts by Cost and finds a row by a word; in Firefox the file is downloaded and Background jobs says so.
+**TC-OND-63 Publish CoNQ as a standalone HTML file** — *(Retired — see TC-OND-94)* Req OND-73, OND-74, OND-76, OND-77, OND-80 — **UAT** — E2E `standalone-html.e2e.mjs` ("TC-OND-63: the Tool Owner publishes CoNQ as a standalone HTML file — the confirmation, the file picked, the rows and charts written without external addresses, sort and search working offline"); browser check (also on a 4x slower CPU, `E2E_CPU_SLOWDOWN=4`): as the Tool Owner in Chrome or Edge, CoNQ ⋯ → Publish standalone HTML… warns "This file contains every row of CoNQ. Anyone who receives it can read them.", Publish now asks for the file (CoNQ.html) and Background jobs says "Published {n} rows of CoNQ to CoNQ.html"; the file opened from a shared folder shows "Published by {you} on {date, time, zone}", the charts and the table, sorts by Cost and finds a row by a word; in Firefox the file is downloaded and Background jobs says so.
 
-**TC-OND-64 Publish disabled in Sample and for others** — Req OND-73, OND-75, CON-102 — E2E `standalone-html.e2e.mjs` ("TC-OND-64: Publish standalone HTML… is disabled with the reason in Sample and for a person who is not an owner of the page"); browser check: a page co-owner (not Tool Owner) may publish; an Admin who is not a co-owner sees the item disabled with the reason.
+**TC-OND-64 Publish disabled in Sample and for others** — Req OND-73, OND-75, CON-102 — E2E `standalone-html.e2e.mjs` ("TC-OND-64: Publish interactive HTML… is disabled with the reason in Sample and for a person who is not an owner of the page"); browser check: a page co-owner (not Tool Owner) may publish; an Admin who is not a co-owner sees the item disabled with the reason; on an On-Demand Dashboard over a page shown in Sample the item says "Switch {page} to Live to publish {dashboard}: sample rows are never published.", and on a dashboard without blocks "No blocks to publish yet.".
 
-**TC-OND-65 A failed scheduled publish warns on the page** — Req OND-79, OND-78 — E2E `standalone-html.e2e.mjs` ("TC-OND-65: a scheduled publish that is due at the start but cannot write its file warns on the page, with Publish standalone HTML… to fix it"); browser check: in Chrome, after the site's file permission is revoked, the next scheduled run fails with "The browser no longer lets the app write CoNQ.html …", Background jobs shows the failure and the page the warning; Publish now asks for the permission once and the warning goes with the next successful scheduled run.
+**TC-OND-65 A failed scheduled publish warns on the page** — Req OND-79, OND-78 — E2E `standalone-html.e2e.mjs` ("TC-OND-65: a scheduled publish that is due at the start but cannot write its file warns on the page, with Publish interactive HTML… to fix it"); browser check: in Chrome, after the site's file permission is revoked, the next scheduled run fails with "The browser no longer lets the app write CoNQ.html …", Background jobs shows the failure and the page the warning; Publish now asks for the permission once and the warning goes with the next successful scheduled run.
+
+**TC-OND-90 A table page publishes only the rows that pass the filter row** — Req OND-91, OND-93 — L1 `standalone-html.test.mjs` ("OND-91, OND-93: a table page publishes only the rows that pass the publisher’s filter row, never a hidden row, with the filters and counts in its header (TC-OND-90)"); browser check: on CoNQ with the Insights filter row at Q3 and Department QRE the pop-up says "This file contains the {n} rows of CoNQ that pass your filters." with the same {n} as the line under the filter row; with Reset filters (the current year) the number follows; on a Table page (no Insights) it is every row that is not hidden.
+
+**TC-OND-91 A dashboard publishes, per data source, only the rows a block counts** — Req OND-92 — L1 `standalone-html.test.mjs` ("OND-92: a dashboard publishes, for each table page a block reads, only the rows a block counts with the publisher’s period and filters (TC-OND-91)"); browser check: a dashboard with a block over the Time Writing hours says in the pop-up and in the file "1 block over the Time Writing hours is not published."; the file's KPI tiles show the same numbers as the dashboard at publishing.
+
+**TC-OND-92 The interactive file: escaped data block, CSP by hash, no address** — Req OND-94, OND-93 — L1 `standalone-html.test.mjs` ("OND-94: the file — the data block escaped, the viewer inline with its CSP hashes, no address, nothing but its own script and styles (TC-OND-92)"); browser check: a row with `</script><script>alert(1)</script>` in a Text column shows that text in the file's Rows tab and nothing runs; the developer tools show no request and no Content-Security-Policy report when the file is opened from a folder.
+
+**TC-OND-93 The viewer's filter row narrows within the file** — Req OND-95 — L1 `standalone-html.test.mjs` ("OND-95: the viewer’s filter row narrows within the published rows only — every year of the file when nothing is ticked, only the values found (TC-OND-93)"); browser check: in a file cut to QRE, Department offers only QRE; Year "All" counts every row of the file, also of last year.
+
+**TC-OND-94 Publish CoNQ as an interactive HTML dashboard, filtered** — Req OND-73, OND-76, OND-90, OND-91, OND-93, OND-94, OND-95, OND-97, OND-99 — **UAT** — E2E `interactive-html.e2e.mjs` ("TC-OND-94: the Tool Owner publishes CoNQ cut to Q3 and QRE; the file holds only those rows and works offline — header, filter row, charts, drill-down, Rows search, phone"); browser check (also on a 4x slower CPU, `E2E_CPU_SLOWDOWN=4`): as the Tool Owner in Chrome or Edge, CoNQ's Insights filtered to a quarter and a department, CoNQ ⋯ → Publish interactive HTML… warns "This file contains the {n} rows of CoNQ that pass your filters. Anyone who receives it can read them.", Publish now asks for the file (CoNQ.html) and Background jobs says "Published {n} rows of CoNQ ({filters}) to CoNQ.html"; the file opened from a shared folder (no network) shows "Published by {you} on {date, time, zone}" and "Data published: {filters} · {n} of {m} rows", the KPI cards and charts as in the app; a month ticked in its filter row changes every chart; a bar lists the rows behind it; the Rows tab sorts by Cost and finds a row by a word; the theme switches to dark; on a phone it reads in one column; in Firefox the file is downloaded and Background jobs says so.
+
+**TC-OND-95 Publish an On-Demand Dashboard with tabs** — Req OND-73, OND-92, OND-93, OND-95, OND-97 — E2E `interactive-html.e2e.mjs` ("TC-OND-95: an On-Demand Dashboard over two table pages published with its filter row — each source cut, the tabs, the KPI tiles and the Rows of each source in the file"); browser check: a dashboard over CoNQ and a second page with two tabs, Department QRE ticked, published; the file shows both tabs, its KPI tiles open their tab, a Supplier ticked in its filter row changes only the blocks over that page; Rows of → each data source.
+
+**TC-OND-96 A schedule publishes with the filters saved with it** — Req OND-96, OND-78 — L1 `standalone-html.test.mjs` ("OND-96: a schedule keeps the filters saved with it, read back strictly (TC-OND-96)"); E2E `interactive-html.e2e.mjs` ("TC-OND-94: the Tool Owner publishes CoNQ cut to Q3 and QRE; the file holds only those rows and works offline — header, filter row, charts, drill-down, Rows search, phone"); browser check: the pop-up says "A scheduled run publishes the rows that pass the filters saved with the schedule …"; Save schedule shows "Saved with the schedule: {filters}."; the filter row changed afterwards, the next scheduled run still publishes with the saved filters (the file's header says so).
+
+**TC-OND-97 The viewer's size** — Req OND-98 — browser check (inspection): after `pnpm build:web`, `dist/standalone-viewer.js` and `dist/standalone-viewer.css` together are under 600 KB; a published file of CoNQ is that size plus its data; the main app's start-up chunks do not contain the viewer (it loads with the first publish).
 
 ### 6.29 Custom streams
 
@@ -1910,7 +1974,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-CHT-11 Dashboard blocks take the same options** — Req CHT-01, CHT-12, CHT-13 — L1 `chart-options.test.mjs` ("CHT-01, CHT-12, CHT-13: dashboard blocks take the same options — validated, written only when set, Pareto blocks, colours merged (TC-CHT-11)").
 
-**TC-CHT-12 The Display fieldset** — Req CHT-14, CHT-01, CHT-05, CHT-06 — browser check at 1440 px and 390 px, light and dark: ＋ Add chart / table and ＋ Add block… show Display under the measure with only the options of the type (Orientation for bars, Group dates by only with a Date column, no Show for a line); with Average chosen, Running total and Percent of total are disabled with "Only for Count of rows or Sum: …"; Vertical columns draw the bars as columns, stacked by the second field; every field fits at 390 px.
+**TC-CHT-12 The display options on the editor's tabs** — Req CHT-14, CHT-01, CHT-05, CHT-06 — browser check at 1440 px and 390 px, light and dark: ＋ Add chart / table and ＋ Add block… show Group dates by and Show on Data and the other display options on Format, only those of the type (Orientation for bars, Group dates by only with a Date column, no Show for a line); with Average chosen, Running total and Percent of total are disabled with "Only for Count of rows or Sum: …"; Vertical columns draw the bars as columns, stacked by the second field; every field fits at 390 px.
 
 **TC-CHT-13 The owner sizes charts for everyone: the Edit pop-up, Arrange sizes and the keyboard** — Req CHT-15, CHT-16, CHT-17, CHT-21, CHT-24, OND-61 — **UAT** — L1 `chart-resize.test.mjs` ("CHT-15, CHT-16: the presets — ⅓ / ½ / ⅔ / Full of a 6-column grid and Small / Medium / Large; v10 half and full read as before (TC-CHT-13)"); E2E `chart-resize.e2e.mjs` ("TC-CHT-13: the owner sets a chart to ⅔ × Large with its own axis names in the Edit pop-up and another to ⅓ with the keyboard in Arrange sizes — saved to Git; the page and chart ⋯ menus work with the keyboard"); UAT: as the owner of a table page with three charts open a chart's ⋯ → Edit…, set Width "Two thirds (⅔)", Height "Large" and an X axis name, Save — the chart takes ⅔ of the row and is taller for everyone, the X axis shows the new name; Arrange sizes, focus another chart's corner handle, ← and Enter — it takes ⅓, saved to Git; Done arranging; as a colleague see both sizes.
 
@@ -1944,7 +2008,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-CHT-28 KPI cards: Show as Card or Panel** — Req CHT-36, CHT-37 — L1 `chart-elements.test.mjs` ("CHT-36, CHT-37: a KPI is a card unless its owners show it as a panel — options.view validated, only for a KPI (TC-CHT-28)"); E2E `chart-elements.e2e.mjs` ("TC-CHT-31: KPI charts are a row of cards — the value never cut, the pop-up’s preview beside the form, no chart type above a chart"); E2E `insights-filters.e2e.mjs` ("TC-OND-40: the owner sets up a period and a Category filter; the viewer narrows every chart and a drill-down to Q1 and Scrap, the choice kept after a reload, Reset clears it"); browser check at 1440, 1280, 1024 and 390 px, light and dark: three KPIs are one row of cards above the charts (two rows at 1024 px when they do not fit), "1,234,567.89 EUR" is shown whole, a long measure takes two lines with "…" and its full text as tooltip; as a viewer the cards have no ⋯.
 
-**TC-CHT-29 The owner sets chart elements: a pie's outside labels and a bar chart's legend, gridlines, data table and trendline** — Req CHT-26, CHT-27, CHT-28, CHT-29, CHT-30, CHT-31, CHT-32, CHT-33, CHT-34 — **UAT** — L1 `chart-elements.test.mjs` ("CHT-28: label positions per type (Excel’s lists), the stacked fallback and the label text (TC-CHT-24)"); E2E `chart-elements.e2e.mjs` ("TC-CHT-29: the owner sets a pie’s data labels to Outside End with value and percentage, and a bar chart’s legend, gridlines, data table and trendline — saved to Git"); UAT: as the owner of CoNQ open a pie's ⋯ → Edit…, in Display → Chart elements set Data labels "On for everyone", Label position "Outside End" and tick Value and Percentage — the preview shows "3, 27%" outside the ring with leader lines; Save; open a bar chart's Edit…, set Legend "Right", tick Major horizontal and Data table, Trendline "Linear"; Save — the legend is beside the chart with "Linear (…)", the numbers are in a table under it, both are saved to Git; as a colleague see the same and switch the pie's Data labels off for yourself (still off after a reload, the owner's chart unchanged).
+**TC-CHT-29 The owner sets chart elements: a pie's outside labels and a bar chart's legend, gridlines, data table and trendline** — Req CHT-26, CHT-27, CHT-28, CHT-29, CHT-30, CHT-31, CHT-32, CHT-33, CHT-34 — **UAT** — L1 `chart-elements.test.mjs` ("CHT-28: label positions per type (Excel’s lists), the stacked fallback and the label text (TC-CHT-24)"); E2E `chart-elements.e2e.mjs` ("TC-CHT-29: the owner sets a pie’s data labels to Outside End with value and percentage, and a bar chart’s legend, gridlines, data table and trendline — saved to Git"); UAT: as the owner of CoNQ open a pie's ⋯ → Edit…, on the Elements tab set Data labels "On for everyone", Label position "Outside End" and tick Value and Percentage — the preview shows "3, 27%" outside the ring with leader lines; Save; open a bar chart's Edit…, set Legend "Right", tick Major horizontal and Data table, Trendline "Linear"; Save — the legend is beside the chart with "Linear (…)", the numbers are in a table under it, both are saved to Git; as a colleague see the same and switch the pie's Data labels off for yourself (still off after a reload, the owner's chart unchanged).
 
 **TC-CHT-30 A viewer sees the chart elements and keeps their own Data labels switch** — Req CHT-28, CHT-34, CHT-35 — E2E `chart-elements.e2e.mjs` ("TC-CHT-30: a viewer sees the owner’s chart elements and switches the data labels for themselves; charts without elements are drawn as before"); browser check on an On-Demand Dashboard: a block whose builders set data labels Off starts without labels for a new viewer, one without the setting starts with them on (DSH-06).
 
@@ -1952,7 +2016,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-CHT-32 Grouped bars: every measure side by side, Excel's clustered label positions, a trendline per series** — Req CHT-40, CHT-28, CHT-33 — L1 `chart-colors.test.mjs` ("CHT-40: grouped bars — the option validated, every measure allowed side by side, stacked still Count or Sum (TC-CHT-32)"); L1 `chart-colors.test.mjs` ("CHT-40: the layout of a group — bars side by side in the band, centred, never wider than the band (TC-CHT-32)"); E2E `chart-grid.e2e.mjs` ("TC-CHT-37: the owner arranges the charts on the grid — drags one to the top (the others shift, saved to Git), resizes one with the grid lines shown, moves one with the keyboard; grouped bars and an own colour are drawn"); browser check at 1440 px and 390 px, light and dark: a bar chart of the Average of Cost by Category with Stacked by Site says it cannot be stacked and offers Grouped; with Series "Grouped (side by side)" it draws one bar per site in each category, horizontal and as columns; Data labels at Center, Inside End, Inside Base and Outside End sit on each bar; Trendline Linear draws one dotted line per site; a click on one bar lists the rows of that category and site; Series "Stacked" draws the chart as before.
 
-**TC-CHT-33 Own colours per value, the contrast warning and readable labels** — Req CHT-41, CHT-42, CHT-09, CHT-13 — L1 `chart-colors.test.mjs` ("CHT-41: colour pins — a palette colour 1…5 or #rrggbb, validated when read, merged as one entry; old pins as before (TC-CHT-33)"); L1 `chart-colors.test.mjs` ("CHT-41: the WCAG non-text contrast check (3:1 against the chart background, light and dark) and the readable label colour (TC-CHT-33)"); E2E `chart-grid.e2e.mjs` ("TC-CHT-33: the owner picks an own colour with the hex field — the contrast warning for a pale colour, a wrong value refused"); browser check at 1440 px and 390 px, light and dark: in a chart's Display pick "Own colour…" for a value, choose a colour with the picker and type `#1f77b4` — the preview and, after Save, every chart of the page use it in both themes; type `#ffff66` — the warning names the light theme and the colour is kept; type `blue` — "Type a colour as #rrggbb" and the pin is unchanged; a page with pins 1…5 shows them as before; the same in the Dashboard block pop-up.
+**TC-CHT-33 Own colours per value, the contrast warning and readable labels** — Req CHT-41, CHT-42, CHT-09, CHT-13 — L1 `chart-colors.test.mjs` ("CHT-41: colour pins — a palette colour 1…5 or #rrggbb, validated when read, merged as one entry; old pins as before (TC-CHT-33)"); L1 `chart-colors.test.mjs` ("CHT-41: the WCAG non-text contrast check (3:1 against the chart background, light and dark) and the readable label colour (TC-CHT-33)"); E2E `chart-grid.e2e.mjs` ("TC-CHT-33: the owner picks an own colour with the hex field — the contrast warning for a pale colour, a wrong value refused"); browser check at 1440 px and 390 px, light and dark: on a chart's Format tab pick "Own colour…" for a value, choose a colour with the picker and type `#1f77b4` — the preview and, after Save, every chart of the page use it in both themes; type `#ffff66` — the warning names the light theme and the colour is kept; type `blue` — "Type a colour as #rrggbb" and the pin is unchanged; a page with pins 1…5 shows them as before; the same in the Dashboard block pop-up.
 
 **TC-CHT-34 The presets on the 12-column grid: sizes kept, minimums** — Req CHT-44, CHT-45, CHT-46 — L1 `chart-grid.test.mjs` ("CHT-44, CHT-45: the presets map onto the grid and draw as before — ⅓ ½ ⅔ Full = 4 6 8 12 columns, Small Medium Large = today’s heights in rows (TC-CHT-34)"); L1 `chart-resize.test.mjs` ("CHT-20: grid placement — a page nobody arranged is laid out as before: half-width charts two per row, a full-width one on its own row (TC-CHT-15)"); E2E `chart-resize.e2e.mjs` ("TC-CHT-13: the owner sets a chart to ⅔ × Large with its own axis names in the Edit pop-up and another to ⅓ with the keyboard in Arrange sizes — saved to Git; the page and chart ⋯ menus work with the keyboard"); browser check: before / after screenshots of CoNQ's Insights, an On-Demand Dashboard and Team overview → Streams at 1440 px — the same panels at the same places and sizes; a chart sized ⅔ × Large before the update is 8 × 12.
 
@@ -1961,6 +2025,36 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 **TC-CHT-36 The layout in the page and dashboard files, merged per chart, read by an older app** — Req CHT-50, CHT-47, CHT-48 — L1 `chart-grid.test.mjs` ("CHT-47, CHT-48, CHT-50: options.grid and a viewer’s size in grid units — written only when set, with the nearest presets for older apps; merged per chart (TC-CHT-36)"); browser check: a hand-edited page file with two charts at `{"x": 0, "y": 0, "w": 6, "h": 8}` and one at `{"x": 11, "w": 40}` shows them one under the other and the third clamped to full width; the same file in v10.1.0 shows the nearest presets (LIM-41).
 
 **TC-CHT-37 Arrange the charts on the grid: drag to move, resize, keyboard; a viewer resizes but cannot move** — Req CHT-43, CHT-47, CHT-48, CHT-49, CHT-46, CHT-40, CHT-41 — **UAT** — L1 `chart-grid.test.mjs` ("CHT-47: moving — dropped on a place, the others shift out of the way and gaps close; the keyboard moves one column or past a neighbour (TC-CHT-35)"); E2E `chart-grid.e2e.mjs` ("TC-CHT-37: the owner arranges the charts on the grid — drags one to the top (the others shift, saved to Git), resizes one with the grid lines shown, moves one with the keyboard; grouped bars and an own colour are drawn"); E2E `chart-grid.e2e.mjs` ("TC-CHT-37: a viewer resizes a chart on the grid for themselves but cannot move one; at 390 px every chart is full width without handle or grip"); UAT: as the owner of CoNQ (four charts) click **Arrange charts** — the grid's lines and each chart's size ("6 × 8") show; drag the third chart by ⠿ to the top left — the others move down while you drag; release — saved to Git, a colleague sees the new order after reloading; drag another chart's corner two columns narrower ("4 × 8") — saved; focus a chart's ⠿, → and Enter — it moves one column, announced; as a colleague resize a chart with its corner (it stays after a reload, Reset to default brings back the owner's size) and find no ⠿ and no Arrange charts; on a phone every chart is full width without handles; also on an On-Demand Dashboard (⋯ → Arrange on the page).
+
+**TC-CHT-38 KPI cards on the chart grid: the default 3 × 3 in a row above the charts, sizes written only when changed** — Req CHT-51, CHT-52 — L1 `chart-grid.test.mjs` ("CHT-51, CHT-52: KPI cards on the chart grid — 3 × 3 by default, in a row above the charts until moved, at least 2 × 3, written only when resized (TC-CHT-38)"); browser check at 1440 px: a page whose KPI cards nobody resized shows them four to a row above the charts, the charts two by two below them, as in v10.3.
+
+**TC-CHT-39 Match heights in a row** — Req CHT-55, CHT-56 — L1 `chart-grid.test.mjs` ("KB-89, CHT-55: Match heights in this row — every panel starting on the row takes the tallest height; the rows below shift (TC-CHT-39)"); browser check on an On-Demand Dashboard: ⋯ → Arrange on the page, a block's ⋯ → Match heights in this row — the blocks of its row take the tallest height, saved to the dashboard file.
+
+**TC-CHT-40 A ⋯ menu is never clipped** — Req CHT-53, OND-61, DSH-13 — L1 `chart-grid.test.mjs` ("KB-88: a ⋯ menu opens under its button, flips above near the bottom, stays inside the window (TC-CHT-40)"); E2E `chart-grid.e2e.mjs` ("TC-CHT-41: KPI cards — the ⋯ menu is never clipped, the header in one row; the owner resizes a card in Arrange charts (saved to Git), the number grows with it"); browser check at 1440 and 390 px, light and dark: a KPI card's, a chart panel's and an On-Demand Dashboard block's ⋯ menu each open fully on top of the page under ⋯, above it near the bottom of the window; ↓ / ↑ / Escape as before.
+
+**TC-CHT-41 KPI cards: a tidy header, sized by the owners and by each viewer, full width on a phone** — Req CHT-51, CHT-52, CHT-53, CHT-54, CHT-36, CHT-37 — **UAT** — E2E `chart-grid.e2e.mjs` ("TC-CHT-41: KPI cards — the ⋯ menu is never clipped, the header in one row; the owner resizes a card in Arrange charts (saved to Git), the number grows with it"); E2E `chart-grid.e2e.mjs` ("TC-CHT-41: a viewer resizes a KPI card for themselves (not written), Reset to default; at 390 px the cards are full width without a handle"); UAT: on CoNQ's Insights with two KPI cards (one with a long title and its own filters) — the title takes at most two lines with ⓘ beside it, "Filtered" and ⋯ on the right; open a card's ⋯ — every item is fully visible and can be chosen; as the owner Arrange charts and make a card wider and taller with its corner — saved to Git, the number grows, a colleague sees it after reloading; Size… offers 2 or 3 columns and 3…12 rows; as a colleague resize a card for yourself (Reset to default brings back the owner's size); on a phone every card is full width without a handle.
+
+**TC-CHT-42 Charts of one row line up; a height set shows; Match heights** — Req CHT-55, CHT-56, CHT-45, CHT-47 — **UAT** — E2E `chart-grid.e2e.mjs` ("TC-CHT-42: charts in one grid row line up, a resized height shows; the owner matches the heights of a row (Arrange charts and Size…)"); UAT: on CoNQ's Insights a bar chart of three bars beside a column chart — both equally tall; as a colleague make one two rows taller with its corner (↓ ↓) — it grows visibly; as the owner Arrange charts, make one taller, then the other's ⋯ → Match heights in this row — both equally tall, saved to Git; Size… → Height Small with "Same height as the other charts in its row" — both Small.
+
+**TC-CHT-50 Automatic sentences: the total, highest and lowest with the share, a threshold — currency, filters, empty data** — Req CHT-61, CHT-60, CHT-65 — L1 `narratives.test.mjs` ("CHT-61: the total, the highest and lowest category with its share — a Currency measure in one currency (TC-CHT-50)"); L1 `narratives.test.mjs` ("CHT-61: its own filters and the filter row narrow the sentences; no row counted is “nothing to report” (TC-CHT-50)"); L1 `narratives.test.mjs` ("CHT-61: above / below a threshold — the Group by values, or the total without one (TC-CHT-50)").
+
+**TC-CHT-51 Change vs the previous period and the biggest mover, counted outside the period chosen** — Req CHT-62 — L1 `narratives.test.mjs` ("CHT-62: the change against the previous period (month, quarter, year) — counted outside the period chosen (TC-CHT-51)"); browser check: on CoNQ with the filter row's period on Q4, a narrative with Change vs the previous period (Quarter) says "Q4 …, up …% vs Q3 …", not "nothing to compare with".
+
+**TC-CHT-52 Rules in order: every match or the first, the Else sentence, comparisons without a number** — Req CHT-63 — L1 `narratives.test.mjs` ("CHT-63: rules in order — every rule that matches or only the first, and the Else sentence (TC-CHT-52)").
+
+**TC-CHT-53 Placeholders as text, templates as plain text, the data embedded in the HTML file escaped** — Req CHT-64, CHT-67, CHT-69 — L1 `narratives.test.mjs` ("CHT-64: placeholders are replaced by text in one pass — markup stays text, unknown ones are dropped when stored (TC-CHT-53)").
+
+**TC-CHT-54 The narrative field validated, written in a fixed order, merged per insight; a Dashboard block; an unknown type dropped** — Req CHT-68 — L1 `narratives.test.mjs` ("CHT-68: the narrative field validated when read and written in a fixed order; older fields unchanged (TC-CHT-54)"); L1 `narratives.test.mjs` ("CHT-68: merged per insight (GIT-17) and as a Dashboard block; an older type list drops the block (LIM-50) (TC-CHT-54)"); browser check: a page file with a narrative opened in v10.3.0 shows the other charts without it (LIM-50).
+
+**TC-CHT-55 The editor's checks: what needs a Group by or a period, a number, a sentence; the type switch; ⓘ** — Req CHT-66, CHT-65 — L1 `narratives.test.mjs` ("CHT-66: the pop-up’s checks — sentences and rules that need a Group by or a period, a number, a sentence (TC-CHT-55)"); browser check at 1440 and 390 px, light and dark: in the chart pop-up and the block pop-up, type Narrative shows Group by, Period on, the sentence ticks (Change and Biggest mover disabled with the reason until a period is chosen), ＋ Add rule with If / Is / Value / Tone / Then show, ↑ ↓ and ✕, the Else field once a rule exists, and the Width; the Preview follows each change; the labels are not clipped and nothing overlaps.
+
+**TC-CHT-56 The owner adds a Narrative with the total, the highest category and a warning rule; the filter row changes it; the PDF includes it** — Req CHT-60, CHT-61, CHT-63, CHT-64, CHT-65, CHT-66, CHT-67 — **UAT** — E2E `narratives.e2e.mjs` ("TC-CHT-56: the owner adds a Narrative with the total, the highest category and a warning rule — saved to Git; the filter row changes its sentences; the PDF includes it"); UAT: as the owner of CoNQ (a Department, a Cost in EUR and a Found on column, a filter row on Found on and Department) click **＋ Add chart / table**, title "CoNQ summary", type **Narrative (text)**, Measure **Sum** of **Cost**, Group by **Department**; keep **Total** and **Highest category** ticked; **＋ Add rule**: If **Total** Is **>** Value **20000**, Tone **Warning**, Then show "CoNQ cost above budget: {value}"; Width **Full** — the Preview lists the three sentences, the last with a warning border and ⚠; **Add chart** — the page file in Git holds the narrative; the panel shows the sentences and ⓘ lists "Rule 1. If Sum of Cost > 20,000 …"; in the filter row pick Department **Design** — the total and the highest change, the warning is gone and the panel shows "Filtered"; **Export PDF…** — the print view lists the same sentences.
+
+**TC-CHT-57 A viewer reads a Narrative and a Dashboard Narrative block, the tone read out in words** — Req CHT-60, CHT-65, CHT-66 — E2E `narratives.e2e.mjs` ("TC-CHT-57: a viewer sees a Narrative and a Dashboard Narrative block read only, the tone read out in words"); browser check with a screen reader (NVDA or VoiceOver): each sentence is read with its tone first ("Warning: CoNQ cost above budget: …"), the icon is not read; the Dashboard block follows the period and the filter row as its charts do.
+
+**TC-CHT-58 The chart editor in tabs: opens on Data, the preview beside the tabs, arrow keys, a count on Elements, a filter error marks Filters and Save focuses it** — Req CHT-70, CHT-71, CHT-72, CHT-73, CHT-14, CHT-38, CHT-66 — **UAT** — L1 `chart-editor.test.mjs` ("CHT-70: the chart editor shows only the tabs the type takes — Narrative instead of Format and Elements, no Elements for a KPI or table, no Format for a Dashboard KPI (TC-CHT-58)", "CHT-71: each tab counts its settings changed from the defaults; a chart as it was made counts none (TC-CHT-58)", "CHT-72: an error belongs to its tab — the filters to Filters, the rest of the columns to Data — and Save opens the first tab with one (TC-CHT-58)", "CHT-70, CHT-73: both chart pop-ups use the one tab component — a tablist with the arrow keys — the preview beside it and the buttons under it (TC-CHT-58)"); E2E `chart-editor-tabs.e2e.mjs` ("TC-CHT-58: the chart editor opens on Data with the preview beside its tabs — arrow keys, a count on Elements, a filter error marks Filters and Save focuses it"); UAT: as the owner of CoNQ open a bar chart's ⋯ → **Edit…** — the pop-up opens on **Data** (Title, Type, Categories by, Stacked by, Measure, Show, Sort) with the Preview beside the tabs **Data · Filters · Format · Elements**; with the keyboard on a tab, ← → Home End move between them; on **Elements** set Legend **Bottom** — the tab reads "Elements (1)", the Preview shows the legend under the chart and Cancel / Save stay on screen; on **Filters** ＋ Add filter without ticking a value, go back to Data and press **Save** — Filters opens with a red marker, the reason above the buttons and its tooltip; tick a value — the marker goes; Save. A KPI shows Data · Filters · Format, a Narrative Data · Filters · Narrative; at 390 px the tabs scroll sideways and the Preview is under the form; light and dark theme.
+
+**TC-CHT-59 The Dashboard block pop-up in the same tabs: data source, period and tab on Data; a KPI tile only Data and Filters** — Req CHT-70, CHT-71, CHT-72, CHT-73 — E2E `chart-editor-tabs.e2e.mjs` ("TC-CHT-59: the Dashboard block pop-up has the same tabs — data source, period and tab on Data; a KPI tile only Data and Filters"); browser check at 1440 and 390 px, light and dark: ＋ Add block… on a dashboard with tabs shows Data · Filters for a KPI tile (Data source, Period filter on, Opens the tab on Data), Data · Filters · Format · Elements for a bar chart; Width Full on Format reads "Format (1)"; an empty title marks Data and Save to Git opens it; the block is saved as before.
 
 ## 7. Requirements coverage matrix
 
@@ -2241,7 +2335,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CAP-45 | TC-CAP-19 |
 | CAP-46 | TC-CAP-20 |
 | CAP-47 | TC-CAP-21 |
-| CAP-48 | TC-CAP-22 |
+| CAP-48 | TC-CAP-22, TC-CAP-31 (retired: see CAP-59) |
 | CAP-49 | TC-CAP-22 |
 | CAP-50 | TC-CAP-22 |
 | CAP-51 | TC-CAP-22, TC-CAP-23 |
@@ -2251,6 +2345,11 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CAP-55 | TC-CAP-27 |
 | CAP-56 | TC-CAP-28 |
 | CAP-57 | TC-CAP-22, TC-CAP-29 |
+| CAP-58 | TC-CAP-30 |
+| CAP-59 | TC-CAP-31 |
+| CAP-60 | TC-CAP-32 |
+| CAP-61 | TC-CAP-33 |
+| CAP-62 | TC-CAP-34 |
 | BAS-01…04 | TC-BAS-01 |
 | BAS-05…07 | TC-BAS-02 |
 | BAS-08…10 | TC-BAS-03 |
@@ -2267,6 +2366,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | GIT-21 | TC-GIT-13 |
 | GIT-22 | TC-GIT-14 |
 | GIT-23 | TC-GIT-15 |
+| GIT-24 | TC-GIT-16 |
 | GIT-19 | TC-GIT-12 |
 | GIT-17 (On-Demand pages) | TC-OND-05, TC-OND-11, TC-OND-17, TC-OND-22, TC-PGB-08, TC-DSH-04, TC-OND-41 |
 | GIT-05, GIT-07, GIT-11 | TC-GIT-03 |
@@ -2305,12 +2405,15 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | DOC-12 | TC-DOC-04 |
 | DOC-13 | TC-DOC-05 |
 | DOC-09…11 | TC-DOC-03 |
+| DOC-14 | TC-DOC-06 |
+| DOC-15 | TC-DOC-06 |
+| DOC-16 | TC-DOC-06 |
 | UI-01, UI-02 | TC-UI-01 |
 | UI-03, UI-04 | TC-INS-03 |
 | UI-05 | TC-UI-02 |
 | UI-06 | TC-UI-03 |
 | UI-07 | TC-UI-04 |
-| UI-08 | TC-UI-04 |
+| UI-08 | TC-UI-04, TC-UI-14 |
 | UI-09 | TC-UI-04 |
 | UI-10 | TC-UI-04, TC-UI-05 |
 | UI-11 | TC-UI-05 |
@@ -2322,6 +2425,10 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UI-17 | TC-UI-10 |
 | UI-18 | TC-UI-11 |
 | UI-19 | TC-UI-12 |
+| UI-20 | TC-UI-15, TC-UI-16, TC-UI-17 |
+| UI-21 | TC-UI-13, TC-UI-16 |
+| UI-22 | TC-UI-14, TC-UI-16 |
+| UI-23 | TC-UI-15, TC-UI-17 |
 | CI-01…04 | TC-INS-04, TC-CI-01 |
 | CI-05 | TC-UPD-01 |
 | CI-06 | TC-CI-02 |
@@ -2366,12 +2473,23 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | MYD-05 | TC-MYD-02 |
 | MYD-06 | TC-MYD-03, TC-MYD-04 |
 | MYD-07 | TC-MYD-04 |
-| MYD-08 | TC-MYD-04 |
+| MYD-08 | TC-MYD-04, TC-UI-17 |
 | MYD-09 | TC-MYD-03 |
 | MYD-10 | TC-MYD-05 |
 | MYD-11 | TC-MYD-05 |
 | MYD-12 | TC-MYD-05 |
 | MYD-13 | TC-MYD-06 |
+| MYD-14 | TC-MYD-07, TC-MYD-09 |
+| MYD-15 | TC-MYD-07, TC-MYD-08 |
+| MYD-16 | TC-MYD-07, TC-MYD-08 |
+| MYD-17 | TC-MYD-07, TC-MYD-08 |
+| MYD-18 | TC-MYD-07, TC-MYD-08 |
+| MYD-19 | TC-MYD-08 |
+| MYD-20 | TC-MYD-08 |
+| MYD-21 | TC-MYD-08 |
+| MYD-22 | TC-MYD-08 |
+| MYD-23 | TC-MYD-07, TC-MYD-09 |
+| MYD-24 | TC-MYD-07 |
 | HIS-01 | TC-HIS-01 |
 | HIS-02 | TC-HIS-02 |
 | HIS-03 | TC-HIS-02 |
@@ -2519,14 +2637,24 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | OND-70 | TC-OND-56, TC-OND-58, TC-OND-59 |
 | OND-71 | TC-OND-55, TC-OND-58 |
 | OND-72 | TC-OND-56, TC-OND-57, TC-OND-58 |
-| OND-73 | TC-OND-63, TC-OND-64 |
+| OND-73 | TC-OND-63, TC-OND-64, TC-OND-94, TC-OND-95 |
 | OND-74 | TC-OND-60, TC-OND-63 |
 | OND-75 | TC-OND-64 |
-| OND-76 | TC-OND-62, TC-OND-63 |
+| OND-76 | TC-OND-62, TC-OND-63, TC-OND-94 |
 | OND-77 | TC-OND-60, TC-OND-63 |
-| OND-78 | TC-OND-61, TC-OND-65 |
+| OND-78 | TC-OND-61, TC-OND-65, TC-OND-96 |
 | OND-79 | TC-OND-61, TC-OND-65 |
 | OND-80 | TC-OND-63 |
+| OND-90 | TC-OND-94 |
+| OND-91 | TC-OND-90, TC-OND-94 |
+| OND-92 | TC-OND-91, TC-OND-95 |
+| OND-93 | TC-OND-90, TC-OND-92, TC-OND-94, TC-OND-95 |
+| OND-94 | TC-OND-92, TC-OND-94 |
+| OND-95 | TC-OND-93, TC-OND-94, TC-OND-95 |
+| OND-96 | TC-OND-96 |
+| OND-97 | TC-OND-94, TC-OND-95 |
+| OND-98 | TC-OND-97 |
+| OND-99 | TC-OND-94 |
 | CON-103 | TC-OND-06, TC-OND-07, TC-OND-13 |
 | CON-104 | TC-CON-65 |
 | CON-105 | TC-CON-66 |
@@ -2587,7 +2715,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CHT-11 | TC-CHT-01, TC-CHT-02, TC-CHT-13 |
 | CHT-12 | TC-CHT-01, TC-CHT-02, TC-CHT-08, TC-CHT-11 |
 | CHT-13 | TC-CHT-03, TC-CHT-10, TC-CHT-11 |
-| CHT-14 | TC-CHT-01, TC-CHT-12 |
+| CHT-14 | TC-CHT-01, TC-CHT-12, TC-CHT-58 |
 | CHT-15 | TC-CHT-13, TC-CHT-14, TC-CHT-16, TC-CHT-20 |
 | CHT-16 | TC-CHT-13, TC-CHT-14, TC-CHT-16 |
 | CHT-17 | TC-CHT-13, TC-CHT-15 |
@@ -2611,7 +2739,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CHT-35 | TC-CHT-22, TC-CHT-23, TC-CHT-30 |
 | CHT-36 | TC-CHT-28 |
 | CHT-37 | TC-CHT-28, TC-CHT-31 |
-| CHT-38 | TC-CHT-31 |
+| CHT-38 | TC-CHT-31, TC-CHT-58 |
 | CHT-39 | TC-CHT-31 |
 | CHT-40 | TC-CHT-32, TC-CHT-37 |
 | CHT-41 | TC-CHT-33, TC-CHT-37 |
@@ -2624,6 +2752,26 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CHT-48 | TC-CHT-36, TC-CHT-37 |
 | CHT-49 | TC-CHT-35, TC-CHT-37 |
 | CHT-50 | TC-CHT-36 |
+| CHT-51 | TC-CHT-38, TC-CHT-41 |
+| CHT-52 | TC-CHT-38, TC-CHT-41 |
+| CHT-53 | TC-CHT-40, TC-CHT-41 |
+| CHT-54 | TC-CHT-41 |
+| CHT-55 | TC-CHT-39, TC-CHT-42 |
+| CHT-56 | TC-CHT-39, TC-CHT-42 |
+| CHT-60 | TC-CHT-50, TC-CHT-56, TC-CHT-57 |
+| CHT-61 | TC-CHT-50, TC-CHT-56 |
+| CHT-62 | TC-CHT-51 |
+| CHT-63 | TC-CHT-52, TC-CHT-56 |
+| CHT-64 | TC-CHT-53, TC-CHT-56 |
+| CHT-65 | TC-CHT-50, TC-CHT-55, TC-CHT-56, TC-CHT-57 |
+| CHT-66 | TC-CHT-55, TC-CHT-56, TC-CHT-57, TC-CHT-58 |
+| CHT-67 | TC-CHT-53, TC-CHT-56 |
+| CHT-68 | TC-CHT-54 |
+| CHT-69 | TC-CHT-53 |
+| CHT-70 | TC-CHT-58, TC-CHT-59 |
+| CHT-71 | TC-CHT-58, TC-CHT-59 |
+| CHT-72 | TC-CHT-58, TC-CHT-59 |
+| CHT-73 | TC-CHT-58, TC-CHT-59 |
 | IF-05 | TC-KPT-02 |
 | NFR-02 | TC-STO-01 |
 | NFR-03…05 | TC-DSK-02, TC-INS-01 |
@@ -2645,25 +2793,25 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-05 | TC-MON-07, TC-FET-11 |
 | UC-06 | TC-ATM-01…11, TC-ATM-21, TC-ATM-22, TC-ATM-23, TC-TWN-03, TC-CON-20, TC-CON-33, TC-CON-34, TC-CON-43, TC-BKL-30, TC-BKL-31, TC-BKL-32 |
 | UC-07 | TC-BKL-01…09, TC-BKL-34, TC-BKL-35, TC-BKL-36, TC-BKL-15, TC-BKL-16, TC-BKL-17, TC-BKL-18, TC-BKL-19, TC-BKL-20, TC-BKL-21, TC-BKL-22, TC-BKL-23, TC-BKL-24, TC-BKL-25, TC-BKL-26, TC-BKL-27, TC-BKL-28, TC-DPF-06, TC-NAV-36, TC-CON-23, TC-CON-25…27, TC-CON-29…32, TC-CON-35 |
-| UC-08 | TC-QV-01…05, TC-FET-07, TC-CON-08, TC-CON-11…16, TC-QV-08, TC-QV-09, TC-QV-10, TC-QV-11, TC-QV-12, TC-QV-13, TC-QV-14, TC-QV-15, TC-QV-16, TC-CON-37, TC-CON-38, TC-CON-39, TC-CON-40, TC-CON-41, TC-QV-18, TC-QV-19, TC-QV-20, TC-QV-21, TC-QV-22, TC-CON-42, TC-QV-41, TC-QV-42, TC-CON-61, TC-NAV-51, TC-QV-43, TC-QV-44, TC-QV-45, TC-QV-46, TC-STR-01…07 |
+| UC-08 | TC-QV-01…05, TC-FET-07, TC-CON-08, TC-CON-11…16, TC-QV-08, TC-QV-09, TC-QV-10, TC-QV-11, TC-QV-12, TC-QV-13, TC-QV-14, TC-QV-15, TC-QV-16, TC-CON-37, TC-CON-38, TC-CON-39, TC-CON-40, TC-CON-41, TC-QV-18, TC-QV-19, TC-QV-20, TC-QV-21, TC-QV-22, TC-CON-42, TC-QV-41, TC-QV-42, TC-CON-61, TC-NAV-51, TC-QV-43, TC-QV-44, TC-QV-45, TC-QV-46, TC-STR-01…07, TC-UI-13…16 |
 | UC-09 | TC-OV-11…15, TC-CAP-01, TC-CAP-02, TC-CAP-03, TC-CAP-08, TC-CAP-10, TC-CAP-11, TC-CAP-12, TC-CAP-13, TC-CAP-14, TC-CAP-15, TC-CAP-16, TC-CAP-17, TC-CAP-18, TC-CAP-19, TC-CAP-20, TC-CAP-21, TC-CAP-22, TC-CAP-23, TC-CAP-24, TC-CAP-25, TC-CAP-26, TC-CAP-27, TC-QV-17, TC-CON-21, TC-QV-10, TC-QV-11, TC-QV-21, TC-CHT-17, TC-CHT-19 |
 | UC-10 | TC-OV-11 (Months, Streams), TC-OV-13 |
 | UC-11 | TC-BAS-01…04 |
-| UC-12 | TC-GIT-01…04, TC-GIT-05, TC-GIT-06, TC-GIT-07, TC-GIT-08, TC-ACC-03…05, TC-GIT-09, TC-GIT-10, TC-GIT-11, TC-GIT-12, TC-GIT-13, TC-GIT-14, TC-GIT-15, TC-CON-62 |
+| UC-12 | TC-GIT-01…04, TC-GIT-05, TC-GIT-06, TC-GIT-07, TC-GIT-08, TC-ACC-03…05, TC-GIT-09, TC-GIT-10, TC-GIT-11, TC-GIT-12, TC-GIT-13, TC-GIT-14, TC-GIT-15, TC-GIT-16, TC-CON-62 |
 | UC-13 | TC-SNP-01…03 |
-| UC-14 | TC-SET-01…07, TC-CAP-02, TC-CAP-03, TC-NAV-34, TC-CAP-07, TC-CAP-09 |
+| UC-14 | TC-SET-01…07, TC-CAP-02, TC-CAP-03, TC-NAV-34, TC-CAP-07, TC-CAP-09, TC-CAP-30, TC-CAP-31, TC-CAP-32, TC-CAP-33, TC-CAP-34, TC-UI-15…17 |
 | UC-15 | TC-STO-01…04, TC-SNP-04 |
 | UC-16 | TC-UPD-01, TC-UPD-02 |
 | UC-17 | TC-DSK-01…03, TC-INS-02 |
 | UC-18 | TC-SMP-01, TC-ATM-06, TC-GIT-04, TC-SMP-02 |
 | UC-19 | TC-INS-04, TC-CI-01, TC-CI-02, TC-CI-03, TC-CI-07, TC-CI-08, TC-DOC-03 |
-| UC-20 | TC-DOC-01, TC-DOC-02, TC-DOC-03 |
+| UC-20 | TC-DOC-01, TC-DOC-02, TC-DOC-03, TC-DOC-04, TC-DOC-05, TC-DOC-06 |
 | UC-21 | TC-SCR-01 |
-| UC-22 | TC-ACC-01, TC-ACC-02, TC-CON-57, TC-CON-58, TC-CON-63, TC-CON-64, TC-CON-65, TC-CON-66, TC-PGB-06, TC-GIT-15 |
+| UC-22 | TC-ACC-01, TC-ACC-02, TC-CON-57, TC-CON-58, TC-CON-63, TC-CON-64, TC-CON-65, TC-CON-66, TC-PGB-06, TC-GIT-15, TC-MYD-07 |
 | UC-23 | TC-QEM-01…08 |
 | UC-24 | TC-PCK-01…10 |
 | UC-25 | TC-WSP-01…07 |
-| UC-26 | TC-MYD-01…05, TC-QV-31, TC-QV-32, TC-QV-33, TC-QV-34, TC-QV-35, TC-QV-36, TC-QV-37, TC-MYD-06 |
+| UC-26 | TC-MYD-01…05, TC-QV-31, TC-QV-32, TC-QV-33, TC-QV-34, TC-QV-35, TC-QV-36, TC-QV-37, TC-MYD-06, TC-UI-17, TC-MYD-07, TC-MYD-08, TC-MYD-09 |
 | UC-27 | TC-HIS-01…11 |
 | UC-28 | TC-ACT-01…12, TC-BKL-16, TC-BKL-17, TC-BKL-18, TC-ATM-21 |
 | UC-29 | TC-OVW-01…03 |
@@ -2674,8 +2822,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-34 | TC-EPS-01, TC-EPS-02, TC-EPS-03, TC-EPS-04, TC-EPS-05, TC-EPS-06 |
 | UC-35 | TC-ADM-01, TC-ADM-02, TC-ADM-03 |
 | UC-36 | TC-STT-01, TC-STT-02, TC-STT-03 |
-| UC-37 | TC-OND-01…34, TC-OND-40…65, TC-CHT-01…37 |
-| UC-38 | TC-PGB-01…16, TC-DSH-01…16, TC-CHT-02, TC-CHT-11, TC-CHT-13…27, TC-CHT-29…37 |
+| UC-37 | TC-OND-01…34, TC-OND-40…65, TC-OND-90…97, TC-CHT-01…42, TC-CHT-50…59 |
+| UC-38 | TC-PGB-01…16, TC-DSH-01…16, TC-CHT-02, TC-CHT-11, TC-CHT-13…27, TC-CHT-29…37, TC-CHT-39, TC-CHT-40, TC-CHT-42, TC-CHT-50…57, TC-CHT-59 |
 
 ## 8. Result record
 

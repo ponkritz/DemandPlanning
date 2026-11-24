@@ -9,31 +9,53 @@ import { clampSize, gridColumns, minSize, type GridBox, type GridKind, type Grid
 // later, or every chart of a page nobody arranged) follows the others in the order of the page, left to right, like
 // the flow of before; so a page nobody arranged is laid out exactly as before (two half-width charts per row).
 
-export interface GridEntry { id: string; kind: GridKind; size: GridSize; box?: GridBox }
-export type Layout = Record<string, GridBox>
+// top (CHT-51): a KPI card — without a place it goes in the row(s) of cards above every other panel, as before.
+export interface GridEntry { id: string; kind: GridKind; size: GridSize; box?: GridBox; top?: boolean }
+// card (CHT-51): the box of a KPI card — the rows its cards take at the top (the "card band") are kept for cards: a chart
+// below them never moves up beside them by compaction, only when the owners drop it there.
+export type LayoutBox = GridBox & { card?: boolean }
+export type Layout = Record<string, LayoutBox>
+type Item = { id: string; x: number; key: number; w: number; h: number; card?: boolean }
 export const overlaps = (a: GridBox, b: GridBox) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
 const bottomOf = (boxes: GridBox[]) => boxes.reduce((all, box) => Math.max(all, box.y + box.h), 0)
 
 // Where a panel wanted at row `from` goes: below every placed panel it would overlap there, then up as far as it can
 // without overlapping one (it never jumps over a panel above it, so the reading order is kept).
-function settle(placed: GridBox[], x: number, from: number, w: number, h: number): number {
-  let y = Math.max(0, Math.ceil(from))
+// `floor`: the first row it may take (below the cards of CHT-51).
+function settle(placed: GridBox[], x: number, from: number, w: number, h: number, floor = 0): number {
+  let y = Math.max(floor, Math.ceil(from))
   for (;;) {
     const hit = placed.filter((box) => overlaps(box, { x, y, w, h }))
     if (!hit.length) break
     y = Math.max(...hit.map((box) => box.y + box.h))
   }
-  while (y > 0 && !placed.some((box) => overlaps(box, { x, y: y - 1, w, h }))) y -= 1
+  while (y > floor && !placed.some((box) => overlaps(box, { x, y: y - 1, w, h }))) y -= 1
   return y
 }
 // Compaction of panels with a wanted place (`key`: the row they sort by; x their column), in reading order.
-export function compact(items: { id: string; x: number; key: number; w: number; h: number }[], order: string[] = []): Layout {
+// CHT-51: the card band — the rows of the KPI cards that start at the top, one under the other — takes no chart that
+// wants a place below it (a chart dropped into it stays there).
+export function compact(items: Item[], order: string[] = [], floor = 0): Layout {
   const rank = (id: string) => { const at = order.indexOf(id); return at < 0 ? order.length : at }
   const sorted = [...items].sort((a, b) => a.key - b.key || a.x - b.x || rank(a.id) - rank(b.id))
+  // The band: the cards from the top down while they touch it; a chart that starts at or below the bottom of one of
+  // them is "below the cards" and stays below the whole band.
+  let band = 0, below = Infinity
+  for (const item of sorted) if (item.card && item.key <= band) { band = Math.max(band, Math.ceil(item.key) + item.h); below = Math.min(below, Math.ceil(item.key) + item.h) }
   const placed: GridBox[] = []
   const out: Layout = {}
   for (const item of sorted) {
-    const box = { x: item.x, y: settle(placed, item.x, item.key, item.w, item.h), w: item.w, h: item.h }
+    const low = floor + (!item.card && band && item.key >= below ? band : 0)
+    let box: LayoutBox = { x: item.x, y: settle(placed, item.x, item.key + floor, item.w, item.h, low), w: item.w, h: item.h }
+    // A card of the band pushed down by a wider neighbour first tries the next free place to the right in its row.
+    const row = Math.max(floor, Math.ceil(item.key))
+    if (item.card && item.key < band && box.y > row) {
+      for (let x = 0; x + item.w <= gridColumns; x += 1) {
+        const probe = { x, y: row, w: item.w, h: item.h }
+        if (x >= item.x && !placed.some((other) => overlaps(other, probe))) { box = probe; break }
+      }
+    }
+    if (item.card) box.card = true
     placed.push(box); out[item.id] = box
   }
   return out
@@ -72,10 +94,12 @@ export function packLayout(entries: GridEntry[], cols = gridColumns): Layout {
   const placedItems = sized.filter((entry) => entry.box).map((entry) => {
     const box = entry.box!
     const x = Math.max(0, Math.min(cols - entry.size.w, Math.floor(box.x / scale)))
-    return { id: entry.id, x, key: box.y, w: entry.size.w, h: entry.size.h }
+    return { id: entry.id, x, key: box.y, w: entry.size.w, h: entry.size.h, card: entry.top }
   })
-  const layout = compact(placedItems, order)
-  const rest = flow(sized.filter((entry) => !entry.box).map((entry) => ({ id: entry.id, ...entry.size })), Object.values(layout), cols)
+  // CHT-51: KPI cards without a place first, in their own row(s) at the top; the arranged panels below them.
+  const cards = Object.fromEntries(Object.entries(flow(sized.filter((entry) => !entry.box && entry.top).map((entry) => ({ id: entry.id, ...entry.size })), [], cols)).map(([id, box]) => [id, { ...box, card: true }]))
+  const layout = { ...cards, ...compact(placedItems, order, layoutRows(cards)) }
+  const rest = flow(sized.filter((entry) => !entry.box && !entry.top).map((entry) => ({ id: entry.id, ...entry.size })), Object.values(layout), cols)
   if (cols === 1) {
     // A phone: one column in the reading order of the full grid.
     const all = packLayout(entries)
@@ -93,8 +117,8 @@ export function movePanel(layout: Layout, id: string, x: number, y: number, cols
   const box = layout[id]
   if (!box) return layout
   const items = Object.entries(layout).map(([key, entry]) => key === id
-    ? { id: key, x: Math.max(0, Math.min(cols - entry.w, Math.round(x))), key: Math.max(0, y) - 0.5, w: entry.w, h: entry.h }
-    : { id: key, x: entry.x, key: entry.y, w: entry.w, h: entry.h })
+    ? { id: key, x: Math.max(0, Math.min(cols - entry.w, Math.round(x))), key: Math.max(0, y) - 0.5, w: entry.w, h: entry.h, card: entry.card }
+    : { id: key, x: entry.x, key: entry.y, w: entry.w, h: entry.h, card: entry.card })
   return compact(items)
 }
 // CHT-47: the keyboard's move (Shift + arrows): ← / → one column; ↑ / ↓ past the panel above or below it (gaps close
@@ -115,7 +139,7 @@ export function stepMove(layout: Layout, id: string, key: string, cols = gridCol
     return above ? movePanel(layout, id, box.x, above.y, cols) : layout
   }
   const below = others.filter((other) => other.y > box.y || (other.y === box.y && other.x > box.x)).sort((a, b) => a.y - b.y)[0]
-  return below ? compact(Object.entries(layout).map(([key2, entry]) => ({ id: key2, x: entry.x, key: key2 === id ? below.y + 0.5 : entry.y, w: entry.w, h: entry.h }))) : layout
+  return below ? compact(Object.entries(layout).map(([key2, entry]) => ({ id: key2, x: entry.x, key: key2 === id ? below.y + 0.5 : entry.y, w: entry.w, h: entry.h, card: entry.card }))) : layout
 }
 // CHT-43: a panel resized — the others below or beside it shift out of its way; gaps close upward.
 export function resizePanel(layout: Layout, id: string, size: GridSize, cols = gridColumns): Layout {
@@ -123,10 +147,20 @@ export function resizePanel(layout: Layout, id: string, size: GridSize, cols = g
   if (!box) return layout
   const w = Math.min(cols, size.w)
   const items = Object.entries(layout).map(([key, entry]) => key === id
-    ? { id: key, x: Math.max(0, Math.min(cols - w, entry.x)), key: entry.y - 0.5, w, h: size.h }
-    : { id: key, x: entry.x, key: entry.y, w: entry.w, h: entry.h })
+    ? { id: key, x: Math.max(0, Math.min(cols - w, entry.x)), key: entry.y - 0.5, w, h: size.h, card: entry.card }
+    : { id: key, x: entry.x, key: entry.y, w: entry.w, h: entry.h, card: entry.card })
   return compact(items)
 }
 // The panels whose place or size differs between two layouts (what an owner's change writes).
 export const changedPanels = (before: Layout, after: Layout) => Object.keys(after).filter((id) => { const a = before[id], b = after[id]; return !a || a.x !== b.x || a.y !== b.y || a.w !== b.w || a.h !== b.h })
-export const layoutRows = (layout: Layout) => bottomOf(Object.values(layout))
+export function layoutRows(layout: Layout) { return bottomOf(Object.values(layout)) }
+// KB-89, CHT-55: the panels that start on the same grid row as `id` (the row it heads), it included.
+export const rowOf = (layout: Layout, id: string) => { const box = layout[id]; return box ? Object.keys(layout).filter((key) => layout[key].y === box.y) : [] }
+// KB-89, CHT-55: Match heights in this row — every panel starting on the row of `id` takes the tallest height among
+// them (or `h` when given); the others shift out of the way, gaps close upward.
+export function matchRowHeights(layout: Layout, id: string, h?: number): Layout {
+  const row = rowOf(layout, id)
+  if (!row.length) return layout
+  const tallest = h ?? Math.max(...row.map((key) => layout[key].h))
+  return compact(Object.entries(layout).map(([key, entry]) => ({ id: key, x: entry.x, key: entry.y, w: entry.w, h: row.includes(key) ? tallest : entry.h, card: entry.card })))
+}

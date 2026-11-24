@@ -13,18 +13,25 @@ export function useColumnWidths(table: string, defaultWrap = false) {
   const [wrap, setWrapState] = useState(() => { try { const saved = localStorage.getItem(wrapKey(table)); return saved == null ? defaultWrap : saved === '1' } catch { return defaultWrap } })
   const setWrap = (next: boolean) => { setWrapState(next); try { localStorage.setItem(wrapKey(table), next ? '1' : '0') } catch { /* session only */ } }
   const save = (next: Record<string, number>) => { setWidths(next); try { localStorage.setItem(storageKey(table), JSON.stringify(next)) } catch { /* session only */ } }
-  const style = (column: string): CSSProperties | undefined => widths[column] ? { width: widths[column], minWidth: widths[column], maxWidth: widths[column] } : undefined
-  const handle = (column: string, label = column) => <span role="separator" aria-orientation="vertical" aria-label={`Resize ${label} column`} title="Drag to resize; double-click to reset" className="col-resize"
-    onDoubleClick={() => { const next = { ...widths }; delete next[column]; save(next) }}
+  const style = (column: string) => widthStyle(widths, column)
+  const handle = (column: string, label = column) => resizeHandle({ column, label, widths, onLive: setWidths, onDone: save })
+  const wrapToggle = <label className="check wrap-toggle"><input type="checkbox" checked={wrap} onChange={(event) => setWrap(event.target.checked)} />Wrap text</label>
+  return { style, handle, reset: () => save({}), resized: Object.keys(widths).length > 0, wrap, setWrap, tableClass: `resizable ${wrap ? 'wrap' : 'no-wrap'}`, wrapToggle }
+}
+
+export const widthStyle = (widths: Record<string, number>, column: string): CSSProperties | undefined => widths[column] ? { width: widths[column], minWidth: widths[column], maxWidth: widths[column] } : undefined
+// A heading's resize handle: drag to size the column (onLive while dragging, onDone at the end); double-click returns it
+// to its automatic width.
+export function resizeHandle({ column, label = column, widths, onLive, onDone }: { column: string; label?: string; widths: Record<string, number>; onLive: (widths: Record<string, number>) => void; onDone: (widths: Record<string, number>) => void }) {
+  return <span role="separator" aria-orientation="vertical" aria-label={`Resize ${label} column`} title="Drag to resize; double-click to reset" className="col-resize"
+    onDoubleClick={() => { const next = { ...widths }; delete next[column]; onDone(next) }}
     onPointerDown={(event: PointerEvent<HTMLSpanElement>) => {
       event.preventDefault(); event.stopPropagation()
       const heading = event.currentTarget.parentElement!
       const startX = event.clientX, startWidth = heading.getBoundingClientRect().width
       let latest = widths
-      const move = (moved: globalThis.PointerEvent) => { latest = { ...widths, [column]: Math.max(minWidth, Math.round(startWidth + moved.clientX - startX)) }; setWidths(latest) }
-      const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); save(latest) }
+      const move = (moved: globalThis.PointerEvent) => { latest = { ...widths, [column]: Math.max(minWidth, Math.round(startWidth + moved.clientX - startX)) }; onLive(latest) }
+      const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); onDone(latest) }
       window.addEventListener('pointermove', move); window.addEventListener('pointerup', up)
     }} />
-  const wrapToggle = <label className="check wrap-toggle"><input type="checkbox" checked={wrap} onChange={(event) => setWrap(event.target.checked)} />Wrap text</label>
-  return { style, handle, reset: () => save({}), resized: Object.keys(widths).length > 0, wrap, setWrap, tableClass: `resizable ${wrap ? 'wrap' : 'no-wrap'}`, wrapToggle }
 }

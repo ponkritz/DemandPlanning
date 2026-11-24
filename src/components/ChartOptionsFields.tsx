@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { additive, cleanOptions, hasOptions, maxAxisTitle, paletteSize, type ChartOptions, type ColorPin, type ColorPins, type DateGroup, type Insight, type OnDemandPage } from '../onDemand'
 import { contrastWarning, normalizeHex, pinColor, pinHex } from '../chartColors'
 import { autoAxisTitles, dateGroupLabels, limitsFor } from '../onDemandInsights'
@@ -7,7 +7,8 @@ import { SizeFields } from './ChartSize'
 import { factoryOf, kindOf, sizeFromOptions, withSizeOptions } from '../chartSize'
 import { chartKind, contentLabels, contentsFor, defaultContent, defaultGridlines, defaultLegend, defaultPosition, gridlineKeys, gridlineLabels, labelPositions, legendLabels, legendPositions, positionLabels, resolveElements, trendlineFor, withElement, type ChartElements, type ChartKind, type Gridline, type LabelContent, type LabelPosition, type LegendPosition } from '../chartElements'
 
-// CHT-01…CHT-11, CHT-15, CHT-16 The Display options of a chart, the same in the Insights pop-up and the Dashboard block pop-up: only the
+// CHT-01…CHT-11, CHT-15, CHT-16 The Display options of a chart, the same in the Insights pop-up and the Dashboard block pop-up,
+// in three parts for the editor's tabs (CHT-70): Data (Group dates by, Show), Format, Elements. Only the
 // options the chosen type takes are shown, each change validated as the file is (cleanOptions); an option that does not
 // fit the measure is shown disabled with the reason (CON-102 style). Colour pins (CHT-09) are the page's or dashboard's,
 // for the values of the coloured Dropdown / Multi-select column.
@@ -15,7 +16,7 @@ import { chartKind, contentLabels, contentsFor, defaultContent, defaultGridlines
 const tops: { value: string; label: string }[] = [{ value: '5', label: 'Top 5 + Other' }, { value: '10', label: 'Top 10 + Other' }, { value: '15', label: 'Top 15 + Other' }, { value: '20', label: 'Top 20 + Other' }, { value: 'all', label: 'All categories' }]
 const notAdditive = 'Only for Count of rows or Sum: an average, minimum, maximum or distinct count does not add up.'
 
-export function ChartOptionsFields({ page, insight, pins, onOptions, onPins, scope = 'page' }: { page: OnDemandPage; insight: Insight; pins: ColorPins | undefined; onOptions: (options: ChartOptions | undefined) => void; onPins: (pins: ColorPins | undefined) => void; scope?: 'page' | 'dashboard' }) {
+export function ChartOptionsFields({ page, insight, pins, onOptions, onPins, scope = 'page', part }: { page: OnDemandPage; insight: Insight; pins: ColorPins | undefined; onOptions: (options: ChartOptions | undefined) => void; onPins: (pins: ColorPins | undefined) => void; scope?: 'page' | 'dashboard'; part: 'data' | 'format' | 'elements' }) {
   const options = insight.options ?? {}
   const [targetText, setTargetText] = useState(options.target ? String(options.target.value) : '')
   const type = insight.type
@@ -46,7 +47,31 @@ export function ChartOptionsFields({ page, insight, pins, onOptions, onPins, sco
   const money = column(insight.value)?.type === 'currency' && insight.measure !== 'count' && insight.measure !== 'distinct'
   // A dashboard's KPI tile sits in the tile row: nothing to choose.
   if (type === 'kpi' && scope === 'dashboard') return null
-  return <fieldset className="od-display"><legend>Display <Info label="Display">How the chart is drawn — nothing here changes which rows are counted. Without a choice the chart looks as before: horizontal bars, dates by month, {usual ? `the ${usual} largest categories and “Other”` : 'every category'}, the values as measured, half width and medium height. The width and height set here are everyone’s; each viewer may still resize a chart for themselves.</Info></legend>
+  // CHT-70: the Data tab takes the grouping of dates and Show (Top N); the rest are the Format and Elements tabs.
+  if (part === 'data') return <>
+    {dated && <label>Group dates by
+      <select aria-label="Group dates by" value={options.dateGroup ?? 'month'} onChange={(event) => set({ dateGroup: event.target.value === 'month' ? undefined : event.target.value as DateGroup })}>
+        {(Object.keys(dateGroupLabels) as DateGroup[]).map((grain) => <option key={grain} value={grain}>{dateGroupLabels[grain].label}</option>)}
+      </select>
+    </label>}
+    {(type === 'bar' || type === 'pie' || type === 'pareto' || type === 'table') && <label>Show
+      <select aria-label="Show" value={options.top ? String(options.top) : ''} onChange={(event) => set({ top: event.target.value === '' ? undefined : event.target.value === 'all' ? 'all' : Number(event.target.value) })}>
+        <option value="">{usual ? `As usual (top ${usual} + Other)` : 'As usual (all categories)'}</option>
+        {tops.map((entry) => <option key={entry.value} value={entry.value}>{entry.label}</option>)}
+      </select>
+      <small>The largest categories by the measure; the rest (with “(none)”) summed as “Other”, last.</small>
+    </label>}
+  </>
+  if (part === 'elements') {
+    // CHT-26…CHT-35: Excel's chart elements, only those the chart type takes; CHT-24 the axis names typed beside them.
+    if (!kind) return null
+    const names = (type === 'bar' || type === 'line' || type === 'pareto') ? <div className="form-row">
+      <label>X axis name (optional)<input aria-label="X axis name" maxLength={maxAxisTitle} value={xText} placeholder={axes.x} onChange={(event) => { setXText(event.target.value); set({ xTitle: event.target.value || undefined }) }} /></label>
+      <label>Y axis name (optional)<input aria-label="Y axis name" maxLength={maxAxisTitle} value={yText} placeholder={axes.y} onChange={(event) => { setYText(event.target.value); set({ yTitle: event.target.value || undefined }) }} /></label>
+    </div> : null
+    return <ElementsFields kind={kind} stacked={Boolean(insight.second) && options.grouping !== 'grouped'} percent={Boolean(options.percent)} money={money} elements={options.elements} names={names} onChange={(elements) => set({ elements })} />
+  }
+  return <fieldset className="od-display"><legend>Format <Info label="Format">How the chart is drawn — nothing here changes which rows are counted. Without a choice the chart looks as before: horizontal bars, the values as measured, half width and medium height. The width and height set here are everyone’s; each viewer may still resize a chart for themselves.</Info></legend>
     {type === 'bar' && <label>Orientation
       <select aria-label="Orientation" value={options.orientation ?? 'horizontal'} onChange={(event) => set({ orientation: event.target.value === 'vertical' ? 'vertical' : undefined })}>
         <option value="horizontal">Horizontal bars{insight.second ? ' (stacked)' : ''}</option>
@@ -61,29 +86,12 @@ export function ChartOptionsFields({ page, insight, pins, onOptions, onPins, sco
       </select>
       <small>{options.grouping === 'grouped' ? 'One bar per value side by side: any measure (Average, Minimum, Maximum too).' : 'Stacked bars add their parts up: Count of rows or Sum only.'}</small>
     </label>}
-    {dated && <label>Group dates by
-      <select aria-label="Group dates by" value={options.dateGroup ?? 'month'} onChange={(event) => set({ dateGroup: event.target.value === 'month' ? undefined : event.target.value as DateGroup })}>
-        {(Object.keys(dateGroupLabels) as DateGroup[]).map((grain) => <option key={grain} value={grain}>{dateGroupLabels[grain].label}</option>)}
-      </select>
-    </label>}
-    {(type === 'bar' || type === 'pie' || type === 'pareto' || type === 'table') && <label>Show
-      <select aria-label="Show" value={options.top ? String(options.top) : ''} onChange={(event) => set({ top: event.target.value === '' ? undefined : event.target.value === 'all' ? 'all' : Number(event.target.value) })}>
-        <option value="">{usual ? `As usual (top ${usual} + Other)` : 'As usual (all categories)'}</option>
-        {tops.map((entry) => <option key={entry.value} value={entry.value}>{entry.label}</option>)}
-      </select>
-      <small>The largest categories by the measure; the rest (with “(none)”) summed as “Other”, last.</small>
-    </label>}
     {(type === 'bar' || type === 'line') && <label className="check" title={adds ? undefined : notAdditive}><input type="checkbox" disabled={!adds} checked={Boolean(options.cumulative)} onChange={(event) => set({ cumulative: event.target.checked || undefined })} />Running total</label>}
     {(type === 'bar' || type === 'line' || type === 'table') && <label className="check" title={adds ? undefined : notAdditive}><input type="checkbox" disabled={!adds} checked={Boolean(options.percent)} onChange={(event) => set({ percent: event.target.checked || undefined })} />Percent of total</label>}
     {(type === 'bar' || type === 'line' || type === 'table') && !adds && <small>{notAdditive}</small>}
     {(type === 'bar' || type === 'line' || type === 'pareto') && <div className="form-row">
       <label>Target line (optional)<input aria-label="Target line value" type="number" inputMode="decimal" value={targetText} placeholder="e.g. 1000" onChange={(event) => setTarget(event.target.value)} /></label>
       <label>Its label (optional)<input aria-label="Target line label" maxLength={40} value={options.target?.label ?? ''} disabled={!options.target} title={options.target ? undefined : 'Give the target a value first.'} placeholder="e.g. Budget" onChange={(event) => setTarget(targetText, event.target.value)} /></label>
-    </div>}
-    {/* CHT-24: the axis titles (charts with axes only); empty = the automatic title, shown as the placeholder. */}
-    {(type === 'bar' || type === 'line' || type === 'pareto') && <div className="form-row">
-      <label>X axis name (optional)<input aria-label="X axis name" maxLength={maxAxisTitle} value={xText} placeholder={axes.x} onChange={(event) => { setXText(event.target.value); set({ xTitle: event.target.value || undefined }) }} /></label>
-      <label>Y axis name (optional)<input aria-label="Y axis name" maxLength={maxAxisTitle} value={yText} placeholder={axes.y} onChange={(event) => { setYText(event.target.value); set({ yTitle: event.target.value || undefined }) }} /></label>
     </div>}
     {/* CHT-36: a KPI as a card in the Insights tab's card row (the default) or as a chart panel. */}
     {type === 'kpi' && scope === 'page' && <label>Show as
@@ -92,10 +100,8 @@ export function ChartOptionsFields({ page, insight, pins, onOptions, onPins, sco
         <option value="panel">Panel (a chart panel)</option>
       </select>
     </label>}
-    {/* CHT-26…CHT-35: Excel's chart elements, only those the chart type takes. */}
-    {kind && <ElementsFields kind={kind} stacked={Boolean(insight.second) && options.grouping !== 'grouped'} percent={Boolean(options.percent)} money={money} elements={options.elements} onChange={(elements) => set({ elements })} />}
     {/* CHT-15, CHT-16: the owner's size for everyone (each viewer may still resize the chart for themselves). */}
-    {type === 'kpi' && scope === 'page' && options.view !== 'panel' ? <small>A card takes its place in the row of KPI cards: no width or height to set.</small> : <SizeFields size={current} kind={gridKind} heightReason={type === 'kpi' || type === 'table' ? 'A KPI or a summary table takes the height of its content.' : ''}
+    {type === 'kpi' && scope === 'page' && options.view !== 'panel' ? <small>A card sits in the row of KPI cards above the charts until it is moved; its size is set with Size… in its ⋯ menu, in Arrange charts or with its corner handle.</small> : <SizeFields size={current} kind={gridKind} heightReason={type === 'kpi' || type === 'table' ? 'A KPI or a summary table takes the height of its content.' : ''}
       onChange={(size) => onOptions(cleanOptions(type, insight.measure, withSizeOptions(options, size, factoryOf(gridKind), Boolean(options.size) || size.h === current.h, gridKind)))} />}
     {values.length > 0 && <div className="od-colors" role="group" aria-label={`Colours of ${colored!.name}`}>
       <small>Colours of “{colored!.name}” — the same in every chart of this {scope}; “Default” keeps the palette order. Colour 1…5 follow the light and dark theme; an own colour (the picker or #rrggbb) is the same in both.</small>
@@ -134,10 +140,10 @@ function ColorPick({ value, pin, onPin }: { value: string; pin: ColorPin | undef
   </div>
 }
 
-// CHT-34 The "Chart elements" group of the Display fieldset, modelled on Excel's Chart Elements: chart heading (Excel's
+// CHT-34 The "Chart elements" group (the editor's Elements tab, CHT-70), modelled on Excel's Chart Elements: chart heading (Excel's
 // Chart Title), axes, axis names (Axis Titles — named so as not to clash with the pop-up's Title field), data labels (on / off for everyone, position, contents, number format), data table, gridlines, legend and
 // trendline — only those the chart type takes; each control shows today's look until the owner changes it.
-function ElementsFields({ kind, stacked, percent, money, elements, onChange }: { kind: ChartKind; stacked: boolean; percent: boolean; money: boolean; elements: ChartElements | undefined; onChange: (elements: ChartElements | undefined) => void }) {
+function ElementsFields({ kind, stacked, percent, money, elements, names, onChange }: { kind: ChartKind; stacked: boolean; percent: boolean; money: boolean; elements: ChartElements | undefined; names: ReactNode; onChange: (elements: ChartElements | undefined) => void }) {
   const el = resolveElements(kind, elements, { stacked, percent })
   const type = kind === 'column' || kind === 'bar' ? 'bar' : kind
   const scope = { orientation: kind === 'column' ? 'vertical' as const : undefined, percent: percent ? true as const : undefined }
@@ -159,6 +165,7 @@ function ElementsFields({ kind, stacked, percent, money, elements, onChange }: {
       {check('Horizontal axis name', el.titleX, toggle('titleX'))}
       {check('Vertical axis name', el.titleY, toggle('titleY'))}
     </div>}
+    {names}
     <label>Data labels
       <select aria-label="Data labels" value={el.labels == null ? '' : el.labels ? 'on' : 'off'} onChange={(event) => put('labels', event.target.value === '' ? undefined : event.target.value === 'on')}>
         <option value="">As each viewer chooses (off unless they turn them on)</option>

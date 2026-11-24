@@ -129,7 +129,8 @@ export function passesField(column: OnDemandColumn, choice: FieldChoice | undefi
   return !words || valuesOf(row.cells[column.id]).join(', ').toLowerCase().includes(words)
 }
 // currencies (OND-58, OND-60): the currency of each Currency filter of the row (its column id → code or anyCurrency).
-export interface InsightNarrowed { page: OnDemandPage; all: number; shown: number; noDate: number; months: string[] | null; active: boolean; currencies: Record<string, string> }
+// base (CHT-62): the rows that pass the filters without the period — a Narrative's previous period is counted in them.
+export interface InsightNarrowed { page: OnDemandPage; all: number; shown: number; noDate: number; months: string[] | null; active: boolean; currencies: Record<string, string>; base?: OnDemandPage }
 // The rows every chart of the tab counts. Without a setup the page itself (the charts exactly as before, OND-56).
 export function narrowInsightRows(page: OnDemandPage, setup: ResolvedSetup, choice: ViewerChoice, currentYear: number): InsightNarrowed {
   if (!setup.period && !setup.fields.length) return { page, all: page.rows.length, shown: page.rows.length, noDate: 0, months: null, active: false, currencies: {} }
@@ -146,7 +147,8 @@ export function narrowInsightRows(page: OnDemandPage, setup: ResolvedSetup, choi
     }
     return setup.fields.every((column) => passesField(column, choice.fields[column.id], row, currencies[column.id]))
   })
-  return { page: { ...page, rows }, all: page.rows.length, shown: rows.length, noDate, months, active: true, currencies }
+  const base = wanted ? { ...page, rows: page.rows.filter((row) => setup.fields.every((column) => passesField(column, choice.fields[column.id], row, currencies[column.id]))) } : undefined
+  return { page: { ...page, rows }, all: page.rows.length, shown: rows.length, noDate, months, active: true, currencies, ...(base ? { base } : {}) }
 }
 // OND-60: the currency the filter row picks for a chart — only for a Sum / Average / Minimum / Maximum whose column is a
 // Currency filter of the row with a currency (not Any currency); '' otherwise (the chart keeps its own default).

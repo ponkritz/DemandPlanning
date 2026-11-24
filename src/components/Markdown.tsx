@@ -2,10 +2,12 @@ import { Fragment, type ReactNode } from 'react'
 import { linkTarget, parseInline, type Block, type ListBlock } from '../markdown'
 
 // Renders parsed Markdown blocks as React elements. Links to other bundled documents and to anchors are handled by
-// the page (onLink); external https links open in a new tab.
-export function Markdown({ blocks, docs, currentDoc, onLink }: { blocks: Block[]; docs: string[]; currentDoc?: string; onLink: (doc: string | null, anchor: string) => void }) {
+// the page (onLink); external https links open in a new tab. Images and videos are shown only when `media` resolves their
+// path to a file of this build (DOC-13); otherwise the image's alt text or the video's title is shown as text.
+export function Markdown({ blocks, docs, currentDoc, onLink, media = () => undefined }: { blocks: Block[]; docs: string[]; currentDoc?: string; onLink: (doc: string | null, anchor: string) => void; media?: (path: string) => string | undefined }) {
   const inline = (text: string): ReactNode => parseInline(text).map((part, index) => {
     if (part.kind === 'code') return <code key={index}>{part.text}</code>
+    if (part.kind === 'image') { const src = media(part.href); return src ? <img key={index} className="markdown-image" src={src} alt={part.text} loading="lazy" /> : <span key={index} className="muted">[{part.text}]</span> }
     if (part.kind === 'strong') return <strong key={index}>{inline(part.text)}</strong>
     if (part.kind === 'em') return <em key={index}>{inline(part.text)}</em>
     if (part.kind === 'link') {
@@ -26,6 +28,10 @@ export function Markdown({ blocks, docs, currentDoc, onLink }: { blocks: Block[]
     if (block.kind === 'paragraph') return <p key={index}>{inline(block.text)}</p>
     if (block.kind === 'list') return list(block, index)
     if (block.kind === 'rule') return <hr key={index} />
+    if (block.kind === 'video') {
+      const src = media(block.src), poster = block.poster ? media(block.poster) : undefined
+      return src ? <figure key={index} className="markdown-video"><video controls muted preload="none" src={src} poster={poster} aria-label={block.title || 'Video'} /></figure> : <p key={index} className="muted">[Video: {block.title || block.src}]</p>
+    }
     return <div key={index} className="azure-table markdown-table"><table>{block.header.some(Boolean) && <thead><tr>{block.header.map((cell, cellIndex) => <th key={cellIndex}>{inline(cell)}</th>)}</tr></thead>}<tbody>{block.rows.map((row, rowIndex) => <tr key={rowIndex}>{block.header.map((_, cellIndex) => <td key={cellIndex}>{inline(row[cellIndex] ?? '')}</td>)}</tr>)}</tbody></table></div>
   })}</div>
 }

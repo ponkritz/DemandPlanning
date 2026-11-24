@@ -3,8 +3,12 @@ import { useCan } from '../useCan'
 import { ExportNoteContext } from '../exportNote'
 import { csvCell } from '../csv'
 import { useTableDefaults } from './tableDesign'
-import { compareCells, moveId, moveIdTo, orderedIds, readLayout, saveLayout, tableCsv, tableSheet, totalsRow, type CellValue, type ExportFormat, type TableDensity, type TableLayout } from '../tableDefaults'
-import { useColumnWidths } from './columnWidths'
+import { compareCells, moveId, moveIdTo, orderedIds, tableCsv, tableSheet, totalsRow, type CellValue, type ExportFormat, type TableDensity } from '../tableDefaults'
+import { chooseTableView, fitTableView, newerForEveryone, parseTableView, readOwnView, shareableView, startOwnView, writeOwnView, type TableView } from '../tableViews'
+import { viewEntryKey } from '../personalViews'
+import { resizeHandle, widthStyle } from './columnWidths'
+import { ViewForEveryoneBar } from './ViewForEveryone'
+import { useViewsForEveryone } from '../useViewsForEveryone'
 import { downloadCsv, downloadXlsx } from '../download'
 import { writeXlsx } from '../xlsx'
 import { Info } from './ui'
@@ -12,7 +16,8 @@ import { Info } from './ui'
 // The one table of the app (UI-07…12). Every table is built on it and follows the design default (Settings → Table
 // defaults): resizable columns, columns moved by dragging a heading or with ↑ ↓ in the Columns list, columns ticked on
 // or off, Wrap text, Compact / Comfortable, and one Export that offers Excel or CSV — dates written as real date-times.
-// A table's own choices (widths, order, hidden columns, wrap, density) are kept per table in the viewer's browser.
+// A table's own choices (widths, order, hidden columns, wrap, density, sort) are kept per table in the viewer's browser;
+// UI-20…UI-23: a Tool Owner can save a table's view for everyone, which a viewer sees until they change their own.
 
 export interface DataColumn<T> {
   id: string
@@ -37,6 +42,8 @@ export interface DataColumn<T> {
   title?: (row: T) => string | undefined
   // Kept first and never hidden or moved (e.g. a selection tick box).
   fixed?: boolean
+  // Drawn in the heading instead of the label (e.g. the "select every row shown" tick box); the label stays its name.
+  heading?: ReactNode
 }
 
 export interface DataTableProps<T> {
@@ -71,15 +78,36 @@ export interface DataTableProps<T> {
   // rows in the order shown (sort and filter) for Previous / Next. A click on a button, link or field in the row does not open it.
   onRowOpen?: (row: T, shown: T[]) => void
   rowLabel?: (row: T) => string // the accessible name of an opening row
+  // CAP-60: rows ticked for a bulk action — a first column of tick boxes (kept first, never exported) with one in the
+  // heading that ticks or unticks every row shown; selected holds row keys (rowKey), kept while filters change.
+  selection?: { selected: string[]; onChange: (keys: string[]) => void; label?: (row: T) => string }
 }
 
-export function DataTable<T>({ id, columns, rows, rowKey, exportName, toolbar, status, limit, defaultSort, sort: controlledSort, onSort, rowClassName, empty, footer, className = '', caption, expand, group, totals, subRows, onRowOpen, rowLabel }: DataTableProps<T>) {
+export function DataTable<T>({ id, columns: ownColumns, rows, rowKey, exportName, toolbar, status, limit, defaultSort, sort: controlledSort, onSort, rowClassName, empty, footer, className = '', caption, expand, group, totals, subRows, onRowOpen, rowLabel, selection }: DataTableProps<T>) {
   const defaults = useTableDefaults()
-  const widths = useColumnWidths(`table:${id}`, defaults.defaultWrap)
-  const [layout, setLayoutState] = useState<TableLayout>(() => readLayout(id))
-  const setLayout = (next: TableLayout) => { setLayoutState(next); saveLayout(id, next) }
-  const [ownSort, setOwnSort] = useState<{ id: string; desc: boolean } | null>(defaultSort ? { id: defaultSort.id, desc: Boolean(defaultSort.desc) } : null)
-  const sort = controlledSort !== undefined ? controlledSort : ownSort
+  // UI-20…UI-23: the viewer's own view (this browser), else the view for everyone (shared views defaults in Git), else
+  // the table's built-in one.
+  const shared = useViewsForEveryone()
+  const viewKey = viewEntryKey('table', id)
+  const everyone = parseTableView(shared.everyone(viewKey))
+  const everyoneMeta = everyone ? shared.meta(viewKey) : undefined
+  const [own, setOwnState] = useState<TableView | undefined>(() => readOwnView(id))
+  const setOwn = (next: TableView | undefined) => { setOwnState(next); writeOwnView(id, next) }
+  const { view: layout, source } = chooseTableView(own, everyone)
+  // A change: the own view, started from the view for everyone the first time.
+  const setLayout = (change: Partial<TableView>) => setOwn(own ? { ...own, ...change } : startOwnView(everyone, everyoneMeta?.at, change))
+  const [dragWidths, setDragWidths] = useState<Record<string, number> | null>(null)
+  const widthMap = dragWidths ?? layout.widths ?? {}
+  const wrap = defaults.wrapToggle && layout.wrap !== undefined ? layout.wrap : defaults.defaultWrap
+  const widths = {
+    style: (column: string) => widthStyle(widthMap, column),
+    handle: (column: string, label: string) => resizeHandle({ column, label, widths: widthMap, onLive: setDragWidths, onDone: (next) => { setDragWidths(null); setLayout({ widths: next }) } }),
+    tableClass: `resizable ${wrap ? 'wrap' : 'no-wrap'}`,
+  }
+  const builtInSort = defaultSort ? { id: defaultSort.id, desc: Boolean(defaultSort.desc) } : null
+  const viewSortId = layout.sort?.id ?? ''
+  const viewSort = viewSortId && ownColumns.some((column) => column.id === viewSortId && column.sortable !== false && column.value) ? layout.sort ?? null : null
+  const sort = controlledSort !== undefined ? controlledSort : viewSort ?? builtInSort
   const [picking, setPicking] = useState(false)
   const [dragging, setDragging] = useState('')
   const [exporting, setExporting] = useState(false)
@@ -92,6 +120,16 @@ export function DataTable<T>({ id, columns, rows, rowKey, exportName, toolbar, s
     return () => { document.removeEventListener('mousedown', outside); document.removeEventListener('keydown', escape) }
   }, [exporting])
 
+  const valueOf = (column: DataColumn<T>, row: T): CellValue => column.value ? column.value(row) : undefined
+  const sortColumn = controlledSort === undefined && sort ? ownColumns.find((entry) => entry.id === sort.id) : undefined
+  const sortValue = sortColumn?.value, sortDesc = Boolean(sort?.desc)
+  const sorted = useMemo(() => sortValue ? [...rows].sort((a, b) => { const order = compareCells(sortValue(a), sortValue(b)); return sortDesc ? -order : order }) : rows, [rows, sortValue, sortDesc])
+  const keyOf = (row: T) => rowKey(row, sorted.indexOf(row))
+  const shownKeys = selection ? sorted.map(keyOf) : []
+  const allTicked = Boolean(shownKeys.length) && shownKeys.every((key) => selection!.selected.includes(key))
+  const columns: DataColumn<T>[] = selection ? [{ id: '@select', label: 'Select', fixed: true, sortable: false, export: false,
+    heading: <input type="checkbox" aria-label={allTicked ? 'Clear the selection of every row shown' : 'Select every row shown'} checked={allTicked} disabled={!shownKeys.length} onChange={() => selection.onChange(allTicked ? selection.selected.filter((key) => !shownKeys.includes(key)) : [...new Set([...selection.selected, ...shownKeys])])} />,
+    render: (row: T) => { const key = keyOf(row), on = selection.selected.includes(key); return <input type="checkbox" aria-label={`Select ${selection.label?.(row) ?? key}`} checked={on} onChange={() => selection.onChange(on ? selection.selected.filter((entry) => entry !== key) : [...selection.selected, key])} /> } }, ...ownColumns] : ownColumns
   const fixed = columns.filter((column) => column.fixed)
   const movable = columns.filter((column) => !column.fixed)
   const order = defaults.reorder ? orderedIds(movable.map((column) => column.id), layout.order) : movable.map((column) => column.id)
@@ -100,19 +138,12 @@ export function DataTable<T>({ id, columns, rows, rowKey, exportName, toolbar, s
   const shownColumns = [...fixed, ...ordered.filter((column) => !hidden.includes(column.id))]
   const density: TableDensity = defaults.densityToggle ? layout.density ?? defaults.defaultDensity : defaults.defaultDensity
 
-  const valueOf = (column: DataColumn<T>, row: T): CellValue => column.value ? column.value(row) : undefined
-  const sorted = useMemo(() => {
-    if (!sort || controlledSort !== undefined) return rows
-    const column = columns.find((entry) => entry.id === sort.id)
-    if (!column?.value) return rows
-    return [...rows].sort((a, b) => { const order = compareCells(column.value!(a), column.value!(b)); return sort.desc ? -order : order })
-  }, [rows, sort, columns, controlledSort])
   const drawn = limit ? sorted.slice(0, limit) : sorted
 
   const toggleSort = (column: DataColumn<T>) => {
     if (column.sortable === false || !column.value) return
     const next = { id: column.id, desc: sort?.id === column.id ? !sort.desc : Boolean(column.firstSortDesc) }
-    if (onSort) onSort(next); else setOwnSort(next)
+    if (onSort) onSort(next); else setLayout({ sort: next })
   }
   // Moving columns: drag a heading onto another, or ↑ ↓ in the Columns list.
   const dragType = 'application/x-table-column'
@@ -123,7 +154,7 @@ export function DataTable<T>({ id, columns, rows, rowKey, exportName, toolbar, s
   } : {}
   const dropProps = (column: DataColumn<T>) => defaults.reorder && !column.fixed ? {
     onDragOver: (event: DragEvent) => { if (event.dataTransfer.types.includes(dragType)) { event.preventDefault(); event.dataTransfer.dropEffect = 'move' } },
-    onDrop: (event: DragEvent) => { const moved = event.dataTransfer.getData(dragType); if (!moved) return; event.preventDefault(); setDragging(''); if (moved !== column.id) setLayout({ ...layout, order: moveIdTo(order, moved, column.id) }) },
+    onDrop: (event: DragEvent) => { const moved = event.dataTransfer.getData(dragType); if (!moved) return; event.preventDefault(); setDragging(''); if (moved !== column.id) setLayout({ order: moveIdTo(order, moved, column.id) }) },
   } : {}
 
   const rowLines = (row: T, index: number): ReactNode[] => {
@@ -152,7 +183,10 @@ export function DataTable<T>({ id, columns, rows, rowKey, exportName, toolbar, s
   // CON-94: export needs "Export tables".
   const can = useCan()
   const formats = exportName && can('data.export') ? defaults.exportFormats : []
-  const changed = Boolean(layout.order?.length || layout.hidden?.length || layout.density || widths.resized)
+  const changed = source === 'own'
+  // UI-21: the view as it is now (columns that no longer exist left out), saved for everyone; the Tool Owner then follows it.
+  const what = `${caption || exportName || id} table`
+  const currentView = (): TableView => shareableView(fitTableView({ order, hidden, widths: layout.widths, wrap, density, ...(controlledSort === undefined && sort ? { sort } : {}) }, movable.map((column) => column.id)))
 
   return <div className={`data-table data-table-${density} ${className}`}>
     <div className="data-table-toolbar">
@@ -160,9 +194,9 @@ export function DataTable<T>({ id, columns, rows, rowKey, exportName, toolbar, s
       {status && <span className="muted data-table-status">{status}</span>}
       <span className="data-table-controls">
         {(defaults.chooseColumns || defaults.reorder) && movable.length > 1 && <button type="button" className="ghost data-table-button" aria-expanded={picking} onClick={() => setPicking(!picking)}>Columns{hidden.length ? ` (${shownColumns.length - fixed.length} of ${movable.length})` : ''}</button>}
-        {defaults.wrapToggle && <label className="check wrap-toggle"><input type="checkbox" checked={widths.wrap} onChange={(event) => widths.setWrap(event.target.checked)} />Wrap text</label>}
-        {defaults.densityToggle && <select className="data-table-density" aria-label="Row density" value={density} onChange={(event) => setLayout({ ...layout, density: event.target.value as TableDensity })}><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select>}
-        {changed && <button type="button" className="text-button" title="Back to the table's default widths, order, columns and density" onClick={() => { setLayout({}); widths.reset() }}>Reset layout</button>}
+        {defaults.wrapToggle && <label className="check wrap-toggle"><input type="checkbox" checked={wrap} onChange={(event) => setLayout({ wrap: event.target.checked })} />Wrap text</label>}
+        {defaults.densityToggle && <select className="data-table-density" aria-label="Row density" value={density} onChange={(event) => setLayout({ density: event.target.value as TableDensity })}><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select>}
+        {changed && <button type="button" className="text-button" title={everyone ? 'Back to the view for everyone: its widths, order, columns, wrap, density and sort' : 'Back to the table\u2019s default widths, order, columns, wrap, density and sort'} onClick={() => setOwn(undefined)}>Reset layout</button>}
         {formats.length > 0 && <span className="data-table-export" ref={menu}>
           {formats.length === 1 ? <button type="button" className="ghost data-table-button" onClick={() => runExport(formats[0])}>Export {formats[0] === 'xlsx' ? 'Excel' : 'CSV'}</button>
             : <button type="button" className="ghost data-table-button" aria-haspopup="menu" aria-expanded={exporting} onClick={() => setExporting(!exporting)}>Export ▾</button>}
@@ -171,19 +205,21 @@ export function DataTable<T>({ id, columns, rows, rowKey, exportName, toolbar, s
       </span>
     </div>
     {picking && <fieldset className="column-chooser"><legend>Columns — {defaults.chooseColumns ? 'tick the ones to show; ' : ''}{defaults.reorder ? 'drag or use ↑ ↓ to move' : ''}</legend>
-      {defaults.chooseColumns && <div className="button-row"><button type="button" className="text-button" onClick={() => setLayout({ ...layout, hidden: [] })}>Show all</button></div>}
+      <ViewForEveryoneBar entryKey={viewKey} what={what} source={source} hasEveryone={Boolean(everyone)} newer={newerForEveryone(own, everyoneMeta?.at)} canSave={shared.canSave} meta={everyoneMeta}
+        onUse={() => setOwn(undefined)} onSave={() => { shared.save(viewKey, currentView(), what, () => setOwn(undefined)) }} onClear={() => { shared.clear(viewKey, what) }} />
+      {defaults.chooseColumns && <div className="button-row"><button type="button" className="text-button" onClick={() => setLayout({ hidden: [] })}>Show all</button></div>}
       <ol className="column-chooser-list">{ordered.map((column, index) => <li key={column.id} className={`column-choice${dragging === column.id ? ' dragging' : ''}`} {...dragProps(column)} {...dropProps(column)}>
         {defaults.reorder && <span className="drag-grip" aria-hidden="true">⋮⋮</span>}
-        {defaults.chooseColumns ? <label className="check"><input type="checkbox" checked={!hidden.includes(column.id)} disabled={!hidden.includes(column.id) && shownColumns.length - fixed.length < 2} onChange={(event) => setLayout({ ...layout, hidden: event.target.checked ? hidden.filter((key) => key !== column.id) : [...hidden, column.id] })} />{column.label}</label> : <span>{column.label}</span>}
-        {defaults.reorder && <span className="column-move"><button type="button" className="text-button" aria-label={`Move ${column.label} up`} disabled={index === 0} onClick={() => setLayout({ ...layout, order: moveId(order, column.id, -1) })}>↑</button><button type="button" className="text-button" aria-label={`Move ${column.label} down`} disabled={index === ordered.length - 1} onClick={() => setLayout({ ...layout, order: moveId(order, column.id, 1) })}>↓</button></span>}
+        {defaults.chooseColumns ? <label className="check"><input type="checkbox" checked={!hidden.includes(column.id)} disabled={!hidden.includes(column.id) && shownColumns.length - fixed.length < 2} onChange={(event) => setLayout({ hidden: event.target.checked ? hidden.filter((key) => key !== column.id) : [...hidden, column.id] })} />{column.label}</label> : <span>{column.label}</span>}
+        {defaults.reorder && <span className="column-move"><button type="button" className="text-button" aria-label={`Move ${column.label} up`} disabled={index === 0} onClick={() => setLayout({ order: moveId(order, column.id, -1) })}>↑</button><button type="button" className="text-button" aria-label={`Move ${column.label} down`} disabled={index === ordered.length - 1} onClick={() => setLayout({ order: moveId(order, column.id, 1) })}>↓</button></span>}
       </li>)}</ol>
     </fieldset>}
-    {rows.length || !empty ? <div className="azure-table data-table-scroll"><table className={defaults.resize ? widths.tableClass : `${widths.wrap ? 'wrap' : 'no-wrap'}`}>
+    {rows.length || !empty ? <div className="azure-table data-table-scroll"><table className={defaults.resize ? widths.tableClass : wrap ? 'wrap' : 'no-wrap'}>
       {caption && <caption className="sr-only">{caption}</caption>}
       <thead><tr>{shownColumns.map((column) => {
         const active = sort?.id === column.id, canSort = column.sortable !== false && Boolean(column.value)
         return <th key={column.id} style={defaults.resize ? widths.style(column.id) : undefined} className={[column.align ? `align-${column.align}` : '', dragging && dragging !== column.id && !column.fixed ? 'drop-target' : ''].filter(Boolean).join(' ') || undefined} aria-sort={active ? (sort!.desc ? 'descending' : 'ascending') : canSort ? 'none' : undefined} {...dropProps(column)}>
-          {canSort ? <button type="button" className="sort-button" title={defaults.reorder && !column.fixed ? 'Click to sort; drag onto another heading to move the column' : 'Click to sort'} {...dragProps(column)} onClick={() => toggleSort(column)}>{column.label}{active ? (sort!.desc ? ' ▾' : ' ▴') : ''}</button>
+          {column.heading ? <>{column.heading}<span className="sr-only">{column.label}</span></> : canSort ? <button type="button" className="sort-button" title={defaults.reorder && !column.fixed ? 'Click to sort; drag onto another heading to move the column' : 'Click to sort'} {...dragProps(column)} onClick={() => toggleSort(column)}>{column.label}{active ? (sort!.desc ? ' ▾' : ' ▴') : ''}</button>
             : <span className="sort-button" title={defaults.reorder && !column.fixed ? 'Drag onto another heading to move the column' : undefined} {...dragProps(column)}>{column.label}</span>}
           {column.hint && <Info iconOnly label={`About ${column.label}`}>{column.hint}</Info>}
           {defaults.resize && widths.handle(column.id, column.label)}

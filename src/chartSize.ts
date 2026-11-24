@@ -130,7 +130,9 @@ export function withSizeOptions<T extends SizeOptions>(options: T | undefined, s
   const grid = parseGridBox(out.grid, kind)
   delete out.size; delete out.height; delete out.grid
   const w = size.w ?? factory.w, h = size.h ?? factory.h
-  const exact = exactWidth(w) && (kind === 'table' || kind === 'kpi' || exactHeight(h, kind))
+  // The factory size is written as nothing (a KPI card's 3 × 3 too, CHT-51); a KPI card's height counts (CHT-52).
+  if (!grid && !keepWidth && w === factory.w && h === factory.h) return Object.keys(out).length ? out : undefined
+  const exact = exactWidth(w) && (kind === 'table' || exactHeight(h, kind))
   if (grid || !exact) return withGridBox(out, { x: grid?.x ?? 0, y: grid?.y ?? 0, w, h }, kind)
   if (keepWidth || w !== factory.w) out.size = nearestWidth(w)
   const height = nearestHeight(h, kind)
@@ -197,6 +199,12 @@ export const blockChartId = (pageId: string, blockId: string) => `dashboard:${pa
 export const pairFactory: GridSize = { w: 6, h: 8 }
 export const stackFactory: GridSize = { w: 12, h: 8 }
 export const factoryOf = (kind: GridKind, factory: GridSize = pairFactory): GridSize => ({ w: factory.w, h: kind === 'chart' ? factory.h : heightRows[kind].medium })
+// CHT-51: a KPI card on the chart grid — 3 of 12 columns (four in a row, about the 180 px-wide cards of before on a
+// wide screen) and 3 rows (its minimum height), in a row above the charts until someone moves it.
+export const cardFactory: GridSize = { w: 3, h: 3 }
+// CHT-51: the widths and heights a KPI card's Size… offers besides the presets (2 or 3 columns; 3…12 rows).
+export const cardWidths = [2, 3]
+export const cardRows = Array.from({ length: 10 }, (_, index) => index + 3)
 // CHT-19: the built-in charts in the shared chart frame, by stable id.
 export const builtInCharts = {
   epicMix: 'overview:epic-mix-by-month',

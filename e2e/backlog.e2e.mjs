@@ -521,7 +521,7 @@ test('TC-BKL-36: QMS-0025 starts on the column order saved for everyone; Apply k
   assert.deepEqual(await headers(), ['ID', 'Title', 'State', 'Assigned To'], 'the team default order')
   await page.getByRole('button', { name: '⚙ Column Options' }).click()
   const dialog = page.getByRole('dialog')
-  assert.equal(await dialog.getByRole('button', { name: 'Save for everyone' }).count(), 0, 'sample data, no Git: nothing can be saved for everyone')
+  assert.equal(await dialog.getByRole('button', { name: 'Save view for everyone' }).count(), 0, 'sample data, no Git: nothing can be saved for everyone')
   await dialog.getByRole('button', { name: 'Move title column up' }).click()
   await dialog.getByRole('button', { name: 'Apply' }).click()
   assert.deepEqual(await headers(), ['Title', 'ID', 'State', 'Assigned To'], 'my own order')

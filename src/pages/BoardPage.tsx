@@ -6,6 +6,8 @@ import type { FeatureSetups } from '../featureSetup'
 import { useMemo, useState, type ReactNode } from 'react'
 import { EmptyState, Notice, Page, Panel, Pill, TablePanel, WriteBlocked } from '../components/ui'
 import type { PersonalViewsStore } from '../usePersonalViews'
+import { viewMetaKey } from '../personalViews'
+import { recordJob } from '../backgroundJobs'
 import { normalizeBacklogColumns } from '../backlogView'
 
 // BKL-47: the QMS-0025 column order a Tool Owner saves for everyone (in the shared views defaults in Git).
@@ -53,8 +55,18 @@ export function BoardPage({ azure, store, current, month, git, onOpenConnection,
   const counts = new Map<string, number>()
   for (const item of activeItems) counts.set(item.workItemType || 'Unknown', (counts.get(item.workItemType || 'Unknown') ?? 0) + 1)
 
+  // BKL-47: the QMS-0025 column order as the view for everyone (with who and when, as every table's), or cleared;
+  // the result is also listed under Background jobs.
+  const columnsForEveryone = async (columns: string[] | undefined) => {
+    if (!views) return
+    const by = views.who || 'a Tool Owner', label = columns ? 'Save view for everyone · QMS-0025 columns' : 'Clear the view for everyone · QMS-0025 columns'
+    try {
+      await views.saveDefaults({ [columnsDefaultKey]: columns, [viewMetaKey(columnsDefaultKey)]: columns ? { by, at: new Date().toISOString() } : undefined }, `${columns ? 'View for everyone' : 'View for everyone cleared'}: QMS-0025 columns (${by})`)
+      recordJob('views-for-everyone:backlog-columns', label, { text: columns ? 'QMS-0025 columns: saved as the view for everyone.' : 'QMS-0025 columns: the view for everyone is cleared.' })
+    } catch (failure) { recordJob('views-for-everyone:backlog-columns', label, { text: failure instanceof Error ? failure.message : String(failure), failed: true }); throw failure }
+  }
   // BKL-12, BKL-45: the board and its source details are two tabs; the board is the page's only scroller.
-  const board = config ? <Panel className="connection-panel backlog-panel"><AzureWorkItemTree items={items} config={config} tabs={<span />} teamColumns={views?.filter(columnsDefaultKey, (value) => Array.isArray(value) ? normalizeBacklogColumns(value) : undefined)} onSaveColumnsForEveryone={canSetDefault && views ? async (columns) => { await views.saveEntryAsDefault(columnsDefaultKey, columns) } : undefined} onCreated={featureCreated} savedPat={pat} creatorEmail={azure.creatorEmail} onSavePat={rememberPat} assign={assign} featureSetup={featureSetup} month={month} /></Panel> : <Panel><EmptyState title="Configure a valid Azure DevOps project to use Backlogs." /><button className="primary" onClick={onOpenConnection}>Open connection settings</button></Panel>
+  const board = config ? <Panel className="connection-panel backlog-panel"><AzureWorkItemTree items={items} config={config} tabs={<span />} teamColumns={views?.filter(columnsDefaultKey, (value) => Array.isArray(value) ? normalizeBacklogColumns(value) : undefined)} onSaveColumnsForEveryone={canSetDefault && views ? (columns) => columnsForEveryone(columns) : undefined} onClearColumnsForEveryone={canSetDefault && views ? () => columnsForEveryone(undefined) : undefined} onCreated={featureCreated} savedPat={pat} creatorEmail={azure.creatorEmail} onSavePat={rememberPat} assign={assign} featureSetup={featureSetup} month={month} /></Panel> : <Panel><EmptyState title="Configure a valid Azure DevOps project to use Backlogs." /><button className="primary" onClick={onOpenConnection}>Open connection settings</button></Panel>
   const sourceDetails = <Panel className="connection-panel" title={preview ? 'Work-item preview' : 'Saved work items'} detail={`${items.length} items · ${preview ? `Scope: ${preview.areaPaths.join(', ')}` : 'Refresh source data from connection settings.'}`} info="Only verified team-backlog records are shown. Missing target/closure dates stay blank. Saving a fresh scoped result replaces the Azure cache; no Azure source records or demand-planning data are deleted." action={<input aria-label="Search work-item details" className="search" placeholder="Search ID, title, type or state" value={filter} onChange={(event) => setFilter(event.target.value)} />}>
     <div className="button-row">{[...counts].map(([type, count]) => <Pill key={type} tone="info">{type}: {count}</Pill>)}</div>
     {shown.length > 0 ? <div className="azure-table"><table><thead><tr><th>ID / Title</th><th>Type / State</th><th>Assigned to</th><th>Iteration / Parent</th><th>Target / Closed</th><th>Last fetched</th></tr></thead><tbody>{shown.slice(0, 100).map((item) => <tr key={item.key}><td><a href={item.url} target="_blank" rel="noreferrer">#{item.id}</a><strong>{item.title}</strong></td><td>{item.workItemType}<small>{item.state}</small></td><td>{item.assignedTo || 'Unassigned'}</td><td>{item.iterationPath}<small>{item.parentId ? `Parent #${item.parentId}` : 'No parent supplied'}</small></td><td>{formatDate(item.targetDate, 'No target date')}<small>{formatDate(item.closedDate, 'No closed date')}</small></td><td>{formatDateTime(item.syncedAt)}</td></tr>)}</tbody></table><p className="muted">Showing {Math.min(shown.length, 100)} of {shown.length} matching work items.</p></div> : <EmptyState title={items.length ? 'No matching work items.' : 'No work items loaded yet.'} />}

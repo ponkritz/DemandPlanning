@@ -1,4 +1,4 @@
-import { additive, cleanOptions, hasOptions, moneyOf, valuesOf, type DateGroup, type Insight, type InsightFilter, type InsightMeasure, type InsightType, type OnDemandColumn, type OnDemandPage, type OnDemandRow, type OnDemandType } from './onDemand.ts'
+import { additive, blankNarrative, cleanOptions, hasOptions, moneyOf, narrativeError, valuesOf, type DateGroup, type Insight, type InsightFilter, type InsightMeasure, type InsightType, type OnDemandColumn, type OnDemandPage, type OnDemandRow, type OnDemandType } from './onDemand.ts'
 
 // OND-11…OND-17 Insights of an On-Demand page: what each chart or summary table is made of, the checks of its column
 // references, and the aggregation of the page's rows into categories × series. Kept free of React so that every rule
@@ -11,6 +11,7 @@ export const insightTypes: { key: InsightType; label: string; hint: string }[] =
   { key: 'pareto', label: 'Pareto', hint: 'Categories largest first as columns, the cumulative share (%) as a line on a 0–100% axis and an 80% line.' },
   { key: 'kpi', label: 'KPI (one number)', hint: 'One number: the count, sum, average, minimum, maximum or distinct count of the rows.' },
   { key: 'table', label: 'Summary table', hint: 'Rows by one field, optional columns by another, with totals.' },
+  { key: 'narrative', label: 'Narrative (text)', hint: 'Sentences about the measure — the total, the highest and lowest, the change against the previous period — and rules of your own, as plain text.' },
 ]
 export const insightTypeLabel = (type: InsightType) => insightTypes.find((entry) => entry.key === type)?.label ?? type
 export const measures: { key: InsightMeasure; label: string }[] = [{ key: 'count', label: 'Count of rows' }, { key: 'sum', label: 'Sum' }, { key: 'average', label: 'Average' }, { key: 'min', label: 'Minimum' }, { key: 'max', label: 'Maximum' }, { key: 'distinct', label: 'Distinct count' }]
@@ -18,8 +19,8 @@ export const measures: { key: InsightMeasure; label: string }[] = [{ key: 'count
 export const measuresFor = (type: InsightType) => measures.filter((measure) => type !== 'pie' && type !== 'pareto' || additive(measure.key))
 
 // Which columns each part may use.
-const categoryTypes: Record<InsightType, OnDemandType[]> = { bar: ['dropdown', 'multi', 'text', 'date'], line: ['date'], pie: ['dropdown', 'multi', 'text', 'date'], table: ['dropdown', 'multi', 'text', 'date'], pareto: ['dropdown', 'multi', 'text', 'date'], kpi: [] }
-const secondTypes: Record<InsightType, OnDemandType[]> = { bar: ['dropdown', 'multi'], line: ['dropdown', 'multi'], pie: [], table: ['dropdown', 'multi', 'text', 'date'], pareto: [], kpi: [] }
+const categoryTypes: Record<InsightType, OnDemandType[]> = { bar: ['dropdown', 'multi', 'text', 'date'], line: ['date'], pie: ['dropdown', 'multi', 'text', 'date'], table: ['dropdown', 'multi', 'text', 'date'], pareto: ['dropdown', 'multi', 'text', 'date'], kpi: [], narrative: ['dropdown', 'multi', 'text', 'date'] }
+const secondTypes: Record<InsightType, OnDemandType[]> = { bar: ['dropdown', 'multi'], line: ['dropdown', 'multi'], pie: [], table: ['dropdown', 'multi', 'text', 'date'], pareto: [], kpi: [], narrative: [] }
 export const categoryColumns = (page: OnDemandPage, type: InsightType) => page.columns.filter((column) => categoryTypes[type].includes(column.type))
 export const secondColumns = (page: OnDemandPage, type: InsightType) => page.columns.filter((column) => secondTypes[type].includes(column.type))
 // OND-24: Sum and Average take a Number or a Currency column.
@@ -39,10 +40,13 @@ export const grainOf = (insight: Insight): DateGroup => insight.options?.dateGro
 
 // A new insight's starting point: the first column that fits, Count of rows, no filter, largest first.
 export function blankInsight(page: OnDemandPage, id: string, type: InsightType = 'bar'): Insight {
-  return { id, title: '', type, category: type === 'kpi' ? '' : categoryColumns(page, type)[0]?.id ?? '', second: '', measure: 'count', value: '', filters: [], sort: type === 'line' ? 'label' : 'value' }
+  const out: Insight = { id, title: '', type, category: type === 'kpi' ? '' : categoryColumns(page, type)[0]?.id ?? '', second: '', measure: 'count', value: '', filters: [], sort: type === 'line' ? 'label' : 'value' }
+  if (type === 'narrative') out.narrative = blankNarrative()
+  return out
 }
 // The draft after the type is changed: fields that no longer fit are cleared or replaced by the first that fits.
 export function withType(page: OnDemandPage, insight: Insight, type: InsightType): Insight {
+  // CHT-60: a Narrative's Group by is optional — kept when it fits, else the first column that fits.
   const category = type === 'kpi' ? '' : categoryColumns(page, type).some((column) => column.id === insight.category) ? insight.category : categoryColumns(page, type)[0]?.id ?? ''
   const second = secondColumns(page, type).some((column) => column.id === insight.second) && insight.second !== category ? insight.second : ''
   // A pie or Pareto adds its parts up: Average, Minimum, Maximum become Sum (of the same column), Distinct count Count.
@@ -50,9 +54,11 @@ export function withType(page: OnDemandPage, insight: Insight, type: InsightType
   const measure: InsightMeasure = shares && !additive(insight.measure) ? insight.measure === 'distinct' ? 'count' : 'sum' : insight.measure
   const value = measure === 'count' ? '' : measure === insight.measure ? insight.value : valueColumns(page).some((column) => column.id === insight.value) ? insight.value : valueColumns(page)[0]?.id ?? ''
   const options = cleanOptions(type, measure, insight.options)
-  const next: Insight = { ...insight, type, category, second, measure, value, sort: type === 'line' ? 'label' : type === 'pareto' ? 'value' : insight.sort }
+  const next: Insight = { ...insight, type, category, second, measure, value, sort: type === 'line' ? 'label' : type === 'pareto' || type === 'narrative' ? 'value' : insight.sort }
   if (options) next.options = options
   else delete next.options
+  if (type === 'narrative') next.narrative = insight.narrative ?? blankNarrative()
+  else delete next.narrative
   return next
 }
 
@@ -70,7 +76,11 @@ export function insightProblems(page: OnDemandPage, insight: Insight): string[] 
     if (!id || !column) problems.push(`The column ${role} is no longer on the page (removed).`)
     else if (!types.includes(column.type)) problems.push(`“${column.name}” ${role} is now a ${typeName[column.type]} column; it needs ${allowed(types)}.`)
   }
-  if (insight.type !== 'kpi') check(insight.category, insight.type === 'line' ? `for the ${dateGroupLabels[grainOf(insight)].unit}s` : 'for the categories', categoryTypes[insight.type])
+  // CHT-60: a Narrative without a Group by has no category to check; its period must be a Date column.
+  if (insight.type === 'narrative') {
+    if (insight.category) check(insight.category, 'for Group by', categoryTypes.narrative)
+    if (insight.narrative?.period) check(insight.narrative.period, 'for the period', ['date'])
+  } else if (insight.type !== 'kpi') check(insight.category, insight.type === 'line' ? `for the ${dateGroupLabels[grainOf(insight)].unit}s` : 'for the categories', categoryTypes[insight.type])
   if (insight.second) {
     if (insight.second === insight.category) problems.push('The same column is used twice: choose another one, or none.')
     else check(insight.second, insight.type === 'table' ? 'for the table’s columns' : insight.type === 'line' ? 'for the lines' : 'for the stacks', secondTypes[insight.type])
@@ -79,7 +89,7 @@ export function insightProblems(page: OnDemandPage, insight: Insight): string[] 
   if (!additive(insight.measure) && insight.type === 'pie') problems.push('A pie shows shares of a total: choose Count of rows or Sum.')
   if (!additive(insight.measure) && insight.type === 'pareto') problems.push('A Pareto adds its categories up to 100%: choose Count of rows or Sum.')
   // CHT-40: grouped bars (side by side) take every measure; stacked ones add their parts up.
-  if (!additive(insight.measure) && insight.type === 'bar' && insight.second && !isGrouped(insight)) problems.push(`Stacked bars add their parts up: ${insight.measure === 'average' ? 'an Average' : `a ${measureWord[insight.measure]}`} cannot be stacked. Choose Count or Sum, Grouped (side by side) under Display, or no stack.`)
+  if (!additive(insight.measure) && insight.type === 'bar' && insight.second && !isGrouped(insight)) problems.push(`Stacked bars add their parts up: ${insight.measure === 'average' ? 'an Average' : `a ${measureWord[insight.measure]}`} cannot be stacked. Choose Count or Sum, Grouped (side by side) under Format, or no stack.`)
   for (const filter of insight.filters) {
     const column = columnOf(page, filter.column)
     if (!column) problems.push('A filter’s column is no longer on the page (removed).')
@@ -94,6 +104,7 @@ export function insightError(page: OnDemandPage, insight: Insight): string {
   if (insight.type === 'line' && !categoryColumns(page, 'line').length) return 'A line over time needs a Date column on the page.'
   const target = insight.options?.target
   if (target && !Number.isFinite(target.value)) return 'The target line needs a number.'
+  if (insight.type === 'narrative') { const problem = narrativeError(insight.narrative, Boolean(insight.category)); if (problem) return problem }
   return insightProblems(page, insight)[0] ?? ''
 }
 
@@ -302,7 +313,7 @@ export function limitsFor(insight: Insight): { maxCategories?: number; maxSeries
   if (insight.type === 'pie') return { maxCategories: top ? chosen : 5 }
   if (insight.type === 'table') return top ? { maxCategories: chosen } : {}
   if (insight.type === 'line') return { maxCategories: undefined, maxSeries: 5 }
-  if (insight.type === 'kpi') return {}
+  if (insight.type === 'kpi' || insight.type === 'narrative') return {}
   return { maxCategories: top ? chosen : 20, maxSeries: 5 }
 }
 // The data a chart draws: the aggregation, then the running total (CHT-05) and the share of the total (CHT-06); a
@@ -320,7 +331,8 @@ export function kpiData(page: OnDemandPage, insight: Insight, currency = ''): In
   return aggregate(probe.page, probe.insight, { currency })
 }
 export function chartData(page: OnDemandPage, insight: Insight, currency = ''): ChartData {
-  if (insight.type === 'kpi') return { ...kpiData(page, insight, currency), unit: '' }
+  // CHT-60: a Narrative counts its rows as a KPI does (what ⓘ and a Dashboard's empty state read).
+  if (insight.type === 'kpi' || insight.type === 'narrative') return { ...kpiData(page, insight, currency), unit: '' }
   const data = aggregate(page, insight, { ...limitsFor(insight), currency })
   const out: ChartData = { ...data, unit: '' }
   const options = insight.options ?? {}
@@ -357,7 +369,7 @@ export function drillRows(page: OnDemandPage, insight: Insight, data: InsightDat
   const keysOf = (buckets: Bucket[]) => new Set(buckets.map((bucket) => bucket.key))
   const cats = keysOf(data.categories), sers = keysOf(data.series)
   const mapped = (buckets: Bucket[], keys: Set<string>) => buckets.map((bucket) => keys.has(bucket.key) && bucket.key !== otherKey ? bucket.key : keys.has(otherKey) ? otherKey : '\u0002')
-  const asked = insight.type === 'kpi' ? asKpi(page, insight) : { page, insight }
+  const asked = insight.type === 'kpi' || insight.type === 'narrative' ? asKpi(page, insight) : { page, insight }
   return prepare(asked.page, asked.insight, data.currency).prepared
     .filter((entry) => mapped(entry.cats, cats).includes(cat.key) && (!ser || !insight.second || mapped(entry.sers, sers).includes(ser.key)))
     .map((entry) => entry.row)
@@ -410,7 +422,7 @@ export function currencyText(data: Pick<InsightData, 'currencies' | 'currency'>)
 // "Sum of Cost (EUR) by Category, stacked by Sites" — what is measured and how it is split.
 export function insightSubject(page: OnDemandPage, insight: Insight) {
   const name = (id: string) => columnOf(page, id)?.name ?? '(removed column)'
-  if (insight.type === 'kpi') return measureText(page, insight)
+  if (insight.type === 'kpi' || insight.type === 'narrative' && !insight.category) return measureText(page, insight)
   const by = insight.type === 'line' ? `per ${dateGroupLabels[grainOf(insight)].unit} of ${name(insight.category)}` : `by ${name(insight.category)}`
   const split = insight.second ? `, ${isGrouped(insight) ? 'grouped by' : secondLabel(insight.type).toLowerCase()} ${name(insight.second)}` : ''
   return `${measureText(page, insight)} ${by}${split}`

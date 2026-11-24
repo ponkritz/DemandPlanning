@@ -3,8 +3,12 @@
 // storage — never in Git). It runs only while the app is open; a run missed while the app was closed runs at the next
 // start (once, however many were missed). Times are the computer's local time. Nothing here reads the clock itself.
 
+import { readCut, type PublishCut } from './publishData.ts'
+
 export type ScheduleMode = 'off' | 'daily' | 'weekly'
-export interface PublishSchedule { mode: ScheduleMode; day: number; time: string; setAt: string; lastRun?: string; lastOk?: boolean; lastText?: string }
+// OND-96: cut — the filters a scheduled run publishes with (the publisher's, saved with the schedule), cutText — their
+// words as the pop-up shows them; a schedule saved before has none (its runs use the filters remembered for the page).
+export interface PublishSchedule { mode: ScheduleMode; day: number; time: string; setAt: string; lastRun?: string; lastOk?: boolean; lastText?: string; cut?: PublishCut; cutText?: string; invalidCut?: boolean }
 export const scheduleKey = 'demand-planning-publish-schedule-v2'
 export interface PublishScope { repository: string; publisher: string; pageId: string }
 
@@ -40,7 +44,10 @@ export function parseSchedules(text: string | null): Record<string, PublishSched
     const setAt = iso(entry.setAt)
     if (!setAt || typeof entry.time !== 'string' || !timePattern.test(entry.time)) continue
     const day = Number.isInteger(entry.day) && (entry.day as number) >= 0 && (entry.day as number) <= 6 ? entry.day as number : 1
-    out[id] = { mode, day, time: entry.time, setAt, ...(iso(entry.lastRun) ? { lastRun: iso(entry.lastRun) } : {}), ...(typeof entry.lastOk === 'boolean' ? { lastOk: entry.lastOk } : {}), ...(typeof entry.lastText === 'string' ? { lastText: entry.lastText.slice(0, 500) } : {}) }
+    const cut = readCut(entry.cut)
+    const invalidCut = !cut && (Object.hasOwn(entry, 'cut') || Object.hasOwn(entry, 'cutText') || entry.invalidCut === true)
+    out[id] = { mode, day, time: entry.time, setAt, ...(iso(entry.lastRun) ? { lastRun: iso(entry.lastRun) } : {}), ...(typeof entry.lastOk === 'boolean' ? { lastOk: entry.lastOk } : {}), ...(typeof entry.lastText === 'string' ? { lastText: entry.lastText.slice(0, 500) } : {}),
+      ...(cut ? { cut } : {}), ...(cut && typeof entry.cutText === 'string' ? { cutText: entry.cutText.slice(0, 500) } : {}), ...(invalidCut ? { invalidCut } : {}) }
   }
   return out
 }

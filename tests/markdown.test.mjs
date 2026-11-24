@@ -81,3 +81,15 @@ test('every bundled document parses, and its in-app links point at existing sect
     }
   }
 })
+
+test('DOC-15: images are inline parts with their alt text, and a video line is a block of plain values, never markup', () => {
+  assert.deepEqual(parseInline('See ![The home page](user-guide/images/home.png) and [Plan](TEST-PLAN.md)'), [
+    { kind: 'text', text: 'See ' }, { kind: 'image', text: 'The home page', href: 'user-guide/images/home.png' }, { kind: 'text', text: ' and ' }, { kind: 'link', text: 'Plan', href: 'TEST-PLAN.md' },
+  ])
+  const [video, caption] = parseMarkdown('<video controls muted preload="none" src="user-guide/media/a.webm" poster="user-guide/media/a.png" title="Add a chart"></video>\n\n*Clip: a chart.*')
+  assert.deepEqual(video, { kind: 'video', src: 'user-guide/media/a.webm', poster: 'user-guide/media/a.png', title: 'Add a chart' })
+  assert.equal(caption.kind, 'paragraph')
+  // Only src, poster and title are kept (an event attribute is dropped); anything else on the line, or no src, is text.
+  assert.deepEqual(parseMarkdown('<video src="a.webm" onplay="x()"></video>')[0], { kind: 'video', src: 'a.webm', poster: '', title: '' })
+  for (const line of ['<video src="a.webm"></video> and more', '<video poster="a.png"></video>', '<video src="a.webm"><script>x()</script></video>']) assert.equal(parseMarkdown(line)[0].kind, 'paragraph', line)
+})

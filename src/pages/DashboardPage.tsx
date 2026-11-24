@@ -20,6 +20,7 @@ import type { MyWork } from '../useMyWork'
 import type { Page as PageId } from './registry'
 import type { PageProps } from './types'
 import type { PersonalViewsStore } from '../usePersonalViews'
+import { PageViewForEveryone } from '../components/ViewForEveryone'
 import { CustomizableSections } from '../components/PersonalLayout'
 import { UtilizationTable } from '../components/MonthOverview'
 import { defaultInsightThresholds, thresholdsOf } from '../insightThresholds'
@@ -181,6 +182,7 @@ export function DashboardPage({ month, azure, store, my, views, navigate, canSet
       <button type="button" className="ghost" disabled={!filtered && !periodChanged} onClick={() => update({ filter: noFilter, period: defaultPeriod(month) })}>Reset filters</button>
       {canLock && <ProfilePicker settings={shared} value={viewProfile} onChange={setViewProfile} />}
     </div>
+    <PageViewForEveryone entryKey="dashboard" what="Team overview period, filters and tab" value={saved} onUse={(value) => setSaved(load(month, value))} />
     <p className="muted dash-scope">{periodLabel} · {all.people} {all.people === 1 ? 'person' : 'people'} · {rows.length} person-months · {filterNote}{months.some((entry) => activeFigureLock(settings, entry)) && <> · <span role="note">🔒 Locked figures: {months.filter((entry) => activeFigureLock(settings, entry)).map((entry) => { const lock = activeFigureLock(settings, entry)!; return `${short(entry)} (${lock.profileName}, ${formatDateTime(lock.lockedOn)} by ${lock.lockedBy})` }).join(', ')}</span></>}{notNow.length > 0 && <> · <span className="warning-text">{notNow.length === 1 ? `${short(notNow[0])} is` : `${notNow.map(short).join(', ')} are`} not finished: {notNow.length === 1 ? 'its' : 'their'} ratios are not results</span></>} <Info label="Utilization colours">{profileFormula(defaultProfile(settings), settings)} Locked months keep the figures they were locked with. <span className="util util-over">↑ red</span> above {bands.overloadedAt}% (overloaded), <span className="util util-balanced">green</span> balanced, <span className="util util-spare">↓ blue</span> below {bands.availableBelow}% (spare). The thresholds come from Admin → Capacity & time and apply to every number on this page. Hour differences carry no colour: + and − only say the direction. Partial and future months do not establish spare capacity or results.</Info></p>
     {!rows.length ? <EmptyState title="No Time Writing data for this selection." detail="Change the period or filters, refresh from Azure, or load the synthetic sample." /> : <>
       <Metrics>

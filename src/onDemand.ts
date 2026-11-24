@@ -1,4 +1,4 @@
-import { kindOf, parseGridBox, type GridBox } from './chartSize.ts'
+import { kindOf, parseGridBox, type GridBox, type GridKind } from './chartSize.ts'
 import { csvCell } from './csv.ts'
 import type { Merge } from './gitSaveQueue.ts'
 import { cleanElements, type ChartElements } from './chartElements.ts'
@@ -33,7 +33,9 @@ export interface LogEntry { id: string; at: string; by: string; added?: true; ac
 // when (UTC ISO), set once; log — the update log.
 // OND-39: hidden — who hid the row and when; a hidden row stays in the file with its ID and is left out of the table,
 // the Insights, the exports and the dashboards.
-export interface OnDemandRow { id: string; key?: string; seq?: number; addedBy?: string; addedAt?: string; log?: LogEntry[]; hidden?: { by: string; at: string }; cells: Record<string, OnDemandValue> }
+// link (MYD-24): a row built by a data source of My dashboard links to its origin (an Azure DevOps work item, https only);
+// never read from or written to a page file.
+export interface OnDemandRow { id: string; key?: string; link?: string; seq?: number; addedBy?: string; addedAt?: string; log?: LogEntry[]; hidden?: { by: string; at: string }; cells: Record<string, OnDemandValue> }
 // OND-31: storage 'rows' — the page is kept as one file per row (on-demand/<id>/page.json, rows/<key>.json, counter.json,
 // src/rowFiles.ts); absent — the single page file on-demand/<id>.json (OND-08).
 // OND-63, OND-66: sample — the page as shown in Sample (src/sampleRows.ts): its rows are made up; it is never written.
@@ -44,7 +46,7 @@ export interface OnDemandPage { schema: 1; kind: 'on-demand-page'; id: string; n
 // to by id, so a renamed column is followed; a removed one (or one whose type no longer fits) is kept as written and
 // the insight says so instead of drawing (OND-17).
 // CHT-01…: 'pareto' and 'kpi' are chart types of their own; 'min', 'max' and 'distinct' further measures.
-export type InsightType = 'bar' | 'line' | 'pie' | 'table' | 'pareto' | 'kpi'
+export type InsightType = 'bar' | 'line' | 'pie' | 'table' | 'pareto' | 'kpi' | 'narrative'
 export type InsightMeasure = 'count' | 'sum' | 'average' | 'min' | 'max' | 'distinct'
 // A filter on a Dropdown / Multi-select column (values: the options kept; '' is "(none)") or on a Date column (from / to
 // month, YYYY-MM, either may be open).
@@ -68,13 +70,15 @@ export interface ChartOptions {
   view?: 'panel' // a KPI shown as a chart panel instead of a card in the Insights tab's card row (CHT-36)
   grid?: GridBox // CHT-47: the owners' place and size on the 12-column chart grid (x, y, w, h); `size` / `height` then hold the nearest presets for older apps
 }
-export interface Insight { id: string; title: string; type: InsightType; category: string; second: string; measure: InsightMeasure; value: string; filters: InsightFilter[]; sort: 'value' | 'label'; options?: ChartOptions }
+// CHT-60: a Narrative (type 'narrative') keeps its sentences and rules in `narrative`; its category is the optional
+// Group by, '' for none.
+export interface Insight { id: string; title: string; type: InsightType; category: string; second: string; measure: InsightMeasure; value: string; filters: InsightFilter[]; sort: 'value' | 'label'; options?: ChartOptions; narrative?: Narrative }
 // CHT-09, CHT-41: a colour pin — a palette colour 1…5 (the --viz-series-* tokens, light and dark) or any colour as
 // "#rrggbb" (the same in both themes).
 export type ColorPin = number | string
 export type ColorPins = Record<string, ColorPin>
 export const isHexColor = (value: unknown): value is string => typeof value === 'string' && /^#[0-9a-f]{6}$/.test(value)
-export const insightTypeKeys: InsightType[] = ['bar', 'line', 'pie', 'table', 'pareto', 'kpi']
+export const insightTypeKeys: InsightType[] = ['bar', 'line', 'pie', 'table', 'pareto', 'kpi', 'narrative']
 export const measureKeys: InsightMeasure[] = ['count', 'sum', 'average', 'min', 'max', 'distinct']
 // Count and Sum add up; the others cannot be stacked, shown as shares, summed into a running total or a Pareto.
 export const additive = (measure: InsightMeasure) => measure === 'count' || measure === 'sum'
@@ -89,7 +93,7 @@ export function cleanOptions(type: InsightType, measure: InsightMeasure, raw: un
   if (type === 'bar' && item.orientation === 'vertical') out.orientation = 'vertical'
   // CHT-40: grouped bars (only a bar chart; drawn only with a second field — stacked when absent).
   if (type === 'bar' && item.grouping === 'grouped') out.grouping = 'grouped'
-  if (type !== 'kpi' && typeof item.dateGroup === 'string' && item.dateGroup !== 'month' && dateGroups.includes(item.dateGroup as DateGroup)) out.dateGroup = item.dateGroup as DateGroup
+  if (type !== 'kpi' && type !== 'narrative' && typeof item.dateGroup === 'string' && item.dateGroup !== 'month' && dateGroups.includes(item.dateGroup as DateGroup)) out.dateGroup = item.dateGroup as DateGroup
   if (type === 'bar' || type === 'pie' || type === 'pareto' || type === 'table') {
     if (item.top === 'all') out.top = 'all'
     else if (typeof item.top === 'number' && Number.isFinite(item.top) && item.top >= 1) out.top = Math.min(maxTop, Math.round(item.top))
@@ -102,7 +106,7 @@ export function cleanOptions(type: InsightType, measure: InsightMeasure, raw: un
   }
   // CHT-15, CHT-16: a width of ⅓, ½, ⅔ or Full (v10 knew half and full and drops the others: LIM-36) and a height.
   if (item.size === 'third' || item.size === 'half' || item.size === 'twothirds' || item.size === 'full') out.size = item.size
-  if (type !== 'kpi' && type !== 'table' && (item.height === 'small' || item.height === 'large')) out.height = item.height
+  if (type !== 'kpi' && type !== 'table' && type !== 'narrative' && (item.height === 'small' || item.height === 'large')) out.height = item.height
   // CHT-24: the axis titles of a chart with axes, plain text of up to 60 characters; empty means automatic.
   if (type === 'bar' || type === 'line' || type === 'pareto') for (const key of ['xTitle', 'yTitle'] as const) { const text = typeof item[key] === 'string' ? (item[key] as string).trim().replace(/\s+/g, ' ').slice(0, maxAxisTitle) : ''; if (text) out[key] = text }
   // CHT-35: the chart elements, each checked against the type (and its orientation and Percent of total).
@@ -110,8 +114,9 @@ export function cleanOptions(type: InsightType, measure: InsightMeasure, raw: un
   if (elements) out.elements = elements
   // CHT-36: a KPI shown as a panel (a card when absent).
   if (type === 'kpi' && item.view === 'panel') out.view = 'panel'
-  // CHT-47: the place on the chart grid — whole numbers clamped to the grid and the type's minimum size.
-  const grid = type !== 'kpi' || out.view === 'panel' ? parseGridBox(item.grid, kindOf(type)) : undefined
+  // CHT-47: the place on the chart grid — whole numbers clamped to the grid and the type's minimum size (since CHT-51 a
+  // KPI card's too).
+  const grid = parseGridBox(item.grid, insightKindOf(type))
   if (grid) out.grid = grid
   return Object.keys(out).length ? out : undefined
 }
@@ -129,6 +134,106 @@ export function parseColors(raw: unknown): ColorPins | undefined {
   return Object.keys(out).length ? out : undefined
 }
 export const maxInsights = 40, maxFilters = 10
+// CHT-60: the grid kind of an insight — a Narrative is sized like a summary table (a width on the grid, the height of
+// its content).
+export const insightKindOf = (type: string): GridKind => kindOf(type === 'narrative' ? 'table' : type)
+
+// ---- Narratives (CHT-60…CHT-69) ----
+// A Narrative is text, deterministic and computed in the browser: automatic sentences the owners tick (the total, the
+// highest / lowest category with its share, the change against the previous period of a Date column, how many categories
+// are above / below a threshold, the biggest mover) and up to 20 rules of their own — IF a metric compares with a value
+// THEN a sentence template with placeholders and a tone. Stored as the optional field `narrative` of an insight or a
+// Dashboard block; templates are plain text (no HTML), placeholders are replaced by text, never by markup (SM-130).
+export type NarrativeAuto = 'total' | 'top' | 'bottom' | 'change' | 'threshold' | 'mover'
+export const narrativeAutoKeys: NarrativeAuto[] = ['total', 'top', 'bottom', 'change', 'threshold', 'mover']
+export type NarrativeMetric = 'total' | 'count' | 'top_value' | 'share' | 'change' | 'top'
+export const narrativeMetricKeys: NarrativeMetric[] = ['total', 'count', 'top_value', 'share', 'change', 'top']
+export type NarrativeOp = 'gt' | 'ge' | 'lt' | 'le' | 'eq' | 'changed' | 'is_top'
+export const narrativeOpKeys: NarrativeOp[] = ['gt', 'ge', 'lt', 'le', 'eq', 'changed', 'is_top']
+export type NarrativeTone = 'info' | 'good' | 'warning' | 'bad'
+export const narrativeToneKeys: NarrativeTone[] = ['info', 'good', 'warning', 'bad']
+export type NarrativeGrain = 'month' | 'quarter' | 'year'
+export const narrativeGrains: NarrativeGrain[] = ['month', 'quarter', 'year']
+export const narrativePlaceholders = ['value', 'total', 'top', 'top_value', 'share', 'change', 'period', 'count', 'category'] as const
+export const maxNarrativeRules = 20, maxTemplate = 300
+// value: a number for the comparisons, a category's name for "is top category"; while being edited the typed text.
+export interface NarrativeRule { metric: NarrativeMetric; op: NarrativeOp; value: number | string; template: string; tone: NarrativeTone }
+export interface Narrative {
+  auto: NarrativeAuto[] // the automatic sentences ticked, shown in the order of narrativeAutoKeys
+  period?: string // the Date column of "change vs the previous period" and "biggest mover"
+  grain?: NarrativeGrain // the period's length (month when absent)
+  threshold?: { op: 'above' | 'below'; value: number } // of the "above / below a threshold" sentence
+  rules: NarrativeRule[]
+  mode?: 'first' // only the first rule that matches (every rule that matches when absent)
+  otherwise?: string // the "Else" sentence, shown when no rule matches
+}
+export const blankNarrative = (): Narrative => ({ auto: ['total', 'top'], rules: [] })
+// A template as stored: plain text — markup tags and control characters removed, spaces collapsed, unknown
+// placeholders dropped, at most 300 characters.
+export function cleanTemplate(raw: unknown): string {
+  if (typeof raw !== 'string') return ''
+  const plain = Array.from(raw.slice(0, 4 * maxTemplate), (char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127 ? ' ' : char).join('')
+  return plain.replace(/<\/?[a-z!][^>]*>/gi, '')
+    .replace(/\{([^{}]*)\}/g, (match, key: string) => (narrativePlaceholders as readonly string[]).includes(key) ? match : '')
+    .replace(/\s+/g, ' ').trim().slice(0, maxTemplate)
+}
+const finiteNumber = (value: unknown) => { const number = typeof value === 'number' ? value : typeof value === 'string' && value.trim() !== '' ? Number(value) : NaN; return Number.isFinite(number) && Math.abs(number) <= 1e15 ? number : null }
+const narrativeRef = /^[A-Za-z0-9][\w-]{0,39}$/
+// CHT-68: the field as read from a file — sentences, operators, metrics and tones not known are dropped, a rule without
+// a sentence or a value is dropped, at most 20 rules; never throws.
+export function parseNarrative(raw: unknown): Narrative {
+  const item = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {}
+  const auto = narrativeAutoKeys.filter((key) => Array.isArray(item.auto) && item.auto.includes(key))
+  const out: Narrative = { auto, rules: [] }
+  if (typeof item.period === 'string' && narrativeRef.test(item.period)) out.period = item.period
+  if (item.grain === 'quarter' || item.grain === 'year') out.grain = item.grain
+  const threshold = item.threshold && typeof item.threshold === 'object' ? item.threshold as Record<string, unknown> : undefined
+  const limit = threshold ? finiteNumber(threshold.value) : null
+  if (threshold && limit != null) out.threshold = { op: threshold.op === 'below' ? 'below' : 'above', value: limit }
+  for (const entry of Array.isArray(item.rules) ? item.rules : []) {
+    if (out.rules.length >= maxNarrativeRules) break
+    const rule = entry && typeof entry === 'object' ? entry as Record<string, unknown> : {}
+    const op = rule.op as NarrativeOp, template = cleanTemplate(rule.template)
+    if (!narrativeOpKeys.includes(op) || !template) continue
+    const tone: NarrativeTone = narrativeToneKeys.includes(rule.tone as NarrativeTone) ? rule.tone as NarrativeTone : 'info'
+    if (op === 'is_top') {
+      const name = typeof rule.value === 'string' ? rule.value.replace(/\s+/g, ' ').trim().slice(0, 120) : ''
+      if (name) out.rules.push({ metric: 'top', op, value: name, template, tone })
+      continue
+    }
+    const value = finiteNumber(rule.value)
+    if (value == null) continue
+    if (op === 'changed') { out.rules.push({ metric: 'change', op, value: Math.abs(value), template, tone }); continue }
+    const metric = rule.metric as NarrativeMetric
+    if (!narrativeMetricKeys.includes(metric) || metric === 'top') continue
+    out.rules.push({ metric, op, value, template, tone })
+  }
+  if (item.mode === 'first') out.mode = 'first'
+  const otherwise = cleanTemplate(item.otherwise)
+  if (otherwise) out.otherwise = otherwise
+  return out
+}
+// Written in a fixed order, the optional parts only when set.
+export function narrativeOut(narrative: Narrative | undefined) {
+  const value = parseNarrative(narrative)
+  return { auto: value.auto, ...(value.period ? { period: value.period } : {}), ...(value.grain ? { grain: value.grain } : {}), ...(value.threshold ? { threshold: value.threshold } : {}), rules: value.rules.map(({ metric, op, value: limit, template, tone }) => ({ metric, op, value: limit, template, tone })), ...(value.mode ? { mode: value.mode } : {}), ...(value.otherwise ? { otherwise: value.otherwise } : {}) }
+}
+// CHT-66: the pop-up's check before Add / Save (the columns are checked with the insight, onDemandInsights.ts).
+// hasGroup: a Group by column is chosen.
+export function narrativeError(narrative: Narrative | undefined, hasGroup: boolean): string {
+  if (!narrative) return ''
+  if (narrative.rules.length > maxNarrativeRules) return `A narrative holds at most ${maxNarrativeRules} rules.`
+  for (const [index, rule] of narrative.rules.entries()) {
+    if (!cleanTemplate(rule.template)) return `Rule ${index + 1} has no sentence: write the sentence to show, or remove the rule.`
+    if (rule.op === 'is_top' ? !String(rule.value).trim() : finiteNumber(rule.value) == null) return rule.op === 'is_top' ? `Rule ${index + 1} needs the name of a category.` : `Rule ${index + 1} needs a number to compare with.`
+    if (!hasGroup && (rule.op === 'is_top' || rule.metric === 'top_value' || rule.metric === 'share')) return `Rule ${index + 1} looks at the top category: choose a Group by column first.`
+    if (!narrative.period && (rule.op === 'changed' || rule.metric === 'change')) return `Rule ${index + 1} looks at the change against the previous period: choose the Date column of the period first.`
+  }
+  if (narrative.auto.includes('threshold') && (!narrative.threshold || finiteNumber(narrative.threshold.value) == null)) return 'Give the threshold a number, or untick “Above / below a threshold”.'
+  if ((narrative.auto.includes('change') || narrative.auto.includes('mover')) && !narrative.period) return 'The change against the previous period needs the Date column of the period.'
+  if (!hasGroup && (narrative.auto.includes('top') || narrative.auto.includes('bottom') || narrative.auto.includes('mover'))) return 'Highest, lowest and biggest mover need a Group by column.'
+  return ''
+}
 
 export const onDemandFolder = 'on-demand'
 // OND-31: the page types that hold a table (Table, Table + Insights today). The follow-up that makes page types a
@@ -538,11 +643,13 @@ export function parseInsights(list: unknown): Insight[] {
       return [{ column, ...(values?.length ? { values } : {}), ...(from ? { from } : {}), ...(to ? { to } : {}) }]
     }).slice(0, maxFilters)
     const options = cleanOptions(type, measure, item.options)
-    return [{ id: item.id, title: cleanName(text(item.title, 120)) || 'Untitled', type, category: type === 'kpi' ? '' : ref(item.category), second: type === 'pie' || type === 'pareto' || type === 'kpi' ? '' : ref(item.second), measure, value: measure === 'count' ? '' : ref(item.value), filters, sort: type === 'line' ? 'label' : type === 'pareto' ? 'value' : item.sort === 'label' ? 'label' : 'value', ...(options ? { options } : {}) }]
+    // CHT-60, CHT-68: a Narrative's sentences and rules, validated (unknown sentences, operators and placeholders dropped).
+    const narrative = type === 'narrative' ? { narrative: parseNarrative((item as { narrative?: unknown }).narrative) } : {}
+    return [{ id: item.id, title: cleanName(text(item.title, 120)) || 'Untitled', type, category: type === 'kpi' ? '' : ref(item.category), second: type === 'pie' || type === 'pareto' || type === 'kpi' || type === 'narrative' ? '' : ref(item.second), measure, value: measure === 'count' ? '' : ref(item.value), filters, sort: type === 'line' ? 'label' : type === 'pareto' || type === 'narrative' ? 'value' : item.sort === 'label' ? 'label' : 'value', ...(options ? { options } : {}), ...narrative }]
   }).slice(0, maxInsights)
 }
 // CHT: the options are written only when an insight has any, so a file without them stays byte for byte as before.
-const insightOut = ({ id, title, type, category, second, measure, value, filters, sort, options }: Insight) => ({ id, title, type, category, ...(second ? { second } : {}), measure, ...(value ? { value } : {}), ...(filters.length ? { filters } : {}), sort, ...(options && Object.keys(options).length ? { options } : {}) })
+const insightOut = ({ id, title, type, category, second, measure, value, filters, sort, options, narrative }: Insight) => ({ id, title, type, category, ...(second ? { second } : {}), measure, ...(value ? { value } : {}), ...(filters.length ? { filters } : {}), sort, ...(options && Object.keys(options).length ? { options } : {}), ...(type === 'narrative' ? { narrative: narrativeOut(narrative) } : {}) })
 // Schema 1 still: the new fields (a column's description and currency, a row's seq, addedBy, addedAt and log) are
 // optional, so an older file reads as before; an older app version drops them when it saves (LIM-19).
 const logOut = ({ id, at, by, added, action, comment, changes }: LogEntry) => ({ id, at, by, ...(added ? { added } : {}), ...(action ? { action } : {}), ...(comment ? { comment } : {}), changes })

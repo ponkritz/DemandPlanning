@@ -1,6 +1,6 @@
 import test, { after, before } from 'node:test'
 import assert from 'node:assert/strict'
-import { navigate, openPage, rolesFile, startApp, text } from './helpers.mjs'
+import { editorTab, navigate, openPage, rolesFile, startApp, text } from './helpers.mjs'
 
 // Chart options (CHT-01…CHT-12) against a mocked GitHub: on CoNQ's Insights tab the owner makes a Pareto and a stacked
 // horizontal bar with Top 5 + Other and a target line, pins a colour, drills into a bar and a stack, sets the widths and
@@ -93,9 +93,10 @@ test('TC-CHT-01: the owner makes a Pareto and a stacked horizontal bar with Top 
   await dialog.getByLabel('Measure').selectOption('sum')
   await dialog.getByLabel('Of the Number column').selectOption({ label: 'Cost (EUR)' })
   // Options the Pareto does not take are not offered.
-  assert.equal(await dialog.getByLabel('Orientation').count(), 0)
   assert.equal(await dialog.getByLabel('Stacked by').count(), 0)
   await dialog.getByLabel('Show', { exact: true }).selectOption('5')
+  await editorTab(dialog, 'Format')
+  assert.equal(await dialog.getByLabel('Orientation').count(), 0)
   await dialog.getByLabel('Target line value').fill('1000')
   await dialog.getByLabel('Target line label').fill('Budget')
   await dialog.getByLabel('Width', { exact: true }).selectOption('full')
@@ -113,8 +114,9 @@ test('TC-CHT-01: the owner makes a Pareto and a stacked horizontal bar with Top 
   await dialog.getByLabel('Stacked by').selectOption({ label: 'Sites' })
   await dialog.getByLabel('Measure').selectOption('sum')
   await dialog.getByLabel('Of the Number column').selectOption({ label: 'Cost (EUR)' })
-  assert.equal(await dialog.getByLabel('Orientation').inputValue(), 'horizontal', 'horizontal bars, as before, unless chosen')
   await dialog.getByLabel('Show', { exact: true }).selectOption('5')
+  await editorTab(dialog, 'Format')
+  assert.equal(await dialog.getByLabel('Orientation').inputValue(), 'horizontal', 'horizontal bars, as before, unless chosen')
   await dialog.getByLabel('Target line value').fill('800')
   await dialog.getByLabel('Target line label').fill('Limit')
   await dialog.getByLabel('Width', { exact: true }).selectOption('half')

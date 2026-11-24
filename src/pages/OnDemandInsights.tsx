@@ -1,21 +1,26 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useId, useMemo, useState, type ReactNode } from 'react'
 import { utcToday } from '../businessTime'
 import { ChartOptionsFields } from '../components/ChartOptionsFields'
 import { PreviewHeading } from '../components/ChartElements'
-import { ChartGrid, ChartPanel, SizeDialog } from '../components/ChartSize'
+import { ChartGrid, ChartPanel, GridCell, SizeDialog } from '../components/ChartSize'
 import { ViewActions } from '../components/ViewActions'
-import { factoryOf, insightChartId, kindOf, parseGridBox, sizeFromOptions, sizeText, withGridBox, withSizeOptions, type ChartSize, type GridBox } from '../chartSize'
-import type { Layout } from '../chartGrid'
+import { cardFactory, factoryOf, insightChartId, parseGridBox, sizeFromOptions, sizeText, withGridBox, withSizeOptions, type ChartSize, type GridBox } from '../chartSize'
+import { matchRowHeights, packLayout, resizePanel, rowOf, type Layout } from '../chartGrid'
 import { useChartSizes } from '../useChartSize'
 import { ChartCountInfo, InsightView, KpiCard } from '../components/InsightCharts'
 import { MultiSelect } from '../components/MultiSelect'
 import { EmptyState, Info, Modal, Notice, Panel, Pill, WriteBlocked } from '../components/ui'
 import { narrowPeriod, offeredMonths, offeredQuarters, periodQuarters, periodYears, type Period } from '../dashboard'
 import { amountProblem, anyCurrency, chartCurrency, cleanSetup, currenciesOf, filterCurrency, filterKind, filterRowColumns, insightsLocalKey, insightsViewerKey, isFiltered, maxInsightFilters, narrowInsightRows, offeredYears, periodColumns, readChoice, resolveFilterSetup, scopeText, emptyChoice, type FieldChoice, type ResolvedSetup, type ViewerChoice } from '../insightFilters'
-import { cleanOptions, hasOptions, newId, type ColorPins, type Insight, type InsightFilter, type InsightFilterSetup, type InsightMeasure, type OnDemandColumn, type OnDemandPage } from '../onDemand'
+import { cleanOptions, hasOptions, narrativeError, insightKindOf as kindOf, newId, parseNarrative, type ColorPins, type Insight, type InsightFilter, type InsightFilterSetup, type InsightMeasure, type OnDemandColumn, type OnDemandPage } from '../onDemand'
 import type { PersonalViewsStore } from '../usePersonalViews'
+import { PageViewForEveryone } from '../components/ViewForEveryone'
 import { PdfExport, type PrintItem } from '../components/PrintView'
-import { blankInsight, categoryColumns, filterColumns, filterText, insightError, insightRules, insightSubject, insightTypeLabel, insightTypes, measureColumns, measuresFor, noneKey, noneLabel, secondColumns, secondLabel, withType } from '../onDemandInsights'
+import { NarrativeFields } from '../components/NarrativeFields'
+import { EditorTabs } from '../components/EditorTabs'
+import { coloredColumnOf, editorCounts, editorTabLabels, editorTabsFor, filterError, firstErrorTab, panelId, splitProblems, tabId, type EditorTab } from '../chartEditor'
+import { narrativeInfo } from '../narratives'
+import { blankInsight, categoryColumns, filterColumns, filterText, insightError, insightProblems, insightRules, insightSubject, insightTypeLabel, insightTypes, measureColumns, measuresFor, noneKey, noneLabel, secondColumns, secondLabel, withType } from '../onDemandInsights'
 
 // CHT-36: a KPI (one number) is a card in the row above the charts unless its owners show it as a panel.
 const isCard = (insight: Insight) => insight.type === 'kpi' && insight.options?.view !== 'panel'
@@ -53,19 +58,32 @@ export function InsightsTab({ page, canSetup, setupReason, blockNote, saveBar, v
   const sizes = useChartSizes()
   const [arranging, setArranging] = useState(false)
   const arrange = arranging && canSetup
-  const sizeOf = (insight: Insight) => { const kind = kindOf(insight.type); const resolved = sizes.resolve(insightChartId(page.id, insight.id), factoryOf(kind), sizeFromOptions(insight.options, kind), kind); return arrange ? { ...resolved, size: resolved.base, source: 'owner' as const } : resolved }
-  const ownerSize = (insight: Insight, size: ChartSize) => onChange({ ...page, insights: page.insights.map((entry) => entry.id === insight.id ? withInsightSize(entry, size) : entry) }, `${page.name}: size of the chart ${insight.title} (${sizeText(size, kindOf(insight.type))})`)
+  // CHT-51: a KPI card's factory size is 3 × 3 (a chart's half width, Medium).
+  const sizeOf = (insight: Insight) => { const kind = kindOf(insight.type); const resolved = sizes.resolve(insightChartId(page.id, insight.id), isCard(insight) ? cardFactory : factoryOf(kind), sizeFromOptions(insight.options, kind), kind); return arrange ? { ...resolved, size: resolved.base, source: 'owner' as const } : resolved }
+  // CHT-51: the cards first (without a place they take the row(s) above the charts), then the charts and tables.
+  const cards = page.insights.filter(isCard), panels = page.insights.filter((insight) => !isCard(insight))
+  const gridEntry = (insight: Insight, owner: boolean) => ({ id: insight.id, kind: kindOf(insight.type), size: owner ? sizeOf(insight).base : sizeOf(insight).size, box: parseGridBox(insight.options?.grid, kindOf(insight.type)), top: isCard(insight) })
+  const entries = [...cards, ...panels].map((insight) => gridEntry(insight, false))
+  // The owners' layout as everyone sees it (the owners' sizes, not a viewer's own).
+  const ownerGrid = () => packLayout([...cards, ...panels].map((insight) => gridEntry(insight, true)))
+  // CHT-17, CHT-51, CHT-55: Size… — a chart's size written as before; a card's (it has no preset that fits) and "Same
+  // height as the other charts in its row" save the layout, as Arrange does.
+  const ownerSize = (insight: Insight, size: ChartSize, match = false) => {
+    if (!match && !isCard(insight)) { onChange({ ...page, insights: page.insights.map((entry) => entry.id === insight.id ? withInsightSize(entry, size) : entry) }, `${page.name}: size of the chart ${insight.title} (${sizeText(size, kindOf(insight.type))})`); return }
+    const sized = resizePanel(ownerGrid(), insight.id, size)
+    ownerLayout(match ? matchRowHeights(sized, insight.id, size.h) : sized, [], insight.id, match ? 'match' : 'resize')
+  }
   // CHT-47: the owners' layout (Arrange mode) — every chart's place and size on the grid, saved for everyone at once.
-  const ownerLayout = (layout: Layout, _changed: string[], id: string, mode: 'resize' | 'move') => {
+  const ownerLayout = (layout: Layout, _changed: string[], id: string, mode: 'resize' | 'move' | 'match') => {
     const moved = page.insights.find((entry) => entry.id === id)
     const box = layout[id]
     onChange({ ...page, insights: page.insights.map((entry) => layout[entry.id] ? withInsightBox(entry, layout[entry.id]) : entry) },
-      mode === 'move' ? `${page.name}: move the chart ${moved?.title ?? id} (column ${box.x + 1}, row ${box.y + 1})` : `${page.name}: size of the chart ${moved?.title ?? id} (${sizeText(box, kindOf(moved?.type ?? 'bar'))})`)
+      mode === 'move' ? `${page.name}: move the chart ${moved?.title ?? id} (column ${box.x + 1}, row ${box.y + 1})` : mode === 'match' ? `${page.name}: match the heights in the row of ${moved?.title ?? id} (${box.h} rows)` : `${page.name}: size of the chart ${moved?.title ?? id} (${sizeText(box, kindOf(moved?.type ?? 'bar'))})`)
   }
-  // CHT-36: KPI charts are cards (unless shown as a panel); the rest are chart panels. Move up / down moves a card among
-  // the cards and a panel among the panels.
-  const cards = page.insights.filter(isCard), panels = page.insights.filter((insight) => !isCard(insight))
-  const entries = panels.map((insight) => ({ id: insight.id, kind: kindOf(insight.type), size: sizeOf(insight).size, box: parseGridBox(insight.options?.grid, kindOf(insight.type)) }))
+  // CHT-55: Match heights in this row (Arrange mode): every chart starting on its grid row takes the tallest height.
+  const matchRow = (insight: Insight) => ownerLayout(matchRowHeights(ownerGrid(), insight.id), [], insight.id, 'match')
+  const rowMates = (insight: Insight) => Math.max(0, rowOf(ownerGrid(), insight.id).length - 1)
+  // CHT-36: Move up / down moves a card among the cards and a panel among the panels.
   const moveAmong = (list: Insight[], insight: Insight, by: number) => { const other = list[list.indexOf(insight) + by]; if (other) move(page.insights.indexOf(insight), page.insights.indexOf(other) - page.insights.indexOf(insight)) }
   // CHT-25, CHT-39: what a chart's or card's header holds — its title, no type eyebrow (the type is the first line of ⓘ) — ⓘ (what it measures, its filters, the filter row, the rows counted,
   // the currency) and "Filtered" with the owners' ⋯ menu.
@@ -74,12 +92,13 @@ export function InsightsTab({ page, canSetup, setupReason, blockNote, saveBar, v
     const subject = insightSubject(page, insight), filters = filterText(page, insight)
     const rowFiltered = narrowed.active && narrowed.shown < narrowed.all
     const filteredBy = [insight.filters.length ? `its own filters: ${filters}` : '', rowFiltered ? 'the filter row above' : ''].filter(Boolean).join('; ').replace(/^./, (first) => `Filtered by ${first}`)
-    const info = <ul className="od-rules"><li>Type: {insightTypeLabel(insight.type)}.</li><li>{subject}.</li><li>Its own filters: {filters}.</li>{narrowed.active && <li>The filter row above: {scopeText(setup, choice, narrowed, currentYear)}</li>}<ChartCountInfo page={shown} insight={insight} currency={currency} />{insightRules(page, insight).map((line) => <li key={line}>{line}</li>)}{currency && <li>The filter row’s currency for {page.columns.find((column) => column.id === insight.value)?.name}, {currency}, is shown to match; choose another currency above the chart to see its rows.</li>}</ul>
+    const info = <ul className="od-rules"><li>Type: {insightTypeLabel(insight.type)}.</li><li>{subject}.</li><li>Its own filters: {filters}.</li>{narrowed.active && <li>The filter row above: {scopeText(setup, choice, narrowed, currentYear)}</li>}<ChartCountInfo page={shown} insight={insight} currency={currency} />{(insight.type === 'narrative' ? narrativeInfo(page, insight) : insightRules(page, insight)).map((line) => <li key={line}>{line}</li>)}{currency && <li>The filter row’s currency for {page.columns.find((column) => column.id === insight.value)?.name}, {currency}, is shown to match; choose another currency above the chart to see its rows.</li>}</ul>
     const action = (list: Insight[], sizable: boolean) => (filteredBy || canSetup) ? <span className="button-row nowrap">{filteredBy && <span className="chart-filtered" title={filteredBy} aria-label={filteredBy}><Pill>Filtered</Pill></span>}{canSetup && <ViewActions label={insight.title} items={[
       { key: 'up', label: 'Move up', disabled: list.indexOf(insight) === 0, onClick: () => moveAmong(list, insight, -1) },
       { key: 'down', label: 'Move down', disabled: list.indexOf(insight) === list.length - 1, onClick: () => moveAmong(list, insight, 1) },
       { key: 'edit', label: 'Edit…', onClick: () => setEditing({ insight, isNew: false }) },
       ...(sizable ? [{ key: 'size', label: 'Size…', onClick: () => setSizing(insight) }] : []),
+      ...(sizable && arrange ? [{ key: 'match', label: 'Match heights in this row', disabled: !rowMates(insight), title: rowMates(insight) ? undefined : 'No other chart starts on its row.', onClick: () => matchRow(insight) }] : []),
       { key: 'remove', label: 'Remove…', danger: true, onClick: () => setRemoving(insight) },
     ]} />}</span> : undefined
     return { currency, info, action, rowFiltered }
@@ -94,7 +113,7 @@ export function InsightsTab({ page, canSetup, setupReason, blockNote, saveBar, v
       const rows = filters ? shown : page
       return card ? <KpiCard page={rows} insight={insight} currency={currency} />
         : <ChartPanel className="od-insight" size={size} source="owner" title={insight.title} titleHidden={insight.options?.elements?.title === false} detail={own}>
-          <InsightView quiet drill={false} page={rows} insight={insight} colors={page.colors} narrowed={filters && narrowed.active && narrowed.shown < narrowed.all} currency={currency} />
+          <InsightView quiet drill={false} page={rows} insight={insight} colors={page.colors} narrowed={filters && narrowed.active && narrowed.shown < narrowed.all} currency={currency} compare={filters ? narrowed.base : undefined} />
         </ChartPanel>
     } }
   })
@@ -118,13 +137,21 @@ export function InsightsTab({ page, canSetup, setupReason, blockNote, saveBar, v
     {narrowed.active && <div className="ins-bar">
       <FilterRow page={page} setup={setup} choice={choice} currentYear={currentYear} onChange={update} />
       <p className="muted dsh-scope ins-scope" role="status">{scopeText(setup, choice, narrowed, currentYear)}</p>
+      <PageViewForEveryone entryKey={insightsViewerKey(page.id)} what={`${page.name} filter row`} value={choice} onUse={(value) => setChoice(readChoice(value))} />
     </div>}
-    {/* CHT-36: the KPI cards in one row above the charts, in the charts' order (Show as: Panel keeps a KPI among them). */}
-    {cards.length > 0 && <div className="metric-grid compact od-kpi-cards">
-      {cards.map((insight) => { const parts = partsOf(insight); return <KpiCard key={insight.id} page={shown} insight={insight} currency={parts.currency} info={parts.info} action={parts.action(cards, false)} /> })}
-    </div>}
-    {panels.length > 0 && <ChartGrid className="od-insights" entries={entries} arranging={arrange} canMove={canSetup} titleOf={(id) => page.insights.find((entry) => entry.id === id)?.title ?? id}
+    {/* CHT-36, CHT-51: the KPI cards on the chart grid, in a row above the charts in the charts' order until the owners
+        move them (Show as: Panel keeps a KPI among the charts as a panel); each resizable as a chart. */}
+    {page.insights.length > 0 && <ChartGrid className="od-insights" entries={entries} arranging={arrange} canMove={canSetup} titleOf={(id) => page.insights.find((entry) => entry.id === id)?.title ?? id}
       onResize={(id, next) => { const insight = page.insights.find((entry) => entry.id === id); if (insight) sizes.setOwn(insightChartId(page.id, id), next, sizeOf(insight).base, kindOf(insight.type)) }} onLayout={ownerLayout}>
+      {cards.map((insight) => {
+        const parts = partsOf(insight)
+        const { size, source } = sizeOf(insight)
+        const id = insightChartId(page.id, insight.id)
+        return <GridCell key={insight.id} id={insight.id} kind="kpi" title={insight.title || 'Untitled'} size={size} source={source} arranging={arrange}
+          onResize={arrange ? (next) => ownerSize(insight, next) : (next) => sizes.setOwn(id, next, sizeOf(insight).base, 'kpi')} onReset={arrange ? undefined : () => sizes.setOwn(id, undefined)}>
+          {(cell) => <KpiCard page={shown} insight={insight} currency={parts.currency} info={parts.info} action={parts.action(cards, true)} frame={{ className: cell.className, style: cell.style, grip: cell.grip, footer: cell.footer, rows: cell.shown.h }} />}
+        </GridCell>
+      })}
       {panels.map((insight) => {
         const { currency, info, action, rowFiltered } = partsOf(insight)
         const { size, source } = sizeOf(insight)
@@ -132,11 +159,11 @@ export function InsightsTab({ page, canSetup, setupReason, blockNote, saveBar, v
         return <ChartPanel key={insight.id} id={insight.id} kind={kindOf(insight.type)} className="od-insight" size={size} source={source} arranging={arrange} title={insight.title} titleHidden={insight.options?.elements?.title === false}
           info={info} action={action(panels, true)}
           onResize={arrange ? (next) => ownerSize(insight, next) : (next) => sizes.setOwn(id, next, sizeOf(insight).base, kindOf(insight.type))} onReset={arrange ? undefined : () => sizes.setOwn(id, undefined)}>
-          <InsightView quiet page={shown} insight={insight} colors={page.colors} narrowed={rowFiltered} currency={currency} />
+          <InsightView quiet page={shown} insight={insight} colors={page.colors} narrowed={rowFiltered} currency={currency} compare={narrowed.base} />
         </ChartPanel>
       })}
     </ChartGrid>}
-    {sizing && <SizeDialog eyebrow={eyebrow} title={sizing.title} kind={kindOf(sizing.type)} size={sizeOf(sizing).base} heightReason={sizing.type === 'kpi' || sizing.type === 'table' ? 'A KPI or a summary table takes the height of its content.' : ''} onCancel={() => setSizing(null)} onSave={(size) => { ownerSize(sizing, size); setSizing(null) }} />}
+    {sizing && <SizeDialog eyebrow={eyebrow} title={sizing.title} kind={kindOf(sizing.type)} size={sizeOf(sizing).base} card={isCard(sizing)} row={rowMates(sizing)} heightReason={isCard(sizing) ? '' : sizing.type === 'kpi' || sizing.type === 'table' || sizing.type === 'narrative' ? 'A KPI, a summary table or a narrative takes the height of its content.' : ''} onCancel={() => setSizing(null)} onSave={(size, match) => { ownerSize(sizing, size, match); setSizing(null) }} />}
     {exporting && <PdfExport eyebrow={eyebrow} pageName={page.name} sample={Boolean(page.sample)} items={printItems()} onClose={() => setExporting(false)}
       filtersLine={(filters) => narrowed.active ? filters ? `Filter row: ${scopeText(setup, choice, narrowed, currentYear)}` : `Without the filter row: all ${page.rows.length} row${page.rows.length === 1 ? '' : 's'} of ${page.name}.` : ''} />}
     {editing && <InsightDialog page={page} insight={editing.insight} isNew={editing.isNew} onCancel={() => setEditing(null)} onSave={(insight, colors) => {
@@ -163,92 +190,114 @@ export function InsightsTab({ page, canSetup, setupReason, blockNote, saveBar, v
 
 // OND-15 The pop-up of one insight: title, type, the fields, the measure, filters and sort, with a live preview of the
 // chart or table from the page's rows. Add / Save puts it in the page's unsaved changes.
+// CHT-70…CHT-73: the form in tabs — Data, Filters, Format, Elements (Narrative for a narrative), only those the type
+// takes — each with the count of its settings changed from the defaults and, once Save was tried, a red marker on a tab
+// with an error; Save opens and focuses the first of them. The preview stays beside the tabs, the buttons under them.
 function InsightDialog({ page, insight, isNew, onCancel, onSave }: { page: OnDemandPage; insight: Insight; isNew: boolean; onCancel: () => void; onSave: (insight: Insight, colors: ColorPins | undefined) => void }) {
   const [draft, setDraft] = useState<Insight>(insight)
   const [pins, setPins] = useState(page.colors)
   const [error, setError] = useState('')
+  const [tab, setTab] = useState<EditorTab>('data')
+  const [tried, setTried] = useState(false)
+  const tabsId = useId()
   const edit = (change: Partial<Insight>) => { setDraft({ ...draft, ...change }); setError('') }
   const setFilter = (index: number, change: Partial<InsightFilter>) => edit({ filters: draft.filters.map((filter, at) => at === index ? { ...filter, ...change } : filter) })
   const filterable = filterColumns(page)
   const seconds = secondColumns(page, draft.type).filter((column) => column.id !== draft.category)
   const numbers = measureColumns(page, draft.measure)
+  const tabs = editorTabsFor(draft.type)
+  const shownTab = tabs.includes(tab) ? tab : 'data'
+  const errors = insightTabErrors(page, draft, tabs)
+  const colored = page.columns.find((column) => column.id === coloredColumnOf(draft))
+  const counts = editorCounts(draft, pins, colored && hasOptions(colored.type) ? colored.options : [])
   const submit = (event: React.FormEvent) => {
     event.preventDefault()
-    const empty = draft.filters.find((filter) => !filter.values?.length && !filter.from && !filter.to)
-    if (empty) { setError(`The filter on “${page.columns.find((column) => column.id === empty.column)?.name ?? '?'}” has nothing chosen: tick a value or give a month, or remove it.`); return }
-    const bad = draft.filters.find((filter) => filter.from && filter.to && filter.from > filter.to)
-    if (bad) { setError('A date filter ends before it starts: check From and To.'); return }
-    const problem = insightError(page, draft)
-    if (problem) { setError(problem); return }
-    onSave({ ...draft, title: draft.title.trim().replace(/\s+/g, ' ') }, pins)
+    setTried(true)
+    const first = firstErrorTab(tabs, errors)
+    const problem = first ? errors[first]! : filterError(draft.filters, (id) => page.columns.find((column) => column.id === id)?.name ?? '?') || insightError(page, draft)
+    if (problem) { setError(problem); setTab(first ?? 'data'); document.getElementById(tabId(tabsId, first ?? 'data'))?.focus(); return }
+    onSave({ ...draft, title: draft.title.trim().replace(/\s+/g, ' '), ...(draft.type === 'narrative' ? { narrative: parseNarrative(draft.narrative) } : {}) }, pins)
   }
   const measureNeedsNumber = draft.measure !== 'count'
   const preview = { ...draft, filters: draft.filters.filter((filter) => filter.values?.length || filter.from || filter.to) }
+  const onOptions = (options: Insight['options']) => { const next = { ...draft }; if (options) next.options = options; else delete next.options; setDraft(next); setError('') }
+  const panels: Record<EditorTab, () => ReactNode> = {
+    data: () => <>
+      <label>Title<input aria-label="Title" required maxLength={120} value={draft.title} placeholder="e.g. Cost by category" onChange={(event) => edit({ title: event.target.value })} /></label>
+      <fieldset className="od-types"><legend>Type</legend>
+        {insightTypes.map((type) => <label key={type.key} className="check" title={type.hint}><input type="radio" name="insight-type" checked={draft.type === type.key} onChange={() => { setDraft(withType(page, draft, type.key)); setError('') }} />{type.label}</label>)}
+        <small>{insightTypes.find((type) => type.key === draft.type)?.hint}</small>
+      </fieldset>
+      {draft.type !== 'kpi' && draft.type !== 'narrative' && <label>{draft.type === 'line' ? 'Months of' : draft.type === 'table' ? 'Rows by' : 'Categories by'}
+        <select aria-label={draft.type === 'line' ? 'Months of' : draft.type === 'table' ? 'Rows by' : 'Categories by'} value={draft.category} onChange={(event) => edit({ category: event.target.value, second: draft.second === event.target.value ? '' : draft.second })}>
+          {!categoryColumns(page, draft.type).some((column) => column.id === draft.category) && <option value={draft.category}>— Choose —</option>}
+          {categoryColumns(page, draft.type).map((column) => <option key={column.id} value={column.id}>{column.name} ({column.type === 'date' ? 'by month' : column.type === 'multi' ? 'Multi-select' : column.type === 'dropdown' ? 'Dropdown' : 'Text'})</option>)}
+        </select>
+        <small>{draft.type === 'line' ? 'A Date column, grouped by month (or as chosen in Group dates by).' : 'A Dropdown, Multi-select, Text or Date (by month, or as chosen in Group dates by) column.'}</small>
+      </label>}
+      {/* CHT-66: a Narrative's Group by takes the place of Categories by. */}
+      {draft.type === 'narrative' && <NarrativeFields part="data" page={page} insight={draft} onChange={(next) => { setDraft(next); setError('') }} />}
+      {draft.type !== 'pie' && draft.type !== 'pareto' && draft.type !== 'kpi' && draft.type !== 'narrative' && <label>{secondLabel(draft.type)} (optional)
+        <select aria-label={secondLabel(draft.type)} value={draft.second} onChange={(event) => edit({ second: event.target.value })}>
+          <option value="">— None —</option>
+          {draft.second && !seconds.some((column) => column.id === draft.second) && <option value={draft.second}>(not available)</option>}
+          {seconds.map((column) => <option key={column.id} value={column.id}>{column.name}</option>)}
+        </select>
+        <small>{draft.type === 'table' ? 'A second field across: one column per value, with totals.' : 'A Dropdown or Multi-select column.'}</small>
+      </label>}
+      <div className="form-row">
+        <label>Measure
+          <select aria-label="Measure" value={draft.measure} onChange={(event) => { const measure = event.target.value as InsightMeasure; const fits = measureColumns(page, measure); setDraft(withType(page, { ...draft, measure, value: measure === 'count' ? '' : fits.some((column) => column.id === draft.value) ? draft.value : fits[0]?.id || '' }, draft.type)); setError('') }}>
+            {measuresFor(draft.type).map((measure) => { const none = measure.key !== 'count' && !measureColumns(page, measure.key).length; return <option key={measure.key} value={measure.key} disabled={none}>{measure.label}{none ? measure.key === 'distinct' ? ' (needs a column other than Long text)' : ' (needs a Number or Currency column)' : ''}</option> })}
+          </select>
+        </label>
+        {measureNeedsNumber && <label>{draft.measure === 'distinct' ? 'Of the column' : 'Of the Number column'}
+          <select aria-label={draft.measure === 'distinct' ? 'Of the column' : 'Of the Number column'} value={draft.value} onChange={(event) => edit({ value: event.target.value })}>
+            {!numbers.some((column) => column.id === draft.value) && <option value={draft.value}>— Choose —</option>}
+            {numbers.map((column) => <option key={column.id} value={column.id}>{column.name}{column.type === 'currency' ? ' (Currency)' : ''}</option>)}
+          </select>
+        </label>}
+      </div>
+      {draft.type !== 'narrative' && <ChartOptionsFields part="data" page={page} insight={draft} pins={pins} onPins={setPins} onOptions={onOptions} />}
+      {draft.type !== 'line' && draft.type !== 'pareto' && draft.type !== 'kpi' && draft.type !== 'narrative' && <label>Sort
+        <select aria-label="Sort" value={draft.sort} onChange={(event) => edit({ sort: event.target.value === 'label' ? 'label' : 'value' })}>
+          <option value="value">Largest first</option>
+          <option value="label">By option order, month or name</option>
+        </select>
+      </label>}
+    </>,
+    filters: () => <fieldset className="od-filters"><legend>Filters (optional) <Info label="Filters">Only the rows that pass every filter are counted. A Dropdown / Multi-select filter keeps the rows with any of the ticked values (“{noneLabel}”: no value or one not in the list); a Date filter keeps the rows whose date is in the months from / to (either may be left open). The filters are stated under the chart’s title.</Info></legend>
+      {draft.filters.map((filter, index) => {
+        const column = page.columns.find((entry) => entry.id === filter.column)
+        return <div key={index} className="od-filter">
+          <div className="od-filter-head">
+            <select aria-label={`Filter ${index + 1} column`} value={filter.column} onChange={(event) => setFilter(index, { column: event.target.value, values: undefined, from: undefined, to: undefined })}>
+              {!column && <option value={filter.column}>(removed column)</option>}
+              {filterable.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
+            </select>
+            <button type="button" className="text-button danger-text" aria-label={`Remove filter ${index + 1}`} onClick={() => edit({ filters: draft.filters.filter((_, at) => at !== index) })}>✕</button>
+          </div>
+          {column && hasOptions(column.type) && <div className="od-multi">{[...column.options, noneKey].map((option) => <label key={option || '(none)'} className="check"><input type="checkbox" checked={filter.values?.includes(option) ?? false} onChange={(event) => setFilter(index, { values: event.target.checked ? [...(filter.values ?? []), option] : (filter.values ?? []).filter((entry) => entry !== option) })} />{option || noneLabel}</label>)}</div>}
+          {column?.type === 'date' && <div className="form-row">
+            <label>From (optional)<input type="month" aria-label={`Filter ${index + 1} from month`} value={filter.from ?? ''} onChange={(event) => setFilter(index, { from: event.target.value || undefined })} /></label>
+            <label>To (optional)<input type="month" aria-label={`Filter ${index + 1} to month`} value={filter.to ?? ''} onChange={(event) => setFilter(index, { to: event.target.value || undefined })} /></label>
+          </div>}
+        </div>
+      })}
+      <button type="button" className="text-button" disabled={!filterable.length} title={filterable.length ? undefined : 'Filters need a Dropdown, Multi-select or Date column.'} onClick={() => edit({ filters: [...draft.filters, { column: filterable[0].id }] })}>＋ Add filter</button>
+      {!filterable.length && <small>Filters need a Dropdown, Multi-select or Date column.</small>}
+    </fieldset>,
+    format: () => <ChartOptionsFields part="format" page={page} insight={draft} pins={pins} onPins={setPins} onOptions={onOptions} />,
+    elements: () => <ChartOptionsFields part="elements" page={page} insight={draft} pins={pins} onPins={setPins} onOptions={onOptions} />,
+    // CHT-66: a Narrative's own fields — the period, the sentences and rules, the width.
+    narrative: () => <NarrativeFields part="narrative" page={page} insight={draft} onChange={(next) => { setDraft(next); setError('') }} />,
+  }
   return <Modal eyebrow={`ON-DEMAND · ${page.name.toUpperCase()}`} title={isNew ? 'Add a chart or table' : 'Edit the chart or table'} wide onClose={onCancel}>
     <form onSubmit={submit} className="od-insight-form" noValidate>
       <div className="od-insight-editor">
         <div className="od-insight-fields">
-          <label>Title<input aria-label="Title" autoFocus required maxLength={120} value={draft.title} placeholder="e.g. Cost by category" onChange={(event) => edit({ title: event.target.value })} /></label>
-          <fieldset className="od-types"><legend>Type</legend>
-            {insightTypes.map((type) => <label key={type.key} className="check" title={type.hint}><input type="radio" name="insight-type" checked={draft.type === type.key} onChange={() => { setDraft(withType(page, draft, type.key)); setError('') }} />{type.label}</label>)}
-            <small>{insightTypes.find((type) => type.key === draft.type)?.hint}</small>
-          </fieldset>
-          {draft.type !== 'kpi' && <label>{draft.type === 'line' ? 'Months of' : draft.type === 'table' ? 'Rows by' : 'Categories by'}
-            <select aria-label={draft.type === 'line' ? 'Months of' : draft.type === 'table' ? 'Rows by' : 'Categories by'} value={draft.category} onChange={(event) => edit({ category: event.target.value, second: draft.second === event.target.value ? '' : draft.second })}>
-              {!categoryColumns(page, draft.type).some((column) => column.id === draft.category) && <option value={draft.category}>— Choose —</option>}
-              {categoryColumns(page, draft.type).map((column) => <option key={column.id} value={column.id}>{column.name} ({column.type === 'date' ? 'by month' : column.type === 'multi' ? 'Multi-select' : column.type === 'dropdown' ? 'Dropdown' : 'Text'})</option>)}
-            </select>
-            <small>{draft.type === 'line' ? 'A Date column, grouped by month (or as chosen under Display).' : 'A Dropdown, Multi-select, Text or Date (by month, or as chosen under Display) column.'}</small>
-          </label>}
-          {draft.type !== 'pie' && draft.type !== 'pareto' && draft.type !== 'kpi' && <label>{secondLabel(draft.type)} (optional)
-            <select aria-label={secondLabel(draft.type)} value={draft.second} onChange={(event) => edit({ second: event.target.value })}>
-              <option value="">— None —</option>
-              {draft.second && !seconds.some((column) => column.id === draft.second) && <option value={draft.second}>(not available)</option>}
-              {seconds.map((column) => <option key={column.id} value={column.id}>{column.name}</option>)}
-            </select>
-            <small>{draft.type === 'table' ? 'A second field across: one column per value, with totals.' : 'A Dropdown or Multi-select column.'}</small>
-          </label>}
-          <div className="form-row">
-            <label>Measure
-              <select aria-label="Measure" value={draft.measure} onChange={(event) => { const measure = event.target.value as InsightMeasure; const fits = measureColumns(page, measure); setDraft(withType(page, { ...draft, measure, value: measure === 'count' ? '' : fits.some((column) => column.id === draft.value) ? draft.value : fits[0]?.id || '' }, draft.type)); setError('') }}>
-                {measuresFor(draft.type).map((measure) => { const none = measure.key !== 'count' && !measureColumns(page, measure.key).length; return <option key={measure.key} value={measure.key} disabled={none}>{measure.label}{none ? measure.key === 'distinct' ? ' (needs a column other than Long text)' : ' (needs a Number or Currency column)' : ''}</option> })}
-              </select>
-            </label>
-            {measureNeedsNumber && <label>{draft.measure === 'distinct' ? 'Of the column' : 'Of the Number column'}
-              <select aria-label={draft.measure === 'distinct' ? 'Of the column' : 'Of the Number column'} value={draft.value} onChange={(event) => edit({ value: event.target.value })}>
-                {!numbers.some((column) => column.id === draft.value) && <option value={draft.value}>— Choose —</option>}
-                {numbers.map((column) => <option key={column.id} value={column.id}>{column.name}{column.type === 'currency' ? ' (Currency)' : ''}</option>)}
-              </select>
-            </label>}
-          </div>
-          {draft.type !== 'line' && draft.type !== 'pareto' && draft.type !== 'kpi' && <label>Sort
-            <select aria-label="Sort" value={draft.sort} onChange={(event) => edit({ sort: event.target.value === 'label' ? 'label' : 'value' })}>
-              <option value="value">Largest first</option>
-              <option value="label">By option order, month or name</option>
-            </select>
-          </label>}
-          <ChartOptionsFields page={page} insight={draft} pins={pins} onPins={setPins} onOptions={(options) => { const next = { ...draft }; if (options) next.options = options; else delete next.options; setDraft(next); setError('') }} />
-          <fieldset className="od-filters"><legend>Filters (optional) <Info label="Filters">Only the rows that pass every filter are counted. A Dropdown / Multi-select filter keeps the rows with any of the ticked values (“{noneLabel}”: no value or one not in the list); a Date filter keeps the rows whose date is in the months from / to (either may be left open). The filters are stated under the chart’s title.</Info></legend>
-            {draft.filters.map((filter, index) => {
-              const column = page.columns.find((entry) => entry.id === filter.column)
-              return <div key={index} className="od-filter">
-                <div className="od-filter-head">
-                  <select aria-label={`Filter ${index + 1} column`} value={filter.column} onChange={(event) => setFilter(index, { column: event.target.value, values: undefined, from: undefined, to: undefined })}>
-                    {!column && <option value={filter.column}>(removed column)</option>}
-                    {filterable.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
-                  </select>
-                  <button type="button" className="text-button danger-text" aria-label={`Remove filter ${index + 1}`} onClick={() => edit({ filters: draft.filters.filter((_, at) => at !== index) })}>✕</button>
-                </div>
-                {column && hasOptions(column.type) && <div className="od-multi">{[...column.options, noneKey].map((option) => <label key={option || '(none)'} className="check"><input type="checkbox" checked={filter.values?.includes(option) ?? false} onChange={(event) => setFilter(index, { values: event.target.checked ? [...(filter.values ?? []), option] : (filter.values ?? []).filter((entry) => entry !== option) })} />{option || noneLabel}</label>)}</div>}
-                {column?.type === 'date' && <div className="form-row">
-                  <label>From (optional)<input type="month" aria-label={`Filter ${index + 1} from month`} value={filter.from ?? ''} onChange={(event) => setFilter(index, { from: event.target.value || undefined })} /></label>
-                  <label>To (optional)<input type="month" aria-label={`Filter ${index + 1} to month`} value={filter.to ?? ''} onChange={(event) => setFilter(index, { to: event.target.value || undefined })} /></label>
-                </div>}
-              </div>
-            })}
-            <button type="button" className="text-button" disabled={!filterable.length} title={filterable.length ? undefined : 'Filters need a Dropdown, Multi-select or Date column.'} onClick={() => edit({ filters: [...draft.filters, { column: filterable[0].id }] })}>＋ Add filter</button>
-            {!filterable.length && <small>Filters need a Dropdown, Multi-select or Date column.</small>}
-          </fieldset>
+          <EditorTabs id={tabsId} label="Chart settings" current={shownTab} onChoose={setTab} tabs={tabs.map((key) => ({ key, label: editorTabLabels[key], count: counts[key], error: tried ? errors[key] : undefined }))} />
+          <div className="od-tab-panel" role="tabpanel" id={panelId(tabsId, shownTab)} aria-label={editorTabLabels[shownTab]}>{panels[shownTab]()}</div>
         </div>
         <section className="od-insight-preview" aria-label="Preview">
           <p className="eyebrow">PREVIEW</p>
@@ -258,14 +307,31 @@ function InsightDialog({ page, insight, isNew, onCancel, onSave }: { page: OnDem
               <InsightView quiet page={page} colors={pins} drill={false} insight={preview} /></>}
         </section>
       </div>
-      {error && <Notice tone="error">{error}</Notice>}
-      <p className="muted">Saved for everyone to Git at once.</p>
-      <div className="modal-actions"><button type="button" className="ghost" onClick={onCancel}>Cancel</button><button className="primary">{isNew ? 'Add chart' : 'Save'}</button></div>
+      <div className="od-editor-footer">
+        {error && <Notice tone="error">{error}</Notice>}
+        <p className="muted">Saved for everyone to Git at once.</p>
+        <div className="modal-actions"><button type="button" className="ghost" onClick={onCancel}>Cancel</button><button className="primary">{isNew ? 'Add chart' : 'Save'}</button></div>
+      </div>
     </form>
   </Modal>
 }
 
-// OND-55: the choice remembered for this viewer (personal views), else the one kept in this browser.
+// CHT-72: the error of each tab of the chart pop-up — the title and the columns on Data, the chart's own filters on
+// Filters, the target line on Format, the sentences and rules on Narrative; an error of a tab the type does not show
+// goes to Data.
+function insightTabErrors(page: OnDemandPage, insight: Insight, tabs: EditorTab[]): Partial<Record<EditorTab, string>> {
+  const split = splitProblems(insightProblems(page, insight), insightProblems(page, { ...insight, filters: [] }))
+  const target = insight.options?.target
+  const errors: Partial<Record<EditorTab, string>> = {
+    data: !insight.title.trim() ? 'Give the chart or table a title.' : insight.type === 'line' && !categoryColumns(page, 'line').length ? 'A line over time needs a Date column on the page.' : split.data,
+    filters: filterError(insight.filters, (id) => page.columns.find((column) => column.id === id)?.name ?? '?') || split.filters,
+    format: target && !Number.isFinite(target.value) ? 'The target line needs a number.' : '',
+    narrative: insight.type === 'narrative' ? narrativeError(insight.narrative, Boolean(insight.category)) : '',
+  }
+  for (const key of Object.keys(errors) as EditorTab[]) if (!tabs.includes(key) && errors[key]) { errors.data ||= errors[key]; delete errors[key] }
+  return errors
+}
+
 function readStoredChoice(pageId: string, stored: unknown): ViewerChoice {
   if (stored && typeof stored === 'object') return readChoice(stored)
   try { return readChoice(JSON.parse(localStorage.getItem(insightsLocalKey(pageId)) ?? 'null')) } catch { return emptyChoice() }

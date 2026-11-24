@@ -2,10 +2,9 @@ import test, { after, before } from 'node:test'
 import assert from 'node:assert/strict'
 import { menuOf, navigate, openPage, rolesFile, startApp, text } from './helpers.mjs'
 
-// Publish standalone HTML… in a browser (OND-73…OND-77) against a mocked GitHub, with showSaveFilePicker replaced by a
-// stub that keeps what is written: the Tool Owner confirms the pop-up, picks the file, and the file written holds the
-// rows (not the hidden one), the charts as SVG, no external address, and its own sort and search work offline
-// (TC-OND-63, UAT); in Sample and for a person who is not an owner the action is disabled with the reason (TC-OND-64).
+// Publish interactive HTML… (OND-73, OND-75, OND-79) against a mocked GitHub: in Sample and for a person who is not an
+// owner the action is disabled with the reason (TC-OND-64); a scheduled publish that cannot write its file warns on the
+// page (TC-OND-65). The published file itself: e2e/interactive-html.e2e.mjs (TC-OND-94…TC-OND-96).
 let app
 before(async () => { app = await startApp() })
 after(async () => { await app.stop() })
@@ -57,69 +56,19 @@ async function open(role) {
   return { page, context, errors, writes }
 }
 
-test('TC-OND-63: the Tool Owner publishes CoNQ as a standalone HTML file — the confirmation, the file picked, the rows and charts written without external addresses, sort and search working offline', async () => {
-  const { page, context, errors, writes } = await open('Tool Owner')
-  await (await menuOf(page, 'page CoNQ')).getByRole('menuitem', { name: 'Publish standalone HTML…' }).click()
-  const dialog = page.getByRole('dialog', { name: 'Publish standalone HTML' })
-  await dialog.waitFor()
-  assert.match(await text(dialog.locator('.publish-warning')), /^This file contains every row of CoNQ\. Anyone who receives it can read them\. \(3 rows; 1 hidden row left out,/)
-  await dialog.getByText('Not chosen yet: Publish now asks where to save it').waitFor()
-  await dialog.getByRole('button', { name: 'Publish now' }).click()
-  await dialog.waitFor({ state: 'detached' })
-  await page.waitForFunction(() => window.__written.length === 1)
-  assert.equal(await page.evaluate(() => window.__picker.suggestedName), 'CoNQ.html')
-  const html = await page.evaluate(() => window.__written[0])
-
-  // OND-74, OND-77: the rows (not the hidden one), escaped; the charts as SVG; no address the file could load.
-  assert.match(html, /^<!doctype html>/)
-  for (const id of ['CONQ-0001', 'CONQ-0002', 'CONQ-0003']) assert.ok(html.includes(`<td data-sort="${id.slice(-1)}">${id}</td>`), id)
-  assert.doesNotMatch(html, /CONQ-0004|Hidden secret/)
-  assert.ok(html.includes('Wrong label &lt;b&gt;x&lt;/b&gt;'))
-  assert.match(html, /<meta http-equiv="Content-Security-Policy" content="default-src 'none';/)
-  assert.match(html, /<figure class="half"><h2>Cost by category<\/h2>.*<svg [^>]*role="img"/s)
-  assert.match(html, /<div class="card"><div class="muted">Rows<\/div><strong>3<\/strong>/)
-  assert.match(html, /<p>Published by .* on \d{1,2} [A-Z][a-z]{2} \d{4}, \d{2}:\d{2} \S+<\/p>/)
-  assert.deepEqual(html.match(/https?:\/\/[^<\s]*/g), ['https://example.com/not-a-link'], 'the only address is a row’s text')
-  assert.equal(writes.length, 0, 'nothing written to Git')
-
-  // The file on its own: no request, search and sort work.
-  const file = await context.newPage()
-  const requests = []
-  file.on('request', (request) => { if (!request.url().startsWith('data:') && request.url() !== 'about:blank') requests.push(request.url()) })
-  await file.setContent(html)
-  await file.locator('#count', { hasText: '3 of 3 rows' }).waitFor()
-  await file.getByRole('searchbox', { name: 'Search all columns' }).fill('rework')
-  await file.locator('#count', { hasText: '1 of 3 rows' }).waitFor()
-  await file.getByRole('searchbox', { name: 'Search all columns' }).fill('')
-  await file.getByRole('button', { name: 'Cost' }).click()
-  assert.deepEqual(await file.locator('#rows tbody tr').evaluateAll((list) => list.map((row) => row.cells[0].textContent)), ['CONQ-0002', 'CONQ-0003', 'CONQ-0001'], 'by amount, ascending')
-  await file.getByRole('button', { name: 'Cost' }).click()
-  assert.equal(await file.locator('#rows thead th').nth(3).getAttribute('aria-sort'), 'descending')
-  assert.deepEqual(requests, [])
-
-  // The next publish overwrites the same file without asking again.
-  await (await menuOf(page, 'page CoNQ')).getByRole('menuitem', { name: 'Publish standalone HTML…' }).click()
-  await dialog.getByText('CoNQ.html').first().waitFor()
-  await dialog.getByRole('button', { name: 'Publish now' }).click()
-  await page.waitForFunction(() => window.__written.length === 2)
-  assert.equal(await page.evaluate(() => window.__picker.suggestedName), 'CoNQ.html')
-  assert.deepEqual(errors, [])
-  await context.close()
-})
-
-test('TC-OND-64: Publish standalone HTML… is disabled with the reason in Sample and for a person who is not an owner of the page', async () => {
+test('TC-OND-64: Publish interactive HTML… is disabled with the reason in Sample and for a person who is not an owner of the page', async () => {
   const owner = await open('Tool Owner')
   await owner.page.getByRole('group', { name: 'Data shown on CoNQ' }).getByRole('button', { name: 'Sample' }).click()
   await owner.page.locator('.od-sample-banner').waitFor()
-  let item = (await menuOf(owner.page, 'page CoNQ')).getByRole('menuitem', { name: 'Publish standalone HTML…' })
+  let item = (await menuOf(owner.page, 'page CoNQ')).getByRole('menuitem', { name: 'Publish interactive HTML…' })
   assert.equal(await item.isDisabled(), true)
   assert.equal(await item.getAttribute('title'), 'Switch CoNQ to Live to publish: sample rows are never published.')
   await owner.context.close()
 
   const member = await open('Team Member')
-  item = (await menuOf(member.page, 'page CoNQ')).getByRole('menuitem', { name: 'Publish standalone HTML…' })
+  item = (await menuOf(member.page, 'page CoNQ')).getByRole('menuitem', { name: 'Publish interactive HTML…' })
   assert.equal(await item.isDisabled(), true)
-  assert.equal(await item.getAttribute('title'), 'Only the Tool Owner and the co-owners of CoNQ publish it as a standalone HTML file.')
+  assert.equal(await item.getAttribute('title'), 'Only the Tool Owner and the co-owners of CoNQ publish it as an interactive HTML file.')
   await member.context.close()
 })
 
@@ -128,20 +77,20 @@ test('TC-OND-64: losing permission after the live read prevents the final HTML w
   let checks = 0
   const { page, context, writes } = await open(() => publishing && ++checks >= 2 ? 'Team Member' : 'Tool Owner')
   try {
-    await (await menuOf(page, 'page CoNQ')).getByRole('menuitem', { name: 'Publish standalone HTML…' }).click()
-    const dialog = page.getByRole('dialog', { name: 'Publish standalone HTML' })
+    await (await menuOf(page, 'page CoNQ')).getByRole('menuitem', { name: 'Publish interactive HTML…' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Publish interactive HTML' })
     await dialog.getByText('Not chosen yet: Publish now asks where to save it').waitFor()
     publishing = true
     await dialog.getByRole('button', { name: 'Publish now' }).click()
     await page.locator('.jobs-failed').click()
-    await page.getByRole('dialog', { name: 'Background jobs' }).getByText('Only the Tool Owner and the co-owners of CoNQ publish it as a standalone HTML file.').waitFor()
+    await page.getByRole('dialog', { name: 'Background jobs' }).getByText('Only the Tool Owner and the co-owners of CoNQ publish it as an interactive HTML file.').waitFor()
     assert.ok(checks >= 2, 'roles were fetched again before writing')
     assert.equal(await page.evaluate(() => window.__written.length), 0)
     assert.deepEqual(writes, [])
   } finally { await context.close() }
 })
 
-test('TC-OND-65: a scheduled publish that is due at the start but cannot write its file warns on the page, with Publish standalone HTML… to fix it', async () => {
+test('TC-OND-65: a scheduled publish that is due at the start but cannot write its file warns on the page, with Publish interactive HTML… to fix it', async () => {
   // A daily schedule set two days ago that never ran, and no file this browser can write to (none chosen here).
   const setAt = new Date(Date.now() - 2 * 86_400_000).toISOString()
   const { page, context, errors } = await openPage(app, { init: (value) => {
@@ -169,12 +118,9 @@ test('TC-OND-65: a scheduled publish that is due at the start but cannot write i
   await navigate(page, 'CoNQ')
   const warning = page.locator('.od-publish-failed')
   await warning.waitFor()
-  assert.match(await text(warning), /^The scheduled publish of CoNQ at .+ failed: No file is chosen for this page yet: choose Publish now to pick one\. Publish standalone HTML…$/)
+  assert.match(await text(warning), /^The scheduled publish of CoNQ at .+ failed: No file is chosen for this page yet: choose Publish now to pick one\. Publish interactive HTML…$/)
   // It ran once: its last run is recorded on this computer.
-  const stored = await page.evaluate(() => {
-    const scope = JSON.stringify(['example/storage@main:access.json', 'ana@example.com', 'conq'])
-    return JSON.parse(localStorage.getItem('demand-planning-publish-schedule-v2'))[scope]
-  })
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('demand-planning-publish-schedule-v2'))[JSON.stringify(['example/storage@main:access.json', 'ana@example.com', 'conq'])])
   assert.equal(stored.lastOk, false)
   assert.ok(Date.parse(stored.lastRun) > Date.parse(setAt))
   assert.deepEqual(errors, [])

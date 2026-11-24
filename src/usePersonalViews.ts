@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { GitConflictError } from './gitStorage'
-import { emptyViews, parseViews, withDefaultEntry, personalViewsPath, serializeViews, viewsDefaultsPath, withDefaults, type MenuLayout, type PersonalViews, type SectionLayout } from './personalViews'
+import { emptyViews, parseViews, withDefaultEntries, personalViewsPath, serializeViews, viewsDefaultsPath, withDefaults, type MenuLayout, type PersonalViews, type SectionLayout } from './personalViews'
 import type { GitStorage } from './useGitStorage'
 
 // Each person's views (MYD-06…MYD-09): kept in this browser at once (so a change shows immediately and survives without
@@ -58,12 +58,24 @@ export function usePersonalViews(git: GitStorage, myEmail: string) {
   }
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current) }, [])
 
+  // The defaults file is read fresh first, so the other defaults in it are kept (GIT-17 merges a save in between).
+  const saveDefaults = async (changes: Record<string, unknown>, message: string) => {
+    const fresh = await readViewsDefaults()
+    const current = fresh.text != null ? parseViews(fresh.text) : defaults
+    const text = serializeViews(withDefaultEntries(current, changes))
+    const saved = await git.writeViewsDefaults(text, message)
+    const parsed = parseViews(saved.text)
+    setDefaults(parsed); write(cacheKey('defaults'), parsed)
+    return saved
+  }
   const views = withDefaults(mine, defaults)
   return {
-    views, note, inGit: Boolean(connected && !readOnly && email),
+    views, note, inGit: Boolean(connected && !readOnly && email), who: email,
     reload: () => { if (!timer.current) setReads((count) => count + 1) },
     sections: (page: string): SectionLayout | undefined => views.sections[page],
     setSections: (page: string, layout: SectionLayout) => change((current) => ({ ...current, sections: { ...current.sections, [page]: layout } })),
+    // MYD-23: the shared default of a page's sections only (View as shows it, never the viewed person's own layout).
+    defaultSections: (page: string): SectionLayout | undefined => defaults.sections[page],
     resetSections: (page: string) => change((current) => { const sections = { ...current.sections }; delete sections[page]; return { ...current, sections } }),
     menu: views.menu,
     setMenu: (menu: MenuLayout) => change((current) => ({ ...current, menu })),
@@ -76,15 +88,9 @@ export function usePersonalViews(git: GitStorage, myEmail: string) {
     clearFilter: (page: string) => { if (page in latest.current.filters) change((current) => { const filters = { ...current.filters }; delete filters[page]; return { ...current, filters } }) },
     // BKL-47: one entry (e.g. the QMS-0025 column order) as everyone's default; the defaults file is read fresh first so
     // the other defaults in it are kept.
-    saveEntryAsDefault: async (page: string, value: unknown) => {
-      const fresh = await readViewsDefaults()
-      const current = fresh.text != null ? parseViews(fresh.text) : defaults
-      const text = serializeViews(withDefaultEntry(current, page, value))
-      const saved = await git.writeViewsDefaults(text, `Default ${page} from ${email || 'a Tool Owner'}`)
-      const parsed = parseViews(saved.text)
-      setDefaults(parsed); write(cacheKey('defaults'), parsed)
-      return saved
-    },
+    saveEntryAsDefault: (page: string, value: unknown) => saveDefaults({ [page]: value }, `Default ${page} from ${email || 'a Tool Owner'}`),
+    // UI-21: entries for everyone set or (undefined) removed in one queued commit — a view for everyone with who and when.
+    saveDefaults,
     // Admins: my sections and menu become everyone's default (filters stay personal). GIT-17: queued and merged with a
     // default saved by someone else in between (per page; the later save wins for a page both changed).
     saveAsDefault: async () => {

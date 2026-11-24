@@ -18,7 +18,7 @@ Run the L3 system test cases in TEST-PLAN.md §6 on the environments in §3. Rec
 
 ## Documents with every change
 
-Every pull request that changes behaviour updates, in the same pull request: the requirement rows (REQUIREMENTS-SPECIFICATION.md), the test cases and the coverage matrix (TEST-PLAN.md §6 and §7), the regenerated traceability matrix (`pnpm trace`), the UAT plan when a UAT case is added or retired, the README, and the package documents the change touches (components, known issues, DFMEA, security assessment). The Documentation page bundles these files at build time, so the app always shows the documents of its own build.
+Every pull request that changes behaviour updates, in the same pull request: the requirement rows (REQUIREMENTS-SPECIFICATION.md), the test cases and the coverage matrix (TEST-PLAN.md §6 and §7), the regenerated traceability matrix (`pnpm trace`), the UAT plan when a UAT case is added or retired, the README, the user guide (`docs/USER-GUIDE.md`; a change to a page it pictures is followed by `pnpm build:web && pnpm docs:shots` — and `pnpm docs:videos` when a clip shows it — with the new pictures in the same pull request, DOC-16), and the package documents the change touches (components, known issues, DFMEA, security assessment). The Documentation page bundles these files at build time, so the app always shows the documents of its own build.
 
 ## Evidence
 

@@ -2,8 +2,9 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { cleanOptions, mergeOnDemandText, parseOnDemandPage, serializeOnDemandPage } from '../src/onDemand.ts'
 import { mergeDashboardText, parseDashboard, serializeDashboard } from '../src/dashboardPages.ts'
-import { clampSize, factoryOf, gridColsFor, heightFactorOf, heightRows, kindOf, nearestHeight, nearestWidth, parseChartSize, parseGridBox, presetSize, sizeFromOptions, storedSize, withGridBox, withSizeOptions } from '../src/chartSize.ts'
-import { changedPanels, compact, movePanel, overlaps, packLayout, resizePanel, stepMove } from '../src/chartGrid.ts'
+import { cardFactory, clampSize, factoryOf, gridColsFor, heightFactorOf, heightRows, kindOf, nearestHeight, nearestWidth, parseChartSize, parseGridBox, presetSize, sizeFromOptions, storedSize, withGridBox, withSizeOptions } from '../src/chartSize.ts'
+import { changedPanels, compact, matchRowHeights, movePanel, overlaps, packLayout, resizePanel, rowOf, stepMove } from '../src/chartGrid.ts'
+import { menuPlace } from '../src/menuPlace.ts'
 
 // CHT-43…CHT-50 The chart grid: the size mapping of the presets, the packing and compaction of panels, moving and
 // resizing with the others shifting, the keyboard's move, the narrower grids, the file field `options.grid` (validated,
@@ -109,7 +110,7 @@ test('CHT-47, CHT-48, CHT-50: options.grid and a viewer’s size in grid units �
   assert.deepEqual(withSizeOptions({ grid: { x: 6, y: 0, w: 6, h: 8 } }, { w: 5, h: 9 }), { grid: { x: 6, y: 0, w: 5, h: 9 } }, 'a size between the presets is kept in the grid')
   assert.deepEqual(cleanOptions('bar', 'count', { grid: { x: 2, y: 1, w: 5, h: 7 } }), { grid: { x: 2, y: 1, w: 5, h: 7 } })
   assert.deepEqual(cleanOptions('table', 'count', { grid: { x: 0, y: 0, w: 2, h: 2 } }), { grid: { x: 0, y: 0, w: 4, h: 4 } }, 'a summary table at least 4 × 4')
-  assert.equal(cleanOptions('kpi', 'count', { grid: { x: 0, y: 0, w: 2, h: 3 } }), undefined, 'a KPI card has no place on the grid')
+  assert.deepEqual(cleanOptions('kpi', 'count', { grid: { x: 0, y: 0, w: 1, h: 3 } }), { grid: { x: 0, y: 0, w: 2, h: 3 } }, 'a KPI card has a place on the grid since CHT-51, at least 2 × 3')
   assert.deepEqual(sizeFromOptions({ size: 'full', grid: { x: 0, y: 0, w: 7, h: 9 } }), { w: 7, h: 9 }, 'the grid wins over the presets beside it')
   // A viewer's size: stored as grid units and the nearest presets; read either way.
   assert.deepEqual(storedSize({ w: 7, h: 9 }), { width: 'twothirds', height: 'medium', w: 7, h: 9 })
@@ -139,4 +140,67 @@ test('CHT-47, CHT-48, CHT-50: options.grid and a viewer’s size in grid units �
   const dash = (blocks) => serializeDashboard(parseDashboard(JSON.stringify({ schema: 1, kind: 'dashboard', id: 'd', tabs: [], filters: [], blocks }), 'd').dashboard)
   const out = parseDashboard(mergeDashboardText(dash([block('b1'), block('b2')]), dash([block('b1', { x: 6, y: 0, w: 6, h: 8 }), block('b2')]), dash([block('b1'), block('b2', { x: 0, y: 0, w: 4, h: 5 })]), true), 'd').dashboard
   assert.deepEqual(out.blocks.map((entry) => entry.options?.grid), [{ x: 6, y: 0, w: 6, h: 8 }, { x: 0, y: 0, w: 4, h: 5 }])
+})
+
+test('CHT-51, CHT-52: KPI cards on the chart grid — 3 × 3 by default, in a row above the charts until moved, at least 2 × 3, written only when resized (TC-CHT-38)', () => {
+  assert.deepEqual(cardFactory, { w: 3, h: 3 })
+  assert.deepEqual(clampSize({ w: 1, h: 2 }, 'kpi'), { w: 2, h: 3 })
+  // A page nobody arranged: the cards four to a row at the top, the charts under them two by two, as before.
+  const card = (id, box) => ({ ...entry(id, 3, 3, box, 'kpi'), top: true })
+  const plain = (layout) => Object.fromEntries(Object.entries(layout).map(([id, { x, y, w, h }]) => [id, { x, y, w, h }]))
+  const fresh = plain(packLayout([card('k1'), card('k2'), entry('a', 6), entry('b', 6)]))
+  assert.deepEqual(fresh, { k1: { x: 0, y: 0, w: 3, h: 3 }, k2: { x: 3, y: 0, w: 3, h: 3 }, a: { x: 0, y: 3, w: 6, h: 8 }, b: { x: 6, y: 3, w: 6, h: 8 } }, 'no chart beside the cards')
+  const five = packLayout([1, 2, 3, 4, 5].map((n) => card(`k${n}`)))
+  assert.deepEqual(five.k5, { x: 0, y: 3, w: 3, h: 3, card: true }, 'a fifth card wraps to a second row')
+  // Charts arranged before the cards had a place (v10.3): the cards stay above them, the arranged layout below as it was.
+  const arranged = plain(packLayout([card('k1'), entry('a', 6, 8, { x: 6, y: 0, w: 6, h: 8 }), entry('b', 6, 8, { x: 0, y: 0, w: 6, h: 8 })]))
+  assert.deepEqual(arranged, { k1: { x: 0, y: 0, w: 3, h: 3 }, a: { x: 6, y: 3, w: 6, h: 8 }, b: { x: 0, y: 3, w: 6, h: 8 } })
+  // Once arranged a card is a panel like the others: moved among the charts.
+  const moved = packLayout([{ ...card('k1', { x: 6, y: 8, w: 4, h: 5 }), size: { w: 4, h: 5 } }, entry('a', 6, 8, { x: 0, y: 0, w: 6, h: 8 })])
+  assert.deepEqual(plain(moved).k1, { x: 6, y: 0, w: 4, h: 5 }, 'gaps close upward')
+  // The card band: once the cards have places, a chart below them does not move up beside them when another chart is
+  // resized (compaction), only when the owners drop it there.
+  const placed = packLayout([card('k1', { x: 0, y: 0, w: 3, h: 3 }), card('k2', { x: 3, y: 0, w: 3, h: 3 }), entry('a', 6, 8, { x: 0, y: 3, w: 6, h: 8 }), entry('b', 6, 8, { x: 6, y: 3, w: 6, h: 8 })])
+  assert.deepEqual(placed.b, { x: 6, y: 3, w: 6, h: 8 }, 'read as saved')
+  const taller = resizePanel(placed, 'a', { w: 6, h: 10 })
+  assert.deepEqual([taller.a, taller.b], [{ x: 0, y: 3, w: 6, h: 10 }, { x: 6, y: 3, w: 6, h: 8 }])
+  const dropped = movePanel(placed, 'b', 6, 0)
+  assert.deepEqual(dropped.b, { x: 6, y: 0, w: 6, h: 8 }, 'dropped beside the cards: it stays')
+  assert.deepEqual(resizePanel(dropped, 'a', { w: 6, h: 9 }).b, { x: 6, y: 0, w: 6, h: 8 })
+  // A card made wider and taller pushes the next card to the right in its row; the charts stay below the cards.
+  const wider = resizePanel(placed, 'k1', { w: 4, h: 4 })
+  assert.deepEqual([wider.k1, wider.k2, wider.a, wider.b].map(({ x, y, w, h }) => ({ x, y, w, h })), [{ x: 0, y: 0, w: 4, h: 4 }, { x: 4, y: 0, w: 3, h: 3 }, { x: 0, y: 4, w: 6, h: 8 }, { x: 6, y: 4, w: 6, h: 8 }])
+  // A viewer's own size for a card: wider and taller, the charts shift down.
+  const viewer = plain(packLayout([{ ...card('k1'), size: { w: 6, h: 5 } }, card('k2'), entry('a', 6)]))
+  assert.deepEqual([viewer.k1, viewer.k2, viewer.a], [{ x: 0, y: 0, w: 6, h: 5 }, { x: 6, y: 0, w: 3, h: 3 }, { x: 0, y: 5, w: 6, h: 8 }])
+  // On a phone: full width, cards first.
+  const phone = packLayout([card('k1'), entry('a', 6), card('k2')], 1)
+  assert.deepEqual(Object.keys(phone).sort((x, y) => phone[x].y - phone[y].y), ['k1', 'k2', 'a'])
+  // Written: nothing for the factory size; a card resized gets its place and size (no preset holds 3 columns × 5 rows).
+  assert.equal(withSizeOptions(undefined, { w: 3, h: 3 }, cardFactory, false, 'kpi'), undefined)
+  assert.deepEqual(withSizeOptions(undefined, { w: 3, h: 5 }, cardFactory, false, 'kpi'), { size: 'third', grid: { x: 0, y: 0, w: 3, h: 5 } })
+  assert.deepEqual(sizeFromOptions({ size: 'third', grid: { x: 0, y: 0, w: 3, h: 5 } }, 'kpi'), { w: 3, h: 5 })
+  assert.deepEqual(cleanOptions('kpi', 'count', { size: 'third', grid: { x: 0, y: 3, w: 3, h: 5 } }), { size: 'third', grid: { x: 0, y: 3, w: 3, h: 5 } })
+})
+
+test('KB-89, CHT-55: Match heights in this row — every panel starting on the row takes the tallest height; the rows below shift (TC-CHT-39)', () => {
+  const layout = packLayout([entry('a', 6, 6), entry('b', 6, 10), entry('c', 12, 8)])
+  assert.deepEqual(rowOf(layout, 'a').sort(), ['a', 'b'])
+  const matched = matchRowHeights(layout, 'a')
+  assert.deepEqual([matched.a, matched.b, matched.c], [{ x: 0, y: 0, w: 6, h: 10 }, { x: 6, y: 0, w: 6, h: 10 }, { x: 0, y: 10, w: 12, h: 8 }])
+  assert.equal(matchRowHeights(layout, 'b', 7).a.h, 7, 'Size… with "Same height": the chosen height')
+  assert.deepEqual(matchRowHeights(layout, 'c').c, layout.c, 'alone in its row: unchanged')
+  assert.ok(noOverlap(matched))
+})
+
+test('KB-88: a ⋯ menu opens under its button, flips above near the bottom, stays inside the window (TC-CHT-40)', () => {
+  const view = { width: 1440, height: 900 }
+  const menu = { width: 200, height: 180 }
+  assert.deepEqual(menuPlace({ top: 100, bottom: 130, left: 600, right: 630 }, menu, view), { top: 134, left: 430, maxHeight: 758, up: false })
+  const low = menuPlace({ top: 800, bottom: 830, left: 600, right: 630 }, menu, view)
+  assert.deepEqual([low.top, low.up], [800 - 4 - 180, true], 'above the button near the bottom')
+  assert.equal(menuPlace({ top: 100, bottom: 130, left: 10, right: 40 }, menu, view).left, 10, 'left-aligned near the left edge')
+  assert.equal(menuPlace({ top: 100, bottom: 130, left: 1420, right: 1450 }, menu, view).left, 1440 - 8 - 200, 'inside on the right')
+  const tall = menuPlace({ top: 100, bottom: 130, left: 600, right: 630 }, { width: 200, height: 2000 }, view)
+  assert.ok(tall.top >= 8 && tall.top + tall.maxHeight <= 900 - 8, 'a taller menu scrolls inside the window')
 })

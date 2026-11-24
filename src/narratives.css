@@ -1,0 +1,23 @@
+/* CHT-60, CHT-65 Narratives: a list of sentences, each with its tone as a coloured left border and an icon (the tone in
+   words is read out too). The colour tokens are the app's, for the light and dark themes. */
+.narrative { display: grid; gap: 8px; min-width: 0 }
+.narrative-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px }
+.narrative-line { display: flex; gap: 8px; align-items: flex-start; padding: 7px 10px; border-left: 4px solid var(--accent-line); border-radius: 6px; background: var(--surface-2); color: var(--text); font-size: 13px; line-height: 1.45; overflow-wrap: anywhere }
+.narrative-icon { flex: 0 0 auto; width: 16px; text-align: center; font-weight: 700; color: var(--accent-text) }
+.narrative-text { min-width: 0 }
+.narrative-good { border-left-color: var(--success); background: var(--success-soft) }
+.narrative-good .narrative-icon { color: var(--success-text) }
+.narrative-warning { border-left-color: var(--warning); background: var(--warning-soft) }
+.narrative-warning .narrative-icon { color: var(--warning-text) }
+.narrative-bad { border-left-color: var(--danger); background: var(--danger-soft) }
+.narrative-bad .narrative-icon { color: var(--danger-text) }
+.narrative-empty { margin: 4px 0 }
+/* The editor (CHT-66): the rule list, one rule per row that wraps on a narrow pop-up. */
+.narrative-fields { display: grid; gap: 12px; border: 1px solid var(--line); border-radius: 9px; padding: 12px; margin: 0; min-width: 0 }
+.narrative-fields legend { font-size: 11px; font-weight: 700; color: var(--text-2); padding: 0 4px }
+.narrative-checks { display: flex; flex-wrap: wrap; gap: 6px 14px }
+.narrative-rule { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2) }
+.narrative-rule-head { display: flex; flex-wrap: wrap; gap: 6px; align-items: end }
+.narrative-rule-head > label { flex: 1 1 140px }
+.narrative-rule-head .button-row { margin-left: auto }
+.narrative-rule textarea { min-height: 44px }

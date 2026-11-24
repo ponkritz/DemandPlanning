@@ -153,7 +153,8 @@ export function Drawer({ title, eyebrow, onClose, children, footer, headerAction
       if (openDialogs[openDialogs.length - 1] !== me || !box) return
       const target = event.target instanceof HTMLElement ? event.target : null
       if (event.key === 'Escape') {
-        if (event.defaultPrevented || target?.getAttribute('aria-expanded') === 'true') return
+        // A list open inside the drawer (multi-select, person picker) closes first, as in a pop-up.
+        if (event.defaultPrevented || target?.getAttribute('aria-expanded') === 'true' || target?.closest('.multi-select, .person-picker')?.querySelector('[aria-expanded="true"]')) return
         event.preventDefault(); close.current()
       } else if (event.key === 'Tab') {
         const items = [...box.querySelectorAll<HTMLElement>(focusable)].filter((item) => item.offsetParent !== null || item === document.activeElement)

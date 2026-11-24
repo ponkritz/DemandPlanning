@@ -12,6 +12,8 @@
     "test:e2e": "node --test \"e2e/*.e2e.mjs\"",
     "swbom": "node scripts/swbom.mjs",
     "trace": "node scripts/traceability.mjs",
+    "docs:shots": "node scripts/user-guide-shots.mjs",
+    "docs:videos": "node scripts/user-guide-shots.mjs --videos",
     "test:azure": "node --test tests/azure-devops.test.mjs tests/browser-state.test.mjs tests/app-update.test.mjs tests/cloud-snapshots.test.mjs tests/azure-insights.test.mjs",
     "dev": "vite",
     "dev:desktop": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",

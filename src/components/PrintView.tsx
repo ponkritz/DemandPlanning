@@ -96,7 +96,7 @@ function PrintView({ pageName, eyebrow, stamp, footer, filtersLine, sample, item
     let tries = 0, stable = 0, last = ''
     const timer = window.setInterval(() => {
       const boxes = [...(sheet.current?.querySelectorAll<HTMLElement>('[data-print-item]') ?? [])]
-      const drawn = boxes.every((box) => box.querySelector('svg, table, .empty-state, .notice, .metric, .od-kpi'))
+      const drawn = boxes.every((box) => box.querySelector('svg, table, .empty-state, .notice, .metric, .od-kpi, .narrative'))
       const widths = boxes.map((box) => box.querySelector('svg')?.getAttribute('width') ?? '').join(',')
       stable = drawn && widths === last ? stable + 1 : 0
       last = widths

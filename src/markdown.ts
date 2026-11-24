@@ -1,7 +1,8 @@
 // A small Markdown reader for the documents shown in the app (docs/*.md): headings, paragraphs, nested bullet and
-// numbered lists, tables, horizontal rules and inline code, bold, italic and links. It returns plain data that the
+// numbered lists, tables, horizontal rules and inline code, bold, italic, links and images (`![alt](path)`), plus one
+// video line (`<video src="…" poster="…" title="…"></video>`, read as data, DOC-13). It returns plain data that the
 // Markdown component renders as React elements, so no HTML from the documents is ever injected.
-export type Inline = { kind: 'text' | 'code' | 'strong' | 'em'; text: string } | { kind: 'link'; text: string; href: string }
+export type Inline = { kind: 'text' | 'code' | 'strong' | 'em'; text: string } | { kind: 'link' | 'image'; text: string; href: string }
 export interface ListItem { text: string; children: ListBlock[] }
 export interface ListBlock { kind: 'list'; ordered: boolean; items: ListItem[] }
 export type Block =
@@ -10,6 +11,7 @@ export type Block =
   | ListBlock
   | { kind: 'table'; header: string[]; rows: string[][] }
   | { kind: 'rule' }
+  | { kind: 'video'; src: string; poster: string; title: string }
 
 // Heading anchors as GitHub makes them, so links such as TEST-PLAN.md#7-requirements-coverage-matrix work in the app too.
 export function slug(text: string) {
@@ -42,6 +44,8 @@ export function parseMarkdown(source: string): Block[] {
       index += 1; continue
     }
     if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) { blocks.push({ kind: 'rule' }); index += 1; continue }
+    const video = videoLine(line)
+    if (video) { blocks.push(video); index += 1; continue }
     if (isTableLine(line) && index + 1 < lines.length && isSeparator(lines[index + 1])) {
       const header = tableCells(line), rows: string[][] = []
       index += 2
@@ -54,7 +58,7 @@ export function parseMarkdown(source: string): Block[] {
       blocks.push(parseList(lines.slice(start, index))); continue
     }
     const text: string[] = []
-    while (index < lines.length && lines[index].trim() && !/^#{1,6}\s/.test(lines[index]) && !listLine.test(lines[index]) && !(isTableLine(lines[index]) && isSeparator(lines[index + 1] ?? ''))) { text.push(lines[index].trim()); index += 1 }
+    while (index < lines.length && lines[index].trim() && !/^#{1,6}\s/.test(lines[index]) && !videoLine(lines[index]) && !listLine.test(lines[index]) && !(isTableLine(lines[index]) && isSeparator(lines[index + 1] ?? ''))) { text.push(lines[index].trim()); index += 1 }
     blocks.push({ kind: 'paragraph', text: text.join(' ') })
   }
   return blocks
@@ -84,17 +88,29 @@ function parseList(lines: string[]): ListBlock {
   return build(entries[0]?.indent ?? 0)
 }
 
-// Inline: `code`, **bold**, *italic* or _italic_ (word-bounded), [text](href) and "\|" escapes.
+// A line holding only a video element, its attributes as plain values (paths and a title, never markup). Anything else
+// on the line, or an attribute other than src, poster and title, makes it an ordinary paragraph.
+export function videoLine(line: string): Block | null {
+  const match = /^\s*<video((?:\s+[a-z]+(?:="[^"<>]*")?)*)\s*>\s*<\/video>\s*$/.exec(line)
+  if (!match) return null
+  const values: Record<string, string> = {}
+  for (const attribute of match[1].matchAll(/([a-z]+)(?:="([^"]*)")?/g)) values[attribute[1]] = attribute[2] ?? ''
+  if (!values.src) return null
+  return { kind: 'video', src: values.src, poster: values.poster ?? '', title: values.title ?? '' }
+}
+
+// Inline: `code`, **bold**, *italic* or _italic_ (word-bounded), ![alt](path), [text](href) and "\|" escapes.
 export function parseInline(text: string): Inline[] {
   const parts: Inline[] = []
-  const pattern = /`([^`]+)`|\*\*(.+?)\*\*|\[([^\]]+)\]\(([^)\s]+)\)|(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])|(?<!\w)_(?!\s)(.+?)(?<!\s)_(?!\w)/g
+  const pattern = /`([^`]+)`|\*\*(.+?)\*\*|!\[([^\]]*)\]\(([^)\s]+)\)|\[([^\]]+)\]\(([^)\s]+)\)|(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])|(?<!\w)_(?!\s)(.+?)(?<!\s)_(?!\w)/g
   let last = 0
   for (const match of text.matchAll(pattern)) {
     if (match.index > last) parts.push({ kind: 'text', text: text.slice(last, match.index) })
     if (match[1] != null) parts.push({ kind: 'code', text: match[1] })
     else if (match[2] != null) parts.push({ kind: 'strong', text: match[2] })
-    else if (match[3] != null) parts.push({ kind: 'link', text: match[3], href: match[4] })
-    else parts.push({ kind: 'em', text: match[5] ?? match[6] })
+    else if (match[4] != null) parts.push({ kind: 'image', text: match[3], href: match[4] })
+    else if (match[5] != null) parts.push({ kind: 'link', text: match[5], href: match[6] })
+    else parts.push({ kind: 'em', text: match[7] ?? match[8] })
     last = match.index + match[0].length
   }
   if (last < text.length) parts.push({ kind: 'text', text: text.slice(last) })

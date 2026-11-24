@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { privateGitWrites, decodeBase64, encodeBase64, GitConflictError, historyUrl, parsePlanning, planningData, readPlanningFile, serializePlanning, validateGitConfig, defaultGitRepository, writePlanningFile, loadGitConfig, saveGitConfig } from '../src/gitStorage.ts'
+import { privateGitWrites, decodeBase64, encodeBase64, GitConflictError, historyUrl, parsePlanning, planningData, readPlanningFile, serializePlanning, validateGitConfig, defaultGitRepository, writePlanningFile, loadGitConfig, saveGitConfig, movedRepositoryTarget } from '../src/gitStorage.ts'
 
 const config = { owner: 'acme', repo: 'demand-planning-data', branch: 'main', path: 'planning-data.json' }
 const state = { baselineRules: [{ stream: 'CP', types: {}, items: [{ label: 'Documents', hoursPerUnit: 2, baseUnits: 14, driver: 'assets', unitsPerDriver: 11 }] }], releaseScopes: [{ release: 'CP | Care Pathways | v3.1', stream: 'CP', history: [{ at: '2026-10-01T10:00:00Z', drivers: { assets: 10 }, reason: 'Initial' }] }], resourceProfiles: { 'Zoë Müller': { region: 'Netherlands', role: 'QE' }, 'Arjun Rao': { region: 'India', role: 'Lead', peopleManager: true } } }
@@ -144,8 +144,17 @@ test('capacity settings, holidays and common activities travel in the Git planni
   assert.deepEqual(parsePlanning(serializePlanning({ ...data, capacitySettings: { ...capacitySettings, sharedTime: [{ id: 'x', kind: 'party', scope: 'Mars' }] } })).capacitySettings.sharedTime, undefined, 'invalid mappings in the file are dropped')
 })
 
-test('the default data repository is a valid config: ponkritz/DemandPlanningStorage, main, planning-data.json (GIT-13)', () => {
-  assert.deepEqual(validateGitConfig(defaultGitRepository), { owner: 'ponkritz', repo: 'DemandPlanningStorage', branch: 'main', path: 'planning-data.json' })
+test('GIT-24: a connection to the old data repository points to the new one, keeping its branch and data file; any other connection does not (TC-GIT-16)', () => {
+  assert.deepEqual(movedRepositoryTarget({ owner: 'ponkritz', repo: 'DemandPlanningStorage', branch: 'main', path: 'planning-data.json' }), { owner: 'philips-internal', repo: 'InD_DemandPlanningStorage', branch: 'main', path: 'planning-data.json' })
+  assert.deepEqual(movedRepositoryTarget({ owner: 'PonKritz', repo: 'demandplanningstorage', branch: 'test', path: 'data/planning-data.json' }), { owner: 'philips-internal', repo: 'InD_DemandPlanningStorage', branch: 'test', path: 'data/planning-data.json' }, 'GitHub names are not case-sensitive')
+  assert.equal(movedRepositoryTarget({ owner: 'philips-internal', repo: 'InD_DemandPlanningStorage', branch: 'main', path: 'planning-data.json' }), null)
+  assert.equal(movedRepositoryTarget({ owner: 'ponkritz', repo: 'DemandPlanning', branch: 'main', path: 'planning-data.json' }), null, 'another repository of the same owner')
+  assert.equal(movedRepositoryTarget({ owner: 'acme', repo: 'DemandPlanningStorage', branch: 'main', path: 'planning-data.json' }), null, 'the same name under another owner')
+  assert.equal(movedRepositoryTarget(null), null)
+})
+
+test('the default data repository is a valid config: philips-internal/InD_DemandPlanningStorage, main, planning-data.json (GIT-13)', () => {
+  assert.deepEqual(validateGitConfig(defaultGitRepository), { owner: 'philips-internal', repo: 'InD_DemandPlanningStorage', branch: 'main', path: 'planning-data.json' })
 })
 
 test('GIT-14: Table defaults and the release-source settings are shared in the planning file; an older file leaves them alone', () => {

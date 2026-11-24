@@ -1,6 +1,6 @@
 import { csvCell } from './csv.ts'
 import { merge3 } from './gitSaveQueue.ts'
-import { cleanOptions, hasOptions, measureKeys, moneyOf, parseColors, valuesOf, type ChartOptions, type Insight, type InsightFilter, type InsightMeasure, type OnDemandColumn, type OnDemandPage, type OnDemandRow, type ColorPins } from './onDemand.ts'
+import { blankNarrative, cleanOptions, hasOptions, measureKeys, moneyOf, narrativeError, narrativeOut, parseColors, parseNarrative, valuesOf, type ChartOptions, type Narrative, type Insight, type InsightFilter, type InsightMeasure, type OnDemandColumn, type OnDemandPage, type OnDemandRow, type ColorPins } from './onDemand.ts'
 import { bucketsOf, categoryColumns, chartData, dateGroupLabels, filterColumns, formatValue, grainOf, insightProblems, kpiData, measureText, noneKey, numberOf, otherKey, passesFilter, secondColumns, valueColumns, withType, type ChartData } from './onDemandInsights.ts'
 
 // DSH-01…DSH-12 On-Demand Dashboard pages: a page type of the page builder (PGB-01) that is read only for everyone and
@@ -11,7 +11,7 @@ import { bucketsOf, categoryColumns, chartData, dateGroupLabels, filterColumns, 
 // dashboards/<page-id>.json, next to the page's own file (on-demand/<page-id>.json keeps its name and description).
 // Kept free of React so that every rule is tested on its own (tests/dashboard-pages.test.mjs).
 
-export type BlockType = 'kpi' | 'bar' | 'line' | 'pie' | 'table' | 'pareto'
+export type BlockType = 'kpi' | 'bar' | 'line' | 'pie' | 'table' | 'pareto' | 'narrative'
 export const blockTypes: { key: BlockType; label: string; hint: string }[] = [
   { key: 'kpi', label: 'KPI tile', hint: 'One number: the count, sum or average of the rows, shown as a tile above the tabs.' },
   { key: 'bar', label: 'Bar chart', hint: 'A value per category, optionally stacked by a Dropdown or Multi-select.' },
@@ -19,6 +19,7 @@ export const blockTypes: { key: BlockType; label: string; hint: string }[] = [
   { key: 'pie', label: 'Pie chart', hint: 'Each category’s share of the total; more than 5 categories: the 5 largest and “Other”.' },
   { key: 'pareto', label: 'Pareto chart', hint: 'Categories largest first as columns, the cumulative share (%) as a line on a 0–100% axis and an 80% line.' },
   { key: 'table', label: 'Summary table', hint: 'Rows by one field (largest first), optional columns by another, with totals; the first 10 rows, Show all, Export.' },
+  { key: 'narrative', label: 'Narrative (text)', hint: 'Sentences about the measure — the total, the highest and lowest, the change against the previous period — and rules of your own, as plain text (CHT-60).' },
 ]
 export const blockTypeLabel = (type: BlockType) => blockTypes.find((entry) => entry.key === type)?.label ?? type
 const blockTypeKeys = blockTypes.map((entry) => entry.key)
@@ -30,6 +31,7 @@ export interface DashboardBlock {
   period: string // the Date column the dashboard's period filters on; '' = not filtered by period
   tab: string // the tab the block is on (a KPI tile: the tab it opens); '' = the first tab
   options?: ChartOptions // CHT: the chart's display options, as an insight's
+  narrative?: Narrative // CHT-60: a Narrative's sentences and rules, as an insight's
 }
 export interface DashboardTab { id: string; name: string }
 // A filter of the filter row: the viewer ticks values of a Dropdown / Multi-select column of one data source.
@@ -81,7 +83,8 @@ export function dataSources(pages: OnDemandPage[], saved: (id: string) => OnDema
 // (as OND-17). expectedId: the file's name, which wins over the id inside.
 export interface ParsedDashboard { dashboard: Dashboard; dropped: string[] }
 const ref = (value: unknown) => typeof value === 'string' && idPattern.test(value) ? value : ''
-export function parseDashboard(raw: string, expectedId?: string): ParsedDashboard {
+// pattern: the data sources a block may name (MYD-15: My dashboard's registry passes its own, src/dashboardSources.ts).
+export function parseDashboard(raw: string, expectedId?: string, pattern: RegExp = sourcePattern): ParsedDashboard {
   const where = expectedId ? dashboardPath(expectedId) : 'The dashboard'
   let data: unknown
   try { data = JSON.parse(raw) } catch { throw new Error(`${where} is not valid JSON.`) }
@@ -102,7 +105,7 @@ export function parseDashboard(raw: string, expectedId?: string): ParsedDashboar
   const filterIds = new Set<string>()
   const filters = (Array.isArray(file.filters) ? file.filters : []).flatMap((entry): ViewerFilter[] => {
     const filter = entry as Partial<ViewerFilter> | null
-    if (!filter || !ref(filter.id) || filterIds.has(filter.id!) || typeof filter.source !== 'string' || !sourcePattern.test(filter.source) || !ref(filter.column)) { dropped.push('A filter of the filter row without a valid id, data source or column was left out.'); return [] }
+    if (!filter || !ref(filter.id) || filterIds.has(filter.id!) || typeof filter.source !== 'string' || !pattern.test(filter.source) || !ref(filter.column)) { dropped.push('A filter of the filter row without a valid id, data source or column was left out.'); return [] }
     filterIds.add(filter.id!); return [{ id: filter.id!, source: filter.source, column: filter.column! }]
   })
   if (filters.length > maxViewerFilters) dropped.push(`Only the first ${maxViewerFilters} filters are shown.`)
@@ -113,7 +116,7 @@ export function parseDashboard(raw: string, expectedId?: string): ParsedDashboar
     if (!item || typeof item !== 'object') { dropped.push(`${label} is not a block: left out.`); return [] }
     if (!blockTypeKeys.includes(item.type as BlockType)) { dropped.push(`${label} has an unknown type (${String(item.type).slice(0, 20)}): left out.`); return [] }
     if (!ref(item.id) || blockIds.has(item.id as string)) { dropped.push(`${label} has no valid id, or the id of another block: left out.`); return [] }
-    if (typeof item.source !== 'string' || !sourcePattern.test(item.source)) { dropped.push(`${label} has no known data source: left out.`); return [] }
+    if (typeof item.source !== 'string' || !pattern.test(item.source)) { dropped.push(`${label} has no known data source: left out.`); return [] }
     const title = clean(item.title, maxTitle)
     if (!title) { dropped.push(`${label} has no title: left out.`); return [] }
     blockIds.add(item.id as string)
@@ -132,16 +135,16 @@ export function parseDashboard(raw: string, expectedId?: string): ParsedDashboar
     const tab = ref(item.tab)
     // CHT: the display options validated as an insight's (a KPI tile takes none); unknown ones dropped.
     const options = type === 'kpi' ? undefined : cleanOptions(type, measure, item.options)
-    return [{ id: item.id as string, title, type, source: item.source, category: type === 'kpi' ? '' : ref(item.category), second: type === 'kpi' || type === 'pie' || type === 'pareto' ? '' : ref(item.second), measure, value: measure === 'count' ? '' : ref(item.value), filters: blockFilters,
-      sort: type === 'line' ? 'label' : type === 'table' || type === 'kpi' || type === 'pareto' ? 'value' : item.sort === 'label' ? 'label' : 'value', period: ref(item.period), tab: tab && tabIds.has(tab) ? tab : '', ...(options ? { options } : {}) }]
+    return [{ id: item.id as string, title, type, source: item.source, category: type === 'kpi' ? '' : ref(item.category), second: type === 'kpi' || type === 'pie' || type === 'pareto' || type === 'narrative' ? '' : ref(item.second), measure, value: measure === 'count' ? '' : ref(item.value), filters: blockFilters,
+      sort: type === 'line' ? 'label' : type === 'table' || type === 'kpi' || type === 'pareto' || type === 'narrative' ? 'value' : item.sort === 'label' ? 'label' : 'value', period: ref(item.period), tab: tab && tabIds.has(tab) ? tab : '', ...(options ? { options } : {}), ...(type === 'narrative' ? { narrative: parseNarrative((item as { narrative?: unknown }).narrative) } : {}) }]
   })
   if (blocks.length > maxBlocks) dropped.push(`Only the first ${maxBlocks} blocks are shown (${blocks.length} in the file).`)
   const colors = parseColors(file.colors)
   return { dashboard: { schema: 1, kind: 'dashboard', id, tabs: keptTabs, filters: filters.slice(0, maxViewerFilters), blocks: blocks.slice(0, maxBlocks), ...(colors ? { colors } : {}) }, dropped }
 }
 // CHT: options and colours are written only when set, so a dashboard without them stays byte for byte as before.
-const blockOut = ({ id, title, type, source, category, second, measure, value, filters, sort, period, tab, options }: DashboardBlock) =>
-  ({ id, title, type, source, ...(category ? { category } : {}), ...(second ? { second } : {}), measure, ...(value ? { value } : {}), ...(filters.length ? { filters } : {}), sort, ...(period ? { period } : {}), ...(tab ? { tab } : {}), ...(options && Object.keys(options).length ? { options } : {}) })
+const blockOut = ({ id, title, type, source, category, second, measure, value, filters, sort, period, tab, options, narrative }: DashboardBlock) =>
+  ({ id, title, type, source, ...(category ? { category } : {}), ...(second ? { second } : {}), measure, ...(value ? { value } : {}), ...(filters.length ? { filters } : {}), sort, ...(period ? { period } : {}), ...(tab ? { tab } : {}), ...(options && Object.keys(options).length ? { options } : {}), ...(type === 'narrative' ? { narrative: narrativeOut(narrative) } : {}) })
 export function serializeDashboard(dashboard: Dashboard) {
   const out = `${JSON.stringify({ schema: 1, kind: 'dashboard', id: dashboard.id, tabs: dashboard.tabs.map(({ id, name }) => ({ id, name })), filters: dashboard.filters.map(({ id, source, column }) => ({ id, source, column })), blocks: dashboard.blocks.map(blockOut), ...(dashboard.colors && Object.keys(dashboard.colors).length ? { colors: dashboard.colors } : {}) }, null, 1)}\n`
   if (new TextEncoder().encode(out).length > dashboardMaxBytes) throw new Error(`The dashboard is too large to save (over ${Math.round(dashboardMaxBytes / 1000)} KB). Remove blocks or filters.`)
@@ -231,24 +234,26 @@ export function setTabsAndFilters(dashboard: Dashboard, tabs: DashboardTab[], fi
 }
 
 // ---- a block's fields (DSH-05) ----
-export const asInsight = (block: DashboardBlock): Insight => ({ id: block.id, title: block.title, type: block.type, category: block.category, second: block.second, measure: block.measure, value: block.value, filters: block.filters, sort: block.type === 'table' ? 'value' : block.sort, ...(block.options ? { options: block.options } : {}) })
+export const asInsight = (block: DashboardBlock): Insight => ({ id: block.id, title: block.title, type: block.type, category: block.category, second: block.second, measure: block.measure, value: block.value, filters: block.filters, sort: block.type === 'table' ? 'value' : block.sort, ...(block.options ? { options: block.options } : {}), ...(block.narrative ? { narrative: block.narrative } : {}) })
 export const periodColumns = (page: OnDemandPage) => page.columns.filter((column) => column.type === 'date')
 export function blankBlock(dataset: Dataset, id: string, type: BlockType = 'kpi', tab = ''): DashboardBlock {
   const page = dataset.page
   const chart = type === 'kpi' ? undefined : type
   // DSH-16: the Time Writing hours are measured in hours (Sum of the first hours column), never counted.
   const hours = dataset.key === hoursSource
-  return { id, title: '', type, source: dataset.key, category: chart ? categoryColumns(page, chart)[0]?.id ?? '' : '', second: '', measure: hours ? 'sum' : 'count', value: hours ? valueColumns(page)[0]?.id ?? '' : '', filters: [], sort: type === 'line' ? 'label' : 'value', period: periodColumns(page)[0]?.id ?? '', tab }
+  return { id, title: '', type, source: dataset.key, category: chart ? categoryColumns(page, chart)[0]?.id ?? '' : '', second: '', measure: hours ? 'sum' : 'count', value: hours ? valueColumns(page)[0]?.id ?? '' : '', filters: [], sort: type === 'line' ? 'label' : 'value', period: periodColumns(page)[0]?.id ?? '', tab, ...(type === 'narrative' ? { narrative: blankNarrative() } : {}) }
 }
 // The block after its type or data source changed: fields that no longer fit are cleared or replaced by the first that fits.
 export function withBlockType(dataset: Dataset, block: DashboardBlock, type: BlockType): DashboardBlock {
   const page = dataset.page
-  if (type === 'kpi') { const out: DashboardBlock = { ...block, type, category: '', second: '', sort: 'value' }; delete out.options; return out }
+  if (type === 'kpi') { const out: DashboardBlock = { ...block, type, category: '', second: '', sort: 'value' }; delete out.options; delete out.narrative; return out }
   // The insight's rules (OND-15, CHT): fields that no longer fit cleared, the measure and the options made to fit.
   const next = withType(page, asInsight(block), type)
   const out: DashboardBlock = { ...block, type, category: next.category, second: next.second, measure: next.measure, value: next.value, sort: type === 'table' ? 'value' : next.sort }
   if (next.options) out.options = next.options
   else delete out.options
+  if (next.narrative) out.narrative = next.narrative
+  else delete out.narrative
   return out
 }
 export function withSource(dataset: Dataset, block: DashboardBlock): DashboardBlock {
@@ -280,7 +285,8 @@ export function blockError(dataset: Dataset, block: DashboardBlock): string {
   if (dataset.problem) return dataset.problem
   if (dataset.key === hoursSource && block.measure !== 'sum' && block.measure !== 'average') return 'Time Writing hours are measured as the Sum or Average of Planned hours or Booked hours: choose one of them.'
   if (block.type === 'line' && !categoryColumns(dataset.page, 'line').length) return 'A line chart needs a Date column in the data source.'
-  if (block.type !== 'kpi' && !categoryColumns(dataset.page, block.type).length) return 'The data source has no column to group by (a Dropdown, Multi-select, Text or Date column).'
+  if (block.type !== 'kpi' && block.type !== 'narrative' && !categoryColumns(dataset.page, block.type).length) return 'The data source has no column to group by (a Dropdown, Multi-select, Text or Date column).'
+  if (block.type === 'narrative') { const problem = narrativeError(block.narrative, Boolean(block.category)); if (problem) return problem }
   const empty = block.filters.find((filter) => !filter.values?.length && !filter.from && !filter.to)
   if (empty) return `The filter on “${dataset.page.columns.find((column) => column.id === empty.column)?.name ?? '?'}” has nothing chosen: tick a value or give a month, or remove it.`
   if (block.filters.some((filter) => filter.from && filter.to && filter.from > filter.to)) return 'A date filter ends before it starts: check From and To.'
@@ -291,7 +297,8 @@ export { filterColumns, valueColumns, categoryColumns, secondColumns }
 // ---- the period and the filter row (DSH-07) ----
 // The rows a block counts: those whose month in the block's Date column is one of the period's months (rows without a
 // valid date are left out and counted), and those that pass the viewer's filters of the block's data source.
-export interface Narrowed { page: OnDemandPage; all: number; outside: number; noDate: number; filtered: number; byPeriod: boolean }
+// base (CHT-62): the rows that pass the filter row without the period — a Narrative's previous period is counted in them.
+export interface Narrowed { page: OnDemandPage; all: number; outside: number; noDate: number; filtered: number; byPeriod: boolean; base?: OnDemandPage }
 export function narrowRows(dataset: Dataset, block: DashboardBlock, months: string[] | null, filters: ViewerFilter[] = [], chosen: Record<string, string[]> = {}): Narrowed {
   const page = dataset.page
   const periodColumn = block.period ? page.columns.find((column) => column.id === block.period && column.type === 'date') : undefined
@@ -310,7 +317,9 @@ export function narrowRows(dataset: Dataset, block: DashboardBlock, months: stri
     }
     return true
   })
-  return { page: { ...page, rows }, all: page.rows.length, outside, noDate, filtered, byPeriod: Boolean(periodColumn && wanted) }
+  const byPeriod = Boolean(periodColumn && wanted)
+  const base = byPeriod && block.type === 'narrative' ? { ...page, rows: page.rows.filter((row) => active.every((filter) => { const column = page.columns.find((entry) => entry.id === filter.column); return !column || !hasOptions(column.type) || passesFilter(column, { column: column.id, values: chosen[filter.id] }, row) })) } : undefined
+  return { page: { ...page, rows }, all: page.rows.length, outside, noDate, filtered, byPeriod, ...(base ? { base } : {}) }
 }
 
 // ---- aggregation (DSH-05) ----
@@ -353,6 +362,7 @@ export function blockSubject(dataset: Dataset, block: DashboardBlock, currency =
   const column = (id: string) => page.columns.find((entry) => entry.id === id)?.name ?? '(removed column)'
   const measure = measureText(page, asInsight(block), currency)
   if (block.type === 'kpi') return measure
+  if (block.type === 'narrative' && !block.category) return measure
   const by = block.type === 'line' ? `per ${dateGroupLabels[grainOf(asInsight(block))].unit} of ${column(block.category)}` : `by ${column(block.category)}`
   const split = block.second ? `, ${block.type === 'table' ? 'columns by' : block.type === 'line' ? 'one line per' : block.options?.grouping === 'grouped' ? 'grouped by' : 'stacked by'} ${column(block.second)}` : ''
   return `${measure} ${by}${split}`

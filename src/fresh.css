@@ -353,6 +353,7 @@ td small{color:var(--text-3)}
 .qe-table th.qe-select,.qe-table td.qe-select{width:1%!important;min-width:0!important;padding-left:10px;padding-right:6px;text-align:left}.qe-toolbar .inline-select{white-space:nowrap}
 .dp-counted{margin:0 0 12px;border:1px solid var(--line);border-radius:10px;padding:8px 12px}.dp-counted>summary{cursor:pointer;font-weight:600;font-size:13px}
 ol.column-chooser-list{list-style:none;padding:0;margin:8px 0 0}.column-choice{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:6px;padding:4px 6px;border:1px solid transparent;border-radius:8px;cursor:grab}.column-choice:hover{border-color:var(--line);background:var(--surface-2,transparent)}.column-choice.dragging{opacity:.45}.drag-grip{color:var(--text-3,#999);font-size:12px;letter-spacing:-2px;user-select:none}.column-move{display:inline-flex;gap:2px}.column-move .text-button{padding:2px 6px}
+.view-for-everyone{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin:4px 0 8px;font-size:12px}.view-for-everyone-state{display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap}.view-for-everyone .text-button{padding:2px 0}.view-for-everyone .button-row{align-items:center}.page-view-for-everyone{margin:0 0 12px}
 .query-table th.drop-target{outline:2px dashed var(--accent,#5b5bd6);outline-offset:-3px}.query-table th [draggable=true]{cursor:grab}
 .milestone-chip{display:inline-flex;align-items:baseline;gap:4px;margin:0 6px 2px 0;padding:1px 7px;border-radius:999px;background:var(--surface-2,rgba(91,91,214,.08));border:1px solid var(--line);font-weight:600;font-size:12px;white-space:nowrap}.milestone-chip small{font-weight:400;opacity:.75}
 .inline-field{display:inline-flex;align-items:center;gap:6px;font-size:12px}.inline-field select{width:auto}
@@ -420,7 +421,6 @@ table.resizable.wrap th,table.resizable.wrap td{white-space:pre-wrap;overflow-wr
 .jobs-head{display:flex;justify-content:space-between;gap:8px;align-items:baseline}.jobs-panel ul{list-style:none;margin:0;padding:0;display:grid;gap:8px}.job{border-left:3px solid var(--line);padding-left:8px}.job p{margin:2px 0 0;font-size:13px;overflow-wrap:anywhere}.job-running{border-color:var(--accent)}.job-done{border-color:var(--success)}.job-error{border-color:var(--danger)}
 
 .employment-dates{display:grid;gap:4px;min-width:150px}.employment-dates label{display:grid;gap:2px;font-size:12px}.employment-note{margin:0 0 8px}
-.default-joined{display:grid;gap:4px;margin:0 0 10px;max-width:520px}
 .until-target{display:grid;gap:6px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:0}.until-target legend{font-weight:600;padding:0 4px}
 /* Compact page actions (QV-48): small icon buttons and a "⋯" menu instead of a row of full buttons. */
 .view-actions{position:relative;display:inline-flex;align-items:center;gap:4px}
@@ -630,11 +630,22 @@ details.act-leave{border:1px solid var(--line);border-radius:10px;padding:8px 12
 .pack-plus:hover,.pack-plus:focus-visible{color:#773b93;border-color:#773b93;opacity:1}
 .pack-remove:hover,.pack-remove:focus-visible{color:#c62828;border-color:#c62828;opacity:1}
 .pack-add{justify-self:start;font-size:12px;padding:3px 10px;min-height:0;line-height:1.4}.pack-empty{margin:0;font-size:12.5px}
-/* CAP-51: People & access — names and emails from Azure DevOps. */
-.people-source{align-items:flex-start;justify-content:space-between;flex-wrap:nowrap}.people-source>span{font-size:13px;max-width:70ch}
-.people-count{margin:0;font-size:13px}
-.resource-table td:first-child{min-width:190px}.resource-table td.person-email{white-space:nowrap}
-@media(max-width:760px){.people-source{flex-wrap:wrap}}
+/* CAP-58…CAP-62: People & roles → People — one source line, one folded warning line, the filters, the bulk bar, the
+   read-only list and the person drawer. */
+.people-source{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 10px;font-size:13px}
+.people-warnings{margin:0 0 10px}.people-warnings summary{cursor:pointer;font-weight:600}.people-warnings ul{margin:8px 0 0;padding-left:18px;display:grid;gap:6px}
+.people-warnings .people-incomplete{margin:4px 0 0;display:grid;gap:2px}
+.people-filters{display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap}.people-filters .search{min-width:180px;max-width:260px}
+.bulk-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 10px;padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);font-size:13px}
+.bulk-bar .write-blocked{flex-basis:100%}
+.people-table td{vertical-align:top}.people-table .person-note{display:block;color:var(--muted);font-size:11px;margin-top:2px}
+.people-table td.person-email{overflow-wrap:anywhere}
+.person-tags{display:inline-flex;flex-wrap:wrap;gap:4px;align-items:center}
+.person-status-left,.person-status-not-team,.person-status-not-in-azure{color:var(--text-2)}
+.person-form{display:grid;gap:14px}.person-section{display:grid;gap:10px;padding-bottom:12px;border-bottom:1px solid var(--line-soft)}
+.person-section:last-child{border-bottom:0}.person-section h3{margin:0;font-size:14px;color:var(--heading)}
+.person-section .od-row-values>div:last-child{border-bottom:0;padding-bottom:0}
+.person-drawer .drawer-actions .drawer-remove{display:inline-flex;gap:12px;flex-wrap:wrap}
 .pack-capabilities{display:grid;gap:8px;max-width:760px}.pack-capabilities label{display:grid;gap:4px;max-width:420px}
 /* CAP-54: the utilization formula builder — Top ÷ Bottom. */
 .formula-builder{border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:grid;gap:8px}
@@ -1112,6 +1123,20 @@ div.chart-grid:not(.od-insights){margin-bottom:18px}
 .od-insight-editor{grid-template-columns:minmax(300px,1fr) minmax(320px,1.15fr)}
 .od-insight-fields,.od-insight-fields fieldset,.od-display,.od-insight-preview{min-width:0}
 @container (max-width:860px){.od-insight-editor{grid-template-columns:minmax(0,1fr)}}
+/* CHT-70…CHT-73: the chart editor in tabs — the form and the preview scroll between the heading and the buttons, which
+   stay visible and the pop-up keeps its height from tab to tab; on a wide pop-up the preview stays beside the tabs,
+   under them on a narrow one; the tab row scrolls sideways on a phone. */
+.modal:has(.od-insight-editor){display:flex;flex-direction:column;overflow:hidden;height:min(90vh,920px)}
+.modal:has(.od-insight-editor)>.od-insight-form{display:flex;flex-direction:column;gap:10px;min-height:0;flex:1 1 auto}
+.od-insight-form>.od-insight-editor{flex:1 1 auto;min-height:0;overflow:auto;padding:2px}
+.od-tab-panel{display:grid;gap:10px;min-width:0}
+.overview-tabs.editor-tabs{flex-wrap:nowrap;overflow-x:auto;margin:0 0 2px;gap:4px 18px;scrollbar-width:thin}
+.editor-tabs .backlog-tab{white-space:nowrap;flex-shrink:0}
+.editor-tab-count{color:var(--text-3);font-weight:400}
+.editor-tab-error{display:inline-grid;place-items:center;width:16px;height:16px;margin-left:6px;border-radius:50%;background:var(--danger);color:var(--surface);font-size:11px;font-weight:700;line-height:1}
+.overview-tabs .editor-tab-invalid,.overview-tabs .editor-tab-invalid.backlog-tab-active{color:var(--danger-text)}
+.od-editor-footer{flex:0 0 auto;display:grid;gap:8px}.od-editor-footer>.muted{margin:0}.od-editor-footer .notice{margin:0}
+@container (min-width:861px){.od-insight-preview{position:sticky;top:0}}
 .od-preview-title{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 /* CHT-36, KB-84: KPI cards — at least 180 px wide, wrapping to further rows; the number never cut, the caption 2 lines. */
 .metric-grid.od-kpi-cards,.metric-grid.od-kpi{grid-template-columns:repeat(auto-fill,minmax(180px,1fr))}
@@ -1131,3 +1156,29 @@ div.chart-grid:not(.od-insights){margin-bottom:18px}
 .od-color-hex{width:6.5rem;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 .od-color-note{grid-column:2/-1;font-size:11px}.od-color-warn{color:var(--warning-text)}
 @media(max-width:719px){.od-color{grid-template-columns:14px minmax(0,1fr)}.od-color .od-color-pick{grid-column:1/-1;justify-content:flex-start}}
+/* KB-88: a ⋯ menu in its own layer on top of the page (ViewActions: a portal to <body>, placed under its ⋯ by script),
+   never clipped by a card, a panel or the grid. */
+.view-actions-menu.view-actions-floating{position:fixed;right:auto;z-index:1100;overflow-y:auto;overscroll-behavior:contain}
+/* KB-89, CHT-56: a panel fills the rows of its grid area (h × 40 px and the gaps; more only when its content cannot fit),
+   so the panels on one grid row line up; a resized height always shows. */
+.chart-grid,.od-insights.chart-grid{align-items:stretch}
+.chart-grid>.chart-panel{align-self:stretch}
+/* CHT-51…CHT-54: a KPI card on the chart grid — the look of the KPI tiles, filling its columns and rows; the header in
+   one row (title at most two lines with ⓘ at its end, "Filtered" and ⋯ on the right); the number grows with the card. */
+.od-kpi-card{background:var(--surface);border:1px solid var(--card-border);border-radius:12px;box-shadow:var(--card-shadow);padding:14px 16px;gap:2px;container-type:inline-size;position:relative;overflow:visible}
+.chart-grid>.od-kpi-card{margin:0;min-width:0;z-index:1}
+.chart-grid-1>.od-kpi-card{grid-column:1/-1}
+.od-kpi-card .od-kpi-card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:6px;min-width:0}
+.od-kpi-card .od-kpi-card-head h2{display:flex;align-items:flex-start;gap:4px;flex:1 1 auto;min-width:0;margin:0;font-size:12.5px;font-weight:600;color:var(--text-2);line-height:1.35}
+.od-kpi-card .od-kpi-title{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;min-width:0;font:inherit;color:inherit;letter-spacing:0;text-transform:none}
+.od-kpi-card .od-kpi-card-head .info-button{flex:none;padding:0 6px;line-height:16px}
+.od-kpi-card .od-kpi-card-actions{display:inline-flex;align-items:center;gap:4px;flex:none;font-size:inherit}
+.od-kpi-card .od-kpi-card-actions .view-actions .ghost{min-width:26px;height:26px;padding:0 6px}
+.od-kpi-card .od-kpi{flex:1 1 auto;display:flex;align-items:center;min-height:0;margin:0}
+.od-kpi-card .od-kpi strong{display:block;max-width:100%;margin:4px 0 2px;font-size:clamp(20px,min(11cqi,calc(var(--kpi-rows,3) * 8px)),72px);font-weight:650;letter-spacing:-.02em;color:var(--text);line-height:1.15;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.od-kpi-card .od-kpi-caption{font-size:12px;color:var(--text-3);line-height:1.45}
+.od-kpi-card>.chart-size-note{margin:4px 0 0}
+@media(max-width:719px){.chart-grid>.od-kpi-card{grid-column:1/-1!important;grid-row:auto!important}}
+/* MYD-14: My dashboard's Customize list (each section and block with its size) and its KPI tiles of the person's own. */
+.my-dash-editor li{flex-wrap:wrap;row-gap:6px}.my-dash-editor li>.checkbox-label{flex:1 1 220px;min-width:0}.my-dash-editor li>small{flex:1 1 180px;min-width:0}.my-dash-editor .chart-size-fields{margin:0;gap:8px}
+.my-dash-tile{display:grid;gap:6px;align-content:start;min-width:0}.my-dash-tile>.ghost{justify-self:start;padding:3px 9px}

@@ -34,7 +34,30 @@ export function parseViews(text: string | null | undefined): PersonalViews {
   return { schema: 1, kind, sections, menu: { pinned: ids(menu.pinned), hidden: ids(menu.hidden) }, filters }
 }
 // BKL-47: the defaults file with one page's entry set (as everyone's default), every other default kept.
-export const withDefaultEntry = (current: PersonalViews, page: string, value: unknown): PersonalViews => ({ ...current, filters: { ...current.filters, [page]: value } })
+export const withDefaultEntry = (current: PersonalViews, page: string, value: unknown): PersonalViews => withDefaultEntries(current, { [page]: value })
+// UI-21: several entries at once (one commit); undefined removes an entry (Clear the view for everyone).
+export function withDefaultEntries(current: PersonalViews, changes: Record<string, unknown>): PersonalViews {
+  const filters = { ...current.filters }
+  for (const [key, value] of Object.entries(changes)) { if (!keyOk(key)) continue; if (value === undefined) delete filters[key]; else filters[key] = value }
+  return { ...current, filters }
+}
+// UI-21: the key of a view entry — letters, digits and _:.- only, at most 80 characters (a longer id is cut and gets a
+// short hash of the whole, so two long ids stay apart).
+export function viewEntryKey(prefix: string, id: string) {
+  const clean = `${prefix}:${id}`.replace(/[^\w:.-]/g, '_')
+  if (clean.length <= 80) return clean
+  let hash = 0
+  for (const char of `${prefix}:${id}`) hash = (Math.imul(hash, 31) + char.charCodeAt(0)) >>> 0
+  return `${clean.slice(0, 72)}.${hash.toString(36).padStart(7, '0')}`
+}
+// Who saved a view for everyone and when, kept beside it (by:<key>), so the view itself keeps its page's own shape.
+export interface ViewMeta { by: string; at: string }
+export const viewMetaKey = (key: string) => viewEntryKey('by', key)
+export function parseViewMeta(raw: unknown): ViewMeta | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const value = raw as Record<string, unknown>
+  return typeof value.at === 'string' && /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(value.at) ? { by: typeof value.by === 'string' ? value.by.slice(0, 200) : '', at: value.at } : undefined
+}
 export const serializeViews = (views: PersonalViews) => `${JSON.stringify({ schema: 1, kind, sections: views.sections, menu: views.menu, filters: views.filters }, null, 2)}\n`
 
 // My views over the defaults: a page I changed keeps my layout, any other page uses the default one; the same for

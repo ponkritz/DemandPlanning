@@ -27,7 +27,16 @@ export function normalizeSetupLinks(value: unknown): SetupLinks | undefined {
 
 export const defaultGitPath = 'planning-data.json'
 // The team's data repository, prefilled in the Connect Git storage form (GIT-13): a user adds only the token.
-export const defaultGitRepository: GitConfig = { owner: 'ponkritz', repo: 'DemandPlanningStorage', branch: 'main', path: defaultGitPath }
+export const defaultGitRepository: GitConfig = { owner: 'philips-internal', repo: 'InD_DemandPlanningStorage', branch: 'main', path: defaultGitPath }
+// GIT-24: repositories the team's data has moved away from. A connection still saved to one of them is not changed by
+// itself: the app shows a notice with a button that switches it to the default repository (same branch and data file).
+export const movedGitRepositories: readonly { owner: string; repo: string }[] = [{ owner: 'ponkritz', repo: 'DemandPlanningStorage' }]
+export function movedRepositoryTarget(config: Pick<GitConfig, 'owner' | 'repo' | 'branch' | 'path'> | null | undefined): GitConfig | null {
+  if (!config) return null
+  const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
+  if (!movedGitRepositories.some((old) => same(old.owner, config.owner) && same(old.repo, config.repo))) return null
+  return { owner: defaultGitRepository.owner, repo: defaultGitRepository.repo, branch: config.branch, path: config.path }
+}
 const configKey = 'demand-planning-git-storage-v1'
 const tokenKey = 'demand-planning-git-token-v1'
 const name = /^[A-Za-z0-9_.-]{1,100}$/

@@ -1,5 +1,6 @@
 // The project documents shown on the Documentation page. They are bundled from docs/ at build time, so the page always
-// shows the documents of the running build.
+// shows the documents of the running build. The user guide comes first (DOC-12).
+import userGuide from '../../docs/USER-GUIDE.md?raw'
 import requirements from '../../docs/REQUIREMENTS-SPECIFICATION.md?raw'
 import testPlan from '../../docs/TEST-PLAN.md?raw'
 import verification from '../../docs/VERIFICATION-PLAN.md?raw'
@@ -33,6 +34,7 @@ export const designDocs: ProjectDoc[] = Object.entries(
 }).sort((left, right) => left.file.localeCompare(right.file))
 
 export const projectDocs: ProjectDoc[] = [
+  { file: 'USER-GUIDE.md', label: 'User guide', source: userGuide },
   { file: 'VALIDATION-PACKAGE.md', label: 'Validation package', source: validationPackage },
   { file: 'RELEASE-NOTES.md', label: 'Release notes', source: releaseNotes },
   { file: 'REQUIREMENTS-SPECIFICATION.md', label: 'Requirements', source: requirements },
@@ -53,3 +55,12 @@ export const projectDocs: ProjectDoc[] = [
   { file: 'UI-STANDARDS.md', label: 'UI standards', source: uiStandards },
   { file: 'CP_Release_Reporting_Implementation.md', label: 'CP release reporting brief', source: cpReporting },
 ]
+
+// DOC-13: the user guide's screenshots, clips and their posters, bundled as files of this build (served from the app's
+// own origin, or inlined as data: when tiny) — a document can never make the page load an image or video from elsewhere.
+// Paths are as the documents write them, relative to docs/ (e.g. "user-guide/images/home.png").
+const mediaFiles = import.meta.glob(['../../docs/user-guide/images/*.png', '../../docs/user-guide/media/*.webm', '../../docs/user-guide/media/*.png'], { eager: true, query: '?url', import: 'default' }) as Record<string, string>
+const docMedia = new Map(Object.entries(mediaFiles).map(([path, url]) => [path.replace('../../docs/', ''), url]))
+export function mediaUrl(href: string): string | undefined {
+  return docMedia.get(href.replace(/^\.\//, '').replace(/^docs\//, ''))
+}

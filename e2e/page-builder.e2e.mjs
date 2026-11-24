@@ -320,11 +320,12 @@ test('TC-PGB-16: the co-owner list offers the Azure DevOps team members read at 
   }, initArg: ['tool.owner@example.com', profile] })
   await mockGitHub(context, qualityFiles(), 'Tool Owner')
   // Azure DevOps: the team's members (one is a group); the start fetch finds no work, so nobody is Assigned To.
-  let teamReads = 0, teamRead = () => undefined
+  // Counted for the reloaded page only: the first load's own start fetch can still reach the route on a slow runner.
+  let counting = false, teamReads = 0, teamRead = () => undefined
   const read = new Promise((resolve) => { teamRead = resolve })
   await context.route('https://dev.azure.com/**', (route) => {
     const url = route.request().url(), json = (body) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
-    if (/\/teams\/[^/]+\/members/.test(url)) { teamReads += 1; teamRead(); return json({ value: [{ identity: { displayName: 'Rita Gomez', uniqueName: 'Rita.Gomez@Example.com' } }, { identity: { displayName: 'Omar Haddad', uniqueName: 'omar.haddad@example.com' } }, { identity: { displayName: 'QA Group', uniqueName: 'group', isContainer: true } }] }) }
+    if (/\/teams\/[^/]+\/members/.test(url)) { if (counting) { teamReads += 1; teamRead() } return json({ value: [{ identity: { displayName: 'Rita Gomez', uniqueName: 'Rita.Gomez@Example.com' } }, { identity: { displayName: 'Omar Haddad', uniqueName: 'omar.haddad@example.com' } }, { identity: { displayName: 'QA Group', uniqueName: 'group', isContainer: true } }] }) }
     if (/\/_apis\/wit\/wiql/.test(url)) return json({ workItems: [] })
     return json({ value: [] })
   })
@@ -332,7 +333,9 @@ test('TC-PGB-16: the co-owner list offers the Azure DevOps team members read at 
   // runner): close it whenever it appears, instead of checking once.
   const guide = page.getByRole('dialog').filter({ hasText: 'Could not fetch from Azure DevOps' })
   await page.addLocatorHandler(guide, async () => { await guide.getByRole('button', { name: 'Close', exact: true }).last().click() })
-  await page.reload()
+  // From the moment the reload commits the old page can send nothing more; every team read after it is the new page's.
+  await page.reload({ waitUntil: 'commit' })
+  counting = true
   await page.locator('.sidebar nav').waitFor()
   await read
   await navigate(page, 'Pages & menu')

@@ -1,7 +1,7 @@
 import test, { after, before } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdirSync } from 'node:fs'
-import { navigate, openPage, rolesFile, startApp, text } from './helpers.mjs'
+import { editorTab, navigate, openPage, rolesFile, startApp, text } from './helpers.mjs'
 
 // The chart grid (CHT-43…CHT-50) and the chart follow-ups (CHT-40…CHT-42) against a mocked GitHub, named after UAT
 // case TC-CHT-37: on CoNQ's Insights tab the owner arranges the charts — the grid's lines and each chart's size shown,
@@ -29,7 +29,7 @@ const insights = [
   { id: 'i4', title: 'Average cost by site', type: 'bar', category: 'c1', second: 'c2', measure: 'average', value: 'c3', sort: 'label', options: { orientation: 'vertical', grouping: 'grouped' } },
 ]
 // CHT-41: Berlin in an own colour, Leeds in palette colour 3.
-const conq = () => ({ schema: 1, kind: 'on-demand-page', id: 'conq', name: 'CoNQ', description: 'Cost of Non-Quality', keyPrefix: 'CONQ', columns, rows, insights, colors: { Berlin: '#7b2ff7', Leeds: 3 } })
+const conq = (list = insights) => ({ schema: 1, kind: 'on-demand-page', id: 'conq', name: 'CoNQ', description: 'Cost of Non-Quality', keyPrefix: 'CONQ', columns, rows, insights: list, colors: { Berlin: '#7b2ff7', Leeds: 3 } })
 
 const gitStorage = () => {
   localStorage.setItem('demand-planning-git-storage-v1', JSON.stringify({ owner: 'example', repo: 'storage', branch: 'main', path: 'planning-data.json' }))
@@ -61,15 +61,18 @@ async function mockGitHub(context, files, role) {
   })
   return writes
 }
-async function open(role = 'Tool Owner', viewport = {}) {
-  const files = { 'on-demand/conq.json': JSON.stringify(conq()) }
+async function open(role = 'Tool Owner', viewport = {}, list = insights) {
+  const files = { 'on-demand/conq.json': JSON.stringify(conq(list)) }
   const { page, context, errors } = await openPage(app, { init: gitStorage, width: 1440, ...viewport })
   const writes = await mockGitHub(context, files, role)
+  // The start fetch (Azure DevOps answers 401 here) may open the setup guide at any moment: close it whenever it appears.
+  const guide = page.getByRole('dialog').filter({ hasText: 'Could not fetch from Azure DevOps' })
+  await page.addLocatorHandler(guide, async () => { await guide.getByRole('button', { name: 'Close', exact: true }).last().click() })
   await page.reload()
   await page.locator('.sidebar nav').waitFor()
   await navigate(page, 'CoNQ')
   await page.getByRole('tab', { name: /^Insights/ }).click()
-  for (const title of ['Cost per month', 'Average cost by site']) await panel(page, title).locator('svg[role="img"]').waitFor()
+  for (const entry of list.filter((item) => item.type !== 'kpi')) await panel(page, entry.title).locator('svg[role="img"]').first().waitFor()
   return { page, context, errors, writes }
 }
 const panel = (page, title) => page.locator('.chart-panel', { has: page.locator('h2', { hasText: title }) })
@@ -222,6 +225,7 @@ test('TC-CHT-33: the owner picks an own colour with the hex field — the contra
   await page.getByRole('button', { name: 'More actions: Average cost by site' }).click()
   await page.getByRole('menuitem', { name: 'Edit…' }).click()
   const dialog = page.getByRole('dialog', { name: 'Edit the chart or table' })
+  await editorTab(dialog, 'Format')
   assert.equal(await dialog.getByLabel('Series', { exact: true }).inputValue(), 'grouped')
   assert.equal(await dialog.getByLabel('Colour of Berlin', { exact: true }).inputValue(), 'custom')
   const hex = dialog.getByLabel('#rrggbb for Lyon')
@@ -237,6 +241,158 @@ test('TC-CHT-33: the owner picks an own colour with the hex field — the contra
   await dialog.waitFor({ state: 'detached' })
   await until(() => pageFile(writes)?.colors?.Lyon === '#ffff66', 'the own colour saved to Git')
   assert.deepEqual(pageFile(writes).colors, { Berlin: '#7b2ff7', Leeds: 3, Lyon: '#ffff66' })
+  assert.deepEqual(realErrors(errors), [])
+  await context.close()
+})
+
+// CHT-51…CHT-56, KB-88, KB-89: two KPI cards above a bar chart of three bars and a line chart.
+const withCards = [
+  { id: 'k1', title: 'CoNQ KPI [euros] — cost of non-quality over all sites and categories', type: 'kpi', category: '', measure: 'sum', value: 'c3', sort: 'value', filters: [{ column: 'c1', values: ['Rework', 'Scrap', 'Complaint'] }] },
+  { id: 'k2', title: 'Time Delay [days] due to CoNQ Issues', type: 'kpi', category: '', measure: 'count', sort: 'value' },
+  insights[0], insights[1],
+]
+const card = (page, id) => page.locator('.od-kpi-card').nth(id === 'k1' ? 0 : 1)
+// KB-88: every item of the open menu is inside the window and on top (the element at its centre is the item).
+async function menuVisible(page, label) {
+  await page.getByRole('button', { name: `More actions: ${label}`, exact: true }).click()
+  const menu = page.getByRole('menu', { name: label, exact: true })
+  await menu.waitFor()
+  const items = await menu.getByRole('menuitem').evaluateAll((list) => list.map((item) => {
+    const rect = item.getBoundingClientRect(), x = rect.left + rect.width / 2, y = rect.top + rect.height / 2
+    const hit = document.elementFromPoint(x, y)
+    return { text: item.textContent, inside: rect.top >= 0 && rect.left >= 0 && rect.bottom <= window.innerHeight && rect.right <= window.innerWidth, top: hit === item || item.contains(hit) }
+  }))
+  return { menu, items }
+}
+
+test('TC-CHT-41: KPI cards — the ⋯ menu is never clipped, the header in one row; the owner resizes a card in Arrange charts (saved to Git), the number grows with it', async () => {
+  const { page, context, errors, writes } = await open('Tool Owner', {}, withCards)
+  await card(page, 'k2').waitFor()
+  const grid = page.locator('.od-insights.chart-grid')
+  await until(async () => (await grid.getAttribute('data-cols')) === '12', 'the 12-column grid')
+  // CHT-51: the cards on the grid, 3 of 12 columns each, side by side above the charts.
+  const [one, two, bar] = [await box(card(page, 'k1')), await box(card(page, 'k2')), await box(panel(page, 'Cost by category'))]
+  const all = await box(grid), column = (all.width - 11 * 18) / 12
+  assert.ok(Math.abs(one.top - two.top) < 2 && one.right < two.left, 'side by side')
+  assert.ok(Math.abs(one.width - (3 * column + 2 * 18)) < 2, `3 columns wide: ${one.width}`)
+  assert.ok(bar.top > one.bottom, 'the charts below the cards')
+  // CHT-53: the header in one row — the title at most two lines with ⓘ beside it, Filtered and ⋯ on the right.
+  const head = await card(page, 'k1').evaluate((element) => {
+    const title = element.querySelector('.od-kpi-title'), info = element.querySelector('h2 .info-button'), more = element.querySelector('.view-actions .ghost'), pill = element.querySelector('.chart-filtered')
+    const [t, i, m, p] = [title, info, more, pill].map((node) => node.getBoundingClientRect())
+    return { lines: Math.round(t.height / parseFloat(getComputedStyle(title).lineHeight)), tooltip: title.getAttribute('title'), infoBeside: i.left >= t.right - 1 && i.top < t.bottom, oneRow: Math.abs(m.top + m.height / 2 - (p.top + p.height / 2)) < 4 && p.right <= m.left + 1 }
+  })
+  assert.ok(head.lines <= 2, `the title takes at most two lines: ${head.lines}`)
+  assert.equal(head.tooltip, withCards[0].title)
+  assert.ok(head.infoBeside && head.oneRow, JSON.stringify(head))
+
+  // KB-88: the cards' and a chart's ⋯ menus — every item fully visible and on top.
+  for (const [label, width] of [[withCards[0].title, 1440], ['Cost per month', 1440], [withCards[1].title, 1024]]) {
+    await page.setViewportSize({ width, height: 900 })
+    const { menu, items } = await menuVisible(page, label)
+    assert.deepEqual(items.map((item) => item.text), ['Move up', 'Move down', 'Edit…', 'Size…', 'Remove…'])
+    assert.ok(items.every((item) => item.inside && item.top), `${label} at ${width}: ${JSON.stringify(items)}`)
+    if (shots && label === withCards[0].title) { mkdirSync(shots, { recursive: true }); for (const scheme of ['light', 'dark']) { await page.emulateMedia({ colorScheme: scheme }); await page.screenshot({ path: `${shots}/kpi-menu-${width}-${scheme}.png` }) } await page.emulateMedia({ colorScheme: 'light' }) }
+    await page.keyboard.press('Escape')
+    await menu.waitFor({ state: 'detached' })
+  }
+  // Near the bottom of the window the menu opens above its ⋯, and its items can be clicked (Size… opens its pop-up).
+  await page.setViewportSize({ width: 1440, height: 420 })
+  await page.getByRole('button', { name: `More actions: ${withCards[1].title}`, exact: true }).evaluate((element) => window.scrollBy(0, element.getBoundingClientRect().bottom - window.innerHeight + 8))
+  const low = await menuVisible(page, withCards[1].title)
+  assert.ok(low.items.every((item) => item.inside && item.top), `flipped up: ${JSON.stringify(low.items)}`)
+  await low.menu.getByRole('menuitem', { name: 'Size…' }).click()
+  const sizing = page.getByRole('dialog', { name: /^Size of Time Delay/ })
+  await sizing.waitFor()
+  assert.deepEqual(await sizing.getByLabel('Width', { exact: true }).locator('option').allInnerTexts(), ['2 of 12 columns', '3 of 12 columns', 'One third (⅓)', 'Half (½)', 'Two thirds (⅔)', 'Full width'])
+  await sizing.getByRole('button', { name: 'Cancel' }).click()
+  await sizing.waitFor({ state: 'detached' })
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.evaluate(() => window.scrollTo(0, 0))
+
+  // CHT-52: Arrange charts — the card's handle: → and ↓ (4 × 4), Enter keeps; saved for everyone with every place.
+  await page.getByRole('button', { name: 'Arrange charts' }).click()
+  await page.locator('.chart-grid-lines').waitFor()
+  const before = await box(card(page, 'k1'))
+  await card(page, 'k1').locator('.chart-resize-handle').focus()
+  await page.keyboard.press('ArrowRight')
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('Enter')
+  await until(() => gridOf(writes, 'k1')?.w === 4 && gridOf(writes, 'k1')?.h === 4, 'the card’s size saved to Git')
+  assert.deepEqual(gridOf(writes, 'k2'), { x: 4, y: 0, w: 3, h: 3 }, 'the next card moves to the right in the row, saved with it')
+  assert.ok(['i1', 'i2'].every((id) => gridOf(writes, id)?.y >= 4), 'the charts stay below the cards')
+  await page.getByRole('button', { name: 'Done arranging' }).click()
+  await page.locator('.chart-grid-lines').waitFor({ state: 'detached' })
+  await until(async () => { const after = await box(card(page, 'k1')); return after.width > before.width + column && after.height > before.height + 40 }, 'the card wider and taller')
+  // CHT-54: the number grows with the card and is never cut.
+  const sizes = await page.locator('.od-kpi-card .od-kpi strong').evaluateAll((list) => list.map((value) => ({ size: parseFloat(getComputedStyle(value).fontSize), cut: value.scrollWidth > value.clientWidth + 1 })))
+  assert.ok(sizes[0].size > sizes[1].size && sizes.every((entry) => !entry.cut), JSON.stringify(sizes))
+  await shoot(page, 'kpi-cards-resized')
+  assert.deepEqual(realErrors(errors), [])
+  await context.close()
+})
+
+test('TC-CHT-41: a viewer resizes a KPI card for themselves (not written), Reset to default; at 390 px the cards are full width without a handle', async () => {
+  const { page, context, errors, writes } = await open('Team Member', {}, withCards)
+  await card(page, 'k2').waitFor()
+  assert.equal(await page.getByRole('button', { name: `More actions: ${withCards[1].title}` }).count(), 0, 'no ⋯ for a viewer')
+  const before = await box(card(page, 'k2'))
+  await card(page, 'k2').locator('.chart-resize-handle').focus()
+  await page.keyboard.press('ArrowRight')
+  await page.keyboard.press('ArrowRight')
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('Enter')
+  await card(page, 'k2').locator('.chart-size-note', { hasText: 'Size: yours' }).waitFor()
+  const after = await box(card(page, 'k2'))
+  assert.ok(after.width > before.width + 100 && after.height > before.height + 40, `${JSON.stringify(before)} → ${JSON.stringify(after)}`)
+  assert.equal(writes.filter((write) => write.path === 'on-demand/conq.json').length, 0, 'nothing written to the page')
+  await card(page, 'k2').getByRole('button', { name: /^Reset .* to the default size$/ }).click()
+  await until(async () => Math.abs((await box(card(page, 'k2'))).width - before.width) < 2, 'back to the owners’ size')
+  await page.setViewportSize({ width: 390, height: 844 })
+  await until(async () => (await page.locator('.od-insights.chart-grid').getAttribute('data-cols')) === '1', 'one column')
+  const all = await box(page.locator('.od-insights'))
+  for (const id of ['k1', 'k2']) {
+    const shown = await box(card(page, id))
+    assert.ok(Math.abs(shown.width - all.width) < 2, `${id} full width`)
+    assert.equal(await card(page, id).locator('.chart-resize-handle').isVisible(), false)
+  }
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false, 'no sideways scroll')
+  assert.deepEqual(realErrors(errors), [])
+  await context.close()
+})
+
+test('TC-CHT-42: charts in one grid row line up, a resized height shows; the owner matches the heights of a row (Arrange charts and Size…)', async () => {
+  const { page, context, errors, writes } = await open('Tool Owner', {}, withCards)
+  const [bar, line] = [panel(page, 'Cost by category'), panel(page, 'Cost per month')]
+  // KB-89: by default the two charts of a row are as tall as each other — the bar chart of three bars too.
+  await until(async () => Math.abs((await box(bar)).height - (await box(line)).height) < 2, 'the same height by default')
+  const start = (await box(bar)).height
+  // Arrange charts: the bar chart two rows taller with the keyboard — the panel shows it; then Match heights in this row.
+  await page.getByRole('button', { name: 'Arrange charts' }).click()
+  await page.locator('.chart-grid-lines').waitFor()
+  await handle(page, 'Cost by category').focus()
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('Enter')
+  await until(() => gridOf(writes, 'i1')?.h === 10, 'the height saved')
+  await until(async () => (await box(bar)).height > start + 80, 'the bar chart two rows taller')
+  await page.getByRole('button', { name: 'More actions: Cost per month', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Match heights in this row' }).click()
+  await until(() => gridOf(writes, 'i2')?.h === 10, 'Cost per month as tall as Cost by category, saved')
+  assert.match(writes[writes.length - 1].message, /match the heights in the row of Cost per month \(10 rows\)/)
+  await page.getByRole('button', { name: 'Done arranging' }).click()
+  await page.locator('.chart-grid-lines').waitFor({ state: 'detached' })
+  await until(async () => Math.abs((await box(bar)).height - (await box(line)).height) < 2 && (await box(line)).height > start + 80, 'both taller, the same height')
+  // Size… with "Same height as the other charts in its row": both Small.
+  await page.getByRole('button', { name: 'More actions: Cost by category', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Size…' }).click()
+  const sizing = page.getByRole('dialog', { name: 'Size of Cost by category' })
+  await sizing.getByLabel('Height', { exact: true }).selectOption('small')
+  await sizing.getByRole('checkbox', { name: /Same height as the other charts in its row/ }).check()
+  await sizing.getByRole('button', { name: 'Save to Git' }).click()
+  await sizing.waitFor({ state: 'detached' })
+  await until(() => gridOf(writes, 'i1')?.h === 6 && gridOf(writes, 'i2')?.h === 6, 'both 6 rows in Git')
+  await until(async () => Math.abs((await box(bar)).height - (await box(line)).height) < 2 && (await box(bar)).height < start - 40, 'both lower, the same height')
   assert.deepEqual(realErrors(errors), [])
   await context.close()
 })

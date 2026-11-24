@@ -1,5 +1,5 @@
-import { createContext, useContext, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
-import { chartHeights, chartWidths, clampSize, exactHeight, exactWidth, gridColumns, gridGap, gridColsFor, gridText, heightFactorOf, heightLabels, heightRows, nearestHeight, nearestWidth, rowUnit, sameSize, sizeText, snapHeight, snapWidth, stackFactory, stepSize, widthCols, widthNames, type GridBox, type GridKind, type GridSize, type SizeSource } from '../chartSize'
+import { createContext, useContext, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
+import { cardRows, cardWidths, chartHeights, chartWidths, clampSize, exactHeight, exactWidth, gridColumns, gridGap, gridColsFor, gridText, heightFactorOf, heightLabels, heightRows, nearestHeight, nearestWidth, rowUnit, sameSize, sizeText, snapHeight, snapWidth, stackFactory, stepSize, widthCols, widthNames, type GridBox, type GridKind, type GridSize, type SizeSource } from '../chartSize'
 import { changedPanels, layoutRows, movePanel, packLayout, resizePanel, stepMove, type GridEntry, type Layout } from '../chartGrid'
 import { recordJob } from '../backgroundJobs'
 import { useElementWidth } from '../chartUtils'
@@ -124,21 +124,39 @@ export function ChartPanel({ id, kind = 'chart', title, eyebrow, detail, info, a
   size: GridSize; source: SizeSource
   onResize?: (size: GridSize) => void; onReset?: () => void; extra?: ReactNode; arranging?: boolean; children: ReactNode
 }) {
+  const cell = useGridCell({ id, kind, title, size, source, onResize, onReset, extra, arranging })
+  return <Panel className={[className, cell.className].join(' ')} style={cell.style} eyebrow={eyebrow} title={title} detail={detail} info={info} action={cell.grip || action ? <>{cell.grip}{action}</> : undefined} titleHidden={titleHidden}>
+    <ChartHeightContext.Provider value={heightFactorOf(cell.shown.h, kind)}>{children}</ChartHeightContext.Provider>
+    {cell.footer}
+  </Panel>
+}
+
+// What a panel or a KPI card on the grid takes from it (CHT-15…CHT-18, CHT-43…CHT-51): its classes, its place (the grid
+// area), the move grip (owners, Arrange mode), the size shown, and the footer — "Size: yours · Reset to default", the
+// size tag or the outline while it changes, and the resize handle.
+export interface GridCellParts { className: string; style?: CSSProperties; grip: ReactNode; shown: GridSize; footer: ReactNode }
+function useGridCell({ id, kind, title, size, source, onResize, onReset, extra, arranging = false }: {
+  id?: string; kind: GridKind; title: string; size: GridSize; source: SizeSource; onResize?: (size: GridSize) => void; onReset?: () => void; extra?: ReactNode; arranging?: boolean
+}): GridCellParts {
   const grid = useContext(GridContext)
   const box = id && grid ? grid.place(id) : undefined
   const shown = (id && grid?.sizeOf(id)) || size
   const moving = Boolean(id && grid?.preview?.id === id)
   const width = exactWidth(shown.w) ?? nearestWidth(shown.w), height = exactHeight(shown.h, kind) ?? nearestHeight(shown.h, kind)
-  const classes = [className, 'chart-panel', `chart-w-${width}`, `chart-h-${height}`, arranging ? 'chart-arranging' : '', moving ? 'chart-moving' : ''].filter(Boolean).join(' ')
-  const style = box && grid ? grid.cols === 1 ? { gridColumn: '1 / -1' } : { gridColumn: `${box.x + 1} / span ${box.w}`, gridRow: `${box.y + 1} / span ${box.h}` } : undefined
+  const className = ['chart-panel', `chart-w-${width}`, `chart-h-${height}`, arranging ? 'chart-arranging' : '', moving ? 'chart-moving' : ''].filter(Boolean).join(' ')
+  const style: CSSProperties | undefined = box && grid ? grid.cols === 1 ? { gridColumn: '1 / -1' } : { gridColumn: `${box.x + 1} / span ${box.w}`, gridRow: `${box.y + 1} / span ${box.h}` } : undefined
   const resizable = Boolean(onResize) && (!grid || grid.cols > 1)
   const grip = id && grid?.canMove ? <MoveGrip id={id} title={title} /> : null
-  return <Panel className={classes} style={style} eyebrow={eyebrow} title={title} detail={detail} info={info} action={grip || action ? <>{grip}{action}</> : undefined} titleHidden={titleHidden}>
-    <ChartHeightContext.Provider value={heightFactorOf(shown.h, kind)}>{children}</ChartHeightContext.Provider>
+  const footer = <>
     {(source === 'viewer' && onReset) || extra ? <p className="chart-size-note muted">{source === 'viewer' && onReset && <>Size: yours · <button type="button" className="text-button" aria-label={`Reset ${title} to the default size`} onClick={onReset}>Reset to default</button></>}{extra}</p> : null}
     {(moving || (arranging && grid)) && <div className={moving ? 'chart-resize-outline' : 'chart-size-tag'} aria-hidden="true"><span>{moving ? sizeText(shown, kind) : gridText(shown)}</span></div>}
     {resizable && <ResizeHandle id={id} kind={kind} title={title} size={shown} arranging={arranging} onCommit={onResize!} />}
-  </Panel>
+  </>
+  return { className, style, grip, shown, footer }
+}
+// CHT-51: a KPI card (or anything else drawn by its caller) on the grid — the parts of useGridCell handed to `children`.
+export function GridCell({ children, ...props }: Parameters<typeof useGridCell>[0] & { children: (cell: GridCellParts) => ReactNode }) {
+  return <>{children(useGridCell(props))}</>
 }
 
 // CHT-49 The handle: a pointer drag snaps to whole columns and rows (the others shift out of the way, the size shown on
@@ -235,33 +253,41 @@ function MoveGrip({ id, title }: { id: string; title: string }) {
 
 // Width and Height as two selects — the chart's Display (Insights and Dashboard pop-ups), Size… and Arrange blocks…: the
 // presets, and the size in columns and rows when it is none of them (CHT-44).
-export function SizeFields({ size, kind = 'chart', onChange, heightReason = '', label = '' }: { size: GridSize; kind?: GridKind; onChange: (size: GridSize) => void; heightReason?: string; label?: string }) {
+export function SizeFields({ size, kind = 'chart', onChange, heightReason = '', label = '', card = false }: { size: GridSize; kind?: GridKind; onChange: (size: GridSize) => void; heightReason?: string; label?: string; card?: boolean }) {
   const width = exactWidth(size.w), height = exactHeight(size.h, kind)
+  // CHT-51: a KPI card also takes 2 or 3 columns, and a height of 3…12 rows.
+  const widths = [...chartWidths.map((entry) => ({ value: entry as string, w: widthCols[entry], text: widthNames[entry] })),
+    ...[...new Set([...(card ? cardWidths : []), ...(width ? [] : [size.w])])].map((w) => ({ value: `w${w}`, w, text: `${w} of 12 columns` }))].sort((a, b) => a.w - b.w)
   return <div className="form-row chart-size-fields">
     <label>Width
       <select aria-label={label ? `Width of ${label}` : 'Width'} value={width ?? `w${size.w}`} onChange={(event) => { const value = event.target.value; onChange({ ...size, w: value.startsWith('w') ? Number(value.slice(1)) : widthCols[value as keyof typeof widthCols] }) }}>
-        {chartWidths.map((entry) => <option key={entry} value={entry}>{widthNames[entry]}</option>)}
-        {!width && <option value={`w${size.w}`}>{size.w} of 12 columns</option>}
+        {widths.map((entry) => <option key={entry.value} value={entry.value}>{entry.text}</option>)}
       </select>
     </label>
     <label>Height
-      <select aria-label={label ? `Height of ${label}` : 'Height'} value={heightReason ? 'medium' : height ?? `h${size.h}`} disabled={Boolean(heightReason)} title={heightReason || undefined} onChange={(event) => { const value = event.target.value; onChange({ ...size, h: value.startsWith('h') ? Number(value.slice(1)) : heightRows[kind][value as keyof typeof heightLabels] }) }}>
+      {card ? <select aria-label={label ? `Height of ${label}` : 'Height'} value={`h${size.h}`} onChange={(event) => onChange({ ...size, h: Number(event.target.value.slice(1)) })}>
+        {[...new Set([...cardRows, size.h])].sort((a, b) => a - b).map((h) => <option key={h} value={`h${h}`}>{h} rows</option>)}
+      </select>
+      : <select aria-label={label ? `Height of ${label}` : 'Height'} value={heightReason ? 'medium' : height ?? `h${size.h}`} disabled={Boolean(heightReason)} title={heightReason || undefined} onChange={(event) => { const value = event.target.value; onChange({ ...size, h: value.startsWith('h') ? Number(value.slice(1)) : heightRows[kind][value as keyof typeof heightLabels] }) }}>
         {chartHeights.map((entry) => <option key={entry} value={entry}>{heightLabels[entry]}</option>)}
         {!height && !heightReason && <option value={`h${size.h}`}>{size.h} rows</option>}
-      </select>
+      </select>}
     </label>
   </div>
 }
 
-// Size… (the chart's ⋯ menu): the owner's size for everyone, saved to Git.
-export function SizeDialog({ eyebrow, title, size, kind = 'chart', heightReason, onCancel, onSave }: { eyebrow: string; title: string; size: GridSize; kind?: GridKind; heightReason?: string; onCancel: () => void; onSave: (size: GridSize) => Promise<void> | void }) {
+// Size… (the chart's ⋯ menu): the owner's size for everyone, saved to Git. KB-89, CHT-55: with `row` (the other
+// charts that start on its grid row) "Same height as the other charts in its row" gives them all this height.
+export function SizeDialog({ eyebrow, title, size, kind = 'chart', heightReason, card = false, row = 0, onCancel, onSave }: { eyebrow: string; title: string; size: GridSize; kind?: GridKind; heightReason?: string; card?: boolean; row?: number; onCancel: () => void; onSave: (size: GridSize, matchRow: boolean) => Promise<void> | void }) {
   const [draft, setDraft] = useState(size)
+  const [match, setMatch] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   return <Modal eyebrow={eyebrow} title={`Size of ${title}`} onClose={() => { if (!busy) onCancel() }}>
-    <form onSubmit={(event) => { event.preventDefault(); setBusy(true); setError(''); void Promise.resolve(onSave(draft)).then(() => setBusy(false), (failure: unknown) => { setBusy(false); setError(failure instanceof Error ? failure.message : String(failure)) }) }}>
+    <form onSubmit={(event) => { event.preventDefault(); setBusy(true); setError(''); void Promise.resolve(onSave(draft, match && row > 0)).then(() => setBusy(false), (failure: unknown) => { setBusy(false); setError(failure instanceof Error ? failure.message : String(failure)) }) }}>
       <p className="muted">The size everyone sees, unless they resized the chart for themselves. On a narrow screen every chart is full width.</p>
-      <SizeFields size={draft} kind={kind} onChange={setDraft} heightReason={heightReason} />
+      <SizeFields size={draft} kind={kind} onChange={setDraft} heightReason={heightReason} card={card} />
+      {row > 0 && !heightReason && <label className="check"><input type="checkbox" checked={match} onChange={(event) => setMatch(event.target.checked)} />Same height as the other charts in its row ({row} other{row === 1 ? '' : 's'}: all take this height)</label>}
       {error && <Notice tone="error">{error}</Notice>}
       <div className="modal-actions"><button type="button" className="ghost" disabled={busy} onClick={onCancel}>Cancel</button><button className="primary" disabled={busy}>{busy ? 'Saving to Git…' : 'Save to Git'}</button></div>
     </form>

@@ -1,0 +1,13 @@
+/* OND-93, OND-99 The published file's own frame: the page fills the width with the app's margins, the header above the
+   filter row, and on a phone (390 px) everything in one column without a horizontal scroll of the page. */
+body{background:var(--bg);color:var(--text)}
+.pv-main{padding:16px 20px 32px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.pv-header{background:var(--surface);border:1px solid var(--card-border);border-radius:12px;padding:14px 18px;display:flex;flex-direction:column;gap:4px}
+.pv-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.pv-heading h1{margin:2px 0 4px;font-size:22px;color:var(--heading,var(--text))}
+.pv-header p{margin:0}
+.pv-cut{font-weight:600}
+.pv-note{font-size:13px}
+.pv-search{min-width:220px}
+.pv-rows{min-width:0}
+@media (max-width:600px){.pv-main{padding:10px 16px 24px}.pv-heading{flex-wrap:wrap}.pv-search{min-width:0;width:100%}}

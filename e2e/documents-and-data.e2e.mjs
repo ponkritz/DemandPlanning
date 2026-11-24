@@ -50,6 +50,46 @@ test('TC-DOC-02: a link to another document opens it at the linked section, and 
   await context.close()
 })
 
+test('TC-DOC-06: the user guide is the first tab and the profile menu\'s User guide opens it; its screenshots load from the build and its clips play from the build', async () => {
+  const { page, context, errors } = await openPage(app)
+  await navigate(page, 'Documentation')
+  // Another document is chosen first, so that the profile menu has to bring the guide back.
+  await page.getByRole('tab', { name: 'Requirements' }).click()
+  await profileItem(page, 'User guide')
+  const tabs = page.getByRole('tablist', { name: 'Documents' }).getByRole('tab')
+  assert.equal(await text(tabs.first()), 'User guide', 'the first tab')
+  assert.equal(await text(page.getByRole('tab', { selected: true })), 'User guide', 'opened by the profile menu')
+  const panel = page.locator('.docs-panel')
+  await panel.locator('h2', { hasText: 'User guide' }).first().waitFor()
+  // Every screenshot is a file of this build (same origin or data:) and loads; none is left as text.
+  const origin = new URL(app.url).origin
+  const images = panel.locator('img.markdown-image')
+  assert.ok(await images.count() >= 30, 'the screenshots are shown')
+  assert.equal(await panel.locator('span.muted', { hasText: /^\[/ }).count(), 0, 'no picture missing from the build')
+  for (const image of await images.all()) {
+    await image.scrollIntoViewIfNeeded()
+    await page.waitForFunction((element) => element.complete, await image.elementHandle())
+    const { src, width } = await image.evaluate((element) => ({ src: element.currentSrc, width: element.naturalWidth }))
+    assert.ok(src.startsWith(origin) || src.startsWith('data:image/png'), `${src} is from the app`)
+    assert.ok(width > 0, `${src} loads`)
+  }
+  // The clips: muted, loaded only when played, from the app's own files, with a poster; one plays.
+  const videos = panel.locator('figure.markdown-video video')
+  assert.ok(await videos.count() >= 6, 'the clips are shown')
+  for (const video of await videos.all()) {
+    const facts = await video.evaluate((element) => ({ src: element.src, poster: element.poster, muted: element.muted, preload: element.preload, controls: element.controls }))
+    assert.ok(facts.src.startsWith(origin), `${facts.src} is from the app`)
+    assert.ok(facts.poster, 'a poster')
+    assert.deepEqual([facts.muted, facts.preload, facts.controls], [true, 'none', true])
+  }
+  const first = videos.first()
+  await first.scrollIntoViewIfNeeded()
+  await first.evaluate((element) => element.play())
+  await page.waitForFunction((element) => element.currentTime > 0.2, await first.elementHandle())
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
 test('TC-CON-39 / TC-CON-37 / TC-QV-27: a Windchill export lists its unique releases, clubbed names included, its raw rows on their own tab, and exports a neutralised CSV', async () => {
   const { page, context, errors } = await openPage(app, { roles: true })
   await navigate(page, 'Import Windchill export')

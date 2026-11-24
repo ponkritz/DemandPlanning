@@ -106,3 +106,39 @@ export async function profileItem(page, name) {
   await page.locator('header.topbar').getByRole('button', { name: /^Profile/ }).click()
   await page.getByRole('menu', { name: 'Profile' }).getByRole('menuitem', { name }).click()
 }
+
+// CAP-58, CAP-59: Admin → People & roles → People — open a person's drawer by a click on their row (the name cell, not
+// the tick box), and the text behind the source line's ⓘ (where the people come from, the team read).
+export async function openPerson(page, name) {
+  await page.locator(`.people-table tr[data-row-key="${name}"] td`).nth(1).click()
+  const drawer = page.locator('aside.drawer[role="dialog"]', { has: page.getByRole('heading', { name, exact: true }) })
+  await drawer.waitFor()
+  return drawer
+}
+export async function peopleSource(page) {
+  await page.mouse.move(0, 0)
+  await page.getByRole('button', { name: 'Where the people come from' }).hover()
+  const tip = page.getByRole('tooltip')
+  await tip.waitFor()
+  const value = await text(tip)
+  await page.keyboard.press('Escape')
+  await tip.waitFor({ state: 'detached' })
+  return value
+}
+// A value of a MultiSelect filter ticked or unticked (the list opened, then closed with Escape).
+export async function toggleFilter(page, label, option) {
+  await page.getByRole('button', { name: new RegExp(`^${label}: `) }).click()
+  const list = page.getByRole('listbox', { name: label, exact: true })
+  await list.getByRole('checkbox', { name: option, exact: true }).click()
+  await page.keyboard.press('Escape')
+  await list.waitFor({ state: 'detached' })
+}
+
+// CHT-70: the chart and block pop-ups hold their fields in tabs (Data, Filters, Format, Elements, Narrative): open one
+// before using its fields; it returns once that tab is the chosen one. Its name may carry a count, "Filters (2)".
+export async function editorTab(dialog, name) {
+  const tab = dialog.getByRole('tablist').getByRole('tab', { name: new RegExp(`^${name}\\b`) })
+  await tab.click()
+  await dialog.locator('[role="tab"][aria-selected="true"]', { hasText: name }).waitFor()
+  return tab
+}

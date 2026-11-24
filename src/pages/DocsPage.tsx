@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Page, Panel } from '../components/ui'
 import { Markdown } from '../components/Markdown'
 import { parseMarkdown, plainText } from '../markdown'
-import { designDocs, designIndex, projectDocs, type ProjectDoc } from '../docs'
+import { designDocs, designIndex, mediaUrl, projectDocs, type ProjectDoc } from '../docs'
 import { downloadMarkdown } from '../download'
 import { ToolValidationPackage } from '../components/ToolValidationPackage'
 import type { GitStorage } from '../useGitStorage'
@@ -66,7 +66,7 @@ export function DocsPage({ git, onConfigure }: { git: GitStorage; onConfigure: (
     <div className="docs-layout">
       {sections.length > 1 && <nav className="docs-toc" aria-label="Sections"><p className="eyebrow">ON THIS PAGE</p><ul>{sections.map((section) => section.kind === 'heading' && <li key={section.id}><a href={`#${section.id}`} onClick={(event) => { event.preventDefault(); go(null, section.id) }}>{plainText(section.text)}</a></li>)}</ul></nav>}
       <Panel className="docs-panel" action={<div className="button-row"><span className="muted">docs/{doc.file} · this build</span><button type="button" className="ghost" onClick={() => downloadMarkdown(doc.source, doc.file.split('/').at(-1)!)}>Download .md</button></div>}>
-        <Markdown blocks={blocks} docs={files} currentDoc={doc.file} onLink={go} />
+        <Markdown blocks={blocks} docs={files} currentDoc={doc.file} onLink={go} media={mediaUrl} />
       </Panel>
     </div>
     </>}

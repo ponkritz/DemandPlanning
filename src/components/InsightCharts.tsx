@@ -1,4 +1,4 @@
-import { useId, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useId, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
 import { arcPath, barPath, columnPath, epicSlots, niceTicks, otherColor, useElementWidth } from '../chartUtils'
 import { useDataLabels } from '../useDataLabels'
 import { useHeightFactor } from '../useChartSize'
@@ -11,6 +11,7 @@ import { ChartDataTable, ChartLabel, LegendAround, LegendTrend } from './ChartEl
 import { DataTable, type DataColumn } from './DataTable'
 import { Info, Metric, Modal, Notice } from './ui'
 import { ChartFrame, LegendBar, LegendLine, Tooltip, TooltipRow } from './WorkloadCharts'
+import { NarrativeView } from './NarrativeView'
 
 // OND-12 The charts and the summary table of an On-Demand insight, drawn from aggregate() (src/onDemandInsights.ts) in
 // the app's chart frame (UI-STANDARDS §9: legend, Data labels, Table / Chart, axis names) with the --viz-series-*
@@ -57,13 +58,16 @@ const drillHint = 'Click a bar, slice or point — or press Enter on the highlig
 // above the chart wins until the filter row's currency changes.
 // quiet (CHT-25, the chart panels): the "rows counted" line goes to the panel's ⓘ (ChartCountInfo); only a warning that
 // matters for the numbers — several currencies, one shown — stays visible.
-export function InsightView({ page, insight, colors: pins, drill = true, narrowed = false, currency: preferred = '', quiet = false }: { page: OnDemandPage; insight: Insight; colors?: Pins; drill?: boolean; narrowed?: boolean; currency?: string; quiet?: boolean }) {
+// compare (CHT-62): a Narrative's rows for the previous period — the filter row's without its period.
+export function InsightView({ page, insight, colors: pins, drill = true, narrowed = false, currency: preferred = '', quiet = false, compare }: { page: OnDemandPage; insight: Insight; colors?: Pins; drill?: boolean; narrowed?: boolean; currency?: string; quiet?: boolean; compare?: OnDemandPage }) {
   const [pick, setPick] = useState({ base: preferred, code: '' })
   const currency = (pick.base === preferred ? pick.code : '') || preferred
   const setCurrency = (code: string) => setPick({ base: preferred, code })
   const [drilled, setDrilled] = useState<{ category: number; series: number | null } | null>(null)
   const problems = insightProblems(page, insight)
-  if (problems.length) return <Notice tone="warning"><strong>This {insight.type === 'table' ? 'table' : 'chart'} cannot be shown:</strong> {problems.join(' ')} {' '}Edit it to choose the columns again, or remove it.</Notice>
+  if (problems.length) return <Notice tone="warning"><strong>This {insight.type === 'table' ? 'table' : insight.type === 'narrative' ? 'narrative' : 'chart'} cannot be shown:</strong> {problems.join(' ')} {' '}Edit it to choose the columns again, or remove it.</Notice>
+  // CHT-60: a Narrative is text, drawn by its own component.
+  if (insight.type === 'narrative') return <NarrativeView page={page} insight={insight} compare={compare} currency={currency} onCurrency={setCurrency} />
   const data = chartData(page, insight, currency)
   const notes = [
     data.rows.noNumber ? `${data.rows.noNumber} row${data.rows.noNumber === 1 ? '' : 's'} without a number left out.` : '',
@@ -175,7 +179,11 @@ function BarChart(props: ChartProps) {
   // CHT-16: the panel's height (Small / Medium / Large) scales the rows; Medium is today's 30 px. Grouped bars (CHT-40)
   // take taller rows with more series, each bar side by side in the row.
   const factor = useHeightFactor()
-  const rowHeight = grouped ? groupedRowHeight(data.series.length, factor) : Math.round(30 * factor), barHeight = Math.round(18 * Math.min(factor, 1.3))
+  // KB-89, CHT-56: a chart of few bars fills about the height of a column chart of its size (its rows up to 2½ times
+  // as tall, the bars up to 28 px thick) so that charts in one row of the grid line up; many bars keep 30 px rows.
+  const plain = Math.round(30 * factor), stretched = Math.min(Math.round(75 * factor), Math.floor((320 * factor - 36) / Math.max(1, data.categories.length)))
+  const rowHeight = grouped ? groupedRowHeight(data.series.length, factor) : Math.max(plain, stretched)
+  const barHeight = grouped || rowHeight <= plain ? Math.round(18 * Math.min(factor, 1.3)) : Math.round(Math.min(rowHeight * 0.6, 28 * Math.min(factor, 1.3)))
   const slots = groupedSlots(rowHeight, data.series.length, barHeight)
   const narrow = width < 520
   // CHT-28: the owner's data labels (position, contents, number format); the plain labels are drawn as before.
@@ -513,7 +521,7 @@ function DrillDialog({ page, insight, data, category, series, onClose }: { page:
   const cat = data.categories[category]
   const ser = series != null && insight.second ? data.series[series] : undefined
   const columns: DataColumn<OnDemandRow>[] = [
-    { id: 'drill-id', label: 'ID', value: (row) => rowId(page, row) || row.key || '' },
+    { id: 'drill-id', label: 'ID', value: (row) => rowId(page, row) || row.key || '', ...(page.rows.some((row) => row.link) ? { render: (row: OnDemandRow) => row.link && /^https:\/\//.test(row.link) ? <a href={row.link} target="_blank" rel="noreferrer">{rowId(page, row) || row.key || 'Open'}</a> : rowId(page, row) || row.key || '' } : {}) },
     ...page.columns.map((column): DataColumn<OnDemandRow> => ({ id: `drill-${column.id}`, label: column.name, align: column.type === 'number' || column.type === 'currency' ? 'right' : undefined, value: (row) => displayText(column, row.cells[column.id]) })),
   ]
   const where = `${cat?.label ?? ''}${ser ? ` · ${ser.label}` : ''}`
@@ -528,7 +536,11 @@ function DrillDialog({ page, insight, data, category, series, onClose }: { page:
 // tiles (the shared metric tiles, UI-STANDARDS §9): the title with ⓘ (and the owners' ⋯), the number, the measure as
 // a caption of at most two lines (KB-84: the full text as its tooltip), "Filtered" when narrowed. The number is never
 // cut: it wraps before its currency code and, as a last resort, between digits; its full text is the tooltip.
-export function KpiCard({ page, insight, currency: preferred = '', info, action }: { page: OnDemandPage; insight: Insight; currency?: string; info?: ReactNode; action?: ReactNode }) {
+// CHT-53: the header in one row — the title (at most two lines, "…", the full title as its tooltip) with ⓘ at its end,
+// "Filtered" and ⋯ on the right. CHT-51, CHT-54: on the chart grid (`frame`) the card fills its columns and rows, and
+// the number grows with the card (never cut).
+export interface KpiFrame { className?: string; style?: CSSProperties; grip?: ReactNode; footer?: ReactNode; rows?: number }
+export function KpiCard({ page, insight, currency: preferred = '', info, action, frame }: { page: OnDemandPage; insight: Insight; currency?: string; info?: ReactNode; action?: ReactNode; frame?: KpiFrame }) {
   const [pick, setPick] = useState({ base: preferred, code: '' })
   const currency = (pick.base === preferred ? pick.code : '') || preferred
   const problems = insightProblems(page, insight)
@@ -537,11 +549,13 @@ export function KpiCard({ page, insight, currency: preferred = '', info, action 
   const unit = data?.currency ?? ''
   const caption = problems.length ? `Cannot be shown: ${problems.join(' ')}` : measureText(page, insight, unit)
   const title = insight.title || 'Untitled'
-  return <article className="od-insight od-kpi-card">
-    <div className="od-kpi-card-head"><h2>{title}{info && <> <Info>{info}</Info></>}</h2>{action}</div>
+  const style = frame ? { ...frame.style, ...(frame.rows ? { '--kpi-rows': frame.rows } : {}) } as CSSProperties : undefined
+  return <article className={['od-insight od-kpi-card', frame?.className].filter(Boolean).join(' ')} style={style}>
+    <div className="od-kpi-card-head"><h2><span className="od-kpi-title" title={title}>{title}</span>{info && <Info iconOnly label={`Info: ${title}`}>{info}</Info>}</h2>{(frame?.grip || action) && <span className="od-kpi-card-actions">{frame?.grip}{action}</span>}</div>
     <div className="od-kpi"><strong title={`${value}${unit ? ` ${unit}` : ''}`}>{value}{unit && <span className="od-kpi-unit"> {unit}</span>}</strong></div>
     <small className={problems.length ? 'od-kpi-caption dsh-problem' : 'od-kpi-caption'} title={caption}>{caption}</small>
     {data && data.currencies.length > 1 && <label className="od-currency-pick">Currency<select aria-label={`Currency of ${title}`} value={data.currency} onChange={(event) => setPick({ base: preferred, code: event.target.value })}>{data.currencies.map((entry) => <option key={entry.code} value={entry.code}>{entry.code} ({entry.rows} row{entry.rows === 1 ? '' : 's'})</option>)}</select></label>}
+    {frame?.footer}
   </article>
 }
 
