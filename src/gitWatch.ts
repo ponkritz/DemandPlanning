@@ -86,9 +86,10 @@ export interface RemoteChange { path: string; sha: string | null; by?: string; a
 // GIT-18: the pages that show each shared file. A page key is a built-in page's id ('qemapping', 'pulse' …), an Admin
 // page 'admin:<tab>', or an added page 'ondemand:<page id>' (Table, Table + Insights and On-Demand Dashboard alike).
 // '*' is every page; 'admin:*' every Admin page. quiet: loaded without a notice when nothing of it is unsaved here — the
-// menu layout (the menu is refreshed), the default and own views, and the planning data as before (GIT-15).
+// menu layout (the menu is refreshed), the default and own views, the access roles away from People & roles (GIT-23)
+// and the planning data as before (GIT-15).
 // loader: how the newer file is loaded without reloading the app ('reload': only a full reload can).
-export interface FilePages { pages: string[]; quiet?: 'menu' | 'views' | 'planning'; loader: string }
+export interface FilePages { pages: string[]; quiet?: 'menu' | 'views' | 'planning' | 'access'; loader: string }
 const reportPages = ['mydash', 'overview', 'pulse', 'capactual', 'planover']
 const featurePages = ['board', 'windchill', 'mywork', 'activities', 'admin:epics']
 const releasePages = ['board', 'windchill', 'home', 'admin:connections', 'admin:options']
@@ -106,7 +107,9 @@ export function pagesOfFile(path: string, planningPath: string, dashboardsReadin
   if (dashboard) return { pages: [`ondemand:${dashboard[1]}`], loader: 'remount' }
   if (name === 'menu-layout.json') return { pages: ['admin:pages'], quiet: 'menu', loader: 'menu' }
   if (name === 'personal-views-defaults.json' || /^personal-views\/[^/]+\.json$/.test(name)) return { pages: ['admin:my', 'admin:look'], quiet: 'views', loader: 'views' }
-  if (name === 'access.json') return { pages: ['*'], loader: 'access' }
+  // GIT-23: the roles are loaded quietly on every page (rights update in place); only Admin → People & roles, where
+  // someone may be editing them, shows the notice.
+  if (name === 'access.json') return { pages: ['admin:resources'], quiet: 'access', loader: 'access' }
   if (name === 'qe-mapping.json') return { pages: ['qemapping', 'board'], loader: 'qemapping' }
   if (name === 'feature-setup.json' || /^feature-setup\/[^/]+\.json$/.test(name)) return { pages: featurePages, loader: 'featureSetup' }
   if (name === 'epic-setup.json') return { pages: featurePages, loader: 'epicSetup' }

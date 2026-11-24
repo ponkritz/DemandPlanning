@@ -65,6 +65,12 @@ export function exportCell(value: CellValue): XlsxCell {
 // The CSV of the shown columns and rows: headings, then each cell formula-safe (CON-69) with dates as date-times.
 export const tableCsv = (headings: string[], rows: CellValue[][]) => [headings.map(csvCell).join(','), ...rows.map((row) => row.map((value) => csvCell(exportText(value))).join(','))].join('\r\n')
 export const tableSheet = (headings: string[], rows: CellValue[][]): XlsxCell[][] => [headings, ...rows.map((row) => row.map(exportCell))]
+// DSH-14: a table's Total row as Export writes it (after every data row): the value of each exported column that has
+// one, the label ("Total") in the first exported column without one.
+export function totalsRow(columnIds: string[], values: Record<string, CellValue>, label = 'Total'): CellValue[] {
+  const first = columnIds.findIndex((id) => !(id in values))
+  return columnIds.map((id, index) => id in values ? values[id] : index === first ? label : '')
+}
 
 // The per-table choices of this viewer, by table id.
 export interface TableLayout { order?: string[]; hidden?: string[]; density?: TableDensity }

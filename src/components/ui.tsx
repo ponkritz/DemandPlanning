@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
 export type Tone = 'neutral' | 'open' | 'locked' | 'warning' | 'danger' | 'info'
@@ -39,9 +39,10 @@ export function Info({ children, label = 'Info', iconOnly = false }: { children:
   </>
 }
 
-export function Panel({ children, className = '', eyebrow, title, detail, info, action }: { children: ReactNode; className?: string; eyebrow?: string; title?: string; detail?: ReactNode; info?: ReactNode; action?: ReactNode }) {
-  return <article className={`panel ${className}`}>
-    {(title || action || info) && <div className="panel-heading"><div>{eyebrow && <p className="eyebrow">{eyebrow}</p>}{title ? <h2>{title}{info && <> <Info>{info}</Info></>}</h2> : info && <Info>{info}</Info>}{detail && <p className="muted">{detail}</p>}</div>{action}</div>}
+// titleHidden (CHT-26, a chart's Chart heading element off): the title is read by screen readers but not shown.
+export function Panel({ children, className = '', eyebrow, title, detail, info, action, titleHidden = false, style }: { children: ReactNode; className?: string; eyebrow?: string; title?: string; detail?: ReactNode; info?: ReactNode; action?: ReactNode; titleHidden?: boolean; style?: CSSProperties }) {
+  return <article className={`panel ${className}`} style={style}>
+    {(title || action || info) && <div className="panel-heading"><div>{eyebrow && <p className="eyebrow">{eyebrow}</p>}{title ? <h2>{titleHidden ? <span className="chart-title-hidden">{title}</span> : title}{info && <> <Info>{info}</Info></>}</h2> : info && <Info>{info}</Info>}{detail && <p className="muted">{detail}</p>}</div>{action}</div>}
     {children}
   </article>
 }

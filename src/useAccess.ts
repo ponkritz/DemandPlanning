@@ -25,13 +25,16 @@ export function useAccess(git: GitStorage, azure: AzureWorkspace, viewAs: ViewAs
   const scope = git.accessScope
   const { readAccess } = git
   const [state, setState] = useState<PolicyState>({ scope: '', policy: null, sha: null, error: '', loaded: false })
-  const load = useCallback(async () => {
-    if (!scope) return
+  // Returns the policy read (GIT-23: App compares the viewer's rights before and after a quiet load); undefined when
+  // nothing was read.
+  const load = useCallback(async (): Promise<AccessPolicy | null | undefined> => {
+    if (!scope) return undefined
     try {
       const file = await readAccess()
       const policy = file.text == null ? null : parseAccess(file.text)
       cachePolicy(policy ? serializeAccess(policy) : null)
       setState({ scope, policy, sha: file.sha, error: '', loaded: true })
+      return policy
     } catch (failure) {
       // A file that cannot be read or understood keeps the last policy in force.
       setState((current) => ({ ...current, scope, policy: current.scope === scope ? current.policy : cachedPolicy(), error: failure instanceof Error ? failure.message : String(failure), loaded: true }))

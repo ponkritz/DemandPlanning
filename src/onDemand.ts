@@ -1,5 +1,7 @@
+import { kindOf, parseGridBox, type GridBox } from './chartSize.ts'
 import { csvCell } from './csv.ts'
 import type { Merge } from './gitSaveQueue.ts'
+import { cleanElements, type ChartElements } from './chartElements.ts'
 
 // OND-01…OND-10 On-Demand pages: blank tables the team sets up itself — CoNQ (Cost of Non-Quality) first, more pages
 // added, renamed and removed by the roles allowed "Set up On-Demand pages". Each page is one JSON file in the Git data
@@ -34,7 +36,8 @@ export interface LogEntry { id: string; at: string; by: string; added?: true; ac
 export interface OnDemandRow { id: string; key?: string; seq?: number; addedBy?: string; addedAt?: string; log?: LogEntry[]; hidden?: { by: string; at: string }; cells: Record<string, OnDemandValue> }
 // OND-31: storage 'rows' — the page is kept as one file per row (on-demand/<id>/page.json, rows/<key>.json, counter.json,
 // src/rowFiles.ts); absent — the single page file on-demand/<id>.json (OND-08).
-export interface OnDemandPage { schema: 1; kind: 'on-demand-page'; id: string; name: string; description: string; keyPrefix: string; columns: OnDemandColumn[]; rows: OnDemandRow[]; insights: Insight[]; colors?: Record<string, number>; storage?: 'rows'; lastSeq?: number; insightFilters?: InsightFilterSetup }
+// OND-63, OND-66: sample — the page as shown in Sample (src/sampleRows.ts): its rows are made up; it is never written.
+export interface OnDemandPage { schema: 1; kind: 'on-demand-page'; id: string; name: string; description: string; keyPrefix: string; columns: OnDemandColumn[]; rows: OnDemandRow[]; insights: Insight[]; colors?: ColorPins; storage?: 'rows'; lastSeq?: number; insightFilters?: InsightFilterSetup; sample?: true }
 
 // OND-11…OND-17 Insights: charts and summary tables built from the page's rows, kept in the same file (an `insights`
 // list, written only when the page has one) so they travel with the page and are merged with it. Columns are referred
@@ -51,20 +54,32 @@ export interface InsightFilter { column: string; values?: string[]; from?: strin
 export type DateGroup = 'day' | 'week' | 'month' | 'quarter' | 'year'
 export interface ChartOptions {
   orientation?: 'vertical' // a bar chart as vertical columns (horizontal bars when absent)
+  grouping?: 'grouped' // CHT-40: a bar chart's series side by side (Excel's clustered bars) instead of stacked (stacked when absent)
   dateGroup?: DateGroup // a Date column grouped by day, ISO week, quarter or year (month when absent)
   top?: number | 'all' // the N largest categories and "Other" (1…50) or all of them; absent: the type's usual limit
   cumulative?: true // a running total along the categories (bar, line)
   percent?: true // values as a share of the total (bar, line, summary table)
   target?: { value: number; label: string } // a fixed reference line (bar, line, Pareto)
-  size?: 'half' | 'full' // the panel's width in the grid (half when absent)
+  size?: 'third' | 'half' | 'twothirds' | 'full' // the panel's width of a 6-column grid (half when absent; CHT-11, CHT-15)
+  height?: 'small' | 'large' // the chart's height (medium, today's, when absent; CHT-16) — not for a KPI or a summary table
+  xTitle?: string // the owner's title of the X axis (the automatic one when absent; CHT-24) — bar, line, Pareto
+  yTitle?: string // the owner's title of the Y axis (the automatic one when absent; CHT-24) — bar, line, Pareto
+  elements?: ChartElements // Excel-style chart elements set by the owners (as before when absent; CHT-26…CHT-35)
+  view?: 'panel' // a KPI shown as a chart panel instead of a card in the Insights tab's card row (CHT-36)
+  grid?: GridBox // CHT-47: the owners' place and size on the 12-column chart grid (x, y, w, h); `size` / `height` then hold the nearest presets for older apps
 }
 export interface Insight { id: string; title: string; type: InsightType; category: string; second: string; measure: InsightMeasure; value: string; filters: InsightFilter[]; sort: 'value' | 'label'; options?: ChartOptions }
+// CHT-09, CHT-41: a colour pin — a palette colour 1…5 (the --viz-series-* tokens, light and dark) or any colour as
+// "#rrggbb" (the same in both themes).
+export type ColorPin = number | string
+export type ColorPins = Record<string, ColorPin>
+export const isHexColor = (value: unknown): value is string => typeof value === 'string' && /^#[0-9a-f]{6}$/.test(value)
 export const insightTypeKeys: InsightType[] = ['bar', 'line', 'pie', 'table', 'pareto', 'kpi']
 export const measureKeys: InsightMeasure[] = ['count', 'sum', 'average', 'min', 'max', 'distinct']
 // Count and Sum add up; the others cannot be stacked, shown as shares, summed into a running total or a Pareto.
 export const additive = (measure: InsightMeasure) => measure === 'count' || measure === 'sum'
 export const dateGroups: DateGroup[] = ['day', 'week', 'month', 'quarter', 'year']
-export const maxTop = 50, maxTargetLabel = 40, maxColorPins = 200
+export const maxTop = 50, maxTargetLabel = 40, maxColorPins = 200, maxAxisTitle = 60
 // CHT-09: the colours of the chart palette a value can be pinned to (--viz-series-1…5).
 export const paletteSize = 5
 // Which options each type takes; the others are dropped when read and when the type changes.
@@ -72,6 +87,8 @@ export function cleanOptions(type: InsightType, measure: InsightMeasure, raw: un
   const item = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {}
   const out: ChartOptions = {}
   if (type === 'bar' && item.orientation === 'vertical') out.orientation = 'vertical'
+  // CHT-40: grouped bars (only a bar chart; drawn only with a second field — stacked when absent).
+  if (type === 'bar' && item.grouping === 'grouped') out.grouping = 'grouped'
   if (type !== 'kpi' && typeof item.dateGroup === 'string' && item.dateGroup !== 'month' && dateGroups.includes(item.dateGroup as DateGroup)) out.dateGroup = item.dateGroup as DateGroup
   if (type === 'bar' || type === 'pie' || type === 'pareto' || type === 'table') {
     if (item.top === 'all') out.top = 'all'
@@ -83,16 +100,31 @@ export function cleanOptions(type: InsightType, measure: InsightMeasure, raw: un
   if ((type === 'bar' || type === 'line' || type === 'pareto') && target && typeof target === 'object' && typeof target.value === 'number' && Number.isFinite(target.value) && Math.abs(target.value) <= 1e12) {
     out.target = { value: target.value, label: typeof target.label === 'string' ? target.label.trim().replace(/\s+/g, ' ').slice(0, maxTargetLabel) : '' }
   }
-  if (item.size === 'half' || item.size === 'full') out.size = item.size
+  // CHT-15, CHT-16: a width of ⅓, ½, ⅔ or Full (v10 knew half and full and drops the others: LIM-36) and a height.
+  if (item.size === 'third' || item.size === 'half' || item.size === 'twothirds' || item.size === 'full') out.size = item.size
+  if (type !== 'kpi' && type !== 'table' && (item.height === 'small' || item.height === 'large')) out.height = item.height
+  // CHT-24: the axis titles of a chart with axes, plain text of up to 60 characters; empty means automatic.
+  if (type === 'bar' || type === 'line' || type === 'pareto') for (const key of ['xTitle', 'yTitle'] as const) { const text = typeof item[key] === 'string' ? (item[key] as string).trim().replace(/\s+/g, ' ').slice(0, maxAxisTitle) : ''; if (text) out[key] = text }
+  // CHT-35: the chart elements, each checked against the type (and its orientation and Percent of total).
+  const elements = cleanElements(type, out, item.elements)
+  if (elements) out.elements = elements
+  // CHT-36: a KPI shown as a panel (a card when absent).
+  if (type === 'kpi' && item.view === 'panel') out.view = 'panel'
+  // CHT-47: the place on the chart grid — whole numbers clamped to the grid and the type's minimum size.
+  const grid = type !== 'kpi' || out.view === 'panel' ? parseGridBox(item.grid, kindOf(type)) : undefined
+  if (grid) out.grid = grid
   return Object.keys(out).length ? out : undefined
 }
-// CHT-09: a page's (or a dashboard's) colour pins — a value's text → a palette colour 1…5; anything else is dropped.
-export function parseColors(raw: unknown): Record<string, number> | undefined {
+// CHT-09, CHT-41: a page's (or a dashboard's) colour pins — a value's text → a palette colour 1…5 or a colour
+// "#rrggbb" (any case when read, written in lower case); anything else is dropped.
+export function parseColors(raw: unknown): ColorPins | undefined {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
-  const out: Record<string, number> = {}
+  const out: ColorPins = {}
   for (const [key, slot] of Object.entries(raw as Record<string, unknown>).slice(0, maxColorPins)) {
     const value = key.trim().replace(/\s+/g, ' ').slice(0, 120)
-    if (value && typeof slot === 'number' && Number.isInteger(slot) && slot >= 1 && slot <= paletteSize) out[value] = slot
+    if (!value) continue
+    if (typeof slot === 'number' && Number.isInteger(slot) && slot >= 1 && slot <= paletteSize) out[value] = slot
+    else if (typeof slot === 'string' && isHexColor(slot.toLowerCase())) out[value] = slot.toLowerCase()
   }
   return Object.keys(out).length ? out : undefined
 }
@@ -516,12 +548,20 @@ const insightOut = ({ id, title, type, category, second, measure, value, filters
 const logOut = ({ id, at, by, added, action, comment, changes }: LogEntry) => ({ id, at, by, ...(added ? { added } : {}), ...(action ? { action } : {}), ...(comment ? { comment } : {}), changes })
 // fill: false (the copy kept in this browser) writes the page as it is, without giving keys and numbers.
 export function serializeOnDemandPage(input: OnDemandPage, { fill = true }: { fill?: boolean } = {}) {
+  // OND-66: a page shown with sample rows is never written to Git (nor kept as the page last read).
+  if (input.sample) throw new Error(`Sample data is shown for ${input.name}: nothing is saved to Git. Switch to Live to change it.`)
   // OND-18, OND-19: a saved file has a key and a sequential number on every row.
   const page = fill ? withRowNumbers(withRowKeys(input)) : input
   const out = `${JSON.stringify({ schema: 1, kind: 'on-demand-page', id: page.id, name: page.name, description: page.description, keyPrefix: page.keyPrefix, columns: page.columns.map(({ id, name, type, options, required, description, currency }) => ({ id, name, type, ...(hasOptions(type) ? { options } : {}), ...(required ? { required } : {}), ...(description ? { description } : {}), ...(type === 'currency' ? { currency: currency ?? defaultCurrency } : {}) })), rows: page.rows.map(({ id, key, seq, addedBy, addedAt, log, hidden, cells }) => ({ id, ...(key ? { key } : {}), ...(seq ? { seq } : {}), ...(addedBy ? { addedBy } : {}), ...(addedAt ? { addedAt } : {}), ...(log?.length ? { log: log.map(logOut) } : {}), ...(hidden ? { hidden } : {}), cells })), ...(page.insights.length ? { insights: page.insights.map(insightOut) } : {}), ...(page.colors && Object.keys(page.colors).length ? { colors: page.colors } : {}), ...(page.storage === 'rows' ? { storage: 'rows' } : {}), ...(page.lastSeq ? { lastSeq: page.lastSeq } : {}), ...insightFiltersPart(page.insightFilters) }, null, 1)}\n`
   if (new TextEncoder().encode(out).length > onDemandMaxBytes) throw new Error(`The page is too large to save to Git (over ${Math.round(onDemandMaxBytes / 1000)} KB). Remove rows, or split it into two pages.`)
   return out
 }
+// OND-62: a table page still in one file is suggested to be converted to row files (OND-32) when it has more than
+// 500 rows or its file is over 600 KB (two thirds of the 900 KB a single file may have, OND-08). The size is the file as
+// written (a page too large to be written counts as over).
+export const suggestRowFilesAt = { rows: 500, bytes: 600_000 }
+export function pageFileBytes(page: OnDemandPage) { try { return new TextEncoder().encode(serializeOnDemandPage(page, { fill: false })).length } catch { return onDemandMaxBytes + 1 } }
+export const suggestRowFiles = (rows: number, bytes: number) => rows > suggestRowFilesAt.rows || bytes > suggestRowFilesAt.bytes
 // GIT-21: what a newer menu layout makes the app read: the pages listed in Git and not known here (read), and the pages
 // known here that are no longer listed (dropped) — except keep(id), the page in use with edits not saved here.
 export function pageListChange(known: string[], listed: { id: string; rows: boolean }[], keep: (id: string) => boolean = () => false) {

@@ -48,3 +48,14 @@ export function useDashboardPage(git: GitStorage, pageId: string) {
   }
 }
 export type DashboardPageStore = ReturnType<typeof useDashboardPage>
+
+// DSH-15: a change to another dashboard's file (Copy to…): read from Git, changed, saved with the queued, merged save
+// (GIT-17); the merged result is kept in this browser as that page's last read dashboard.
+export async function changeOtherDashboard(git: Pick<GitStorage, 'readDashboard' | 'writeDashboard'>, pageId: string, change: (dashboard: Dashboard) => Dashboard, message: string) {
+  const read = await git.readDashboard(pageId)
+  const current = read.text == null ? emptyDashboard(pageId) : parseDashboard(read.text, pageId).dashboard
+  const result = await git.writeDashboard(pageId, serializeDashboard(change(current)), message)
+  const merged = parseDashboard(result.text, pageId).dashboard
+  remember(merged)
+  return { ...result, dashboard: merged }
+}

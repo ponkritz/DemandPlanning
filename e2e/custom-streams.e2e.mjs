@@ -46,7 +46,7 @@ async function mock(context, files, role = 'Tool Owner') {
   await context.route('https://api.github.com/**', (route) => {
     const request = route.request(), url = new URL(request.url())
     const json = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
-    if (url.pathname === '/repos/example/storage') return json({ permissions: { push: true } })
+    if (url.pathname === '/repos/example/storage') return json({ visibility: 'private', permissions: { push: true } })
     if (url.pathname === '/repos/example/storage/commits') return json([])
     const match = /^\/repos\/example\/storage\/contents\/(.*)$/.exec(url.pathname)
     if (!match) return json({ message: 'Not Found' }, 404)
@@ -89,9 +89,12 @@ test('TC-STR-06: as Tool Owner add a stream “Labeling” (Azure DevOps, Like C
   await shot(page, 'add-stream-dialog')
   await dialog.getByRole('button', { name: 'Add stream' }).click()
   await dialog.waitFor({ state: 'detached' })
-  const saved = writes.filter((entry) => entry.path === 'custom-streams.json').pop()
+  // The dialog closes when the save is queued; wait for the write to reach the mocked GitHub (a condition, not a time).
+  const savedOf = () => writes.filter((entry) => entry.path === 'custom-streams.json').pop()
+  for (const until = Date.now() + 30000; !savedOf() && Date.now() < until;) await new Promise((resolve) => setTimeout(resolve, 50))
+  const saved = savedOf()
   assert.deepEqual(saved.data, { schema: 1, kind: 'custom-streams', streams: [{ name: 'Labeling', rule: 'title', fuzzy: false }] }, 'saved to the shared setup in Git')
-  assert.match(saved.message, /^Add stream: Labeling \(Like Content\)$/)
+  assert.match(saved.message, /^Add stream: Labeling \(Like Content\)( \[by [^\]]+\])?$/)
   assert.match(await text(panel.locator('tbody')), /Labeling Custom Azure DevOps query connection “Labeling” Like Content — each document is a release by its title/)
 
   // The menu lists Labeling under Release Details → Azure DevOps Server, not set up yet (＋).

@@ -127,8 +127,8 @@ test('TC-CHT-01: the owner makes a Pareto and a stacked horizontal bar with Top 
   await pareto.locator('svg[role="img"]').waitFor()
   assert.match(await pareto.locator('svg[role="img"] title').first().textContent(), /^Cost Pareto: Rework 1,950 \(cumulative 43%\), Scrap 1,000 \(cumulative 66%\), Complaint 700 \(cumulative 81%\), Label 350 \(cumulative 89%\), Seal 250 \(cumulative 94%\), Other 250 \(cumulative 100%\)$/)
   assert.match(await text(pareto.locator('.viz-legend')), /Cumulative share \(%\).*80%.*Budget \(1,000\)/)
-  assert.equal(await pareto.evaluate((element) => element.classList.contains('od-insight-full')), true)
-  assert.equal(await panel(page, 'Cost by category and site').evaluate((element) => element.classList.contains('od-insight-full')), false)
+  assert.equal(await pareto.evaluate((element) => element.classList.contains('chart-w-full')), true)
+  assert.equal(await panel(page, 'Cost by category and site').evaluate((element) => element.classList.contains('chart-w-full')), false)
   // Its Table view: value, share and cumulative share.
   await pareto.getByRole('button', { name: 'Table', exact: true }).click()
   assert.deepEqual(await pareto.locator('tbody tr').evaluateAll((list) => list.map((row) => row.innerText.replace(/\s+/g, ' ').trim())).then((list) => list.slice(0, 2)), ['Rework 1,950 43.3 43.3', 'Scrap 1,000 22.2 65.6'])
@@ -191,7 +191,8 @@ test('TC-CHT-02: a viewer without the setup right sees the charts and a Dashboar
   await insightsTab(page).click()
   const pareto = panel(page, 'Cost Pareto')
   await pareto.locator('svg[role="img"]').waitFor()
-  assert.equal(await page.getByRole('button', { name: 'Edit Cost Pareto', exact: true }).isDisabled(), true)
+  // OND-61: no chart ⋯ menu (Edit…, Size…, Remove…) for a viewer.
+  assert.equal(await page.getByRole('button', { name: 'More actions: Cost Pareto', exact: true }).count(), 0)
   // The stacked bar as vertical columns, read only: a click lists the rows.
   const bar = panel(page, 'Cost by category and site')
   await bar.locator('svg[role="img"]').waitFor()
@@ -205,7 +206,7 @@ test('TC-CHT-02: a viewer without the setup right sees the charts and a Dashboar
   await page.locator('.sidebar nav button', { hasText: 'Cost dashboard' }).click()
   const block = page.locator('.dsh-block', { has: page.locator('h2', { hasText: 'Pareto of cost' }) })
   await block.locator('svg[role="img"]').waitFor()
-  assert.equal(await block.evaluate((element) => element.classList.contains('od-insight-full')), true)
+  assert.equal(await block.evaluate((element) => element.classList.contains('chart-w-full')), true)
   assert.match(await block.locator('svg[role="img"] title').first().textContent(), /Other 850 \(cumulative 100%\)$/)
   await block.locator('svg[role="img"]').focus()
   for (let step = 0; step < 4; step++) await page.keyboard.press('ArrowRight')

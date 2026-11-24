@@ -1,12 +1,15 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
+import { kindOf, pairFactory, type ChartSize, type SizeSource } from '../chartSize'
+import { ChartPanel } from './ChartSize'
 import { readChartLabels, saveChartLabel } from '../chartLabels'
 import { DataTable, type DataColumn } from './DataTable'
 import { ChartOptionsFields } from './ChartOptionsFields'
-import { InsightView } from './InsightCharts'
-import { EmptyState, Info, Metric, Modal, Notice, Panel } from './ui'
-import { hasOptions, type InsightFilter, type InsightMeasure } from '../onDemand'
+import { PreviewHeading } from './ChartElements'
+import { ChartCountInfo, InsightView } from './InsightCharts'
+import { EmptyState, Info, Metric, Modal, Notice, Pill } from './ui'
+import { hasOptions, type ColorPins, type InsightFilter, type InsightMeasure } from '../onDemand'
 import { currencyText, formatShown, insightRules, measureColumns, measuresFor, noneKey, noneLabel, secondLabel, valueText } from '../onDemandInsights'
-import { asInsight, noData, blockData, blockError, blockProblems, blockSubject, blockTypeLabel, blockTypes, categoryColumns, filterColumns, kpiText, kpiValue, periodColumns, periodNote, secondColumns, summaryRows, tableLimit, withBlockType, withSource, type Dashboard, type DashboardBlock, type Dataset, type Narrowed, type SummaryRow } from '../dashboardPages'
+import { asInsight, noData, blockData, blockError, blockProblems, blockSubject, blockTypeLabel, blockTypes, categoryColumns, filterColumns, kpiText, kpiValue, periodColumns, periodNote, secondColumns, summaryExportTotals, summaryRows, tableLimit, withBlockType, withSource, type Dashboard, type DashboardBlock, type Dataset, type Narrowed, type SummaryRow } from '../dashboardPages'
 
 // DSH-05, DSH-06 The blocks of a Dashboard page: a KPI tile (Metric, UI-STANDARDS §9), a bar, line or pie chart — the
 // On-Demand insight charts in the shared chart frame (OND-12: legend, Data labels, Table / Chart) — and a summary table
@@ -31,24 +34,31 @@ export function KpiTile({ dataset, block, narrowed, tabName, onOpenTab }: { data
   </>} />
 }
 
-// A chart or a summary table in its panel.
-export function BlockPanel({ dataset, block, narrowed, colors }: { dataset: Dataset; block: DashboardBlock; narrowed: Narrowed | null; colors?: Record<string, number> }) {
+// A chart or a summary table in its panel. CHT-15…CHT-18: its size (the viewer's own, else the owners', else half
+// width and medium height), the corner handle and — for the dashboard's builders — its ⋯ menu (DSH-13).
+export function BlockPanel({ id, dataset, block, narrowed, colors, size = pairFactory, source = 'factory', arranging = false, action, onResize, onReset }: { id?: string; dataset: Dataset; block: DashboardBlock; narrowed: Narrowed | null; colors?: ColorPins; size?: ChartSize; source?: SizeSource; arranging?: boolean; action?: ReactNode; onResize?: (size: ChartSize) => void; onReset?: () => void }) {
   const filters = filtersText(dataset, block.filters)
   const problems = narrowed ? blockProblems(dataset, block) : [dataset.problem ?? '']
-  return <Panel className={`od-insight dsh-block dsh-block-${block.type}${block.options?.size === 'full' ? ' od-insight-full' : ''}`} eyebrow={`${blockTypeLabel(block.type).toUpperCase()} · ${dataset.name.toUpperCase()}`} title={block.title}
-    detail={<><span>{blockSubject(dataset, block)}</span><br /><span className="od-insight-filters">{periodNote(dataset, block)}{filters ? ` · Filters: ${filters}` : ''}{narrowed ? ` · ${counted(narrowed)}` : ''}</span></>}
-    info={problems.length || !narrowed ? undefined : <ul className="od-rules">{insightRules(narrowed.page, asInsight(block)).map((line) => <li key={line}>{line}</li>)}<li>The period (Year / Quarter / Month above) keeps the rows whose {dataset.page.columns.find((column) => column.id === block.period)?.name ?? 'date'} falls in it; rows without that date are left out.</li></ul>}>
+  // CHT-25: the header shows the title and ⓘ only; what the block measures, its period, filters and rows counted are in ⓘ,
+  // and a neutral "Filtered" says when its own filters or the filter row's choices narrow it.
+  const filteredBy = [block.filters.length ? `its own filters: ${filters}` : '', narrowed?.filtered ? 'the filter row above' : ''].filter(Boolean).join('; ').replace(/^./, (first) => `Filtered by ${first}`)
+  const pill = filteredBy ? <span className="chart-filtered" title={filteredBy} aria-label={filteredBy}><Pill>Filtered</Pill></span> : null
+  return <ChartPanel id={id} kind={kindOf(block.type)} className={`od-insight dsh-block dsh-block-${block.type}`} size={size} source={source} arranging={arranging} title={block.title} titleHidden={block.options?.elements?.title === false}
+    info={problems.length || !narrowed ? undefined : <ul className="od-rules"><li>Type: {blockTypeLabel(block.type)} · from {dataset.name}.</li><li>{blockSubject(dataset, block)}.</li><li>{periodNote(dataset, block)}.</li><li>Its own filters: {filters || 'none'}.</li><li>Rows: {counted(narrowed)}.</li>{block.type !== 'table' && <ChartCountInfo page={narrowed.page} insight={asInsight(block)} />}{insightRules(narrowed.page, asInsight(block)).map((entry) => <li key={entry}>{entry}</li>)}<li>The period (Year / Quarter / Month above) keeps the rows whose {dataset.page.columns.find((column) => column.id === block.period)?.name ?? 'date'} falls in it; rows without that date are left out.</li></ul>}
+    action={pill || action ? <span className="button-row nowrap">{pill}{action}</span> : undefined} onResize={onResize} onReset={onReset}>
     <BlockBody dataset={dataset} block={block} narrowed={narrowed} problems={problems} colors={colors} />
-  </Panel>
+  </ChartPanel>
 }
-function BlockBody({ dataset, block, narrowed, problems, colors, drill = true }: { dataset: Dataset; block: DashboardBlock; narrowed: Narrowed | null; problems: string[]; colors?: Record<string, number>; drill?: boolean }) {
+function BlockPreviewBody(props: { dataset: Dataset; block: DashboardBlock; narrowed: Narrowed | null; problems: string[]; colors?: ColorPins }) { return <BlockBody {...props} drill={false} quiet /> }
+function BlockBody({ dataset, block, narrowed, problems, colors, drill = true, quiet = drill }: { dataset: Dataset; block: DashboardBlock; narrowed: Narrowed | null; problems: string[]; colors?: ColorPins; drill?: boolean; quiet?: boolean }) {
   // DSH-06: a dashboard chart starts with its data labels on (UI-17 keeps the viewer's own choice per chart): the choice is
   // set through the shared chart-labels helper once, before the chart reads it — the insight charts stay as they are.
-  useState(() => { if (block.type !== 'table' && readChartLabels()[`ondemand-${block.id}`] === undefined) saveChartLabel(`ondemand-${block.id}`, true); return true })
+  // CHT-28: not when the block's builders set data labels on or off for everyone (their choice is the default then).
+  useState(() => { if (block.type !== 'table' && block.options?.elements?.labels === undefined && readChartLabels()[`ondemand-${block.id}`] === undefined) saveChartLabel(`ondemand-${block.id}`, true); return true })
   if (problems.length || !narrowed) return <Notice tone="warning"><strong>This block cannot be shown:</strong> {problems.join(' ')} {dataset.problem ? '' : 'Its owners edit it to choose the columns again, or remove it.'}</Notice>
   const probe = blockData(narrowed.page, block)
   if (!narrowed.page.rows.length || !probe.categories.length) return <EmptyState {...noData} />
-  return block.type === 'table' ? <SummaryTable block={block} narrowed={narrowed} /> : <InsightView page={narrowed.page} insight={asInsight(block)} colors={colors} drill={drill} />
+  return block.type === 'table' ? <SummaryTable block={block} narrowed={narrowed} /> : <InsightView quiet={quiet} page={narrowed.page} insight={asInsight(block)} colors={colors} drill={drill} />
 }
 
 // DSH-06: the summary table — largest first, the first 10 rows with Show all, the shared table's Export (every row).
@@ -73,7 +83,7 @@ function SummaryTable({ block, narrowed }: { block: DashboardBlock; narrowed: Na
     {currencyText(data) && <p className="muted">{currencyText(data)}</p>}
     <DataTable id={`dashboard-block:${block.id}`} columns={columns} rows={rows} rowKey={(row) => row.key} exportName={block.title} limit={all ? undefined : tableLimit}
       status={`${Math.min(rows.length, all ? rows.length : tableLimit)} of ${rows.length} row${rows.length === 1 ? '' : 's'}`}
-      totals={{ label: 'Total', values: { ...Object.fromEntries(split ? data.seriesTotals.map((value, at) => [`dsh-s${at}`, show(value)]) : []), 'dsh-total': show(data.total) } }} />
+      totals={{ label: 'Total', values: { ...Object.fromEntries(split ? data.seriesTotals.map((value, at) => [`dsh-s${at}`, show(value)]) : []), 'dsh-total': show(data.total) }, exportValues: summaryExportTotals(data, split) }} />
     {(more > 0 || all) && <button type="button" className="text-button" onClick={() => setAll(!all)}>{all ? 'Show the first 10' : `Show all (+${more} more)`}</button>}
     {data.rows.multi && block.measure !== 'average' && <p className="muted od-pivot-note">A row with several values of a Multi-select counts in each of them; the totals take each row once.</p>}
   </>
@@ -81,7 +91,7 @@ function SummaryTable({ block, narrowed }: { block: DashboardBlock; narrowed: Na
 
 // DSH-05: the pop-up of one block — title, type, data source, the fields, the measure, the period's Date column, the
 // tab, filters — with a live preview over the current period. Add block / Save to Git saves the dashboard at once.
-export function BlockDialog({ datasets, dashboard, block, isNew, preview, onCancel, onSave }: { datasets: Dataset[]; dashboard: Dashboard; block: DashboardBlock; isNew: boolean; preview: (dataset: Dataset, block: DashboardBlock) => Narrowed | null; onCancel: () => void; onSave: (block: DashboardBlock, colors: Record<string, number> | undefined) => Promise<void> }) {
+export function BlockDialog({ datasets, dashboard, block, isNew, preview, onCancel, onSave }: { datasets: Dataset[]; dashboard: Dashboard; block: DashboardBlock; isNew: boolean; preview: (dataset: Dataset, block: DashboardBlock) => Narrowed | null; onCancel: () => void; onSave: (block: DashboardBlock, colors: ColorPins | undefined) => Promise<void> }) {
   const [draft, setDraft] = useState<DashboardBlock>(block)
   const [pins, setPins] = useState(dashboard.colors)
   const [error, setError] = useState('')
@@ -117,9 +127,9 @@ export function BlockDialog({ datasets, dashboard, block, isNew, preview, onCanc
           </fieldset>
           <label>Data source
             <select aria-label="Data source" value={draft.source} onChange={(event) => { const next = datasets.find((entry) => entry.key === event.target.value); if (next) { setDraft(withSource(next, draft)); setError('') } }}>
-              {datasets.map((entry) => <option key={entry.key} value={entry.key} disabled={Boolean(entry.problem) && entry.key !== draft.source}>{entry.name}{entry.problem ? ' (not available)' : ' (table page)'}</option>)}
+              {datasets.map((entry) => <option key={entry.key} value={entry.key} disabled={Boolean(entry.problem) && entry.key !== draft.source}>{entry.name}{entry.problem ? ' (not available)' : ` (${entry.kind ?? 'table page'})`}</option>)}
             </select>
-            <small>{dataset.problem || `The rows of ${dataset.name} as saved in Git (${page.rows.length} row${page.rows.length === 1 ? '' : 's'}).`}</small>
+            <small>{dataset.problem || dataset.note || `The rows of ${dataset.name} as saved in Git (${page.rows.length} row${page.rows.length === 1 ? '' : 's'}).`}</small>
           </label>
           {chart && <label>{categoryLabel}
             <select aria-label={categoryLabel} value={draft.category} onChange={(event) => edit({ category: event.target.value, second: draft.second === event.target.value ? '' : draft.second })}>
@@ -190,10 +200,10 @@ export function BlockDialog({ datasets, dashboard, block, isNew, preview, onCanc
         </div>
         <section className="od-insight-preview" aria-label="Preview">
           <p className="eyebrow">PREVIEW · THE PERIOD ABOVE</p>
-          <h3>{draft.title.trim() || 'Untitled'}</h3>
-          <p className="muted">{blockSubject(dataset, draft)} · {periodNote(dataset, draft)}</p>
-          {draft.type === 'kpi' ? <div className="metric-grid compact"><KpiTile dataset={dataset} block={{ ...shown, title: shown.title || 'Untitled' }} narrowed={narrowed} /></div>
-            : <BlockBody dataset={dataset} block={shown} narrowed={narrowed} colors={pins} drill={false} problems={narrowed ? blockProblems(dataset, shown) : [dataset.problem ?? '']} />}
+          {/* KB-86: the preview's header is the block's own — its title and ⓘ, "Filtered" when its filters narrow it. */}
+          {draft.type === 'kpi' ? <div className="metric-grid compact od-kpi-cards"><KpiTile dataset={dataset} block={{ ...shown, title: shown.title || 'Untitled' }} narrowed={narrowed} /></div>
+            : <><PreviewHeading title={draft.title.trim() || 'Untitled'} hidden={draft.options?.elements?.title === false} info={<>{blockSubject(dataset, draft)}. {periodNote(dataset, draft)}.</>} filtered={shown.filters.length > 0} />
+              <BlockPreviewBody dataset={dataset} block={shown} narrowed={narrowed} colors={pins} problems={narrowed ? blockProblems(dataset, shown) : [dataset.problem ?? '']} /></>}
         </section>
       </div>
       {error && <Notice tone="error">{error}</Notice>}

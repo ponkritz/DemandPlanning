@@ -1,6 +1,6 @@
 import test, { after, before } from 'node:test'
 import assert from 'node:assert/strict'
-import { navigate, openPage, rolesFile, startApp, text } from './helpers.mjs'
+import { infoText, menuOf, navigate, openPage, rolesFile, startApp, text } from './helpers.mjs'
 
 // On-Demand pages (OND-01…10, CON-103): CoNQ set up with a Dropdown and a Multi-select column, a row added and saved
 // to Git as on-demand/conq.json — each change at once (OND-28) — (TC-OND-01, UAT), and a viewer without the rights
@@ -99,7 +99,7 @@ test('TC-OND-01: On-Demand → CoNQ — add a Dropdown and a Multi-select column
   assert.deepEqual(file.rows.map((entry) => entry.cells), [{ [file.columns[0].id]: 'Rework', [file.columns[1].id]: ['Berlin', 'Lyon'] }])
   assert.equal(file.rows[0].key, key, 'the key shown is the key saved')
   assert.equal(file.keyPrefix, 'CONQ')
-  assert.match(saved[1].message, /^CoNQ: add row CONQ-0001 \(CONQ-.+\) \[saved \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\]$/, 'a queued save carries its time (GIT-17)')
+  assert.match(saved[1].message, /^CoNQ: add row CONQ-0001 \(CONQ-.+\) \[saved \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\]( \[by [^\]]+\])?$/, 'a queued save carries its time (GIT-17)')
   assert.equal(JSON.stringify(writes).includes('test-token'), false, 'no token in the data repository')
   // §8: the result is a Background jobs entry.
   await page.locator('.jobs-button').click()
@@ -130,7 +130,11 @@ test('TC-OND-07: a viewer without the On-Demand rights sees the page read only �
   await first.waitFor()
   // The value no longer in the options is kept and marked.
   assert.match(await text(first), /Rework not in the list/)
-  for (const name of ['＋ Add row', 'Set up columns…', '＋ Add page…', 'Rename page…', 'Hide page', 'Delete page…']) assert.equal(await page.getByRole('button', { name }).isDisabled(), true, `${name} is disabled`)
+  for (const name of ['＋ Add row', 'Set up columns…']) assert.equal(await page.getByRole('button', { name }).isDisabled(), true, `${name} is disabled`)
+  // OND-61: the page's other actions are in its ⋯ menu, disabled there.
+  const pageMenu = await menuOf(page, 'page CoNQ')
+  for (const name of ['＋ Add page…', 'Rename page…', 'Hide page', 'Delete page…']) assert.equal(await pageMenu.getByRole('menuitem', { name }).isDisabled(), true, `${name} is disabled`)
+  await page.keyboard.press('Escape')
   assert.equal(await first.getByRole('button', { name: /^Edit row/ }).isDisabled(), true)
   assert.equal(await first.getByRole('button', { name: /^Hide row/ }).isDisabled(), true)
   assert.equal(await text(page.locator('.od-panel .write-blocked')), 'Your role does not allow “Edit On-Demand data (rows)”, “Set up On-Demand pages (pages, columns, options)”. An Admin can change this in Admin → People & roles → Role rights.')
@@ -184,7 +188,9 @@ test('TC-OND-09: Insights — on CoNQ add rows, add a Bar chart of Sum of cost b
   await dialog.getByLabel('Measure').selectOption('sum')
   await dialog.getByLabel('Of the Number column').selectOption({ label: 'Cost (EUR)' })
   const preview = dialog.getByRole('region', { name: 'Preview' })
-  assert.match(await text(preview), /Sum of Cost \(EUR\) by Category · Filters: All rows/)
+  // CHT-38 (KB-86): the preview's header is the chart's own — its title and ⓘ, no subtitle repeating what ⓘ says.
+  assert.match(await text(preview.locator('.od-preview-title')), /^Cost by category ⓘ/)
+  assert.doesNotMatch(await text(preview), /Filters: All rows|rows counted/)
   await preview.locator('svg[role="img"] title', { hasText: 'Rework 1,650' }).waitFor({ state: 'attached' })
   await dialog.getByRole('button', { name: 'Add chart' }).click()
   await dialog.waitFor({ state: 'detached' })
@@ -199,7 +205,11 @@ test('TC-OND-09: Insights — on CoNQ add rows, add a Bar chart of Sum of cost b
   await dialog.waitFor({ state: 'detached' })
   assert.match(await text(insightsTab(page)), /Insights \(2\)/)
   const bar = page.locator('.od-insight', { hasText: 'Cost by category' })
-  assert.match(await text(bar.locator('.panel-heading')), /BAR \/ COLUMN Cost by category.*Sum of Cost \(EUR\) by Category Filters: All rows/)
+  // CHT-25, CHT-39: the heading is the title only (no type above it); the type, what the chart measures and its filters
+  // are in its ⓘ.
+  assert.match(await text(bar.locator('.panel-heading')), /^Cost by category/)
+  assert.equal(await bar.locator('.panel-heading .eyebrow').count(), 0)
+  assert.match(await infoText(page, bar), /^Type: Bar \/ column\. Sum of Cost \(EUR\) by Category\. Its own filters: All rows\./)
   const pivot = page.locator('.od-insight', { hasText: 'Rows by category and site' })
   assert.match(await text(pivot.locator('thead')), /^Category Berlin Leeds Lyon Total$/i)
   assert.match(await text(pivot.locator('tbody tr', { hasText: 'Rework' })), /^Rework 2 0 1 2$/)
@@ -234,7 +244,7 @@ test('TC-OND-09: Insights — on CoNQ add rows, add a Bar chart of Sum of cost b
   await context.close()
 })
 
-test('TC-OND-13: a viewer without the setup right sees the Insights read only — charts shown, Add chart / table, Edit, ↑ ↓ and Remove disabled with the reason', async () => {
+test('TC-OND-13: a viewer without the setup right sees the Insights read only — charts shown, Add chart / table disabled with the reason, no chart ⋯ menu', async () => {
   const conq = { schema: 1, kind: 'on-demand-page', id: 'conq', name: 'CoNQ', description: 'Cost of Non-Quality', columns: conqColumns,
     rows: [{ id: 'r1', cells: { c1: 'Rework', c2: ['Berlin'], c3: '100', c4: '2026-10-01' } }, { id: 'r2', cells: { c1: 'Scrap', c3: '40', c4: '2026-11-03' } }],
     insights: [{ id: 'i1', title: 'Cost per month', type: 'line', category: 'c4', measure: 'sum', value: 'c3', sort: 'label' }, { id: 'i2', title: 'Old chart', type: 'bar', category: 'gone', measure: 'count', sort: 'value' }] }
@@ -247,13 +257,15 @@ test('TC-OND-13: a viewer without the setup right sees the Insights read only �
   await insightsTab(page).click()
   const line = page.locator('.od-insight', { hasText: 'Cost per month' })
   await line.locator('svg[role="img"]').waitFor()
-  assert.match(await text(line), /2 of 2 rows counted/)
+  assert.match(await infoText(page, line), /2 of 2 rows counted/)
   // A chart whose column is gone says so instead of failing.
   assert.match(await text(page.locator('.od-insight', { hasText: 'Old chart' })), /This chart cannot be shown: The column for the categories is no longer on the page \(removed\)\./)
   assert.equal(await page.getByRole('button', { name: '＋ Add chart / table' }).isDisabled(), true)
-  for (const name of ['Edit Cost per month', 'Remove Cost per month', 'Move Cost per month up', 'Move Cost per month down']) assert.equal(await page.getByRole('button', { name, exact: true }).isDisabled(), true, `${name} is disabled`)
+  // OND-61: Move up / down, Edit…, Size… and Remove… are in each chart's ⋯ menu, shown only to those who may set charts up.
+  assert.equal(await page.getByRole('button', { name: 'More actions: Cost per month' }).count(), 0, 'no chart menu for a viewer')
+  assert.equal(await line.getByRole('button', { name: /^(Edit|Remove|Move)/ }).count(), 0, 'no chart buttons for a viewer')
   assert.equal(await text(page.locator('.od-insights-head .write-blocked')), 'Your role does not allow “Set up On-Demand pages (pages, columns, options)”. An Admin can change this in Admin → People & roles → Role rights.')
-  assert.match(await page.getByRole('button', { name: 'Edit Cost per month' }).getAttribute('title'), /Your role does not allow “Set up On-Demand pages/)
+  assert.match(await page.getByRole('button', { name: '＋ Add chart / table' }).getAttribute('title'), /Your role does not allow “Set up On-Demand pages/)
   // The Data tab is unchanged.
   await page.getByRole('tab', { name: 'Data' }).click()
   await page.locator('.od-panel table tbody tr').first().waitFor()

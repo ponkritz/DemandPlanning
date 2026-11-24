@@ -1,4 +1,5 @@
-const { app, BrowserWindow, shell, ipcMain, net, session } = require('electron')
+const { app, BrowserWindow, dialog, shell, ipcMain, net, session } = require('electron')
+const fs = require('fs')
 const path = require('path')
 const { pathToFileURL } = require('url')
 const { spawn } = require('child_process')
@@ -6,6 +7,8 @@ const { requestAzureDevOps } = require('./azure-devops.cjs')
 const { checkForUpdate, downloadUpdate } = require('./desktop-update.cjs')
 const { windchillUrl, testWindchill, queryWindchill } = require('./windchill.cjs')
 const { sharePointFileUrl, readSharePointFile } = require('./sharepoint-file.cjs')
+const { savePdf } = require('./pdf-export.cjs')
+const { publishTargets } = require('./html-publish.cjs')
 const distDir = path.join(__dirname, '..', 'dist')
 const bundledUrl = pathToFileURL(path.join(distDir, 'index.html')).href
 const trustedSender = (event) => {
@@ -197,6 +200,36 @@ ipcMain.handle('sharepoint-file:sign-out', async (event) => {
   await ses.clearStorageData()
   await ses.clearAuthCache()
   return { ok: true }
+})
+
+// OND-69: Export PDF… — the window's print view printed to a PDF and saved where the person chooses.
+ipcMain.handle('pdf-export:save', async (event, request) => {
+  if (!trustedSender(event)) throw new Error('Untrusted request source.')
+  return savePdf(request, {
+    print: (options) => event.sender.printToPDF(options),
+    showSaveDialog: (options) => dialog.showSaveDialog(BrowserWindow.fromWebContents(event.sender), options),
+    writeFile: (target, bytes) => fs.promises.writeFile(target, bytes),
+    defaultDir: app.getPath('documents'),
+  })
+})
+
+// OND-76: Publish standalone HTML — the file of each page chosen in the save dialog, remembered on this computer
+// (publish-targets.json in the user data folder), and overwritten by each publish; the page never names a path.
+const targets = (event) => publishTargets({
+  storeFile: path.join(app.getPath('userData'), 'publish-targets.json'), fs: fs.promises, documentsDir: app.getPath('documents'),
+  showSaveDialog: (options) => dialog.showSaveDialog(BrowserWindow.fromWebContents(event.sender), options),
+})
+ipcMain.handle('html-publish:target', async (event, pageId) => {
+  if (!trustedSender(event)) throw new Error('Untrusted request source.')
+  return targets(event).target(pageId)
+})
+ipcMain.handle('html-publish:choose', async (event, pageId, defaultName) => {
+  if (!trustedSender(event)) throw new Error('Untrusted request source.')
+  return targets(event).choose(pageId, defaultName)
+})
+ipcMain.handle('html-publish:write', async (event, pageId, html) => {
+  if (!trustedSender(event)) throw new Error('Untrusted request source.')
+  return targets(event).write(pageId, html)
 })
 
 // UI-14: zoom of the app window. The app sets it (Auto fit or − / +); Ctrl + / Ctrl − / Ctrl 0 and Ctrl + wheel are

@@ -69,6 +69,11 @@ export function usePersonalViews(git: GitStorage, myEmail: string) {
     setMenu: (menu: MenuLayout) => change((current) => ({ ...current, menu })),
     filter: <T,>(page: string, check: (value: unknown) => T | undefined): T | undefined => check(views.filters[page]),
     setFilter: (page: string, value: unknown) => change((current) => ({ ...current, filters: { ...current.filters, [page]: value } })),
+    // CHT-17, CHT-19: an entry of the person's own (not the default) and of the shared defaults apart, and an own
+    // entry removed so the default applies again (a chart's "Reset to default").
+    ownFilter: (page: string): unknown => mine.filters[page],
+    sharedFilter: (page: string): unknown => defaults.filters[page],
+    clearFilter: (page: string) => { if (page in latest.current.filters) change((current) => { const filters = { ...current.filters }; delete filters[page]; return { ...current, filters } }) },
     // BKL-47: one entry (e.g. the QMS-0025 column order) as everyone's default; the defaults file is read fresh first so
     // the other defaults in it are kept.
     saveEntryAsDefault: async (page: string, value: unknown) => {

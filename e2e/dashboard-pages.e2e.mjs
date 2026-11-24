@@ -1,10 +1,13 @@
 import test, { after, before } from 'node:test'
 import assert from 'node:assert/strict'
-import { navigate, openPage, rolesFile, startApp, text } from './helpers.mjs'
+import { readFileSync } from 'node:fs'
+import { loadSample, menuOf, navigate, openPage, rolesFile, startApp, text } from './helpers.mjs'
 
-// Dashboard pages (DSH-01…DSH-14) against a mocked GitHub: a Tool Owner adds a Dashboard page, builds it from a KPI
+// Dashboard pages (DSH-01…DSH-16) against a mocked GitHub: a Tool Owner adds a Dashboard page, builds it from a KPI
 // tile, a bar chart and a summary table over a table page's rows and filters it by period (TC-DSH-01, UAT); a person
-// without the right sees the dashboard with every builder button disabled and the reason (TC-DSH-09).
+// without the right sees the dashboard with every builder button disabled and the reason (TC-DSH-09); "Set up On-Demand
+// pages" alone no longer builds (TC-DSH-13); a summary table's export ends with its Total row (TC-DSH-14); a block is
+// copied to another dashboard (TC-DSH-15); the Time Writing hours as a data source (TC-DSH-16, UAT).
 let app
 before(async () => { app = await startApp() })
 after(async () => { await app.stop() })
@@ -60,6 +63,10 @@ async function open(email, files, role, viewport = {}) {
 const lastWrite = (writes, path) => writes.filter((write) => write.path === path).at(-1)
 const tile = (page, title) => page.locator('.metric-grid article', { has: page.locator('span', { hasText: title }) })
 const panel = (page, title) => page.locator('.dsh-block', { has: page.locator('h2', { hasText: title }) })
+// CON-107: the reason a builder action is disabled for a role without “Build On-Demand Dashboards”.
+const buildReason = 'Your role does not allow “Build On-Demand Dashboards (blocks, tabs, filters — every dashboard)”. An Admin can change this in Admin → People & roles → Role rights.'
+const openDashboard = async (page, name) => { await page.locator('.sidebar nav button', { hasText: name }).click(); await page.locator('header.topbar h1', { hasText: name }).waitFor() }
+const openJobs = async (page) => { const jobs = page.locator('.jobs-button'); await jobs.waitFor(); await jobs.click(); const list = page.getByRole('dialog', { name: 'Background jobs' }); await list.waitFor(); return list }
 // Ticks values in a filter-row multi-select (its list closes with Escape).
 async function pick(page, label, values) {
   await page.getByRole('button', { name: new RegExp(`^${label}: `) }).click()
@@ -109,7 +116,7 @@ test('TC-DSH-01: a Tool Owner adds a Dashboard page, builds it from a KPI tile, 
   await tile(page, 'Issues').waitFor()
   assert.match(await text(tile(page, 'Issues').locator('strong')), /^4$/, 'this year: 4 of the 5 rows')
   let saved = lastWrite(writes, 'dashboards/quality-dashboard.json')
-  assert.match(saved.message, /\[saved \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\]$/, 'a queued save (GIT-17)')
+  assert.match(saved.message, /\[saved \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\]( \[by [^\]]+\])?$/, 'a queued save (GIT-17)')
   assert.deepEqual(saved.data.blocks.map((entry) => [entry.type, entry.title, entry.source, entry.measure, entry.period]), [['kpi', 'Issues', 'page:supplier-issues', 'count', 'c3']])
 
   // A bar chart: Count of rows by Category.
@@ -174,19 +181,160 @@ test('TC-DSH-09: a viewer without the right sees the dashboard read only, every 
   await tile(page, 'Issues').waitFor()
   assert.match(await text(tile(page, 'Issues').locator('strong')), /^4$/)
   await panel(page, 'Issues by category').locator('.viz-root').waitFor()
-  const reason = 'Your role does not allow “Set up On-Demand pages (pages, columns, options)”. An Admin can change this in Admin → People & roles → Role rights.'
-  for (const name of ['＋ Add block…', 'Arrange blocks…', 'Tabs and filters…']) {
-    const button = page.getByRole('button', { name })
-    assert.equal(await button.isDisabled(), true, `${name} is disabled`)
-    assert.equal(await button.getAttribute('title'), reason)
+  const reason = buildReason
+  // DSH-13: the page's actions in its ⋯ menu, each disabled with its reason as its tooltip; no block ⋯ menus.
+  const pageMenu = await menuOf(page, 'page Quality dashboard')
+  for (const name of ['＋ Add block…', 'Arrange blocks…', 'Arrange on the page', 'Tabs and filters…']) {
+    const item = pageMenu.getByRole('menuitem', { name })
+    assert.equal(await item.isDisabled(), true, `${name} is disabled`)
+    assert.equal(await item.getAttribute('title'), reason)
   }
-  for (const name of ['Rename page…', 'Hide page', 'Delete page…']) assert.equal(await page.getByRole('button', { name }).isDisabled(), true, `${name} is disabled`)
+  for (const name of ['Rename page…', 'Hide page', 'Delete page…']) assert.equal(await pageMenu.getByRole('menuitem', { name }).isDisabled(), true, `${name} is disabled`)
+  await page.keyboard.press('Escape')
+  assert.equal(await page.getByRole('button', { name: 'More actions: Issues by category' }).count(), 0)
   assert.equal(await text(page.locator('.dashboard-page .write-blocked').first()), reason)
   // The viewer still filters for themselves.
   await pick(page, 'Year', [String(last)])
   await page.locator('.dsh-scope', { hasText: `${last} (whole year)` }).waitFor()
   assert.match(await text(tile(page, 'Issues').locator('strong')), /^1$/)
   assert.equal(writes.length, 0, 'nothing is written')
+  assert.deepEqual(errors.filter((entry) => !/401|Unauthorized/.test(entry)), [])
+  await context.close()
+})
+
+test('TC-DSH-13: “Set up On-Demand pages” alone no longer builds a dashboard — an Admin sees the builder actions disabled with “Build On-Demand Dashboards”', async () => {
+  const { page, context, errors, writes } = await open('admin@example.com', dashboardFiles(), 'Admin')
+  await openDashboard(page, 'Quality dashboard')
+  await tile(page, 'Issues').waitFor()
+  const pageMenu = await menuOf(page, 'page Quality dashboard')
+  for (const name of ['＋ Add block…', 'Arrange blocks…', 'Tabs and filters…']) {
+    const item = pageMenu.getByRole('menuitem', { name })
+    assert.equal(await item.isDisabled(), true, `${name} is disabled`)
+    assert.equal(await item.getAttribute('title'), buildReason)
+  }
+  // The page builder's own actions (rename) still follow "Set up On-Demand pages" in the On-Demand group (PGB-10).
+  assert.equal(await pageMenu.getByRole('menuitem', { name: 'Rename page…' }).isDisabled(), false)
+  await page.keyboard.press('Escape')
+  assert.equal(await page.getByRole('button', { name: 'More actions: Issues by category' }).count(), 0, 'no block ⋯ menus')
+  assert.equal(await text(page.locator('.dashboard-page .write-blocked').first()), buildReason)
+  assert.equal(writes.length, 0)
+  assert.deepEqual(errors.filter((entry) => !/401|Unauthorized/.test(entry)), [])
+  await context.close()
+})
+
+test('TC-DSH-14: a summary table’s Export (CSV) ends with its Total row, labelled Total', async () => {
+  const files = dashboardFiles()
+  const board = JSON.parse(files['dashboards/quality-dashboard.json'])
+  board.blocks.push({ id: 'b3', title: 'Cost by category', type: 'table', source: 'page:supplier-issues', category: 'c1', measure: 'sum', value: 'c2', sort: 'value', period: 'c3' })
+  files['dashboards/quality-dashboard.json'] = JSON.stringify(board)
+  const { page, context, errors } = await open('someone@example.com', files, 'Team Member')
+  await openDashboard(page, 'Quality dashboard')
+  const table = panel(page, 'Cost by category')
+  await table.locator('table tbody tr.matrix-total').waitFor()
+  await table.getByRole('button', { name: /^Export/ }).click()
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('menuitem', { name: 'CSV (.csv)' }).click()])
+  const lines = readFileSync(await download.path(), 'utf8').replace(/^﻿/, '').split(/\r?\n/).filter(Boolean)
+  assert.deepEqual(lines.slice(1), ['Scrap,1500', 'Rework,450', 'Delay,80', 'Total,2030'], 'every row, then the Total row')
+  assert.deepEqual(errors.filter((entry) => !/401|Unauthorized/.test(entry)), [])
+  await context.close()
+})
+
+test('TC-DSH-15: Copy to… copies a block to another dashboard (the first tab when no tab has its name, said) and duplicates it here — each saved to the dashboard’s file', async () => {
+  const files = dashboardFiles()
+  files['on-demand/second-board.json'] = JSON.stringify({ schema: 1, kind: 'on-demand-page', id: 'second-board', name: 'Second board', description: '', keyPrefix: 'SECONDB', columns: [], rows: [] })
+  files['dashboards/second-board.json'] = JSON.stringify({ schema: 1, kind: 'dashboard', id: 'second-board', tabs: [{ id: 't1', name: 'Summary' }], filters: [], blocks: [] })
+  const layout = JSON.parse(files['menu-layout.json']); layout.pages['second-board'] = { type: 'dashboard', group: 'on-demand', order: 3, icon: '◔', owners: [] }
+  files['menu-layout.json'] = JSON.stringify(layout)
+  const quality = JSON.parse(files['dashboards/quality-dashboard.json']); quality.tabs = [{ id: 'q1', name: 'Overview' }]
+  files['dashboards/quality-dashboard.json'] = JSON.stringify(quality)
+  const { page, context, errors, writes } = await open('tool.owner@example.com', files, 'Tool Owner')
+  await openDashboard(page, 'Quality dashboard')
+  await panel(page, 'Issues by category').locator('.viz-root').waitFor()
+  // To another dashboard: the pop-up lists This dashboard and the dashboards the person may build.
+  await (await menuOf(page, 'Issues by category')).getByRole('menuitem', { name: 'Copy to…' }).click()
+  let dialog = page.getByRole('dialog', { name: 'Copy the block' })
+  assert.deepEqual(await dialog.getByLabel('Copy to').locator('option').allInnerTexts(), ['This dashboard', 'Second board'])
+  await dialog.getByLabel('Copy to').selectOption({ label: 'Second board' })
+  await dialog.getByRole('button', { name: 'Copy block' }).click()
+  await dialog.waitFor({ state: 'detached' })
+  const copied = lastWrite(writes, 'dashboards/second-board.json')
+  assert.equal(copied.data.blocks.length, 1)
+  const [block] = copied.data.blocks
+  assert.notEqual(block.id, 'b2', 'a new id')
+  assert.deepEqual([block.title, block.type, block.source, block.category, block.measure, block.period, block.tab], ['Issues by category', 'bar', 'page:supplier-issues', 'c1', 'count', 'c3', undefined], 'its settings and data source; the first tab')
+  const jobs = await openJobs(page)
+  await jobs.getByText('Second board has no tab named “Overview”: the block is on its first tab, Summary.', { exact: false }).waitFor()
+  assert.match(await text(jobs), /Copy block · Issues by category → Second board/)
+  await page.locator('.jobs-button').click()
+  await jobs.waitFor({ state: 'detached' })
+  // A duplicate on this dashboard.
+  await (await menuOf(page, 'Issues by category')).getByRole('menuitem', { name: 'Copy to…' }).click()
+  dialog = page.getByRole('dialog', { name: 'Copy the block' })
+  await dialog.getByRole('button', { name: 'Copy block' }).click()
+  await dialog.waitFor({ state: 'detached' })
+  await panel(page, 'Issues by category (copy)').locator('.viz-root').waitFor()
+  assert.deepEqual(lastWrite(writes, 'dashboards/quality-dashboard.json').data.blocks.map((entry) => entry.title), ['Issues', 'Issues by category', 'Issues by category (copy)'])
+  // The other dashboard shows the copy.
+  await openDashboard(page, 'Second board')
+  await panel(page, 'Issues by category').locator('.viz-root').waitFor()
+  assert.deepEqual(errors.filter((entry) => !/401|Unauthorized/.test(entry)), [])
+  await context.close()
+})
+
+const hoursBoard = () => {
+  const files = dashboardFiles()
+  files['dashboards/quality-dashboard.json'] = JSON.stringify({ schema: 1, kind: 'dashboard', id: 'quality-dashboard', tabs: [], filters: [], blocks: [
+    { id: 'b1', title: 'Issues', type: 'kpi', source: 'page:supplier-issues', measure: 'count', sort: 'value', period: 'c3' },
+    { id: 'h1', title: 'Planned hours', type: 'kpi', source: 'hours:time-writing', measure: 'sum', value: 'tw-planned', sort: 'value', period: 'tw-month' },
+    { id: 'h2', title: 'Booked hours by team member', type: 'table', source: 'hours:time-writing', category: 'tw-person', measure: 'sum', value: 'tw-booked', sort: 'value', period: 'tw-month' },
+  ] })
+  return files
+}
+
+test('TC-DSH-16: the Time Writing hours as a data source — planned and booked hours by team member over the period; “Not available for your role” without Team overview', async () => {
+  // A Tool Owner with Time Writing data (the synthetic sample) sees the hours.
+  const { page, context, errors } = await open('tool.owner@example.com', hoursBoard(), 'Tool Owner')
+  await loadSample(page)
+  await openDashboard(page, 'Quality dashboard')
+  const planned = tile(page, 'Planned hours')
+  await planned.locator('strong', { hasText: /^[\d,.]+$/ }).waitFor()
+  assert.ok(Number((await text(planned.locator('strong'))).replace(/,/g, '')) > 0, 'planned hours of this year')
+  const table = panel(page, 'Booked hours by team member')
+  await table.locator('table tbody tr.matrix-total').waitFor()
+  assert.ok(await table.locator('table tbody tr').count() > 2, 'a row per team member and the Total')
+  assert.equal(await table.getByRole('cell', { name: 'Chen Wei', exact: true }).count(), 1)
+  assert.deepEqual(errors.filter((entry) => !/401|Unauthorized/.test(entry)), [])
+  await context.close()
+
+  // A Team Member (no Team insights) sees the blocks over the hours as not available; the others are drawn.
+  const viewer = await open('someone@example.com', hoursBoard(), 'Team Member')
+  await openDashboard(viewer.page, 'Quality dashboard')
+  await tile(viewer.page, 'Issues').locator('strong', { hasText: '4' }).waitFor()
+  await tile(viewer.page, 'Planned hours').locator('.dsh-problem', { hasText: 'Not available for your role.' }).waitFor()
+  await panel(viewer.page, 'Booked hours by team member').locator('.notice', { hasText: 'Not available for your role.' }).waitFor()
+  assert.equal(await panel(viewer.page, 'Booked hours by team member').locator('table').count(), 0, 'no hours shown')
+  assert.deepEqual(viewer.errors.filter((entry) => !/401|Unauthorized/.test(entry)), [])
+  await viewer.context.close()
+})
+
+test('TC-DSH-16: a builder adds a block over the Time Writing hours in the block pop-up — only its settings are saved', async () => {
+  const { page, context, errors, writes } = await open('tool.owner@example.com', dashboardFiles(), 'Tool Owner')
+  await openDashboard(page, 'Quality dashboard')
+  await tile(page, 'Issues').waitFor()
+  await page.getByRole('button', { name: '＋ Add block…' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Add a block' })
+  await dialog.getByLabel('Title').fill('Booked by stream')
+  await dialog.getByRole('radio', { name: 'Bar chart' }).check()
+  await dialog.getByLabel('Data source').selectOption({ label: 'Time Writing hours (as in Team overview)' })
+  assert.equal(await dialog.getByLabel('Measure').inputValue(), 'sum', 'hours are summed, never counted')
+  await dialog.getByLabel('Categories by').selectOption({ label: 'Stream (Dropdown)' })
+  await dialog.getByLabel('Of the Number column').selectOption({ label: 'Booked hours' })
+  assert.equal(await dialog.getByLabel('Period filter on').inputValue(), 'tw-month')
+  await dialog.getByRole('button', { name: 'Add block' }).click()
+  await dialog.waitFor({ state: 'detached' })
+  await panel(page, 'Booked by stream').waitFor()
+  const saved = lastWrite(writes, 'dashboards/quality-dashboard.json').data.blocks.at(-1)
+  assert.deepEqual([saved.source, saved.category, saved.measure, saved.value, saved.period], ['hours:time-writing', 'tw-stream', 'sum', 'tw-booked', 'tw-month'])
   assert.deepEqual(errors.filter((entry) => !/401|Unauthorized/.test(entry)), [])
   await context.close()
 })

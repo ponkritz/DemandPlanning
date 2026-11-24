@@ -1,6 +1,6 @@
 import { maxOwners, ownersOf } from './menuLayout.ts'
 
-// PGB-18: co-owners are picked from the people the app already knows (Admin → People & roles → People, CAP-51: the
+// PGB-18, PGB-21: co-owners are picked from the people the app already knows (Admin → People & roles → People, CAP-51: the
 // Azure DevOps team members and everyone Assigned To fetched work) instead of typing their work emails. The name is
 // shown, the work email (lower case) is stored, as before (PGB-08). A co-owner already named who is not in that list
 // stays chosen, marked "not in Azure DevOps"; a person without a work email is listed but cannot be chosen.
@@ -22,6 +22,16 @@ export function knownPeople(items: { assignedTo?: string; assignedToEmail?: stri
   // A person known by name and work email is listed once: an entry named by its email alone is dropped then.
   const named = new Set([...byName.values()].filter((person) => person.email && person.name !== person.email).map((person) => person.email))
   return [...byName.values()].filter((person) => !(person.name === person.email && named.has(person.email))).sort((a, b) => a.name.localeCompare(b.name))
+}
+
+// PGB-21: the members of the Time Writing connection's team (CAP-30), read once per team in this app session (the
+// first caller reads, the others share the answer). A refused or failed read gives no one, silently: the list then
+// has the other people it knows (no notice outside Admin → People & roles).
+const teamReads = new Map<string, Promise<KnownPerson[]>>()
+export function teamPeopleOnce(key: string, read: () => Promise<KnownPerson[]>): Promise<KnownPerson[]> {
+  let found = teamReads.get(key)
+  if (!found) { found = read().then((people) => people.filter((person) => person.name?.trim()), () => []); teamReads.set(key, found) }
+  return found
 }
 
 // The options of the co-owner list: the known people with a work email (by name), the chosen co-owners not among them

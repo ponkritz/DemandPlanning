@@ -72,6 +72,26 @@ export async function loadSample(page) {
 
 export const text = async (locator) => (await locator.innerText()).replace(/\s+/g, ' ').trim()
 
+// CHT-25: the text of a panel's ⓘ (the one by its title), opened by pointing at it and closed with Escape.
+export async function infoText(page, panel) {
+  const button = panel.locator('h2 .info-button').first()
+  await page.mouse.move(0, 0)
+  await button.hover()
+  const tip = page.getByRole('tooltip')
+  await tip.waitFor()
+  const value = await text(tip)
+  await page.keyboard.press('Escape')
+  await tip.waitFor({ state: 'detached' })
+  return value
+}
+// OND-61, DSH-13: the items of a ⋯ menu ("More actions: {label}"), opened; the caller closes it with Escape.
+export async function menuOf(page, label) {
+  await page.getByRole('button', { name: `More actions: ${label}`, exact: true }).click()
+  const menu = page.getByRole('menu', { name: label, exact: true })
+  await menu.waitFor()
+  return menu
+}
+
 // Reload a page that has the synthetic sample loaded. The sample is saved to IndexedDB in the background; a reload
 // that beats that save (slow CI runners) starts without it, so it is loaded again. Settings kept in localStorage stay.
 export async function reloadWithSample(page) {

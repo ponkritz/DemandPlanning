@@ -98,6 +98,31 @@ export function shortFeatureTitle(title: string) {
 
 // Wrap an axis label onto at most two lines of maxChars. When it doesn't fit, the last word (usually the release
 // version) keeps line two so sibling releases stay distinguishable, and the rest is shortened with an ellipsis.
+// CHT-23 (KB-83): a label fitted to its space — split by words into at most `maxLines` lines of `maxChars` characters
+// (a word longer than a line is cut), the last line ending in "…" when the text does not fit; `cut` says so, and the
+// chart then gives the full text as the label's <title> (its accessible name and the Table view keep it whole).
+export function fitLabel(text: string, maxChars: number, maxLines = 2): { lines: string[]; cut: boolean } {
+  const width = Math.max(2, Math.floor(maxChars)), most = Math.max(1, Math.floor(maxLines))
+  const words = text.trim().split(/\s+/).filter(Boolean)
+  if (!words.length) return { lines: [''], cut: false }
+  const lines: string[] = []
+  let cut = false
+  for (const word of words) {
+    if (word.length > width) cut = true
+    const piece = word.length > width ? `${word.slice(0, width - 1)}…` : word
+    const last = lines[lines.length - 1]
+    if (last != null && `${last} ${piece}`.length <= width) lines[lines.length - 1] = `${last} ${piece}`
+    else lines.push(piece)
+  }
+  if (lines.length <= most) return { lines, cut }
+  const kept = lines.slice(0, most)
+  const tail = kept[most - 1]
+  kept[most - 1] = `${tail.length >= width ? tail.slice(0, width - 1).trimEnd() : tail}…`
+  return { lines: kept, cut: true }
+}
+// Characters of about 6.6 px (11–12 px chart text) that fit in `px`.
+export const charsIn = (px: number) => Math.max(2, Math.floor(px / 6.6))
+
 export function wrapLabel(text: string, maxChars: number) {
   const words = text.split(/\s+/).filter(Boolean)
   const cut = (line: string) => line.length > maxChars ? line.slice(0, Math.max(1, maxChars - 1)).trimEnd() + '…' : line

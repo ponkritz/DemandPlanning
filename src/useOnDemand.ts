@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { GitQueueError } from './gitSaveQueue'
 import { conqPage, onDemandPath, pageListChange, withoutHidden, parseOnDemandPage, serializeOnDemandPage, sortPages, type OnDemandPage } from './onDemand'
 import { headOf, pageFolder, rowPageQueue } from './rowFiles'
+import { SampleWriteError, samplePage } from './sampleRows'
 import { defaultLockSettings, parseLockSettings, serializeLockSettings, type LockSettings } from './rowLocks'
 import type { GitStorage } from './useGitStorage'
 
@@ -30,7 +31,10 @@ let keptIds = 0
 const without = <T,>(record: Record<string, T>, id: string) => { const next = { ...record }; delete next[id]; return next }
 const messageOf = (failure: unknown) => failure instanceof Error ? failure.message : String(failure)
 
-export function useOnDemand(git: GitStorage) {
+// OND-63…OND-66: isSample(id) — the viewer looks at the page in Sample (useDataMode): every list of pages given out here
+// (pages, full, stored: the Data tab, the Insights and the dashboards) has the page with its sample rows, and every save
+// of that page is refused (SampleWriteError) before anything is sent to Git.
+export function useOnDemand(git: GitStorage, isSample: (id: string) => boolean = () => false) {
   const scope = git.accessScope
   const { listOnDemand, readOnDemand, readRowPage, readLockSettings } = git
   // OND-36: the inactivity timeout of row locks (row-locks.json), read with the pages.
@@ -103,8 +107,10 @@ export function useOnDemand(git: GitStorage) {
   const apply = (page: OnDemandPage) => (kept[page.id] ?? []).reduce((current, entry) => { try { return entry.change(current) } catch { return current } }, page)
   // OND-39: everyone gets the pages without their hidden rows (table, Insights, exports, dashboards); the table page
   // asks for the full page (full) to list them with Show hidden rows.
-  const allPages = sortPages(saved.map(apply))
+  const shown = (page: OnDemandPage) => isSample(page.id) ? samplePage(page) : page
+  const allPages = sortPages(saved.map(apply)).map(shown)
   const pages = allPages.map(withoutHidden)
+  const refuse = (id: string) => { if (isSample(id)) throw new SampleWriteError(stored.current.find((page) => page.id === id)?.name ?? id) }
   const put = (page: OnDemandPage) => {
     stored.current = sortPages([...stored.current.filter((entry) => entry.id !== page.id), page])
     setState((current) => { const list = sortPages([...current.pages.filter((entry) => entry.id !== page.id), page]); remember(list); return { ...current, pages: list, inGit: [...new Set([...current.inGit, page.id])] } })
@@ -112,6 +118,7 @@ export function useOnDemand(git: GitStorage) {
 
   // Save to Git (queued, merged): the page as saved — merged with what others saved meanwhile — becomes the page shown.
   async function save(page: OnDemandPage, message: string): Promise<Saved> {
+    refuse(page.id)
     // OND-33: a row-file page saves its name and description (page.json) — never its rows from this copy.
     const known = stored.current.find((entry) => entry.id === page.id)
     if (known?.storage === 'rows') return update(page.id, (base) => ({ ...base, ...headOf(page), colors: page.colors }), message)
@@ -123,6 +130,7 @@ export function useOnDemand(git: GitStorage) {
   // OND-28: one change saved at once — applied to the page as last read from or saved to Git (never on top of a pending
   // change). keep (a label): the change is shown applied while it is saved and kept when its save fails.
   async function update(id: string, change: Change, message: string, { keep = '' }: { keep?: string } = {}): Promise<Saved> {
+    refuse(id)
     const base = stored.current.find((page) => page.id === id) ?? conqPage()
     const entry = keptIds++
     const mark = (state: Kept['state'] | null, error = '') => setKept((current) => {
@@ -146,6 +154,7 @@ export function useOnDemand(git: GitStorage) {
   const queueKey = (id: string) => isRows(id) ? rowPageQueue(id) : onDemandPath(id)
   // Retry: the saves of the page kept in the GIT-17 queue, then its pending changes, each applied to the latest page.
   async function retry(id: string) {
+    refuse(id)
     const results = await git.retryQueued(queueKey(id)) as ({ text?: string; page?: OnDemandPage } | undefined)[]
     const last = [...results].reverse().find((result) => typeof result?.text === 'string' || result?.page)
     if (last?.page) put(last.page)
@@ -157,6 +166,7 @@ export function useOnDemand(git: GitStorage) {
     if (failed) throw new Error('The save failed again; the change is kept: choose Retry.')
   }
   async function remove(id: string, message: string) {
+    refuse(id)
     if (state.inGit.includes(id)) { if (isRows(id)) await git.removeRowPageGit(id, message); else await git.removeOnDemand(id, message) }
     setKept((current) => without(current, id))
     setState((current) => { const list = current.pages.filter((page) => page.id !== id); remember(list); return { ...current, pages: list, inGit: current.inGit.filter((entry) => entry !== id) } })
@@ -164,12 +174,13 @@ export function useOnDemand(git: GitStorage) {
   return {
     pages, save, update, retry, remove, reload: load, reloadPage: loadPage, loadNew,
     // OND-32: Convert to row files (Tool Owner) — one commit; the page shown is read from its folder.
-    convert: async (id: string) => { const result = await git.convertOnDemand(id); put(result.page); return result },
+    convert: async (id: string) => { refuse(id); const result = await git.convertOnDemand(id); put(result.page); return result },
     // OND-36: the inactivity timeout, and its change (Admin, Tool Owner).
     lockSettings, saveLockSettings: async (next: LockSettings, message: string) => { const result = await git.writeLockSettings(serializeLockSettings(next), message); setLockSettings(parseLockSettings(result.text)); return result },
     reloadLockSettings: async () => setLockSettings(parseLockSettings((await readLockSettings()).text)),
     full: (id: string) => allPages.find((page) => page.id === id) ?? null,
-    stored: (id: string) => saved.find((page) => page.id === id) ?? null,
+    stored: (id: string) => { const found = saved.find((page) => page.id === id); return found ? shown(found) : null },
+    isSample,
     // OND-28: the pending changes of a page (saves that failed before they were queued), and Discard.
     pending: (id: string) => (kept[id] ?? []).filter((entry) => entry.state === 'failed').map(({ label, error }) => ({ label, error })),
     discard: (id: string) => setKept((current) => { const list = (current[id] ?? []).filter((entry) => entry.state !== 'failed'); return list.length ? { ...current, [id]: list } : without(current, id) }),

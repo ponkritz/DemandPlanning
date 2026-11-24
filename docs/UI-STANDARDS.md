@@ -38,6 +38,9 @@ a Notice as intro); the Windchill pages (S&S IT, ECP) have no `Page` wrapper.
 - **Help** goes behind ⓘ (the panel's `info`), not in a Notice and not in a paragraph above the content.
 - **Panel actions** go in the panel's `action` slot, top right. The panel's main action is the one primary button there.
 - No hand-built cards (`section.act-card`, `div.control-card`, custom `Section` wrappers).
+- **Chart header** (approved 2026-11-23): a chart or table panel's heading shows the **title** and **ⓘ** — no type
+  eyebrow; what the chart measures, its type, its filters and the rows counted go in ⓘ; a neutral **"Filtered"** pill
+  when its own filters or a filter row narrow it; warnings that affect the numbers stay visible on the chart.
 
 **Today:** about 12 hand-built cards (Planning Overview, Capacity vs Actual, Time Writing, Dashboard sections);
 ~35 headings outside panels; 13 loose ⓘ and one fake ⓘ (a tooltip on `<small>`).
@@ -60,6 +63,10 @@ a Notice as intro); the Windchill pages (S&S IT, ECP) have no `Page` wrapper.
   lacks its action; the reason comes from `useWriteBlock()` (`src/useCan.ts`) and is shown with `WriteBlocked`
   (`src/components/ui.tsx`) next to the button — for a table of row buttons once above the table, each row button
   carrying the same reason as its tooltip.
+
+- **Per-object ⋯ menus** (approved 2026-11-23, an exception to CON-102's "disabled, not hidden"): the ⋯ menu of a
+  chart, block or row is hidden — not disabled — for people who cannot set that object up, when the page-level ⋯ keeps
+  the same actions disabled with their reason.
 
 **Today:** most settings edit inline; three save on every change; five places put the primary first; more than eight
 verbs for the main action; ~9 hand-built error boxes; 154 of 174 disabled buttons do not say why.
@@ -156,6 +163,13 @@ actions (QV-63); the other pages still show their results in the page.
 - **Charts**: inside `ChartFrame` (`components/WorkloadCharts.tsx`) — legend, Data labels toggle and **Table / Chart**
   toggle, axis names (UI-17).
 - **Colours** of measures are the same everywhere: planned, actual and capacity use the `--viz-series-*` tokens.
+- **Size** (approved 2026-11-23): a chart or table panel takes **Width ⅓ / ½ / ⅔ / Full** of the 6-column chart grid
+  and **Height Small / Medium / Large**; the owner's size is set in the chart's pop-up (Display), **Size…** or an
+  **Arrange** mode; every viewer may resize a chart for themselves with the resize handle; **"Size: yours · Reset to
+  default"** shows on a chart with an own size; below 720 px charts are full width and there is no handle.
+- **Resize handle** (approved 2026-11-23): the only drag control — a 20 px button on the panel's bottom-right corner;
+  a pointer drag snaps to the presets with a dashed outline naming the target size; the arrow keys step, **Enter**
+  keeps, **Escape** cancels; `aria-label` "Resize {object}: {size}" plus a polite live region; never shown on phones.
 
 **Today:** about eight tile styles (number sizes 22–32px); six charts without `ChartFrame` (no table view); three
 palettes for planned / actual / capacity.
@@ -245,3 +259,5 @@ wrong for a real case as an Improvement to the standard.
 | Date | Change | Approved by |
 |---|---|---|
 | 2026-11-23 | §4a Drawers added: one record of a table viewed and edited in a drawer from the right (the On-Demand row drawer, OND-27…OND-29). | Product owner, 2026-11-23 |
+| 2026-11-23 | v10.1 chart resizing: §9 chart **Size** and the **Resize handle** control; §2 the **chart header**; §3 the per-object ⋯ menu exception to CON-102 (CHT-15…CHT-25, OND-61, DSH-13). | Product owner, 2026-11-23 |
+| 2026-11-23 | §2 chart header **without the type eyebrow** ("I don't want the chart type at the top"): title, ⓘ (the type is its first line) and "Filtered" only, for the Insights and On-Demand Dashboard chart panels, KPI cards and the pop-up preview; the app's own panels keep their eyebrows (CHT-39). | Product owner, 2026-11-23 |

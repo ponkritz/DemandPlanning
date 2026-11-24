@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { fakeGitHub } from '../e2e/fakeGitHub.mjs'
+import { pageFileBytes, suggestRowFiles, suggestRowFilesAt } from '../src/onDemand.ts'
 import { conqPage, isRowHidden, mergeOnDemandText, rowKeyPattern, rowSave, serializeOnDemandPage, setRowHidden, upsertRow, withoutHidden, withRowKeys, withRowNumbers } from '../src/onDemand.ts'
 import { assembleRowPage, convertedFiles, diffPages, isMovedMarker, keyOfRowFile, mergeRowText, movedMarker, pageJsonPath, rowFilePath, serializeRow } from '../src/rowFiles.ts'
 import { commitPageChange, convertPage, createRowFile, loadRowPage, takeRowNumber } from '../src/rowPageGit.ts'
@@ -195,4 +196,19 @@ test('OND-39, OND-40: a row hidden and shown again — kept with its ID, logged,
   assert.equal(deleted.message, 'CoNQ: delete row CONQ-0003')
   const after = parseOnDemandPage(serializeOnDemandPage(upsertRow(deleted.page, { id: 'r9', cells: { c1: 'Scrap' } })), 'conq')
   assert.equal(after.rows.find((entry) => entry.id === 'r9').seq, 4)
+})
+
+test('OND-62: a single-file table page is suggested for row files above 500 rows or 600 KB (two thirds of the 900 KB limit) (TC-OND-50)', () => {
+  assert.deepEqual(suggestRowFilesAt, { rows: 500, bytes: 600_000 })
+  assert.equal(suggestRowFiles(500, 100_000), false, '500 rows: not yet')
+  assert.equal(suggestRowFiles(501, 100_000), true)
+  assert.equal(suggestRowFiles(10, 600_001), true, 'few but large rows')
+  const page = { ...conqPage(), columns: [{ id: 'c1', name: 'Notes', type: 'text', options: [] }] }
+  const small = pageFileBytes(page)
+  assert.ok(small > 0 && small < 10_000)
+  const big = { ...page, rows: Array.from({ length: 501 }, (_, index) => ({ id: `r${index}`, cells: {} })) }
+  assert.equal(suggestRowFiles(big.rows.length, pageFileBytes(big)), true)
+  const huge = { ...page, rows: Array.from({ length: 450 }, (_, index) => ({ id: `r${index}`, cells: { [page.columns[0].id]: 'x'.repeat(1990) } })) }
+  assert.ok(pageFileBytes(huge) > 600_000, 'the size of the file as written')
+  assert.equal(suggestRowFiles(huge.rows.length, pageFileBytes(huge)), true)
 })

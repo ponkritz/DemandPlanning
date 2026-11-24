@@ -276,6 +276,13 @@ export function pageRights(viewer: Viewer, layout: MenuLayout, pageId: string) {
   const owner = isPageOwner(layout, pageId, viewer.email) || isGroupOwner(layout, placementOf(layout, pageId).group, viewer.email)
   return { setup: viewer.can('ondemand.setup') || owner, rows: viewer.can('ondemand.edit') || owner, owner }
 }
+// CON-107, DSH-09: building an On-Demand Dashboard (blocks, tabs, filters, copying blocks to it) — the role right "Build
+// On-Demand Dashboards" (every dashboard), or a co-owner of the page or of its group. "Set up On-Demand pages" does not
+// give it (it keeps the table pages). Fail closed: nothing without the roles file (CON-101).
+export function canBuildDashboard(viewer: Viewer, layout: MenuLayout, pageId: string) {
+  if (viewer.readOnly) return false
+  return viewer.can('dashboards.build') || isPageOwner(layout, pageId, viewer.email) || isGroupOwner(layout, placementOf(layout, pageId).group, viewer.email)
+}
 
 // ---- merging two saves (PGB-03, GIT-17) ----
 // Groups and pages are merged by id. Each field of an entry three ways: a field only one save changed takes that change;

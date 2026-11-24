@@ -5,7 +5,7 @@ import { canManagePages, defaultPolicy, parseAccess, rightsFor, serializeAccess 
 import { conqPage, emptyPage, parseOnDemandPage, serializeOnDemandPage } from '../src/onDemand.ts'
 import { fileLabel } from '../src/gitWatch.ts'
 import { duplicatePageNames, menuLabel, normalPageName, pageNameClash, pageNameError } from '../src/pageNames.ts'
-import { capReason, knownPeople, noEmailReason, ownerOptions, ownersFromList } from '../src/ownerPeople.ts'
+import { capReason, knownPeople, noEmailReason, ownerOptions, ownersFromList, teamPeopleOnce } from '../src/ownerPeople.ts'
 
 test('PGB-18: co-owners are picked from the people the app knows; owners not in the list stay, marked; no email: disabled; at most 50', () => {
   const people = knownPeople([
@@ -142,7 +142,7 @@ test('CON-106: “Manage pages and menu groups” — Tool Owner only in the sta
   const policy = defaultPolicy('lead@example.com')
   assert.ok(policy.roles['Tool Owner'].actions.includes('pages.manage'))
   for (const role of ['Admin', 'Product Owner', 'People Manager', 'Scrum Master', 'Team Member']) assert.ok(!policy.roles[role].actions.includes('pages.manage'), `${role} has no pages.manage`)
-  assert.match(serializeAccess(policy), /"permissions": 5/)
+  assert.match(serializeAccess(policy), /"permissions": 6/)
   // A file written with permissions 4: a listed Tool Owner gets it, nobody else.
   const v4 = JSON.parse(serializeAccess(policy)); v4.permissions = 4
   for (const rights of Object.values(v4.roles)) rights.actions = rights.actions.filter((key) => key !== 'pages.manage')
@@ -247,4 +247,17 @@ test('PGB-17: duplicate page names already in Git are kept and listed with their
   assert.equal(menuLabel(named[2], sets), 'conq (Quality)')
   assert.equal(menuLabel(named[3], sets), 'Audits', 'a unique name as it is')
   assert.deepEqual(duplicatePageNames([{ key: 'admin:home', name: 'Overview', group: 'Admin' }, { key: 'page:x', name: 'overview', group: 'Testing' }]), [], 'built-in names alone are not listed')
+})
+
+test('PGB-21: the Time Writing team is read once per session and its members are offered as co-owners; a refused read offers the others, silently (TC-PGB-16)', async () => {
+  let reads = 0
+  const read = async () => { reads += 1; return [{ name: 'Rita Gomez', email: 'rita.gomez@example.com' }, { name: 'Omar Haddad' }] }
+  const [first, second] = await Promise.all([teamPeopleOnce('org/project/team-a', read), teamPeopleOnce('org/project/team-a', read)])
+  assert.equal(reads, 1, 'one read for the session')
+  assert.deepEqual(first, second)
+  const people = knownPeople([{ assignedTo: 'Ana Silva', assignedToEmail: 'ana@example.com' }], [...first, { name: 'rita.gomez@example.com', email: 'rita.gomez@example.com' }])
+  assert.deepEqual(people.map((person) => person.name), ['Ana Silva', 'Omar Haddad', 'Rita Gomez'], 'a team member without fetched work is listed; the role member by email is the same person')
+  const options = ownerOptions(people, [])
+  assert.deepEqual(options.map((option) => [option.label, option.disabled === '']), [['Ana Silva (ana@example.com)', true], ['Rita Gomez (rita.gomez@example.com)', true], ['Omar Haddad', false]])
+  assert.deepEqual(await teamPeopleOnce('org/project/refused', async () => { throw new Error('401') }), [], 'refused: nobody, no error')
 })

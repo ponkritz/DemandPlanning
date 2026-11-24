@@ -1,7 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { blankBlock, blockError, blockProblems, blockData, emptyDashboard, kpiValue, maxBlocks, mergeDashboardText, moveBlock, narrowRows, noData, pageDataset, parseDashboard, removeBlock, serializeDashboard, setTabsAndFilters, summaryCsv, summaryRows, tabsError, upsertBlock, withBlockType, dataSources, sourcePattern, pageSource } from '../src/dashboardPages.ts'
-import { emptyLayout, isDashboard, kindLabel, kindOf, pageKinds, pageRights, placePage } from '../src/menuLayout.ts'
+import { blankBlock, blockError, blockProblems, blockData, emptyDashboard, kpiValue, maxBlocks, mergeDashboardText, moveBlock, narrowRows, noData, pageDataset, parseDashboard, removeBlock, serializeDashboard, setTabsAndFilters, summaryCsv, summaryExportTotals, summaryRows, tabsError, upsertBlock, withBlockType, dataSources, sourcePattern, pageSource, copyBlock, hoursSource } from '../src/dashboardPages.ts'
+import { canBuildDashboard, emptyLayout, isDashboard, kindLabel, kindOf, pageKinds, pageRights, placePage, setGroupSettings } from '../src/menuLayout.ts'
+import { defaultPolicy, parseAccess, rightsFor, serializeAccess } from '../src/access.ts'
+import { totalsRow } from '../src/tableDefaults.ts'
 import { periodMonths } from '../src/dashboard.ts'
 import { fileLabel } from '../src/gitWatch.ts'
 
@@ -42,7 +44,7 @@ test('DSH-08: the dashboard file is validated when read — a file that is not a
   assert.equal(dropped.length, 7, dropped.join(' | '))
   assert.match(dropped.join(' '), /“Gauge” has an unknown type \(gauge\): left out\./)
   assert.match(dropped.join(' '), /“Twice” has no valid id, or the id of another block/)
-  assert.match(dropped.join(' '), /“Hours” has no known data source: left out\./, 'only table pages are data sources (DSH-04)')
+  assert.match(dropped.join(' '), /“Hours” has no known data source: left out\./, 'table pages and the Time Writing hours are the data sources (DSH-04, DSH-16)')
   assert.deepEqual(dashboard.blocks[1], { id: 'b5', title: 'Share', type: 'pie', source: 'page:supplier-issues', category: 'c4', second: '', measure: 'average', value: 'c2', filters: [], sort: 'value', period: 'c3', tab: '' }, 'a pie has no second field; a tab that is not there is dropped')
   assert.deepEqual(dashboard.tabs, [{ id: 't1', name: 'Overview' }])
   assert.deepEqual(dashboard.filters, [{ id: 'f1', source: 'page:supplier-issues', column: 'c4' }])
@@ -156,11 +158,73 @@ test('DSH-03, DSH-04: the data sources are the table pages as saved in Git — n
   assert.deepEqual(dataSources([issues], (id) => saved[id], () => false, 'supplier-issues'), [], 'a page is not its own source')
 })
 
-test('DSH-09: whoever may set up the page builds its dashboard — fail closed without the roles file (TC-DSH-09)', () => {
-  const layout = placePage(emptyLayout(), 'quality', { type: 'dashboard', group: 'on-demand', owners: ['page.keeper@example.com'] })
+test('DSH-09, CON-107: “Build On-Demand Dashboards” or a co-owner of the page or its group builds the dashboard; “Set up On-Demand pages” no longer does — fail closed without the roles file (TC-DSH-09, TC-DSH-13)', () => {
+  const layout = setGroupSettings(placePage(emptyLayout(), 'quality', { type: 'dashboard', group: 'on-demand', owners: ['page.keeper@example.com'] }), 'on-demand', { acceptsPages: true, owners: ['group.keeper@example.com'] })
   const viewer = (email, actions = [], readOnly = false) => ({ email, can: (action) => actions.includes(action), readOnly, manager: false })
-  assert.equal(pageRights(viewer('page.keeper@example.com'), layout, 'quality').setup, true)
-  assert.equal(pageRights(viewer('someone@example.com'), layout, 'quality').setup, false)
-  assert.equal(pageRights(viewer('someone@example.com', ['ondemand.setup']), layout, 'quality').setup, true)
-  assert.equal(pageRights(viewer('page.keeper@example.com', ['ondemand.setup'], true), layout, 'quality').setup, false)
+  assert.equal(canBuildDashboard(viewer('page.keeper@example.com'), layout, 'quality'), true, 'a page co-owner')
+  assert.equal(canBuildDashboard(viewer('group.keeper@example.com'), layout, 'quality'), true, 'a group co-owner')
+  assert.equal(canBuildDashboard(viewer('someone@example.com'), layout, 'quality'), false)
+  assert.equal(canBuildDashboard(viewer('someone@example.com', ['ondemand.setup']), layout, 'quality'), false, 'Set up On-Demand pages keeps the table pages only')
+  assert.equal(pageRights(viewer('someone@example.com', ['ondemand.setup']), layout, 'quality').setup, true, 'the table pages are not changed')
+  assert.equal(canBuildDashboard(viewer('someone@example.com', ['dashboards.build']), layout, 'quality'), true, 'the role right builds every dashboard')
+  assert.equal(canBuildDashboard(viewer('someone@example.com', ['dashboards.build']), layout, 'other-dashboard'), true)
+  assert.equal(canBuildDashboard(viewer('page.keeper@example.com', ['dashboards.build'], true), layout, 'quality'), false, 'nothing without the roles file (CON-101)')
+})
+
+test('CON-107: “Build On-Demand Dashboards” — Tool Owner only in the starting matrix and for an access.json written before permissions 6; Allow, Deny, Not set (TC-DSH-13)', () => {
+  const policy = defaultPolicy('lead@example.com')
+  assert.ok(policy.roles['Tool Owner'].actions.includes('dashboards.build'))
+  for (const role of ['Admin', 'Product Owner', 'People Manager', 'Scrum Master', 'Team Member']) assert.ok(!policy.roles[role].actions.includes('dashboards.build'), `${role} has no dashboards.build`)
+  assert.match(serializeAccess(policy), /"permissions": 6/)
+  // A file written with permissions 5: a listed Tool Owner gets it, nobody else — not the roles with Set up On-Demand pages.
+  const v5 = JSON.parse(serializeAccess(policy)); v5.permissions = 5
+  for (const rights of Object.values(v5.roles)) rights.actions = rights.actions.filter((key) => key !== 'dashboards.build')
+  const read = parseAccess(JSON.stringify(v5))
+  assert.ok(read.roles['Tool Owner'].actions.includes('dashboards.build'))
+  assert.ok(read.roles.Admin.actions.includes('ondemand.setup') && !read.roles.Admin.actions.includes('dashboards.build'))
+  // Saved again (permissions 6), Not set stays Not set; a Deny wins over another role's Allow.
+  read.roles['Tool Owner'].actions = read.roles['Tool Owner'].actions.filter((key) => key !== 'dashboards.build')
+  assert.ok(!parseAccess(serializeAccess(read)).roles['Tool Owner'].actions.includes('dashboards.build'))
+  const both = defaultPolicy(); both.members['two@example.com'] = ['Tool Owner', 'Team Member']; both.roles['Team Member'].deny = ['dashboards.build']
+  assert.equal(rightsFor(both, 'two@example.com').actions.has('dashboards.build'), false)
+  // An older file without the Tool Owner role: that role gets every right (CON-93); no other role gets it.
+  const old = parseAccess(JSON.stringify({ schema: 1, defaultRole: null, roles: { Admin: { areas: [], actions: ['settings.manage', 'access.manage'] } }, members: {} }))
+  assert.ok(old.roles['Tool Owner'].actions.includes('dashboards.build') && !old.roles.Admin.actions.includes('dashboards.build'))
+  // Without a roles file nobody (CON-101).
+  assert.equal(rightsFor(null, 'x@example.com').actions.has('dashboards.build'), false)
+})
+
+test('DSH-14: a summary table’s export ends with the Total row, labelled Total (TC-DSH-14)', () => {
+  assert.deepEqual(totalsRow(['dsh-category', 'dsh-s0', 'dsh-s1', 'dsh-total'], { 'dsh-s0': 3, 'dsh-s1': 1.5, 'dsh-total': 4.5 }), ['Total', 3, 1.5, 4.5])
+  assert.deepEqual(totalsRow(['dsh-total', 'dsh-category'], { 'dsh-total': 7 }), [7, 'Total'], 'the label follows the columns as moved')
+  const split = blockData(issues, block({ type: 'table', category: 'c1', second: 'c4', measure: 'count' }))
+  assert.deepEqual(summaryExportTotals(split, true), { 'dsh-s0': 3, 'dsh-s1': 2, 'dsh-s2': 1, 'dsh-total': 6 }, 'India, US, (none)')
+  const sums = blockData(issues, block({ type: 'table', category: 'c1', measure: 'sum', value: 'c2' }))
+  assert.deepEqual(summaryExportTotals(sums, false), { 'dsh-total': sums.total })
+  const csv = summaryCsv(['Category', 'Count'], summaryRows(split).map((row) => ({ ...row, values: [row.total] })), { values: [split.total], total: split.total })
+  assert.equal(csv.split('\r\n').at(-1), 'Total,6')
+})
+
+test('DSH-15: a block copied to another dashboard — a new id, its settings and data source, the tab of the same name or the first tab (said); a duplicate here (TC-DSH-15)', () => {
+  const source = block({ id: 'b9', type: 'bar', title: 'Cost by site', category: 'c4', measure: 'sum', value: 'c2', tab: 't2', filters: [{ column: 'c1', values: ['Scrap'] }], options: { topN: 5 } })
+  const sourceTabs = [{ id: 't1', name: 'Overview' }, { id: 't2', name: 'Cost' }]
+  const target = { ...emptyDashboard('board'), tabs: [{ id: 'x1', name: 'Summary' }, { id: 'x2', name: 'cost' }], blocks: [block({ id: 'k1' })] }
+  const copied = copyBlock(target, source, sourceTabs, 'bnew', 'Board')
+  assert.deepEqual(copied.dashboard.blocks.map((entry) => entry.id), ['k1', 'bnew'])
+  assert.deepEqual({ ...copied.block, id: source.id, tab: source.tab }, source, 'every setting and the data source kept')
+  assert.equal(copied.block.tab, 'x2', 'the tab of the same name (any case)')
+  assert.equal(copied.note, '')
+  const elsewhere = copyBlock({ ...target, tabs: [{ id: 'x1', name: 'Summary' }] }, source, sourceTabs, 'bnew', 'Board')
+  assert.equal(elsewhere.block.tab, '')
+  assert.equal(elsewhere.note, 'Board has no tab named “Cost”: the block is on its first tab, Summary.')
+  assert.match(copyBlock(emptyDashboard('board'), source, sourceTabs, 'bnew', 'Board').note, /Board has no tabs/)
+  const here = copyBlock({ ...emptyDashboard('quality'), tabs: sourceTabs, blocks: [source] }, source, sourceTabs, 'bdup', 'Quality', true)
+  assert.deepEqual(here.dashboard.blocks.map((entry) => [entry.id, entry.title, entry.tab]), [['b9', 'Cost by site', 't2'], ['bdup', 'Cost by site (copy)', 't2']])
+  // Written and read back: the copy survives the file's checks; a full target refuses it.
+  assert.equal(parseDashboard(serializeDashboard(copied.dashboard), 'board').dashboard.blocks[1].source, 'page:supplier-issues')
+  const full = { ...emptyDashboard('board'), blocks: Array.from({ length: maxBlocks }, (_, index) => block({ id: `f${index}` })) }
+  assert.throws(() => copyBlock(full, source, sourceTabs, 'bnew', 'Board'), /at most 40 blocks/)
+  // The copied block keeps its own options object (not shared with the original).
+  assert.notEqual(copied.block.options, source.options)
+  assert.equal(sourcePattern.test(hoursSource), true)
 })

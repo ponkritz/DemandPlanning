@@ -1,6 +1,9 @@
 import { useState, type ReactNode } from 'react'
 import { EmptyState, Info, Metric, Metrics, Notice, Page, Panel, Pill, TablePanel } from '../components/ui'
 import { EpicMixChart, ParetoChart } from '../components/WorkloadCharts'
+import { BuiltInChart, BuiltInGrid } from '../components/ChartSize'
+import { builtInCharts } from '../chartSize'
+import { useChartSizes } from '../useChartSize'
 import { AxisTitles, DataLabelsToggle } from '../components/chartLabels'
 import { useDataLabels } from '../useDataLabels'
 import { epicColors, shortFeatureTitle } from '../chartUtils'
@@ -423,6 +426,7 @@ function StreamsTab({ rows, months, items, settings, streamFiltered }: { rows: P
   const problems = problemBreakdown(items, months, settings)
   const colors = epicColors(trend)
   const [overrunLevel, setOverrunLevel] = useState<'feature' | 'epic'>('feature')
+  const sizes = useChartSizes()
   const [adhocLevel, setAdhocLevel] = useState<'feature' | 'epic'>('epic')
   const levelToggle = (value: 'feature' | 'epic', onChange: (value: 'feature' | 'epic') => void) => <div className="chip-row" role="group" aria-label="Group by">{(['feature', 'epic'] as const).map((level) => <button key={level} type="button" className={`chip ${value === level ? 'chip-on' : ''}`} aria-pressed={value === level} onClick={() => onChange(level)}>{level === 'feature' ? 'By Feature' : 'By Epic'}</button>)}</div>
   return <NoHours rows={rows}>
@@ -440,16 +444,19 @@ function StreamsTab({ rows, months, items, settings, streamFiltered }: { rows: P
       </tbody></table>
     </TablePanel>
     {streamFiltered && <Notice tone="info">The stream filter does not apply to the charts below: they show every Epic for the selected people.</Notice>}
-    {trend.some((point) => point.actual != null) ? <>
-      <Panel className="viz-panel" title="Epic mix by month" info="Stacked bars: recorded hours per Epic over the period (the five largest keep their colour; the rest are grouped as Other Epics). Line: available hours on the same scale.">
+    {/* CHT-19, CHT-48: the charts by stable id on the chart grid, each resizable in grid units (the viewer's own size, else
+        the Tool Owner's for everyone, else full width as before), in their order — not moved. */}
+    {trend.some((point) => point.actual != null) ? <><BuiltInGrid sizes={sizes} ids={[builtInCharts.epicMix, builtInCharts.overrun, builtInCharts.adhoc]} titles={{ [builtInCharts.epicMix]: 'Epic mix by month', [builtInCharts.overrun]: 'Overrun hours', [builtInCharts.adhoc]: 'Ad-hoc hours' }}>
+      <BuiltInChart sizes={sizes} id={builtInCharts.epicMix} title="Epic mix by month" info="Stacked bars: recorded hours per Epic over the period (the five largest keep their colour; the rest are grouped as Other Epics). Line: available hours on the same scale.">
         <EpicMixChart series={trend} selected={[...trend].reverse().find((point) => point.actual)?.month ?? months[months.length - 1]} colors={colors} />
-      </Panel>
-      <Panel className="viz-panel" title="Overrun hours" detail={`${formatHours(problems.overrun.total)}h above estimate on ${problems.overrun.tasks} Task${problems.overrun.tasks === 1 ? '' : 's'}`} info="Completed Work above Original Estimate per Task, over the period. The few Features or Epics up to the 80% line account for most of the overrun: that is where to look first." action={levelToggle(overrunLevel, setOverrunLevel)}>
+      </BuiltInChart>
+      <BuiltInChart sizes={sizes} id={builtInCharts.overrun} title="Overrun hours" detail={`${formatHours(problems.overrun.total)}h above estimate on ${problems.overrun.tasks} Task${problems.overrun.tasks === 1 ? '' : 's'}`} info="Completed Work above Original Estimate per Task, over the period. The few Features or Epics up to the 80% line account for most of the overrun: that is where to look first." action={levelToggle(overrunLevel, setOverrunLevel)}>
         <ParetoChart items={problems.overrun[overrunLevel]} colors={colors} noun={overrunLevel === 'feature' ? 'Feature' : 'Epic'} measure="overrun hours" shortLabel={overrunLevel === 'feature' ? shortFeatureTitle : undefined} />
-      </Panel>
-      <Panel className="viz-panel" title="Ad-hoc hours" detail={`${formatHours(problems.adhoc.total)}h on ${problems.adhoc.tasks} Task${problems.adhoc.tasks === 1 ? '' : 's'} — ${formatPercent(problems.adhoc.share)} of recorded hours`} info="Hours on Tasks tagged ad-hoc: unplanned work that arrived after planning locked, over the period." action={levelToggle(adhocLevel, setAdhocLevel)}>
+      </BuiltInChart>
+      <BuiltInChart sizes={sizes} id={builtInCharts.adhoc} title="Ad-hoc hours" detail={`${formatHours(problems.adhoc.total)}h on ${problems.adhoc.tasks} Task${problems.adhoc.tasks === 1 ? '' : 's'} — ${formatPercent(problems.adhoc.share)} of recorded hours`} info="Hours on Tasks tagged ad-hoc: unplanned work that arrived after planning locked, over the period." action={levelToggle(adhocLevel, setAdhocLevel)}>
         <ParetoChart items={problems.adhoc[adhocLevel]} colors={colors} noun={adhocLevel === 'feature' ? 'Feature' : 'Epic'} measure="ad-hoc hours" shortLabel={adhocLevel === 'feature' ? shortFeatureTitle : undefined} />
-      </Panel>
+      </BuiltInChart>
+    </BuiltInGrid>
     </> : null}
   </NoHours>
 }

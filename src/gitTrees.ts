@@ -1,4 +1,4 @@
-import { api, decodeBase64, encodePath, failure, GitConflictError, headers, type Fetch, type GitConfig } from './gitStorage.ts'
+import { api, decodeBase64, encodePath, failure, GitConflictError, headers, signedGitMessage, type Fetch, type GitConfig } from './gitStorage.ts'
 import { GitQueueError } from './gitSaveQueue.ts'
 import { assertNotViewingAs } from './viewAs.ts'
 
@@ -83,7 +83,7 @@ export async function commitFiles(config: GitConfig, token: string, build: (comm
     const { files, message } = await build(head.commit)
     const tree = Object.entries(files).map(([path, text]) => text == null ? { path, mode: '100644', type: 'blob', sha: null } : { path, mode: '100644', type: 'blob', content: text })
     const made = await sendJson<{ sha?: unknown }>(fetchImpl, 'POST', `${repoUrl(config)}/git/trees`, token, { base_tree: head.tree, tree }, config, 'prepare the commit')
-    const commit = await sendJson<{ sha?: unknown; html_url?: unknown }>(fetchImpl, 'POST', `${repoUrl(config)}/git/commits`, token, { message, tree: made.sha, parents: [head.commit] }, config, 'make the commit')
+    const commit = await sendJson<{ sha?: unknown; html_url?: unknown }>(fetchImpl, 'POST', `${repoUrl(config)}/git/commits`, token, { message: await signedGitMessage(config, token, message, fetchImpl), tree: made.sha, parents: [head.commit] }, config, 'make the commit')
     const response = await fetchImpl(`${repoUrl(config)}/git/refs/heads/${encodePath(config.branch)}`, { method: 'PATCH', headers: { ...headers(token), 'Content-Type': 'application/json' }, body: JSON.stringify({ sha: commit.sha, force: false }) })
     if (response.ok) return { commit: String(commit.sha), commitUrl: typeof commit.html_url === 'string' ? commit.html_url : `https://github.com/${config.owner}/${config.repo}/commit/${String(commit.sha)}` }
     const error = await failure(response, config, 'move the branch to the commit')

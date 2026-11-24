@@ -155,5 +155,5 @@ export function fakeGitHub({ owner = 'example', repo = 'storage', files = {}, br
   }
   // As a Playwright route handler (E2E): every call to api.github.com.
   const route = (route) => { const request = route.request(); const { status, body } = handle(request.method(), request.url(), request.postData()); return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) }) }
-  return { ...state, handle, fetch: fetchImpl, route, read: (path, name = branch) => state.files(name)?.[path] ?? null, put: (path, text, name = branch) => { const map = { ...state.files(name) }; if (text == null) delete map[path]; else map[path] = text; write(name, map, `set ${path}`, [path]) } }
+  return { ...state, handle, fetch: fetchImpl, route, read: (path, name = branch) => state.files(name)?.[path] ?? null, put: (path, text, name = branch, message = `set ${path}`) => { const map = { ...state.files(name) }; if (text == null) delete map[path]; else map[path] = text; write(name, map, message, [path]) } }
 }

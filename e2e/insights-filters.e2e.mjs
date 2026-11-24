@@ -1,6 +1,6 @@
 import test, { after, before } from 'node:test'
 import assert from 'node:assert/strict'
-import { navigate, openPage, rolesFile, startApp, text } from './helpers.mjs'
+import { infoText, navigate, openPage, rolesFile, startApp, text } from './helpers.mjs'
 
 // The Insights tab's filter row (OND-50…OND-56) against a mocked GitHub: the owner sets up a period on Found on and a
 // Category filter with Filters… (saved to Git with the page); the viewer narrows to a quarter and a value — every chart
@@ -210,7 +210,8 @@ test('TC-OND-46: the owner adds a Currency filter; the viewer picks EUR 100–50
   await scope(page).filter({ hasText: 'Cost: EUR 100–500 · 3 of 7 rows counted.' }).waitFor()
   assert.equal(await kpi(page), '3')
   const bar = panel(page, 'Cost by category')
-  await bar.locator('.od-insight-count', { hasText: 'Currency: EUR (3 rows).' }).waitFor()
+  // CHT-25: the chart's rows and currency are in its ⓘ.
+  assert.match(await infoText(page, bar), /Currency: EUR \(3 rows\)\./)
   await bar.getByRole('button', { name: 'Table', exact: true }).click()
   assert.deepEqual(await bar.locator('tbody tr').evaluateAll((list) => list.map((entry) => entry.innerText.replace(/\s+/g, ' ').trim())), ['Complaint 450', 'Rework 200', 'Scrap 150', 'Total 800'])
   await bar.getByRole('button', { name: 'Chart', exact: true }).click()
@@ -238,12 +239,14 @@ test('TC-OND-46: the owner adds a Currency filter; the viewer picks EUR 100–50
   assert.equal(await row(page).getByLabel('Cost at least').inputValue(), '100')
   await row(page).getByLabel('Cost currency').selectOption('USD')
   await scope(page).filter({ hasText: 'Cost: USD 100–500 · 2 of 7 rows counted.' }).waitFor()
-  await panel(page, 'Cost by category').locator('.od-insight-count', { hasText: 'Currency: USD (2 rows).' }).waitFor()
+  assert.match(await infoText(page, panel(page, 'Cost by category')), /Currency: USD \(2 rows\)\./)
   // Any currency: the amounts are cleared and disabled, nothing is filtered, the chart keeps its own currency.
   await row(page).getByLabel('Cost currency').selectOption({ label: 'Any currency' })
   await scope(page).filter({ hasText: 'No filter · 7 of 7 rows counted.' }).waitFor()
   assert.equal(await row(page).getByLabel('Cost at least').isDisabled(), true)
-  await panel(page, 'Cost by category').locator('.od-insight-count', { hasText: 'shown: EUR' }).waitFor()
+  // Several currencies in the chart: a visible warning names the one shown; ⓘ lists them.
+  await panel(page, 'Cost by category').locator('.od-insight-warning', { hasText: 'Several currencies: EUR shown' }).waitFor()
+  assert.match(await infoText(page, panel(page, 'Cost by category')), /shown: EUR/)
   assert.deepEqual(errors.filter((entry) => !/401|Unauthorized/.test(entry)), [])
   await context.close()
 })

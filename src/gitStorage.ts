@@ -79,13 +79,21 @@ export const api = 'https://api.github.com'
 export const encodePath = (path: string) => path.split('/').map(encodeURIComponent).join('/')
 const fileUrl = (config: GitConfig) => `${api}/repos/${encodeURIComponent(config.owner)}/${encodeURIComponent(config.repo)}/contents/${encodePath(config.path)}`
 export const headers = (token: string) => ({ Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`, 'X-GitHub-Api-Version': '2022-11-28' })
+async function isPrivateGitRepository(config: GitConfig, token: string, fetchImpl: Fetch): Promise<boolean> {
+  try {
+    const repo = await fetchImpl(`${api}/repos/${encodeURIComponent(config.owner)}/${encodeURIComponent(config.repo)}`, { headers: headers(token), cache: 'no-store' })
+    return repo.ok && ((await repo.json()) as { visibility?: unknown } | null)?.visibility === 'private'
+  } catch {
+    return false
+  }
+}
+
 export function privateGitWrites(config: GitConfig, token: string, fetchImpl: typeof fetch = fetch): typeof fetch {
   return async (url, init) => {
     const method = (init?.method ?? 'GET').toUpperCase()
-    if (method === 'PUT' || method === 'PATCH' || method === 'DELETE' || (method === 'POST' && url !== `${api}/graphql`)) {
-      const repo = await fetchImpl(`${api}/repos/${encodeURIComponent(config.owner)}/${encodeURIComponent(config.repo)}`, { headers: headers(token), cache: 'no-store' })
-      const details = repo.ok ? await repo.json().catch(() => null) as { visibility?: unknown } | null : null
-      if (details?.visibility !== 'private') throw new Error('Connect a private Git data repository before saving.')
+    const writes = method === 'PUT' || method === 'PATCH' || method === 'DELETE' || (method === 'POST' && url !== `${api}/graphql`)
+    if (writes && !await isPrivateGitRepository(config, token, fetchImpl)) {
+      throw new Error('Connect a private Git data repository before saving.')
     }
     return fetchImpl(url, init)
   }
@@ -146,18 +154,50 @@ export async function fileCommits(config: GitConfig, token: string, count = 30, 
   const body = (await response.json()) as { sha?: unknown; commit?: { message?: unknown; committer?: { date?: unknown }; author?: { date?: unknown } } }[]
   return (Array.isArray(body) ? body : []).flatMap((entry) => typeof entry?.sha === 'string' && /^[0-9a-f]{40}$/.test(entry.sha) ? [{ sha: entry.sha, date: String(entry.commit?.committer?.date ?? entry.commit?.author?.date ?? ''), message: String(entry.commit?.message ?? '').split('\n')[0].slice(0, 200) }] : [])
 }
-// GIT-18: who saved a file last and when (its latest commit's author name and date), for the page notice; null when
+// GIT-18: who saved a file last and when (the app user of its latest commit, GIT-22, else its author name; its date), for the page notice; null when
 // the history cannot be read. Read only.
-export async function lastCommit(config: GitConfig, token: string, fetchImpl: Fetch = fetch): Promise<{ by: string; at: string } | null> {
+export async function lastCommit(config: GitConfig, token: string, fetchImpl: Fetch = fetch): Promise<{ by: string; at: string; inApp?: boolean } | null> {
   const url = `${api}/repos/${encodeURIComponent(config.owner)}/${encodeURIComponent(config.repo)}/commits?path=${encodeURIComponent(config.path)}&sha=${encodeURIComponent(config.branch)}&per_page=1`
   try {
     const response = await fetchImpl(url, { headers: headers(token), cache: 'no-store' })
     if (!response.ok) return null
-    const [entry] = (await response.json()) as { commit?: { author?: { name?: unknown; date?: unknown }; committer?: { date?: unknown } } }[]
+    const [entry] = (await response.json()) as { commit?: { message?: unknown; author?: { name?: unknown; date?: unknown }; committer?: { date?: unknown } } }[]
     if (!entry?.commit) return null
-    return { by: String(entry.commit.author?.name ?? '').slice(0, 100), at: String(entry.commit.author?.date ?? entry.commit.committer?.date ?? '') }
+    // GIT-22: the app user named in the commit message; the GitHub author only for a commit made outside the app.
+    const saver = saverOf(String(entry.commit.message ?? ''))
+    return { by: saver?.name || saver?.email || String(entry.commit.author?.name ?? '').slice(0, 100), at: String(entry.commit.author?.date ?? entry.commit.committer?.date ?? ''), ...(saver ? { inApp: true } : {}) }
   } catch { return null }
 }
+// GIT-22: who saved, in every commit message the app writes — "[by {name} <{work email}>]" after the message (and its
+// [saved …] stamp, GIT-17): the app user's display name (from Azure DevOps) and work email (My settings), set by App;
+// never a token or anything of the GitHub account. A notice names this person (GIT-18); a commit made outside the app
+// (no tag) is named by its GitHub author.
+export interface Saver { name?: string; email?: string }
+const cleanName = (value: string | undefined) => (value ?? '').replace(/[[\]<>\r\n\t]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80)
+const cleanEmail = (value: string | undefined) => { const email = (value ?? '').trim().toLowerCase(); return /^[^\s@<>[\]]+@[^\s@<>[\]]+\.[^\s@<>[\]]+$/.test(email) && email.length <= 200 ? email : '' }
+export function saverTag(saver: Saver): string {
+  const name = cleanName(saver.name), email = cleanEmail(saver.email)
+  if (name && email && name.toLowerCase() !== email) return `[by ${name} <${email}>]`
+  return email || name ? `[by ${email || name}]` : ''
+}
+const saverPattern = /\[by ([^\]<>]*?)\s*(?:<([^<>\]\s]+)>)?\]/
+// The app user named in a commit message, or null for a commit made outside the app.
+export function saverOf(message: string): Saver | null {
+  const found = saverPattern.exec(message)
+  if (!found) return null
+  const first = cleanName(found[1]), email = cleanEmail(found[2]) || cleanEmail(first)
+  const name = cleanEmail(first) ? '' : first
+  return name || email ? { ...(name ? { name } : {}), ...(email ? { email } : {}) } : null
+}
+let currentSaver = ''
+export function setCommitSaver(saver: Saver) { currentSaver = saverTag(saver) }
+export const signMessage = (message: string, tag = currentSaver) => !tag || saverPattern.test(message) ? message : `${message.trim()} ${tag}`
+
+export async function signedGitMessage(config: GitConfig, token: string, message: string, fetchImpl: Fetch): Promise<string> {
+  const saver = currentSaver
+  return saver && await isPrivateGitRepository(config, token, fetchImpl) ? signMessage(message, saver) : message
+}
+
 export async function readTextAt(config: GitConfig, token: string, ref: string, fetchImpl: Fetch = fetch): Promise<string | null> {
   if (!/^[0-9a-f]{40}$/.test(ref)) throw new Error('Unknown version.')
   const response = await fetchImpl(`${fileUrl(config)}?ref=${ref}`, { headers: headers(token), cache: 'no-store' })
@@ -179,7 +219,7 @@ export async function readTextFile(config: GitConfig, token: string, fetchImpl: 
 }
 export async function writeTextFile(config: GitConfig, token: string, text: string, sha: string | null, message: string, fetchImpl: Fetch = fetch): Promise<{ sha: string; commitUrl: string }> {
   assertNotViewingAs()
-  const response = await fetchImpl(fileUrl(config), { method: 'PUT', headers: { ...headers(token), 'Content-Type': 'application/json' }, body: JSON.stringify({ message: message.trim() || `Update ${config.path}`, content: encodeBase64(text), branch: config.branch, ...(sha ? { sha } : {}) }) })
+  const response = await fetchImpl(fileUrl(config), { method: 'PUT', headers: { ...headers(token), 'Content-Type': 'application/json' }, body: JSON.stringify({ message: await signedGitMessage(config, token, message.trim() || `Update ${config.path}`, fetchImpl), content: encodeBase64(text), branch: config.branch, ...(sha ? { sha } : {}) }) })
   if (!response.ok) throw await failure(response, config, `save ${config.path}`)
   const body = (await response.json()) as { content?: { sha?: string }; commit?: { html_url?: string } }
   if (typeof body.content?.sha !== 'string') throw new Error(`GitHub saved ${config.path} but returned no version id.`)
@@ -190,7 +230,7 @@ export async function writeTextFile(config: GitConfig, token: string, text: stri
 export function bytesToBase64(bytes: Uint8Array) { let binary = ''; for (let at = 0; at < bytes.length; at += 0x8000) binary += String.fromCharCode(...bytes.subarray(at, at + 0x8000)); return btoa(binary) }
 export async function writeBinaryFile(config: GitConfig, token: string, bytes: Uint8Array, sha: string | null, message: string, fetchImpl: Fetch = fetch): Promise<{ sha: string; commitUrl: string }> {
   assertNotViewingAs()
-  const response = await fetchImpl(fileUrl(config), { method: 'PUT', headers: { ...headers(token), 'Content-Type': 'application/json' }, body: JSON.stringify({ message: message.trim() || `Update ${config.path}`, content: bytesToBase64(bytes), branch: config.branch, ...(sha ? { sha } : {}) }) })
+  const response = await fetchImpl(fileUrl(config), { method: 'PUT', headers: { ...headers(token), 'Content-Type': 'application/json' }, body: JSON.stringify({ message: await signedGitMessage(config, token, message.trim() || `Update ${config.path}`, fetchImpl), content: bytesToBase64(bytes), branch: config.branch, ...(sha ? { sha } : {}) }) })
   if (!response.ok) throw await failure(response, config, `save ${config.path}`)
   const body = (await response.json()) as { content?: { sha?: string }; commit?: { html_url?: string } }
   if (typeof body.content?.sha !== 'string') throw new Error(`GitHub saved ${config.path} but returned no version id.`)
@@ -209,7 +249,7 @@ export async function deleteFile(config: GitConfig, token: string, message: stri
   assertNotViewingAs()
   const sha = await fileSha(config, token, fetchImpl)
   if (!sha) return false
-  const response = await fetchImpl(fileUrl(config), { method: 'DELETE', headers: { ...headers(token), 'Content-Type': 'application/json' }, body: JSON.stringify({ message: message.trim() || `Delete ${config.path}`, sha, branch: config.branch }) })
+  const response = await fetchImpl(fileUrl(config), { method: 'DELETE', headers: { ...headers(token), 'Content-Type': 'application/json' }, body: JSON.stringify({ message: await signedGitMessage(config, token, message.trim() || `Delete ${config.path}`, fetchImpl), sha, branch: config.branch }) })
   if (response.status === 404) return false
   if (!response.ok) throw await failure(response, config, `delete ${config.path}`)
   return true
@@ -231,7 +271,7 @@ export async function listEntries(config: GitConfig, token: string, fetchImpl: F
 // closes. False when the file was not there (or changed meanwhile).
 export async function deleteFileAt(config: GitConfig, token: string, sha: string, message: string, fetchImpl: Fetch = fetch, keepalive = false): Promise<boolean> {
   assertNotViewingAs()
-  const response = await fetchImpl(fileUrl(config), { method: 'DELETE', keepalive, headers: { ...headers(token), 'Content-Type': 'application/json' }, body: JSON.stringify({ message: message.trim() || `Delete ${config.path}`, sha, branch: config.branch }) })
+  const response = await fetchImpl(fileUrl(config), { method: 'DELETE', keepalive, headers: { ...headers(token), 'Content-Type': 'application/json' }, body: JSON.stringify({ message: await signedGitMessage(config, token, message.trim() || `Delete ${config.path}`, fetchImpl), sha, branch: config.branch }) })
   if (response.status === 404 || response.status === 409 || response.status === 422) return false
   if (!response.ok) throw await failure(response, config, `delete ${config.path}`)
   return true
@@ -256,7 +296,7 @@ export async function fileSha(config: GitConfig, token: string, fetchImpl: Fetch
 // is refused (GitConflictError) instead of being overwritten.
 export async function writePlanningFile(config: GitConfig, token: string, data: PlanningData, sha: string | null, message: string, fetchImpl: Fetch = fetch): Promise<{ sha: string; commitUrl: string }> {
   assertNotViewingAs()
-  const response = await fetchImpl(fileUrl(config), { method: 'PUT', headers: { ...headers(token), 'Content-Type': 'application/json' }, body: JSON.stringify({ message: message.trim() || 'Update planning data', content: encodeBase64(serializePlanning(data)), branch: config.branch, ...(sha ? { sha } : {}) }) })
+  const response = await fetchImpl(fileUrl(config), { method: 'PUT', headers: { ...headers(token), 'Content-Type': 'application/json' }, body: JSON.stringify({ message: await signedGitMessage(config, token, message.trim() || 'Update planning data', fetchImpl), content: encodeBase64(serializePlanning(data)), branch: config.branch, ...(sha ? { sha } : {}) }) })
   if (!response.ok) throw await failure(response, config, 'save the data file')
   const body = (await response.json()) as { content?: { sha?: string }; commit?: { html_url?: string } }
   if (typeof body.content?.sha !== 'string') throw new Error('GitHub saved the file but returned no version id. Load the latest version before saving again.')

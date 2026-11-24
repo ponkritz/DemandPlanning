@@ -1,0 +1,43 @@
+/* OND-63…OND-80: the Live | Sample toggle of table pages, the PDF print view and the standalone HTML publish (kept
+   apart from fresh.css so the chart grid and the chart styles stay where they are). */
+.page-toolbar .od-data-mode{margin:0}
+.od-sample-banner strong{font-weight:700}
+
+/* OND-68…OND-73: the PDF print view — a preview over the app on screen, only the sheet in print. */
+.pdf-form fieldset{border:0;padding:0;margin:0 0 6px}
+.pdf-form legend{font-weight:600;font-size:13px;margin-bottom:4px}
+.pdf-charts{display:grid;gap:4px;max-height:220px;overflow:auto;padding:6px 0 0 22px}
+.pdf-orientation{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.print-root{position:fixed;inset:0;z-index:1000;overflow:auto;background:#dfe4ea;color:#1b1f24}
+.print-toolbar{position:sticky;top:0;z-index:1;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 16px;background:#fff;border-bottom:1px solid #cfd6de}
+.print-sheet{margin:20px auto;background:#fff;padding:12mm;box-shadow:0 2px 12px rgb(0 0 0 / .18);box-sizing:content-box}
+.print-head h1{margin:2px 0 4px;font-size:20px}
+.print-head p{margin:2px 0}
+.print-filters{font-size:12.5px}
+.print-cards{margin-bottom:12px}
+.print-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;align-items:start}
+.print-grid>.print-chart{grid-column:span 3;min-width:0}
+.print-grid>.print-w-third{grid-column:span 2}
+.print-grid>.print-w-twothirds{grid-column:span 4}
+.print-grid>.print-w-full{grid-column:span 6}
+.print-chart>.panel,.print-card>*{margin:0;box-shadow:none}
+.print-root .viz-toolbar>:not(.viz-legend),.print-root .info-button,.print-root .chart-size-note,.print-root .od-currency-pick select{display:none!important}
+.print-footer{display:flex;justify-content:space-between;gap:12px;margin-top:16px;padding-top:6px;border-top:1px solid #cfd6de;font-size:11px;color:#555}
+@media print{
+  body.printing>:not(.print-root){display:none!important}
+  body.printing .print-root{position:static;overflow:visible;background:#fff}
+  .print-toolbar{display:none!important}
+  .print-sheet{margin:0;padding:0;box-shadow:none}
+  .print-chart,.print-card,.print-head{break-inside:avoid;page-break-inside:avoid}
+  .print-numbered .print-footer{display:none}
+  .print-root:not(.print-numbered) .print-footer{position:fixed;left:0;right:0;bottom:0;border:0;margin:0;background:#fff}
+  .print-footer-pages{display:none}
+}
+
+/* OND-73…OND-79: the Publish standalone HTML pop-up. */
+.publish-form .publish-target p{margin:4px 0 0}
+.publish-form code{overflow-wrap:anywhere}
+.publish-schedule{border:0;padding:0;margin:0;display:grid;gap:8px}
+.publish-schedule legend{font-weight:600;font-size:13px;margin-bottom:4px}
+.publish-modes{display:flex;gap:14px;flex-wrap:wrap}
+.publish-schedule[disabled]{opacity:.6}

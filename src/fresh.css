@@ -981,7 +981,7 @@ td .od-flag{display:inline-block;margin-top:0}
 @media(max-width:760px){.ins-filters .ins-range{grid-column:1/-1}.ins-filters .ins-range .dash-select{flex:1}.ins-filters .dash-select input{width:100%;max-width:none;min-width:0}}
 @media(max-width:900px){.od-insight-editor{grid-template-columns:1fr}}
 /* CHT-01…CHT-12 chart options: full-width panels, the target and 80% lines, clickable charts, the Display fieldset and colour pins */
-.od-insights>.od-insight-full{grid-column:1/-1}
+
 .viz-target{stroke-dasharray:5 4;stroke:var(--text-2)}.viz-legend i.viz-key-target{width:16px;height:0;border-top:2px dashed var(--text-2);border-radius:0;background:none}
 .viz-drill .viz-row-hit,.viz-drill .viz-row-active,.viz-drill .viz-bar,.viz-drill .viz-slice,.viz-fixed.viz-drill[role=img]{cursor:pointer}
 .od-kpi{margin:0 0 4px}.viz-target-group,.viz-pareto{pointer-events:none}
@@ -1049,3 +1049,85 @@ body:has(.drawer-backdrop){overflow:hidden}
 .od-timeout{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}.od-timeout strong{font-variant-numeric:tabular-nums}
 /* OND-39: a hidden row listed with Show hidden rows — greyed, with its Hidden mark. */
 .od-row-hidden td{color:var(--text-3)}.od-row-hidden td code{opacity:.75}.od-show-hidden{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600}
+/* CHT-15…CHT-22 chart sizes: the 6-column chart grid (only once a chart takes ⅓ or ⅔, or a built-in chart is narrower
+   than the full width), the corner handle with the outline of the size it snaps to, and the size note. Below 720 px
+   every chart is full width and the handle is not shown. */
+.chart-panel{position:relative}
+/* CHT-43…CHT-47: the chart grid — 12 columns (6 on a medium-wide screen, 1 on a phone; set by ChartGrid), rows of 40 px
+   that grow when a panel's content needs more; while arranging or dragging the rows are fixed and the lines shown. */
+.chart-grid,.od-insights.chart-grid{display:grid;gap:18px;grid-auto-rows:minmax(40px,auto);align-items:start;position:relative}
+div.chart-grid:not(.od-insights){margin-bottom:18px}
+.chart-grid>.panel{margin:0;min-width:0;position:relative;z-index:1}
+.chart-grid-1>.panel{grid-column:1/-1}
+.chart-grid.chart-grid-fixed{grid-auto-rows:40px;align-items:stretch}.chart-grid-fixed>.chart-panel{overflow:hidden}
+.chart-grid-lines{display:grid;gap:18px;grid-auto-rows:40px;pointer-events:none;z-index:0;align-self:stretch}
+.chart-grid-lines i{border:1px dashed var(--accent-line);border-radius:6px;background:color-mix(in srgb,var(--accent) 4%,transparent)}
+.chart-moving{z-index:3;box-shadow:0 6px 22px color-mix(in srgb,var(--text) 18%,transparent)}
+.chart-resize-handle{position:absolute;right:3px;bottom:3px;width:20px;height:20px;padding:0;border:0;border-radius:5px;background:transparent;cursor:nwse-resize;touch-action:none;opacity:.55;z-index:5}
+.chart-resize-handle::before{content:"";position:absolute;inset:4px;background:linear-gradient(135deg,transparent 46%,var(--text-3) 46%,var(--text-3) 56%,transparent 56%,transparent 68%,var(--text-3) 68%,var(--text-3) 78%,transparent 78%)}
+.chart-panel:hover>.chart-resize-handle,.chart-arranging>.chart-resize-handle,.chart-resize-handle:focus-visible{opacity:1}
+.chart-resize-handle:focus-visible,.chart-move-grip:focus-visible{outline:2px solid var(--focus);outline-offset:1px}
+.chart-arranging{border-style:dashed;border-color:var(--accent-line)}
+.chart-resize-outline{position:absolute;inset:0;z-index:4;border:2px dashed var(--accent);border-radius:12px;background:color-mix(in srgb,var(--accent) 7%,transparent);pointer-events:none;display:flex;align-items:flex-end;justify-content:flex-end;padding:6px 28px 6px 6px;box-sizing:border-box}
+.chart-resize-outline span,.chart-size-tag span{font-size:11px;font-weight:700;color:var(--accent-text);background:var(--surface);border:1px solid var(--accent-line);padding:2px 6px;border-radius:6px}
+.chart-size-tag{position:absolute;right:28px;bottom:6px;z-index:4;pointer-events:none}
+.chart-move-grip{border:1px solid var(--line);background:var(--surface-2);color:var(--text-2);border-radius:6px;padding:0 7px;min-height:28px;font-size:15px;line-height:1;cursor:grab;touch-action:none}
+.chart-move-grip:active{cursor:grabbing}
+.chart-size-note{font-size:11px;margin:6px 0 0;padding-right:24px}.chart-size-note .text-button{padding:0;font-size:11px}
+.chart-arrange-note{font-size:12px;margin:8px 0 0}.chart-arrange-note .text-button{padding:0}
+@media(max-width:719px){.chart-grid>.panel{grid-column:1/-1!important;grid-row:auto!important}.chart-resize-handle,.chart-resize-outline,.chart-move-grip,.chart-grid-lines,.chart-size-tag{display:none}}
+/* OND-61, DSH-13, CHT-25: compact Insights and Dashboard pages — the heading panel on one line, a chart header of type,
+   title, ⓘ and a "Filtered" pill, the filter row on one line with its status at the end, ⋯ menus instead of rows of buttons. */
+.od-insights-head{padding:10px 16px;margin-bottom:10px}.od-insights-head .panel-heading{align-items:center;margin-bottom:8px}.od-insights-head .panel-heading:last-child{margin-bottom:0}.od-insights-head .panel-heading h2{margin:2px 0 0}
+.od-insight.panel{padding:14px 16px}.od-insight .panel-heading{margin-bottom:8px}.chart-panel .panel-heading>div:first-child{min-width:0;flex:1}.chart-panel .panel-heading>div:first-child>.muted{margin:2px 0 0}
+.chart-filtered .pill{padding:3px 8px;font-size:11px}.od-insight-warning{font-size:12px;color:var(--warning-text);margin:0 0 6px}
+.ins-bar{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin-bottom:10px}.ins-bar>.dash-filters{margin:0}.ins-bar>.dsh-scope{margin:0 0 0 auto;font-size:12px}
+.compact-filters{gap:8px;align-items:center}.compact-filters .multi-select{display:flex;align-items:center;gap:6px}.compact-filters .multi-button{min-width:110px;padding:6px 8px}.compact-filters .dash-select{display:flex;align-items:center;gap:6px}.compact-filters .dash-select input,.compact-filters .dash-select select{padding:6px 8px}.compact-filters>.text-button{padding:6px 4px}.compact-filters .ins-range{align-items:center}
+.on-demand-page .page-toolbar,.dashboard-page .page-toolbar{margin-bottom:10px}
+@media(max-width:760px){.ins-bar>.dsh-scope{margin-left:0}.compact-filters .multi-select,.compact-filters .dash-select{display:grid}}
+/* CHT-23 (KB-83): long legend entries wrap inside the chart instead of running out of it. */
+.viz-legend{min-width:0;max-width:100%}.viz-legend li{min-width:0;max-width:100%;overflow-wrap:anywhere}.viz-donut-legend span{min-width:0;overflow-wrap:anywhere}
+/* CHT-26…CHT-35: Excel-style chart elements — legend below or beside the plot, minor gridlines, trendlines, data table. */
+.viz-toolbar-end{justify-content:flex-end}
+.viz-legend-bottom{margin-top:8px}
+.viz-legend-side{display:flex;gap:14px;align-items:flex-start}.viz-legend-main{flex:1 1 auto;min-width:0}
+.viz-legend-side>.viz-legend{flex:0 1 auto;flex-direction:column;flex-wrap:nowrap;max-width:min(200px,30%);padding-top:8px}
+@media(max-width:720px){.viz-legend-side{flex-direction:column;align-items:stretch}.viz-legend-side>.viz-legend{max-width:100%;flex-direction:row;flex-wrap:wrap}}
+.viz-grid-minor{stroke-dasharray:2 3;opacity:.7}
+.viz-trendline{stroke-width:2;stroke-dasharray:2 4;stroke-linecap:round;fill:none;pointer-events:none}
+.viz-legend i.viz-key-trend{width:18px;height:0;border-top:2px dotted;border-radius:0;background:none}
+.viz-data-table{margin-top:10px;overflow-x:auto;max-width:100%}.viz-data-table:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:6px}
+.viz-data-table table{font-size:11.5px;width:auto;min-width:100%}.viz-data-table th,.viz-data-table td{padding:5px 8px;white-space:nowrap}
+.viz-data-table th{text-transform:none;letter-spacing:0;font-size:11.5px;font-weight:600}.viz-data-table .num{text-align:right;font-variant-numeric:tabular-nums}
+.viz-data-table th i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}.viz-data-table th i.viz-key-line{height:2px;background:var(--viz-series-2);vertical-align:3px}
+.viz-donut-legend-top,.viz-donut-legend-bottom{flex-direction:column;align-items:stretch}.viz-donut-legend-top>svg,.viz-donut-legend-bottom>svg{align-self:center}
+.viz-donut svg{max-width:100%;height:auto}
+.chart-title-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.od-elements{border:1px dashed var(--line);border-radius:8px;padding:8px 10px;display:grid;gap:8px;min-width:0}.od-elements legend{font-size:11px;font-weight:700;color:var(--text-2);padding:0 4px}
+.od-elements-row{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;min-width:0}.od-elements-row>span{flex-basis:100%;font-size:11px;font-weight:700;color:var(--text-2)}.od-elements .check{margin:0;font-size:13px}
+/* KB-85: the chart pop-up — the form and the preview side by side in a wider window, one under the other below ~860 px
+   of pop-up width; a fieldset never grows wider than its column (no overlap with the preview). */
+.modal:has(.od-insight-editor){width:min(1180px,100%)}
+.od-insight-form{container-type:inline-size}
+.od-insight-editor{grid-template-columns:minmax(300px,1fr) minmax(320px,1.15fr)}
+.od-insight-fields,.od-insight-fields fieldset,.od-display,.od-insight-preview{min-width:0}
+@container (max-width:860px){.od-insight-editor{grid-template-columns:minmax(0,1fr)}}
+.od-preview-title{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+/* CHT-36, KB-84: KPI cards — at least 180 px wide, wrapping to further rows; the number never cut, the caption 2 lines. */
+.metric-grid.od-kpi-cards,.metric-grid.od-kpi{grid-template-columns:repeat(auto-fill,minmax(180px,1fr))}
+.od-kpi-cards{margin:0 0 18px}.od-insight-preview .od-kpi-cards{margin:0}
+.od-kpi-card{display:flex;flex-direction:column;min-width:0}
+.od-kpi-card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;min-width:0}
+.od-kpi-card-head h2{margin:0;font-size:12.5px;font-weight:600;color:var(--text-2);line-height:1.35;min-width:0;overflow-wrap:anywhere}
+.od-kpi-card .od-kpi{margin:0}
+.metric-grid .od-kpi strong,.od-kpi-card strong,.od-kpi-cards article>strong{overflow-wrap:anywhere;word-break:normal;line-height:1.15}
+.od-kpi-unit{font-size:.62em;font-weight:600;color:var(--text-2)}
+.od-kpi-caption,.od-kpi-cards article>small{display:-webkit-box!important;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.viz-data-table tbody th{white-space:normal;min-width:120px;max-width:220px;overflow-wrap:anywhere}
+/* CHT-41: a value's colour — Default / Colour 1…5 / Own colour…, the picker and the #rrggbb field; notes under the row. */
+.od-color{grid-template-columns:14px minmax(0,1fr) auto}
+.od-color .od-color-pick{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;overflow:visible;white-space:normal}.od-color-pick select{max-width:9rem}
+.od-color-pick input[type=color]{width:34px;height:28px;padding:2px;border:1px solid var(--line);border-radius:6px;background:var(--surface);cursor:pointer}
+.od-color-hex{width:6.5rem;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.od-color-note{grid-column:2/-1;font-size:11px}.od-color-warn{color:var(--warning-text)}
+@media(max-width:719px){.od-color{grid-template-columns:14px minmax(0,1fr)}.od-color .od-color-pick{grid-column:1/-1;justify-content:flex-start}}

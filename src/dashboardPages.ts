@@ -1,6 +1,6 @@
 import { csvCell } from './csv.ts'
 import { merge3 } from './gitSaveQueue.ts'
-import { cleanOptions, hasOptions, measureKeys, moneyOf, parseColors, valuesOf, type ChartOptions, type Insight, type InsightFilter, type InsightMeasure, type OnDemandColumn, type OnDemandPage, type OnDemandRow } from './onDemand.ts'
+import { cleanOptions, hasOptions, measureKeys, moneyOf, parseColors, valuesOf, type ChartOptions, type Insight, type InsightFilter, type InsightMeasure, type OnDemandColumn, type OnDemandPage, type OnDemandRow, type ColorPins } from './onDemand.ts'
 import { bucketsOf, categoryColumns, chartData, dateGroupLabels, filterColumns, formatValue, grainOf, insightProblems, kpiData, measureText, noneKey, numberOf, otherKey, passesFilter, secondColumns, valueColumns, withType, type ChartData } from './onDemandInsights.ts'
 
 // DSH-01…DSH-12 On-Demand Dashboard pages: a page type of the page builder (PGB-01) that is read only for everyone and
@@ -25,7 +25,7 @@ const blockTypeKeys = blockTypes.map((entry) => entry.key)
 
 export interface DashboardBlock {
   id: string; title: string; type: BlockType
-  source: string // 'page:<page id>' (DSH-04: the only kind of data source so far)
+  source: string // 'page:<page id>' (DSH-04) or 'hours:time-writing' (DSH-16: the Time Writing hours)
   category: string; second: string; measure: InsightMeasure; value: string; filters: InsightFilter[]; sort: 'value' | 'label'
   period: string // the Date column the dashboard's period filters on; '' = not filtered by period
   tab: string // the tab the block is on (a KPI tile: the tab it opens); '' = the first tab
@@ -34,8 +34,8 @@ export interface DashboardBlock {
 export interface DashboardTab { id: string; name: string }
 // A filter of the filter row: the viewer ticks values of a Dropdown / Multi-select column of one data source.
 export interface ViewerFilter { id: string; source: string; column: string }
-// colors (CHT-09): the dashboard's colour pins, a value's text → palette colour 1…5, used by every block's chart.
-export interface Dashboard { schema: 1; kind: 'dashboard'; id: string; tabs: DashboardTab[]; filters: ViewerFilter[]; blocks: DashboardBlock[]; colors?: Record<string, number> }
+// colors (CHT-09): the dashboard's colour pins, a value's text → palette colour 1…5 or #rrggbb (CHT-41), used by every block's chart.
+export interface Dashboard { schema: 1; kind: 'dashboard'; id: string; tabs: DashboardTab[]; filters: ViewerFilter[]; blocks: DashboardBlock[]; colors?: ColorPins }
 
 export const dashboardFolder = 'dashboards'
 export const dashboardPath = (id: string) => `${dashboardFolder}/${id}.json`
@@ -51,18 +51,23 @@ export function dashId(prefix: 'b' | 't' | 'f', random: () => number = Math.rand
 const clean = (value: unknown, max: number) => typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').slice(0, max) : ''
 
 // ---- data sources (DSH-03, DSH-04) ----
-// A data source is a table page, named 'page:<page id>'; the pattern is the one place where a later kind of source
-// (e.g. the Time Writing hours) would be added. A file naming another kind is dropped block by block (DSH-08).
+// A data source is a table page, named 'page:<page id>', or (DSH-16) the Time Writing hours, 'hours:time-writing'
+// (src/dashboardHours.ts); the pattern is the one place where a kind of source is added. A file naming another kind is
+// dropped block by block (DSH-08).
 export const pageSource = (pageId: string) => `page:${pageId}`
-export const sourcePattern = /^page:[a-z0-9][a-z0-9-]{0,39}$/
+export const hoursSource = 'hours:time-writing'
+export const hoursSourceName = 'Time Writing hours'
+export const sourcePattern = /^(page:[a-z0-9][a-z0-9-]{0,39}|hours:time-writing)$/
 export const pageOfSource = (source: string) => source.startsWith('page:') ? source.slice(5) : ''
 
 // A data source as the blocks see it: rows in the shape of an On-Demand page, so the On-Demand aggregation applies.
-export interface Dataset { key: string; name: string; page: OnDemandPage; problem?: string }
+// kind: how the block editor names it ('table page' unless given); note: the line under the editor's Data source.
+export interface Dataset { key: string; name: string; page: OnDemandPage; problem?: string; kind?: string; note?: string }
 const asPage = (id: string, name: string, columns: OnDemandColumn[], rows: OnDemandRow[]): OnDemandPage => ({ schema: 1, kind: 'on-demand-page', id, name, description: '', keyPrefix: 'DSH', columns, rows, insights: [] })
 // A table page's rows as saved in Git (the viewer's unsaved changes are not shown).
 export const pageDataset = (page: OnDemandPage): Dataset => ({ key: pageSource(page.id), name: page.name, page })
-export const missingDataset = (source: string, problem: string): Dataset => ({ key: source, name: pageOfSource(source), page: asPage('missing', '', [], []), problem })
+export const missingDataset = (source: string, problem: string): Dataset => ({ key: source, name: source === hoursSource ? hoursSourceName : pageOfSource(source), page: asPage('missing', '', [], []), problem, ...(source === hoursSource ? { kind: 'as in Team overview' } : {}) })
+export const datasetPage = asPage
 // DSH-03: the data sources offered — every table page as saved in Git, except dashboards and the page itself, by name.
 export function dataSources(pages: OnDemandPage[], saved: (id: string) => OnDemandPage | null, isDashboard: (id: string) => boolean, self: string): Dataset[] {
   return pages.filter((page) => page.id !== self && !isDashboard(page.id)).flatMap((page) => { const stored = saved(page.id); return stored ? [pageDataset(stored)] : [] })
@@ -231,7 +236,9 @@ export const periodColumns = (page: OnDemandPage) => page.columns.filter((column
 export function blankBlock(dataset: Dataset, id: string, type: BlockType = 'kpi', tab = ''): DashboardBlock {
   const page = dataset.page
   const chart = type === 'kpi' ? undefined : type
-  return { id, title: '', type, source: dataset.key, category: chart ? categoryColumns(page, chart)[0]?.id ?? '' : '', second: '', measure: 'count', value: '', filters: [], sort: type === 'line' ? 'label' : 'value', period: periodColumns(page)[0]?.id ?? '', tab }
+  // DSH-16: the Time Writing hours are measured in hours (Sum of the first hours column), never counted.
+  const hours = dataset.key === hoursSource
+  return { id, title: '', type, source: dataset.key, category: chart ? categoryColumns(page, chart)[0]?.id ?? '' : '', second: '', measure: hours ? 'sum' : 'count', value: hours ? valueColumns(page)[0]?.id ?? '' : '', filters: [], sort: type === 'line' ? 'label' : 'value', period: periodColumns(page)[0]?.id ?? '', tab }
 }
 // The block after its type or data source changed: fields that no longer fit are cleared or replaced by the first that fits.
 export function withBlockType(dataset: Dataset, block: DashboardBlock, type: BlockType): DashboardBlock {
@@ -246,6 +253,7 @@ export function withBlockType(dataset: Dataset, block: DashboardBlock, type: Blo
 }
 export function withSource(dataset: Dataset, block: DashboardBlock): DashboardBlock {
   const fresh = blankBlock(dataset, block.id, block.type, block.tab)
+  if (dataset.key === hoursSource) return { ...fresh, ...(block.options ? { options: block.options } : {}), title: block.title, measure: block.measure === 'average' ? 'average' : 'sum' }
   return { ...fresh, ...(block.options ? { options: block.options } : {}), title: block.title, measure: block.measure !== 'count' && valueColumns(dataset.page).length ? block.measure : 'count', value: block.measure !== 'count' ? valueColumns(dataset.page)[0]?.id ?? '' : '' }
 }
 
@@ -270,6 +278,7 @@ export function blockProblems(dataset: Dataset, block: DashboardBlock): string[]
 export function blockError(dataset: Dataset, block: DashboardBlock): string {
   if (!block.title.trim()) return 'Give the block a title.'
   if (dataset.problem) return dataset.problem
+  if (dataset.key === hoursSource && block.measure !== 'sum' && block.measure !== 'average') return 'Time Writing hours are measured as the Sum or Average of Planned hours or Booked hours: choose one of them.'
   if (block.type === 'line' && !categoryColumns(dataset.page, 'line').length) return 'A line chart needs a Date column in the data source.'
   if (block.type !== 'kpi' && !categoryColumns(dataset.page, block.type).length) return 'The data source has no column to group by (a Dropdown, Multi-select, Text or Date column).'
   const empty = block.filters.find((filter) => !filter.values?.length && !filter.from && !filter.to)
@@ -324,14 +333,20 @@ export function summaryRows(data: ChartData): SummaryRow[] {
   return data.categories.map((cat, index) => ({ key: cat.key, label: cat.label, values: data.values[index], total: data.categoryTotals[index], rank: rank(cat.key) }))
     .sort((a, b) => a.rank - b.rank || (b.total ?? -Infinity) - (a.total ?? -Infinity) || a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' }))
 }
-export const summaryCsv = (head: string[], rows: SummaryRow[]) => [head, ...rows.map((row) => [row.label, ...(row.values.length > 1 ? row.values : []), row.total])].map((line) => line.map((value) => csvCell(value == null ? '' : typeof value === 'number' ? String(Number(value.toFixed(2))) : value)).join(',')).join('\r\n')
+// DSH-14: the Total row goes with the export, after the rows (as the table shows it).
+export const summaryCsv = (head: string[], rows: SummaryRow[], totals?: { values: (number | null)[]; total: number | null }) => [head, ...rows.map((row) => [row.label, ...(row.values.length > 1 ? row.values : []), row.total]), ...(totals ? [['Total', ...(totals.values.length > 1 ? totals.values : []), totals.total]] : [])].map((line) => line.map((value) => csvCell(value == null ? '' : typeof value === 'number' ? String(Number(value.toFixed(2))) : value)).join(',')).join('\r\n')
+// DSH-14: the Total row's values as the shared table exports them (column ids of the summary table, numbers to 2 decimals).
+const exported = (value: number | null) => value == null ? '' : Number(value.toFixed(2))
+export function summaryExportTotals(data: ChartData, split: boolean): Record<string, number | string> {
+  return { ...Object.fromEntries(split ? data.seriesTotals.map((value, at) => [`dsh-s${at}`, exported(value)]) : []), 'dsh-total': exported(data.total) }
+}
 
 // DSH-10: the empty state of a block, the same everywhere.
 export const noData = { title: 'No data for this selection.', detail: 'Change the period or the filters above, or Reset filters (the current year, no filter).' }
 
 // ---- words (DSH-05) ----
 export function sourceName(datasets: Dataset[], source: string) {
-  return datasets.find((entry) => entry.key === source)?.name || `the page ${pageOfSource(source)} (no longer there)`
+  return datasets.find((entry) => entry.key === source)?.name || (source === hoursSource ? hoursSourceName : `the page ${pageOfSource(source)} (no longer there)`)
 }
 export function blockSubject(dataset: Dataset, block: DashboardBlock, currency = '') {
   const page = dataset.page
@@ -339,7 +354,7 @@ export function blockSubject(dataset: Dataset, block: DashboardBlock, currency =
   const measure = measureText(page, asInsight(block), currency)
   if (block.type === 'kpi') return measure
   const by = block.type === 'line' ? `per ${dateGroupLabels[grainOf(asInsight(block))].unit} of ${column(block.category)}` : `by ${column(block.category)}`
-  const split = block.second ? `, ${block.type === 'table' ? 'columns by' : block.type === 'line' ? 'one line per' : 'stacked by'} ${column(block.second)}` : ''
+  const split = block.second ? `, ${block.type === 'table' ? 'columns by' : block.type === 'line' ? 'one line per' : block.options?.grouping === 'grouped' ? 'grouped by' : 'stacked by'} ${column(block.second)}` : ''
   return `${measure} ${by}${split}`
 }
 export function periodNote(dataset: Dataset, block: DashboardBlock) {
@@ -350,7 +365,22 @@ export function periodNote(dataset: Dataset, block: DashboardBlock) {
 export const cellNumber = (column: OnDemandColumn, value: OnDemandRow['cells'][string] | undefined) => column.type === 'currency' ? moneyOf(value, column.currency)?.amount ?? null : numberOf(value)
 export const cellValues = valuesOf
 
-// ---- rights (DSH-09) ----
-// Whoever may set up the page builds its dashboard (PGB-08…PGB-11: the role right "Set up On-Demand pages", a co-owner of
-// the page or of its group); the menu reasons (rename, remove) are those of the page builder.
+// ---- copying a block (DSH-15) ----
+// A copy of a block on another dashboard (or this one): a new id, the same settings and data source. Its tab: the
+// target's tab of the same name (case-insensitive) as the block's tab here; else the target's first tab, and the note
+// says so. Throws when the target is full (40 blocks).
+export function copyBlock(target: Dashboard, block: DashboardBlock, sourceTabs: DashboardTab[], id: string, targetName: string, same = false): { dashboard: Dashboard; block: DashboardBlock; note: string } {
+  const tabName = (sourceTabs.find((tab) => tab.id === block.tab) ?? sourceTabs[0])?.name ?? ''
+  const match = tabName ? target.tabs.find((tab) => tab.name.trim().toLowerCase() === tabName.trim().toLowerCase()) : undefined
+  const tab = same ? block.tab : match && match.id !== target.tabs[0]?.id ? match.id : ''
+  const title = same ? `${block.title} (copy)`.slice(0, maxTitle) : block.title
+  const copy: DashboardBlock = { ...structuredClone(block), id, title, tab }
+  const note = same || !tabName || match ? '' : target.tabs.length ? `${targetName} has no tab named “${tabName}”: the block is on its first tab, ${target.tabs[0].name}.` : `${targetName} has no tabs: the block is shown with all its blocks.`
+  return { dashboard: upsertBlock(target, copy), block: copy, note }
+}
+
+// ---- rights (DSH-09, CON-107) ----
+// The role right "Build On-Demand Dashboards" (every dashboard) or a co-owner of the page or of its group builds it
+// (menuLayout.ts canBuildDashboard); "Set up On-Demand pages" no longer does. The menu reasons (rename, remove) are
+// those of the page builder.
 export const viewerKey = (pageId: string) => `dashboard-page:${pageId}`

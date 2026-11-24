@@ -1,14 +1,24 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { utcToday } from '../businessTime'
 import { ChartOptionsFields } from '../components/ChartOptionsFields'
-import { InsightView } from '../components/InsightCharts'
+import { PreviewHeading } from '../components/ChartElements'
+import { ChartGrid, ChartPanel, SizeDialog } from '../components/ChartSize'
+import { ViewActions } from '../components/ViewActions'
+import { factoryOf, insightChartId, kindOf, parseGridBox, sizeFromOptions, sizeText, withGridBox, withSizeOptions, type ChartSize, type GridBox } from '../chartSize'
+import type { Layout } from '../chartGrid'
+import { useChartSizes } from '../useChartSize'
+import { ChartCountInfo, InsightView, KpiCard } from '../components/InsightCharts'
 import { MultiSelect } from '../components/MultiSelect'
-import { EmptyState, Info, Modal, Notice, Panel, WriteBlocked } from '../components/ui'
+import { EmptyState, Info, Modal, Notice, Panel, Pill, WriteBlocked } from '../components/ui'
 import { narrowPeriod, offeredMonths, offeredQuarters, periodQuarters, periodYears, type Period } from '../dashboard'
 import { amountProblem, anyCurrency, chartCurrency, cleanSetup, currenciesOf, filterCurrency, filterKind, filterRowColumns, insightsLocalKey, insightsViewerKey, isFiltered, maxInsightFilters, narrowInsightRows, offeredYears, periodColumns, readChoice, resolveFilterSetup, scopeText, emptyChoice, type FieldChoice, type ResolvedSetup, type ViewerChoice } from '../insightFilters'
-import { hasOptions, newId, type Insight, type InsightFilter, type InsightFilterSetup, type InsightMeasure, type OnDemandColumn, type OnDemandPage } from '../onDemand'
+import { cleanOptions, hasOptions, newId, type ColorPins, type Insight, type InsightFilter, type InsightFilterSetup, type InsightMeasure, type OnDemandColumn, type OnDemandPage } from '../onDemand'
 import type { PersonalViewsStore } from '../usePersonalViews'
+import { PdfExport, type PrintItem } from '../components/PrintView'
 import { blankInsight, categoryColumns, filterColumns, filterText, insightError, insightRules, insightSubject, insightTypeLabel, insightTypes, measureColumns, measuresFor, noneKey, noneLabel, secondColumns, secondLabel, withType } from '../onDemandInsights'
+
+// CHT-36: a KPI (one number) is a card in the row above the charts unless its owners show it as a panel.
+const isCard = (insight: Insight) => insight.type === 'kpi' && insight.options?.view !== 'panel'
 
 // OND-11, OND-15 The Insights tab of an On-Demand page: the page's charts and summary tables, one panel each (title,
 // what it shows and its filters under the title, ⓘ how it counts), in the order the team set. ＋ Add chart / table,
@@ -22,6 +32,9 @@ export function InsightsTab({ page, canSetup, setupReason, blockNote, saveBar, v
   const [editing, setEditing] = useState<{ insight: Insight; isNew: boolean } | null>(null)
   const [removing, setRemoving] = useState<Insight | null>(null)
   const [settingUp, setSettingUp] = useState(false)
+  const [sizing, setSizing] = useState<Insight | null>(null)
+  // OND-68: Export PDF… (the Insights ⋯).
+  const [exporting, setExporting] = useState(false)
   const noColumns = !page.columns.length
   const addReason = setupReason || (noColumns ? 'Set up the page’s columns first (Data tab → Set up columns…).' : '')
   const filtersReason = addReason || (filterRowColumns(page).length ? '' : 'The filter row needs a Date, Dropdown, Multi-select, Text, Number or Currency column.')
@@ -35,36 +48,97 @@ export function InsightsTab({ page, canSetup, setupReason, blockNote, saveBar, v
   const setup = useMemo(() => resolveFilterSetup(page), [page])
   const narrowed = useMemo(() => narrowInsightRows(page, setup, choice, currentYear), [page, setup, choice, currentYear])
   const shown = narrowed.page
+  // CHT-15…CHT-18: each chart's size — the viewer's own (personal views), else the owners' (the page file), else half
+  // width and medium height. Arrange sizes (owners): the corner handle sets the size for everyone, saved to Git at once.
+  const sizes = useChartSizes()
+  const [arranging, setArranging] = useState(false)
+  const arrange = arranging && canSetup
+  const sizeOf = (insight: Insight) => { const kind = kindOf(insight.type); const resolved = sizes.resolve(insightChartId(page.id, insight.id), factoryOf(kind), sizeFromOptions(insight.options, kind), kind); return arrange ? { ...resolved, size: resolved.base, source: 'owner' as const } : resolved }
+  const ownerSize = (insight: Insight, size: ChartSize) => onChange({ ...page, insights: page.insights.map((entry) => entry.id === insight.id ? withInsightSize(entry, size) : entry) }, `${page.name}: size of the chart ${insight.title} (${sizeText(size, kindOf(insight.type))})`)
+  // CHT-47: the owners' layout (Arrange mode) — every chart's place and size on the grid, saved for everyone at once.
+  const ownerLayout = (layout: Layout, _changed: string[], id: string, mode: 'resize' | 'move') => {
+    const moved = page.insights.find((entry) => entry.id === id)
+    const box = layout[id]
+    onChange({ ...page, insights: page.insights.map((entry) => layout[entry.id] ? withInsightBox(entry, layout[entry.id]) : entry) },
+      mode === 'move' ? `${page.name}: move the chart ${moved?.title ?? id} (column ${box.x + 1}, row ${box.y + 1})` : `${page.name}: size of the chart ${moved?.title ?? id} (${sizeText(box, kindOf(moved?.type ?? 'bar'))})`)
+  }
+  // CHT-36: KPI charts are cards (unless shown as a panel); the rest are chart panels. Move up / down moves a card among
+  // the cards and a panel among the panels.
+  const cards = page.insights.filter(isCard), panels = page.insights.filter((insight) => !isCard(insight))
+  const entries = panels.map((insight) => ({ id: insight.id, kind: kindOf(insight.type), size: sizeOf(insight).size, box: parseGridBox(insight.options?.grid, kindOf(insight.type)) }))
+  const moveAmong = (list: Insight[], insight: Insight, by: number) => { const other = list[list.indexOf(insight) + by]; if (other) move(page.insights.indexOf(insight), page.insights.indexOf(other) - page.insights.indexOf(insight)) }
+  // CHT-25, CHT-39: what a chart's or card's header holds — its title, no type eyebrow (the type is the first line of ⓘ) — ⓘ (what it measures, its filters, the filter row, the rows counted,
+  // the currency) and "Filtered" with the owners' ⋯ menu.
+  const partsOf = (insight: Insight) => {
+    const currency = narrowed.active ? chartCurrency(insight, narrowed) : ''
+    const subject = insightSubject(page, insight), filters = filterText(page, insight)
+    const rowFiltered = narrowed.active && narrowed.shown < narrowed.all
+    const filteredBy = [insight.filters.length ? `its own filters: ${filters}` : '', rowFiltered ? 'the filter row above' : ''].filter(Boolean).join('; ').replace(/^./, (first) => `Filtered by ${first}`)
+    const info = <ul className="od-rules"><li>Type: {insightTypeLabel(insight.type)}.</li><li>{subject}.</li><li>Its own filters: {filters}.</li>{narrowed.active && <li>The filter row above: {scopeText(setup, choice, narrowed, currentYear)}</li>}<ChartCountInfo page={shown} insight={insight} currency={currency} />{insightRules(page, insight).map((line) => <li key={line}>{line}</li>)}{currency && <li>The filter row’s currency for {page.columns.find((column) => column.id === insight.value)?.name}, {currency}, is shown to match; choose another currency above the chart to see its rows.</li>}</ul>
+    const action = (list: Insight[], sizable: boolean) => (filteredBy || canSetup) ? <span className="button-row nowrap">{filteredBy && <span className="chart-filtered" title={filteredBy} aria-label={filteredBy}><Pill>Filtered</Pill></span>}{canSetup && <ViewActions label={insight.title} items={[
+      { key: 'up', label: 'Move up', disabled: list.indexOf(insight) === 0, onClick: () => moveAmong(list, insight, -1) },
+      { key: 'down', label: 'Move down', disabled: list.indexOf(insight) === list.length - 1, onClick: () => moveAmong(list, insight, 1) },
+      { key: 'edit', label: 'Edit…', onClick: () => setEditing({ insight, isNew: false }) },
+      ...(sizable ? [{ key: 'size', label: 'Size…', onClick: () => setSizing(insight) }] : []),
+      { key: 'remove', label: 'Remove…', danger: true, onClick: () => setRemoving(insight) },
+    ]} />}</span> : undefined
+    return { currency, info, action, rowFiltered }
+  }
+  // OND-68, OND-70: the charts and cards for the PDF, drawn by the same components as above (no drill-down, no ⋯),
+  // with the active filter row (the viewer's choice) or over every row; each chart's own filters always apply.
+  const printItems = (): PrintItem[] => page.insights.map((insight) => {
+    const card = isCard(insight), size = sizeOf(insight).size
+    const own = insight.filters.length ? `Its own filters: ${filterText(page, insight)}` : undefined
+    return { id: insight.id, title: insight.title, card, size, render: (filters: boolean) => {
+      const currency = filters && narrowed.active ? chartCurrency(insight, narrowed) : ''
+      const rows = filters ? shown : page
+      return card ? <KpiCard page={rows} insight={insight} currency={currency} />
+        : <ChartPanel className="od-insight" size={size} source="owner" title={insight.title} titleHidden={insight.options?.elements?.title === false} detail={own}>
+          <InsightView quiet drill={false} page={rows} insight={insight} colors={page.colors} narrowed={filters && narrowed.active && narrowed.shown < narrowed.all} currency={currency} />
+        </ChartPanel>
+    } }
+  })
   return <>
-    <Panel className="od-insights-head" eyebrow={eyebrow} title="Insights" detail={`${page.insights.length} chart${page.insights.length === 1 ? '' : 's'} and tables from the ${page.rows.length} row${page.rows.length === 1 ? '' : 's'} of ${page.name}, the same for everyone.`}
-      info={<>Charts and summary tables built from the rows on the Data tab: a bar / column chart, a line over time, a pie / donut, a Pareto, a KPI or a summary table, each with Count of rows, Sum, Average, Minimum or Maximum of a Number or Currency column (one currency at a time, never converted) or a Distinct count, filters of its own and display options (orientation, date grouping, Top N, running total, percent of total, a target line, colours, width). Click a bar, slice or point to list the rows behind it. When the filter row has a Currency filter, the currency chosen there is also shown by each chart that sums, averages or takes the minimum or maximum of that column (another can still be chosen above the chart); charts of other columns keep their own currency. Each change is saved to Git at once, with the page, and shown to everyone who sees the page; people allowed to set up On-Demand pages add, edit, reorder and remove them.</>}
+    {/* OND-61: the heading in one line — the explanation behind ⓘ, Filters… and ＋ Add chart / table beside the title. */}
+    <Panel className="od-insights-head" eyebrow={eyebrow} title="Insights"
+      info={<>{page.insights.length} chart{page.insights.length === 1 ? '' : 's'} and tables from the {page.rows.length} row{page.rows.length === 1 ? '' : 's'} of {page.name}, the same for everyone. Charts and summary tables built from the rows on the Data tab: a bar / column chart, a line over time, a pie / donut, a Pareto, a KPI or a summary table, each with Count of rows, Sum, Average, Minimum or Maximum of a Number or Currency column (one currency at a time, never converted) or a Distinct count, filters of its own and display options (orientation, date grouping, Top N, running total, percent of total, a target line, colours, width and height). Click a bar, slice or point to list the rows behind it. When the filter row has a Currency filter, the currency chosen there is also shown by each chart that sums, averages or takes the minimum or maximum of that column (another can still be chosen above the chart); charts of other columns keep their own currency. Each change is saved to Git at once, with the page, and shown to everyone who sees the page; people allowed to set up On-Demand pages add, edit, reorder, size and remove them (the chart’s ⋯). Anyone can resize a chart for themselves with the handle on its bottom-right corner (or focus it and use the arrow keys): it is remembered for them, and Reset to default goes back to the owners’ size.</>}
       action={<span className="button-row nowrap">
         <button type="button" className="ghost" disabled={Boolean(filtersReason)} title={filtersReason || undefined} onClick={() => setSettingUp(true)}>Filters…</button>
+        {canSetup && page.insights.length > 0 && <button type="button" className="ghost" aria-pressed={arrange} title="Drag a chart by ⠿ to move it, or its corner to size it, for everyone" onClick={() => setArranging(!arrange)}>{arrange ? 'Done arranging' : 'Arrange charts'}</button>}
         <button type="button" className="primary" disabled={Boolean(addReason)} title={addReason || undefined} onClick={() => setEditing({ insight: blankInsight(page, newId('i')), isNew: true })}>＋ Add chart / table</button>
+        <ViewActions label="Insights" items={[{ key: 'pdf', label: 'Export PDF…', disabled: !page.insights.length, title: page.insights.length ? undefined : 'No charts or tables to export yet.', onClick: () => setExporting(true) }]} />
       </span>}>
       <WriteBlocked reason={blockNote} />
       {!blockNote && noColumns && canSetup && <p className="muted">{addReason}</p>}
+      {arrange && <p className="muted chart-arrange-note" role="status">Arranging the charts for everyone on the 12-column grid: drag a chart by ⠿ to move it (the others make room) and its bottom-right corner to size it — or focus ⠿ or the corner and use the arrow keys (Shift + arrows on the corner move it), Enter to keep. Each change is saved to Git at once. Done arranging goes back to your own view.</p>}
       {setup.dropped.length > 0 && <Notice tone="warning">Filter row: {setup.dropped.join(' ')}{canSetup ? ' Filters… sets it up again.' : ''}</Notice>}
       {!page.insights.length && <EmptyState title="No charts or tables yet." detail={canSetup && !noColumns ? 'Add the first one with ＋ Add chart / table.' : canSetup ? undefined : 'Someone allowed to set up On-Demand pages adds them.'} />}
       {saveBar}
     </Panel>
-    {narrowed.active && <>
+    {narrowed.active && <div className="ins-bar">
       <FilterRow page={page} setup={setup} choice={choice} currentYear={currentYear} onChange={update} />
       <p className="muted dsh-scope ins-scope" role="status">{scopeText(setup, choice, narrowed, currentYear)}</p>
-    </>}
-    <div className="od-insights">
-      {page.insights.map((insight, index) => { const currency = narrowed.active ? chartCurrency(insight, narrowed) : ''; return <Panel key={insight.id} className={`od-insight${insight.options?.size === 'full' ? ' od-insight-full' : ''}`} eyebrow={insightTypeLabel(insight.type).toUpperCase()} title={insight.title}
-        detail={<><span>{insightSubject(page, insight)}</span><br /><span className="od-insight-filters">Filters: {filterText(page, insight)}</span></>}
-        info={<ul className="od-rules">{insightRules(page, insight).map((line) => <li key={line}>{line}</li>)}{currency && <li>The filter row’s currency for {page.columns.find((column) => column.id === insight.value)?.name}, {currency}, is shown to match; choose another currency above the chart to see its rows.</li>}</ul>}
-        action={<span className="button-row nowrap">
-          <button type="button" className="ghost" disabled={!canSetup} title={setupReason || undefined} aria-label={`Move ${insight.title} up`} onClick={() => move(index, -1)}>↑</button>
-          <button type="button" className="ghost" disabled={!canSetup} title={setupReason || undefined} aria-label={`Move ${insight.title} down`} onClick={() => move(index, 1)}>↓</button>
-          <button type="button" className="ghost" disabled={!canSetup} title={setupReason || undefined} aria-label={`Edit ${insight.title}`} onClick={() => setEditing({ insight, isNew: false })}>Edit</button>
-          <button type="button" className="text-button danger-text" disabled={!canSetup} title={setupReason || undefined} aria-label={`Remove ${insight.title}`} onClick={() => setRemoving(insight)}>Remove</button>
-        </span>}>
-        <InsightView page={shown} insight={insight} colors={page.colors} narrowed={narrowed.active && narrowed.shown < narrowed.all} currency={currency} />
-      </Panel> })}
-    </div>
+    </div>}
+    {/* CHT-36: the KPI cards in one row above the charts, in the charts' order (Show as: Panel keeps a KPI among them). */}
+    {cards.length > 0 && <div className="metric-grid compact od-kpi-cards">
+      {cards.map((insight) => { const parts = partsOf(insight); return <KpiCard key={insight.id} page={shown} insight={insight} currency={parts.currency} info={parts.info} action={parts.action(cards, false)} /> })}
+    </div>}
+    {panels.length > 0 && <ChartGrid className="od-insights" entries={entries} arranging={arrange} canMove={canSetup} titleOf={(id) => page.insights.find((entry) => entry.id === id)?.title ?? id}
+      onResize={(id, next) => { const insight = page.insights.find((entry) => entry.id === id); if (insight) sizes.setOwn(insightChartId(page.id, id), next, sizeOf(insight).base, kindOf(insight.type)) }} onLayout={ownerLayout}>
+      {panels.map((insight) => {
+        const { currency, info, action, rowFiltered } = partsOf(insight)
+        const { size, source } = sizeOf(insight)
+        const id = insightChartId(page.id, insight.id)
+        return <ChartPanel key={insight.id} id={insight.id} kind={kindOf(insight.type)} className="od-insight" size={size} source={source} arranging={arrange} title={insight.title} titleHidden={insight.options?.elements?.title === false}
+          info={info} action={action(panels, true)}
+          onResize={arrange ? (next) => ownerSize(insight, next) : (next) => sizes.setOwn(id, next, sizeOf(insight).base, kindOf(insight.type))} onReset={arrange ? undefined : () => sizes.setOwn(id, undefined)}>
+          <InsightView quiet page={shown} insight={insight} colors={page.colors} narrowed={rowFiltered} currency={currency} />
+        </ChartPanel>
+      })}
+    </ChartGrid>}
+    {sizing && <SizeDialog eyebrow={eyebrow} title={sizing.title} kind={kindOf(sizing.type)} size={sizeOf(sizing).base} heightReason={sizing.type === 'kpi' || sizing.type === 'table' ? 'A KPI or a summary table takes the height of its content.' : ''} onCancel={() => setSizing(null)} onSave={(size) => { ownerSize(sizing, size); setSizing(null) }} />}
+    {exporting && <PdfExport eyebrow={eyebrow} pageName={page.name} sample={Boolean(page.sample)} items={printItems()} onClose={() => setExporting(false)}
+      filtersLine={(filters) => narrowed.active ? filters ? `Filter row: ${scopeText(setup, choice, narrowed, currentYear)}` : `Without the filter row: all ${page.rows.length} row${page.rows.length === 1 ? '' : 's'} of ${page.name}.` : ''} />}
     {editing && <InsightDialog page={page} insight={editing.insight} isNew={editing.isNew} onCancel={() => setEditing(null)} onSave={(insight, colors) => {
       // CHT-09: the colour pins are the page's, saved with it.
       const next: OnDemandPage = { ...page, insights: editing.isNew ? [...page.insights, insight] : page.insights.map((entry) => entry.id === insight.id ? insight : entry) }
@@ -89,7 +163,7 @@ export function InsightsTab({ page, canSetup, setupReason, blockNote, saveBar, v
 
 // OND-15 The pop-up of one insight: title, type, the fields, the measure, filters and sort, with a live preview of the
 // chart or table from the page's rows. Add / Save puts it in the page's unsaved changes.
-function InsightDialog({ page, insight, isNew, onCancel, onSave }: { page: OnDemandPage; insight: Insight; isNew: boolean; onCancel: () => void; onSave: (insight: Insight, colors: Record<string, number> | undefined) => void }) {
+function InsightDialog({ page, insight, isNew, onCancel, onSave }: { page: OnDemandPage; insight: Insight; isNew: boolean; onCancel: () => void; onSave: (insight: Insight, colors: ColorPins | undefined) => void }) {
   const [draft, setDraft] = useState<Insight>(insight)
   const [pins, setPins] = useState(page.colors)
   const [error, setError] = useState('')
@@ -109,6 +183,7 @@ function InsightDialog({ page, insight, isNew, onCancel, onSave }: { page: OnDem
     onSave({ ...draft, title: draft.title.trim().replace(/\s+/g, ' ') }, pins)
   }
   const measureNeedsNumber = draft.measure !== 'count'
+  const preview = { ...draft, filters: draft.filters.filter((filter) => filter.values?.length || filter.from || filter.to) }
   return <Modal eyebrow={`ON-DEMAND · ${page.name.toUpperCase()}`} title={isNew ? 'Add a chart or table' : 'Edit the chart or table'} wide onClose={onCancel}>
     <form onSubmit={submit} className="od-insight-form" noValidate>
       <div className="od-insight-editor">
@@ -177,9 +252,10 @@ function InsightDialog({ page, insight, isNew, onCancel, onSave }: { page: OnDem
         </div>
         <section className="od-insight-preview" aria-label="Preview">
           <p className="eyebrow">PREVIEW</p>
-          <h3>{draft.title.trim() || 'Untitled'}</h3>
-          <p className="muted">{insightSubject(page, draft)} · Filters: {filterText(page, draft)}</p>
-          <InsightView page={page} colors={pins} drill={false} insight={{ ...draft, filters: draft.filters.filter((filter) => filter.values?.length || filter.from || filter.to) }} />
+          {/* KB-86: the preview shows the chart as its panel (or card) does — title, ⓘ and "Filtered", no long subtitle. */}
+          {isCard(draft) ? <div className="metric-grid compact od-kpi-cards"><KpiCard page={page} insight={{ ...preview, title: draft.title.trim() || 'Untitled' }} info={<>{insightSubject(page, draft)}. Its own filters: {filterText(page, draft)}.</>} action={preview.filters.length ? <Pill>Filtered</Pill> : undefined} /></div>
+            : <><PreviewHeading title={draft.title.trim() || 'Untitled'} hidden={draft.options?.elements?.title === false} info={<>{insightSubject(page, draft)}. Its own filters: {filterText(page, draft)}.</>} filtered={preview.filters.length > 0} />
+              <InsightView quiet page={page} colors={pins} drill={false} insight={preview} /></>}
         </section>
       </div>
       {error && <Notice tone="error">{error}</Notice>}
@@ -196,6 +272,25 @@ function readStoredChoice(pageId: string, stored: unknown): ViewerChoice {
 }
 
 const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+// CHT-17: an insight with the owners' size written into its options (a factory value left out).
+function withInsightSize(insight: Insight, size: ChartSize): Insight {
+  const kind = kindOf(insight.type)
+  const options = cleanOptions(insight.type, insight.measure, withSizeOptions(insight.options, size, factoryOf(kind), false, kind))
+  const out: Insight = { ...insight }
+  if (options) out.options = options
+  else delete out.options
+  return out
+}
+
+// CHT-47: an insight with the owners' place on the grid (and the nearest presets for older apps).
+function withInsightBox(insight: Insight, box: GridBox): Insight {
+  const options = cleanOptions(insight.type, insight.measure, withGridBox(insight.options, box, kindOf(insight.type)))
+  const out: Insight = { ...insight }
+  if (options) out.options = options
+  else delete out.options
+  return out
+}
+
 // OND-53: the filter row (UI-STANDARDS §7) — Year → Quarter → Month over the period's Date column as on the On-Demand
 // Dashboard (DSH-07), then the owners' filters in their order, then Reset filters.
 function FilterRow({ page, setup, choice, currentYear, onChange }: { page: OnDemandPage; setup: ResolvedSetup; choice: ViewerChoice; currentYear: number; onChange: (choice: ViewerChoice) => void }) {
@@ -211,7 +306,7 @@ function FilterRow({ page, setup, choice, currentYear, onChange }: { page: OnDem
     onChange({ ...choice, fields })
   }
   const numberOrNone = (text: string) => text.trim() === '' || !Number.isFinite(Number(text)) ? undefined : Number(text)
-  return <div className="dash-filters ins-filters" role="group" aria-label="Insights filters">
+  return <div className="dash-filters ins-filters compact-filters" role="group" aria-label="Insights filters">
     {setup.period && <>
       <MultiSelect label="Year" emptyLabel={String(currentYear)} options={offeredYears(page, setup, choice, currentYear).map((year) => [String(year), String(year)])} value={choice.period.years.map(String)} onChange={(value) => setPeriod({ ...choice.period, years: value.map(Number) })} />
       <MultiSelect label="Quarter" options={offeredQuarters(countingYears).map((quarter) => [quarter, several ? `Q${quarter.slice(6)} ${quarter.slice(0, 4)}` : `Q${quarter.slice(6)}`])} value={choice.period.quarters} onChange={(value) => setPeriod({ ...choice.period, quarters: value })} />
@@ -249,7 +344,7 @@ function FilterRow({ page, setup, choice, currentYear, onChange }: { page: OnDem
       }
       return <label key={column.id} className="dash-select">{column.name} contains<input type="search" maxLength={120} aria-label={`${column.name} contains`} placeholder="Text" value={value.text ?? ''} onChange={(event) => setField(column, { text: event.target.value || undefined })} /></label>
     })}
-    <button type="button" className="ghost" disabled={!isFiltered(choice)} onClick={() => onChange(emptyChoice())}>Reset filters</button>
+    <button type="button" className="text-button" disabled={!isFiltered(choice)} onClick={() => onChange(emptyChoice())}>Reset filters</button>
     {setup.fields.filter((column) => filterKind(column) === 'money' && amountProblem(choice.fields[column.id])).map((column) => <small key={`error-${column.id}`} className="field-error ins-error" role="alert">{column.name}: {amountProblem(choice.fields[column.id])}</small>)}
   </div>
 }

@@ -24,3 +24,11 @@ contextBridge.exposeInMainWorld('desktopUpdate', {
     return () => ipcRenderer.removeListener('desktop-update:progress', handler)
   },
 })
+// OND-69: Export PDF… (the print view saved as a PDF file); OND-76: the standalone HTML file of a page (chosen in the
+// save dialog, remembered per page by the app, overwritten by each publish).
+contextBridge.exposeInMainWorld('desktopFiles', {
+  savePdf: (request) => ipcRenderer.invoke('pdf-export:save', request),
+  publishTarget: (pageId) => ipcRenderer.invoke('html-publish:target', pageId),
+  choosePublishTarget: (pageId, defaultName) => ipcRenderer.invoke('html-publish:choose', pageId, defaultName),
+  publishHtml: (pageId, html) => ipcRenderer.invoke('html-publish:write', pageId, html),
+})

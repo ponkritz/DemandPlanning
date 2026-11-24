@@ -10,5 +10,5 @@ export function readChartLabels(storage: Pick<Storage, 'getItem'> = localStorage
 export function saveChartLabel(chart: string, on: boolean, storage: Pick<Storage, 'getItem' | 'setItem'> = localStorage) {
   try { storage.setItem(labelsKey, JSON.stringify({ ...readChartLabels(storage), [chart]: on })) } catch { /* this visit only */ }
 }
-// The chart's own choice, else the shared default.
+// The chart's own choice, else the shared default (for an On-Demand chart: its owners' choice if they made one, CHT-28).
 export const chartLabelsOn = (own: Record<string, boolean>, chart: string, shared: boolean) => own[chart] ?? shared

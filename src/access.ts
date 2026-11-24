@@ -74,6 +74,11 @@ export const actions = [
   // move and remove any added page and name co-owners. A file older than permissions 5 gives it as the starting matrix
   // does: to a listed Tool Owner only (a file without the Tool Owner role gives that role every right, CON-93).
   { key: 'pages.manage', group: 'On-Demand', label: 'Manage pages and menu groups (Tool Owner)', legacy: 'pages.manage', since: 5 },
+  // CON-107 (permissions 6): building the On-Demand Dashboards (DSH-09) — add, edit, arrange and copy blocks, tabs and
+  // filters — on every dashboard; "Set up On-Demand pages" no longer gives it (it keeps the table pages). A file older
+  // than permissions 6 gives it as the starting matrix does: to a listed Tool Owner only (a file without the Tool Owner
+  // role gives that role every right, CON-93). The page's and its group's co-owners keep building their dashboard.
+  { key: 'dashboards.build', group: 'On-Demand', label: 'Build On-Demand Dashboards (blocks, tabs, filters — every dashboard)', legacy: 'dashboards.build', since: 6 },
 ] as const
 export type Action = typeof actions[number]['key']
 
@@ -100,7 +105,7 @@ export function defaultPolicy(adminEmail = ''): AccessPolicy {
     defaultRole: 'Team Member',
     roles: {
       'Tool Owner': { areas: [...allAreas], actions: [...allActions] },
-      'Admin': { areas: [...allAreas], actions: allActions.filter((action) => action !== 'streams.manage' && action !== 'pages.manage') },
+      'Admin': { areas: [...allAreas], actions: allActions.filter((action) => action !== 'streams.manage' && action !== 'pages.manage' && action !== 'dashboards.build') },
       // CON-94: the starting matrix; each cell can be set to Allow, Deny or Not set in Role rights.
       'Product Owner': { areas: ['overview', 'board', 'health', 'release', 'baselines', 'qemapping', 'docs', 'ondemand'], actions: [...workActions, 'work.bulk', 'azure.createForOthers', 'baselines.edit', 'qemapping.edit', 'data.export', 'pack.text'] },
       'People Manager': { areas: ['overview', 'insights', ...myWork, 'board', 'release', 'baselines', 'qemapping', 'snapshots', 'docs', 'ondemand'], actions: [...workActions, 'work.bulk', 'azure.createForOthers', 'baselines.edit', 'qemapping.edit', 'data.export', 'pack.text'] },
@@ -120,7 +125,7 @@ function inOrder(policy: AccessPolicy): AccessPolicy {
 
 const pick = <T extends string>(value: unknown, allowed: readonly T[]) => Array.isArray(value) ? allowed.filter((entry) => value.includes(entry)) : []
 // The permissions that did not exist before CON-94 (their presence marks a file written with the split permissions).
-const newKeys = new Set<Action>(['setup.epic', 'setup.values', 'work.edit', 'work.state', 'work.move', 'work.hours', 'work.comment', 'work.bulk', 'release.counts', 'qemapping.edit', 'data.export', 'streams.options', 'setup.feature', 'capacity.settings', 'capacity.rules', 'capacity.time', 'capacity.periods', 'capacity.history', 'people.edit', 'people.capacityRoles', 'access.viewAs', 'pack.text', 'pack.setup', 'layout.defaults', 'storage.shared', 'ondemand.setup', 'ondemand.edit', 'pages.manage'])
+const newKeys = new Set<Action>(['setup.epic', 'setup.values', 'work.edit', 'work.state', 'work.move', 'work.hours', 'work.comment', 'work.bulk', 'release.counts', 'qemapping.edit', 'data.export', 'streams.options', 'setup.feature', 'capacity.settings', 'capacity.rules', 'capacity.time', 'capacity.periods', 'capacity.history', 'people.edit', 'people.capacityRoles', 'access.viewAs', 'pack.text', 'pack.setup', 'layout.defaults', 'storage.shared', 'ondemand.setup', 'ondemand.edit', 'pages.manage', 'dashboards.build'])
 
 // Reads access.json: unknown roles, areas, actions and invalid emails are dropped; a role missing from the file has no
 // rights. Throws on anything that is not an access policy, so a broken file is reported rather than ignored.
@@ -167,7 +172,7 @@ export function parseAccess(text: string): AccessPolicy {
 
 export function serializeAccess(policy: AccessPolicy) {
   const members = Object.fromEntries(Object.entries(policy.members).filter(([email, assigned]) => isEmail(email) && assigned.length).sort(([a], [b]) => a.localeCompare(b)).map(([email, assigned]) => [normalEmail(email), roles.filter((role) => assigned.includes(role))]))
-  return `${JSON.stringify({ schema: 1, permissions: 5, defaultRole: policy.defaultRole, roles: Object.fromEntries(roles.map((role) => [role, { areas: allAreas.filter((area) => policy.roles[role].areas.includes(area)), actions: allActions.filter((action) => policy.roles[role].actions.includes(action)), ...(policy.roles[role].deny?.length ? { deny: ([...allAreas, ...allActions] as Permission[]).filter((key) => policy.roles[role].deny!.includes(key)) } : {}) }])), members }, null, 2)}\n`
+  return `${JSON.stringify({ schema: 1, permissions: 6, defaultRole: policy.defaultRole, roles: Object.fromEntries(roles.map((role) => [role, { areas: allAreas.filter((area) => policy.roles[role].areas.includes(area)), actions: allActions.filter((action) => policy.roles[role].actions.includes(action)), ...(policy.roles[role].deny?.length ? { deny: ([...allAreas, ...allActions] as Permission[]).filter((key) => policy.roles[role].deny!.includes(key)) } : {}) }])), members }, null, 2)}\n`
 }
 
 // A person's rights: the union of their roles, or the default role when their email is not listed (or not known yet).
@@ -185,6 +190,25 @@ export function rightsFor(policy: AccessPolicy | null, email: string, bootstrap 
     roles: assigned,
     restricted: true,
   }
+}
+
+// GIT-23: what changed in the viewer's own rights when a newer access.json was loaded quietly, in words: "you can now
+// {right}", "“{right}” removed", "you now see {area}", "{area} no longer shown" (menu areas first, in catalog order).
+// Nothing when the rights are the same (also when no file was loaded before: the fail-closed state is not a change).
+export function rightsChanges(before: Rights, after: Rights): string[] {
+  if (!before.restricted || !after.restricted) return []
+  const lower = (label: string) => /^[A-Z][a-z]/.test(label) ? label[0].toLowerCase() + label.slice(1) : label
+  return [
+    ...areas.filter((entry) => !before.areas.has(entry.key) && after.areas.has(entry.key)).map((entry) => `you now see ${entry.label}`),
+    ...areas.filter((entry) => before.areas.has(entry.key) && !after.areas.has(entry.key)).map((entry) => `${entry.label} no longer shown`),
+    ...actions.filter((entry) => !before.actions.has(entry.key) && after.actions.has(entry.key)).map((entry) => `you can now ${lower(entry.label)}`),
+    ...actions.filter((entry) => before.actions.has(entry.key) && !after.actions.has(entry.key)).map((entry) => `“${entry.label}” removed`),
+  ]
+}
+// The info line of GIT-23: who changed it and at most four changes ("and n more").
+export function accessChangedText(who: string, changes: string[]) {
+  const shown = changes.slice(0, 4).join('; ')
+  return `Your access was changed by ${who || 'someone else'}: ${shown}${changes.length > 4 ? `; and ${changes.length - 4} more` : ''}.`
 }
 
 // CON-102: why a button that starts a change in Azure DevOps is disabled — '' when nothing is missing. Read-only (no

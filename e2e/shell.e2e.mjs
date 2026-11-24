@@ -1118,12 +1118,16 @@ test('TC-GIT-08: while the app is open, newer planning data in Git loads by itse
     localStorage.setItem('demand-planning-git-token-v1', 'test-token')
   } })
   const listings = []
+  // GIT-23: access.json read again (quietly) once it is newer in Git.
+  let accessRead = () => undefined
+  const accessReadAgain = new Promise((resolve) => { accessRead = resolve })
   await context.route('https://api.github.com/**', (route) => {
     const url = new URL(route.request().url())
     if (url.pathname === '/repos/example/storage') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ permissions: { push: false } }) })
     const match = /^\/repos\/example\/storage\/contents\/?(.*)$/.exec(url.pathname)
     if (!match || route.request().method() !== 'GET') return route.fulfill({ status: 404, contentType: 'application/json', body: '{"message":"Not Found"}' })
     const path = decodeURIComponent(match[1])
+    if (path === 'access.json' && files[path]) accessRead()
     if (path === '') { listings.push(path); return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(Object.entries(files).map(([name, file]) => ({ type: 'file', name, path: name, sha: file.sha }))) }) }
     const file = files[path]
     if (!file) return route.fulfill({ status: 404, contentType: 'application/json', body: '{"message":"Not Found"}' })
@@ -1142,13 +1146,10 @@ test('TC-GIT-08: while the app is open, newer planning data in Git loads by itse
   await page.clock.fastForward('05:01')
   await page.getByText(/Updated from Git at .*: newer planning data saved by someone else was loaded\./).waitFor()
   assert.ok(listings.length >= 1, 'the folder was listed (no file contents)')
-  const banner = page.locator('.git-update-banner')
-  await banner.waitFor()
-  // GIT-18: on Data & sharing only what it uses — the access roles (every page); the Monthly pack setup waits for
-  // Pulse Check and Admin → Reports.
-  assert.match(await text(banner), /^Newer data in Git for Data & sharing: Access — saved by someone else\. Load the newer data$/)
-  assert.doesNotMatch(await text(banner), /Planning data/, 'the planning data was loaded, so it is not in the notice')
-  assert.equal(await banner.getByRole('button', { name: 'Load the newer data' }).count(), 1)
+  // GIT-23: the access roles are loaded quietly on this page (the notice is for People & roles only); GIT-18: the
+  // Monthly pack setup waits for Pulse Check and Admin → Reports, and the planning data was loaded — no notice here.
+  await accessReadAgain
+  assert.equal(await page.locator('.git-update-banner').count(), 0, 'nothing newer for Data & sharing')
   assert.deepEqual(errors, [])
   await context.close()
 })

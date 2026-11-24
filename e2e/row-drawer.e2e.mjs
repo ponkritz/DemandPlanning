@@ -113,7 +113,7 @@ test('TC-OND-21: a CoNQ row opens in a drawer from the right with its values and
   await drawer.locator('.od-row-values').waitFor()
   const saved = writes.filter((write) => write.path === 'on-demand/conq.json')
   assert.equal(saved.length, 1, 'saved to Git at once')
-  assert.match(saved[0].message, /^CoNQ: update row CONQ-0001 \[saved \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\]$/)
+  assert.match(saved[0].message, /^CoNQ: update row CONQ-0001 \[saved \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\]( \[by [^\]]+\])?$/)
   const row = saved[0].data.rows.find((entry) => entry.id === 'r1')
   assert.equal(row.cells.c2, '450 EUR')
   assert.equal(row.log.length, 2)
