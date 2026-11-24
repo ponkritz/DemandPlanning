@@ -2,6 +2,19 @@
 
 Version history of the I&D Quality Demand Planning app, newest first. Every merged change bumps the version in `package.json` and adds its entry here, in the same pull request (CI-09; [CONFIGURATION-MANAGEMENT.md](CONFIGURATION-MANAGEMENT.md) §4): **major** for a change that breaks existing data, shared setup files or the way users work; **minor** for a new or changed feature; **patch** for a fix, a dependency update or documentation only. `pnpm test` fails when the newest version here is not the version in `package.json`. CI tags each version `vX.Y.Z` on its merge commit and publishes its GitHub release with the installers and this entry (CI-10); the build number of a version is the CI build of that merge (shown in the app under Force Update, and in `latest.json`). Open bugs and accepted limitations of every version are in [KNOWN-ISSUES.md](KNOWN-ISSUES.md); the third-party components of every version are in [SWBOM.md](SWBOM.md).
 
+## v5.2.0 — 2026-11-24
+
+**Added**
+- **Interactive HTML publishing** — export an offline copy of a table or dashboard with the selected rows, charts, KPIs and drill-down. The destination and schedule remain scoped to the publisher, repository configuration and page. Scheduled publishing checks current authorization and live data (OND-73, OND-76, OND-78, OND-79, OND-90…OND-99).
+- **Personal dashboards and shared table defaults** — customize dashboard blocks and allow authorized users to publish default views for their team (MYD-14…MYD-24, UI-20…UI-23, BKL-47).
+- **User guide** — open illustrated instructions and short clips made with synthetic data, alongside design documents and private tool validation downloads (DOC-12…DOC-16).
+
+**Updated**
+- **People and chart tools** — edit person profiles and access roles in the People view, arrange KPI cards with charts and add rule-based narratives (CAP-58…CAP-62, CHT-51…CHT-69).
+- **Git storage** — new connections start with the updated team data repository. Existing connections can switch after confirmation (GIT-13, GIT-24).
+
+Synced Test2 through commit `2abd8ba`. DemandPlanning release numbering is managed by its release workflow.
+
 ## v5.1.0 — 2026-11-24
 
 **Added**
