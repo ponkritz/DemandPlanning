@@ -101,6 +101,8 @@ Approved by the product owner on 2026-11-23.
   (text button, danger colour).
 - **Count**: "{shown} of {total} {items}" (e.g. "12 of 40 releases"); a cut list always says so.
 - Headers stay visible when the table scrolls (sticky) when it can be longer than the screen.
+- Inside a `TablePanel` the table's toolbar (filters, search, Columns, Export), its first column and the read-only
+  reason line up with the panel's title; the table's lines run the full width (one shared rule, KB-93).
 
 **Today:** ~82 hand-built tables in 39 files against 16 `DataTable`s; class `num` has no CSS rule, so numbers are
 left-aligned; six wordings for the row count and seven schemes for cut lists.
@@ -128,7 +130,7 @@ both ⟳ and ↻, both ✕ and ×, both ＋ and +.
 - **Filters**: one filter bar under the panel heading: `MultiSelect` for a filter with several values, a segmented
   control for two to four exclusive options, a search box last, and **Reset filters** (ghost) at the end.
 - **Period**: the top-bar month is the default everywhere. A page that needs another period offers one control,
-  **Show: {month} / All months**, or one period picker — the same on every page.
+  **Show: Selected month / All months**, or one period picker — the same on every page.
 
 **Today:** six tab implementations, and the chosen Settings tab is not highlighted; four chip styles; the Region filter
 in three forms; "Reset filters" and "Clear filters"; seven period controls.
@@ -179,12 +181,16 @@ palettes for planned / actual / capacity.
 Every stream's Release page (DP, CP, IOCC, Content, Tool Validations, S&S IT, ECP) has the same parts in the same
 order; a stream leaves out a part it cannot have, and adds its own columns only after the common ones.
 
-1. **Source bar** — view name, source (server / project, or export file), when fetched, ⓘ, **Show: {month} / All
-   months**, ↻ and ⋯.
+1. **Source bar** — only the controls, right-aligned: **Show: Selected month / All months**, ↻ and ⋯; no view name, source,
+   when fetched or ⓘ (the page title names the view). The first line of ⋯ (not an action) is the source · when
+   fetched or imported; **About this source…** at the end of ⋯ opens a pop-up with that line and the details of the
+   data (month filter, items fetched, milestone names, Git copy). Warnings about the data shown stay below the bar.
 2. **Counts** — `Metrics`: Releases in the month, Completed, Supported (as the stream counts them), with ⓘ "What was
    counted" for the counting rules. **At most three tiles**: a stream's extra count (CP "QA/QE-signed documents") goes in
    the Releases table's count line, not in a fourth tile. A list behind a count stays a folded table under the tiles
    (DP "Supported releases counted"). A tile the stream has no rule for is left out, and ⓘ says why.
+   Tool Validations (TVL-23) shows its counts on its **Master list** tab only, named **Validations in the month**,
+   **Completed validations** and **Supported validations**.
 3. **Tabs** — **Releases** | **Source data (n)** (the raw query or export rows).
 4. **Releases table** (`DataTable`), columns in this order:
 
@@ -258,6 +264,10 @@ wrong for a real case as an Improvement to the standard.
 
 | Date | Change | Approved by |
 |---|---|---|
+| 2026-11-24 | §7 Period: **Show: Selected month / All months** is a segmented toggle, no longer a drop-down repeating the month ("Month is repeating … make it as a Toggle", QV-71). | Product owner, 2026-11-24 |
+| 2026-11-24 | §3 Missing permission — **row buttons with a reason per row** (an exception): on the Tool Validations Master list a tool from Azure DevOps has Edit and Remove disabled with its own reason as each button's tooltip (Edit: change it in Azure DevOps; Remove: until Azure DevOps no longer returns it), and one line above the table covers both, with Edit notes… for the notes (TVL-30). | Product owner, 2026-11-24 |
+| 2026-11-24 | §10 (2) Counts: Tool Validations shows them on its Master list tab only, as Validations ("Keep the Supported Validations and Completed Validation Card only in Master List", TVL-23). | Product owner, 2026-11-24 |
+| 2026-11-24 | §10 (1) Source bar: the name · source · fetched text and ⓘ Info removed from the bar ("It's duplicating info"), on every Release page; Show, ↻ and ⋯ stay, right-aligned; source · fetched is the first line of ⋯ and the details are behind ⋯ → About this source… (QV-62, QV-70). | Product owner, 2026-11-24 |
 | 2026-11-23 | §4a Drawers added: one record of a table viewed and edited in a drawer from the right (the On-Demand row drawer, OND-27…OND-29). | Product owner, 2026-11-23 |
 | 2026-11-23 | v10.1 chart resizing: §9 chart **Size** and the **Resize handle** control; §2 the **chart header**; §3 the per-object ⋯ menu exception to CON-102 (CHT-15…CHT-25, OND-61, DSH-13). | Product owner, 2026-11-23 |
 | 2026-11-23 | §2 chart header **without the type eyebrow** ("I don't want the chart type at the top"): title, ⓘ (the type is its first line) and "Filtered" only, for the Insights and On-Demand Dashboard chart panels, KPI cards and the pop-up preview; the app's own panels keep their eyebrows (CHT-39). | Product owner, 2026-11-23 |

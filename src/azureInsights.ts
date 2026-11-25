@@ -1,6 +1,7 @@
 import { isFinishedState } from './workStates.ts'
 import { utcMonthKey } from './businessTime.ts'
 import type { AzureWorkItem } from './domain'
+import { defaultCapacitySettings } from './capacity.ts'
 
 const months = ['January','February','March','April','May','June','July','August','September','October','November','December']
 const monthName = 'jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?'
@@ -88,7 +89,8 @@ function total(items: AzureWorkItem[], field: 'originalEstimate'|'completedWork'
   return { value: values.length ? values.reduce((a, b) => a + b, 0) : null, count: values.length, total: items.length }
 }
 function utilization(fundedHours: number, actualHoursLessAbsence: number | null) { return actualHoursLessAbsence != null && actualHoursLessAbsence > 0 && fundedHours > 0 ? Math.round(fundedHours / actualHoursLessAbsence * 1000000) / 10000 : null }
-export function azureInsights(source: AzureWorkItem[], month: string, today: string) {
+// CAP-03 (glossary "Absence Epic"): absenceEpicId is the Absence Epic of the capacity settings (Admin → Capacity & time), not a fixed ID.
+export function azureInsights(source: AzureWorkItem[], month: string, today: string, absenceEpicId = defaultCapacitySettings.absenceEpicId) {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error('Choose a valid dashboard month.')
   const items = [...new Map(source.filter(item => item.state.trim().toLowerCase() !== 'removed').map(item => [item.key, item])).values()]
   const features = items.filter(item => item.workItemType === 'Feature'), tasks = items.filter(item => item.workItemType === 'Task')
@@ -117,7 +119,7 @@ export function azureInsights(source: AzureWorkItem[], month: string, today: str
   const npraFeatures = monthlyFeatures.filter(item => hasTag(item, 'NPRA Hours'))
   const npra = total(npraFeatures, 'originalEstimate')
   const dayCount = workingDays(month), dayCapacity = dayCount * 8
-  const absenceTasks = monthlyTasks.filter(item => epicOf(item)?.id === 37778)
+  const absenceTasks = monthlyTasks.filter(item => epicOf(item)?.id === absenceEpicId)
   const absence = total(absenceTasks, 'completedWork')
   const actualLessAbsence = actual.value == null ? null : actual.value - (absence.value ?? 0)
   const resourceNames = [...new Set(monthlyTasks.map(item => item.assignedTo).filter(Boolean))].sort()

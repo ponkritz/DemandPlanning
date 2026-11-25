@@ -30,6 +30,17 @@
   --epic:#f0a35e; --feature:#c58df0; --story:#53c5f5; --shadow:#00000040; --shadow-strong:#000000aa; --overlay:#000000b3;
   --card-border:var(--line-soft); --card-shadow:none; --card-shadow-hover:0 4px 14px #00000055; }
  }
+/* TVL-28: the due date highlight palette of Tool Validations — a row tint (-bg) and a marker colour (-line) per named colour. */
+:root {
+  --hl-red-bg:#fdecec; --hl-red-line:#dc2626; --hl-orange-bg:#fdeee2; --hl-orange-line:#ea580c; --hl-amber-bg:#fdf3dc; --hl-amber-line:#d97706; --hl-yellow-bg:#fbf7d2; --hl-yellow-line:#ca8a04;
+  --hl-green-bg:#e6f6ea; --hl-green-line:#16a34a; --hl-blue-bg:#e5effb; --hl-blue-line:#2563eb; --hl-purple-bg:#f1e9fb; --hl-purple-line:#9333ea; --hl-grey-bg:#eef0f3; --hl-grey-line:#6b7280; }
+:root[data-theme="dark"] {
+  --hl-red-bg:#3a1a1d; --hl-red-line:#f87171; --hl-orange-bg:#3a2416; --hl-orange-line:#fb923c; --hl-amber-bg:#352a12; --hl-amber-line:#fbbf24; --hl-yellow-bg:#312e10; --hl-yellow-line:#facc15;
+  --hl-green-bg:#14301e; --hl-green-line:#4ade80; --hl-blue-bg:#152741; --hl-blue-line:#60a5fa; --hl-purple-bg:#2a1d40; --hl-purple-line:#c084fc; --hl-grey-bg:#272b33; --hl-grey-line:#9ca3af; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --hl-red-bg:#3a1a1d; --hl-red-line:#f87171; --hl-orange-bg:#3a2416; --hl-orange-line:#fb923c; --hl-amber-bg:#352a12; --hl-amber-line:#fbbf24; --hl-yellow-bg:#312e10; --hl-yellow-line:#facc15;
+  --hl-green-bg:#14301e; --hl-green-line:#4ade80; --hl-blue-bg:#152741; --hl-blue-line:#60a5fa; --hl-purple-bg:#2a1d40; --hl-purple-line:#c084fc; --hl-grey-bg:#272b33; --hl-grey-line:#9ca3af; }
+ }
 * { box-sizing:border-box; }
 body { margin:0; min-width:320px; min-height:100vh; }
 button,input,select,textarea { font:inherit; }

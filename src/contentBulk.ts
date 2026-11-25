@@ -3,11 +3,10 @@ import type { ReleaseEntry } from './releaseSource.ts'
 import type { BoardHit } from './dpBoardMatch.ts'
 import { fullMatch, similarNote } from './dpBulk.ts'
 
-// CNB-01…02: Content releases (one per document Title, QV-52) get their Features in bulk: under Epic 22919, Release
-// Classification NA, DoD "All Documents are approved", one User Story "Review of Deliverables - <Feature title>" in the
-// current Sprint, the Time Writing story and the month Task with 4 h Original Estimate, all assigned to one person
-// chosen in the pop-up.
-export const contentEpicId = 22919
+// CNB-01…02: Content releases (one per document Title, QV-52) get their Features in bulk: under the Content bulk
+// creation Epic as mapped (QV-59; none built in), Release Classification NA, DoD "All Documents are approved", one
+// User Story "Review of Deliverables - <Feature title>" in the current Sprint, the Time Writing story and the month
+// Task with 4 h Original Estimate, all assigned to one person chosen in the pop-up.
 // DPF-09: no Release Classification line any more (it was "NA").
 export const contentBulk = { featureDoD: 'All Documents are approved', taskEstimate: 4 } as const
 

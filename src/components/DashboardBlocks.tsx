@@ -13,7 +13,7 @@ import { NarrativeFields } from './NarrativeFields'
 import { EditorTabs } from './EditorTabs'
 import { coloredColumnOf, editorCounts, editorTabLabels, editorTabsFor, filterError, firstErrorTab, panelId, splitProblems, tabId, type EditorTab } from '../chartEditor'
 import { currencyText, formatShown, insightRules, measureColumns, measuresFor, noneKey, noneLabel, secondLabel, valueText } from '../onDemandInsights'
-import { asInsight, noData, blockData, blockError, blockProblems, blockSubject, blockTypeLabel, blockTypes, categoryColumns, filterColumns, kpiText, kpiValue, periodColumns, periodNote, secondColumns, summaryExportTotals, summaryRows, tableLimit, withBlockType, withSource, type Dashboard, type DashboardBlock, type Dataset, type Narrowed, type SummaryRow } from '../dashboardPages'
+import { asInsight, noData, blockData, blockDataset, isToolSource, withStatusShown, blockError, blockProblems, blockSubject, blockTypeLabel, blockTypes, categoryColumns, filterColumns, kpiText, kpiValue, periodColumns, periodNote, secondColumns, summaryExportTotals, summaryRows, tableLimit, withBlockType, withSource, type Dashboard, type DashboardBlock, type Dataset, type Narrowed, type SummaryRow } from '../dashboardPages'
 
 // DSH-05, DSH-06 The blocks of a Dashboard page: a KPI tile (Metric, UI-STANDARDS §9), a bar, line or pie chart — the
 // On-Demand insight charts in the shared chart frame (OND-12: legend, Data labels, Table / Chart) — and a summary table
@@ -105,7 +105,9 @@ export function BlockDialog({ datasets, dashboard, block, isNew, preview, onCanc
   const [tab, setTab] = useState<EditorTab>('data')
   const [tried, setTried] = useState(false)
   const tabsId = useId()
-  const dataset = datasets.find((entry) => entry.key === draft.source) ?? datasets[0]
+  const source = datasets.find((entry) => entry.key === draft.source) ?? datasets[0]
+  // TVL-26: with "Show expiry status" off, the Tool Validations source without Status and Days left.
+  const dataset = blockDataset(source, draft)
   const page = dataset.page
   const edit = (change: Partial<DashboardBlock>) => { setDraft({ ...draft, ...change }); setError('') }
   const setFilter = (index: number, change: Partial<InsightFilter>) => edit({ filters: draft.filters.map((filter, at) => at === index ? { ...filter, ...change } : filter) })
@@ -149,6 +151,11 @@ export function BlockDialog({ datasets, dashboard, block, isNew, preview, onCanc
         </select>
         <small>{dataset.problem || dataset.note || `The rows of ${dataset.name} as saved in Git (${page.rows.length} row${page.rows.length === 1 ? '' : 's'}).`}</small>
       </label>
+      {isToolSource(draft.source) && !source.problem && <div className="dsh-status-toggle">
+        <label className="check"><input type="checkbox" checked={!draft.hideStatus} onChange={(event) => { setDraft(withStatusShown(source, draft, event.target.checked)); setError('') }} />Show expiry status</label>
+        <Info iconOnly label="About the expiry status"><ul><li><strong>Status</strong> (Overdue / Due soon / No due date / OK) and <strong>Days left</strong> use the <strong>team default window of {source.statusDays ?? 60} days</strong> (Tool Validations → Setup → Team settings), the same for every viewer — not a viewer’s own window of the Expiry list.</li><li>Switched off, this block neither offers nor shows Status and Days left — in the block, its table and its drill-down. Fields on them are replaced and their filters removed.</li></ul></Info>
+        <small>{draft.hideStatus ? 'Status and Days left are left out of this block.' : `Status and Days left use the team default window of ${source.statusDays ?? 60} days.`}</small>
+      </div>}
       {chart && <label>{categoryLabel}
         <select aria-label={categoryLabel} value={draft.category} onChange={(event) => edit({ category: event.target.value, second: draft.second === event.target.value ? '' : draft.second })}>
           {!categories.some((column) => column.id === draft.category) && <option value={draft.category}>— Choose —</option>}

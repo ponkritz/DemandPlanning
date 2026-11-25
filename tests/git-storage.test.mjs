@@ -6,9 +6,9 @@ const config = { owner: 'acme', repo: 'demand-planning-data', branch: 'main', pa
 const state = { baselineRules: [{ stream: 'CP', types: {}, items: [{ label: 'Documents', hoursPerUnit: 2, baseUnits: 14, driver: 'assets', unitsPerDriver: 11 }] }], releaseScopes: [{ release: 'CP | Care Pathways | v3.1', stream: 'CP', history: [{ at: '2026-10-01T10:00:00Z', drivers: { assets: 10 }, reason: 'Initial' }] }], resourceProfiles: { 'Zoë Müller': { region: 'Netherlands', role: 'QE' }, 'Arjun Rao': { region: 'India', role: 'Lead', peopleManager: true } } }
 const response = (status, body) => ({ ok: status >= 200 && status < 300, status, json: async () => body })
 
-test('TC-OND-02, TC-PGB-02 and TC-DSH-03: page, menu and dashboard writes require a confirmed private repository', async () => {
+test('TC-OND-02, TC-PGB-02, TC-DSH-03 and TC-TVL-01: selected Git writes require a confirmed private repository', async () => {
   const repoUrl = 'https://api.github.com/repos/acme/demand-planning-data'
-  const urls = ['on-demand/example.json', 'menu-layout.json', 'dashboards/example.json'].map((path) => `${repoUrl}/contents/${path}`)
+  const urls = ['on-demand/example.json', 'menu-layout.json', 'dashboards/example.json', 'tool-validations.json'].map((path) => `${repoUrl}/contents/${path}`)
   for (const metadata of [response(200, { visibility: 'public' }), response(200, { visibility: 'internal', private: true }), response(200, {}), response(403, {})]) {
     const calls = []
     const send = privateGitWrites(config, 'synthetic', async (target, init) => {
@@ -76,7 +76,8 @@ test('read: existing file, missing file in an accessible repo, inaccessible repo
   assert.equal(ok.sha, 'abc'); assert.deepEqual(ok.data, planningData(state))
   const missing = await readPlanningFile(config, 't', async (url) => url.includes('/contents/') ? response(404, {}) : response(200, { name: 'main' }))
   assert.deepEqual(missing, { data: null, sha: null })
-  await assert.rejects(readPlanningFile(config, 't', async () => response(404, {})), /not found, or the token cannot access it/)
+  // Another token (the probe's answer is kept per repository, branch and token: GIT-25).
+  await assert.rejects(readPlanningFile(config, 't2', async () => response(404, {})), /not found, or the token cannot access it/)
   await assert.rejects(readPlanningFile(config, 'bad', async () => response(401, {})), /rejected the token/)
 })
 
@@ -184,4 +185,43 @@ test('GIT-16: loading from Git asks first only when there are unsaved changes, a
   assert.match(asked[0], /replaces them with the copy in Git, and they are lost/)
   assert.doesNotMatch(asked[0], /Someone else saved/)
   assert.match(replaceUnsavedText(true), /^Someone else saved the planning data in Git after you started editing\./, 'a save conflict says why')
+})
+
+import { listEntries, listFolder, readBinaryFile, readRawFile, readTextAt, readTextFile, fileSha } from '../src/gitStorage.ts'
+// GIT-25 (KB-92): GitHub answers 404 for a missing file and for a repository the token cannot see. Each case uses its own
+// repository, as the probe's answer is kept for the session.
+const probeFetch = (branchStatus, calls = []) => async (url) => { calls.push(url); return url.includes('/branches/') || /\/commits\/[0-9a-f]{40}$/.test(url) ? response(branchStatus, { name: 'main' }) : response(404, { message: 'Not Found' }) }
+test('GIT-25: a 404 from a repository the token cannot read is an error, never a missing file — every reader (TC-GIT-18)', async () => {
+  const locked = { owner: 'acme', repo: 'moved-data-locked', branch: 'main', path: 'custom-streams.json' }
+  const fetchImpl = probeFetch(404)
+  const unreadable = /Repository acme\/moved-data-locked or branch main was not found, or the token cannot access it/
+  await assert.rejects(readTextFile(locked, 't', fetchImpl), unreadable)
+  await assert.rejects(readTextFile({ ...locked, path: 'access.json' }, 't', fetchImpl), unreadable)
+  await assert.rejects(readRawFile({ ...locked, path: 'windchill/a.json' }, 't', fetchImpl), unreadable)
+  await assert.rejects(readBinaryFile({ ...locked, path: 'pack.pptx' }, 't', fetchImpl), unreadable)
+  await assert.rejects(listFolder({ ...locked, path: 'windchill' }, 't', fetchImpl), unreadable)
+  await assert.rejects(listEntries({ ...locked, path: 'on-demand' }, 't', fetchImpl), unreadable)
+  await assert.rejects(fileSha({ ...locked, path: 'azure-views.json' }, 't', fetchImpl), unreadable)
+  await assert.rejects(readTextAt(locked, 't', 'a'.repeat(40), fetchImpl), /moved-data-locked or branch a{40} was not found, or the token cannot access it/)
+  // A token GitHub refuses (401) is reported as such, not as a missing file.
+  await assert.rejects(readTextFile({ ...locked, repo: 'moved-data-401' }, 't', async (url) => url.includes('/branches/') ? response(401, {}) : response(404, {})), /rejected the token/)
+})
+test('GIT-25: a 404 in a readable repository is a missing file; the repository is probed once and the answer reused (TC-GIT-18)', async () => {
+  const open = { owner: 'acme', repo: 'moved-data-open', branch: 'main', path: 'custom-streams.json' }
+  const calls = []
+  const fetchImpl = probeFetch(200, calls)
+  const reads = await Promise.all([readTextFile(open, 't', fetchImpl), readTextFile({ ...open, path: 'access.json' }, 't', fetchImpl), readRawFile({ ...open, path: 'w.json' }, 't', fetchImpl), listFolder({ ...open, path: 'windchill' }, 't', fetchImpl), fileSha({ ...open, path: 'azure-views.json' }, 't', fetchImpl)])
+  assert.deepEqual(reads, [{ text: null, sha: null }, { text: null, sha: null }, null, [], null])
+  assert.deepEqual(await readTextFile({ ...open, path: 'azure-views-reset.json' }, 't', fetchImpl), { text: null, sha: null })
+  assert.equal(calls.filter((url) => url.includes('/branches/')).length, 1, 'one probe for six reads, also when they run side by side')
+  assert.equal(calls.find((url) => url.includes('/branches/')), 'https://api.github.com/repos/acme/moved-data-open/branches/main')
+  // Another token has its own answer.
+  await readTextFile(open, 'other', fetchImpl)
+  assert.equal(calls.filter((url) => url.includes('/branches/')).length, 2)
+  // A file read (200) shows the repository readable: a later 404 needs no probe.
+  const seen = { owner: 'acme', repo: 'moved-data-seen', branch: 'main', path: 'access.json' }
+  const later = []
+  await readTextFile(seen, 't', async () => response(200, { type: 'file', encoding: 'base64', content: encodeBase64('{}'), sha: 'a1' }))
+  assert.deepEqual(await readTextFile({ ...seen, path: 'missing.json' }, 't', probeFetch(200, later)), { text: null, sha: null })
+  assert.equal(later.filter((url) => url.includes('/branches/')).length, 0)
 })

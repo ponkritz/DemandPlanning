@@ -1,4 +1,4 @@
-import { api, decodeBase64, encodePath, failure, GitConflictError, headers, signedGitMessage, type Fetch, type GitConfig } from './gitStorage.ts'
+import { api, assertReadable, decodeBase64, encodePath, failure, GitConflictError, headers, signedGitMessage, type Fetch, type GitConfig } from './gitStorage.ts'
 import { GitQueueError } from './gitSaveQueue.ts'
 import { assertNotViewingAs } from './viewAs.ts'
 
@@ -95,7 +95,8 @@ export async function commitFiles(config: GitConfig, token: string, build: (comm
 export async function branchExists(config: GitConfig, token: string, branch: string, fetchImpl: Fetch = fetch): Promise<boolean> {
   const found = await fetchImpl(`${repoUrl(config)}/git/ref/heads/${encodePath(branch)}`, { headers: headers(token), cache: 'no-store' })
   if (found.ok) return true
-  if (found.status === 404) return false
+  // GIT-25: a missing branch only in a repository this token can read.
+  if (found.status === 404) { await assertReadable(config, token, fetchImpl); return false }
   throw await failure(found, config, `read the branch ${branch}`)
 }
 // OND-35: the branch for the locks, made from the data branch when it is missing. 'refused': the token or the

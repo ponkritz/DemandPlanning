@@ -1,6 +1,6 @@
 import { clampSize, type GridSize } from './chartSize.ts'
 import { blankBlock, parseDashboard, type BlockType, type DashboardBlock, type Dataset } from './dashboardPages.ts'
-import { capacitySource, historySource, kpiSource, mySourcePattern, releasesSource } from './dashboardSources.ts'
+import { capacitySource, completedSource, historySource, kpiSource, mySourcePattern, releasesSource } from './dashboardSources.ts'
 import { arrangeSections, type SectionLayout } from './personalViews.ts'
 import type { ColorPins } from './onDemand.ts'
 
@@ -76,6 +76,8 @@ export function myBlankBlock(dataset: Dataset, id: string, type: BlockType = 'kp
   const period = (column: string) => dataset.page.columns.some((entry) => entry.id === column) ? column : ''
   if (dataset.key === capacitySource) return { ...block, measure: 'sum', value: 'cp-available', period: period('cp-month') }
   if (dataset.key === releasesSource) return { ...block, period: period('rl-month') }
+  // MYD-25: the Sum of Completed releases by Month (a line chart by Month with Running total is Pulse Check's Year chart).
+  if (dataset.key === completedSource) return { ...block, measure: 'sum', value: 'cr-completed', period: period('cr-month'), ...(type === 'line' ? { category: 'cr-month' } : {}) }
   if (dataset.key === historySource) return { ...block, measure: 'sum', value: 'hs-actual', period: period('hs-month') }
   if (dataset.key === kpiSource) return { ...block, measure: 'sum', value: 'kp-value', period: '' }
   if (dataset.key === 'azure:work') return { ...block, period: '', ...(type !== 'kpi' && type !== 'line' && dataset.page.columns.some((column) => column.id === 'aw-state') ? { category: 'aw-state' } : {}) }

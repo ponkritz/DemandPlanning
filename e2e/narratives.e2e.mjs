@@ -35,6 +35,7 @@ async function mockGitHub(context, files, role = 'Tool Owner') {
   const writes = [], waiting = []
   await context.route('https://dev.azure.com/**', (route) => route.fulfill({ status: 401, contentType: 'application/json', body: '{}' }))
   await context.route('https://api.github.com/**', (route) => {
+    if (/^\/repos\/[^/]+\/[^/]+\/branches\/[^/]+$/.test(new URL(route.request().url()).pathname)) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ name: 'main' }) }) // GIT-25: the branch can be read
     const request = route.request(), url = new URL(request.url())
     const json = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
     if (url.pathname === '/repos/example/storage') return json({ visibility: 'private', permissions: { push: true } })

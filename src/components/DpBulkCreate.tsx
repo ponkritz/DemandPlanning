@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { QePick } from './QePick'
+import { ClassPick, QePick } from './QePick'
 import { boardPeople } from '../contentBulk'
 import { classificationOf, epicFieldsFor, withEpicFields } from '../epicSetup'
 import { useEpicSetupFile } from '../useEpicSetup'
@@ -8,6 +8,7 @@ import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { FeatureSetups } from '../featureSetup'
 import { chooseSetup, withLinkedStories } from '../featureSetup'
 import { useBulkEpic } from '../useStreamEpics'
+import { bulkEpicMissing } from '../bulkEpics'
 import type { QeMappingFile } from '../qeMapping'
 import { bulkPlan, pickQe } from '../dpBulk'
 import type { BoardHit } from '../dpBoardMatch'
@@ -16,13 +17,13 @@ import { runInBackground } from '../backgroundJobs'
 import { adhocAfterLock } from '../planningLock'
 import { Modal, Notice } from './ui'
 
-// DPF-04: Create Features for the selected DP releases — under Epic 13946, each titled Program | Service | Release, with
-// the DoD and default User Stories of its release type (Release or PU set, Feature setup → Epic 13946), the Release
-// Classification (Major, Minor, MLD, Platform Update), the Time Writing story and month Task, all assigned to the QE from
+// DPF-04: Create Features for the selected DP releases — under the DP bulk creation Epic (QV-59), each titled Program |
+// Service | Release, with the DoD and default User Stories of its release type (that Epic's Feature setup), the Release
+// Classification (the Epic’s list, detected from the release number by its rules, DPF-11), the Time Writing story and month Task, all assigned to the QE from
 // the QE Mapping, in the PI / Sprint chosen. One after another as a background job; releases that cannot be created
 // are listed with the reason and skipped.
 export function DpBulkCreate({ rows, azure, featureSetup, qeMapping, featureMatch, onClose }: { rows: AzureWorkItem[]; azure: AzureWorkspace; featureSetup?: FeatureSetups | null; qeMapping?: QeMappingFile | null; featureMatch: (row: AzureWorkItem) => BoardHit | undefined; onClose: () => void }) {
-  // QV-59: the DP bulk Epic — mine, else shared, else built in (13946).
+  // QV-59: the DP bulk Epic — mine, else shared; none built in (0: not set, Create is blocked).
   const dpEpicId = useBulkEpic('DP').epicId ?? 0
   const unlinked = chooseSetup(featureSetup, dpEpicId, true).setup
   const epicFile = useEpicSetupFile()
@@ -35,7 +36,7 @@ export function DpBulkCreate({ rows, azure, featureSetup, qeMapping, featureMatc
   // the DoD and User Stories (DPF-07).
   const classes = classificationOf(epicFile, dpEpicId)
   const [classPicks, setClassPicks] = useState<Record<string, string>>({})
-  const mappedPlan = bulkPlan(rows, { setup, qeMapping, board: azure.items, featureMatch, classes: classPicks, classValues: classes.values })
+  const mappedPlan = bulkPlan(rows, { setup, qeMapping, board: azure.items, featureMatch, classes: classPicks, classValues: classes.values, classRules: classes.rules })
   const rawPlan = pickQe(mappedPlan, picks, (line) => String(line.row.id), people)
   // EPS-03: the Epic setup's fields of the bulk Epic.
   const plan = withEpicFields(rawPlan, epicFieldsFor(epicFile, dpEpicId), (line) => [line.row], { index: classes.fieldIndex, of: (line) => line.classification })
@@ -55,7 +56,7 @@ export function DpBulkCreate({ rows, azure, featureSetup, qeMapping, featureMatc
     return () => { active = false }
   }, [azure.config, azure.pat])
   const pair = pairs?.[choice]
-  const blocked = azure.isSample ? 'Synthetic sample data is loaded: creating in Azure DevOps is disabled.' : !azure.config || !azure.pat ? 'Connect the QMS-0025 Time Writing connection with a PAT first (My settings → Servers and PATs).' : !epic ? `Epic #${dpEpicId} is not on the loaded QMS-0025 board: load the board first.` : !pair ? (error || 'Loading the PI / Sprint…') : !ready.length ? 'None of the selected releases can be created (see the reasons).' : ''
+  const blocked = azure.isSample ? 'Synthetic sample data is loaded: creating in Azure DevOps is disabled.' : !azure.config || !azure.pat ? 'Connect the QMS-0025 Time Writing connection with a PAT first (My settings → Servers and PATs).' : !dpEpicId ? bulkEpicMissing('DP') : !epic ? `Epic #${dpEpicId} is not on the loaded QMS-0025 board: load the board first.` : !pair ? (error || 'Loading the PI / Sprint…') : !ready.length ? 'None of the selected releases can be created (see the reasons).' : ''
 
   function create() {
     if (blocked || !azure.config || !epic || !pair) return
@@ -84,10 +85,12 @@ export function DpBulkCreate({ rows, azure, featureSetup, qeMapping, featureMatc
     <div className="dp-bulk">
       <p className="muted">Under Epic #{dpEpicId}{epic ? ` “${epic.title}”` : ''}: each Feature gets the DoD and User Stories of the {classes.label} chosen on its row (Admin → Epic &amp; Feature setup → Epic {dpEpicId}; a value without its own set uses the Epic’s default), its Time Writing story and month Task, all assigned to the QE from the QE Mapping.</p>
       <div className="azure-table"><table>
-        <thead><tr><th scope="col">Feature title</th>{classes.values.length > 0 && <th scope="col">{classes.label}</th>}<th scope="col">User Stories</th><th scope="col">QE</th><th scope="col">Result</th></tr></thead>
+        <thead><tr><th scope="col">Release name</th><th scope="col">Version</th>{classes.values.length > 0 && <th scope="col">{classes.label}</th>}<th scope="col">Feature title</th><th scope="col">User Stories</th><th scope="col">QE</th><th scope="col">Result</th></tr></thead>
         <tbody>{plan.map((line) => <tr key={line.row.id} className={line.skip ? 'muted' : undefined}>
+          <td>{line.name}</td>
+          <td>{line.version || '—'}</td>
+          {classes.values.length > 0 && <td><ClassPick label={line.title} field={classes.label} values={classes.values} value={line.classification} detected={line.detected} version={line.version} onPick={(value) => setClassPicks((current) => ({ ...current, [String(line.row.id)]: value }))} /></td>}
           <td>{line.title}</td>
-          {classes.values.length > 0 && <td><select aria-label={`${classes.label} of ${line.title}`} value={line.classification} onChange={(event) => setClassPicks((current) => ({ ...current, [String(line.row.id)]: event.target.value }))}><option value="">— the Epic’s default —</option>{[...classes.values, ...(line.classification && !classes.values.includes(line.classification) ? [line.classification] : [])].map((value) => <option key={value} value={value}>{value}</option>)}</select></td>}
           <td>{line.set ? line.set.stories.map((story) => story.title.split(' :')[0]).join(', ') || 'none' : '—'}</td>
           <td>{line.baseSkip ? (line.qe || '—') : <QePick label={line.title} email={line.email} mapped={mappedPlan.find((entry) => String(entry.row.id) === String(line.row.id))?.qe} people={people} onPick={(email) => setPicks((current) => ({ ...current, [String(line.row.id)]: email }))} />}</td>
           <td>{line.skip ? <span className="warning-text">Skipped: {line.skip}</span> : <>Will be created{line.note && <small className="warning-text"> — {line.note}</small>}{line.warned.length > 0 && <small className="warning-text"> — empty {line.warned.join(', ')}</small>}</>}</td>

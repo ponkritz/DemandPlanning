@@ -20,18 +20,19 @@ export function PageNameField({ value, onChange, clash }: { value: string; onCha
 // shown, the work email kept. Co-owners not in that list stay chosen ("not in Azure DevOps"); people without a work
 // email are listed disabled with the reason; at most 50.
 const ownersHelp = 'Pick people from Admin → People & roles → People (Azure DevOps team members and assignees); their work email is kept.'
-function OwnersField({ label, value, onChange, help }: { label: string; value: string[]; onChange: (value: string[]) => void; help: string }) {
+// TVL-11: also the co-owners of the Tool Validations master list (disabled with its reason for anyone but a Tool Owner).
+export function OwnersField({ label, value, onChange, help, disabled = '' }: { label: string; value: string[]; onChange: (value: string[]) => void; help: string; disabled?: string }) {
   const options = ownerOptions(useContext(OwnerPeopleContext), value)
   const reasons = new Map(options.map((option) => [option.key, option.disabled]))
-  return <div className="pgb-owners"><MultiSelect label={label} search selectAll={false} emptyLabel="Nobody" options={options.map((option) => [option.key, option.label])} value={value} onChange={(keys) => onChange(ownersFromList(keys))} disabledReason={(key) => reasons.get(key) ?? ''} /><small>{help} {ownersHelp}</small></div>
+  return <div className="pgb-owners"><MultiSelect label={label} search selectAll={false} emptyLabel="Nobody" disabled={Boolean(disabled)} title={disabled || undefined} options={options.map((option) => [option.key, option.label])} value={value} onChange={(keys) => onChange(ownersFromList(keys))} disabledReason={(key) => reasons.get(key) ?? ''} /><small>{disabled || help} {disabled ? '' : ownersHelp}</small></div>
 }
 // DSH-01: an On-Demand Dashboard holds blocks, a table page rows — a page keeps its family: Edit offers Table and Table + Insights
 // for a table page and On-Demand Dashboard only for a dashboard; the other choice is disabled with the reason.
 const lockedReason = (locked: 'dashboard' | 'table' | undefined, key: PageKind) => locked === 'dashboard' && key !== 'dashboard' ? 'An On-Demand Dashboard stays a dashboard: it holds blocks, not rows. Add a Table page instead.' : locked === 'table' && key === 'dashboard' ? 'A table page cannot become an On-Demand Dashboard: its rows would be hidden. Add an On-Demand Dashboard page instead.' : ''
-function KindField({ value, onChange, locked }: { value: PageKind; onChange: (kind: PageKind) => void; locked?: 'dashboard' | 'table' }) {
+export function KindField({ value, onChange, locked, hideStreamNote = false }: { value: PageKind; onChange: (kind: PageKind) => void; locked?: 'dashboard' | 'table'; hideStreamNote?: boolean }) {
   return <fieldset className="pgb-kinds"><legend>Page type</legend>
     {pageKinds.map((kind) => { const reason = lockedReason(locked, kind.key); return <div key={kind.key} className="pgb-kind"><label className="check" title={reason || undefined}><input type="radio" name="page-kind" aria-describedby={`page-kind-${kind.key}`} disabled={Boolean(reason)} checked={value === kind.key} onChange={() => onChange(kind.key)} />{kind.label}</label><small id={`page-kind-${kind.key}`}>{reason || kind.detail}</small></div> })}
-    <small className="muted">A Release page for a new stream is added as a custom stream: Admin → Streams → Stream mapping → ＋ Add stream….</small>
+    {!hideStreamNote && <small className="muted">A Release page for a new stream is added as a custom stream: Admin → Streams → Stream mapping → ＋ Add stream….</small>}
   </fieldset>
 }
 function IconField({ value, onChange }: { value: string; onChange: (icon: string) => void }) {

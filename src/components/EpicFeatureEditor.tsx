@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import type { AzureWorkItem } from '../domain'
-import { classificationOf, copyEpicFields, emptyEpicSetup, newStoryTemplateId, templatesFor, upsertStoryTemplate, type StoryTemplateItem, featureFromFields, fieldTypes, ifEmptyOptions, intoOptions, maxEpicFields, serializeEpicSetup, upsertEpicFields, type EpicField, type EpicFields, type EpicSetupFile } from '../epicSetup'
-import { chooseSetup, classSetKey, dpEpicId, emptySetup, fieldKey, inheritFields, serializeFeatureSetup, setForClass, setupFor, type EpicSetup, type FeatureSetupFile, type InheritField, type SetupDefaults, type StoryTemplate } from '../featureSetup'
+import { classificationOf, classRuleProblems, releaseParts, toggleClassRule, usualClassRules, type ClassRule, copyEpicFields, emptyEpicSetup, newStoryTemplateId, templatesFor, upsertStoryTemplate, type StoryTemplateItem, featureFromFields, fieldTypes, ifEmptyOptions, intoOptions, maxEpicFields, serializeEpicSetup, upsertEpicFields, type EpicField, type EpicFields, type EpicSetupFile } from '../epicSetup'
+import { chooseSetup, classSetKey, emptySetup, fieldKey, inheritFields, serializeFeatureSetup, setForClass, setupFor, type EpicSetup, type FeatureSetupFile, type InheritField, type SetupDefaults, type StoryTemplate } from '../featureSetup'
 import { useCan } from '../useCan'
 import type { EpicSetupStore } from '../useEpicSetup'
 import type { FeatureSetup } from '../useFeatureSetup'
@@ -68,7 +68,7 @@ export function EpicFeatureEditor({ setup, epicSetup, git, items, qeColumnNames 
   const resolved = isAll ? undefined : chooseSetup({ shared: sharedFile, personal: personalFile }, epicId, !useMine).setup
   const inheritsHere = (field: InheritField) => !entry || (entry.inherits ?? []).includes(field)
   const custom: Record<Section, boolean> = { fields: Boolean(fieldsEntry?.fields.length), dod: !isAll && !inheritsHere('featureDoD'), stories: !isAll && !inheritsHere('stories'), task: !isAll && !inheritsHere('estimate') }
-  const hasSets = !isAll && (epicId === dpEpicId || epicId === dpBulkEpic || epicId === ioccBulkEpic)
+  const hasSets = !isAll && (epicId === dpBulkEpic || epicId === ioccBulkEpic)
   const classes = classificationOf(epicFile, epicId)
   const value = isAll ? '' : cls
   const ownKey = value ? classSetKey(entry, value) : undefined
@@ -143,6 +143,9 @@ export function EpicFeatureEditor({ setup, epicSetup, git, items, qeColumnNames 
   }
 
   async function save() {
+    // DPF-10: a part of the release number given to two values of a Release Classification is not saved.
+    const ruleProblems = dirtyEpic ? (epicSetup.draft?.epics ?? []).flatMap((item) => item.fields.flatMap((field) => classRuleProblems(field.classRules).map((problem) => `Epic #${item.epicId} ${field.label}: ${problem}`))) : []
+    if (ruleProblems.length) { setResult({ tone: 'error', text: `Not saved: ${ruleProblems.join(' ')}` }); return }
     const missingDoD = [...(dirtyShared ? sharedFile.epics : []), ...(dirtyPersonal ? personalFile.epics : [])].filter((item) => !(item.inherits ?? []).includes('featureDoD') && !item.featureDoD.trim())
     if (missingDoD.length) { setResult({ tone: 'error', text: `Not saved: give Epic ${missingDoD.map((item) => `#${item.epicId}`).join(', ')} a Definition of Done, or switch off “Customize for this Epic”.` }); return }
     setBusy(true)
@@ -289,8 +292,11 @@ function StoriesEditor({ stories, disabled, onChange, templates, offered, canSav
 
 function FieldsEditor({ entry, file, disabled, onChange }: { entry: EpicFields; file: EpicSetupFile; disabled: boolean; onChange: (update: (value: EpicFields) => void) => void }) {
   const edit = (index: number, update: Partial<EpicField>) => onChange((value) => { value.fields[index] = { ...value.fields[index], ...update }; if (value.fields[index].type !== 'list') delete value.fields[index].list })
+  // DPF-12: Release name and Version fields first, then the Release Classification, then the others (as saved) — the
+  // order shown here only; the Title and Description keep the saved order.
+  const shown = entry.fields.map((field, index) => ({ field, index })).sort((a, b) => fieldRank(a.field) - fieldRank(b.field) || a.index - b.index)
   return <div className="efe-list">
-    {entry.fields.map((field, index) => <div key={index} className="efe-fieldrow">
+    {shown.map(({ field, index }) => <Fragment key={index}><div className="efe-fieldrow">
       <label>Field<input aria-label={`Field ${index + 1} label`} value={field.label} maxLength={60} disabled={disabled} onChange={(event) => edit(index, { label: event.target.value })} /><small className="muted">{'{'}{fieldKey(field.label)}{'}'}</small></label>
       <label>Type<select aria-label={`${field.label} type`} value={field.type} disabled={disabled} onChange={(event) => edit(index, { type: event.target.value as EpicField['type'] })}>{fieldTypes.map((type) => <option key={type.key} value={type.key}>{type.label}</option>)}</select></label>
       {field.type === 'list' ? <label>Values<select aria-label={`${field.label} list`} value={field.list ?? ''} disabled={disabled} onChange={(event) => edit(index, { list: event.target.value || undefined })}><option value="">Choose a list…</option>{file.lists.map((list) => <option key={list.id} value={list.id}>{list.name}</option>)}</select></label>
@@ -298,8 +304,48 @@ function FieldsEditor({ entry, file, disabled, onChange }: { entry: EpicFields; 
       <label>If empty<select aria-label={`${field.label} if empty`} value={field.ifEmpty} disabled={disabled} onChange={(event) => edit(index, { ifEmpty: event.target.value as EpicField['ifEmpty'] })}>{ifEmptyOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}</select></label>
       <label>Goes into<select aria-label={`${field.label} goes into`} value={field.into} disabled={disabled} onChange={(event) => edit(index, { into: event.target.value as EpicField['into'] })}>{intoOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}</select></label>
       {!disabled && <button type="button" className="text-button danger-text" aria-label={`Remove ${field.label}`} onClick={() => onChange((value) => { value.fields.splice(index, 1) })}>Remove</button>}
-    </div>)}
+    </div>
+    {field.type === 'list' && fieldKey(field.label) === 'releaseclassification' && <ClassRulesEditor field={field} values={file.lists.find((list) => list.id === field.list)?.values ?? []} disabled={disabled} onChange={(rules) => onChange((value) => { if (rules.length) value.fields[index].classRules = rules; else delete value.fields[index].classRules })} />}
+    </Fragment>)}
     {!disabled && <button type="button" className="ghost efe-add" disabled={entry.fields.length >= maxEpicFields} onClick={() => onChange((value) => { value.fields.push({ label: '', type: 'text', ifEmpty: 'optional', into: 'description' }) })}>＋ Add field</button>}
     <label className="efe-field">Title pattern<input aria-label="Title pattern" value={entry.titlePattern ?? ''} disabled={disabled} placeholder={entry.fields.filter((field) => field.into !== 'description').map((field) => `{${fieldKey(field.label)}}`).join(' | ') || 'e.g. {program} | {feature}'} onChange={(event) => onChange((value) => { if (event.target.value.trim()) value.titlePattern = event.target.value; else delete value.titlePattern })} /></label>
   </div>
+}
+
+// DPF-12: the place of a field in the setup screen — Release name, Version, Release Classification, then the rest.
+const nameKeys = ['releasename', 'name'], versionKeys = ['version', 'releaseversion', 'releasenumber', 'release']
+function fieldRank(field: EpicField) {
+  const key = fieldKey(field.label)
+  return nameKeys.includes(key) ? 0 : versionKeys.includes(key) ? 1 : key === 'releaseclassification' ? 2 : 3
+}
+
+// DPF-10: per value of the Release Classification list, the parts of the release number that give it (the deepest
+// non-zero part decides). A part may be given to one value only: a part given twice is named and the setup is not saved.
+// Without rules the value named like the release type (Major, Minor, MLD, Platform Update) is pre-filled, as before;
+// "Fill with the usual rules" proposes those for the values named so.
+function ClassRulesEditor({ field, values, disabled, onChange }: { field: EpicField; values: string[]; disabled: boolean; onChange: (rules: ClassRule[]) => void }) {
+  const rules = field.classRules ?? []
+  const problems = classRuleProblems(rules)
+  const usual = usualClassRules(values)
+  const stale = rules.filter((rule) => !values.includes(rule.value)).map((rule) => rule.value)
+  return <fieldset className="efe-rules">
+    <legend>Detect the {field.label} from the release number</legend>
+    <small className="muted">For each value, tick the part of the release number that changes for it to apply — the deepest non-zero part decides (5.0 → x.0, 5.2 → x.y, 5.2.1 → x.y.z, 5.2.1.3 → x.y.z.w). DP and IOCC Create Features pre-fill each release with the value found; a release number that is not numeric gets none.</small>
+    {values.length ? <div className="azure-table"><table className="efe-rules-table">
+      <thead><tr><th scope="col">Value</th>{releaseParts.map((part) => <th key={part.key} scope="col">{part.label}<small className="muted">{part.detail}</small></th>)}</tr></thead>
+      <tbody>{values.map((value) => <tr key={value}><td>{value}</td>{releaseParts.map((part) => {
+        const owner = rules.find((rule) => rule.parts.includes(part.key))
+        const mine = Boolean(rules.find((rule) => rule.value === value)?.parts.includes(part.key))
+        return <td key={part.key}><input type="checkbox" aria-label={`${value}: ${part.label}`} checked={mine} disabled={disabled} title={owner && !mine ? `Given to ${owner.value}` : undefined} onChange={(event) => onChange(toggleClassRule(rules, value, part.key, event.target.checked))} /></td>
+      })}</tr>)}</tbody>
+    </table></div> : <small className="muted">Choose a list with values first.</small>}
+    {problems.length > 0 && <Notice tone="error">Not saved until fixed: {problems.join(' ')}</Notice>}
+    {stale.length > 0 && <Notice tone="warning">Rules for values no longer in the list are not used: {stale.join(', ')}.</Notice>}
+    {!rules.length && <small className="muted">No rules saved: the value named like the release type (Major, Minor, MLD, Platform Update) is pre-filled, as before.</small>}
+    {!disabled && <div className="button-row">
+      {rules.length > 0 && <button type="button" className="text-button danger-text" onClick={() => onChange([])}>Remove the rules</button>}
+      <button type="button" className="ghost" disabled={!usual.length} onClick={() => onChange(usual)}>Fill with the usual rules</button>
+      {!usual.length && <small className="muted">No value is named Major, Minor, MLD, Platform Update or PU.</small>}
+    </div>}
+  </fieldset>
 }

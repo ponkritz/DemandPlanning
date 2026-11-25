@@ -1,9 +1,10 @@
 import test, { after, before } from 'node:test'
 import assert from 'node:assert/strict'
 import { cachedRoles, loadSample, navigate, openPage, openPerson, peopleSource, profileItem, rolesFile, startApp, text, toggleFilter } from './helpers.mjs'
+import { fakeGitHub } from './fakeGitHub.mjs'
 
-// Shell, navigation and first-run scenarios of the UAT (TC-NAV-01, TC-NAV-03, TC-NAV-37, TC-HIS-01, TC-ACC-04, TC-NAV-31, TC-NAV-33, TC-UI-01, TC-SMP-01,
-// TC-UPD-02, TC-GIT-06, TC-GIT-16, TC-SET-05), automated against the built web app.
+// Shell, navigation and first-run scenarios of the UAT (TC-NAV-01, TC-NAV-03, TC-NAV-37, TC-NAV-52, TC-HIS-01, TC-ACC-04, TC-NAV-31, TC-NAV-33, TC-UI-01, TC-SMP-01,
+// TC-UPD-02, TC-GIT-06, TC-GIT-16, TC-GIT-17, TC-GIT-20, TC-SET-05), automated against the built web app.
 let app
 before(async () => { app = await startApp() })
 after(async () => { await app.stop() })
@@ -125,6 +126,22 @@ test('TC-NAV-37: Expand all and Collapse all open and close every menu heading, 
   assert.ok((await states()).every((state) => state === 'true'), 'every heading open')
   assert.ok(await page.locator('.sidebar nav button', { hasText: 'My Tasks [Board]' }).isVisible(), 'pages are shown again')
   assert.ok(await expandAll.isDisabled())
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
+test('TC-NAV-52: Release Details is one list — BRITE, every stream A–Z, then Import Windchill export; no sub-headings, and old collapsed sub-lists are forgotten', async () => {
+  // An earlier version kept its two Release Details sub-lists collapsed in this browser: the keys are dropped.
+  const { page, context, errors } = await openPage(app, { roles: 'Tool Owner', init: () => { localStorage.setItem('demand-planning-nav-collapsed-v1', JSON.stringify(['release:ads', 'release:windchill'])) } })
+  const section = page.locator('.sidebar nav .nav-section', { hasText: 'RELEASE DETAILS' })
+  await section.locator('.nav-items button', { hasText: 'Tool Validations' }).waitFor()
+  assert.equal(await section.locator('.nav-subgroup, .nav-subsection').count(), 0, 'no Azure DevOps Server / Windchill exports sub-headings')
+  const labels = (await section.locator('.nav-items button').allInnerTexts()).map((entry) => entry.replace(/^\s*\S+\s*/u, '').replace(/\s+/g, ' ').trim())
+  assert.deepEqual(labels, ['BRITE', 'Content', 'CP', 'DP', 'ECP', 'IOCC', 'S&S IT', 'Tool Validations', 'Import Windchill export'])
+  assert.ok(await page.getByRole('button', { name: 'Expand all', exact: true }).isDisabled(), 'nothing is collapsed: the old keys do not count')
+  // A stream not set up yet still leads to its setup: ＋ ECP opens the import named after it (CON-85).
+  await section.locator('button.nav-missing', { hasText: 'ECP' }).click()
+  await page.getByText('Import the ECP export').first().waitFor()
   assert.deepEqual(errors, [])
   await context.close()
 })
@@ -272,7 +289,7 @@ test('TC-GIT-06: Connect Git storage starts with the team repository prefilled; 
   await context.close()
 })
 
-test('TC-GIT-16: a connection still saved to the old data repository shows a notice; Switch moves it to the new one, same branch and file', async () => {
+test('TC-GIT-16, TC-GIT-17: a connection still saved to the old data repository shows a notice; Switch moves it to the new one, same branch and file, and Change connection then shows the new one', async () => {
   const old = { owner: 'ponkritz', repo: 'DemandPlanningStorage', branch: 'main', path: 'planning-data.json' }
   // The init script runs on every load: it saves the old connection only once, so a reload keeps what the app saved.
   const { page, context, errors } = await openPage(app, { init: (config) => {
@@ -288,6 +305,9 @@ test('TC-GIT-16: a connection still saved to the old data repository shows a not
   await notice.waitFor()
   assert.match(await text(notice), /The team data has moved to philips-internal\/InD_DemandPlanningStorage\. This app is still connected to ponkritz\/DemandPlanningStorage, which is no longer updated\./)
   assert.deepEqual(JSON.parse(await page.evaluate(() => localStorage.getItem('demand-planning-git-storage-v1') ?? 'null')), old, 'nothing changes by itself')
+  // KB-90: the Git storage panel is shown with the old connection before the switch.
+  await navigate(page, 'Data & sharing')
+  await page.getByRole('button', { name: 'Change connection…' }).waitFor()
   asked.length = 0
   const read = page.waitForRequest((request) => new URL(request.url()).pathname.startsWith('/repos/philips-internal/InD_DemandPlanningStorage/'))
   await notice.getByRole('button', { name: 'Switch to philips-internal/InD_DemandPlanningStorage' }).click()
@@ -295,6 +315,15 @@ test('TC-GIT-16: a connection still saved to the old data repository shows a not
   await notice.waitFor({ state: 'detached' })
   assert.deepEqual(JSON.parse(await page.evaluate(() => localStorage.getItem('demand-planning-git-storage-v1') ?? 'null')), { ...old, owner: 'philips-internal', repo: 'InD_DemandPlanningStorage' })
   assert.equal(await page.evaluate(() => localStorage.getItem('demand-planning-git-token-v1')), 'test-token', 'the token is kept')
+  // TC-GIT-17 (GIT-13, KB-90): Change connection… opens with the connection in use now, not the one the panel was shown with.
+  await page.getByRole('button', { name: 'Change connection…' }).click()
+  const form = page.getByRole('dialog').filter({ hasText: 'Change Git storage' })
+  await form.waitFor()
+  assert.equal(await form.getByLabel('Owner (user or organisation)').inputValue(), 'philips-internal')
+  assert.equal(await form.getByLabel('Repository', { exact: true }).inputValue(), 'InD_DemandPlanningStorage')
+  assert.equal(await form.getByLabel('Branch', { exact: true }).inputValue(), 'main')
+  await form.getByRole('button', { name: 'Cancel' }).click()
+  await form.waitFor({ state: 'detached' })
   // After a reload the start-up reads go to the new repository only (reads started before the click may still finish).
   asked.length = 0
   const views = page.waitForRequest((request) => new URL(request.url()).pathname === '/repos/philips-internal/InD_DemandPlanningStorage/contents/planning-data.json')
@@ -303,6 +332,55 @@ test('TC-GIT-16: a connection still saved to the old data repository shows a not
   assert.equal(await page.locator('.notice.git-moved').count(), 0, 'no notice after the switch')
   assert.deepEqual(asked.filter((path) => path.startsWith('/repos/ponkritz/')), [], 'nothing is read from the old repository')
   assert.deepEqual(errors.filter((error) => !/404|Not Found/.test(error)), [])
+  await context.close()
+})
+
+test('TC-GIT-20: a data repository the token cannot read (404 for everything) — the custom streams, connection and PAT here stay, the error says the repository cannot be read, and Set up roles is not offered', async () => {
+  // Synthetic: Git storage points to a new repository this token cannot see; this browser has custom streams, a
+  // connection with its server's PAT (synced from the earlier repository) cached from before.
+  const streams = JSON.stringify({ schema: 1, kind: 'custom-streams', streams: [{ name: 'Lab Systems', rule: 'title', fuzzy: false }] })
+  const connection = { id: 'lab', url: 'https://dev.azure.com/example-org/Lab', reason: 'Lab Systems', viewName: 'Lab Systems', role: 'backlog-view', query: 'SELECT [System.Id] FROM WorkItems', showInMenu: true, token: '' }
+  const { page, context, errors } = await openPage(app, { init: ({ streams, connection }) => {
+    if (localStorage.getItem('demand-planning-git-storage-v1')) return
+    localStorage.setItem('demand-planning-git-storage-v1', JSON.stringify({ owner: 'example-org', repo: 'new-storage', branch: 'main', path: 'planning-data.json' }))
+    localStorage.setItem('demand-planning-git-token-v1', 'test-token')
+    localStorage.setItem('demand-planning-custom-streams-v1', streams)
+    localStorage.setItem('demand-planning-azure-connection-profiles-v1', JSON.stringify([connection]))
+    localStorage.setItem('demand-planning-server-pats-v1', JSON.stringify({ 'https://dev.azure.com/example-org': 'synthetic-pat' }))
+    localStorage.setItem('demand-planning-views-git-baseline-v1', JSON.stringify({ lab: 'synced from the earlier repository' }))
+  }, initArg: { streams, connection } })
+  const guide = page.getByRole('dialog').filter({ hasText: 'Could not fetch from Azure DevOps' })
+  await page.addLocatorHandler(guide, async () => { await guide.getByRole('button', { name: 'Close', exact: true }).last().click() })
+  await context.route('https://dev.azure.com/**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{"value":[],"workItems":[]}' }))
+  // GitHub answers 404 for everything in the repository, the branch included: the token cannot see it.
+  const asked = []
+  await context.route('https://api.github.com/**', (route) => { asked.push(new URL(route.request().url()).pathname); return route.fulfill({ status: 404, contentType: 'application/json', body: '{"message":"Not Found"}' }) })
+  const viewsRead = page.waitForEvent('requestfinished', (request) => request.url().includes('/new-storage/contents/azure-views'))
+  await page.reload()
+  // The read-only notice says the repository cannot be read, not "no access roles yet", and offers no Set up roles.
+  const notice = page.locator('.notice.access-read-only')
+  await notice.filter({ hasText: 'the data repository cannot be read' }).waitFor()
+  assert.match(await text(notice), /Read-only: the data repository cannot be read, so the access roles \(access\.json\) cannot be loaded and no changes can be made: Repository example-org\/new-storage or branch main was not found, or the token cannot access it\. Nothing in this browser was cleared\./)
+  assert.equal(await notice.getByRole('button', { name: /Set up roles/ }).count(), 0)
+  assert.equal(await notice.getByRole('button', { name: 'Open Git storage →' }).count(), 1)
+  // The custom stream is still in the menu, the custom streams, the connection and its PAT are still in this browser.
+  await page.locator('.sidebar nav .nav-section', { hasText: 'RELEASE DETAILS' }).getByRole('button', { name: /Lab Systems/ }).first().waitFor()
+  // Admin → Data & sharing: the Git storage panel says why, also for the connection setup; People & roles offers no Set up roles.
+  await navigate(page, 'Data & sharing')
+  await page.locator('.notice', { hasText: 'Repository example-org/new-storage or branch main was not found, or the token cannot access it.' }).first().waitFor()
+  await page.locator('.notice.git-views-alert', { hasText: 'The connections were not synced from Git: Repository example-org/new-storage or branch main was not found, or the token cannot access it. The connections and PATs here are kept.' }).waitFor()
+  // The start-up sync of the connection setup has read from Git (and failed): what this browser had is all still there.
+  await viewsRead
+  const probes = asked.filter((path) => path === '/repos/example-org/new-storage/branches/main').length
+  const kept = await page.evaluate(() => ({ streams: localStorage.getItem('demand-planning-custom-streams-v1'), connections: JSON.parse(localStorage.getItem('demand-planning-azure-connection-profiles-v1') ?? '[]').map((entry) => entry.id), pat: JSON.parse(localStorage.getItem('demand-planning-server-pats-v1') ?? '{}')['https://dev.azure.com/example-org'] }))
+  assert.deepEqual(kept, { streams, connections: ['lab'], pat: 'synthetic-pat' })
+  await navigate(page, 'People & roles')
+  await page.locator('.notice', { hasText: 'access.json: Repository example-org/new-storage or branch main was not found' }).first().waitFor()
+  assert.equal(await page.getByRole('button', { name: /Set up roles/ }).count(), 0, 'no Set up roles while the repository cannot be read')
+  assert.equal(await page.getByText('No access roles yet').count(), 0)
+  // One probe of the branch for all the start-up reads (planning data, roles, custom streams, connection setup, …).
+  assert.equal(probes, 1, `one probe for ${asked.filter((path) => path.includes('/contents/')).length} reads`)
+  assert.deepEqual(errors.filter((error) => !/404|Not Found|cannot access it/.test(error)), [])
   await context.close()
 })
 
@@ -1206,6 +1284,7 @@ test('TC-GIT-08: while the app is open, newer planning data in Git loads by itse
   let accessRead = () => undefined
   const accessReadAgain = new Promise((resolve) => { accessRead = resolve })
   await context.route('https://api.github.com/**', (route) => {
+    if (/^\/repos\/[^/]+\/[^/]+\/branches\/[^/]+$/.test(new URL(route.request().url()).pathname)) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ name: 'main' }) }) // GIT-25: the branch can be read
     const url = new URL(route.request().url())
     if (url.pathname === '/repos/example/storage') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ permissions: { push: false } }) })
     const match = /^\/repos\/example\/storage\/contents\/?(.*)$/.exec(url.pathname)
@@ -1426,15 +1505,51 @@ test('TC-QV-40: Stream mapping → Bulk creation Epics — shared and my own Epi
   const panel = page.locator('.bulk-epics')
   await panel.waitFor()
   const row = (stream) => panel.getByRole('row', { name: new RegExp(`^${stream}`) })
-  assert.match(await text(row('DP')), /#13946.*built in/)
-  assert.match(await text(row('IOCC')), /not set/)
-  await panel.getByLabel('IOCC shared bulk Epic').fill('21000')
-  await row('IOCC').getByRole('button', { name: 'Save' }).click()
-  assert.match(await text(row('IOCC')), /#21000.*shared/)
+  // No Epic is built in: every stream is "not set" until it is mapped.
+  for (const stream of ['DP', 'IOCC', 'Content']) assert.match(await text(row(stream)), /not set/, `${stream}: not set`)
+  assert.doesNotMatch(await text(panel), /built in|13946|22919/, 'no built-in Epic hint')
+  // The shared Epic is saved straight to Git: without a Git connection it cannot be set, and says why.
+  assert.equal(await panel.getByLabel('IOCC shared bulk Epic').isDisabled(), true, 'shared: disabled without a writable Git')
+  assert.equal(await text(panel.getByRole('note')), 'Connect Git storage first: the shared Epic is saved straight to Git.')
   await panel.getByLabel('IOCC my bulk Epic').fill('21001')
   await row('IOCC').getByRole('button', { name: 'Save' }).click()
-  assert.match(await text(row('IOCC')), /#21001.*mine/)
+  await row('IOCC').filter({ hasText: /#21001.*mine/ }).waitFor()
   assert.equal(await page.evaluate(() => localStorage.getItem('demand-planning-bulk-epics-v1')), '{"IOCC":21001}', 'mine stays in this browser')
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
+test('TC-QV-40: Admin → Overview flags a stream without a bulk creation Epic for attention; Save to Git on a shared Epic commits it straight to Git', async () => {
+  const gh = fakeGitHub({ files: { 'access.json': cachedRoles('Tool Owner') } })
+  const { page, context, errors } = await openPage(app, { roles: true, init: () => {
+    localStorage.setItem('demand-planning-git-storage-v1', JSON.stringify({ owner: 'example', repo: 'storage', branch: 'main', path: 'planning-data.json' }))
+    localStorage.setItem('demand-planning-git-token-v1', 'test-token')
+    localStorage.setItem('demand-planning-work-email-v1', 'owner@example.com')
+  } })
+  await context.route('https://api.github.com/**', gh.route)
+  await context.route(/dev\.azure\.com|azure\.example\.com/, (route) => route.fulfill({ status: 401, contentType: 'application/json', body: '{}' }))
+  for (const title of ['Get started', 'Could not fetch from Azure DevOps']) {
+    const dialog = page.getByRole('dialog').filter({ hasText: title })
+    await page.addLocatorHandler(dialog, () => dialog.getByRole('button', { name: 'Close', exact: true }).last().click())
+  }
+  await page.reload()
+  await page.locator('.sidebar nav').waitFor()
+  await navigate(page, /Overview$/)
+  const health = page.locator('.admin-overview')
+  const item = (stream) => health.locator('li', { hasText: `${stream} bulk creation Epic is not set` })
+  for (const stream of ['DP', 'IOCC', 'Content']) assert.equal(await text(item(stream).locator('.pill')), 'Attention', `${stream}: needs attention, not optional`)
+  await item('DP').getByRole('button').click()
+  const panel = page.locator('.bulk-epics')
+  await panel.waitFor()
+  const row = (stream) => panel.getByRole('row', { name: new RegExp(`^${stream}`) })
+  await panel.getByLabel('DP shared bulk Epic').fill('21000')
+  await row('DP').getByRole('button', { name: 'Save to Git' }).click()
+  await panel.locator('.notice', { hasText: 'Saved to example/storage · planning-data.json' }).waitFor()
+  assert.equal(JSON.parse(gh.read('planning-data.json')).releaseSourceSettings.bulkEpics.DP, 21000, 'committed to Git, no separate Save to Git')
+  assert.match(await text(row('DP')), /#21000.*shared/)
+  await navigate(page, /Overview$/)
+  await item('IOCC').waitFor()
+  assert.equal(await item('DP').count(), 0, 'DP is no longer listed once mapped')
   assert.deepEqual(errors, [])
   await context.close()
 })
@@ -1542,6 +1657,7 @@ test('TC-CON-61: Streams → Removed connections finds a connection dropped from
   } })
   await context.route('https://dev.azure.com/**', (route) => route.fulfill({ status: 401, contentType: 'application/json', body: '{}' }))
   await context.route('https://api.github.com/**', (route) => {
+    if (/^\/repos\/[^/]+\/[^/]+\/branches\/[^/]+$/.test(new URL(route.request().url()).pathname)) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ name: 'main' }) }) // GIT-25: the branch can be read
     const request = route.request(), url = new URL(request.url())
     const json = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
     if (url.pathname === '/repos/example/storage') return json({ visibility: 'private', permissions: { push: true } })
@@ -1606,6 +1722,8 @@ test('TC-CON-63: without a roles file the app is read-only — a notice says why
     const request = route.request(), url = new URL(request.url())
     const json = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
     if (url.pathname === '/repos/example/storage') return json({ visibility: 'private', permissions: { push: true } })
+    // GIT-25: the repository and branch are readable, so a 404 of access.json means it is missing.
+    if (url.pathname === '/repos/example/storage/branches/main') return json({ name: 'main' })
     const match = /^\/repos\/example\/storage\/contents\/(.*)$/.exec(url.pathname)
     if (match && request.method() === 'PUT') { const path = decodeURIComponent(match[1]); if (path === '.demand-planning-write-check') return json({ message: 'Invalid request' }, 422); writes.push([path, JSON.parse(Buffer.from(JSON.parse(request.postData()).content, 'base64').toString())]); return json({ content: { sha: 'new' }, commit: { html_url: 'https://github.com/example/storage/commit/new' } }) }
     return json({ message: 'Not Found' }, 404)
@@ -1703,15 +1821,16 @@ test('TC-QV-41: My settings → My naming patterns — your own patterns for IOC
   await context.close()
 })
 
-test('TC-ADM-02: Admin → Overview lists what to set up with links (and the bulk Epic without a setup, TC-ADM-03); Ctrl K finds a setting and opens it; History filters the changes', async () => {
+test('TC-ADM-02: Admin → Overview lists what to set up with links (and the bulk streams without an Epic, TC-ADM-03); Ctrl K finds a setting and opens it; History filters the changes', async () => {
   const { page, context, errors } = await openPage(app)
   await navigate(page, /Overview$/)
   assert.equal(await text(page.locator('header.topbar h1')), 'Overview')
   const health = page.locator('.admin-overview')
   assert.match(await text(health), /Connect Git storage/, 'the open Get started steps are listed')
   assert.match(await text(health), /No access roles yet.*read-only/, 'CON-101: without access.json the app is read-only')
-  assert.match(await text(health), /DP bulk creation Epic #13946 has no Feature setup/, 'ADM-05: the built-in DP bulk Epic has no shared Feature setup yet')
-  await health.locator('li', { hasText: 'IOCC bulk creation Epic not chosen' }).getByRole('button').click()
+  for (const stream of ['DP', 'IOCC', 'Content']) assert.match(await text(health), new RegExp(`${stream} bulk creation Epic is not set`), `ADM-05: no ${stream} bulk creation Epic is built in, so it is listed until mapped`)
+  assert.doesNotMatch(await text(health), /#13946/, 'no built-in DP Epic')
+  await health.locator('li', { hasText: 'DP bulk creation Epic is not set' }).getByRole('button').click()
   assert.equal(await text(page.locator('header.topbar h1')), 'Stream options')
   assert.equal(await page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'Bulk creation Epics' }).getAttribute('aria-selected'), 'true', 'the fix opens the section')
   await page.keyboard.press('Control+k')

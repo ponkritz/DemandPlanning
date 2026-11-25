@@ -64,6 +64,21 @@ function clean(raw: Record<string, unknown>): CustomStreamEntry {
   return { name, rule, fuzzy: option.source === 'azure' ? raw.fuzzy === true : false, ...(aliases.length ? { aliases } : {}), ...(epics.length ? { epics } : {}) }
 }
 
+// STR-01: the last good file read from Git, kept in this browser (useCustomStreams), so the custom streams are there at
+// the next start before Git answers and while it cannot be read.
+export const customStreamsCacheKey = 'demand-planning-custom-streams-v1'
+export function cachedCustomStreams(storage: Pick<Storage, 'getItem'> = localStorage): CustomStreamEntry[] { try { return parseCustomStreams(storage.getItem(customStreamsCacheKey)).streams } catch { return [] } }
+export function rememberCustomStreams(text: string | null, storage: Pick<Storage, 'setItem' | 'removeItem'> = localStorage) { try { if (text) storage.setItem(customStreamsCacheKey, text); else storage.removeItem(customStreamsCacheKey) } catch { /* this visit only */ } }
+// Reads the file and keeps it as the last good one. GIT-25 (KB-92): a read that fails — the repository cannot be read,
+// the file is broken — throws before anything is kept or removed, so the cached streams stay; only a file that is
+// really missing in a readable repository (text null) clears them.
+export async function readCustomStreamsInto(read: () => Promise<{ text: string | null; sha: string | null }>, storage: Pick<Storage, 'setItem' | 'removeItem'> = localStorage) {
+  const file = await read()
+  const parsed = parseCustomStreams(file.text)
+  rememberCustomStreams(file.text, storage)
+  return { ...parsed, sha: file.sha }
+}
+
 // STR-05: the file read from Git. A file that is not JSON or not a custom-streams file is refused as a whole (the
 // last good list stays in use); each stream is checked on its own: an unknown rule, a clash with a built-in stream or
 // with an earlier custom stream refuses that stream, with the reason, and the others are used.

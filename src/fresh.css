@@ -40,7 +40,7 @@ body{background:var(--bg)}
 .panel,.metric-grid article{background:var(--surface);border:1px solid var(--card-border);border-radius:12px;box-shadow:var(--card-shadow)}
 .panel{padding:22px 24px}
 .table-panel{padding:0}
-.table-panel .panel-heading{padding:20px 24px 14px}
+.table-panel .panel-heading{padding:24px 32px 16px}
 .panel-heading{margin-bottom:16px}
 .panel-heading h2,.section-heading h2{color:var(--text);font-size:16px;font-weight:650;letter-spacing:-.005em;margin:2px 0 4px}
 .panel-heading .muted,.panel-heading p{font-size:13px;line-height:1.55;max-width:90ch}
@@ -105,12 +105,12 @@ td small{color:var(--text-3)}
 .view-switch>span{font-size:12.5px;font-weight:500;color:var(--text-2);margin-right:0}
 .viz-range,.segmented{display:inline-flex;padding:3px;gap:2px;background:var(--surface-2);border:1px solid var(--line-soft);border-radius:10px}
 .viz-range button,.viz-range button.primary,.viz-range button.ghost,.viz-filters button,.viz-filters button.primary,.viz-filters button.ghost,.segmented button,.segmented button.primary,.segmented button.ghost{border:0;border-radius:7px;padding:6px 14px;font-size:12.5px;font-weight:600;background:transparent;color:var(--text-2);box-shadow:none}
-.viz-range button[aria-pressed="true"],.viz-filters button[aria-pressed="true"],.segmented button[aria-pressed="true"]{background:var(--surface);color:var(--text);box-shadow:0 1px 2px #10182814,0 1px 3px #1018280f}
-:root[data-theme="dark"] .viz-range button[aria-pressed="true"],.viz-filters button[aria-pressed="true"],.segmented button[aria-pressed="true"]{background:var(--line)}
+.viz-range button[aria-pressed="true"],.viz-filters button[aria-pressed="true"],.segmented button[aria-pressed="true"],.segmented button[aria-checked="true"]{background:var(--surface);color:var(--text);box-shadow:0 1px 2px #10182814,0 1px 3px #1018280f}
+:root[data-theme="dark"] .viz-range button[aria-pressed="true"],.viz-filters button[aria-pressed="true"],.segmented button[aria-pressed="true"],:root[data-theme="dark"] .segmented button[aria-checked="true"]{background:var(--line)}
 .view-switch select{border-radius:8px;padding:7px 10px}
 
 .viz-filters{gap:4px}
-.viz-filters button:not([aria-pressed="true"]):hover,.viz-range button:not([aria-pressed="true"]):hover,.segmented button:not([aria-pressed="true"]):hover{color:var(--text)}
+.viz-filters button:not([aria-pressed="true"]):hover,.viz-range button:not([aria-pressed="true"]):hover,.segmented button:not([aria-pressed="true"]):not([aria-checked="true"]):hover{color:var(--text)}
 
 .tree-controls .button-row button,.tree-controls .button-row button.primary,.tree-controls .button-row button.ghost{border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--text-2);padding:6px 12px;box-shadow:none}
 .tree-controls .button-row button[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent-text)}
@@ -135,7 +135,7 @@ td small{color:var(--text-3)}
 
 @media(max-width:1000px){.app-shell{grid-template-columns:72px 1fr}.topbar{padding-inline:20px}.content{padding-inline:20px}}
 @media(max-width:700px){.app-shell{display:block}.sidebar{border-right:0;border-bottom:1px solid var(--sidebar-line)}.settings-nav{position:static}.content{padding:12px}}
-.table-panel+.panel,.panel+.table-panel{margin-top:16px}
+.table-panel+.panel,.panel+.table-panel{margin-top:24px}
 
 /* Page header: title, then the page's own controls (Team / Individual), then data status, month and theme */
 .topbar{gap:16px}
@@ -158,30 +158,20 @@ td small{color:var(--text-3)}
 .sort-header{all:unset;cursor:pointer;font:inherit;color:inherit;text-transform:inherit;letter-spacing:inherit;white-space:nowrap}.sort-header:hover,.sort-header:focus-visible{color:var(--accent-text);text-decoration:underline}.inline-select{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-2)}.inline-select select{max-width:240px}
 .assignee-confirm{display:grid;gap:12px}.assignee-confirm label{display:grid;gap:6px}
 .nav-items{display:grid;gap:2px}
-.sidebar nav button.nav-group,.sidebar nav button.nav-subgroup{background:none;border:0;box-shadow:none;cursor:pointer;display:flex;gap:6px;align-items:center;width:100%;text-align:left;color:var(--sidebar-muted);font-size:10.5px;font-weight:650;letter-spacing:.9px;padding:2px 10px;margin:0 0 4px}
-.sidebar nav button.nav-subgroup{letter-spacing:.3px;font-size:11px;padding-left:18px;margin:4px 0 2px}
-.sidebar nav button.nav-group:hover,.sidebar nav button.nav-subgroup:hover{color:#fff;background:none}
+.sidebar nav button.nav-group{background:none;border:0;box-shadow:none;cursor:pointer;display:flex;gap:6px;align-items:center;width:100%;text-align:left;color:var(--sidebar-muted);font-size:10.5px;font-weight:650;letter-spacing:.9px;padding:2px 10px;margin:0 0 4px}
+.sidebar nav button.nav-group:hover{color:#fff;background:none}
 .sidebar nav button.nav-group-active{color:var(--teal-light)}
 @media(min-width:1001px){.nav-collapsed{display:none}}
-@media(max-width:1000px){.sidebar nav button.nav-subgroup{display:none}}
 .feature-setup{display:grid;gap:10px}.setup-story{display:grid;grid-template-columns:2fr 3fr auto;gap:10px;align-items:start;border-bottom:1px solid var(--line-soft);padding-bottom:8px}.setup-story label{display:grid;gap:4px}@media(max-width:900px){.setup-story{grid-template-columns:1fr}}
-/* Menu levels: headings are bold capitals with a divider; sub-headings are smaller, in normal case and indented, and
-   their items sit inside a faint guide line so they read as nested. */
+/* Menu levels: headings are bold capitals with a divider (Release Details is one list since NAV-52, no sub-headings). */
 .sidebar nav .nav-section+.nav-section{border-top:1px solid #ffffff14;padding-top:12px}
 .sidebar nav button.nav-group{font-size:11px;font-weight:800;letter-spacing:1.2px;color:#ffffffc4;padding:2px 8px;margin:0 0 6px}
 .sidebar nav button.nav-group>span{font-size:10px;width:10px}
-.sidebar nav button.nav-subgroup{text-transform:none;font-size:11.5px;font-weight:600;letter-spacing:.2px;color:var(--sidebar-muted);padding:3px 8px 3px 22px;margin:6px 0 2px}
-.sidebar nav button.nav-subgroup>span{font-size:9px;width:9px;opacity:.8}
-.sidebar nav .nav-subsection>.nav-items{margin-left:20px;padding-left:6px;border-left:1px solid #ffffff1f}
-.sidebar nav .nav-subsection>.nav-items button{font-size:13px;padding-top:6px;padding-bottom:6px}
-@media(max-width:1000px){.sidebar nav .nav-section+.nav-section{border-top:0;padding-top:0}.sidebar nav .nav-subsection>.nav-items{margin-left:0;padding-left:0;border-left:0}}
-/* Menu level colours: headings warm gold, sub-headings soft sky blue; teal stays for the open page. */
-.sidebar{--nav-heading:#f2c46d;--nav-subheading:#8ec5ff}
+@media(max-width:1000px){.sidebar nav .nav-section+.nav-section{border-top:0;padding-top:0}}
+/* Menu level colours: headings warm gold; teal stays for the open page. */
+.sidebar{--nav-heading:#f2c46d}
 .sidebar nav button.nav-group{color:var(--nav-heading)}
-.sidebar nav button.nav-subgroup{color:var(--nav-subheading)}
 .sidebar nav button.nav-group:hover{color:#ffe2a6}
-.sidebar nav button.nav-subgroup:hover{color:#c4e0ff}
-.sidebar nav .nav-subsection>.nav-items{border-left-color:#8ec5ff40}
 .sidebar nav button.nav-group-active{color:var(--teal-light)}
 
 /* Phones and small tablets (≤ 760px): the sidebar is an off-canvas menu with full labels, opened from the ☰ button in
@@ -199,7 +189,7 @@ td small{color:var(--text-3)}
   .sidebar nav button,.sidebar nav button:not(.nav-active),.sidebar nav .nav-active{font-size:13.5px;display:flex;justify-content:flex-start;align-items:center;gap:10px;text-align:left;padding:11px 12px;min-height:44px;width:100%}
   .sidebar nav .nav-active{display:flex}
   .nav-icon{font-size:16px}
-  .nav-group,.sidebar nav button.nav-subgroup{display:flex;font-size:10px;min-height:0;padding:8px 12px 4px}
+  .nav-group{display:flex;font-size:10px;min-height:0;padding:8px 12px 4px}
   .nav-collapsed{display:none}
   .sidebar nav .nav-section+.nav-section{border-top:1px solid var(--sidebar-line);padding-top:8px;margin-top:8px}
   .sidebar-footer{display:block;font-size:11px;margin-top:auto;padding-top:12px}
@@ -248,7 +238,7 @@ td small{color:var(--text-3)}
   .sidebar .brand>div:last-child{display:none}
   .nav-collapsed{display:block}
   .sidebar nav button,.sidebar nav button:not(.nav-active),.sidebar nav .nav-items button.nav-missing{font-size:0!important;font-style:normal;display:grid;justify-items:center;padding:10px 4px;width:100%}
-  .sidebar nav button.nav-group,.sidebar nav button.nav-subgroup{display:none}
+  .sidebar nav button.nav-group{display:none}
   .sidebar nav button.nav-active{font-size:9.5px!important;line-height:1.2;text-align:center}
   .nav-icon{font-size:18px}
   .nav-badge{position:absolute;top:2px;right:4px}
@@ -437,7 +427,10 @@ table.resizable.wrap th,table.resizable.wrap td{white-space:pre-wrap;overflow-wr
 /* Release pages (UI-STANDARDS §10, QV-62): source bar, counts, Releases | Source data tabs, Releases table. */
 .release-page{display:flex;flex-direction:column;gap:14px}
 .release-page>.panel,.release-page .metric-grid,.release-page .result-tabs{margin:0}
-.release-source .view-source-bar{margin:0}
+.release-source .view-source-bar{margin:0;justify-content:flex-end}
+/* QV-70: the first line of the source bar's ⋯ menu — where the data comes from and when it was fetched; not an action. */
+.view-actions-menu .view-actions-note{margin:0 0 4px;padding:6px 10px 8px;border-bottom:1px solid var(--line);font-size:12px;color:var(--text-2);max-width:340px;overflow-wrap:anywhere}
+.release-source-about p{margin:0 0 8px}
 .release-source .notice,.release-source .windchill-import{margin:12px 0 0}
 .release-counts{display:grid;gap:8px}
 .release-counts .metric-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
@@ -452,6 +445,20 @@ table.resizable.wrap th,table.resizable.wrap td{white-space:pre-wrap;overflow-wr
 /* The table design default (UI-07…12): one toolbar, one density switch, the same look for every table. */
 .data-table{display:grid;gap:8px;min-width:0}
 .data-table-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+/* KB-93: in a TablePanel (no padding of its own) the table's toolbar, the first and last column and the read-only reason
+   line up with the panel's title (24px, as .table-panel .panel-heading); the table's lines still run full width. */
+.table-panel .data-table>.data-table-toolbar{padding:0 32px}
+.table-panel .data-table th:first-child,.table-panel .data-table td:first-child{padding-left:32px}
+.table-panel .data-table th:last-child,.table-panel .data-table td:last-child{padding-right:32px}
+.table-panel>.write-blocked{display:block;padding:0 32px 8px}
+/* Product owner: more room in table panels — between the rows of controls (N window, filters, Columns / Export),
+   above the table, and between panels and the tiles above them. */
+.table-panel .data-table{gap:16px}
+.table-panel .data-table-toolbar{row-gap:12px;column-gap:10px}
+.table-panel .data-table-scroll{margin-top:8px}
+.table-panel{margin-bottom:24px}
+.metric-grid+.table-panel,.metric-grid+.panel,div:has(>.metric-grid)+.table-panel{margin-top:4px}
+@media(max-width:700px){.table-panel .panel-heading{padding:16px 24px 12px}.table-panel .data-table>.data-table-toolbar{padding:0 24px}.table-panel .data-table th:first-child,.table-panel .data-table td:first-child{padding-left:24px}.table-panel .data-table th:last-child,.table-panel .data-table td:last-child{padding-right:24px}.table-panel>.write-blocked{padding:0 24px 8px}}
 .data-table-controls{display:inline-flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap}
 .data-table-button{padding:6px 10px}
 .data-table-density{padding:5px 8px;font-size:12px}
@@ -697,9 +704,8 @@ label.formula-term{justify-content:flex-start}
   .nav-mini .nav-mini-toggle{margin-left:0}
   .nav-mini .nav-collapsed{display:block}
   .nav-mini .sidebar nav button,.nav-mini .sidebar nav button:not(.nav-active),.nav-mini .sidebar nav .nav-items button.nav-missing{font-size:0!important;display:grid;justify-items:center;padding:10px 4px;width:100%;position:relative}
-  .nav-mini .sidebar nav button.nav-group,.nav-mini .sidebar nav button.nav-subgroup{display:none}
+  .nav-mini .sidebar nav button.nav-group{display:none}
   .nav-mini .sidebar nav .nav-section+.nav-section{border-top:0;padding-top:0}
-  .nav-mini .sidebar nav .nav-subsection>.nav-items{margin-left:0;padding-left:0;border-left:0}
   .nav-mini .nav-icon{font-size:18px}
   .nav-mini .nav-badge{position:absolute;top:2px;right:4px;font-size:9px}
   .nav-mini .sidebar-footer{font-size:0}
@@ -814,6 +820,9 @@ kbd{font-size:11px;border:1px solid var(--accent-line);border-radius:4px;padding
 .efe-fieldrow{display:grid;grid-template-columns:repeat(5,minmax(0,1fr)) auto;gap:8px;align-items:end;border:1px solid var(--accent-line);border-radius:10px;padding:10px}
 .efe-fieldrow label{display:flex;flex-direction:column;gap:4px;font-size:12px}.efe-fieldrow input,.efe-fieldrow select{width:100%}
 @media (max-width:900px){.efe-fieldrow{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+.efe-rules{display:flex;flex-direction:column;gap:8px;min-width:0;margin:-4px 0 0 16px;border:1px dashed var(--accent-line);border-radius:10px;padding:10px}
+.efe-rules legend{font-weight:600;font-size:13px;padding:0 4px}
+.efe-rules-table th small{display:block;font-weight:400;text-transform:none;letter-spacing:0}.efe-rules-table td{text-align:center}.efe-rules-table td:first-child{text-align:left}
 .efe-add{align-self:flex-start}
 .efe-tabs{display:flex;gap:6px;flex-wrap:wrap}
 .efe-tabs button{min-height:40px;padding:6px 12px;border-radius:8px;border:1px solid var(--accent-line);background:transparent;color:inherit;cursor:pointer}
@@ -1182,3 +1191,26 @@ div.chart-grid:not(.od-insights){margin-bottom:18px}
 /* MYD-14: My dashboard's Customize list (each section and block with its size) and its KPI tiles of the person's own. */
 .my-dash-editor li{flex-wrap:wrap;row-gap:6px}.my-dash-editor li>.checkbox-label{flex:1 1 220px;min-width:0}.my-dash-editor li>small{flex:1 1 180px;min-width:0}.my-dash-editor .chart-size-fields{margin:0;gap:8px}
 .my-dash-tile{display:grid;gap:6px;align-content:start;min-width:0}.my-dash-tile>.ghost{justify-self:start;padding:3px 9px}
+/* TVL-08…TVL-12: the Tool Validations expiry and master list toolbars — the window of days, the status (segmented),
+   the search and Reset filters on one wrapping row; the three expiry tiles side by side, stacked on a phone. */
+.tool-filter-bar{display:flex;flex-wrap:wrap;gap:12px 10px;align-items:center}
+.tool-expiry-window{display:flex;flex-wrap:wrap;gap:10px 12px;align-items:center;flex-basis:100%;padding-bottom:6px}
+.tool-expiry-window .inline-field{white-space:nowrap}.tool-expiry-window input{width:76px}
+.tool-expiry-counts .metric-grid{grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:24px}
+.tool-sources td:last-child button{white-space:nowrap}.tool-sources td:nth-child(3){min-width:220px}
+@media(max-width:700px){.tool-filter-bar .search{min-width:0;flex:1 1 100%}.tool-filter-bar .segmented{flex-wrap:wrap}.tool-expiry-counts .metric-grid{grid-template-columns:1fr}}
+/* TVL-27, TVL-28: Tool Validations due date highlights — the tinted row with a marker on its first cell, the band pill, the swatch and the legend. */
+tbody tr.tvl-hl-red td{background:var(--hl-red-bg)}tbody tr.tvl-hl-red td:first-child{box-shadow:inset 4px 0 0 var(--hl-red-line)}tbody tr.tvl-hl-orange td{background:var(--hl-orange-bg)}tbody tr.tvl-hl-orange td:first-child{box-shadow:inset 4px 0 0 var(--hl-orange-line)}tbody tr.tvl-hl-amber td{background:var(--hl-amber-bg)}tbody tr.tvl-hl-amber td:first-child{box-shadow:inset 4px 0 0 var(--hl-amber-line)}tbody tr.tvl-hl-yellow td{background:var(--hl-yellow-bg)}tbody tr.tvl-hl-yellow td:first-child{box-shadow:inset 4px 0 0 var(--hl-yellow-line)}tbody tr.tvl-hl-green td{background:var(--hl-green-bg)}tbody tr.tvl-hl-green td:first-child{box-shadow:inset 4px 0 0 var(--hl-green-line)}tbody tr.tvl-hl-blue td{background:var(--hl-blue-bg)}tbody tr.tvl-hl-blue td:first-child{box-shadow:inset 4px 0 0 var(--hl-blue-line)}tbody tr.tvl-hl-purple td{background:var(--hl-purple-bg)}tbody tr.tvl-hl-purple td:first-child{box-shadow:inset 4px 0 0 var(--hl-purple-line)}tbody tr.tvl-hl-grey td{background:var(--hl-grey-bg)}tbody tr.tvl-hl-grey td:first-child{box-shadow:inset 4px 0 0 var(--hl-grey-line)}
+.tvl-band-red{--band-line:var(--hl-red-line);--band-bg:var(--hl-red-bg)}.tvl-band-orange{--band-line:var(--hl-orange-line);--band-bg:var(--hl-orange-bg)}.tvl-band-amber{--band-line:var(--hl-amber-line);--band-bg:var(--hl-amber-bg)}.tvl-band-yellow{--band-line:var(--hl-yellow-line);--band-bg:var(--hl-yellow-bg)}.tvl-band-green{--band-line:var(--hl-green-line);--band-bg:var(--hl-green-bg)}.tvl-band-blue{--band-line:var(--hl-blue-line);--band-bg:var(--hl-blue-bg)}.tvl-band-purple{--band-line:var(--hl-purple-line);--band-bg:var(--hl-purple-bg)}.tvl-band-grey{--band-line:var(--hl-grey-line);--band-bg:var(--hl-grey-bg)}.tvl-band.pill{background:var(--band-bg);color:var(--text);border:1px solid var(--band-line);padding:1px 7px;margin-left:4px;font-size:11px;vertical-align:baseline}.tvl-swatch{display:inline-block;width:12px;height:12px;border-radius:3px;background:var(--band-bg);border:2px solid var(--band-line);flex:none}.tvl-legend{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;flex-basis:100%;margin:0;font-size:12px}.tvl-legend-item,.tvl-colour{display:inline-flex;align-items:center;gap:6px}.tool-highlights-edit table,.tool-highlights table{min-width:0}.tool-highlights-edit input{width:96px}.tool-highlights-edit select{min-width:120px}.tvl-highlights-note{margin:10px 0 0;font-size:12px}
+/* QV-66: Pulse Check — a stream the Streams filter leaves out stays listed, greyed and marked "Not counted". */
+.pulse-period{flex-wrap:wrap;align-items:flex-end}
+.not-counted,.not-counted td,.not-counted strong,.not-counted a{color:var(--muted)}
+.release-quadrant.not-counted{background:var(--surface-2);border-style:dashed;box-shadow:none}
+.release-quadrant.not-counted .quadrant-counts strong{color:var(--muted)}
+.not-counted .pill{margin-right:4px}
+.not-counted .positive,.not-counted .negative{color:var(--muted)!important}
+/* QV-68: Pulse Check → Year, the cumulative Completed releases — the switches above the chart, a dashed key for the
+   sixth stream and later (the palette again with a dashed line). */
+.pulse-cumulative-switches{gap:16px;margin:2px 0 6px;flex-wrap:wrap}.pulse-cumulative-switches .check{margin:0;font-size:12px;color:var(--text)}
+.viz-legend i.viz-key-dashed{width:18px;height:0;border-top:2px dashed;border-radius:0;background:none}
+.dsh-status-toggle{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}.dsh-status-toggle .check{margin:0}.dsh-status-toggle>small{flex-basis:100%;font-size:11px;font-weight:400;color:var(--muted);line-height:1.4}

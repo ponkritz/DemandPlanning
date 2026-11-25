@@ -1,6 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { azureWorkFields, azureWorkRows, azureWorkSource, capacityFields, capacityRows, capacitySource, enteredRelease, entryOf, fieldsDataset, headingMonth, historyRows, historySource, kindOfKey, kpiRows, kpiSource, mySourcePattern, releaseCountsOf, releaseFields, releaseRows, releasesSource, sourceEntries, sourceKinds } from '../src/dashboardSources.ts'
+import { toolDatasets, toolExpirySource, toolFields, toolMasterSource, toolRows } from '../src/dashboardSources.ts'
+import { parseToolValidations } from '../src/toolValidations.ts'
+import { parseDashboard } from '../src/dashboardPages.ts'
+import { azureWorkFields, azureWorkRows, azureWorkSource, completedFields, completedSource, capacityFields, capacityRows, capacitySource, enteredRelease, entryOf, fieldsDataset, headingMonth, historyRows, historySource, kindOfKey, kpiRows, kpiSource, mySourcePattern, releaseCountsOf, releaseFields, releaseRows, releasesSource, sourceEntries, sourceKinds } from '../src/dashboardSources.ts'
 import { notAvailable } from '../src/dashboardHours.ts'
 import { blankBlock, blockData, hoursSource, kpiValue, narrowRows } from '../src/dashboardPages.ts'
 import { personMonths, totals } from '../src/dashboard.ts'
@@ -22,12 +25,12 @@ const items = [epic, feature, story, task, bug, history]
 const everyone = () => true
 
 test('MYD-15: the registry — every kind declares its fields and the area it needs; keys follow one pattern; a role without the area gets “Not available for your role.” and no rows (TC-MYD-08)', () => {
-  assert.deepEqual(sourceKinds.map((kind) => kind.id), ['page', 'hours', 'azure', 'releases', 'capacity', 'qe', 'kpi', 'history', 'windchill'])
+  assert.deepEqual(sourceKinds.map((kind) => kind.id), ['page', 'hours', 'azure', 'releases', 'completed', 'capacity', 'qe', 'kpi', 'history', 'tools', 'windchill'])
   for (const kind of sourceKinds) assert.ok(kind.areas.length && kind.label && kind.describe, kind.id)
-  for (const key of ['page:conq', hoursSource, azureWorkSource, releasesSource, capacitySource, kpiSource, historySource, 'qe:s1', 'windchill:abc123']) assert.ok(mySourcePattern.test(key), key)
+  for (const key of ['page:conq', hoursSource, azureWorkSource, releasesSource, completedSource, capacitySource, kpiSource, historySource, 'qe:s1', 'windchill:abc123']) assert.ok(mySourcePattern.test(key), key)
   for (const key of ['other:x', 'page:Bad Id', 'qe:', 'azure:all']) assert.equal(mySourcePattern.test(key), false, key)
-  assert.deepEqual(['page:x', hoursSource, 'qe:s1', 'windchill:w', capacitySource].map(kindOfKey), ['page', 'hours', 'qe', 'windchill', 'capacity'])
-  for (const fields of [azureWorkFields, capacityFields]) assert.equal(new Set(fields.map((field) => field.id)).size, fields.length, 'unique field ids')
+  assert.deepEqual(['page:x', hoursSource, 'qe:s1', 'windchill:w', capacitySource, completedSource, releasesSource].map(kindOfKey), ['page', 'hours', 'qe', 'windchill', 'capacity', 'completed', 'releases'])
+  for (const fields of [azureWorkFields, capacityFields, completedFields]) assert.equal(new Set(fields.map((field) => field.id)).size, fields.length, 'unique field ids')
   // Fail closed: no area, no rows — and the hours / capacity are never worked out.
   let counted = 0
   const input = { sees: () => false, months: ['2026-08'], today: '2026-08-15', me: { name: 'Ana' }, items, settings: capacityContext({}), releases: { state: {}, profiles: [], streamsOf: () => { counted++; return [] } }, qe: { file: null, loaded: true }, kpi: undefined, history: { file: null, loaded: true, connected: true }, windchill: [], pages: [], hours: () => { counted++; return [] } }
@@ -145,4 +148,100 @@ test('MYD-19…MYD-22: QE Mapping sheets, KPI tracker values, historical hours a
   assert.deepEqual(export1.page.columns.map((column) => [column.name, column.type]), [['Number', 'text'], ['State', 'dropdown'], ['Approved On', 'date']])
   assert.deepEqual(export1.page.rows.map((row) => row.cells.wc2), ['2026-09-02', '2026-09-20', ''])
   assert.equal(entryOf(entries, 'windchill:w-1', (area) => area !== 'release').dataset.problem, notAvailable)
+})
+
+test('MYD-25: Completed releases per stream per month — the Month tabs’ counts by stream and month, Windchill exports included, Counted in Pulse Check per my filter; a line with Running total is the Year chart (TC-MYD-10)', async () => {
+  const { completedOf, cumulativeYear } = await import('../src/cumulativeReleases.ts')
+  const state = { azureSources: [], releaseSourceSettings: { countOverrides: { CP: { '2026-09': { completed: 2 }, '2026-10': { completed: 1 } } } } }
+  const columns = ['Name', 'Location', 'Last Modified']
+  const windchill = { views: [{ id: 'w1', name: 'S&S IT', exportFile: 'sns.csv', columns }], sources: [{ viewId: 'w1', columns, rows: [{ Name: 'SRS', Location: '/Products/Remote Diagnostics/1.7/DHF', 'Last Modified': '2026-10-03' }] }] }
+  const months = ['2026-09', '2026-10', '2026-11', '2026-12']
+  const input = { sees: (area) => area === 'release', months, today: '2026-11-24', me: { name: 'Ana' }, items: [], settings: capacityContext({}), releases: { state, profiles: [], streamsOf: (month) => defaultStreamReleases(state, [], month), windchill, excluded: ['S&S IT'] }, qe: { file: null, loaded: true }, kpi: null, history: { file: null, loaded: true, connected: false }, windchill: [], pages: [], hours: () => [] }
+  const dataset = entryOf(sourceEntries(input), completedSource, input.sees).dataset
+  assert.deepEqual(dataset.page.columns.map((column) => [column.name, column.type]), [['Stream', 'dropdown'], ['Month', 'date'], ['Completed releases', 'number'], ['Counted in Pulse Check', 'dropdown']])
+  const cells = (stream, month) => dataset.page.rows.find((row) => row.cells['cr-stream'] === stream && row.cells['cr-month'] === `${month}-01`)?.cells
+  for (const month of months.slice(0, 3)) for (const entry of completedOf(state, [], windchill, month)) assert.equal(cells(entry.name, month)['cr-completed'], String(entry.completed), `${entry.name} ${month}`)
+  assert.equal(dataset.page.rows.some((row) => row.cells['cr-month'] === '2026-12-01'), false, 'no month after the current one')
+  assert.deepEqual([cells('S&S IT', '2026-10')['cr-counted'], cells('CP', '2026-10')['cr-counted']], ['No', 'Yes'])
+  // A line by Month with Running total, split by Stream: the Year chart's running totals.
+  const line = { ...blankBlock(dataset, 'l1', 'line'), category: 'cr-month', second: 'cr-stream', measure: 'sum', value: 'cr-completed', period: '', options: { cumulative: true } }
+  const data = blockData(dataset.page, line)
+  const year = cumulativeYear(months, months.map((month) => month > '2026-11' ? [] : completedOf(state, [], windchill, month)), '2026-11-24')
+  const cp = data.series.findIndex((ser) => ser.label === 'CP')
+  assert.deepEqual(data.values.map((row) => row[cp]), year.streams.find((entry) => entry.name === 'CP').cumulative.slice(0, 3))
+  // Fail closed: no Release Details and no Team insights, no rows.
+  assert.equal(entryOf(sourceEntries({ ...input, sees: () => false }), completedSource, () => false).dataset.problem, notAvailable)
+  assert.equal(entryOf(sourceEntries({ ...input, sees: (area) => area === 'insights' }), completedSource, (area) => area === 'insights').dataset.problem, undefined, 'Team insights sees it too')
+})
+
+test('TVL-18: the Tool Validations master list and expiry list as data sources — every tool with its dates, Status and Days left as the Expiry list counts them (team default window), the expiry list without OK; closed without Release Details; usable by My dashboard and the On-Demand Dashboards (TC-TVL-12)', () => {
+  const at = '2026-01-05T10:00:00Z'
+  const file = parseToolValidations(JSON.stringify({ schema: 1, kind: 'tool-validations', defaultDays: 30, owners: [], sources: [{ id: 'stream', kind: 'stream', name: 'Tool Validations', mapping: { periodUnit: 'months', confirmed: false } }, { id: 'register', kind: 'ondemand', name: 'Tool register', ref: 'tool-register', mapping: { periodUnit: 'months', confirmed: true, name: 'c-tool' } }],
+    tools: [
+      { name: 'LabVIEW', version: '2020', dueDate: '2026-08-05', sources: { stream: { inSource: true }, register: { inSource: false } }, addedAt: at },
+      { name: 'Minitab', version: '21', validationDate: '2024-09-01', validityMonths: 24, sources: { stream: { inSource: false } }, addedAt: at },
+      { name: 'Python', version: '3.11', sources: {}, addedAt: at },
+      { name: 'JMP', version: '17', validationDate: '2026-07-01', validityMonths: 36, sources: { stream: { inSource: true } }, addedAt: at },
+      { name: 'R', version: '4.3', validationDate: '2024-08-01', sources: {}, addedAt: at },
+    ] })).file
+  assert.equal(new Set(toolFields.map((field) => field.id)).size, toolFields.length, 'unique field ids')
+  assert.deepEqual(toolFields.map((field) => field.name), ['Tool', 'Version', 'Validation date', 'Validity (months)', 'Due date', 'Due date from', 'Status', 'Days left', 'Sources', 'In source now'])
+  const rows = toolRows(file, '2026-08-15')
+  const byTool = Object.fromEntries(rows.map((row) => [row.cells['tv-tool'], row.cells]))
+  assert.deepEqual([byTool.LabVIEW['tv-status'], byTool.LabVIEW['tv-days'], byTool.LabVIEW['tv-from'], byTool.LabVIEW['tv-sources'], byTool.LabVIEW['tv-state']], ['Overdue', '-10', 'from the source', ['Tool Validations', 'Tool register'], 'In source'])
+  assert.deepEqual([byTool.Minitab['tv-status'], byTool.Minitab['tv-due'], byTool.Minitab['tv-days'], byTool.Minitab['tv-from'], byTool.Minitab['tv-state']], ['Due soon', '2026-09-01', '17', 'completion date + validity period', 'Not in source now'], 'due within the team default of 30 days; from the Tool Validations query: the completion date (TVL-29)')
+  assert.deepEqual([byTool.Python['tv-status'], byTool.Python['tv-days'], byTool.Python['tv-due'], byTool.Python['tv-state']], ['No due date', '', '', 'Added by hand'])
+  assert.deepEqual([byTool.JMP['tv-status'], byTool.JMP['tv-months']], ['OK', '36'], 'due later: OK')
+  // TVL-06 (TC-TVL-20): only a validation date — due 24 months later (default), Validity (months) 24.
+  assert.deepEqual([byTool.R['tv-status'], byTool.R['tv-due'], byTool.R['tv-days'], byTool.R['tv-from'], byTool.R['tv-months']], ['Overdue', '2026-08-01', '-14', 'validation date + 24 months (default)', '24'])
+  assert.deepEqual([byTool.Python['tv-months'], byTool.LabVIEW['tv-months']], ['', ''], 'no default where it gives no due date (no dates; an explicit due date)')
+  assert.deepEqual(toolRows(file, '2026-08-15', true).map((row) => row.cells['tv-tool']).sort(), ['LabVIEW', 'Minitab', 'Python', 'R'], 'the expiry list leaves OK out')
+  // The datasets: blocked without Release Details or without Git; else rows in the shape of a table page.
+  const input = { file, connected: true, loaded: true }
+  const [master, expiry] = toolDatasets(input, true, '2026-08-15')
+  assert.deepEqual([master.key, expiry.key, master.name, expiry.name], [toolMasterSource, toolExpirySource, 'Tool Validations master list', 'Tool Validations expiry list'])
+  assert.deepEqual([master.page.rows.length, expiry.page.rows.length], [5, 4])
+  assert.deepEqual(master.page.columns.find((column) => column.name === 'Status').options, ['Due soon', 'No due date', 'OK', 'Overdue'])
+  assert.match(master.note, /team default window is 30 days/)
+  for (const dataset of toolDatasets(input, false, '2026-08-15')) { assert.equal(dataset.problem, notAvailable); assert.equal(dataset.page.rows.length, 0) }
+  assert.match(toolDatasets({ ...input, connected: false }, true, '2026-08-15')[0].problem, /^Connect Git storage/)
+  assert.equal(toolDatasets(input, true, '2026-08-15', () => false)[0].page.rows.length, 0, 'rows only when wanted')
+  // My dashboard: the registry offers both for a role with Release Details; the keys are valid block sources.
+  const registry = { sees: (area) => area === 'release', months: [], today: '2026-08-15', me: { name: 'Ana' }, items: [], settings: capacityContext({}), releases: { state: {}, profiles: [], streamsOf: () => [] }, qe: { file: null, loaded: true }, kpi: undefined, history: { file: null, loaded: true, connected: true }, windchill: [], pages: [], hours: () => [], tools: input }
+  assert.equal(entryOf(sourceEntries(registry), toolMasterSource, registry.sees).dataset.page.rows.length, 5)
+  assert.equal(entryOf(sourceEntries(registry), toolExpirySource, () => false).dataset.problem, notAvailable, 'closed for a role without Release Details')
+  for (const key of [toolMasterSource, toolExpirySource]) { assert.ok(mySourcePattern.test(key), key); assert.equal(kindOfKey(key), 'tools') }
+  // An On-Demand Dashboard file may name them (DSH-08); a new block on them counts every tool (no period).
+  const dashboard = parseDashboard(JSON.stringify({ schema: 1, kind: 'dashboard', id: 'tool-dash', tabs: [], filters: [], blocks: [{ id: 'b1', title: 'By status', type: 'bar', source: toolMasterSource, category: 'tv-status', second: '', measure: 'count', value: '', filters: [], sort: 'value', period: '' }] }), 'tool-dash')
+  assert.deepEqual(dashboard.dashboard.blocks.map((entry) => entry.source), [toolMasterSource])
+  assert.equal(blankBlock(master, 'b2', 'bar').period, '', 'no period column by default')
+  assert.equal(narrowRows(master, blankBlock(master, 'b3', 'kpi'), ['2026-08']).page.rows.length, 5, 'every tool counted whatever the period')
+})
+
+test('TVL-26: “Show expiry status” off — a block on the master list or expiry list neither offers nor shows Status and Days left; fields on them replaced, their filters removed; kept in the dashboard file only when off (TC-TVL-23)', async () => {
+  const { blockDataset, serializeDashboard, withStatusShown, isToolSource } = await import('../src/dashboardPages.ts')
+  const file = parseToolValidations(JSON.stringify({ schema: 1, kind: 'tool-validations', defaultDays: 45, owners: [], sources: [{ id: 'stream', kind: 'stream', name: 'Tool Validations', mapping: { periodUnit: 'months', confirmed: false } }],
+    tools: [{ name: 'LabVIEW', version: '2020', dueDate: '2026-08-05', sources: {}, addedAt: '2026-01-05T10:00:00Z' }, { name: 'JMP', version: '17', sources: {}, addedAt: '2026-01-05T10:00:00Z' }] })).file
+  const [master, expiry] = toolDatasets({ file, connected: true, loaded: true }, true, '2026-08-15')
+  assert.equal(master.statusDays, 45, 'the team default window the status is worked out with (shown in ⓘ)')
+  assert.ok(isToolSource(master.key) && isToolSource(expiry.key) && !isToolSource('page:x'))
+  const block = { ...blankBlock(master, 'b1', 'bar'), title: 'By status', category: 'tv-status', filters: [{ column: 'tv-status', values: ['Overdue'] }, { column: 'tv-tool', values: ['LabVIEW'] }] }
+  assert.equal(blockDataset(master, block), master, 'shown by default: the source as it is')
+  const off = withStatusShown(master, block, false)
+  assert.equal(off.hideStatus, true)
+  assert.notEqual(off.category, 'tv-status', 'the category on Status replaced')
+  assert.deepEqual(off.filters, [{ column: 'tv-tool', values: ['LabVIEW'] }], 'the filter on Status removed')
+  const seen = blockDataset(master, off)
+  assert.deepEqual(seen.page.columns.map((column) => column.name).filter((name) => name === 'Status' || name === 'Days left'), [], 'not offered, not in the drill-down')
+  assert.equal(seen.page.rows.length, 2, 'the same tools')
+  assert.equal(blockDataset(master, off), seen, 'worked out once per dataset')
+  const narrowed = narrowRows(seen, off, ['2026-08'])
+  assert.ok(!narrowed.page.columns.some((column) => column.id === 'tv-days'))
+  assert.equal(withStatusShown(master, off, true).hideStatus, undefined, 'switched on again')
+  // A page source never hides anything; the file keeps hideStatus only for a Tool Validations block that has it on.
+  assert.equal(blockDataset(master, { ...off, source: 'page:x' }), master)
+  const out = JSON.parse(serializeDashboard({ schema: 1, kind: 'dashboard', id: 'tool-dash', tabs: [], filters: [], blocks: [off, { ...block, id: 'b2' }] }))
+  assert.deepEqual(out.blocks.map((entry) => entry.hideStatus), [true, undefined])
+  const read = parseDashboard(JSON.stringify({ ...out, blocks: [...out.blocks, { ...out.blocks[0], id: 'b3', source: 'page:x' }] }), 'tool-dash').dashboard.blocks
+  assert.deepEqual(read.map((entry) => entry.hideStatus), [true, undefined, undefined], 'read back; ignored on a page source')
 })

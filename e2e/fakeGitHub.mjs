@@ -77,6 +77,9 @@ export function fakeGitHub({ owner = 'example', repo = 'storage', files = {}, br
     }
     const branchRead = /^\/branches\/(.+)$/.exec(rest)
     if (branchRead && method === 'GET') return heads[branchRead[1]] ? json(200, { name: branchRead[1], commit: { sha: heads[branchRead[1]] } }) : json(404, { message: 'Branch not found' })
+    // GIT-25: a commit read (the probe of a 404 at a commit: is the repository readable?).
+    const commitProbe = /^\/commits\/([0-9a-f]{40})$/.exec(rest)
+    if (commitProbe && method === 'GET') return commits.has(commitProbe[1]) ? json(200, { sha: commitProbe[1] }) : json(404, { message: 'No commit found for SHA' })
     const contents = /^\/contents\/?(.*)$/.exec(rest)
     if (contents) {
       const file = decodeURIComponent(contents[1])

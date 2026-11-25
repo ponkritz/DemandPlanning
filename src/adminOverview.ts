@@ -6,7 +6,7 @@ import type { SettingsTab } from './settingsTabs'
 // with a link to the setting that fixes it; nothing is changed here.
 export type HealthTone = 'ok' | 'todo' | 'warn' | 'info'
 export interface HealthItem { id: string; title: string; detail: string; tone: HealthTone; fix?: { tab: SettingsTab; section?: string; label: string } }
-export interface AdminFacts { policy: boolean; toolOwner: boolean; epicSetups: number; sharedFeatureSetups: number; ioccBulkEpic: boolean; unsaved: boolean; gitConnected: boolean; gitReadOnly: boolean; bulkWithoutSetup?: { stream: string; epicId: number }[]; withoutDoD?: number[] }
+export interface AdminFacts { policy: boolean; toolOwner: boolean; epicSetups: number; sharedFeatureSetups: number; bulkEpicsUnset?: string[]; unsaved: boolean; gitConnected: boolean; gitReadOnly: boolean; bulkWithoutSetup?: { stream: string; epicId: number }[]; withoutDoD?: number[] }
 
 // ADM-05: gaps in the shared Feature setup that others meet — a DP or IOCC bulk creation Epic without a shared Feature
 // setup (Create Features skips every row: dpBulk.ts), and shared setups whose Feature DoD resolves to nothing (own, All
@@ -28,7 +28,8 @@ export function adminHealth(steps: SetupStep[], facts: AdminFacts): HealthItem[]
   else if (!facts.toolOwner) checks.push({ id: 'toolowner', title: 'No Tool Owner', detail: 'Nobody holds the Tool Owner role: those who manage access change the stream mapping until one is named (CON-93).', tone: 'warn', fix: { tab: 'resources', section: 'rights', label: 'Role rights' } })
   for (const gap of facts.bulkWithoutSetup ?? []) checks.push({ id: `bulk-setup:${gap.stream}`, title: `${gap.stream} bulk creation Epic #${gap.epicId} has no Feature setup`, detail: `${gap.stream} Create Features skips every row until Epic #${gap.epicId} has a shared Feature setup (or All Epics sets one).`, tone: 'warn', fix: { tab: 'epics', section: 'setup', label: 'Feature setup' } })
   if (facts.withoutDoD?.length) checks.push({ id: 'no-dod', title: `Feature setup without a Feature DoD: ${ids(facts.withoutDoD)}`, detail: 'New Features under these Epics start without a Definition of Done; fill it in the setup (or in All Epics).', tone: 'warn', fix: { tab: 'epics', section: 'setup', label: 'Feature setup' } })
-  if (!facts.ioccBulkEpic) checks.push({ id: 'iocc-epic', title: 'IOCC bulk creation Epic not chosen', detail: 'IOCC Create Features needs the Epic its Features go under.', tone: 'info', fix: { tab: 'options', section: 'bulk', label: 'Bulk creation Epics' } })
+  // ADM-05, QV-59: no bulk creation Epic is built in — each bulk stream (DP, IOCC, Content) without one mapped is listed.
+  for (const stream of facts.bulkEpicsUnset ?? []) checks.push({ id: `bulk-epic:${stream}`, title: `${stream} bulk creation Epic is not set`, detail: `${stream} Create Features is disabled until the Epic its Features go under is mapped (shared, saved to Git, or your own).`, tone: 'warn', fix: { tab: 'options', section: 'bulk', label: 'Bulk creation Epics' } })
   if (!facts.epicSetups) checks.push({ id: 'epic-setup', title: 'No Epic setup yet', detail: 'Optional: the extra fields (Program, Platform…) new Features carry per Epic.', tone: 'info', fix: { tab: 'epics', section: 'setup', label: 'Epic setup' } })
   if (!facts.sharedFeatureSetups) checks.push({ id: 'feature-setup', title: 'No shared Feature setup yet', detail: 'Optional: the User Stories, DoD and estimate new Features get per Epic.', tone: 'info', fix: { tab: 'epics', section: 'setup', label: 'Feature setup' } })
   const order: Record<HealthTone, number> = { todo: 0, warn: 1, info: 2, ok: 3 }

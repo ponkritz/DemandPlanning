@@ -44,6 +44,7 @@ async function mock(context, files, role = 'Tool Owner') {
     return json({ value: [] })
   })
   await context.route('https://api.github.com/**', (route) => {
+    if (/^\/repos\/[^/]+\/[^/]+\/branches\/[^/]+$/.test(new URL(route.request().url()).pathname)) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ name: 'main' }) }) // GIT-25: the branch can be read
     const request = route.request(), url = new URL(request.url())
     const json = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
     if (url.pathname === '/repos/example/storage') return json({ visibility: 'private', permissions: { push: true } })
@@ -97,7 +98,7 @@ test('TC-STR-06: as Tool Owner add a stream “Labeling” (Azure DevOps, Like C
   assert.match(saved.message, /^Add stream: Labeling \(Like Content\)( \[by [^\]]+\])?$/)
   assert.match(await text(panel.locator('tbody')), /Labeling Custom Azure DevOps query connection “Labeling” Like Content — each document is a release by its title/)
 
-  // The menu lists Labeling under Release Details → Azure DevOps Server, not set up yet (＋).
+  // The menu lists Labeling under Release Details (one list A–Z, NAV-52), not set up yet (＋).
   const missing = releaseDetails(page).locator('button.nav-missing', { hasText: 'Labeling' })
   await missing.waitFor()
   assert.equal(await missing.getAttribute('title'), 'Not set up: add a connection named “Labeling”')
@@ -130,8 +131,11 @@ test('TC-STR-06: as Tool Owner add a stream “Labeling” (Azure DevOps, Like C
   await page.locator('.page-loading').waitFor({ state: 'detached' })
   const bar = page.locator('.release-source')
   await bar.waitFor()
-  assert.match(await text(bar), /^Labeling · example \/ Labeling · query · fetched /, '(1) the source bar')
-  assert.equal(await bar.getByLabel('Show').count(), 1, 'Show: month / All months')
+  // (1) the source bar (QV-70): Show, ↻ and ⋯; the source and when fetched are the first line of ⋯.
+  await bar.getByRole('button', { name: 'More actions: Labeling', exact: true }).click()
+  assert.match(await text(page.getByRole('menu', { name: 'Labeling' }).locator('.view-actions-note')), /^example \/ Labeling · query · fetched /, '(1) the source bar: source · fetched in ⋯')
+  await page.keyboard.press('Escape')
+  assert.equal(await bar.getByRole('radiogroup', { name: 'Show' }).count(), 1, 'Show: Selected month / All months')
   const counts = page.locator('.release-counts')
   assert.match(await text(counts), /Releases in \w+ \d{4} 2/, '(2) the counts: two releases this month')
   const tabs = page.getByRole('tablist').filter({ has: page.getByRole('tab', { name: /^Releases/ }) })

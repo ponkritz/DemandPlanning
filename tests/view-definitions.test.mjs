@@ -49,11 +49,12 @@ test('views file sits next to the data file and is committed with the loaded ver
   assert.equal(siblingConfig(config, 'azure-views.json').path, 'team/azure-views.json')
   assert.equal(siblingConfig({ ...config, path: 'planning-data.json' }, 'azure-views.json').path, 'azure-views.json')
   const calls = []
-  const fetchImpl = async (url, init = {}) => { calls.push([init.method ?? 'GET', url, init.body ? JSON.parse(init.body).sha : undefined]); return init.method === 'PUT' ? Response.json({ content: { sha: 'new' }, commit: { html_url: 'c' } }) : new Response('', { status: 404 }) }
+  const fetchImpl = async (url, init = {}) => { calls.push([init.method ?? 'GET', url, init.body ? JSON.parse(init.body).sha : undefined]); return init.method === 'PUT' ? Response.json({ content: { sha: 'new' }, commit: { html_url: 'c' } }) : new Response('', { status: url.includes('/branches/') ? 200 : 404 }) }
   const target = siblingConfig(config, 'azure-views.json')
   assert.deepEqual(await readTextFile(target, 't', fetchImpl), { text: null, sha: null })
   assert.deepEqual(await writeTextFile(target, 't', 'x', 'old', 'msg', fetchImpl), { sha: 'new', commitUrl: 'c' })
-  assert.match(calls[1][1], /contents\/team\/azure-views\.json$/); assert.equal(calls[1][2], 'old')
+  const put = calls.find((call) => call[0] === 'PUT')
+  assert.match(put[1], /contents\/team\/azure-views\.json$/); assert.equal(put[2], 'old')
 })
 
 test('Git connection setup is the default: added and followed; the stream mapping is enforced, other views kept when changed here; PATs kept (TC-CON-47)', async () => {
@@ -256,4 +257,79 @@ test('back up and clean up: every connection removed, PATs kept per server, the 
   markResetApplied('2999-01-01T00:00:00.000Z', user)
   assert.equal(resetPending('2026-11-03T09:00:00.000Z', user), true)
   assert.deepEqual(applyViewsReset('2026-11-03T09:00:00.000Z', user).map((view) => view.id), ['dp-new'])
+})
+
+import * as viewDefinitions from '../src/viewDefinitions.ts'
+import { readFileSync } from 'node:fs'
+// GIT-26 (KB-92): after Git storage points to another repository, the first sync changes nothing here: it adds what is
+// new, removes and replaces nothing (connections and PATs stay), applies no clean-up marker and says what differs.
+test('GIT-26: the first sync from another repository removes no connection or PAT, applies no clean-up, and says what differs (TC-GIT-19)', () => {
+  const { compareViewsWithGit, repositoryChanged, markViewsRepository, repositoryChangeNote, applyViewsReset, serializeViewsReset, parseViewsReset } = viewDefinitions
+  const storage = memory()
+  const cp = { id: 'cp', url: 'https://dev.azure.com/example-org/CP', reason: 'CP', viewName: 'CP', role: 'backlog-view', query: 'SELECT 1' }
+  const tw = { id: 'tw', url: 'https://dev.azure.com/example-org/TW', reason: 'TW', viewName: 'Time Writing', role: 'time-tracking' }
+  const qms = { id: 'qms', url: 'https://dev.azure.com/example-org/QMS', reason: 'QMS', viewName: 'QMS', role: 'backlog-view', query: 'SELECT 3' }
+  saveAzureConnectionProfile({ ...dp, token: 'synthetic-onprem-pat' }, storage)
+  saveAzureConnectionProfile({ ...cp, token: 'synthetic-cloud-pat' }, storage)
+  saveAzureConnectionProfile({ ...tw, token: 'synthetic-cloud-pat' }, storage)
+  // Synced with the old repository: all three came from its setup.
+  syncViewsFromGit([dp, cp, tw], storage)
+  const old = 'acme/old-data@main:azure-views.json', moved = 'example-org/new-data@main:azure-views.json'
+  // A browser from before this check (no repository remembered) with connections from Git counts as a change.
+  assert.equal(repositoryChanged(old, storage), true)
+  markViewsRepository(old, storage)
+  assert.equal(repositoryChanged(old, storage), false)
+  assert.equal(repositoryChanged(moved, storage), true)
+  assert.equal(repositoryChanged(moved, memory()), false, 'a new browser without connections from Git: an ordinary first sync')
+  // The new repository lists other IDs: qms is new, cp differs, dp and tw are not there.
+  const cpThere = { ...cp, query: 'SELECT 2' }
+  const result = compareViewsWithGit([cpThere, qms], storage)
+  assert.deepEqual([result.added, result.removed, result.removedIds, result.updated, result.onlyHere, result.differ, result.repositoryChanged], [['QMS'], [], [], [], ['Digital Platform', 'Time Writing'], ['CP'], true])
+  assert.deepEqual(listAzureConnectionProfiles(storage).map((view) => view.id).sort(), ['cp', 'dp', 'qms', 'tw'], 'every connection here is kept')
+  assert.equal(loadAzureConnectionProfile('cp', storage).query, 'SELECT 1', 'a connection that differs is kept as it is here')
+  assert.equal(loadAzureConnectionProfile('dp', storage).token, 'synthetic-onprem-pat', 'PATs kept')
+  assert.equal(loadAzureConnectionProfile('tw', storage).token, 'synthetic-cloud-pat')
+  assert.equal(loadAzureConnectionProfile('qms', storage).token, 'synthetic-cloud-pat', 'the added one gets the PAT of its server')
+  // Later syncs with the new repository never remove what came from the old one (its baseline is gone).
+  markViewsRepository(moved, storage)
+  const next = syncViewsFromGit([cpThere, qms], storage)
+  assert.deepEqual([next.removed, next.added], [[], []])
+  assert.deepEqual(listAzureConnectionProfiles(storage).map((view) => view.id).sort(), ['cp', 'dp', 'qms', 'tw'])
+  // A clean-up marker found in the new repository is not applied by the first sync (the hook marks it as seen).
+  const resetAt = parseViewsReset(serializeViewsReset('2026-11-20T08:00:00Z'))
+  viewDefinitions.markResetApplied(resetAt, storage)
+  assert.equal(applyViewsReset(resetAt, storage), null)
+  assert.equal(listAzureConnectionProfiles(storage).length, 4)
+  const note = repositoryChangeNote('example-org/new-data', result, true)
+  assert.match(note, /another repository \(example-org\/new-data\)\. The connection setup there has 1 connection that was not here \(added: QMS\) and lacks 2 that are here \(kept here: Digital Platform, Time Writing\); 1 connection differs from here \(kept as here: CP\)\./)
+  assert.match(note, /clean-up \(azure-views-reset\.json\) was not applied here/)
+  assert.match(note, /Nothing here was removed or replaced, and your PATs are kept/)
+  assert.match(repositoryChangeNote('example-org/new-data', null, false), /It has no connection setup yet; the connections here are kept\./)
+  // An empty setup in the new repository: nothing removed, nothing of the old baseline left.
+  const empty = memory()
+  saveAzureConnectionProfile({ ...cp, token: 'synthetic-cloud-pat' }, empty)
+  syncViewsFromGit([cp], empty)
+  assert.deepEqual(compareViewsWithGit([], empty).onlyHere, ['CP'])
+  assert.deepEqual(syncViewsFromGit([qms], empty).removed, [], 'the old baseline does not remove cp later')
+})
+test('GIT-26: a shared view with the same ID cannot replace or reclassify a personal view (TC-GIT-19)', () => {
+  const storage = memory()
+  const personal = { ...dp, id: 'personal', role: 'reference', reason: 'My private query', viewName: 'My private query', mine: true, token: 'synthetic-local-pat' }
+  const shared = { ...dp, id: personal.id, reason: 'CP', viewName: 'CP', query: 'SELECT 2' }
+  saveAzureConnectionProfile(personal, storage)
+  const before = loadAzureConnectionProfile(personal.id, storage)
+  assert.deepEqual(viewDefinitions.compareViewsWithGit([shared], storage).differ, ['CP'])
+  assert.deepEqual(syncViewsFromGit([shared], storage).kept, ['CP'])
+  assert.deepEqual(restoreViews([shared], 'synthetic-other-pat', storage).skipped, ['CP'])
+  assert.deepEqual(loadAzureConnectionProfile(personal.id, storage), before)
+  assert.equal(gitSyncedIds(storage).includes(personal.id), false)
+  assert.deepEqual(viewsFile(listAzureConnectionProfiles(storage)).views, [])
+})
+
+test('GIT-26: the start sync checks for a repository change before any clean-up marker is applied; a failed sync is shown (TC-GIT-19)', () => {
+  const hook = readFileSync(new URL('../src/useGitStorage.ts', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+  const sync = hook.slice(hook.indexOf('async function syncViewsNow'), hook.indexOf('async function shareViews'))
+  assert.ok(sync.indexOf('repositoryChanged(repository)') > 0 && sync.indexOf('repositoryChanged(repository)') < sync.indexOf('applyViewsReset('), 'the change is checked before the clean-up')
+  assert.match(sync, /compareViewsWithGit\(views\)/)
+  assert.match(hook, /The connections were not synced from Git: .* The connections and PATs here are kept\./)
 })

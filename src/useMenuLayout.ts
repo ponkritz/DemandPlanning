@@ -51,7 +51,9 @@ export function useMenuLayout(git: GitStorage) {
 }
 export type MenuLayoutStore = ReturnType<typeof useMenuLayout>
 
-export interface NewPage { kind: PageKind; name: string; description: string; icon: string; group: string; newGroup: string | null; owners: string[] }
+// TVL-15: hidden — the page is placed hidden from the menu (a page that lives as a tab of Tool Validations).
+// TVL-25: ownersFromList — the owners that come from the Tool Validations list's co-owners (a tab's page).
+export interface NewPage { kind: PageKind; name: string; description: string; icon: string; group: string; newGroup: string | null; owners: string[]; hidden?: boolean; ownersFromList?: string[] }
 
 // PGB-05: the blank page file is saved to Git at once (on-demand/<id>.json, its id made from the name), then its place in
 // the menu (menu-layout.json, with a new group when one was asked for) — two queued saves; then the page opens.
@@ -62,8 +64,8 @@ export async function createPage(store: OnDemandStore, menu: MenuLayoutStore, in
   const id = pageIdFor(input.name, [...store.pages.map((page) => page.id), ...Object.keys(layout.pages)])
   const created = emptyPage(id, input.name, input.description)
   const saved = await store.save(created, `Pages & menu: add the ${kindLabel(input.kind)} page ${created.name} to ${groupName}`)
-  layout = placePage(layout, id, { type: input.kind, group, icon: input.icon, owners: input.owners }, store.pages.map((page) => page.id))
-  const placed = await menu.save(layout, `Pages & menu: place ${created.name} in ${groupName}${input.newGroup != null ? ' (new group)' : ''}`)
+  layout = placePage(layout, id, { type: input.kind, group, icon: input.icon, owners: input.owners, ...(input.hidden ? { hidden: true } : {}), ...(input.ownersFromList?.length ? { ownersFromList: input.ownersFromList } : {}) }, store.pages.map((page) => page.id))
+  const placed = await menu.save(layout, input.hidden ? `Pages & menu: place ${created.name} (a tab of Tool Validations, hidden from the menu)` : `Pages & menu: place ${created.name} in ${groupName}${input.newGroup != null ? ' (new group)' : ''}`)
   recordJob(`pages:${id}`, `Add page · ${created.name}`, { text: `${outcomeText(saved)} ${onDemandPath(id)}; ${outcomeText(placed).toLowerCase()} ${menu.path}` })
   return id
 }

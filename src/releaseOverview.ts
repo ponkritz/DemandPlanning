@@ -3,7 +3,8 @@ import { myPatternsVersion } from './myNamingPatterns.ts'
 import type { AppState, AzureWorkItem } from './domain'
 import type { AzureConnectionProfileSummary } from './azureCredentials.ts'
 import { releaseFor, releaseOf } from './releasePath.ts'
-import { allStreams, defaultStreams, profileForStream, profilesForStream, streamArea, streamOfProfile, streamsVersion, type ReleaseRule } from './streams.ts'
+import { allStreams, defaultStreams, profileForStream, profilesForStream, streamArea, streamOfProfile, streamsVersion, toolQueries, type ReleaseRule } from './streams.ts'
+import { statusLabelOf, statusText, toolMasterList, toolMasterVersion, toolMonthReport, toolMonthStatus, toolQueryIndex, type MasterTool } from './toolQueries.ts'
 import { cpMonthReport, cpNameIndex, cpSignatures, fieldReader } from './cpReporting.ts'
 import { countStreams, normalizeReleaseSourceSettings, releaseRegister, streamPatterns, viewMonthOf, type EnteredCounts } from './releaseSource.ts'
 import { viewSource } from './viewSources.ts'
@@ -104,6 +105,48 @@ function cpStream(state: Pick<AppState, 'azureSources' | 'releaseSource'> & Part
   }
 }
 
+// TVL-19…TVL-22: Tool Validations from its two queries (toolQueries): Completed = the tools whose completion date
+// (the chosen field, default Changed Date) is in the month; Supported = the tools with a qualifying Quality signature
+// in the month on a document whose Parent is the tool (CP's logic). Undefined with one query (counted as before).
+// The index is read once per fetched data set and settings (KB-27).
+const toolIndexCache = new WeakMap<object, WeakMap<object, Map<string, ReturnType<typeof toolQueryIndex>>>>()
+const noDocuments: AzureWorkItem[] = []
+export function toolReportFor(state: Pick<AppState, 'azureSources' | 'releaseSource'> & Partial<Pick<AppState, 'releaseSourceSettings'>>, profiles: AzureConnectionProfileSummary[], month: string, timeZone?: string) {
+  const stream = defaultStreams.find((entry) => entry.rule === 'tool')!
+  const queries = toolQueries(stream, profiles)
+  if (!queries.tools || !queries.documents) return undefined
+  const releaseConnections = profiles.filter((profile) => profile.role === 'release-source').length
+  const tools = viewSource(state, queries.tools.id, queries.tools.role, queries.tools.query, releaseConnections)
+  const documents = viewSource(state, queries.documents.id, queries.documents.role, queries.documents.query, releaseConnections)
+  const settings = normalizeReleaseSourceSettings(state.releaseSourceSettings).toolValidations
+  const patterns = streamPatterns(state.releaseSourceSettings, stream.name)
+  const toolItems = tools?.items ?? noDocuments, documentItems = documents?.items ?? noDocuments
+  const toolColumns = tools && 'columns' in tools ? tools.columns : undefined, documentColumns = documents && 'columns' in documents ? documents.columns : undefined
+  let byDocuments = toolIndexCache.get(toolItems)
+  if (!byDocuments) { byDocuments = new WeakMap(); toolIndexCache.set(toolItems, byDocuments) }
+  let byKey = byDocuments.get(documentItems)
+  if (!byKey) { byKey = new Map(); byDocuments.set(documentItems, byKey) }
+  const key = JSON.stringify([settings?.completionField ?? '', timeZone ?? '', patterns, toolColumns ?? null, documentColumns ?? null])
+  let index = byKey.get(key)
+  if (!index) { index = toolQueryIndex(toolItems, toolColumns, documentItems, documentColumns, { completionField: settings?.completionField, patterns, timeZone }); byKey.set(key, index) }
+  return { tools: queries.tools, documents: queries.documents, how: queries.how, toolSource: tools, documentSource: documents, report: toolMonthReport(index, month) }
+}
+// TVL-36: Tool Validations in Pulse Check, the Monthly pack and the cumulative chart count the master list's tools by
+// their Current Month Status (toolMonthStatus — the same rule as the Master list column and its count cards):
+// Completed = the tools Completed, Supported = the tools Supported; the drill-down lists those tools (name and version,
+// ID, status). `master`: the master list (default: this app's, toolMasterList()).
+export function toolStream(found: Pick<NonNullable<ReturnType<typeof toolReportFor>>, 'tools' | 'toolSource' | 'report'>, name: string, master: readonly MasterTool[] | undefined = toolMasterList()): ReleaseStream {
+  const { report } = found
+  const status = toolMonthStatus(master, { report })
+  return {
+    id: found.tools.id, name, fetchedAt: found.toolSource?.fetchedAt ?? '',
+    releases: status.completed.map((row) => ({ name: statusLabelOf(row), release: '', documents: row.documents, ...(row.date ? { approvalDate: row.date } : {}) })),
+    documents: report.signedDocuments,
+    titles: status.listed.map((row) => ({ id: row.id ?? 0, title: statusLabelOf(row), url: row.url ?? '', release: [row.id != null ? `ID ${row.id}` : '', statusText(row)].filter(Boolean).join(' · '), ...(row.date ? { approvalDate: row.date } : {}) })),
+    supported: status.supported.length, supportedEntries: status.supported.map((row) => ({ key: `tool:${row.id ?? row.key}`, label: statusLabelOf(row) })),
+  }
+}
+
 // Pulse Check: the default Azure streams in their order (DP, CP, IOCC, Content, Tool Validations), each from the
 // connection named like it, also before it is fetched; a stream without a connection is listed as not set up.
 // The streams of a month are worked out once per data set (KB-27): the store replaces its arrays on every change, so
@@ -121,7 +164,8 @@ export function defaultStreamReleases(state: Pick<AppState, 'azureSources' | 're
   let byMonth = bySettings.get(state.releaseSourceSettings ?? none)
   if (!byMonth) { byMonth = new Map(); bySettings.set(state.releaseSourceSettings ?? none, byMonth) }
   // QV-60: my own naming patterns changing works the streams out again; STR-02: so does a custom stream added or changed.
-  const key = `${month}\u0000${timeZone ?? ''}\u0000${myPatternsVersion()}\u0000${streamsVersion()}`
+  // TVL-36: so does the master list of Tool Validations.
+  const key = `${month}\u0000${timeZone ?? ''}\u0000${myPatternsVersion()}\u0000${streamsVersion()}\u0000${toolMasterVersion()}`
   const cached = byMonth.get(key)
   if (cached) return cached
   const streams = computeStreams(state, profiles, month, timeZone)
@@ -150,6 +194,7 @@ function computeStreamsOnly(state: Pick<AppState, 'azureSources' | 'releaseSourc
     if (stream.rule === 'dp' && profile && !stream.custom) return { ...dpStream(state, profile, releaseConnections, month, timeZone), name: stream.name }
     if (stream.rule === 'iocc' && profile) return { ...ioccStream(state, profile, releaseConnections, month, timeZone, stream.name, streamArea(stream)), name: stream.name }
     if (stream.rule === 'cp' && profile) return cpStream(state, profiles, month, timeZone)
+    if (stream.rule === 'tool' && !stream.custom && profile) { const two = toolReportFor(state, profiles, month, timeZone); if (two) return toolStream(two, stream.name) }
     return profile ? { ...streamOf(state, profile, releaseConnections, month, timeZone, stream.rule, streamPatterns(state.releaseSourceSettings, stream.name), streamArea(stream)), name: stream.name } : { id: `stream:${stream.name}`, name: stream.name, fetchedAt: '', releases: [], documents: 0, titles: [], notSetUp: true }
   })
 }

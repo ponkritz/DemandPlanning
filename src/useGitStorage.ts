@@ -10,11 +10,12 @@ import { applyWindchillSnapshots, parseWindchillSnapshot, windchillDigest, windc
 import { loadWindchillViews, saveWindchillViews, type WindchillView } from './windchillViews'
 import { windchillAnalysisFolder } from './windchillReleases'
 import { loadAzureConnectionProfile, saveAzureConnectionProfile, type AzureConnectionProfileSummary, listAzureConnectionProfiles } from './azureCredentials'
-import { applyViewsReset, resetPending, parseViews, parseViewsReset, serializeViews, serializeViewsReset, sharedEmails, syncViewsFromGit, connectionKey, viewsBackupFolder, viewsFile, viewsResetPath, mergeViews, removedFromGit, type GitVersion } from './viewDefinitions'
+import { applyViewsReset, compareViewsWithGit, markResetApplied, markViewsRepository, repositoryChanged, repositoryChangeNote, resetPending, parseViews, parseViewsReset, serializeViews, serializeViewsReset, sharedEmails, syncViewsFromGit, connectionKey, viewsBackupFolder, viewsFile, viewsResetPath, mergeViews, removedFromGit, type GitVersion } from './viewDefinitions'
 import { personalSetupPath } from './featureSetup'
 import { personalViewsPath, viewsDefaultsPath } from './personalViews'
 import { kpiTrackerFile } from './kpiTracker'
 import { customStreamsFile } from './customStreams'
+import { mergeToolValidationsText, toolValidationsFile } from './toolValidations'
 import { mergeOnDemandText, onDemandFolder, onDemandPath, pageIdOfFile, pageIdPattern, type OnDemandPage } from './onDemand'
 import { listEntries } from './gitStorage'
 import { branchExists, ensureBranch } from './gitTrees'
@@ -225,14 +226,41 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
   }
   // At start: the shared connection setup in Git becomes this browser's default (connections changed here are kept).
   const [viewsSync, setViewsSync] = useState('')
+  // GIT-25, GIT-26: a failed sync or the first one from another repository, also shown in the Git storage panel for everyone.
+  const [viewsAlert, setViewsAlert] = useState('')
   async function syncViews() {
+    try { return await syncViewsNow() } catch (error) {
+      // GIT-25: a repository that cannot be read (or any other failure) changes nothing here; the reason is shown.
+      const note = `The connections were not synced from Git: ${error instanceof Error ? error.message : String(error)} The connections and PATs here are kept. `
+      setViewsSync(note); setViewsAlert(note)
+      throw error
+    }
+  }
+  async function syncViewsNow() {
+    if (!config || !token || !viewsConfig) throw new Error('Connect Git storage first.')
+    // GIT-26: the first sync from another repository than the last one (Change connection, Switch) changes nothing here:
+    // it adds the connections that are new, applies no clean-up marker and says what differs.
+    const repository = `${config.owner.toLowerCase()}/${config.repo.toLowerCase()}@${config.branch}:${viewsConfig.path}`
+    const resetAt = parseViewsReset((await readTextFile(siblingConfig(config, viewsResetPath), token)).text)
+    if (repositoryChanged(repository)) {
+      const file = await readViews()
+      const views = file.text == null ? [] : parseViews(file.text)
+      const resetSkipped = resetPending(resetAt)
+      const result = compareViewsWithGit(views)
+      if (resetAt) markResetApplied(resetAt)
+      markViewsRepository(repository)
+      const note = repositoryChangeNote(`${config.owner}/${config.repo}`, file.text == null ? null : result, resetSkipped)
+      setViewsSync(note); setViewsAlert(note)
+      return file.text == null ? null : result
+    }
     // A clean-up by an admin (CON-88) not applied here yet: every connection here goes first, with its data.
-    const reset = config && token ? applyViewsReset(parseViewsReset((await readTextFile(siblingConfig(config, viewsResetPath), token)).text)) : null
+    const reset = applyViewsReset(resetAt)
     if (reset?.length) { const ids = reset.map((profile) => profile.id); store.update((draft) => { draft.azureSources = (draft.azureSources ?? []).filter((source) => !ids.includes(source.connectionId)); return draft }) }
     const resetNote = reset?.length ? `Your admin cleaned up the connections: ${reset.length} removed here (${reset.map((profile) => profile.viewName || profile.reason).join(', ')}); your PATs are kept per server. ` : ''
     if (resetNote) setViewsSync(resetNote)
     const file = await readViews()
-    if (file.text == null) return null
+    markViewsRepository(repository); setViewsAlert('')
+    if (file.text == null) { if (!resetNote) setViewsSync(''); return null }
     const result = syncViewsFromGit(parseViews(file.text), localStorage, sharedEmails(file.text))
     // A connection removed in Git goes with its data here, as a connection removed in Settings does.
     if (result.removedIds.length) store.update((draft) => { if (draft.azureSources?.some((source) => result.removedIds.includes(source.connectionId))) draft.azureSources = draft.azureSources.filter((source) => !result.removedIds.includes(source.connectionId)); return draft })
@@ -351,6 +379,18 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     if (!config || !token) throw new Error('Connect Git storage first.')
     if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
     return queueText(siblingConfig(config, kpiTrackerFile), token, text, commitMessage, mergeKpiTrackerText)
+  }
+  // TVL-02: the Tool Validations master list (tool-validations.json next to the planning data), read by everyone with
+  // Git storage; saved with a token that can write, queued and merged with what others saved meanwhile (GIT-17).
+  const readToolValidations = useCallback(async () => {
+    if (!config || !token) throw new Error('Connect Git storage first.')
+    return trackRead(siblingConfig(config, toolValidationsFile), token)
+  }, [config, token])
+  async function writeToolValidations(text: string, commitMessage: string) {
+    if (!config || !token) throw new Error('Connect Git storage first.')
+    if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
+    const target = siblingConfig(config, toolValidationsFile)
+    return queueText(target, token, text, commitMessage, mergeToolValidationsText, privateGitWrites(target, token))
   }
   // OND-08, OND-09: the On-Demand pages, one file each in on-demand/ (the menu lists the folder). Read by everyone with
   // Git storage; saved with a token that can write, queued and merged with what others saved meanwhile (GIT-17);
@@ -803,6 +843,6 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     setConfig(null); setToken(''); setSynced(null); setStatus('off'); setMessage('Git storage disconnected in this browser. The data stays in the app and in the repository.'); sha.current = null
   }
 
-  return { listValidationDocuments, readValidationDocument, queueState, retryQueued, saveSnapshot, listSnapshots, readPersonalViews, writePersonalViews, readViewsDefaults, writeViewsDefaults, backupViews, resetViews, readPackTemplate, writePackTemplate, packTemplateHistory: config ? historyUrl(siblingConfig(config, packTemplateFile)) : '', config, connected, readOnly, status, message, dirty, commitUrl, history: config ? historyUrl(config) : '', isSample, load: () => load(), connect, remoteChanges, save, disconnect, viewsPath: viewsConfig?.path ?? '', viewsHistory: viewsConfig ? historyUrl(viewsConfig) : '', readViews, writeViews, shareViews, removedViews, syncViews, pushWindchillAnalysis, accessScope: accessConfig && token ? `${accessConfig.owner}/${accessConfig.repo}@${accessConfig.branch}:${accessConfig.path}` : '', accessPath: accessConfig?.path ?? '', accessHistory: accessConfig ? historyUrl(accessConfig) : '', readAccess, writeAccess, readFeatureSetup, writeFeatureSetup, readEpicSetup, writeEpicSetup, epicSetupHistory: config ? historyUrl(siblingConfig(config, 'epic-setup.json')) : '', readPersonalFeatureSetup, writePersonalFeatureSetup, featureSetupHistory: config ? historyUrl(siblingConfig(config, 'feature-setup.json')) : '', readQeMapping, writeQeMapping, readCustomStreams, writeCustomStreams, customStreamsHistory: config ? historyUrl(siblingConfig(config, customStreamsFile)) : '', readKpiTracker, writeKpiTracker, kpiTrackerHistory: config ? historyUrl(siblingConfig(config, kpiTrackerFile)) : '', readHistory, writeHistory, removeHistory, listWorkbooks, readWorkbook, historyFileHistory: config ? historyUrl(siblingConfig(config, historyPath)) : '', readMonthlyPack, writeMonthlyPack, monthlyPackHistory: (name: string) => config ? historyUrl(siblingConfig(config, name)) : '', qeMappingHistory: config ? historyUrl(siblingConfig(config, 'qe-mapping.json')) : '', listOnDemand, readOnDemand, writeOnDemand, removeOnDemand, readRowPage, saveRowPage, convertOnDemand, removeRowPageGit, listLocks, acquireLock, renewRowLock, releaseRowLock, lockFallback, readLockSettings, writeLockSettings, watchTick, rowLocksHistory: config ? historyUrl(siblingConfig(config, lockSettingsFile)) : '', readMenuLayout, writeMenuLayout, readDashboard, writeDashboard, removeDashboard, dashboardHistory: (id: string) => config ? historyUrl(siblingConfig(config, dashboardPath(id))) : '', menuLayoutHistory: config ? historyUrl(siblingConfig(config, menuLayoutFile)) : '', onDemandHistory: (id: string) => config ? historyUrl(siblingConfig(config, onDemandPath(id))) : '', removeSnapshots, viewsSync, snapshotNotes, pushSnapshot, pullSnapshot, pullSnapshots, pushWindchill, pullWindchill, pullWindchillOne, snapshotsHistory: config ? historyUrl(siblingConfig(config, snapshotFolder)) : '' }
+  return { listValidationDocuments, readValidationDocument, queueState, retryQueued, saveSnapshot, listSnapshots, readPersonalViews, writePersonalViews, readViewsDefaults, writeViewsDefaults, backupViews, resetViews, readPackTemplate, writePackTemplate, packTemplateHistory: config ? historyUrl(siblingConfig(config, packTemplateFile)) : '', config, connected, readOnly, status, message, dirty, commitUrl, history: config ? historyUrl(config) : '', isSample, load: () => load(), connect, remoteChanges, save, disconnect, viewsPath: viewsConfig?.path ?? '', viewsHistory: viewsConfig ? historyUrl(viewsConfig) : '', readViews, writeViews, shareViews, removedViews, syncViews, pushWindchillAnalysis, accessScope: accessConfig && token ? `${accessConfig.owner}/${accessConfig.repo}@${accessConfig.branch}:${accessConfig.path}` : '', accessPath: accessConfig?.path ?? '', accessHistory: accessConfig ? historyUrl(accessConfig) : '', readAccess, writeAccess, readFeatureSetup, writeFeatureSetup, readEpicSetup, writeEpicSetup, epicSetupHistory: config ? historyUrl(siblingConfig(config, 'epic-setup.json')) : '', readPersonalFeatureSetup, writePersonalFeatureSetup, featureSetupHistory: config ? historyUrl(siblingConfig(config, 'feature-setup.json')) : '', readQeMapping, writeQeMapping, readCustomStreams, writeCustomStreams, customStreamsHistory: config ? historyUrl(siblingConfig(config, customStreamsFile)) : '', readKpiTracker, writeKpiTracker, kpiTrackerHistory: config ? historyUrl(siblingConfig(config, kpiTrackerFile)) : '', readToolValidations, writeToolValidations, toolValidationsHistory: config ? historyUrl(siblingConfig(config, toolValidationsFile)) : '', readHistory, writeHistory, removeHistory, listWorkbooks, readWorkbook, historyFileHistory: config ? historyUrl(siblingConfig(config, historyPath)) : '', readMonthlyPack, writeMonthlyPack, monthlyPackHistory: (name: string) => config ? historyUrl(siblingConfig(config, name)) : '', qeMappingHistory: config ? historyUrl(siblingConfig(config, 'qe-mapping.json')) : '', listOnDemand, readOnDemand, writeOnDemand, removeOnDemand, readRowPage, saveRowPage, convertOnDemand, removeRowPageGit, listLocks, acquireLock, renewRowLock, releaseRowLock, lockFallback, readLockSettings, writeLockSettings, watchTick, rowLocksHistory: config ? historyUrl(siblingConfig(config, lockSettingsFile)) : '', readMenuLayout, writeMenuLayout, readDashboard, writeDashboard, removeDashboard, dashboardHistory: (id: string) => config ? historyUrl(siblingConfig(config, dashboardPath(id))) : '', menuLayoutHistory: config ? historyUrl(siblingConfig(config, menuLayoutFile)) : '', onDemandHistory: (id: string) => config ? historyUrl(siblingConfig(config, onDemandPath(id))) : '', removeSnapshots, viewsSync, viewsAlert, snapshotNotes, pushSnapshot, pullSnapshot, pullSnapshots, pushWindchill, pullWindchill, pullWindchillOne, snapshotsHistory: config ? historyUrl(siblingConfig(config, snapshotFolder)) : '' }
 }
 export type GitStorage = ReturnType<typeof useGitStorage>

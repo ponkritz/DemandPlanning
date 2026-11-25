@@ -45,8 +45,9 @@ export const rolesFile = (role = 'Tool Owner') => ({ type: 'file', encoding: 'ba
 
 // A fresh browser context (clean storage) with the Get started pop-up dismissed unless asked for, and page errors recorded.
 // roles: a role name (or true for Tool Owner) caches a roles file first (cachedRoles); a scenario's own init runs after.
-export async function openPage(app, { width = 1300, height = 1000, guide = false, roles, init, initArg } = {}) {
-  const context = await app.browser.newContext({ viewport: { width, height }, acceptDownloads: true })
+// scale: the device scale factor (2 for sharp screenshots); the default is the browser's (1).
+export async function openPage(app, { width = 1300, height = 1000, guide = false, roles, init, initArg, scale } = {}) {
+  const context = await app.browser.newContext({ viewport: { width, height }, acceptDownloads: true, ...(scale ? { deviceScaleFactor: scale } : {}) })
   const errors = []
   if (!guide) await context.addInitScript(() => { localStorage.setItem('demand-planning-setup-guide-v1', 'dismissed') })
   if (roles) await context.addInitScript((text) => { localStorage.setItem('demand-planning-access-v1', text) }, cachedRoles(roles === true ? 'Tool Owner' : roles))

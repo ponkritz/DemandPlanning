@@ -89,6 +89,7 @@ What the team shares lives in a private GitHub repository: the planning data, th
 - With a read-only token the app shows the shared data, but saving buttons are greyed out with the reason.
 - The token stays in your browser, like the PAT.
 - **The team's data moved** to `philips-internal/InD_DemandPlanningStorage`. If you connected before the move, a notice at the top of every page says so: press **Switch to philips-internal/InD_DemandPlanningStorage**. Your token must be allowed on the new repository; if it is not, ask for a new fine-grained token for it.
+- **"… was not found, or the token cannot access it."** means your token cannot read the repository (or the branch is wrong). The app then keeps everything you had — your streams, connections and PATs — and changes nothing until the token works; ask for access to the repository. After you change the repository, your connections are kept: the first start only adds the new repository's connections and Admin → Data & sharing (Git storage, and Shared setup in Git) tells you what differs.
 
 ### Your work email
 
@@ -122,6 +123,7 @@ The menu on the left groups the pages: **Data Insights**, **My Work**, **I&D Boa
 
 ![The menu](user-guide/images/menu.png)
 
+- **Release Details** is one list: **BRITE**, then every stream — Azure DevOps and Windchill exports alike — from A to Z, then **＋ ECP export** and **Import Windchill export**.
 - Click a group heading to fold or unfold it; **Expand all** / **Collapse all** do every group at once. The app remembers your choice.
 - **«** in the menu header folds the menu to icons; **»** shows the names again.
 - **Customize menu** (profile menu) pins or hides pages in your own menu.
@@ -319,6 +321,7 @@ The data sources are what the app has already loaded:
 
 - **Azure DevOps work** — Features, User Stories and Tasks by type, state, assignee, area, Epic, Feature, PI, Sprint, dates, hours and tags. A click on a bar lists the items with their #ID links. With only *My Tasks [Board]* you see your own items.
 - **Releases per stream** — a row per release as Pulse Check counts it.
+- **Completed releases per stream per month** — each stream's Completed releases in each month up to this one, as Pulse Check's Month tabs count them, with **Counted in Pulse Check** (Yes / No, from your own Streams not counted). A line chart by Month, split by Stream, with **Running total** is Pulse Check's Year chart.
 - **Capacity and utilization** — Team overview's figures per person and month.
 - **The On-Demand table pages**, the **Time Writing hours**, the **QE Mapping** sheets, the **KPI tracker** values, the **historical hours** and each **Windchill export**.
 
@@ -363,6 +366,20 @@ The tabs: **Capacity and workload**, **Streams**, **Plan quality**, **Utilizatio
 - **Ongoing activities** — work in progress per stream, with Target dates flagged when passed.
 - **Current month releases**.
 - **Monthly pack** (below).
+
+**Streams not counted.** To leave a few streams out of the counts, tick them in **Streams not counted** in the filter bar (next to Period). They stay on the page, greyed and marked **Not counted**, and every release total, the Supported total and — for a quarter, half-year or year — the **Releases** and **Change** tiles leave them out (both periods, so the Change compares like with like). The ⓘ of each panel names them, and the Windchill exports export has a **Counted** column. A stream added later is counted. **Reset filters** counts every stream again. The **Work closed and opened** tables count every Epic, and the Monthly pack and other pages count every stream.
+
+**Completed releases over the year.** With **Period** set to **Year**, the panel **Completed releases · {year}, cumulative** shows how the year's Completed releases add up month by month:
+
+- one **line per stream**, adding up its Completed releases from January (**Per stream**);
+- the **All streams** line, adding up all of them (**All streams**, off at first);
+- a grey **column per month** with that month's sum (**Month sum**).
+
+Tick or untick the three switches above the chart; your choice is kept for you. Point at a month to read each stream's total so far and the month's count (+n); **Data labels** writes each line's total at the current month and each column's sum. A month counts exactly as its Month tab counts it, so the totals agree with the monthly Pulse Check. The **Releases** row of the Year table above counts each release once over the year: a release counted in two months (for example an S&S IT release with documents dated in September and October) counts twice in the chart, so December can be higher than that row — the panel's ⓘ says so. Months still to come are empty. The table under the chart lists each month's Completed releases per stream with the **Month total** and the **Cumulative total**; **Export** saves it. Streams you left out with **Streams not counted** have no line and are not in the sums.
+
+To chart the same numbers on **My dashboard**, add a block over **Completed releases per stream per month** ([Edit My dashboard](#edit-my-dashboard)): a **line** chart by Month, split by Stream, with **Running total** on.
+
+The Tool Owner (and the Admin) can **Save view for everyone** beside the filter: that is the team default, kept in Git. Your own change is kept for you on every computer; **Use the view for everyone** goes back to the team default.
 
 ![Pulse Check → Last month](user-guide/images/pulse-check.png)
 
@@ -414,16 +431,20 @@ The **KPI tracker** (from the Team Insights tile on Home) shows the team's KPI w
 
 ### Release pages per stream
 
-**Release Details** has one page per stream: **DP**, **CP**, **IOCC**, **Content** and **Tool Validations** from Azure DevOps Server, and **S&S IT** and **ECP** from Windchill exports. A stream that is not set up yet shows **＋** in the menu and leads to its setup.
+**Release Details** has one page per stream: **DP**, **CP**, **IOCC**, **Content** and **Tool Validations** from Azure DevOps Server, and **S&S IT** and **ECP** from Windchill exports. The menu lists them in one list from A to Z. A stream that is not set up yet shows **＋** in the menu and leads to its setup.
 
 Every Release page looks the same, top to bottom:
 
-1. The **source bar** — where the data comes from, when it was fetched or imported, **Show: <month> / All months**, **↻** to refresh or import, and **⋯** (Load from Git, Connection settings, Remove).
+1. The **source bar** — on the right, **Show: Selected month / All months**, **↻** to refresh or import, and **⋯**. The first line of **⋯** says where the data comes from and when it was fetched or imported; then Load from Git, Connection settings, Remove, and **About this source…** for the details of the data (month filter, items fetched, DP's milestone names).
 2. The **counts** of the header month — **Releases in <month>**, **Completed**, **Supported** — with **What was counted**.
 3. Two tabs: **Releases** and **Source data** (the raw rows, with search and Export).
 4. The **Releases** table: Release name (▸ opens its documents), Release, the date, Documents, the stream's own columns, the Time Writing Feature with its planned and booked hours, and the **QMS-0025 match**.
 
 **Create Feature** on a release without a match opens the New Feature form, titled for that release. Load the QMS-0025 board first.
+
+**Create Features** (DP, IOCC and Content) ticks several releases and creates a Feature for each under the stream's **bulk creation Epic**. No Epic is built in: until one is mapped, the button is disabled and says *"No DP bulk creation Epic is set: map it in Admin → Stream options → Bulk creation Epics."* **Open Bulk creation Epics** next to it takes you there. The Tool Owner enters the Epic ID under **Shared** and saves it to Git for everyone; anyone can enter their own under **Mine**, which is kept in this browser and used for them instead.
+
+**Release Classification from the release number** (DP and IOCC). The Releases table of DP and IOCC starts with **Release name**, **Version** and **Release Classification (detected)** — the value of the bulk Epic's Release Classification list that its rules give for the version (— without a bulk Epic or a value). The Create Features pop-up shows the same three columns first and pre-fills each row's Release Classification, with *"detected from 5.2.1"* under it; change any row before creating. To set the rules (roles allowed *Edit the Epic setup*): **Admin → Epic & Feature setup → Setup per Epic**, choose the bulk Epic, and under its **Release Classification** field tick, for each value, the part of the release number that changes for it — **x.0** (first number only: 5.0, 5.0.0), **x.y** (second number: 5.2), **x.y.z** (third: 5.2.1), **x.y.z.w** (fourth: 5.2.1.3); the deepest non-zero part decides. For example Release ← x.0 and x.y, MLD ← x.y.z, PU ← x.y.z.w. A part can belong to one value only (the screen names a part ticked twice and does not save). **Fill with the usual rules** proposes Major, Minor, MLD and Platform Update (or PU) where your values are named so. Save to Git. Until rules are saved, the value named like the release type (Major, Minor, MLD, Platform Update) is pre-filled, as before. The fields of an Epic are listed Release name, Version, Release Classification first.
 
 ### Windchill exports
 
@@ -436,6 +457,77 @@ A Windchill search exported to CSV becomes a Release page.
 ![An imported Windchill export (made-up file)](user-guide/images/windchill.png)
 
 The import is saved to Git so the team sees it; **Load from Git** reads the team's latest one. Pulse Check counts the releases per stream.
+
+### Tool Validations: master list and expiry
+
+The **Tool Validations** page has these tabs:
+
+- **Expiry list** — opens first: the tiles (**Overdue**, **Due in the next N days**, **No due date**) on top, then **Expiring in the next … days** and the table of the tools that are overdue, due soon or without a due date.
+- **Master list** — the month's count cards, then the master list of every tool, with **＋ Add tool…**, its filters and **Export**. Next to Tool and Version: **ID** (the tool's Azure DevOps work item ID), **Used by** (the query's Source column), **Validated** (its State column), **Type** (its Type column) and **Current Month Status** for the month in the header — **Completed** (the tool's completion date is in the month), **Supported** (one of its documents has a Quality signature in the month), both as two pills (**Completed, Supported**), or empty. Only the tools of the Tool Validations query have these values; sort and filter them like any column.
+- **Tool List [TFS]** — the Tool Validations query's rows, with every column the query selects, in its order. Before a fetch it says to fetch the query with **↻**.
+- **Validation Documents [TFS]** — only when Tool Validations reads two queries (see *Tool Validations from two queries* below): every signed document.
+- **One tab per other source** — every source added under **Setup → Sources** (another Azure DevOps query, a Windchill export, a Table page) gets a tab named after it, in the order added: its rows as the app reads them with the source's field mapping, with **Edit mapping…** and **Merge into master list…**. When its data is not in this browser, the tab says how to load it. Removing the source removes its tab.
+- **Your team's own tabs** — tabs the Tool Owner and the list's co-owners add under **Setup → Tabs**: a Table, a Table + Insights or an On-Demand Dashboard, in the order they set.
+- **Setup** — last: **Sources** (**＋ Add source…**, and per source **Edit mapping…**, **Merge into master list…** and **Remove**), **Tabs** (**＋ Add tab…**, and per tab **←**, **→**, **Rename…** and **Remove…**), **Team settings** (**Edit…**) and **Due date highlights** (**Edit…**). Everyone sees it; those who may not change it see the buttons greyed out with the reason.
+
+There is no Releases table: the month's tools are the master list's Current Month Status. The page remembers the last tab you chose in this browser tab (a tab kept from the former **Azure** tab opens **Tool List [TFS]**).
+
+The master list keeps every tool the team has validated in Git; a tool stays listed after it leaves its source and is marked **Not in source now**.
+
+**See what is due**
+
+1. Open **Release Details → Tool Validations**: the **Expiry list** tab opens first.
+2. The tiles count the tools **Overdue**, **Due in the next N days** and with **No due date**. The table lists them in that order, with the days left.
+3. Change **Expiring in the next … days** to look further or nearer. The window is yours and is kept for you; **Use the team default** goes back to the team's window (60 days unless changed). The Tool Owner and the list's co-owners can make the window shown the team's with **Set … days as team default** (saved to Git); for everyone else the button is greyed out with the reason.
+4. **Export** writes the list to Excel or CSV.
+
+The due date is the source's own due date (or one entered by hand) when there is one; otherwise the validation date plus the validity period in months. A tool with a validation date but no validity period is taken as valid for **24 months** (2 years): its period shows as **24 (default)** and its due date as "validation date + 24 months (default)". Enter a period or a due date (Edit, or in the source) to replace the default; only a tool without a validation date has **No due date**.
+
+A tool from **Azure DevOps** (the Tool Validations query or another Azure DevOps query) is validated on its **completion date** — the field chosen in **Admin → Streams → Stream mapping → Tool Validations queries → Completion date**, **Changed Date** by default — unless its source's mapping names another **Validation date** field. A mapping saved earlier with **Author Approval Date** keeps it: to use the completion date, pick **Completion date** in **Setup → Edit mapping…** and save. Its validation date shows **(completion date)** and its due date "completion date + 24 months (default)", unless the query gives a validity period or a due date. With Changed Date, any later edit of the tool's work item moves both dates at the next fetch; choose a date field that is set once to avoid that.
+
+**Keep the master list (Tool Owner and the list's co-owners)**
+
+1. Fetch the Tool Validations query (**↻**): its tools are added to the master list by themselves.
+2. On **Master list**, **＋ Add tool…** adds a tool validated elsewhere; **Edit** corrects its dates or notes — a date changed by hand is kept when the sources are read again; **Remove** takes it off the list. A tool that comes from **Azure DevOps** is changed there: its **Edit** and **Remove** are greyed out (hover them for the reason), and **Edit notes…** changes only its notes. Once Azure DevOps no longer returns it (**Not in source now**) you can **Remove** it; Edit stays greyed out. Dates you entered by hand on such a tool are replaced by Azure DevOps' at the next fetch. Adding by hand a tool with the same name and version as one from Azure DevOps is refused with the reason.
+3. On **Setup**, under **Sources**, **＋ Add source…** adds another Azure DevOps query, a Windchill export or a Table page you keep by hand (add one with **＋ Add page…**, with columns such as Tool, Version, Validation date, Validity period and Due date). Answer **Category**: **Tool List** (one row per tool — its tools go into the master list) or **Validation Documents** (documents of the validations — listed on its own tab with every column, never added to the master list); nothing is chosen until you pick. The source's tab appears at once, before Setup, and Setup → Sources shows its category.
+4. For a Tool List, check **Edit mapping…** (on Setup or on the source's tab): which column gives the tool name, version and dates. The app's guesses are marked **Guessed** until you save the mapping. A Validation Documents source needs no mapping. **Edit mapping…** is also where you change the category: changed to Validation Documents, the source stops feeding the master list and the tools it brought stay, marked **Not in source now** (nothing is deleted); changed back to Tool List, merge it again to link them.
+5. Open the source's own tab to see its rows as read; for a Tool List, **Merge into master list…** (on that tab or under **Setup → Sources**) shows what changes, then saves it to Git. A Validation Documents tab lists its rows with every column and has no Merge.
+6. **Setup → Team settings → Edit…** sets the team's window (also possible on the Expiry list, see above) and names the list's co-owners (a Tool Owner names them).
+
+**Highlight tools by due date**
+
+The **Master list** and the **Expiry list** tint each tool's row by how soon it is due, and name the band in the **Due date** cell (for example **≤ 30 days** or **Overdue / today**); the legend above the table lists the bands. An overdue tool is in the first band; a tool with no due date is not highlighted. Until the team saves its own bands the defaults apply: overdue or due today red, within 30 days amber, within 90 days yellow.
+
+1. Open **Setup**: **Due date highlights** shows the bands and how many tools fall in each now.
+2. Choose **Edit…** (Tool Owner and the list's co-owners). Each band has **Due within (days)** (0 = overdue or due today) and a **Colour**; **Remove** takes a band away and **＋ Add band** adds one (up to 10). When a tool fits several bands, the one with the fewest days wins.
+3. Choose **Save to Git**. Everyone sees the same bands. Removing every band turns the highlighting off.
+
+**Add a tab of your own (Tool Owner and the list's co-owners)**
+
+1. Open **Setup** and, under **Tabs**, choose **＋ Add tab…**.
+2. Choose the **Page type** — **Table** (a table you set up yourself), **Table + Insights** (the table and an Insights tab of charts) or **On-Demand Dashboard** (tiles and charts over table pages, the master list and the expiry list) — give it a name and choose **Add tab**. The tab appears before Setup.
+3. Open the tab: set up the table (**Set up columns…**, **＋ Add row**) or the dashboard (**＋ Add block…**) as on any other On-Demand page. For a chart of the tools, choose the data source **Tool Validations master list** or **Tool Validations expiry list** — for example a bar chart of the tools by **Status** (Overdue, Due soon, No due date, OK; due soon is within the team default window).
+4. Under **Setup → Tabs**, **←** and **→** move a tab, **Rename…** renames it, and **Remove…** asks first: the page is **kept in Git, hidden** — or, for a Tool Owner, **deleted with its data**.
+5. To bring back a page that is hidden — one kept when its tab was removed, or one left behind when an older app version dropped the tabs — choose **＋ Add existing page as tab…** under **Setup → Tabs**, pick the page, keep or change its name and choose **Add tab**. Its rows or blocks are there again.
+
+**Who may edit the tab pages.** The list's co-owners (Setup → Team settings) are written as **co-owners of each tab's page**, so they can set up and edit the page also when it is opened from Admin → Pages & menu. Co-owners someone added to a page by hand stay; the ones that came from the list are taken off again when they leave the list or when the tab is removed. The **Tabs** panel shows per tab how many co-owners came from the list and how many were added by hand; if a page is not in line with the list, it says so with **Write the co-owners to the tab pages**.
+
+**Status on a dashboard.** Status (Overdue, Due soon, No due date, OK) and Days left on a dashboard use the **team default window**, the same for everyone. To leave them out of a block, untick **Show expiry status** in the block's pop-up (under the data source); the block then counts the same tools without them.
+
+These tabs are pages of their own in Git, but they are not in the menu, on Home or in search: they live on the Tool Validations page only (Admin → Pages & menu lists them as hidden, **Tab of Tool Validations**). Everyone else reads them.
+
+Everyone else sees every tab read only; the buttons say why they are greyed out. The month's cards on the Master list tab, Pulse Check (its Tool Validations quadrant lists the tools with ID and status), the Monthly pack and the cumulative chart count the master list's tools by their Current Month Status. **ID**, **Used by**, **Validated** and **Type** are read with the source's field mapping: check them in **Setup → Edit mapping…** of the Tool Validations query (the app guesses System.Id and the columns named Source, State and Type; choose None to leave one out).
+
+**Count tool validations from two queries (Tool Owner)**
+
+Tool Validations can read two Azure DevOps queries: the **Tool List** query (the Tools query: one row per tool — the only one that feeds the master list) and the **Validation Documents** query (the Signed documents query: (one row per document, with a **Parent** column holding the tool's work item ID and the approver slots, as CP's documents have).
+
+1. Open **Admin → Streams → Stream mapping**. The **Tool Validations** row is the Tool List query; on the row **Tool Validations · Validation Documents** choose **Add query**, enter the server, project and the documents query. **Add query** asks the **Category** — Tool List or Validation Documents —, pre-selected from the query's name or columns: check it (a category another connection already has is greyed out), then **Save and refresh data**. Your choice is kept in Tool Validations queries.
+2. Under **Tool Validations queries** check that one connection shows **Tool List** and the other **Validation Documents**. If the app took the wrong one, choose the **Validation Documents query** yourself; **None — one query** counts as before.
+3. Choose the **Completion date (Completed)**: **Changed Date** (the last updated date) is the default, but it moves whenever someone edits the tool, so pick a date column of the Tools query that is set once, if there is one. Save the change to Git with the bar above.
+4. Open **Release Details → Tool Validations → Master list** for the month's cards (**Validations in {Month}**, **Completed validations**, **Supported validations**; they are on the Master list tab only), with the **Current Month Status** of each tool: **Completed** counts the tools whose completion date is in the header month, **Supported** the tools with a document signed by a Quality role (QA, QE, QAQE for Software, …) in the month; a tool with both shows **Completed, Supported** and counts in both. The tab **Tool List [TFS]** shows the Tools query and **Validation Documents [TFS]** every document of the Signed documents query — each with every column the query selects, in the query's order (use **Columns** to hide some). Validation Documents starts with **Tool**, the name of the document's Parent, **Parent ID** and **Tool List (Azure)**: a document whose Parent is not in the Tools query (for example a retired tool) is marked **Not in Tool List (Azure)** — it is listed, not counted, and not added to the master list. **↻** fetches both queries and then reads the names of those Parents from Azure DevOps by their ID (read only, with the same connection and PAT); they are kept with the data. A name that cannot be read shows as **#ID**: point at it, or open ⓘ on the table, for the reason.
+
+Pulse Check, the Monthly pack and the cumulative chart show the same numbers, counted from the master list; Pulse Check's Tool Validations quadrant lists the tools with their ID and status. With only one Tool Validations connection there is no Validation Documents [TFS] tab, and a tool is Supported when it has a document in the month.
 
 ## On-Demand pages
 
@@ -778,7 +870,7 @@ The **Team tree** tab shows the reporting lines. **Capacity roles** sets which t
 
 ![Admin → Streams (here read only, with server names replaced by made-up ones)](user-guide/images/streams.png)
 
-**＋ Add stream…** adds a **custom stream** with its own Release page. **Stream options** sets the Epics Features are matched in, the bulk creation Epics and the release counts.
+**＋ Add stream…** adds a **custom stream** with its own Release page. **Stream options** sets the Epics Features are matched in, the bulk creation Epics (the Epic each of DP, IOCC and Content creates its Features under — none built in, so map each one the team uses; **Save to Git** on a shared one commits it straight to Git, and Admin → Overview shows a stream without one under Attention) and the release counts.
 
 Your own read-only views are in **My settings → My views**: they appear under **Other views** in your menu only, and never change a stream.
 

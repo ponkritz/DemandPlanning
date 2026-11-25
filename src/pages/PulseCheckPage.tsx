@@ -2,7 +2,12 @@ import { windchillReleases, windchillSupported } from '../windchillReleases'
 import { DataTable } from '../components/DataTable'
 import { SupportedReleasesTable } from '../components/DpMonthCounts'
 import { useMemo, useState } from 'react'
-import { ReleaseQuadrants, SupportedSummary, type SupportedLine } from '../components/ReleaseQuadrants'
+import { NotCounted, ReleaseQuadrants, SupportedSummary, type SupportedLine } from '../components/ReleaseQuadrants'
+import { MultiSelect } from '../components/MultiSelect'
+import { CumulativeReleasesPanel } from '../components/CumulativeReleasesChart'
+import { cumulativeViewKey, cumulativeYear, defaultSwitches, monthCounts, readSwitches, windchillLinesOf, type CumulativeSwitches, type CumulativeYear } from '../cumulativeReleases'
+import { PageViewForEveryone } from '../components/ViewForEveryone'
+import { chosenOf, isCounted, notCountedNote, pulseStreamsKey, readPulseStreams, streamNames, withChosen, type PulseStreamsChoice } from '../pulseStreams'
 import { CapacityMetrics, MonthSections } from '../components/MonthOverview'
 import { GapsPanel } from '../components/GapsPanel'
 import { ScopeSwitch } from '../components/ScopeSwitch'
@@ -35,6 +40,9 @@ const tabKeys: Tab[] = ['releases', 'last', 'ongoing', 'current', 'pack']
 const tabKey = 'demand-planning-pulse-tab-v1'
 const dpListKey = 'demand-planning-pulse-dp-list-v1'
 const periodKey = 'demand-planning-pulse-period-v1'
+const streamsKey = 'demand-planning-pulse-streams-v1'
+const cumulativeKey = 'demand-planning-pulse-cumulative-v1'
+const workNote = 'Every Epic counts here: the Streams filter applies to the release counts only.'
 const change = (now: number, before: number) => now === before ? <span className="muted">±0</span> : <span className={now > before ? 'positive' : 'negative'}>{now > before ? '+' : '−'}{Math.abs(now - before)}</span>
 
 // Pulse Check: the selected month's approved releases per stream (moved from the Dashboard), and Last month — the month
@@ -57,23 +65,39 @@ export function PulseCheckPage({ month, azure, store, my, navigate, windchill, o
   const exports = windchillStreamExports(windchill.views)
   const streams = defaultStreamReleases(store.state, azure.connectionProfiles, month)
   const lastStreams = defaultStreamReleases(store.state, azure.connectionProfiles, last)
+  // QV-66, QV-67: the Streams filter — the release streams not counted on this page (every view: the Month tabs and
+  // Quarter / Half-year / Year). The person's own choice (personal views), else the team default saved by the Tool
+  // Owner (shared views defaults), else every stream counts. Without personal views: this browser only.
+  const [localChoice, setLocalChoice] = useState<PulseStreamsChoice>(() => { try { return readPulseStreams(JSON.parse(localStorage.getItem(streamsKey) ?? 'null')) ?? { excluded: [] } } catch { return { excluded: [] } } })
+  const excluded = (views ? views.filter(pulseStreamsKey, readPulseStreams) : localChoice)?.excluded ?? []
+  const known = streamNames(allStreams().map((stream) => stream.name), exports.map((entry) => entry.name), streams.map((stream) => stream.name), lastStreams.map((stream) => stream.name))
+  const saveChoice = (next: PulseStreamsChoice) => { if (views) views.setFilter(pulseStreamsKey, next); else { setLocalChoice(next); try { localStorage.setItem(streamsKey, JSON.stringify(next)) } catch { /* convenience only */ } } }
+  const counted = (name: string) => isCounted(excluded, name)
+  // QV-69: the Year view's cumulative chart switches — the person's own (personal views), else this browser's.
+  const [localSwitches, setLocalSwitches] = useState<CumulativeSwitches>(() => { try { return readSwitches(JSON.parse(localStorage.getItem(cumulativeKey) ?? 'null')) ?? defaultSwitches } catch { return defaultSwitches } })
+  const switches = (views ? views.filter(cumulativeViewKey, readSwitches) : localSwitches) ?? defaultSwitches
+  const setSwitches = (next: CumulativeSwitches) => { if (views) views.setFilter(cumulativeViewKey, next); else { setLocalSwitches(next); try { localStorage.setItem(cumulativeKey, JSON.stringify(next)) } catch { /* convenience only */ } } }
+  const note = notCountedNote(excluded, known)
+  const chosenStreams = chosenOf(excluded, known)
   // The Supported summary (QV-33, QV-34, QV-36): DP's and IOCC's Supported Releases, the Tool Validations' unique tools, then the Windchill
   // streams' releases with a document dated in the month — every line for the tab's month (the month filter follows the
   // page: Releases shows last month, Current month releases the header month), in the default stream order.
   const supportedLines = (shown: ReleaseStream[], at: string): SupportedLine[] => [
     ...shown.filter((stream) => stream.supportedEntries).map((stream) => ({ name: stream.name, releases: stream.supportedEntries!.map((entry) => entry.label) })),
-    // Tool Validations: the unique tools with a document in the tab's month (validated or supported), one entry per tool.
-    ...shown.filter((stream) => { const rule = allStreams().find((def) => def.name === stream.name)?.rule; return rule === 'tool' }).map((stream) => ({ name: stream.name, releases: stream.releases.map((entry) => [entry.name, entry.release].filter(Boolean).join(' ')) })),
+    // Tool Validations: the unique tools with a document in the tab's month (validated or supported), one entry per tool;
+    // with its two queries (TVL-21) its Supported tools are listed above, as supportedEntries.
+    ...shown.filter((stream) => { const rule = allStreams().find((def) => def.name === stream.name)?.rule; return rule === 'tool' && !stream.supportedEntries }).map((stream) => ({ name: stream.name, releases: stream.releases.map((entry) => [entry.name, entry.release].filter(Boolean).join(' ')) })),
     ...exports.map(({ name, view }) => { const source = view ? windchill.sources.find((entry) => entry.viewId === view.id) : undefined; return { name, releases: source && view ? windchillSupported(source.rows, source.columns.length ? source.columns : view.columns, at, windchillOptionsForView(view)) : [] } }),
   ]
   const releases = (shown: ReleaseStream[], at: string) => <>
-    {shown.length ? <ReleaseQuadrants streams={shown} month={at} supported={supportedLines(shown, at)} /> : <><EmptyState title="No Azure DevOps Server views under Release Details." detail="Add an on-prem connection shown in the menu (Admin → Streams); fetch it in the desktop app or load its data from Git." />{supportedLines(shown, at).some((line) => line.releases.length) && <SupportedSummary lines={supportedLines(shown, at)} month={at} />}</>}
-    {shown.filter((stream) => stream.supportedReleases).map((stream) => <TablePanel key={`supported:${stream.id}`} title={`Supported Releases · ${stream.name} · ${monthName(at)}`} info={<p>Each release once that passed at least one milestone in {monthName(at)} — DT (Design Transfer), SFV (Start of Verification / Hardening), PRD (PRD Milestone) or RPE (Release Planning Event) — with that milestone's Status Done and its Date in the month (UTC). A release passing several milestones in the month counts once; two rows with the same PsName and Release are one release. Completed Releases are those whose DT is among them.</p>} count={`${stream.supportedReleases!.length} release${stream.supportedReleases!.length === 1 ? '' : 's'} · ${stream.milestones ?? 0} milestone${stream.milestones === 1 ? '' : 's'}`} action={<button type="button" className="text-button" aria-expanded={dpList} onClick={() => setDpList(!dpList)}>{dpList ? 'Hide list' : 'Show list'}</button>} empty={!dpList ? undefined : stream.supportedReleases!.length ? undefined : stream.fetchedAt ? `No release passed a milestone in ${monthName(at)}.` : 'The DP view has not been fetched yet (Release Details → DP).'}>
+    {shown.length ? <ReleaseQuadrants streams={shown} month={at} supported={supportedLines(shown, at)} counted={counted} note={note} /> : <><EmptyState title="No Azure DevOps Server views under Release Details." detail="Add an on-prem connection shown in the menu (Admin → Streams); fetch it in the desktop app or load its data from Git." />{supportedLines(shown, at).some((line) => line.releases.length) && <SupportedSummary lines={supportedLines(shown, at)} month={at} counted={counted} note={note} />}</>}
+    {shown.filter((stream) => stream.supportedReleases).map((stream) => <TablePanel key={`supported:${stream.id}`} title={`Supported Releases · ${stream.name} · ${monthName(at)}`} info={<p>Each release once that passed at least one milestone in {monthName(at)} — DT (Design Transfer), SFV (Start of Verification / Hardening), PRD (PRD Milestone) or RPE (Release Planning Event) — with that milestone's Status Done and its Date in the month (UTC). A release passing several milestones in the month counts once; two rows with the same PsName and Release are one release. Completed Releases are those whose DT is among them.</p>} count={`${stream.supportedReleases!.length} release${stream.supportedReleases!.length === 1 ? '' : 's'} · ${stream.milestones ?? 0} milestone${stream.milestones === 1 ? '' : 's'}${counted(stream.name) ? '' : ' · Not counted'}`} action={<button type="button" className="text-button" aria-expanded={dpList} onClick={() => setDpList(!dpList)}>{dpList ? 'Hide list' : 'Show list'}</button>} empty={!dpList ? undefined : stream.supportedReleases!.length ? undefined : stream.fetchedAt ? `No release passed a milestone in ${monthName(at)}.` : 'The DP view has not been fetched yet (Release Details → DP).'}>
       {dpList && stream.supportedReleases!.length > 0 && <SupportedReleasesTable releases={stream.supportedReleases!} />}
     </TablePanel>)}
-    {exports.length > 0 && <TablePanel title="Windchill exports" info={<p>The Windchill streams (S&amp;S IT; ECP later): the export named like the stream, rows as last imported, and the unique releases read from the document names (release name, release number, then the document name). Open one for the release list, its columns, search and filters.</p>} count={`${exports.length} stream${exports.length === 1 ? '' : 's'}`}>
-      <DataTable id="pulse:windchill-exports" rows={exports} rowKey={(entry) => entry.view?.id ?? entry.name} exportName="Windchill exports" columns={[
+    {exports.length > 0 && <TablePanel title="Windchill exports" info={<><p>The Windchill streams (S&amp;S IT; ECP later): the export named like the stream, rows as last imported, and the unique releases read from the document names (release name, release number, then the document name). Open one for the release list, its columns, search and filters.</p>{note && <p>{note}</p>}</>} count={`${exports.length} stream${exports.length === 1 ? '' : 's'}${exports.some((entry) => !counted(entry.name)) ? ` · ${exports.filter((entry) => !counted(entry.name)).length} not counted` : ''}`}>
+      <DataTable id="pulse:windchill-exports" rows={exports} rowKey={(entry) => entry.view?.id ?? entry.name} exportName="Windchill exports" rowClassName={(entry) => counted(entry.name) ? undefined : 'not-counted'} columns={[
         { id: 'stream', label: 'Stream', value: ({ name }) => name, render: ({ name, view }) => <><strong>{name}</strong>{view?.exportFile && <small>{view.exportFile}</small>}</> },
+        { id: 'counted', label: 'Counted', value: ({ name }) => counted(name) ? 'Counted' : 'Not counted', render: ({ name }) => counted(name) ? <span className="muted">Counted</span> : <NotCounted /> },
         { id: 'rows', label: 'Rows', align: 'right', value: ({ view }) => { const source = view ? windchill.sources.find((entry) => entry.viewId === view.id) : undefined; return source ? source.rows.length : '' } },
         { id: 'releases', label: 'Releases', align: 'right', value: ({ view }) => { const source = view ? windchill.sources.find((entry) => entry.viewId === view.id) : undefined; return source && view ? windchillReleases(source.rows, source.columns.length ? source.columns : view.columns, windchillOptionsForView(view)).releases.length : '' } },
         { id: 'imported', label: 'Imported', value: ({ view }) => { const source = view ? windchill.sources.find((entry) => entry.viewId === view.id) : undefined; return source?.fetchedAt ?? '' }, render: ({ view }) => { const source = view ? windchill.sources.find((entry) => entry.viewId === view.id) : undefined; return view ? source ? formatDateTime(source.fetchedAt) : 'Not imported yet' : 'No export named like the stream yet' } },
@@ -84,23 +108,32 @@ export function PulseCheckPage({ month, azure, store, my, navigate, windchill, o
   const tabLabels: [Tab, string][] = [['releases', `Releases · ${monthName(last)}`], ['last', `Last month · ${monthName(last)}`], ['ongoing', 'Ongoing activities'], ['current', `Current month releases · ${monthName(month)}`], ['pack', `Monthly pack · ${monthName(last)}`]]
   const choices = period.kind === 'month' ? [] : recentPeriods(period.kind, last)
   const chosen = choices.find((entry) => entry.key === period.key) ?? choices[0]
-  const periodBar = <div className="button-row pulse-period" role="group" aria-label="Pulse Check period">
+  const periodBar = <div className="button-row pulse-period" role="group" aria-label="Pulse Check period and streams">
     <label className="inline-select">Period<select value={period.kind} onChange={(event) => setPeriod({ kind: event.target.value as PeriodKind, key: '' })}>{periodKinds.map(([kind, label]) => <option key={kind} value={kind}>{label}</option>)}</select></label>
     {chosen && <label className="inline-select">{periodKinds.find(([kind]) => kind === period.kind)?.[1]}<select value={chosen.key} onChange={(event) => setPeriod({ kind: period.kind, key: event.target.value })}>{choices.map((entry) => <option key={entry.key} value={entry.key}>{entry.label}</option>)}</select></label>}
+    <MultiSelect label="Streams not counted" options={known.map((name) => [name, name])} value={chosenStreams} onChange={(value) => saveChoice(withChosen(excluded, known, value))} emptyLabel="None — every stream counts" selectAll={false} />
+    <button type="button" className="ghost" disabled={!excluded.length} onClick={() => saveChoice({ excluded: [] })}>Reset filters</button>
   </div>
+  const viewLine = <PageViewForEveryone entryKey={pulseStreamsKey} what="Pulse Check streams not counted" value={{ excluded }} onUse={() => { /* the page reads the choice from the views */ }} />
+  const bar = <>{periodBar}{viewLine}</>
   if (chosen) {
     const before = previousPeriod(chosen)
-    const windchillLines = (at: string) => exports.map(({ name, view }) => { const source = view ? windchill.sources.find((entry) => entry.viewId === view.id) : undefined; return { name, releases: source && view ? windchillSupported(source.rows, source.columns.length ? source.columns : view.columns, at, windchillOptionsForView(view)) : [] } })
+    const windchillLines = (at: string) => windchillLinesOf(windchill, at)
     const of = (months: string[]) => periodStreams(months.map((at) => defaultStreamReleases(store.state, azure.connectionProfiles, at)), months.map(windchillLines))
-    return <Page>{periodBar}<PeriodPulse label={chosen.label} previous={before.label} months={chosen.months} rows={periodComparison(of(chosen.months), of(before.months))} azure={azure} absenceEpicId={capacityContext(store.state).absenceEpicId} /></Page>
+    // QV-68: the Year view's cumulative Completed releases — each month counted as its Month tab counts it, the months
+    // after the current one left empty (not read).
+    const current = utcToday().slice(0, 7)
+    const cumulative = period.kind === 'year' ? cumulativeYear(chosen.months, chosen.months.map((at) => at > current ? [] : monthCounts(defaultStreamReleases(store.state, azure.connectionProfiles, at), windchillLines(at))), utcToday(), excluded) : undefined
+    return <Page>{bar}<PeriodPulse label={chosen.label} previous={before.label} months={chosen.months} rows={periodComparison(of(chosen.months), of(before.months))} azure={azure} absenceEpicId={capacityContext(store.state).absenceEpicId} counted={counted} note={note} cumulative={cumulative && { data: cumulative, switches, onSwitches: setSwitches }} /></Page>
   }
   return <Page>
-    {periodBar}
+    {bar}
     <div className="overview-tabs" role="tablist" aria-label="Pulse Check sections">{tabLabels.map(([key, label]) => <button key={key} type="button" role="tab" aria-selected={tab === key} className={`backlog-tab ${tab === key ? 'backlog-tab-active' : ''}`} onClick={() => setTab(key)}>{label}</button>)}</div>
     {tab === 'releases' && releases(lastStreams, last)}
-    {tab === 'last' && <LastMonth month={month} last={last} azure={azure} store={store} my={my} navigate={navigate} current={streams} canPickProfile={canPickProfile} />}
+    {tab === 'last' && <LastMonth month={month} last={last} azure={azure} store={store} my={my} navigate={navigate} current={streams} canPickProfile={canPickProfile} counted={counted} note={note} />}
     {tab === 'ongoing' && <Ongoing azure={azure} month={month} absenceEpicId={capacityContext(store.state).absenceEpicId} />}
     {tab === 'current' && releases(streams, month)}
+    {tab === 'pack' && excluded.length > 0 && <p className="muted">The Monthly pack counts every stream: the Streams filter applies to Pulse Check's own release counts only.</p>}
     {tab === 'pack' && <MonthlyPackPanel month={last} azure={azure} store={store} git={git} pack={pack} windchill={windchill} />}
   </Page>
 }
@@ -135,7 +168,7 @@ function Ongoing({ azure, month, absenceEpicId }: { azure: AzureWorkspace; month
   </>
 }
 
-function LastMonth({ month, last, azure, store, my, navigate, current, canPickProfile }: { month: string; last: string; azure: AzureWorkspace; store: PageProps['store']; my: MyWork; navigate: (page: PageId) => void; current: ReleaseStream[]; canPickProfile: boolean }) {
+function LastMonth({ month, last, azure, store, my, navigate, current, canPickProfile, counted, note }: { month: string; last: string; azure: AzureWorkspace; store: PageProps['store']; my: MyWork; navigate: (page: PageId) => void; current: ReleaseStream[]; canPickProfile: boolean; counted: (name: string) => boolean; note: string }) {
   const shared = capacityContext(store.state)
   // CAP-44: an Admin can view Last month with another calculation profile (this page, this person only; not saved).
   const [viewProfile, setViewProfile] = useState('')
@@ -158,12 +191,12 @@ function LastMonth({ month, last, azure, store, my, navigate, current, canPickPr
     {canPickProfile && <ProfilePicker settings={shared} value={viewProfile} onChange={setViewProfile} />}
     {individual && !scope ? <EmptyState title="Choose whose last month to show." detail="Pick a person above, or set your Azure email on the Time Writing connection to make “Me” the default." /> : <>
       <CapacityMetrics model={model} settings={settings} label={`${individual ? who : teamLabel} utilization · ${lastName}`} />
-      <TablePanel title={`Releases · ${lastName} vs ${monthLabel}`} info={<p>Releases and documents approved per Azure DevOps Server view under Release Details, in {lastName} and in the selected month {monthLabel}, with the change. A view counts when its documents carry “Release x.y.z” in their paths. DP counts from its own query: Completed Releases (DT, Design Transfer: DDT Done with its DDT Date in the month) and Supported Releases (DT, SFV = Start of Verification / Hardening, PRD = PRD Milestone and RPE = Release Planning Event, Done in the month — each release once) in place of documents. Not narrowed by Team / Individual.</p>} count={`${releases.length} stream${releases.length === 1 ? '' : 's'}`} empty={releases.length ? undefined : 'No release views fetched yet.'}>
+      <TablePanel title={`Releases · ${lastName} vs ${monthLabel}`} info={<><p>Releases and documents approved per Azure DevOps Server view under Release Details, in {lastName} and in the selected month {monthLabel}, with the change. A view counts when its documents carry “Release x.y.z” in their paths. DP counts from its own query: Completed Releases (DT, Design Transfer: DDT Done with its DDT Date in the month) and Supported Releases (DT, SFV = Start of Verification / Hardening, PRD = PRD Milestone and RPE = Release Planning Event, Done in the month — each release once) in place of documents. Not narrowed by Team / Individual.</p>{note && <p>{note}</p>}</>} count={`${releases.length} stream${releases.length === 1 ? '' : 's'}${releases.some((row) => !counted(row.name)) ? ` · ${releases.filter((row) => !counted(row.name)).length} not counted` : ''}`} empty={releases.length ? undefined : 'No release views fetched yet.'}>
         {releases.length > 0 && <table><thead><tr><th>Stream</th><th>Releases {lastName}</th><th>Documents {lastName}</th><th>Releases {monthLabel}</th><th>Documents {monthLabel}</th><th>Change (releases · documents)</th></tr></thead><tbody>
-          {releases.map((row) => <tr key={row.name}><td><strong>{row.name}</strong></td><td>{row.previousReleases}{row.previousSupported != null && <small>completed</small>}</td><td>{row.previousSupported != null ? <>{row.previousSupported}<small>supported</small></> : row.previousDocuments}</td><td>{row.releases}{row.supported != null && <small>completed</small>}</td><td>{row.supported != null ? <>{row.supported}<small>supported</small></> : row.documents}</td><td>{change(row.releases, row.previousReleases)} · {row.supported != null ? change(row.supported, row.previousSupported ?? 0) : change(row.documents, row.previousDocuments)}</td></tr>)}
+          {releases.map((row) => <tr key={row.name} className={counted(row.name) ? undefined : 'not-counted'}><td><strong>{row.name}</strong>{!counted(row.name) && <NotCounted />}</td><td>{row.previousReleases}{row.previousSupported != null && <small>completed</small>}</td><td>{row.previousSupported != null ? <>{row.previousSupported}<small>supported</small></> : row.previousDocuments}</td><td>{row.releases}{row.supported != null && <small>completed</small>}</td><td>{row.supported != null ? <>{row.supported}<small>supported</small></> : row.documents}</td><td>{change(row.releases, row.previousReleases)} · {row.supported != null ? change(row.supported, row.previousSupported ?? 0) : change(row.documents, row.previousDocuments)}</td></tr>)}
         </tbody></table>}
       </TablePanel>
-      <TablePanel title={`Work closed and opened · ${lastName}`} info={<ul><li>Features and User Stories created in {lastName} (Created Date) and closed in it (Closed Date; an item in a finished state without one counts by its last change), per stream — the Epic above them — in UTC.</li><li>Removed items and work under the absence Epic are left out.</li><li>Team counts the assignees in the team filter; Individual counts the person’s own items.</li></ul>}
+      <TablePanel title={`Work closed and opened · ${lastName}`} info={<ul><li>Features and User Stories created in {lastName} (Created Date) and closed in it (Closed Date; an item in a finished state without one counts by its last change), per stream — the Epic above them — in UTC.</li><li>Removed items and work under the absence Epic are left out.</li><li>Team counts the assignees in the team filter; Individual counts the person’s own items.</li><li>{workNote}</li></ul>}
         count={`Features +${flow.totals.Feature.created} / ✓${flow.totals.Feature.closed} · Stories +${flow.totals['User Story'].created} / ✓${flow.totals['User Story'].closed}`} empty={flow.streams.length ? undefined : `No Features or User Stories created or closed in ${lastName}.`}>
         {flow.streams.length > 0 && <table><thead><tr><th>Stream (Epic)</th><th>Features opened</th><th>Features closed</th><th>Stories opened</th><th>Stories closed</th></tr></thead><tbody>
           {flow.streams.map((stream) => <tr key={stream.key}><td>{stream.epic ? <a href={stream.epic.url} target="_blank" rel="noreferrer">#{stream.epic.id} {stream.title}</a> : stream.title}</td><td>{stream.counts.Feature.created}</td><td>{stream.counts.Feature.closed}</td><td>{stream.counts['User Story'].created}</td><td>{stream.counts['User Story'].closed}</td></tr>)}
@@ -179,10 +212,12 @@ function LastMonth({ month, last, azure, store, my, navigate, current, canPickPr
 
 // A quarter, half-year or year (QV-50): each stream's releases in the period (each release once) against the period
 // before, and the Features and User Stories opened and closed in it.
-function PeriodPulse({ label, previous, months, rows, azure, absenceEpicId }: { label: string; previous: string; months: string[]; rows: ReturnType<typeof periodComparison>; azure: AzureWorkspace; absenceEpicId: number }) {
+function PeriodPulse({ label, previous, months, rows, azure, absenceEpicId, counted, note, cumulative }: { label: string; previous: string; months: string[]; rows: ReturnType<typeof periodComparison>; azure: AzureWorkspace; absenceEpicId: number; counted: (name: string) => boolean; note: string; cumulative?: { data: CumulativeYear; switches: CumulativeSwitches; onSwitches: (next: CumulativeSwitches) => void } }) {
   const monthsKey = months.join(',')
   const flow = useMemo(() => periodWorkFlow(azure.items, monthsKey.split(','), absenceEpicId), [azure.items, monthsKey, absenceEpicId])
-  const total = rows.reduce((sum, row) => sum + row.releases, 0), totalBefore = rows.reduce((sum, row) => sum + row.previousReleases, 0)
+  // QV-66: the streams not counted stay in the table, greyed; both periods leave them out, so the Change compares like with like.
+  const countedRows = rows.filter((row) => counted(row.name))
+  const total = countedRows.reduce((sum, row) => sum + row.releases, 0), totalBefore = countedRows.reduce((sum, row) => sum + row.previousReleases, 0)
   const elapsed = months.filter((entry) => entry <= utcToday().slice(0, 7)).length
   return <>
     <Metrics>
@@ -192,14 +227,15 @@ function PeriodPulse({ label, previous, months, rows, azure, absenceEpicId }: { 
       <Metric label="User Stories closed" value={flow.totals['User Story'].closed} hint={`${flow.totals['User Story'].created} opened`} />
     </Metrics>
     {elapsed < months.length && <p className="muted">{label} is still running: {elapsed} of its {months.length} months so far.</p>}
-    <TablePanel title={`Releases · ${label} vs ${previous}`} info={<ul><li>Per stream, the releases of every month of {label} ({months.length} months), each release once however many months it appears in; documents add up. DP counts its Completed Releases, and its Supported Releases once each.</li><li>The Windchill streams count the releases with a date in each month.</li><li>{previous} is the period of the same length just before.</li></ul>}
+    <TablePanel title={`Releases · ${label} vs ${previous}`} info={<ul><li>Per stream, the releases of every month of {label} ({months.length} months), each release once however many months it appears in; documents add up. DP counts its Completed Releases, and its Supported Releases once each.</li><li>The Windchill streams count the releases with a date in each month.</li><li>{previous} is the period of the same length just before.</li>{note && <li>{note} The tiles, the total and the Change leave them out in both periods.</li>}</ul>}
       empty={rows.length ? undefined : 'No release views under Release Details.'}>
       {rows.length > 0 && <table><thead><tr><th>Stream</th><th>Releases {label}</th><th>Releases {previous}</th><th>Change</th><th>Documents / supported {label}</th></tr></thead><tbody>
-        {rows.map((row) => <tr key={row.name}><td><strong>{row.name}</strong>{row.list.length > 0 && <details><summary><small>{row.list.length} release{row.list.length === 1 ? '' : 's'}</small></summary><small className="plain">{row.list.join(' · ')}</small></details>}</td><td>{row.releases}</td><td>{row.previousReleases}</td><td>{change(row.releases, row.previousReleases)}</td><td>{row.supported != null ? <>{row.supported}<small>supported</small></> : row.documents}</td></tr>)}
+        {rows.map((row) => <tr key={row.name} className={counted(row.name) ? undefined : 'not-counted'}><td><strong>{row.name}</strong>{!counted(row.name) && <NotCounted />}{row.list.length > 0 && <details><summary><small>{row.list.length} release{row.list.length === 1 ? '' : 's'}</small></summary><small className="plain">{row.list.join(' · ')}</small></details>}</td><td>{row.releases}</td><td>{row.previousReleases}</td><td>{change(row.releases, row.previousReleases)}</td><td>{row.supported != null ? <>{row.supported}<small>supported</small></> : row.documents}</td></tr>)}
         <tr className="matrix-total"><td>Total</td><td>{total}</td><td>{totalBefore}</td><td>{change(total, totalBefore)}</td><td /></tr>
       </tbody></table>}
     </TablePanel>
-    <TablePanel title={`Work closed and opened · ${label}`} info="Features and User Stories created (Created Date) and closed (Closed Date) in the months of the period, per stream — the Epic above them. Removed items and work under the absence Epic are left out."
+    {cumulative && <CumulativeReleasesPanel year={label} data={cumulative.data} switches={cumulative.switches} onSwitches={cumulative.onSwitches} note={note} />}
+    <TablePanel title={`Work closed and opened · ${label}`} info={`Features and User Stories created (Created Date) and closed (Closed Date) in the months of the period, per stream — the Epic above them. Removed items and work under the absence Epic are left out. ${workNote}`}
       count={`Features +${flow.totals.Feature.created} / ✓${flow.totals.Feature.closed} · Stories +${flow.totals['User Story'].created} / ✓${flow.totals['User Story'].closed}`} empty={flow.streams.length ? undefined : `No Features or User Stories created or closed in ${label}.`}>
       {flow.streams.length > 0 && <table><thead><tr><th>Stream (Epic)</th><th>Features opened</th><th>Features closed</th><th>Stories opened</th><th>Stories closed</th></tr></thead><tbody>
         {flow.streams.map((stream) => <tr key={stream.key}><td>{stream.epic ? <a href={stream.epic.url} target="_blank" rel="noreferrer">#{stream.epic.id} {stream.title}</a> : stream.title}</td><td>{stream.counts.Feature.created}</td><td>{stream.counts.Feature.closed}</td><td>{stream.counts['User Story'].created}</td><td>{stream.counts['User Story'].closed}</td></tr>)}

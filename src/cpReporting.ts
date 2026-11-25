@@ -65,6 +65,26 @@ const isRelease = (item: AzureWorkItem) => item.workItemType.trim().toLowerCase(
 const normalRole = (role: string) => role.trim().replace(/\s+/g, ' ').toLowerCase()
 const validDate = (value: string | undefined) => value && /^\d{4}-\d{2}-\d{2}/.test(value) && Number.isFinite(Date.parse(value)) ? value : undefined
 
+// The qualifying-signature logic, shared with Tool Validations' signed documents (TVL-21): an item's approver slots
+// (ApproverName<n>, ApproverFunction<n>, ApproverApprovalDate<n> — from its fields and the query's columns), and the
+// slots that qualify: a role on the allowlist (trimmed, spaces squashed, case ignored), a name and a valid date in the
+// same slot. The slots of the columns are read once per reader, the item's own keys once per set of field names.
+export interface ApproverSlot { slot: number; name?: string; role?: string; rawDate?: string }
+export function approverSlotReader(columns: FieldColumns, field = fieldReader(columns)) {
+  const fromColumns = (columns ?? []).flatMap((column) => { const found = /^approvername(\d+)$/i.exec(squash(column.name)); return found ? [Number(found[1])] : [] })
+  const byShape = new Map<string, number[]>()
+  const slotsOf = (item: AzureWorkItem) => {
+    const keys = Object.keys(item.fields ?? {}), shape = keys.join('\u0001')
+    let slots = byShape.get(shape)
+    if (!slots) { slots = [...new Set(keys.flatMap((key) => { const found = /approvername(\d+)$/i.exec(squash(key)); return found ? [Number(found[1])] : [] }).concat(fromColumns))].sort((a, b) => a - b); if (byShape.size >= 2000) byShape.clear(); byShape.set(shape, slots) }
+    return slots
+  }
+  return (item: AzureWorkItem): ApproverSlot[] => slotsOf(item).map((slot) => ({ slot, name: field(item, `ApproverName${slot}`), role: field(item, `ApproverFunction${slot}`), rawDate: field(item, `ApproverApprovalDate${slot}`) }))
+}
+export const qualifyingRoles = (roles: string[] = defaultCpReportingSettings.roles) => new Set(roles.map(normalRole))
+export const qualifyingSlots = (slots: ApproverSlot[], roles: Set<string>) => slots.filter((entry) => entry.rawDate && entry.name && entry.role && validDate(entry.rawDate) && roles.has(normalRole(entry.role))) as (ApproverSlot & { name: string; role: string; rawDate: string })[]
+export const signatureDate = (entry: Pick<ApproverSlot, 'rawDate'>) => validDate(entry.rawDate)
+
 export interface CpSignature { releaseId: number; documentId: number; documentTitle: string; documentType: string; state: string; path: string[]; slot: number; name: string; role: string; date: string; month: string; authorApprovalDate?: string; mainReleaseNotes: boolean; url: string }
 export interface CpIssue { kind: 'missing-parent' | 'cycle' | 'no-release' | 'slot-incomplete' | 'qaqe-on-other-type' | 'multiple-release-notes' | 'completion-conflict' | 'version-unavailable' | 'name-conflict'; ids: number[]; text: string }
 export interface CpContainer { id: number; title: string; url: string; excluded?: string }
@@ -73,7 +93,8 @@ export interface CpContainer { id: number; title: string; url: string; excluded?
 export function cpSignatures(items: AzureWorkItem[], columns: FieldColumns, settings: CpReportingSettings = defaultCpReportingSettings, timeZone?: string) {
   const field = fieldReader(columns)
   const byId = new Map(items.map((item) => [item.id, item]))
-  const roles = new Set(settings.roles.map(normalRole))
+  const roles = qualifyingRoles(settings.roles)
+  const slotsOf = approverSlotReader(columns, field)
   const issues: CpIssue[] = []
   const containers = new Map<number, CpContainer>()
   for (const item of items) if (isRelease(item)) containers.set(item.id, { id: item.id, title: item.title, url: item.url, ...(settings.excluded[String(item.id)] ? { excluded: settings.excluded[String(item.id)] } : {}) })
@@ -90,15 +111,14 @@ export function cpSignatures(items: AzureWorkItem[], columns: FieldColumns, sett
     }
     return { release: current, path }
   }
-  const slotsOf = (item: AzureWorkItem) => [...new Set(Object.keys(item.fields ?? {}).flatMap((key) => { const found = /approvername(\d+)$/i.exec(squash(key)); return found ? [Number(found[1])] : [] }).concat((columns ?? []).flatMap((column) => { const found = /^approvername(\d+)$/i.exec(squash(column.name)); return found ? [Number(found[1])] : [] })))].sort((a, b) => a - b)
   const signatures: CpSignature[] = []
   const missing: number[] = [], cycles: number[] = [], orphans: number[] = []
   for (const item of items) {
     if (isRelease(item)) continue
-    const slots = slotsOf(item).map((slot) => ({ slot, name: field(item, `ApproverName${slot}`), role: field(item, `ApproverFunction${slot}`), rawDate: field(item, `ApproverApprovalDate${slot}`) }))
+    const slots = slotsOf(item)
     const dated = slots.filter((entry) => entry.rawDate)
     for (const entry of dated) if (!entry.name || !entry.role || !validDate(entry.rawDate)) issues.push({ kind: 'slot-incomplete', ids: [item.id], text: `${item.workItemType} ${item.id} “${item.title}”: approver slot ${entry.slot} has a date but ${!validDate(entry.rawDate) ? 'the date cannot be read' : !entry.name ? 'no name' : 'no role'}.` })
-    const qaqe = dated.filter((entry) => entry.name && entry.role && validDate(entry.rawDate) && roles.has(normalRole(entry.role)))
+    const qaqe = qualifyingSlots(dated, roles)
     if (!isDocument(item)) {
       if (qaqe.length && item.workItemType.trim().toLowerCase() !== 'artifact review') issues.push({ kind: 'qaqe-on-other-type', ids: [item.id], text: `${item.workItemType} ${item.id} “${item.title}” has a dated QA/QE approval; only Artifacts and Documents count.` })
       continue
@@ -114,7 +134,7 @@ export function cpSignatures(items: AzureWorkItem[], columns: FieldColumns, sett
     const authorApprovalDate = field(item, 'Author Approval Date')
     for (const entry of qaqe) {
       const date = validDate(entry.rawDate)!
-      signatures.push({ releaseId: release.id, documentId: item.id, documentTitle: item.title, documentType: type, state: item.state, path: path.map((step) => step.title), slot: entry.slot, name: entry.name!, role: entry.role!, date, month: approvalMonthOf(date, timeZone) ?? date.slice(0, 7), ...(authorApprovalDate ? { authorApprovalDate } : {}), mainReleaseNotes, url: item.url })
+      signatures.push({ releaseId: release.id, documentId: item.id, documentTitle: item.title, documentType: type, state: item.state, path: path.map((step) => step.title), slot: entry.slot, name: entry.name, role: entry.role, date, month: approvalMonthOf(date, timeZone) ?? date.slice(0, 7), ...(authorApprovalDate ? { authorApprovalDate } : {}), mainReleaseNotes, url: item.url })
     }
   }
   if (missing.length) issues.push({ kind: 'missing-parent', ids: missing, text: `${missing.length} document${missing.length === 1 ? '' : 's'} with a Parent that is not in the data set; not counted: ${missing.slice(0, 20).join(', ')}${missing.length > 20 ? ', …' : ''}.` })

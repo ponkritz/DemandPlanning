@@ -27,10 +27,12 @@ import { ChartGrid, GridCell, SizeFields } from '../components/ChartSize'
 import { MultiSelect } from '../components/MultiSelect'
 import { ViewActions } from '../components/ViewActions'
 import { factoryOf, sizeFromOptions, withSizeOptions, type GridSize } from '../chartSize'
-import { blockTypeLabel, dashId, dataSources, narrowRows, type DashboardBlock, type Dataset } from '../dashboardPages'
+import { blockDataset, blockTypeLabel, dashId, dataSources, narrowRows, type DashboardBlock, type Dataset } from '../dashboardPages'
 import { hoursLinesCached } from '../dashboardHours'
 import { defaultStreamReleases } from '../releaseOverview'
+import { pulseStreamsKey, readPulseStreams } from '../pulseStreams'
 import { entryOf, sourceEntries, type LoadAction, type SourceInput } from '../dashboardSources'
+import { useToolValidationsEnv } from '../useToolValidations'
 import { arrangeMyItems, isSection, maxMyBlocks, myBlankBlock, myDashboardKey, myDashboardOut, myDashboardPage, myDashboardViewKey, mySections, parseMyDashboard, sectionKindSize, withBlock, withoutBlock, type MyDashboard } from '../myDashboard'
 import { cleanOptions, insightKindOf as kindOf, withoutHidden } from '../onDemand'
 import { parseTracker, type KpiTracker } from '../kpiTracker'
@@ -86,20 +88,25 @@ export function MyDashboardPage({ month, azure, store, my, navigate, views, canS
   const usedKey = wantAll ? '*' : [...used].sort().join(',')
   const onDemand = sources?.onDemand, qe = sources?.qe, history = sources?.history, items = sources?.items ?? azure.items
   const settings = sources?.settings
+  const toolStore = useToolValidationsEnv()?.store
+  // MYD-25: the person's own Pulse Check Streams filter, for the Completed releases source's Counted in Pulse Check.
+  const excludedKey = (views.filter(pulseStreamsKey, readPulseStreams)?.excluded ?? []).join('\u0000')
   const entries = useMemo(() => {
     if (!sources || !settings) return []
     const visibleStored = (id: string) => { const found = onDemand!.stored(id); return found ? withoutHidden(found) : null }
     const input: SourceInput = {
       sees, months: monthsKey ? monthsKey.split(',') : [], today: utcToday(), me: my.me, items, settings,
-      releases: { state: store.state, profiles: azure.connectionProfiles, streamsOf: (at) => defaultStreamReleases(store.state, azure.connectionProfiles, at) },
+      releases: { state: store.state, profiles: azure.connectionProfiles, streamsOf: (at) => defaultStreamReleases(store.state, azure.connectionProfiles, at), windchill: windchill ?? { views: [], sources: [] }, excluded: excludedKey ? excludedKey.split('\u0000') : [] },
       qe: { file: qe!.file, loaded: qe!.loaded }, kpi, history: { file: history!.file, loaded: history!.loaded, connected: sources.git.connected },
       windchill: store.state.windchillSources ?? [],
       pages: dataSources(onDemand!.pages, visibleStored, sources.isDashboard, ''),
       hours: (allowed) => allowed ? hoursLinesCached(items, monthsKey ? monthsKey.split(',') : [], utcToday(), settings) : [],
+      // TVL-18: the Tool Validations master list and expiry list (the app's copy of tool-validations.json).
+      ...(toolStore ? { tools: { file: toolStore.shown, connected: toolStore.connected, loaded: toolStore.loaded } } : {}),
     }
     return sourceEntries(input, (key) => usedKey === '*' || usedKey.split(',').includes(key))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [areaKey, usedKey, monthsKey, items, settings, store.state, azure.connectionProfiles, qe?.file, qe?.loaded, kpi, history?.file, history?.loaded, onDemand?.pages, my.me.email, my.me.name, sources?.git.connected])
+  }, [areaKey, usedKey, monthsKey, items, settings, store.state, azure.connectionProfiles, qe?.file, qe?.loaded, kpi, history?.file, history?.loaded, onDemand?.pages, toolStore?.shown, toolStore?.connected, toolStore?.loaded, my.me.email, my.me.name, sources?.git.connected, windchill?.views, windchill?.sources, excludedKey])
   const sourceOf = (key: string) => entryOf(entries, key, sees)
   const narrow = (dataset: Dataset, block: DashboardBlock) => dataset.problem ? null : narrowRows(dataset, block, months)
   const datasets = entries.map((entry) => entry.dataset)
@@ -254,7 +261,7 @@ export function MyDashboardPage({ month, azure, store, my, navigate, views, canS
       <MultiSelect label="Month" options={offeredMonths(periodQuarters(period, currentYear)).map((entry) => [entry, several ? `${monthNames[Number(entry.slice(5)) - 1]} ${entry.slice(0, 4)}` : monthNames[Number(entry.slice(5)) - 1]])} value={period.months} onChange={(value) => setPeriod({ ...period, months: value })} />
       <button type="button" className="text-button" disabled={!filtered || readOnly} onClick={() => views.clearFilter(myDashboardViewKey)}>Reset filters</button>
     </div><p className="muted dsh-scope" role="status">Your blocks: {months.length === periodYears(period, currentYear).length * 12 ? `${periodYears(period, currentYear).join(', ')} (whole ${several ? 'years' : 'year'})` : months.map((entry) => `${monthNames[Number(entry.slice(5)) - 1]} ${entry.slice(0, 4)}`).join(', ')}. The built-in sections show {label}.</p></div>}
-    {tiles.length > 0 && <Metrics>{tiles.map((block) => { const { dataset } = sourceOf(block.source); return <div key={block.id} className="my-dash-tile" data-block={block.id}><KpiTile dataset={dataset} block={block} narrowed={narrow(dataset, block)} />{loadButton(block.source)}</div> })}</Metrics>}
+    {tiles.length > 0 && <Metrics>{tiles.map((block) => { const dataset = blockDataset(sourceOf(block.source).dataset, block); return <div key={block.id} className="my-dash-tile" data-block={block.id}><KpiTile dataset={dataset} block={block} narrowed={narrow(dataset, block)} />{loadButton(block.source)}</div> })}</Metrics>}
     {panels.length > 0 && <ChartGrid className="od-insights my-dash-grid" entries={panels.map((id) => { const block = mine.blocks.find((entry) => entry.id === id); return block ? { id, kind: kindOf(block.type), size: blockSize(block).size } : { id, kind: 'table' as const, size: sectionSize(id) } })} titleOf={labelOf}
       onResize={(id, size) => { if (!readOnly) resize(id, size) }}>
       {panels.map((id) => {
@@ -262,7 +269,7 @@ export function MyDashboardPage({ month, azure, store, my, navigate, views, canS
         if (!block) return <GridCell key={id} id={id} kind="table" title={labelOf(id)} size={sectionSize(id)} source={mine.sizes[id] ? 'viewer' : 'factory'} onResize={readOnly ? undefined : (size) => resize(id, size)} onReset={readOnly ? undefined : () => resize(id, undefined)}>
           {(cell) => <div className={`layout-section ${cell.className}`} style={{ ...cell.style, minWidth: 0 }} data-section={id}>{sectionNode[id]}{cell.footer}</div>}
         </GridCell>
-        const { dataset } = sourceOf(block.source), sized = blockSize(block)
+        const dataset = blockDataset(sourceOf(block.source).dataset, block), sized = blockSize(block)
         const extra = loadButton(block.source)
         return <BlockPanel key={id} id={id} dataset={dataset} block={block} narrowed={narrow(dataset, block)} colors={mine.colors} size={sized.size} source={sized.own ? 'viewer' : 'factory'}
           onResize={readOnly ? undefined : (size) => resize(id, size)} onReset={readOnly ? undefined : () => resize(id, undefined)} action={extra || blockMenu(block) ? <>{extra}{blockMenu(block)}</> : undefined} />

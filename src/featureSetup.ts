@@ -19,9 +19,9 @@ export interface TimeWritingStoryTemplate { title: string; description: string; 
 export interface TitleField { label: string; source: string }
 // featureDoD: the Feature DoD (Definition of Done) a new Feature under the Epic starts with — mandatory in a setup.
 // titleFields: optional, at most maxTitleFields.
-// DPF-01…03 (DP, Epic 13946): the Feature DoD and default User Stories per release type — Release (Major, Minor) and
-// PU (MLD, Platform Update) — and which QE Mapping columns name the product and its QE. Used by Release Details → DP
-// (QE, possible QEs, Create Features); built-in values when the setup has none.
+// DPF-01…03 (DP, the DP bulk creation Epic as mapped, QV-59): the Feature DoD and default User Stories per release
+// type — Release (Major, Minor) and PU (MLD, Platform Update) — and which QE Mapping columns name the product and its
+// QE. Used by Release Details → DP (QE, possible QEs, Create Features); built-in values when the setup has none.
 export interface ReleaseTypeSetup { featureDoD: string; stories: StoryTemplate[] }
 export interface QeMapColumns { matchColumn: string; qeColumn: string }
 export interface EpicSetup { epicId: number; epicTitle: string; inherits?: InheritField[]; featureDoD: string; stories: StoryTemplate[]; timeWritingStory: TimeWritingStoryTemplate; task: TaskTemplate; titleFields?: TitleField[]; qeColumns?: QeMapColumns; classSets?: Record<string, ReleaseTypeSetup>; completeChildren?: false }
@@ -46,7 +46,6 @@ export function featureDoD(kind: 'PU' | 'Release') {
 export const emptySetup = (epicId: number, epicTitle = ''): EpicSetup => ({ epicId, epicTitle, featureDoD: '', stories: [], timeWritingStory: { ...defaultTimeWritingStory }, task: { ...defaultTask } })
 
 export const maxTitleFields = 5
-export const dpEpicId = 13946
 // DPF-09: there are no built-in Release / PU (MLD) sets any more, and no built-in Release Classification values.
 // DPF-07: a Definition of Done and User Stories per value of the Epic's own Release Classification list, chosen by the
 // value picked when a Feature is created — New Feature and bulk alike; a value without its own set uses the Epic's own

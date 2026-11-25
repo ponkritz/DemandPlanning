@@ -8,9 +8,13 @@ export function Pill({ children, tone = 'neutral' }: { children: ReactNode; tone
 }
 
 // Every page renders inside Page: the header lives in the top bar, so a page starts with its toolbar (intro + actions) and then its panels.
-export function Page({ children, className = '', intro, actions }: { children: ReactNode; className?: string; intro?: ReactNode; actions?: ReactNode }) {
+// TVL-15: embedded — the page shown as a tab of another page (an owners' tab of Tool Validations): the same toolbar and
+// content inside the tab panel, without a page frame of its own.
+export function Page({ children, className = '', intro, actions, embedded = false }: { children: ReactNode; className?: string; intro?: ReactNode; actions?: ReactNode; embedded?: boolean }) {
+  const toolbar = (intro || actions) && <div className="page-toolbar">{intro ? <p className="muted">{intro}</p> : <span />}{actions && <div className="button-row">{actions}</div>}</div>
+  if (embedded) return <div className={`embedded-page ${className}`}>{toolbar}{children}</div>
   return <section className={`content ${className}`}>
-    {(intro || actions) && <div className="page-toolbar">{intro ? <p className="muted">{intro}</p> : <span />}{actions && <div className="button-row">{actions}</div>}</div>}
+    {toolbar}
     {children}
   </section>
 }

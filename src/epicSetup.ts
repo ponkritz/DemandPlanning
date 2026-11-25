@@ -10,7 +10,19 @@ import { fieldKey, fieldsFromItems, fillTitle, type TitleField } from './feature
 export type FieldType = 'text' | 'list' | 'number' | 'date'
 export type IfEmpty = 'optional' | 'warn' | 'block'
 export type FieldInto = 'description' | 'title' | 'both'
-export interface EpicField { label: string; type: FieldType; list?: string; ifEmpty: IfEmpty; into: FieldInto; source?: string }
+export interface EpicField { label: string; type: FieldType; list?: string; ifEmpty: IfEmpty; into: FieldInto; source?: string; classRules?: ClassRule[] }
+// DPF-10: on an Epic's "Release Classification" List field, per value the parts of the release number that, when they
+// are the deepest non-zero part, give that value — x.0 (5.0, 5.0.0, 5.0.0.0), x.y (5.2), x.y.z (5.2.1), x.y.z.w
+// (5.2.1.3). A part decides at most one value.
+export type ReleasePart = 'x.0' | 'x.y' | 'x.y.z' | 'x.y.z.w'
+export interface ClassRule { value: string; parts: ReleasePart[] }
+export const releaseParts: { key: ReleasePart; label: string; detail: string }[] = [
+  { key: 'x.0', label: 'x.0 — first number only', detail: 'x.0, x.0.0, x.0.0.0' },
+  { key: 'x.y', label: 'x.y — second number', detail: 'x.y, x.y.0, x.y.0.0' },
+  { key: 'x.y.z', label: 'x.y.z — third number', detail: 'x.y.z, x.y.z.0' },
+  { key: 'x.y.z.w', label: 'x.y.z.w — fourth number', detail: 'x.y.z.w' },
+]
+export const maxClassRules = 50
 export interface EpicFields { epicId: number; epicTitle: string; fields: EpicField[]; titlePattern?: string }
 export interface ValueList { id: string; name: string; values: string[] }
 // STT-01: a User Story template — its title (placeholders allowed) and description — tagged with the Epics and Release
@@ -45,6 +57,24 @@ export function cleanList(input: Partial<Record<keyof ValueList, unknown>> | und
   const values = Array.isArray(input?.values) ? [...new Set(input.values.map((value) => text(value, 255)).filter(Boolean))].slice(0, 500) : []
   return { id, name, values }
 }
+// DPF-10: the rules read strictly — an array of { value, parts }; a value of text (255), not twice (any case); parts only
+// the four known ones, each once and given to one value only (the first keeps it); a rule left without parts is dropped;
+// at most 50. Nothing usable gives no rules (as a file saved before them).
+const classificationKey = 'releaseclassification'
+export function cleanClassRules(input: unknown): ClassRule[] | undefined {
+  if (!Array.isArray(input)) return undefined
+  const rules: ClassRule[] = [], taken = new Set<ReleasePart>()
+  for (const entry of input as Partial<Record<keyof ClassRule, unknown>>[]) {
+    const value = text(entry?.value, 255)
+    if (!value || rules.some((rule) => rule.value.toLowerCase() === value.toLowerCase()) || !Array.isArray(entry?.parts)) continue
+    const parts = releaseParts.map((part) => part.key).filter((key) => (entry.parts as unknown[]).includes(key) && !taken.has(key))
+    if (!parts.length) continue
+    for (const part of parts) taken.add(part)
+    rules.push({ value, parts })
+    if (rules.length === maxClassRules) break
+  }
+  return rules.length ? rules : undefined
+}
 // Labels unique by placeholder key (and not {feature} or {month}); a list field without a known list becomes text.
 export function cleanFields(input: unknown, lists: ValueList[]): EpicField[] {
   if (!Array.isArray(input)) return []
@@ -53,8 +83,10 @@ export function cleanFields(input: unknown, lists: ValueList[]): EpicField[] {
     const type = oneOf(field?.type, ['text', 'list', 'number', 'date'] as const, 'text')
     const list = text(field?.list, 60)
     const known = type === 'list' && lists.some((entry) => entry.id === list)
-    const source = text(field?.source, 255)
-    return { label: text(field?.label, 60), type: type === 'list' && !known ? 'text' as const : type, ...(known ? { list } : {}), ifEmpty: oneOf(field?.ifEmpty, ['optional', 'warn', 'block'] as const, 'optional'), into: oneOf(field?.into, ['description', 'title', 'both'] as const, 'description'), ...(source ? { source } : {}) }
+    const source = text(field?.source, 255), label = text(field?.label, 60)
+    // DPF-10: rules only on a known List field named Release Classification.
+    const classRules = known && fieldKey(label) === classificationKey ? cleanClassRules(field?.classRules) : undefined
+    return { label, type: type === 'list' && !known ? 'text' as const : type, ...(known ? { list } : {}), ifEmpty: oneOf(field?.ifEmpty, ['optional', 'warn', 'block'] as const, 'optional'), into: oneOf(field?.into, ['description', 'title', 'both'] as const, 'description'), ...(source ? { source } : {}), ...(classRules ? { classRules } : {}) }
   }).filter((field) => { const key = fieldKey(field.label); if (!key || seen.has(key)) return false; seen.add(key); return true }).slice(0, maxEpicFields)
 }
 export function cleanEpicFields(input: Partial<Record<keyof EpicFields, unknown>> | undefined, lists: ValueList[]): EpicFields | null {
@@ -136,15 +168,67 @@ export function withEpicFields<L extends { title: string; skip?: string }>(plan:
 // DPF-07, DPF-09: the Release Classification values of an Epic — the list of its own "Release Classification" field
 // (a List field); none without one (there are no built-in values). fieldIndex: that field's place in the Epic's
 // fields, -1 without one.
-export function classificationOf(file: EpicSetupFile | null | undefined, epicId: number | undefined): { values: string[]; fieldIndex: number; label: string } {
+// DPF-10: rules — the field's detection rules (none: the values are matched by the release type's name, as before).
+export interface Classification { values: string[]; fieldIndex: number; label: string; rules: ClassRule[] }
+export function classificationOf(file: EpicSetupFile | null | undefined, epicId: number | undefined): Classification {
   const entry = epicFieldsFor(file, epicId)
-  const fieldIndex = entry ? entry.fields.findIndex((field) => fieldKey(field.label) === 'releaseclassification') : -1
-  if (fieldIndex < 0) return { values: [], fieldIndex: -1, label: 'Release Classification' }
+  const fieldIndex = entry ? entry.fields.findIndex((field) => fieldKey(field.label) === classificationKey) : -1
+  if (fieldIndex < 0) return { values: [], fieldIndex: -1, label: 'Release Classification', rules: [] }
   const field = entry!.fields[fieldIndex]
-  return { values: field.type === 'list' ? [...(listOf(file, field.list)?.values ?? [])] : [], fieldIndex, label: field.label }
+  const list = field.type === 'list'
+  return { values: list ? [...(listOf(file, field.list)?.values ?? [])] : [], fieldIndex, label: field.label, rules: list ? structuredClone(field.classRules ?? []) : [] }
 }
 /** The value of the release type read from the release number (Major, Minor, MLD, Platform Update) in an Epic's list. */
 export const classificationFromType = (values: string[], type: string | undefined) => type ? values.find((value) => value.trim().toLowerCase() === type.toLowerCase()) ?? '' : ''
+
+// DPF-10: the part of a release number that decides its classification — the deepest non-zero part of x.y.z.w (missing
+// parts are 0, a leading "v" is ignored); null for anything that is not 1 to 4 numbers.
+export function releasePartOf(version: string): ReleasePart | null {
+  const value = version.trim().replace(/^v/i, '')
+  if (!/^\d+(\.\d+){0,3}$/.test(value)) return null
+  const [, y = 0, z = 0, w = 0] = value.split('.').map(Number)
+  return w ? 'x.y.z.w' : z ? 'x.y.z' : y ? 'x.y' : 'x.0'
+}
+// The built-in names the release types had before the rules (DPF-08), by part.
+const typeNames: Record<ReleasePart, string> = { 'x.0': 'Major', 'x.y': 'Minor', 'x.y.z': 'MLD', 'x.y.z.w': 'Platform Update' }
+const usualNames: Record<ReleasePart, string[]> = { 'x.0': ['major'], 'x.y': ['minor'], 'x.y.z': ['mld'], 'x.y.z.w': ['platform update', 'pu'] }
+/** DPF-11: the value of the Epic's list for a release number — by the rules when the field has any, else (no rules
+ * saved) the value named like the release type (Major, Minor, MLD, Platform Update), as before; '' when none. */
+export function detectClassification(classes: Pick<Classification, 'values' | 'rules'>, version: string): string {
+  const part = releasePartOf(version)
+  if (!part) return ''
+  const inList = (name: string) => classes.values.find((value) => value.trim().toLowerCase() === name.trim().toLowerCase()) ?? ''
+  if (!classes.rules.length) return classificationFromType(classes.values, typeNames[part])
+  const rule = classes.rules.find((entry) => entry.parts.includes(part))
+  return rule ? inList(rule.value) : ''
+}
+/** DPF-10 "Fill with the usual rules": x.0 → Major, x.y → Minor, x.y.z → MLD, x.y.z.w → Platform Update (or PU), for
+ * the values of the list named so (any case). */
+export function usualClassRules(values: string[]): ClassRule[] {
+  const rules: ClassRule[] = []
+  for (const part of releaseParts) {
+    const value = values.find((entry) => usualNames[part.key].includes(entry.trim().toLowerCase()))
+    if (!value) continue
+    const known = rules.find((rule) => rule.value === value)
+    if (known) known.parts.push(part.key); else rules.push({ value, parts: [part.key] })
+  }
+  return rules
+}
+/** DPF-10: what keeps the rules from being saved — a part given to more than one value — as messages. */
+export function classRuleProblems(rules: ClassRule[] | undefined): string[] {
+  return releaseParts.flatMap((part) => {
+    const owners = (rules ?? []).filter((rule) => rule.parts.includes(part.key)).map((rule) => rule.value)
+    return owners.length > 1 ? [`${part.key} is given to ${owners.join(' and ')}: a part of the release number may decide one value only.`] : []
+  })
+}
+/** DPF-10: the rules after ticking or unticking a part for a value (a rule without parts is removed). */
+export function toggleClassRule(rules: ClassRule[] | undefined, value: string, part: ReleasePart, on: boolean): ClassRule[] {
+  const next = structuredClone(rules ?? [])
+  let rule = next.find((entry) => entry.value === value)
+  if (!rule) { rule = { value, parts: [] }; next.push(rule) }
+  rule.parts = releaseParts.map((entry) => entry.key).filter((key) => key === part ? on : rule!.parts.includes(key))
+  return next.filter((entry) => entry.parts.length)
+}
 
 // STT-01: the templates offered for an Epic and Release Classification value ('' = the Epic default): a template whose
 // Epic tags are empty or name the Epic, and whose value tags are empty or (for a value) name it.

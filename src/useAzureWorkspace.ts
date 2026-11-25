@@ -4,7 +4,7 @@ import { initialWorkEmail, saveWorkEmail } from './workEmail'
 import { activateAfterHours } from './closeChain'
 import { dependencyFields, fetchAzureWorkItems, guardSampleWrites, isCloudBase, mapAzureWorkItem, mergeAzureWorkItems, parseAzureProjectUrl, readFieldNames, savedBacklogItems, sameAzureScope, updateAzureTimeWritingEffort, type AzureFetchResult, type AzureConfig } from './azureDevOps'
 import type { PageProps } from './pages/types'
-import type { AzureWorkItem } from './domain'
+import type { AppState, AzureWorkItem } from './domain'
 import { loadAzurePat, saveAzurePat, forgetAzurePat, listAzureConnectionProfiles, loadAzureConnectionProfile, saveAzureConnectionProfile, forgetAzureConnectionProfile, composeAzureUrl, collectionUrlFrom, type AzureConnectionProfile, type AzureConnectionProfileSummary, type AzureConnectionRole, loadServerPat, serverKey } from './azureCredentials'
 import { approvalDateFrom, checkWorkItemQuery, defaultReleaseQuery, fetchReleaseSource, normalizeReleaseSourceSettings, projectQuery, runWorkItemQuery, withAncestors } from './releaseSource'
 import { sampleDataset, sampleProfiles, sampleReleaseScopes } from './sampleData'
@@ -32,6 +32,10 @@ async function viewLayout(config: AzureConfig, pat: string, query: string) {
 const withQueryFields = (config: AzureConfig, refs: string[]) =>
   (item: { id: number; fields: Record<string, unknown>; relations?: { rel: string; url: string }[] }) => { const mapped = { ...mapAzureWorkItem(item, config), fields: { ...pickFields(item.fields, refs), ...dependencyFields(item) } }; const approvalDate = approvalDateFrom(item.fields); return approvalDate ? { ...mapped, approvalDate } : mapped }
 const refsOf = (layout: { columns: { ref: string }[] }) => layout.columns.map((column) => column.ref)
+// TVL-31: a new fetch keeps the Parent names read for the connection (Tool Validations' Signed documents query) until
+// its next ↻ on the Tool Validations page reads them again; a Parent not read yet shows as #ID.
+type SavedSource = NonNullable<AppState['azureSources']>[number]
+const keepParentTitles = <T extends object>(sources: SavedSource[] | undefined, id: string, entry: T): T => { const previous = sources?.find((source) => source.connectionId === id)?.parentTitles; return previous ? { ...entry, parentTitles: previous } : entry }
 
 export interface ConnectionStatus { state: 'busy' | 'ok' | 'error'; message: string; at?: string }
 // cloneOf: the connection this one was cloned from; its saved PAT is used when no new PAT is entered.
@@ -317,7 +321,7 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
         // Each release source keeps its own snapshot; the old shared one is dropped so it is never shown for another view.
         const entry = { connectionId: id, name: profile.reason, role: 'release-source' as const, ...snapshot }
         store.update((draft) => {
-          draft.azureSources = [...(draft.azureSources ?? []).filter((source) => source.connectionId !== id), entry]
+          draft.azureSources = [...(draft.azureSources ?? []).filter((source) => source.connectionId !== id), keepParentTitles(draft.azureSources, id, entry)]
           delete draft.releaseSource
           draft.audits.unshift({ id: crypto.randomUUID(), timestamp: snapshot.fetchedAt, actor: 'u-owner', action: 'Sync', entity: 'ReleaseSource', entityId: `${parsed.organization}/${parsed.project}`, detail: `${snapshot.items.length} release documents fetched read-only from “${profile.reason}”` })
           return draft
@@ -331,7 +335,7 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
         const fetchedAt = new Date().toISOString()
         const entry = { connectionId: id, name: profile.reason, role, organization: parsed.organization, project: parsed.project, query: query || `Team backlog: ${parsed.team}`, fetchedAt, items, ...layout }
         store.update((draft) => {
-          draft.azureSources = [...(draft.azureSources ?? []).filter((source) => source.connectionId !== id), entry]
+          draft.azureSources = [...(draft.azureSources ?? []).filter((source) => source.connectionId !== id), keepParentTitles(draft.azureSources, id, entry)]
           draft.audits.unshift({ id: crypto.randomUUID(), timestamp: fetchedAt, actor: 'u-owner', action: 'Sync', entity: 'AzureSource', entityId: `${parsed.organization}/${parsed.project}`, detail: `${items.length} work items fetched read-only for backlog view “${profile.reason}”` })
           return draft
         })
@@ -343,7 +347,7 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
         const fetchedAt = new Date().toISOString()
         const entry = { connectionId: id, name: profile.reason, role: role === 'documents' ? 'documents' as const : 'reference' as const, organization: parsed.organization, project: parsed.project, query: query || projectQuery, fetchedAt, items, ...layout }
         store.update((draft) => {
-          draft.azureSources = [...(draft.azureSources ?? []).filter((source) => source.connectionId !== id), entry]
+          draft.azureSources = [...(draft.azureSources ?? []).filter((source) => source.connectionId !== id), keepParentTitles(draft.azureSources, id, entry)]
           draft.audits.unshift({ id: crypto.randomUUID(), timestamp: fetchedAt, actor: 'u-owner', action: 'Sync', entity: 'AzureSource', entityId: `${parsed.organization}/${parsed.project}`, detail: `${items.length} work items fetched read-only from “${profile.reason}”` })
           return draft
         })

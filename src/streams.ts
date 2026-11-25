@@ -83,10 +83,87 @@ export function streamNamedBy(names: (string | undefined)[], source?: StreamDef[
 
 // The connection of an Azure stream: a non-Time-Writing connection whose view name (or name) is the stream's name.
 // CP's is its release-folder tree: the CP connection with a tree / links query (FROM WorkItemLinks), else the first one.
+// Tool Validations' is its Tools query (TVL-19): never the Signed documents query.
 export function profileForStream<P extends AzureConnectionProfileSummary>(stream: StreamDef, profiles: P[]): P | undefined {
-  // The shared setup's connection (from Git) comes before one set up only here, so the admin's mapping is used.
-  const found = profilesForStream(stream, profiles), all = [...found.filter((profile) => profile.shared), ...found.filter((profile) => !profile.shared)]
+  if (stream.rule === 'tool' && !stream.custom) return toolQueries(stream, profiles).tools
+  const all = sharedFirst(profilesForStream(stream, profiles))
   return stream.rule === 'cp' ? all.find((profile) => /\bFROM\s+WorkItemLinks\b/i.test(profile.query ?? '')) ?? all[0] : all[0]
+}
+// The shared setup's connection (from Git) comes before one set up only here, so the admin's mapping is used.
+const sharedFirst = <P extends Pick<AzureConnectionProfileSummary, 'shared'>>(found: P[]) => [...found.filter((profile) => profile.shared), ...found.filter((profile) => !profile.shared)]
+
+// TVL-19: Tool Validations reads two queries, two connections of its stream: the **Tools** query (one row per tool:
+// the master list and Completed) and the **Signed documents** query (one row per document, its Parent the tool's work
+// item ID, with approver slots: Supported). Which connection is the Signed documents query:
+// 1. the one the Tool Owner chose in Stream mapping → Tool Validations queries (releaseSourceSettings.toolValidations.
+//    documentsQuery: the connection's view name or name; "@none" = no Signed documents query, one query as before);
+// 2. else, automatically, a connection whose view name (or name) carries "documents", "docs", "signed" or "signatures"
+//    after the stream's name — "Tool Validations Signed documents", as Stream mapping's Add query names it;
+// 3. else a connection whose query selects [System.Parent] and an ApproverName<n> column.
+// The Tools query is the first other connection. With one connection (or none found) the stream counts as before
+// (QV-64, single query). The choice is set by the app (setToolDocumentsQuery, from the shared settings) for the plain
+// functions that look streams up; tests pass it.
+export const noToolDocumentsQuery = '@none'
+let toolDocumentsSetting: string | undefined
+export const toolDocumentsQuery = () => toolDocumentsSetting
+// Changes the version (caches) but tells no listener: it is called while the app renders, before its pages read it.
+export function setToolDocumentsQuery(name: string | undefined) {
+  const next = name?.trim() || undefined
+  if (next === toolDocumentsSetting) return
+  toolDocumentsSetting = next
+  version += 1
+}
+const documentWords = new Set(['document', 'documents', 'docs', 'doc', 'signed', 'signature', 'signatures'])
+export type ToolQueryHow = 'single' | 'setting' | 'name' | 'columns' | 'none' | 'off'
+export const toolQueryHowLabel: Record<ToolQueryHow, string> = {
+  single: 'one query: the stream counts as before',
+  setting: 'chosen in Stream mapping → Tool Validations queries',
+  name: 'found by its name (documents, signed)',
+  columns: 'found by its columns (Parent and approver slots)',
+  none: 'no Validation Documents query found: one query, counted as before',
+  off: 'set to none: one query, counted as before',
+}
+const documentsByName = (stream: Pick<StreamDef, 'name'>, names: (string | undefined)[]) => { const own = new Set(tokens(stream.name)); return names.some((name) => tokens(name).some((word) => !own.has(word) && documentWords.has(word))) }
+const documentsByColumns = (query: string | undefined) => /\bSystem\.Parent\b/i.test(query ?? '') && /approver\s*_?name\s*_?\d+/i.test(query ?? '')
+// TVL-33: the roles of the two queries as the UI names them — the Tools query is the **Tool List**, the Signed documents
+// query the **Validation Documents** (the internal keys stay tools / documents).
+export type ToolQueryRole = 'tools' | 'documents'
+export const toolRoleLabel: Record<ToolQueryRole, string> = { tools: 'Tool List', documents: 'Validation Documents' }
+// TVL-33: the category Add query pre-selects for a new Tool Validations connection — the automatic identification of
+// toolQueries (a name with documents / signed …, else a query selecting [System.Parent] and an ApproverName column);
+// the person confirms or changes it before saving.
+export function toolCategoryGuess(stream: Pick<StreamDef, 'name'>, input: { name?: string; viewName?: string; query?: string }): { role: ToolQueryRole; how: 'name' | 'columns' | 'default' } {
+  if (documentsByName(stream, [input.viewName, input.name])) return { role: 'documents', how: 'name' }
+  if (documentsByColumns(input.query)) return { role: 'documents', how: 'columns' }
+  return { role: 'tools', how: 'default' }
+}
+// TVL-33: the Validation Documents setting (releaseSourceSettings.toolValidations.documentsQuery) after a connection of
+// the stream was added with its category confirmed. Validation Documents: that connection, by its view name. Tool List:
+// unchanged, unless the automatic identification could take it for the Validation Documents query (its name or columns
+// say documents, now or once a second connection is added) — then the other one it would find, else none ("@none": one
+// query), so that a Tool List query never becomes the Validation Documents query.
+export function toolDocumentsSettingFor<P extends AzureConnectionProfileSummary>(stream: StreamDef, profiles: P[], setting: string | undefined, addedId: string, role: ToolQueryRole): string | undefined {
+  const added = profiles.find((profile) => profile.id === addedId)
+  if (!added) return setting
+  if (role === 'documents') return added.viewName?.trim() || added.reason
+  // Unchanged when the setting names another connection, or when Automatic would never take this one for documents.
+  const chosen = setting && setting !== noToolDocumentsQuery ? profiles.find((profile) => profile.id !== addedId && [profile.viewName, profile.reason].some((name) => sameStream(name, setting))) : undefined
+  if (chosen || toolCategoryGuess(stream, { name: added.reason, viewName: added.viewName, query: added.query }).role === 'tools') return setting
+  const others = profilesForStream(stream, profiles).filter((profile) => profile.id !== addedId)
+  const other = others.find((profile) => documentsByName(stream, [profile.viewName, profile.reason])) ?? others.find((profile) => documentsByColumns(profile.query))
+  return other ? other.viewName?.trim() || other.reason : noToolDocumentsQuery
+}
+export function toolQueries<P extends AzureConnectionProfileSummary>(stream: StreamDef, profiles: P[], setting: string | undefined = toolDocumentsSetting): { tools?: P; documents?: P; how: ToolQueryHow; all: P[] } {
+  const all = sharedFirst(profilesForStream(stream, profiles))
+  if (all.length < 2) return { tools: all[0], how: 'single', all }
+  if (setting === noToolDocumentsQuery) return { tools: all[0], how: 'off', all }
+  const names = (profile: P) => [profile.viewName, profile.reason]
+  const chosen = setting ? all.find((profile) => names(profile).some((name) => sameStream(name, setting))) : undefined
+  const byName = chosen ? undefined : all.find((profile) => documentsByName(stream, names(profile)))
+  const byColumns = chosen || byName ? undefined : all.find((profile) => documentsByColumns(profile.query))
+  const documents = chosen ?? byName ?? byColumns
+  if (!documents) return { tools: all[0], how: 'none', all }
+  return { tools: all.find((profile) => profile !== documents), documents, how: chosen ? 'setting' : byName ? 'name' : 'columns', all }
 }
 // Every connection of an Azure stream, in the connections' order; CP's others (e.g. "CP Releases") can enrich the
 // release names (cpReporting).
@@ -143,4 +220,19 @@ export function windchillStreamExports<T extends SetupView & { id: string }>(vie
     if (!stream.project) { const view = mine.find((entry) => namesStream(entry.name, stream.name)) ?? mine[0]; return [{ stream, name: stream.name, view }] }
     return mine.length ? mine.map((view) => ({ stream, name: view.name, view })) : [{ stream, name: stream.name }]
   })
+}
+
+// NAV-52: Release Details in the menu is one list — every stream's entry (the Azure DevOps streams and the Windchill
+// exports, built-in and custom; a stream not set up yet with its ＋) sorted A–Z by its label, ignoring case — followed by
+// the "＋ <stream> export" entries of the streams read by project (another ECP export, CON-87). BRITE stays above it and
+// "Import Windchill export" below it (App). Pure, so the order is tested (tests/streams.test.mjs).
+export type ReleaseMenuEntry<T> = { kind: 'azure'; stream: StreamDef; label: string } | { kind: 'windchill'; stream: StreamDef; label: string; view?: T } | { kind: 'add-export'; stream: StreamDef; label: string }
+export const byLabel = (a: string, b: string) => a.localeCompare(b, 'en', { sensitivity: 'base' }) || a.localeCompare(b, 'en')
+export function releaseMenuEntries<T extends SetupView & { id: string }>(views: T[]): ReleaseMenuEntry<T>[] {
+  const azure: ReleaseMenuEntry<T>[] = allStreams().filter((stream) => stream.source === 'azure').map((stream) => ({ kind: 'azure', stream, label: stream.name }))
+  const exports = windchillStreamExports(views)
+  const windchill: ReleaseMenuEntry<T>[] = exports.map(({ stream, name, view }) => ({ kind: 'windchill', stream, label: name, view }))
+  // After the last export of a stream read by project, one entry adds another (only once it has an export).
+  const adds: ReleaseMenuEntry<T>[] = exports.filter(({ stream, view }, index) => view && stream.project && exports[index + 1]?.stream !== stream).map(({ stream }) => ({ kind: 'add-export', stream, label: `${stream.name} export` }))
+  return [...[...azure, ...windchill].sort((a, b) => byLabel(a.label, b.label)), ...adds]
 }

@@ -21,8 +21,12 @@ import { MyDashboardPage } from './pages/MyDashboardPage'
 import { HomePage } from './pages/HomePage'
 import { loadStartView, saveStartView, startPageOf, visibleTiles, type HomeLink, type HomeTile, type StartView } from './homeTiles'
 import { lookLabel, mySettingsLabel, readSettingsTab, settingsPages, resolveSettings, saveSettingsSection, saveSettingsTab, settingsLabel, settingsPagesFor, type SettingsTab } from './settingsTabs'
-import { normalizeReleaseSourceSettings } from './releaseSource'
-import { allStreams, dataSets, defaultMatchThreshold, defaultStreams, profileForDataSet, profileForStream, windchillStreamExports } from './streams'
+import { normalizeReleaseSourceSettings, streamPatterns } from './releaseSource'
+import { viewSource } from './viewSources'
+import { cleanDays, ownersReason as toolOwnersReason } from './toolValidations'
+import { setToolMasterList } from './toolQueries'
+import { ToolValidationsContext, useToolValidations, type SourceData, type ToolValidationsEnv } from './useToolValidations'
+import { allStreams, dataSets, defaultMatchThreshold, defaultStreams, profileForDataSet, profileForStream, releaseMenuEntries, setToolDocumentsQuery, windchillStreamExports } from './streams'
 import { CustomStreamsContext, useCustomStreams, useStreamsVersion } from './useCustomStreams'
 import { connectionPresets } from './connectionPresets'
 import { gitSyncedIds, markViewsSynced, removeDuplicateConnections } from './viewDefinitions'
@@ -72,11 +76,12 @@ import { ProfileMenu, type ProfileAction } from './components/ProfileMenu'
 import { backlogViews, loadBacklogTab, otherMenuViews, saveBacklogTab, timeWritingView } from './backlogViews'
 import { detectWorkEmail, fetchTeamMembers, mergeAzureWorkItems } from './azureDevOps'
 import { formatDateTime } from './format'
-import { utcMonthKey } from './businessTime'
+import { utcMonthKey, utcToday } from './businessTime'
+import { toolDatasets } from './dashboardSources'
 import { HeaderSlot } from './headerSlot'
 import { SetupGuide } from './components/SetupGuide'
 import { GitSyncBar } from './components/GitStorage'
-import { confirmReplace, defaultGitRepository, movedRepositoryTarget, normalizeSetupLinks, setCommitSaver, type SetupLinks } from './gitStorage'
+import { confirmReplace, defaultGitRepository, isRepositoryUnreadable, movedRepositoryTarget, normalizeSetupLinks, setCommitSaver, type SetupLinks } from './gitStorage'
 import { guideKey, requiredOpen, setupSteps } from './setupGuide'
 import { azureResources, capacityContext, setAccessRoles, setAzureEmails } from './capacity'
 import { hasServerPat, serverKey } from './azureCredentials'
@@ -106,6 +111,7 @@ const WindchillPage = lazy(() => import('./components/WindchillViews').then((mod
 const WindchillExportImport = lazy(() => import('./components/WindchillViews').then((module) => ({ default: module.WindchillExportImport })))
 const SprintCheckPage = lazy(() => import('./pages/SprintCheckPage').then((module) => ({ default: module.SprintCheckPage })))
 const menuMiniKey = 'demand-planning-menu-mini-v1'
+const legacyNavKeys = ['release:ads', 'release:windchill']
 
 
 export default function App() {
@@ -113,6 +119,9 @@ export default function App() {
   // The Task creation paths check the planning lock of Settings' periods (ad-hoc tag after the lock).
   // Month locks (MON-21): the lock dates kept with the capacity settings in Git apply on every page.
   setLockSettings(capacityContext(store.state))
+  // TVL-19: which Tool Validations connection is the Signed documents query (the shared settings), for every lookup of
+  // the stream's connections (streams.ts toolQueries) on this render.
+  setToolDocumentsQuery(normalizeReleaseSourceSettings(store.state.releaseSourceSettings).toolValidations?.documentsQuery)
   const onFetched = useRef<FetchListener | undefined>(undefined)
   const gitData = useRef<GitDataSource | undefined>(undefined)
   const azure = useAzureWorkspace(store, onFetched, gitData)
@@ -259,11 +268,46 @@ export default function App() {
   const viewedEmail = access.viewingAs?.kind === 'person' ? (access.viewingAs.email ?? '').trim().toLowerCase() : access.viewingAs ? '' : access.email
   const viewer: Viewer = { email: viewedEmail, can: access.can, readOnly: access.readOnly, manager: canManagePages(access.policy, access.rights) }
   const [addPageFor, setAddPageFor] = useState<string | null>(null)
+  // TVL-01…TVL-12: the Tool Validations master list (tool-validations.json in Git), its sources and who may change it —
+  // the Tool Owner and the list's co-owners, never while viewing as someone else, with the sample or without a token that
+  // can write. The Tool Validations query's tools are appended whenever its data is fetched (TVL-04).
+  const toolStream = defaultStreams.find((stream) => stream.rule === 'tool')!
+  const toolProfile = profileForStream(toolStream, azure.connectionProfiles)
+  const releaseSources = azure.connectionProfiles.filter((profile) => profile.role === 'release-source').length
+  const toolData = toolProfile ? viewSource(store.state, toolProfile.id, toolProfile.role, toolProfile.query, releaseSources) : undefined
+  const toolPatterns = useMemo(() => streamPatterns(store.state.releaseSourceSettings, toolStream.name), [store.state.releaseSourceSettings, toolStream.name])
+  // TVL-29: the completion date chosen in Stream mapping (TVL-20) dates the tools of the Azure DevOps sources.
+  const toolCompletionField = normalizeReleaseSourceSettings(store.state.releaseSourceSettings).toolValidations?.completionField
+  const toolValidations = useToolValidations(git, { items: toolData?.items, fetchedAt: toolData?.fetchedAt, patterns: toolPatterns, completionField: toolCompletionField }, { viewer, blocked: access.viewingAs ? 'Viewing as someone else: read only, nothing is saved.' : gitReasonOf(git), by: my.self.me.name?.trim() || azure.creatorEmail.trim() })
+  // TVL-36: Pulse Check, the Monthly pack and the cumulative chart count Tool Validations from this master list.
+  setToolMasterList(toolValidations.shown.tools)
+  const toolSources = useMemo((): SourceData => ({
+    streamItems: toolData?.items, patterns: toolPatterns, completionField: toolCompletionField,
+    azure: azure.connectionProfiles.filter((profile) => profile.role !== 'time-tracking' && profile.id !== toolProfile?.id).map((profile) => { const data = viewSource(store.state, profile.id, profile.role, profile.query, releaseSources); return { id: profile.id, name: profile.viewName || profile.reason, items: data?.items, fetchedAt: data?.fetchedAt } }),
+    windchill: windchill.views.filter((view) => view.exportFile).map((view) => { const data = windchill.sources.find((entry) => entry.viewId === view.id); return { id: view.id, name: view.name, columns: data?.columns ?? view.columns, rows: data?.rows } }),
+    pages: onDemand.pages.filter((entry) => kindOf(menu.layout, entry.id) !== 'dashboard' && !entry.sample).map((entry) => ({ id: entry.id, name: entry.name, columns: entry.columns.map((column) => ({ id: column.id, name: column.name })), rows: entry.rows })),
+  }), [toolData?.items, toolPatterns, toolCompletionField, azure.connectionProfiles, toolProfile?.id, store.state, releaseSources, windchill.views, windchill.sources, onDemand.pages, menu.layout])
+  const toolDaysKey = 'tool-validations:expiry-days'
+  // TVL-18: the master list and the expiry list as data sources of the On-Demand Dashboards (the owners' dashboard tabs
+  // and every other dashboard), for the roles that see Release Details.
+  const toolsReadable = access.sees('release')
+  const toolDatasetList = useMemo(() => toolDatasets({ file: toolValidations.shown, connected: toolValidations.connected, loaded: toolValidations.loaded }, toolsReadable, utcToday()), [toolValidations.shown, toolValidations.connected, toolValidations.loaded, toolsReadable])
   // OND-73, OND-78, OND-90: who an interactive HTML file is published by; the publish schedules of this computer run while the app
   // is open, each only while the person may still publish the page (the Tool Owner or its co-owners).
   const publisherName = my.self.me.name?.trim() || azure.creatorEmail.trim()
   const publisher = usePublishAuthorization({ git, store: onDemand, access, menu, viewingAs: Boolean(access.viewingAs) })
   usePublishScheduler({ store: onDemand, views: personalViews, publishedBy: publisherName, authorization: publisher })
+  const toolEnv: ToolValidationsEnv = {
+    store: toolValidations, ownersReason: toolValidations.reason || toolOwnersReason(viewer), who: publisherName,
+    personalDays: personalViews.filter(toolDaysKey, cleanDays),
+    setPersonalDays: (days) => days === undefined ? personalViews.clearFilter(toolDaysKey) : personalViews.setFilter(toolDaysKey, days),
+    sources: toolSources, datasets: toolDatasetList,
+    pages: {
+      git, onDemand, menu, viewer, me: azure.isSample ? '' : azure.creatorEmail.trim().toLowerCase() || my.self.me.name?.trim() || '',
+      views: personalViews, dataMode, publisherName, publisher,
+      hours: { items: reportAzure.items, settings: dashboardHoursSettings, allowed: access.sees('insights') },
+    },
+  }
   // Who creates new work items (the email on the Time Writing connection) and whether they may assign them to others.
   const assign = { me: azure.creatorEmail.trim().toLowerCase(), canChoose: access.can('azure.createForOthers') }
   // NAV-42, NAV-46: the start page — Home (the tiles) in the tile view, My dashboard in the classic view.
@@ -327,16 +371,17 @@ export default function App() {
   const toggleMenuMini = () => setMenuMini((current) => { const next = !current; try { localStorage.setItem(menuMiniKey, next ? '1' : '0') } catch { /* this visit only */ } return next })
   useEffect(() => { setNavOpen(false) }, [page, viewId, windchillId, onDemandId])
   useEffect(() => { if (!navOpen) return; const close = (event: KeyboardEvent) => { if (event.key === 'Escape') setNavOpen(false) }; window.addEventListener('keydown', close); return () => window.removeEventListener('keydown', close) }, [navOpen])
-  const [collapsed, setCollapsed] = useState<string[]>(() => { try { const saved = JSON.parse(localStorage.getItem('demand-planning-nav-collapsed-v1') ?? '[]'); return Array.isArray(saved) ? saved.filter((key): key is string => typeof key === 'string') : [] } catch { return [] } })
+  // NAV-52: the Release Details sub-lists of earlier versions (release:ads, release:windchill) are gone; their stored keys are dropped.
+  const [collapsed, setCollapsed] = useState<string[]>(() => { try { const saved = JSON.parse(localStorage.getItem('demand-planning-nav-collapsed-v1') ?? '[]'); return Array.isArray(saved) ? saved.filter((key): key is string => typeof key === 'string' && !legacyNavKeys.includes(key)) : [] } catch { return [] } })
   const saveCollapsed = (next: string[]) => { try { localStorage.setItem('demand-planning-nav-collapsed-v1', JSON.stringify(next)) } catch { /* this visit only */ } return next }
   const toggleNav = (key: string) => setCollapsed((now) => saveCollapsed(now.includes(key) ? now.filter((entry) => entry !== key) : [...now, key]))
-  // Expand all / Collapse all (NAV-37): every heading and both Release Details lists at once.
+  // Expand all / Collapse all (NAV-37): every heading at once.
   // PGB-04: the menu groups — the built-in ones, with the custom groups of the menu layout after On-Demand.
   const customGroups = menuGroups(menu.layout).filter((group) => !group.builtIn)
   const navGroups: string[] = pageGroups.flatMap((group): string[] => group === 'On-Demand' ? [group, ...customGroups.map((entry) => entry.name)] : [group])
   const groupIdOf = (name: string) => builtInGroupOf(name) || customGroups.find((entry) => entry.name === name)?.id || ''
   const groupNameOf = (id: string) => findGroup(menu.layout, id)?.name ?? 'On-Demand'
-  const navKeys = [...navGroups, 'release:ads', 'release:windchill']
+  const navKeys = navGroups
   const allCollapsed = navKeys.every((key) => collapsed.includes(key))
   const navButton = (key: string, icon: string, label: string, active: boolean, onClick: () => void) => <button key={key} title={menuMini ? label : undefined} className={active ? 'nav-active' : ''} aria-current={active ? 'page' : undefined} onClick={onClick}><span className="nav-icon">{icon}</span>{label}</button>
   // PGB-04: the added pages of a group that the viewer sees — the On-Demand area (all added pages share it, CON-103), in
@@ -399,8 +444,12 @@ export default function App() {
   const tileOf = (tile: Omit<HomeTile, 'open'> & { open?: () => void }): HomeTile | null => tile.open ? { ...tile, open: tile.open } : tile.links.length ? { ...tile, open: tile.links[0].open } : null
   const firstAllowed = (...ids: Page[]) => { const id = ids.find((entry) => allowed(entry)); return id ? () => setPage(id) : undefined }
   const streamLinks: HomeLink[] = access.sees('release') ? [
-    ...allStreams().filter((stream) => stream.source === 'azure').map((stream) => { const profile = profileForStream(stream, azure.connectionProfiles), entry = profile && views.find((item) => item.id === profile.id); return entry ? { key: `stream:${stream.name}`, label: stream.name, icon: pageMeta('board').icon, open: () => openView(entry.id) } : { key: `stream:${stream.name}`, label: stream.name, icon: '＋', note: 'not set up yet — opens Stream mapping', open: openConnection } }),
-    ...windchillStreamExports(windchillViews).map(({ stream, name, view: entry }) => ({ key: `windchill:${entry?.id ?? stream.name}`, label: name, icon: entry ? pageMeta('windchill').icon : '＋', ...(entry ? {} : { note: 'not imported yet' }), open: () => entry ? openWindchill(entry.id) : openWindchill('', stream.name) })),
+    // NAV-52: in the menu's order — the streams A–Z (not the "＋ … export" entries), then BRITE.
+    ...releaseMenuEntries(windchillViews).flatMap((item): HomeLink[] => {
+      if (item.kind === 'azure') { const profile = profileForStream(item.stream, azure.connectionProfiles), entry = profile && views.find((view) => view.id === profile.id); return [entry ? { key: `stream:${item.stream.name}`, label: item.label, icon: pageMeta('board').icon, open: () => openView(entry.id) } : { key: `stream:${item.stream.name}`, label: item.label, icon: '＋', note: 'not set up yet — opens Stream mapping', open: openConnection }] }
+      if (item.kind === 'windchill') { const entry = item.view; return [{ key: `windchill:${entry?.id ?? item.stream.name}`, label: item.label, icon: entry ? pageMeta('windchill').icon : '＋', ...(entry ? {} : { note: 'not imported yet' }), open: () => entry ? openWindchill(entry.id) : openWindchill('', item.stream.name) }] }
+      return []
+    }),
     ...pageLink('brite'),
   ] : []
   const settingsLinks: HomeLink[] = settingsPagesFor(access.can).map((entry) => ({ key: `settings:${entry.key}`, label: entry.label, icon: pageMeta('admin').icon, open: () => openSettings(entry.key) }))
@@ -487,6 +536,7 @@ export default function App() {
       else if (loader === 'featureSetup') await featureSetup.reload()
       else if (loader === 'epicSetup') await epicSetup.reload()
       else if (loader === 'customStreams') await customStreams.reload()
+      else if (loader === 'toolValidations') await toolValidations.reload()
       else if (loader === 'connections') { await git.syncViews(); azure.reloadConnectionProfiles() }
       else if (loader === 'monthlyPack') { await monthlyPack.reloadSetup(); await monthlyPack.reloadNotes() }
       else if (loader === 'history') await history.reload()
@@ -531,7 +581,7 @@ export default function App() {
   // saves a built-in chart's size for everyone with Git connected (not with the synthetic sample); View as saves nothing.
   const chartSizeEnv = { views: personalViews, viewOnly: Boolean(access.viewingAs), canSetDefault: access.can('layout.defaults') && git.connected && !git.readOnly && !git.isSample }
   // UI-12: every table follows the shared design default.
-  return <PageNamesContext.Provider value={menuNames}><OwnerPeopleContext.Provider value={ownerPeople}><TableDefaultsContext.Provider value={tableDesign}><CustomStreamsContext.Provider value={customStreams}><ReleaseSettingsContext.Provider value={store.state.releaseSourceSettings}><CanContext.Provider value={access.can}><ReadOnlyContext.Provider value={access.readOnly}><EpicSetupContext.Provider value={epicSetup.file}><OnPremContext.Provider value={onPremSources}><HeaderSlot.Provider value={headerSlot}><ChartSizeEnvContext.Provider value={chartSizeEnv}><div className={`app-shell${navOpen ? ' nav-open' : ''}${menuMini ? ' nav-mini' : ''}`}>
+  return <PageNamesContext.Provider value={menuNames}><OwnerPeopleContext.Provider value={ownerPeople}><TableDefaultsContext.Provider value={tableDesign}><CustomStreamsContext.Provider value={customStreams}><ReleaseSettingsContext.Provider value={store.state.releaseSourceSettings}><CanContext.Provider value={access.can}><ReadOnlyContext.Provider value={access.readOnly}><EpicSetupContext.Provider value={epicSetup.file}><OnPremContext.Provider value={onPremSources}><ToolValidationsContext.Provider value={toolEnv}><HeaderSlot.Provider value={headerSlot}><ChartSizeEnvContext.Provider value={chartSizeEnv}><div className={`app-shell${navOpen ? ' nav-open' : ''}${menuMini ? ' nav-mini' : ''}`}>
     {navOpen && <div className="nav-backdrop" onClick={() => setNavOpen(false)} aria-hidden="true" />}
     <aside className="sidebar" id="primary-navigation">
       <div className="brand" title="I&amp;D Quality Demand Planning"><div className="brand-mark"><BrandMark /></div><div><strong>I&amp;D Quality</strong><span>Demand Planning</span></div><button type="button" className="nav-mini-toggle" aria-pressed={menuMini} aria-label={menuMini ? 'Expand the menu' : 'Collapse the menu'} title={menuMini ? 'Show the menu with names' : 'Fold the menu to icons'} onClick={toggleMenuMini}>{menuMini ? '»' : '«'}</button></div>
@@ -548,16 +598,18 @@ export default function App() {
       })()}{navGroups.map((group) => {
         const pageButton = (item: typeof pages[number]) => !allowed(item.id) ? [] : [<button key={item.id} title={menuMini ? item.label : undefined} className={page === item.id ? 'nav-active' : ''} aria-current={page === item.id ? 'page' : undefined} onClick={() => setPage(item.id)}><span className="nav-icon">{item.icon}</span>{item.label}{item.id === 'mywork' && my.pending.length > 0 && <span className="nav-badge" aria-label={`${my.pending.length} pending`}>{my.pending.length}</span>}</button>]
         const windchillMeta = pageMeta('windchill')
-        // Release Details has two sub-lists: the default Azure streams (DP, CP, IOCC, Content, Tool Validations) and the
-        // Windchill streams (S&S IT; ECP later), each in a fixed order. Other connections and exports go under "Other views".
-        const sections: { key: string; label?: string; entries: React.ReactNode[] }[] = group === 'Release Details' ? [
-          // The default streams in order; one without a connection (shown in the menu) leads to Settings to set it up.
-          // BRITE (CON-84): planned, at the root of Release Details until its exports and rules are known.
+        // NAV-52: Release Details is one list — BRITE at its root (CON-84), then every stream's entry (Azure DevOps and
+        // Windchill exports, built-in and custom) A–Z, then "＋ ECP export" (CON-87) and Import Windchill export. A stream
+        // without a connection (shown in the menu) leads to Settings to set it up; one not imported yet to its import.
+        // Other connections and exports go under "Other views".
+        const sections: { key: string; entries: React.ReactNode[] }[] = group === 'Release Details' ? [
           { key: 'release:root', entries: access.sees('release') ? [navButton('brite', pageMeta('brite').icon, 'BRITE', page === 'brite', () => setPage('brite'))] : [] },
-          { key: 'release:ads', label: 'Azure DevOps Server', entries: access.sees('release') ? allStreams().filter((stream) => stream.source === 'azure').map((stream) => { const profile = profileForStream(stream, azure.connectionProfiles), entry = profile && views.find((item) => item.id === profile.id); return entry ? navButton(`view:${entry.id}`, pageMeta('board').icon, stream.name, page === 'board' && view.id === entry.id, () => openView(entry.id)) : <button key={`stream:${stream.name}`} className="nav-missing" title={`Not set up: add a connection named “${stream.name}”`} onClick={openConnection}><span className="nav-icon">＋</span>{stream.name}</button> }) : [] },
-          { key: 'release:windchill', label: 'Windchill exports', entries: access.sees('release') ? [...windchillStreamExports(windchillViews).flatMap(({ stream, name, view: entry }, index, all) => [entry ? navButton(entry.id, windchillMeta.icon, name, page === 'windchill' && windchillView?.id === entry.id, () => openWindchill(entry.id)) : <button key={`stream:${stream.name}`} className="nav-missing" title={`Not imported yet: import the ${stream.name} export`} onClick={() => openWindchill('', stream.name)}><span className="nav-icon">＋</span>{stream.name}</button>,
-            // Several ECP exports (CON-87): after the last one, "＋ ECP export" adds another with its own name and setup.
-            ...(entry && stream.project && all[index + 1]?.stream !== stream ? [<button key={`stream:${stream.name}:add`} className="nav-missing" title={`Import another ${stream.name} export (its own name and project folder)`} onClick={() => openWindchill('', stream.name)}><span className="nav-icon">＋</span>{stream.name} export</button>] : [])]), ...(access.can('windchill.import') ? [navButton('windchill', '＋', windchillMeta.label, page === 'windchill' && !windchillView, () => openWindchill(''))] : [])] : [] },
+          { key: 'release:streams', entries: access.sees('release') ? [...releaseMenuEntries(windchillViews).map((entry) => {
+            if (entry.kind === 'azure') { const profile = profileForStream(entry.stream, azure.connectionProfiles), found = profile && views.find((item) => item.id === profile.id); return found ? navButton(`view:${found.id}`, pageMeta('board').icon, entry.label, page === 'board' && view.id === found.id, () => openView(found.id)) : <button key={`stream:${entry.stream.name}`} className="nav-missing" title={`Not set up: add a connection named “${entry.stream.name}”`} onClick={openConnection}><span className="nav-icon">＋</span>{entry.label}</button> }
+            if (entry.kind === 'windchill') { const shown = entry.view; return shown ? navButton(shown.id, windchillMeta.icon, entry.label, page === 'windchill' && windchillView?.id === shown.id, () => openWindchill(shown.id)) : <button key={`stream:${entry.stream.name}`} className="nav-missing" title={`Not imported yet: import the ${entry.stream.name} export`} onClick={() => openWindchill('', entry.stream.name)}><span className="nav-icon">＋</span>{entry.label}</button> }
+            // Several ECP exports (CON-87): "＋ ECP export" adds another with its own name and setup.
+            return <button key={`stream:${entry.stream.name}:add`} className="nav-missing" title={`Import another ${entry.stream.name} export (its own name and project folder)`} onClick={() => openWindchill('', entry.stream.name)}><span className="nav-icon">＋</span>{entry.label}</button>
+          }), ...(access.can('windchill.import') ? [navButton('windchill', '＋', windchillMeta.label, page === 'windchill' && !windchillView, () => openWindchill(''))] : [])] : [] },
         ] : group === 'Other views' ? [{ key: group, entries: [
           ...others.azure.filter((entry) => access.sees(entry.onPrem ? 'release' : 'board')).map((entry) => navButton(`view:${entry.id}`, pageMeta('board').icon, entry.name, page === 'board' && view.id === entry.id, () => openView(entry.id))),
           ...(access.sees('release') ? others.windchill.map((entry) => navButton(entry.id, pageMeta('windchill').icon, entry.name, page === 'windchill' && windchillView?.id === entry.id, () => openWindchill(entry.id))) : []),
@@ -575,10 +627,7 @@ export default function App() {
           <div className="nav-group-row"><button type="button" className={`nav-group${holdsActive && !open ? ' nav-group-active' : ''}`} aria-expanded={open} onClick={() => toggleNav(group)}><span aria-hidden="true">{open ? '▾' : '▸'}</span>{group === 'Settings' ? <>ADMIN{git.dirty && <span className="nav-badge" title="Shared changes not yet saved to Git" aria-label="1 unsaved shared change">1</span>}</> : group.toUpperCase()}</button>
           {canAdd && <button type="button" className="nav-group-more" aria-label={`Add a page to ${group}`} title={`Add a page to ${group}`} onClick={() => setAddPageFor(groupId)}>⋯</button>}</div>
           {/* Collapsed lists stay in the page but are hidden on wide screens only: the narrow sidebar has no headings. */}
-          <div className={`nav-items${open ? '' : ' nav-collapsed'}`}>{shown.map((section) => section.label ? <div key={section.key} className="nav-subsection">
-            <button type="button" className="nav-subgroup" aria-expanded={!collapsed.includes(section.key)} onClick={() => toggleNav(section.key)}><span aria-hidden="true">{collapsed.includes(section.key) ? '▸' : '▾'}</span>{section.label}</button>
-            <div className={`nav-items${collapsed.includes(section.key) ? ' nav-collapsed' : ''}`}>{section.entries}</div>
-          </div> : <div key={section.key} className="nav-items">{section.entries}</div>)}</div>
+          <div className={`nav-items${open ? '' : ' nav-collapsed'}`}>{shown.map((section) => <div key={section.key} className="nav-items">{section.entries}</div>)}</div>
         </div>
       })}</nav>
     </aside>
@@ -591,7 +640,7 @@ export default function App() {
       <DataNotices azure={azure} onOpenConnection={openConnection} />
       {/* CON-101 (fail closed): until the roles file is loaded the app is read-only; say why and what to do. */}
       {movedGit && git.config && <Notice tone="warning" className="git-moved"><strong>The team data has moved</strong> to {movedGit.owner}/{movedGit.repo}. This app is still connected to {git.config.owner}/{git.config.repo}, which is no longer updated.{' '}{git.connected ? <button type="button" className="primary" disabled={git.status === 'loading' || git.status === 'saving'} onClick={() => { if (confirmReplace(git.dirty, git.status === 'conflict')) void git.connect(movedGit, '', false) }}>Switch to {movedGit.owner}/{movedGit.repo}</button> : <button type="button" className="text-button" onClick={() => openSettings('storage', 'git')}>Open Git storage →</button>}</Notice>}
-      {access.readOnly && <Notice tone="warning" className="access-read-only"><strong>Read-only:</strong> {access.bootstrap ? <>there are no access roles yet (no {access.path || 'access.json'} in Git storage), so no changes can be made. <button type="button" className="text-button" onClick={() => openSettings('resources', 'rights')}>Set up roles →</button></> : access.error ? <>the access roles ({access.path || 'access.json'}) could not be read, so no changes can be made: {access.error} <button type="button" className="text-button" onClick={() => openSettings('storage', 'git')}>Open Git storage →</button></> : git.accessScope && !access.loaded ? <>loading the access roles ({access.path || 'access.json'}) from Git storage; no changes can be made until they are loaded.</> : <>the access roles (access.json) are not loaded, so no changes can be made. <button type="button" className="text-button" onClick={() => openSettings('storage', 'git')}>Connect Git storage →</button></>}</Notice>}
+      {access.readOnly && <Notice tone="warning" className="access-read-only"><strong>Read-only:</strong> {access.bootstrap ? <>there are no access roles yet (no {access.path || 'access.json'} in Git storage), so no changes can be made. <button type="button" className="text-button" onClick={() => openSettings('resources', 'rights')}>Set up roles →</button></> : access.error && isRepositoryUnreadable(access.error) ? <>the data repository cannot be read, so the access roles ({access.path || 'access.json'}) cannot be loaded and no changes can be made: {access.error} Nothing in this browser was cleared. <button type="button" className="text-button" onClick={() => openSettings('storage', 'git')}>Open Git storage →</button></>: access.error ? <>the access roles ({access.path || 'access.json'}) could not be read, so no changes can be made: {access.error} <button type="button" className="text-button" onClick={() => openSettings('storage', 'git')}>Open Git storage →</button></> : git.accessScope && !access.loaded ? <>loading the access roles ({access.path || 'access.json'}) from Git storage; no changes can be made until they are loaded.</> : <>the access roles (access.json) are not loaded, so no changes can be made. <button type="button" className="text-button" onClick={() => openSettings('storage', 'git')}>Connect Git storage →</button></>}</Notice>}
       {guideOpen && <SetupGuide steps={steps} busy={azure.busy} problem={azure.fetchProblem} links={setupLinks} linkDefaults={linkDefaults} editLinks={access.can('layout.defaults') && git.connected && !git.readOnly && !azure.isSample ? { links: store.state.setupLinks ?? {}, onChange: (links) => store.update((draft) => { draft.setupLinks = links; return draft }), saveBar: <GitSyncBar git={git} /> } : undefined} inputs={{ connectGit: (token) => git.connect({ ...defaultGitRepository, ...git.config }, token, true), saveEmail: (email) => { azure.setCreatorEmail(email) }, savePat: (token) => { azure.rememberPat(token); azure.reloadConnectionProfiles() }, detectEmail: () => azure.config ? detectWorkEmail(azure.config, azure.pat) : Promise.reject(new Error('Set up the Time Writing connection first.')), gitMessage: git.status === 'error' ? git.message : undefined }} onClose={() => setGuideOpen(false)} onDismiss={dismissGuide} onOpenTab={(tab, section) => { openSettings(tab, section); setGuideOpen(false) }} onFetch={() => void azure.refresh()} />}
       {store.cache.status === 'error' && <Notice tone="error"><p>{store.cache.message}</p><div className="button-row"><button className="ghost" onClick={() => exportStateJson(store.state)}>Export JSON backup now</button><button className="primary" onClick={store.retrySave}>Retry browser save</button></div></Notice>}
       <div className="data-notices"><PageGitNotice key={pageKey} page={pageName} changes={pageChanges} unsaved={unsavedHere} fullReload={fullReload} onLoad={loadNewer} />{accessNote?.page === pageKey && <Notice tone="info" className="access-changed-note">{accessNote.text}{' '}<button type="button" className="text-button" onClick={() => setAccessNote(null)}>Dismiss</button></Notice>}</div>
@@ -605,7 +654,7 @@ export default function App() {
       {page === 'pireview' && <PiReviewPage />}
       {page === 'brite' && <BritePage />}
       {page === 'kpitracker' && <KpiTrackerPage git={git} canManage={access.can('storage.shared')} who={my.me.name || 'Admin'} />}
-      {page === 'ondemand' && onDemandPage && kindOf(menu.layout, onDemandPage.id) === 'dashboard' && <CustomDashboardPage key={onDemandPage.id} git={git} store={onDemand} pageId={onDemandPage.id} menu={menu} viewer={viewer} views={personalViews} onOpen={openOnDemand} addPageReason={addPageReason(viewer, menu.layout, placementOf(menu.layout, onDemandPage.id).group)} onAddPage={() => setAddPageFor(placementOf(menu.layout, onDemandPage.id).group)} hours={{ items: reportAzure.items, settings: dashboardHoursSettings, allowed: access.sees('insights') }} publisherName={publisherName} publisher={publisher} />}
+      {page === 'ondemand' && onDemandPage && kindOf(menu.layout, onDemandPage.id) === 'dashboard' && <CustomDashboardPage key={onDemandPage.id} git={git} store={onDemand} pageId={onDemandPage.id} menu={menu} viewer={viewer} views={personalViews} onOpen={openOnDemand} addPageReason={addPageReason(viewer, menu.layout, placementOf(menu.layout, onDemandPage.id).group)} onAddPage={() => setAddPageFor(placementOf(menu.layout, onDemandPage.id).group)} hours={{ items: reportAzure.items, settings: dashboardHoursSettings, allowed: access.sees('insights') }} publisherName={publisherName} publisher={publisher} tools={toolDatasetList} />}
       {page === 'ondemand' && onDemandPage && kindOf(menu.layout, onDemandPage.id) !== 'dashboard' && <OnDemandPage key={onDemandPage.id} git={git} store={onDemand} pageId={onDemandPage.id} me={azure.isSample ? '' : azure.creatorEmail.trim().toLowerCase() || my.self.me.name?.trim() || ''} onOpen={openOnDemand} kind={kindOf(menu.layout, onDemandPage.id)} menu={menu} viewer={viewer} addPageReason={addPageReason(viewer, menu.layout, placementOf(menu.layout, onDemandPage.id).group)} onAddPage={() => setAddPageFor(placementOf(menu.layout, onDemandPage.id).group)} views={personalViews} dataMode={dataMode} publisherName={publisherName} publisher={publisher} />}
       {page === 'qemapping' && <QeMappingPage git={git} store={qeMapping} resources={qeResources} />}
       {page === 'mywork' && <MyWorkPage azure={azure} store={store} my={my} month={month} onOpenActivities={() => setPage('activities')} assign={assign} featureSetup={featureSetup.setups} />}
@@ -616,7 +665,7 @@ export default function App() {
       {page === 'baselines' && <BaselinesPage azure={azure} month={month} store={store} git={git} onOpenSettings={() => openSettings('storage', 'git')} canEdit={access.can('baselines.edit')} />}
       {page === 'windchill' && (windchillView ? <WindchillPage view={windchillView} windchill={windchill} git={git} gitNote={git.snapshotNotes[`wc:${windchillView.id}`]} month={month} board={{ azure, stream: windchillStreamExports(windchillViews).find((entry) => entry.view?.id === windchillView.id)?.stream.name ?? windchillView.name, threshold: normalizeReleaseSourceSettings(store.state.releaseSourceSettings).matchThreshold ?? defaultMatchThreshold, assign, featureSetup: featureSetup.setups }} /> : access.can('windchill.import') ? <WindchillExportImport key={windchillFor} stream={windchillFor} windchill={windchill} git={git} onImported={(id) => openWindchill(id)} /> : <Notice tone="info">Your role does not include importing Windchill exports. Open an export from the menu; an Admin can change this in Admin → People & roles → Role rights.</Notice>)}
       {page === 'health' && <BacklogHealthPage azure={azure} store={store} />}
-      {page === 'board' && <BoardPage views={personalViews} canSetDefault={access.can('layout.defaults') && git.connected && !git.readOnly && !git.isSample} azure={azure} store={store} current={view} month={month} git={git} onOpenConnection={openConnection} assign={assign} featureSetup={featureSetup.setups} qeMapping={qeMapping.file} />}
+      {page === 'board' && <BoardPage views={personalViews} canSetDefault={access.can('layout.defaults') && git.connected && !git.readOnly && !git.isSample} azure={azure} store={store} current={view} month={month} git={git} onOpenConnection={openConnection} onOpenSettings={openSettings} assign={assign} featureSetup={featureSetup.setups} qeMapping={qeMapping.file} />}
       {page === 'snapshots' && <SnapshotsPage {...pageProps} git={git} who={my.me.email || my.me.name || 'unknown'} />}
       {page === 'admin' && settingsTab === 'pages' && <PagesMenuPage duplicates={duplicateNames} git={git} store={onDemand} menu={menu} viewer={viewer} onOpen={openOnDemand} onAddPage={(group) => setAddPageFor(group ?? '')} />}
       {page === 'admin' && settingsTab !== 'pages' && <AdminPage look={{ startView, onStartView: switchView, onCustomizeMenu: () => setMenuEditor(true) }} key={`${settingsTab}:${settingsVisit}`} tab={settingsTab} onOpenTab={openSettings} {...pageProps} azure={azure} git={git} access={access} featureSetup={featureSetup} epicSetup={epicSetup} setupSteps={steps} onSearch={() => setSearchOpen(true)} qeColumnNames={[...new Set((qeMapping.file?.sheets ?? []).flatMap((sheet) => sheet.columns.map((column) => column.name)))]} monthlyPack={monthlyPack} history={history} loadEverything={loadEverything} onOpenBoard={() => setPage('board')} />}
@@ -625,5 +674,5 @@ export default function App() {
       {addPageFor != null && <AddPageDialog viewer={viewer} layout={menu.layout} group={addPageFor || undefined} onCancel={() => setAddPageFor(null)} onCreate={async (input) => { const id = await createPage(onDemand, menu, input); setAddPageFor(null); openOnDemand(id) }} />}
       <footer className="app-footer" aria-label="Version" ref={footerRef}><ZoomControl /><DesktopDownload />{buildStatus}</footer>
     </main>
-  </div></ChartSizeEnvContext.Provider></HeaderSlot.Provider></OnPremContext.Provider></EpicSetupContext.Provider></ReadOnlyContext.Provider></CanContext.Provider></ReleaseSettingsContext.Provider></CustomStreamsContext.Provider></TableDefaultsContext.Provider></OwnerPeopleContext.Provider></PageNamesContext.Provider>
+  </div></ChartSizeEnvContext.Provider></HeaderSlot.Provider></ToolValidationsContext.Provider></OnPremContext.Provider></EpicSetupContext.Provider></ReadOnlyContext.Provider></CanContext.Provider></ReleaseSettingsContext.Provider></CustomStreamsContext.Provider></TableDefaultsContext.Provider></OwnerPeopleContext.Provider></PageNamesContext.Provider>
 }

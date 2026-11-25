@@ -11,3 +11,16 @@ export function QePick({ label, email, mapped, people, onPick, disabled }: { lab
     {mapped && <small className="muted">QE Mapping: {mapped}</small>}
   </span>
 }
+
+// DPF-08, DPF-11: the Release Classification of one release in the DP / IOCC Create Features pop-up — the Epic's values,
+// prefilled with the value detected from the release number (by the field's rules, DPF-10) and changeable; the hint
+// under it says what was detected from which number.
+export function ClassPick({ label, field, values, value, detected, version, onPick }: { label: string; field: string; values: string[]; value: string; detected: string; version: string; onPick: (value: string) => void }) {
+  return <span className="qe-pick">
+    <select aria-label={`${field} of ${label}`} value={value} onChange={(event) => onPick(event.target.value)}>
+      <option value="">— the Epic’s default —</option>
+      {[...values, ...(value && !values.includes(value) ? [value] : [])].map((item) => <option key={item} value={item}>{item}</option>)}
+    </select>
+    {detected && <small className="muted">{detected === value ? `detected from ${version}` : `${detected} detected from ${version}`}</small>}
+  </span>
+}

@@ -78,8 +78,8 @@ export function WindchillViewsPanel({ windchill }: { windchill: WindchillWorkspa
 }
 
 // A Windchill view page (S&S IT, ECP and every other export or search): its Release page with the parts of
-// UI-STANDARDS §10 (QV-62) — the source bar (name, export file or object type, when imported or fetched, ⓘ, Show:
-// {month} / All months, ↻ and ⋯), the counts (QV-64: Releases in the month and Supported, as Pulse Check counts the
+// UI-STANDARDS §10 (QV-62) — the source bar (Show: {month} / All months, ↻ and ⋯; QV-70: the export file or object
+// type and when imported or fetched as the first line of ⋯), the counts (QV-64: Releases in the month and Supported, as Pulse Check counts the
 // Windchill streams; no Completed), the Releases | Source data tabs and the Releases table. QV-63: the results of ↻,
 // Import, Load from Git and Save to Git are Background jobs entries; the page keeps only warnings about its data.
 export function WindchillPage({ view, windchill, git, gitNote, month, board }: { view: WindchillView; windchill: WindchillWorkspace; git?: GitStorage; gitNote?: { tone: string; text: string }; month?: string; board?: ReleaseBoard }) {
@@ -121,12 +121,12 @@ export function WindchillPage({ view, windchill, git, gitNote, month, board }: {
     releases={counted(`The ${noun}s the Releases table lists for the month`)}
     supported={counted(`Each ${noun} with a document dated in the month, as Pulse Check counts it`)}
     counted={<ul><li><strong>Releases in {monthName(month)}</strong>: the {noun}s the Releases table lists for the month — each {noun} with at least one document whose {result.dateColumn ? `“${result.dateColumn}”` : 'date'} is in the month (UTC), read from the {result.source === 'location' ? 'Location' : 'document names'} as chosen under Read from.</li><li><strong>Supported</strong>: the same {noun}s — Pulse Check and the Monthly pack count every {noun} of a Windchill stream with a document dated in the month as supported (with Read from on Automatic).</li><li><strong>Completed</strong> is not counted: the export has no completion event (no signature, milestone or Release Notes rule), only the documents' dates.</li>{!dated && <li>The export has no date column (a column named like Last Modified, Modified, Released or Date), so nothing can be counted for a month.</li>}</ul>} /> : null
-  // ⓘ: the Git copy of the results (saved, unchanged); a failed save to Git stays on the page as a warning.
-  const info = gitNote && gitNote.tone !== 'error' ? <p>{gitNote.text}</p> : undefined
+  // ⋯ → About this source… (QV-70): the Git copy of the results (saved, unchanged); a failed save to Git stays on the page as a warning.
+  const about = gitNote && gitNote.tone !== 'error' ? <p>{gitNote.text}</p> : undefined
   return <Page className="release-page">
     <ReleaseSourceBar name={view.name} source={view.exportFile ? `Windchill export ${view.exportFile}` : view.entitySet}
       fetched={source ? `${source.rows.length} results · ${view.exportFile ? 'imported' : 'fetched'} ${formatDateTime(source.fetchedAt)}${source.fromGit ? ' (desktop app, via Git)' : ''}` : undefined}
-      info={info} period={source && month ? <PeriodSelect month={month} value={scope} onChange={setScope} /> : undefined} primary={primary} menu={menu}>
+      about={about} period={source && month ? <PeriodSelect month={month} value={scope} onChange={setScope} /> : undefined} primary={primary} menu={menu}>
       {!view.exportFile && <WindchillImport view={view} windchill={windchill} />}
       {/* Warnings about the data shown (§8): the last fetch failed, so the results are older; the Git copy is not saved. */}
       {source && status?.state === 'error' && <Notice tone="warning">Not refreshed: {status.message} The results shown are from {formatDateTime(source.fetchedAt)}.</Notice>}

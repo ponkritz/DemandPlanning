@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { normalizeCapacitySettings } from '../capacity'
 import { DataTable } from '../components/DataTable'
 import { EmptyState, Metric, Metrics, Notice, Page, Pill, TablePanel } from '../components/ui'
 import { BaselineRulesEditor } from '../components/BaselineRulesEditor'
@@ -26,7 +27,7 @@ export function BaselinesPage({ azure, month, store, git, onOpenSettings, canEdi
   const totals = { baseline: scoped.reduce((sum, row) => sum + row.current!.total, 0), actual: scoped.reduce((sum, row) => sum + row.actual, 0), growth: scoped.reduce((sum, row) => sum + (row.growth ?? 0), 0) }
   const streams = [...new Set(azure.items.filter((item) => item.workItemType === 'Epic').map((item) => item.title))].sort()
 
-  const data = azureInsights(azure.items, month, today)
+  const data = azureInsights(azure.items, month, today, normalizeCapacitySettings(store.state.capacitySettings).absenceEpicId)
   const rows = data.epicBreakdown.flatMap(group => data.monthlyTasks.filter(task => group.stories.some(story => story.id === task.parentId)).map(task => {
     const variance = task.originalEstimate == null || task.completedWork == null ? null : task.completedWork - task.originalEstimate
     const flagged = task.originalEstimate != null && task.originalEstimate > 0 && task.completedWork != null && task.completedWork > task.originalEstimate * 1.25

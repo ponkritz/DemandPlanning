@@ -41,7 +41,10 @@ const pageIdPattern = /^[a-z0-9][a-z0-9-]{0,39}$/
 // What the file keeps. A built-in group has no name or order (the menu fixes them); a custom one has both.
 export interface GroupSettings { name?: string; order?: number; acceptsPages: boolean; owners: string[] }
 // PGB-19: hidden — the page is hidden from the menu, Home and search for everyone (its files stay in Git).
-export interface Placement { type: string; group: string; order: number; icon: string; owners: string[]; hidden?: boolean }
+// TVL-25: ownersFromList — the co-owners of the page that were written there from the Tool Validations list's co-owners
+// (the page is a tab of Tool Validations), a subset of owners; the others were added by hand. Only these are removed again
+// when they leave the list.
+export interface Placement { type: string; group: string; order: number; icon: string; owners: string[]; hidden?: boolean; ownersFromList?: string[] }
 export interface MenuLayout { schema: 1; kind: 'menu-layout'; groups: Record<string, GroupSettings>; pages: Record<string, Placement> }
 export const emptyLayout = (): MenuLayout => ({ schema: 1, kind: 'menu-layout', groups: {}, pages: {} })
 
@@ -88,15 +91,22 @@ export function parseMenuLayout(raw: string): MenuLayout {
     const type = typeof entry.type === 'string' && /^[a-z][a-z-]{0,29}$/.test(entry.type) ? entry.type : defaultKind
     const group = typeof entry.group === 'string' && (customIdPattern.test(entry.group) || builtInGroups.some((item) => item.id === entry.group)) ? entry.group : onDemandGroup
     const icon = pageIcons.some((item) => item.icon === entry.icon) ? entry.icon as string : defaultIcon
-    pages[id] = { type, group, order: number(entry.order) ?? 0, icon, owners: ownersOf(entry.owners), ...(entry.hidden === true ? { hidden: true } : {}) }
+    const owners = ownersOf(entry.owners)
+    pages[id] = { type, group, order: number(entry.order) ?? 0, icon, owners, ...(entry.hidden === true ? { hidden: true } : {}), ...fromList(owners, entry.ownersFromList) }
   }
   return { schema: 1, kind: 'menu-layout', groups, pages }
+}
+// TVL-25: the owners written from the Tool Validations list — only those still among the page's owners, written only when
+// there are some (a layout without them stays byte for byte as before).
+function fromList(owners: string[], value: unknown): { ownersFromList?: string[] } {
+  const listed = ownersOf(value).filter((email) => owners.includes(email))
+  return listed.length ? { ownersFromList: listed } : {}
 }
 // Groups and pages in id order, so two saves of the same layout are the same text.
 export function serializeMenuLayout(layout: MenuLayout) {
   const sortedKeys = <T>(entries: Record<string, T>) => Object.fromEntries(Object.keys(entries).sort().map((key) => [key, entries[key]]))
   const groups = sortedKeys(Object.fromEntries(Object.entries(layout.groups).map(([id, group]) => [id, { ...(group.name != null ? { name: group.name, order: group.order ?? 0 } : {}), acceptsPages: group.acceptsPages, owners: group.owners }])))
-  const pages = sortedKeys(Object.fromEntries(Object.entries(layout.pages).map(([id, page]) => [id, { type: page.type, group: page.group, order: page.order, icon: page.icon, owners: page.owners, ...(page.hidden ? { hidden: true } : {}) }])))
+  const pages = sortedKeys(Object.fromEntries(Object.entries(layout.pages).map(([id, page]) => [id, { type: page.type, group: page.group, order: page.order, icon: page.icon, owners: page.owners, ...(page.hidden ? { hidden: true } : {}), ...fromList(page.owners, page.ownersFromList) }])))
   return `${JSON.stringify({ schema: 1, kind: 'menu-layout', groups, pages }, null, 2)}\n`
 }
 
@@ -188,7 +198,8 @@ export function placePage(layout: MenuLayout, pageId: string, placement: Partial
   const moved = group !== current.group || !current.placed
   const others = pageIds.filter((id) => id !== pageId && placementOf(layout, id).group === group).map((id) => placementOf(layout, id).order).filter((order) => order < Number.MAX_SAFE_INTEGER)
   const order = placement.order ?? (moved ? Math.max(0, ...others) + 1 : current.order)
-  return { ...layout, pages: { ...layout.pages, [pageId]: { type: placement.type ?? current.type, group, order, icon: placement.icon ?? current.icon, owners: ownersOf(placement.owners ?? current.owners), ...((placement.hidden ?? current.hidden) ? { hidden: true } : {}) } } }
+  const owners = ownersOf(placement.owners ?? current.owners)
+  return { ...layout, pages: { ...layout.pages, [pageId]: { type: placement.type ?? current.type, group, order, icon: placement.icon ?? current.icon, owners, ...((placement.hidden ?? current.hidden) ? { hidden: true } : {}), ...fromList(owners, placement.ownersFromList ?? current.ownersFromList) } } }
 }
 // Reorder within a group (↑ ↓): the group's pages get orders 1…n, so pages never placed before are placed too.
 export function movePage<T extends { id: string; name: string }>(layout: MenuLayout, pages: T[], pageId: string, by: -1 | 1): MenuLayout {
@@ -197,11 +208,28 @@ export function movePage<T extends { id: string; name: string }>(layout: MenuLay
   const from = ids.indexOf(pageId), to = from + by
   if (from < 0 || to < 0 || to >= ids.length) return layout
   ids.splice(from, 1); ids.splice(to, 0, pageId)
-  return { ...layout, pages: { ...layout.pages, ...Object.fromEntries(ids.map((id, index) => { const current = placementOf(layout, id); return [id, { type: current.type, group, order: index + 1, icon: current.icon, owners: current.owners, ...(current.hidden ? { hidden: true } : {}) }] })) } }
+  return { ...layout, pages: { ...layout.pages, ...Object.fromEntries(ids.map((id, index) => { const current = placementOf(layout, id); return [id, { type: current.type, group, order: index + 1, icon: current.icon, owners: current.owners, ...(current.hidden ? { hidden: true } : {}), ...fromList(current.owners, current.ownersFromList) }] })) } }
 }
 // PGB-19: hide or show a page (a field of its placement, merged like the others, GIT-17).
 export const setHidden = (layout: MenuLayout, pageId: string, hidden: boolean, pageIds: string[] = []): MenuLayout => placePage(layout, pageId, { hidden }, pageIds)
 export const isHidden = (layout: MenuLayout, pageId: string) => layout.pages[pageId]?.hidden === true
+// TVL-25: the co-owners of the Tool Validations list written to a page that is one of its tabs. The owners added by hand
+// (those not in ownersFromList) are never touched; the owners this sync wrote before and that left the list are removed;
+// the list's co-owners not yet on the page are added and remembered in ownersFromList. An owner who was on the page by
+// hand before the list named them stays an owner added by hand. listOwners [] takes back every owner the list wrote (the
+// page is no longer a tab). A page without a placement is left as it is.
+export function withListOwners(layout: MenuLayout, pageId: string, listOwners: string[]): MenuLayout {
+  const current = layout.pages[pageId]
+  if (!current) return layout
+  const before = current.ownersFromList ?? []
+  const byHand = current.owners.filter((email) => !before.includes(email))
+  const wanted = ownersOf(listOwners).filter((email) => !byHand.includes(email))
+  const owners = ownersOf([...current.owners.filter((email) => byHand.includes(email) || wanted.includes(email)), ...wanted])
+  const next: Placement = { ...current, owners }
+  delete next.ownersFromList
+  Object.assign(next, fromList(owners, wanted))
+  return { ...layout, pages: { ...layout.pages, [pageId]: next } }
+}
 export function removePlacement(layout: MenuLayout, pageId: string): MenuLayout {
   if (!layout.pages[pageId]) return layout
   const pages = { ...layout.pages }; delete pages[pageId]
@@ -295,11 +323,18 @@ export function mergeOwners(base: string[] | undefined, mine: string[], theirs: 
   return [...new Set([...theirs, ...mine])].filter((email) => !base.includes(email) || (mine.includes(email) && theirs.includes(email)))
 }
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+// TVL-25: the owners written from the Tool Validations list are merged as sets too (the parser keeps only those still
+// among the merged owners).
+type Listed = { ownersFromList?: string[] }
+function listed(b: Listed | undefined, m: Listed, t: Listed): Listed {
+  const merged = mergeOwners(b ? b.ownersFromList ?? [] : undefined, m.ownersFromList ?? [], t.ownersFromList ?? [])
+  return merged.length ? { ownersFromList: merged } : {}
+}
 function mergeEntries<T extends { owners: string[] }>(base: Record<string, T> | null, mine: Record<string, T>, theirs: Record<string, T>, mineLater: boolean): Record<string, T> {
   const ids = [...new Set([...Object.keys(theirs), ...Object.keys(mine), ...Object.keys(base ?? {})])]
   return Object.fromEntries(ids.flatMap((id): [string, T][] => {
     const b = base?.[id], m = mine[id], t = theirs[id]
-    if (!base) return m || t ? [[id, (m && t ? { ...(mineLater ? t : m), ...(mineLater ? m : t), owners: mergeOwners(undefined, m.owners, t.owners) } : m ?? t) as T]] : []
+    if (!base) return m || t ? [[id, (m && t ? { ...(mineLater ? t : m), ...(mineLater ? m : t), owners: mergeOwners(undefined, m.owners, t.owners), ...listed(undefined, m as Listed, t as Listed) } : m ?? t) as T]] : []
     if (!m || !t) {
       const kept = m ?? t
       if (!kept) return []
@@ -308,9 +343,9 @@ function mergeEntries<T extends { owners: string[] }>(base: Record<string, T> | 
       const changed = !same(kept, b), keptIsMine = Boolean(m)
       return changed && keptIsMine === mineLater ? [[id, kept]] : []
     }
-    const keys = [...new Set([...Object.keys(b ?? {}), ...Object.keys(m), ...Object.keys(t)])].filter((key) => key !== 'owners')
+    const keys = [...new Set([...Object.keys(b ?? {}), ...Object.keys(m), ...Object.keys(t)])].filter((key) => key !== 'owners' && key !== 'ownersFromList')
     const merged = Object.fromEntries(keys.flatMap((key) => { const value = merge3((b as Record<string, unknown> | undefined)?.[key], (m as Record<string, unknown>)[key], (t as Record<string, unknown>)[key], mineLater); return value === undefined ? [] : [[key, value]] }))
-    return [[id, { ...merged, owners: mergeOwners(b?.owners, m.owners, t.owners) } as unknown as T]]
+    return [[id, { ...merged, owners: mergeOwners(b?.owners, m.owners, t.owners), ...listed(b as Listed | undefined, m as Listed, t as Listed) } as unknown as T]]
   }))
 }
 export function mergeMenuLayoutText(baseText: string | null, mineText: string, theirsText: string, mineLater: boolean): string {

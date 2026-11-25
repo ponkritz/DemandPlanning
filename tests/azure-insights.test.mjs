@@ -59,6 +59,22 @@ test('NPRA remains exact-tagged and does not change the new utilization calculat
   feature.tags = 'NPRA Hours'; feature.originalEstimate = 176
   assert.equal(azureInsights([feature, story, task], '2026-10', '2026-10-17').utilization, before)
 })
+test('CAP-03, KB-94: absence is read under the Absence Epic of the capacity settings, not a fixed Epic 37778', () => {
+  const absenceEpic = item(50001, { workItemType: 'Epic', title: 'Leave' })
+  const absenceFeature = item(2, { workItemType: 'Feature', parentId: 50001 })
+  const absenceStory = item(3, { parentId: 2 })
+  const absenceTask = item(4, { workItemType: 'Task', parentId: 3, title: 'October 2026 | Leave', completedWork: 16 })
+  const oldEpic = item(37778, { workItemType: 'Epic', title: 'Old absence Epic' })
+  const oldFeature = item(5, { workItemType: 'Feature', parentId: 37778 })
+  const oldStory = item(6, { parentId: 5 })
+  const oldTask = item(7, { workItemType: 'Task', parentId: 6, title: 'October 2026 | Work', completedWork: 40 })
+  const items = [absenceEpic, absenceFeature, absenceStory, absenceTask, oldEpic, oldFeature, oldStory, oldTask]
+  const configured = azureInsights(items, '2026-10', '2026-10-17', 50001)
+  assert.equal(configured.absence.value, 16, 'the configured Epic is the absence')
+  assert.equal(configured.available, 40, 'work under the old fixed Epic counts as work')
+  assert.equal(azureInsights(items, '2026-10', '2026-10-17').absence.value, 40, 'without a setting the default Absence Epic (37778) applies')
+})
+
 test('utilization uses funded month hours over all Actuals less Absence Actuals under Epic 37778', () => {
   const absenceEpic = item(37778, { workItemType: 'Epic', title: 'Absence' })
   const absenceFeature = item(2, { workItemType: 'Feature', parentId: 37778 })

@@ -134,15 +134,49 @@ export async function canWrite(config: GitConfig, token: string, fetchImpl: Fetc
   return null
 }
 
+// GIT-25 (KB-92): GitHub answers 404 both for a file that does not exist and for a repository (or branch) the token
+// cannot see — a private repository, a token without access to the organisation, a fine-grained token not yet approved,
+// a wrong branch. A 404 is "file missing" only once the repository and branch are known to be readable: the branch is
+// probed once per repository, branch (or commit) and token in this session and the answer reused; a repository that
+// cannot be read throws RepositoryUnreadableError, so no caller mistakes it for a missing file and replaces or clears
+// what this browser has. A readable answer is kept for the session; an unreadable one is asked again after a minute
+// (the token may be approved meanwhile). The token is kept only as a hash, in memory.
+export class RepositoryUnreadableError extends Error {}
+export const unreadablePhrase = 'or the token cannot access it'
+export const isRepositoryUnreadable = (error: unknown) => error instanceof RepositoryUnreadableError || String(error instanceof Error ? error.message : error ?? '').includes(unreadablePhrase)
+const probeRetryMs = 60_000
+const probes = new Map<string, { at: number; error?: Error; result: Promise<Error | null> }>()
+function tokenHash(token: string) { let hash = 0x811c9dc5; for (let at = 0; at < token.length; at += 1) hash = Math.imul(hash ^ token.charCodeAt(at), 0x01000193) >>> 0; return hash.toString(36) }
+const probeKey = (config: GitConfig, token: string) => `${config.owner.toLowerCase()}/${config.repo.toLowerCase()}@${config.branch}#${tokenHash(token)}`
+// A read that answered 200 shows the repository and branch are readable: no probe is needed for them.
+function markReadable(config: GitConfig, token: string) { const key = probeKey(config, token); if (!probes.get(key) || probes.get(key)?.error) probes.set(key, { at: Date.now(), result: Promise.resolve(null) }) }
+export async function assertReadable(config: GitConfig, token: string, fetchImpl: Fetch = fetch): Promise<void> {
+  const key = probeKey(config, token)
+  let probe = probes.get(key)
+  // An unreadable answer is asked again after a minute; any other failure (rate limit, network) at the next read.
+  if (probe?.error && (!(probe.error instanceof RepositoryUnreadableError) || Date.now() - probe.at >= probeRetryMs)) { probes.delete(key); probe = undefined }
+  if (!probe) {
+    const target = /^[0-9a-f]{40}$/.test(config.branch) ? `commits/${config.branch}` : `branches/${encodeURIComponent(config.branch)}`
+    const entry: { at: number; error?: Error; result: Promise<Error | null> } = { at: Date.now(), result: Promise.resolve(null) }
+    entry.result = fetchImpl(`${api}/repos/${encodeURIComponent(config.owner)}/${encodeURIComponent(config.repo)}/${target}`, { headers: headers(token), cache: 'no-store' })
+      .then(async (response) => response.ok ? null : response.status === 404 ? new RepositoryUnreadableError(`Repository ${config.owner}/${config.repo} or branch ${config.branch} was not found, ${unreadablePhrase}.`) : await failure(response, config, 'open the repository'))
+      .catch((error: unknown) => error instanceof Error ? error : new Error(String(error)))
+      .then((error) => { if (error) entry.error = error; return error })
+    probe = entry
+    probes.set(key, entry)
+  }
+  const error = await probe.result
+  if (error) throw error
+}
+// A 404 from a read: the file is missing (the repository is readable), else the repository error is thrown.
+async function missing<T>(value: T, config: GitConfig, token: string, fetchImpl: Fetch): Promise<T> { await assertReadable(config, token, fetchImpl); return value }
+
 // Reads the data file. A missing file (with an accessible repository) returns data null so it can be created.
 export async function readPlanningFile(config: GitConfig, token: string, fetchImpl: Fetch = fetch): Promise<{ data: PlanningData | null; sha: string | null }> {
   const response = await fetchImpl(`${fileUrl(config)}?ref=${encodeURIComponent(config.branch)}`, { headers: headers(token), cache: 'no-store' })
-  if (response.status === 404) {
-    const repo = await fetchImpl(`${api}/repos/${encodeURIComponent(config.owner)}/${encodeURIComponent(config.repo)}/branches/${encodeURIComponent(config.branch)}`, { headers: headers(token) })
-    if (repo.ok) return { data: null, sha: null }
-    throw await failure(repo, config, 'open the repository')
-  }
+  if (response.status === 404) { await assertReadable(config, token, fetchImpl); return { data: null, sha: null } }
   if (!response.ok) throw await failure(response, config, 'read the data file')
+  markReadable(config, token)
   const body = (await response.json()) as { content?: string; encoding?: string; sha?: string; type?: string }
   if (body.type !== 'file' || body.encoding !== 'base64' || typeof body.content !== 'string' || typeof body.sha !== 'string') throw new Error(`${config.path} is not a readable file in ${config.owner}/${config.repo}.`)
   return { data: parsePlanning(decodeBase64(body.content)), sha: body.sha }
@@ -210,7 +244,7 @@ export async function signedGitMessage(config: GitConfig, token: string, message
 export async function readTextAt(config: GitConfig, token: string, ref: string, fetchImpl: Fetch = fetch): Promise<string | null> {
   if (!/^[0-9a-f]{40}$/.test(ref)) throw new Error('Unknown version.')
   const response = await fetchImpl(`${fileUrl(config)}?ref=${ref}`, { headers: headers(token), cache: 'no-store' })
-  if (response.status === 404) return null
+  if (response.status === 404) return missing(null, { ...config, branch: ref }, token, fetchImpl)
   if (!response.ok) throw await failure(response, config, `read ${config.path}`)
   const body = (await response.json()) as { content?: string; encoding?: string; type?: string }
   if (body.type !== 'file' || body.encoding !== 'base64' || typeof body.content !== 'string') return null
@@ -220,10 +254,11 @@ export async function readTextAt(config: GitConfig, token: string, ref: string, 
 // Plain text read / commit of a file, with the same errors and conflict check as the planning data file.
 export async function readTextFile(config: GitConfig, token: string, fetchImpl: Fetch = fetch): Promise<{ text: string | null; sha: string | null }> {
   const response = await fetchImpl(`${fileUrl(config)}?ref=${encodeURIComponent(config.branch)}`, { headers: headers(token), cache: 'no-store' })
-  if (response.status === 404) return { text: null, sha: null }
+  if (response.status === 404) return missing({ text: null, sha: null }, config, token, fetchImpl)
   if (!response.ok) throw await failure(response, config, `read ${config.path}`)
   const body = (await response.json()) as { content?: string; encoding?: string; sha?: string; type?: string }
   if (body.type !== 'file' || body.encoding !== 'base64' || typeof body.content !== 'string' || typeof body.sha !== 'string') throw new Error(`${config.path} is not a readable file in ${config.owner}/${config.repo}.`)
+  markReadable(config, token)
   return { text: decodeBase64(body.content), sha: body.sha }
 }
 export async function writeTextFile(config: GitConfig, token: string, text: string, sha: string | null, message: string, fetchImpl: Fetch = fetch): Promise<{ sha: string; commitUrl: string }> {
@@ -247,7 +282,7 @@ export async function writeBinaryFile(config: GitConfig, token: string, bytes: U
 }
 export async function readBinaryFile(config: GitConfig, token: string, fetchImpl: Fetch = fetch): Promise<Uint8Array | null> {
   const response = await fetchImpl(`${fileUrl(config)}?ref=${encodeURIComponent(config.branch)}`, { headers: { ...headers(token), Accept: 'application/vnd.github.raw+json' }, cache: 'no-store' })
-  if (response.status === 404) return null
+  if (response.status === 404) return missing(null, config, token, fetchImpl)
   if (!response.ok) throw await failure(response, config, `read ${config.path}`)
   return new Uint8Array(await response.arrayBuffer())
 }
@@ -264,14 +299,14 @@ export async function deleteFile(config: GitConfig, token: string, message: stri
   return true
 }
 
-// Folder listing (files only); a missing folder is empty.
+// Folder listing (files only); a missing folder is empty (in a readable repository, GIT-25).
 export async function listFolder(config: GitConfig, token: string, fetchImpl: Fetch = fetch): Promise<{ name: string; path: string; sha: string }[]> {
   return (await listEntries(config, token, fetchImpl)).filter((entry) => entry.type === 'file').map(({ name, path, sha }) => ({ name, path, sha }))
 }
 // OND-31: a folder listing with its folders too (a folder's sha is its tree's: it changes when anything inside changes).
 export async function listEntries(config: GitConfig, token: string, fetchImpl: Fetch = fetch): Promise<{ name: string; path: string; sha: string; type: 'file' | 'dir' }[]> {
   const response = await fetchImpl(`${fileUrl(config)}?ref=${encodeURIComponent(config.branch)}`, { headers: headers(token), cache: 'no-store' })
-  if (response.status === 404) return []
+  if (response.status === 404) return missing([], config, token, fetchImpl)
   if (!response.ok) throw await failure(response, config, `list ${config.path}`)
   const body = await response.json() as unknown
   return Array.isArray(body) ? body.filter((entry) => (entry?.type === 'file' || entry?.type === 'dir') && typeof entry.name === 'string' && typeof entry.path === 'string' && typeof entry.sha === 'string').map(({ name, path, sha, type }) => ({ name, path, sha, type })) : []
@@ -288,14 +323,14 @@ export async function deleteFileAt(config: GitConfig, token: string, sha: string
 // Raw file text (works for files above 1 MB, which the JSON form returns without content); null when missing.
 export async function readRawFile(config: GitConfig, token: string, fetchImpl: Fetch = fetch): Promise<string | null> {
   const response = await fetchImpl(`${fileUrl(config)}?ref=${encodeURIComponent(config.branch)}`, { headers: { ...headers(token), Accept: 'application/vnd.github.raw+json' }, cache: 'no-store' })
-  if (response.status === 404) return null
+  if (response.status === 404) return missing(null, config, token, fetchImpl)
   if (!response.ok) throw await failure(response, config, `read ${config.path}`)
   return response.text()
 }
 // Version id of a file (needed to replace it), whatever its size; null when it does not exist yet.
 export async function fileSha(config: GitConfig, token: string, fetchImpl: Fetch = fetch): Promise<string | null> {
   const response = await fetchImpl(`${fileUrl(config)}?ref=${encodeURIComponent(config.branch)}`, { headers: headers(token), cache: 'no-store' })
-  if (response.status === 404) return null
+  if (response.status === 404) return missing(null, config, token, fetchImpl)
   if (!response.ok) throw await failure(response, config, `read ${config.path}`)
   const body = await response.json() as { sha?: unknown }
   return typeof body.sha === 'string' ? body.sha : null

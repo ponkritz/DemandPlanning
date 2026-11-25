@@ -40,8 +40,8 @@ test('DPF-07: my own version without sets per value uses the shared ones', () =>
 
 test('DPF-07, DPF-09: an Epic’s Release Classification values come from its own List field only (no built-in values)', () => {
   const file = { schema: 1, kind: 'epic-setup', lists: [{ id: 'rc', name: 'RC', values: ['Major', 'Hotfix'] }], epics: [{ epicId: 500, epicTitle: 'Tools', fields: [{ label: 'Program', type: 'text', ifEmpty: 'optional', into: 'title' }, { label: 'Release Classification', type: 'list', list: 'rc', ifEmpty: 'block', into: 'description' }] }] }
-  assert.deepEqual(classificationOf(file, 500), { values: ['Major', 'Hotfix'], fieldIndex: 1, label: 'Release Classification' })
-  assert.deepEqual(classificationOf(file, 9), { values: [], fieldIndex: -1, label: 'Release Classification' })
+  assert.deepEqual(classificationOf(file, 500), { values: ['Major', 'Hotfix'], fieldIndex: 1, label: 'Release Classification', rules: [] })
+  assert.deepEqual(classificationOf(file, 9), { values: [], fieldIndex: -1, label: 'Release Classification', rules: [] })
   assert.equal(classificationFromType(['Major', 'Hotfix'], 'Major'), 'Major'); assert.equal(classificationFromType(['Major', 'Hotfix'], 'MLD'), '')
   const lines = withEpicFields([{ title: 'T' }], file.epics[0], () => [], { index: 1, of: () => 'Hotfix' })
   assert.deepEqual([lines[0].fieldLines, lines[0].skip], [['Release Classification : Hotfix'], undefined], 'the value picked on the row fills the Epic’s field (a Block field no longer skips it)')

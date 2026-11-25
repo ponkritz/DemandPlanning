@@ -42,8 +42,9 @@ test('Git helpers: folder listing, raw read for large files, version id of any s
   assert.deepEqual(await listFolder(config, 't', fetchImpl), [{ name: 'dp.json', path: 'azure-data/dp.json', sha: 'a' }])
   assert.equal(await readRawFile({ ...config, path: 'azure-data/dp.json' }, 't', fetchImpl), 'raw text')
   assert.equal(await fileSha({ ...config, path: 'azure-data/dp.json' }, 't', fetchImpl), 'big')
-  assert.deepEqual(await listFolder(config, 't', async () => new Response('', { status: 404 })), [])
-  assert.equal(await fileSha(config, 't', async () => new Response('', { status: 404 })), null)
+  const missing = async (url) => new Response('', { status: url.includes('/branches/') ? 200 : 404 })
+  assert.deepEqual(await listFolder(config, 't', missing), [])
+  assert.equal(await fileSha(config, 't', missing), null)
 })
 
 test('a snapshot with invalid items or an unreadable fetch time is refused; unreadable local dates are replaced', () => {

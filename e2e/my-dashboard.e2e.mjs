@@ -26,6 +26,8 @@ async function mockGitHub(context, files, role) {
     const json = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
     if (url.pathname === '/repos/example/storage') return json({ visibility: 'private', permissions: { push: true } })
     if (url.pathname === '/repos/example/storage/commits') return json([])
+    // GIT-25: the branch exists (as in a real repository), so a 404 of a file means it is missing.
+    if (url.pathname === '/repos/example/storage/branches/main') return json({ name: 'main' })
     const match = /^\/repos\/example\/storage\/contents\/(.*)$/.exec(url.pathname)
     if (!match) return json({ message: 'Not Found' }, 404)
     const path = decodeURIComponent(match[1])

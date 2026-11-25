@@ -7,6 +7,7 @@ import type { ReleaseEntry } from '../releaseSource'
 import type { BoardHit } from '../dpBoardMatch'
 import { boardPeople, contentBulk, contentPlan, personEmail } from '../contentBulk'
 import { useBulkEpic } from '../useStreamEpics'
+import { bulkEpicMissing } from '../bulkEpics'
 import { createFeatureFromSetup, utcMonthLabel, currentIterationPairs, futureIterationPairs, readAzureIterations, withFeatureDoD, HierarchyCreationError, type AzureIteration } from '../azureDevOps'
 import { runInBackground } from '../backgroundJobs'
 import { adhocAfterLock } from '../planningLock'
@@ -15,7 +16,7 @@ import { Modal, Notice } from './ui'
 // CNB-01…02: Create Features for the selected Content releases — the pop-up asks for the one person they are all
 // assigned to, lists each Feature (or why it is skipped) and creates them one after another as a background job.
 export function ContentBulkCreate({ releases, featureTitle, featureMatch, azure, onClose }: { releases: ReleaseEntry[]; featureTitle: (release: ReleaseEntry) => string; featureMatch: (release: ReleaseEntry) => BoardHit | undefined; azure: AzureWorkspace; onClose: () => void }) {
-  // QV-59: the Content bulk Epic — mine, else shared, else built in (22919).
+  // QV-59: the Content bulk Epic — mine, else shared; none built in (0: not set, Create is blocked).
   const contentEpicId = useBulkEpic('Content').epicId ?? 0
   const rawPlan = contentPlan(releases, featureTitle, featureMatch)
   // EPS-03: the Epic setup's fields of the bulk Epic.
@@ -39,7 +40,7 @@ export function ContentBulkCreate({ releases, featureTitle, featureMatch, azure,
     return () => { active = false }
   }, [azure.config, azure.pat])
   const pair = pairs?.[choice]
-  const blocked = azure.isSample ? 'Synthetic sample data is loaded: creating in Azure DevOps is disabled.' : !azure.config || !azure.pat ? 'Connect the QMS-0025 Time Writing connection with a PAT first (My settings → Servers and PATs).' : !epic ? `Epic #${contentEpicId} is not on the loaded QMS-0025 board: load the board first.` : !pair ? (error || 'Loading the PI / Sprint…') : !ready.length ? 'None of the selected releases can be created (see the reasons).' : ready.some((line) => !ownerOf(line)) ? 'Choose who the Features are assigned to (a name on QMS-0025, or an email), for all or on each row.' : ''
+  const blocked = azure.isSample ? 'Synthetic sample data is loaded: creating in Azure DevOps is disabled.' : !azure.config || !azure.pat ? 'Connect the QMS-0025 Time Writing connection with a PAT first (My settings → Servers and PATs).' : !contentEpicId ? bulkEpicMissing('Content') : !epic ? `Epic #${contentEpicId} is not on the loaded QMS-0025 board: load the board first.` : !pair ? (error || 'Loading the PI / Sprint…') : !ready.length ? 'None of the selected releases can be created (see the reasons).' : ready.some((line) => !ownerOf(line)) ? 'Choose who the Features are assigned to (a name on QMS-0025, or an email), for all or on each row.' : ''
 
   function create() {
     if (blocked || !azure.config || !epic || !pair) return

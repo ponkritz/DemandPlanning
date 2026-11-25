@@ -16,7 +16,7 @@ export function useStreamEpics(name: string) {
   return streamEpics(settings, stream?.name ?? name)
 }
 
-// QV-59: the Epic a stream's bulk Feature creation works under (mine, else shared, else built in), and where it comes from.
+// QV-59: the Epic a stream's bulk Feature creation works under (mine, else shared; none built in), and where it comes from.
 export function useBulkEpic(stream: BulkStream) {
   const settings = useContext(ReleaseSettingsContext)
   return bulkEpicFor(stream, normalizeReleaseSourceSettings(settings).bulkEpics, loadMyBulkEpics())

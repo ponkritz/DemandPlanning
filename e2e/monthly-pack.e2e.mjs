@@ -57,7 +57,7 @@ test('TC-PCK-08: every Monthly pack box adds bullets with + (below a bullet) and
     localStorage.setItem('demand-planning-git-storage-v1', JSON.stringify({ owner: 'example', repo: 'storage', branch: 'main', path: 'planning-data.json' }))
     localStorage.setItem('demand-planning-git-token-v1', 'test-token')
   } })
-  await context.route('https://api.github.com/**', (route) => /\/contents\/access\.json/.test(route.request().url()) ? route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(rolesFile()) }) : route.fulfill({ status: 404, contentType: 'application/json', body: '{"message":"Not Found"}' }))
+  await context.route('https://api.github.com/**', (route) => /^\/repos\/[^/]+\/[^/]+\/branches\/[^/]+$/.test(new URL(route.request().url()).pathname) ? route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ name: 'main' }) }) : /\/contents\/access\.json/.test(route.request().url()) ? route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(rolesFile()) }) : route.fulfill({ status: 404, contentType: 'application/json', body: '{"message":"Not Found"}' }))
   await page.reload()
   await navigate(page, 'Pulse Check')
   await page.getByRole('tab', { name: /^Monthly pack/ }).click()

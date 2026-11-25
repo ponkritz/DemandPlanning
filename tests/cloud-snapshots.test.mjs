@@ -61,7 +61,7 @@ test('SNP-08: history lists only snapshot files, newest month first; a missing f
   ]
   const files = await listSnapshots(config, 'token', async () => Response.json(listing))
   assert.deepEqual(files.map((file) => [file.name, file.type]), [['2026-10-PI-Review-bbb.json', 'PI Review'], ['2026-09-LTE-aaa.json', 'LTE']])
-  assert.deepEqual(await listSnapshots(config, 'token', async () => new Response('', { status: 404 })), [])
+  assert.deepEqual(await listSnapshots(config, 'token', async (url) => new Response('', { status: url.includes('/branches/') ? 200 : 404 })), [], 'a missing folder in a readable repository')
   await assert.rejects(listSnapshots(config, 'token', async () => new Response('{}', { status: 403 })))
 })
 

@@ -32,6 +32,7 @@ export interface DashboardBlock {
   tab: string // the tab the block is on (a KPI tile: the tab it opens); '' = the first tab
   options?: ChartOptions // CHT: the chart's display options, as an insight's
   narrative?: Narrative // CHT-60: a Narrative's sentences and rules, as an insight's
+  hideStatus?: boolean // TVL-26: a block on the Tool Validations master list or expiry list without Status and Days left
 }
 export interface DashboardTab { id: string; name: string }
 // A filter of the filter row: the viewer ticks values of a Dropdown / Multi-select column of one data source.
@@ -53,18 +54,23 @@ export function dashId(prefix: 'b' | 't' | 'f', random: () => number = Math.rand
 const clean = (value: unknown, max: number) => typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').slice(0, max) : ''
 
 // ---- data sources (DSH-03, DSH-04) ----
-// A data source is a table page, named 'page:<page id>', or (DSH-16) the Time Writing hours, 'hours:time-writing'
-// (src/dashboardHours.ts); the pattern is the one place where a kind of source is added. A file naming another kind is
+// A data source is a table page, named 'page:<page id>', (DSH-16) the Time Writing hours, 'hours:time-writing'
+// (src/dashboardHours.ts), or (TVL-18) the Tool Validations master list 'tools:master' and expiry list 'tools:expiry'
+// (src/dashboardSources.ts); the pattern is the one place where a kind of source is added. A file naming another kind is
 // dropped block by block (DSH-08).
 export const pageSource = (pageId: string) => `page:${pageId}`
 export const hoursSource = 'hours:time-writing'
 export const hoursSourceName = 'Time Writing hours'
-export const sourcePattern = /^(page:[a-z0-9][a-z0-9-]{0,39}|hours:time-writing)$/
+export const sourcePattern = /^(page:[a-z0-9][a-z0-9-]{0,39}|hours:time-writing|tools:master|tools:expiry)$/
+// TVL-26: the Tool Validations sources and their expiry status fields (Status, Days left), which a block may leave out.
+export const isToolSource = (source: string) => source === 'tools:master' || source === 'tools:expiry'
+export const toolStatusColumns = ['tv-status', 'tv-days']
 export const pageOfSource = (source: string) => source.startsWith('page:') ? source.slice(5) : ''
 
 // A data source as the blocks see it: rows in the shape of an On-Demand page, so the On-Demand aggregation applies.
 // kind: how the block editor names it ('table page' unless given); note: the line under the editor's Data source.
-export interface Dataset { key: string; name: string; page: OnDemandPage; problem?: string; kind?: string; note?: string }
+// statusDays (TVL-26): the team default window the Tool Validations sources' Status is worked out with.
+export interface Dataset { key: string; name: string; page: OnDemandPage; problem?: string; kind?: string; note?: string; statusDays?: number }
 const asPage = (id: string, name: string, columns: OnDemandColumn[], rows: OnDemandRow[]): OnDemandPage => ({ schema: 1, kind: 'on-demand-page', id, name, description: '', keyPrefix: 'DSH', columns, rows, insights: [] })
 // A table page's rows as saved in Git (the viewer's unsaved changes are not shown).
 export const pageDataset = (page: OnDemandPage): Dataset => ({ key: pageSource(page.id), name: page.name, page })
@@ -136,15 +142,15 @@ export function parseDashboard(raw: string, expectedId?: string, pattern: RegExp
     // CHT: the display options validated as an insight's (a KPI tile takes none); unknown ones dropped.
     const options = type === 'kpi' ? undefined : cleanOptions(type, measure, item.options)
     return [{ id: item.id as string, title, type, source: item.source, category: type === 'kpi' ? '' : ref(item.category), second: type === 'kpi' || type === 'pie' || type === 'pareto' || type === 'narrative' ? '' : ref(item.second), measure, value: measure === 'count' ? '' : ref(item.value), filters: blockFilters,
-      sort: type === 'line' ? 'label' : type === 'table' || type === 'kpi' || type === 'pareto' || type === 'narrative' ? 'value' : item.sort === 'label' ? 'label' : 'value', period: ref(item.period), tab: tab && tabIds.has(tab) ? tab : '', ...(options ? { options } : {}), ...(type === 'narrative' ? { narrative: parseNarrative((item as { narrative?: unknown }).narrative) } : {}) }]
+      sort: type === 'line' ? 'label' : type === 'table' || type === 'kpi' || type === 'pareto' || type === 'narrative' ? 'value' : item.sort === 'label' ? 'label' : 'value', period: ref(item.period), tab: tab && tabIds.has(tab) ? tab : '', ...(options ? { options } : {}), ...(item.hideStatus === true && isToolSource(item.source) ? { hideStatus: true } : {}), ...(type === 'narrative' ? { narrative: parseNarrative((item as { narrative?: unknown }).narrative) } : {}) }]
   })
   if (blocks.length > maxBlocks) dropped.push(`Only the first ${maxBlocks} blocks are shown (${blocks.length} in the file).`)
   const colors = parseColors(file.colors)
   return { dashboard: { schema: 1, kind: 'dashboard', id, tabs: keptTabs, filters: filters.slice(0, maxViewerFilters), blocks: blocks.slice(0, maxBlocks), ...(colors ? { colors } : {}) }, dropped }
 }
 // CHT: options and colours are written only when set, so a dashboard without them stays byte for byte as before.
-const blockOut = ({ id, title, type, source, category, second, measure, value, filters, sort, period, tab, options, narrative }: DashboardBlock) =>
-  ({ id, title, type, source, ...(category ? { category } : {}), ...(second ? { second } : {}), measure, ...(value ? { value } : {}), ...(filters.length ? { filters } : {}), sort, ...(period ? { period } : {}), ...(tab ? { tab } : {}), ...(options && Object.keys(options).length ? { options } : {}), ...(type === 'narrative' ? { narrative: narrativeOut(narrative) } : {}) })
+const blockOut = ({ id, title, type, source, category, second, measure, value, filters, sort, period, tab, options, narrative, hideStatus }: DashboardBlock) =>
+  ({ id, title, type, source, ...(category ? { category } : {}), ...(second ? { second } : {}), measure, ...(value ? { value } : {}), ...(filters.length ? { filters } : {}), sort, ...(period ? { period } : {}), ...(tab ? { tab } : {}), ...(options && Object.keys(options).length ? { options } : {}), ...(type === 'narrative' ? { narrative: narrativeOut(narrative) } : {}), ...(hideStatus && isToolSource(source) ? { hideStatus: true } : {}) })
 export function serializeDashboard(dashboard: Dashboard) {
   const out = `${JSON.stringify({ schema: 1, kind: 'dashboard', id: dashboard.id, tabs: dashboard.tabs.map(({ id, name }) => ({ id, name })), filters: dashboard.filters.map(({ id, source, column }) => ({ id, source, column })), blocks: dashboard.blocks.map(blockOut), ...(dashboard.colors && Object.keys(dashboard.colors).length ? { colors: dashboard.colors } : {}) }, null, 1)}\n`
   if (new TextEncoder().encode(out).length > dashboardMaxBytes) throw new Error(`The dashboard is too large to save (over ${Math.round(dashboardMaxBytes / 1000)} KB). Remove blocks or filters.`)
@@ -241,7 +247,33 @@ export function blankBlock(dataset: Dataset, id: string, type: BlockType = 'kpi'
   const chart = type === 'kpi' ? undefined : type
   // DSH-16: the Time Writing hours are measured in hours (Sum of the first hours column), never counted.
   const hours = dataset.key === hoursSource
-  return { id, title: '', type, source: dataset.key, category: chart ? categoryColumns(page, chart)[0]?.id ?? '' : '', second: '', measure: hours ? 'sum' : 'count', value: hours ? valueColumns(page)[0]?.id ?? '' : '', filters: [], sort: type === 'line' ? 'label' : 'value', period: periodColumns(page)[0]?.id ?? '', tab, ...(type === 'narrative' ? { narrative: blankNarrative() } : {}) }
+  // TVL-18: a Tool Validations source counts every tool, whatever the period (its dates are validation and due dates);
+  // a builder may still pick a Date column for the period.
+  const timeless = dataset.key.startsWith('tools:')
+  return { id, title: '', type, source: dataset.key, category: chart ? categoryColumns(page, chart)[0]?.id ?? '' : '', second: '', measure: hours ? 'sum' : 'count', value: hours ? valueColumns(page)[0]?.id ?? '' : '', filters: [], sort: type === 'line' ? 'label' : 'value', period: timeless ? '' : periodColumns(page)[0]?.id ?? '', tab, ...(type === 'narrative' ? { narrative: blankNarrative() } : {}) }
+}
+// TVL-26: the data source as a block sees it — for a block on a Tool Validations source with "Show expiry status" off,
+// without the Status and Days left columns (not offered in the pop-up, not shown in the block, its table or drill-down);
+// the rows keep their cells, so a filter of the filter row on Status still applies. Every other block: as it is.
+const statusless = new WeakMap<Dataset, Dataset>()
+export function blockDataset(dataset: Dataset, block: Pick<DashboardBlock, 'source' | 'hideStatus'>): Dataset {
+  if (!block.hideStatus || !isToolSource(block.source) || dataset.problem) return dataset
+  let hidden = statusless.get(dataset)
+  if (!hidden) { hidden = { ...dataset, page: { ...dataset.page, columns: dataset.page.columns.filter((column) => !toolStatusColumns.includes(column.id)) } }; statusless.set(dataset, hidden) }
+  return hidden
+}
+// The block with "Show expiry status" switched on or off: switched off, a field on Status or Days left is replaced by the
+// first that fits (or cleared) and a filter on them removed.
+export function withStatusShown(dataset: Dataset, block: DashboardBlock, shown: boolean): DashboardBlock {
+  if (shown) { const out = { ...block }; delete out.hideStatus; return out }
+  const hidden: DashboardBlock = { ...block, hideStatus: true, filters: block.filters.filter((filter) => !toolStatusColumns.includes(filter.column)) }
+  const view = blockDataset(dataset, hidden)
+  const gone = (id: string) => toolStatusColumns.includes(id)
+  if (gone(hidden.second)) hidden.second = ''
+  if (gone(hidden.period)) hidden.period = ''
+  if (gone(hidden.value)) { hidden.measure = 'count'; hidden.value = '' }
+  if (gone(hidden.category)) hidden.category = hidden.type === 'kpi' ? '' : hidden.type === 'narrative' ? '' : categoryColumns(view.page, hidden.type)[0]?.id ?? ''
+  return hidden.type === 'kpi' ? hidden : withBlockType(view, hidden, hidden.type)
 }
 // The block after its type or data source changed: fields that no longer fit are cleared or replaced by the first that fits.
 export function withBlockType(dataset: Dataset, block: DashboardBlock, type: BlockType): DashboardBlock {

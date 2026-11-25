@@ -1,7 +1,8 @@
 import test, { afterEach } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { addCustomStream, changeCustomStream, customStreamDefs, customStreamProblem, parseCustomStreams, removeCustomStream, ruleOf, ruleOptions, serializeCustomStreams } from '../src/customStreams.ts'
-import { allStreams, defaultStreams, exportForStream, isEcpExport, profileForStream, setCustomStreams, streamNamedBy, streamOfProfile, streamsVersion, windchillOptionsForView, windchillStreamExports } from '../src/streams.ts'
+import { allStreams, releaseMenuEntries, defaultStreams, exportForStream, isEcpExport, profileForStream, setCustomStreams, streamNamedBy, streamOfProfile, streamsVersion, windchillOptionsForView, windchillStreamExports } from '../src/streams.ts'
 import { defaultStreamReleases } from '../src/releaseOverview.ts'
 import { releaseRegister } from '../src/releaseSource.ts'
 import { windchillReleases } from '../src/windchillReleases.ts'
@@ -124,4 +125,39 @@ test('STR-03: a custom Windchill stream — “Like S&S IT” has its export, �
   assert.deepEqual(windchillReleases(rows, ['Name', 'Location', 'Last Modified'], windchillOptionsForView(views[1])).releases.map((entry) => `${entry.name}|${entry.release}|${entry.documents.length}`), ['Service Tool|Release 3.1|2'])
   setCustomStreams([])
   assert.deepEqual(windchillStreamExports(views).map((entry) => entry.view?.id ?? '-'), ['ss', 'ecp1', 'fa1'], 'without them, the ECP-logic export goes back to ECP')
+})
+
+test('NAV-52: Release Details is one list — every stream A–Z (case ignored), built-in and custom, Azure and Windchill alike; "＋ ECP export" after them (TC-NAV-52)', () => {
+  setCustomStreams(customStreamDefs([{ name: 'labeling', rule: 'title', fuzzy: false }, { name: 'Field Actions', rule: 'windchill-project', fuzzy: false }]))
+  const views = [
+    { id: 'ss', name: 'S&S IT', exportFile: 'ss.csv' },
+    { id: 'ecp1', name: 'ECP - Type 1', exportFile: 'e1.csv', logic: 'ecp', projectLevel: 2 },
+    { id: 'ecp2', name: 'ECP - Type 2', exportFile: 'e2.csv', logic: 'ecp', projectLevel: 3 },
+  ]
+  const shown = (entries) => entries.map((entry) => `${entry.kind}:${entry.label}${entry.kind === 'windchill' ? `:${entry.view?.id ?? '+'}` : ''}`)
+  assert.deepEqual(shown(releaseMenuEntries(views)), ['azure:Content', 'azure:CP', 'azure:DP', 'windchill:ECP - Type 1:ecp1', 'windchill:ECP - Type 2:ecp2', 'windchill:Field Actions:+', 'azure:IOCC', 'azure:labeling', 'windchill:S&S IT:ss', 'azure:Tool Validations', 'add-export:ECP export'])
+  // Without exports: each Windchill stream is listed by its name (＋, not imported yet) and nothing is added after them.
+  setCustomStreams([])
+  assert.deepEqual(shown(releaseMenuEntries([])), ['azure:Content', 'azure:CP', 'azure:DP', 'windchill:ECP:+', 'azure:IOCC', 'windchill:S&S IT:+', 'azure:Tool Validations'])
+})
+
+import * as customStreamsModule from '../src/customStreams.ts'
+import { readTextFile as readGitText } from '../src/gitStorage.ts'
+// GIT-25 (KB-92): a repository the token cannot read (GitHub answers 404 for everything) keeps the custom streams cached
+// in this browser; only a file really missing in a readable repository clears them.
+test('GIT-25: the cached custom streams stay when the repository cannot be read; a missing file in a readable one clears them (TC-GIT-18)', async () => {
+  const { readCustomStreamsInto, cachedCustomStreams, customStreamsCacheKey } = customStreamsModule
+  const data = new Map(), storage = { getItem: (key) => data.get(key) ?? null, setItem: (key, value) => data.set(key, String(value)), removeItem: (key) => data.delete(key) }
+  const text = serializeCustomStreams([{ name: 'Lab Systems', rule: 'iocc', fuzzy: false }])
+  storage.setItem(customStreamsCacheKey, text)
+  const notFound = (readable) => async (url) => ({ ok: readable && url.includes('/branches/'), status: readable && url.includes('/branches/') ? 200 : 404, json: async () => ({}) })
+  const locked = { owner: 'example-org', repo: 'streams-locked', branch: 'main', path: 'custom-streams.json' }
+  await assert.rejects(readCustomStreamsInto(() => readGitText(locked, 't', notFound(false)), storage), /cannot access it/)
+  assert.equal(storage.getItem(customStreamsCacheKey), text, 'the cache is kept')
+  assert.deepEqual(cachedCustomStreams(storage).map((entry) => entry.name), ['Lab Systems'])
+  const open = { ...locked, repo: 'streams-open' }
+  const read = await readCustomStreamsInto(() => readGitText(open, 't', notFound(true)), storage)
+  assert.deepEqual([read.streams, read.sha, storage.getItem(customStreamsCacheKey)], [[], null, null], 'a file deleted in a readable repository: no custom streams')
+  const hook = readFileSync(new URL('../src/useCustomStreams.ts', import.meta.url), 'utf8')
+  assert.match(hook, /readCustomStreamsInto\(readCustomStreams\)/, 'the hook reads through it')
 })

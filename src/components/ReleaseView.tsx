@@ -5,6 +5,8 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { ContentBulkCreate } from './ContentBulkCreate'
 import type { NamingPattern } from '../namingPatterns'
 import { fullMatch } from '../dpBulk'
+import { classificationOf, detectClassification } from '../epicSetup'
+import { useEpicSetupFile } from '../useEpicSetup'
 import type { AzureWorkItem } from '../domain'
 import { releaseFeatureTitle, releaseRegister, type ReleaseEntry } from '../releaseSource'
 import type { FeatureSetups } from '../featureSetup'
@@ -16,7 +18,9 @@ import { ResultTabs } from './ResultTabs'
 import { EmptyState, Pill, TablePanel, WriteBlocked } from './ui'
 import type { QueryColumn, QueryOrder } from '../queryView'
 import { DataTable, type DataColumn } from './DataTable'
-import { useStreamEpics } from '../useStreamEpics'
+import { useBulkEpic, useStreamEpics } from '../useStreamEpics'
+import { BulkEpicNotSet } from './BulkEpicsPanel'
+import { bulkEpicMissing } from '../bulkEpics'
 import { BoardMatchCell } from './DpBoardColumn'
 import { boardMatchText, dpBoardCandidates, releaseBoardMatch, type BoardMatch } from '../dpBoardMatch'
 import { nestGroups, nestedKeys, type GroupLevel, type NestedGroup } from '../nestedGroups'
@@ -30,20 +34,20 @@ const releaseLevels: GroupLevel<ReleaseEntry>[] = [
 
 // Release source view, one page: the releases found in the documents' paths (see releasePath: release from the
 // Iteration Path with the name from the Area Path, else "…\Name\Release x.y.z" in the Area Path) as a flat list — no grouping by stream — and below it the documents with the query's columns.
-export function ReleaseView({ name, items, backlog, columns, orderBy, unresolved, azure, assign, featureSetup, qeMapping, rule, fuzzy = false, threshold = 80, patterns, area }: { area?: string[]; patterns?: NamingPattern[]; featureSetup?: FeatureSetups | null; qeMapping?: QeMappingFile | null; name: string; items: AzureWorkItem[]; backlog: AzureWorkItem[]; columns?: QueryColumn[]; orderBy?: QueryOrder[]; unresolved?: string[]; azure?: AzureWorkspace; assign?: { me: string; canChoose: boolean }; rule?: ReleaseRule; fuzzy?: boolean; threshold?: number }) {
+export function ReleaseView({ name, items, backlog, columns, orderBy, unresolved, azure, assign, featureSetup, qeMapping, rule, fuzzy = false, threshold = 80, patterns, area, onOpenBulkEpics }: { onOpenBulkEpics?: () => void; area?: string[]; patterns?: NamingPattern[]; featureSetup?: FeatureSetups | null; qeMapping?: QeMappingFile | null; name: string; items: AzureWorkItem[]; backlog: AzureWorkItem[]; columns?: QueryColumn[]; orderBy?: QueryOrder[]; unresolved?: string[]; azure?: AzureWorkspace; assign?: { me: string; canChoose: boolean }; rule?: ReleaseRule; fuzzy?: boolean; threshold?: number }) {
   const register = useMemo(() => releaseRegister(items, backlog, { rule, fuzzy, threshold, patterns, area }), [items, backlog, rule, fuzzy, threshold, patterns, area])
   const info = rule === 'title' ? 'Content: a release is named by the naming patterns (Admin → Streams → Stream mapping; built in: the Title up to and including _RELEASE, the rest is the document), its documents grouped under it; a Title no pattern fits is a release of its own (QV-52, QV-55). The Time Writing Feature is the one whose title holds that name.' : rule === 'dp' ? `DP: release name from the Area Path (last segment), release number from the Iteration Path (a “Release x.y.z” segment, else a segment with a version). Time Writing Feature = the best fuzzy match among QMS-0025 Features (name 60%, version 40%); it counts — with its planned and booked hours — at ${threshold}% or more (Admin → Streams → Stream mapping). Map the Pedestal and DHFI data sets there to list the Pedestal Releases with their DHFI dates instead.` : rule === 'iocc' ? `${area ? `${name} (Like IOCC, STR-03): the Area Path segment after “${area.join('” or “')}” (else the last segment)` : 'IOCC: the Area Path segment after “IOCC”'} is the Type of Release; the release name comes from the document Title, with its version as the release number. Time Writing Feature = the best fuzzy match among QMS-0025 Features (name 60%, version 40%); it counts — with its planned and booked hours — at ${threshold}% or more (Admin → Streams → Stream mapping).` : 'Releases are read from the documents’ paths: a “Release x.y.z” segment with the name in the segment above it (Iteration Path first, else Area Path). Time Writing Feature = the QMS-0025 Feature whose title names the release exactly (name as whole words and the exact version, in any order); a Feature matching several releases goes to the longest name. Planned and booked hours are the Time Writing Tasks under that Feature.'
   // QV-47: the releases and the source data (the query output) are two tabs of the page.
-  return <ResultTabs id={`azure:${name}`} rawCount={items.length} main={
-    <ReleaseTable name={name} register={register} azure={azure} assign={assign} featureSetup={featureSetup} qeMapping={qeMapping} threshold={threshold} typed={rule === 'iocc'} titled={rule === 'title'} info={info} empty={<EmptyState title="No releases found in the documents' paths." detail="A release is read from a path segment “Release x.y.z”, with the name in the segment above it." />} />
-} raw={<TablePanel><QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={unresolved} summary={rule !== 'tool'} queryOnly={rule === 'title'} /></TablePanel>} />
+  const releases = <ReleaseTable name={name} register={register} azure={azure} onOpenBulkEpics={onOpenBulkEpics} assign={assign} featureSetup={featureSetup} qeMapping={qeMapping} threshold={threshold} typed={rule === 'iocc'} titled={rule === 'title'} info={info} empty={<EmptyState title="No releases found in the documents' paths." detail="A release is read from a path segment “Release x.y.z”, with the name in the segment above it." />} />
+  const rows = <TablePanel><QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={unresolved} summary={rule !== 'tool'} queryOnly={rule === 'title'} /></TablePanel>
+  return <ResultTabs id={`azure:${name}`} rawCount={items.length} main={releases} raw={rows} />
 }
 
 // The release table shared by the views: one row per release with its documents, Feature match and hours; with
 // typed, the IOCC Type of Release column and nested grouping (Group by … then by …, Collapse all / Expand all).
 // QV-62, UI-STANDARDS §10: the columns in the standard's order — Select (bulk only), Release name ▸, Release, Approved,
 // Documents, the stream's own (Type of Release), Time Writing Feature, Planned (h), Booked (h), QMS-0025 match.
-function ReleaseTable({ name, title = 'Releases', detail, register, azure, assign, featureSetup, qeMapping, threshold = 80, typed, titled = false, info, action, empty, featureTitle = (release) => releaseFeatureTitle(name, [release.group, release.name].filter(Boolean).join(' '), release.release) }: { featureTitle?: (release: ReleaseEntry) => string; name: string; title?: string; detail?: string; register: ReleaseEntry[]; featureSetup?: FeatureSetups | null; qeMapping?: QeMappingFile | null; azure?: AzureWorkspace; assign?: { me: string; canChoose: boolean }; fuzzy?: boolean; threshold?: number; typed?: boolean; titled?: boolean; info?: ReactNode; action?: ReactNode; empty?: ReactNode }) {
+function ReleaseTable({ onOpenBulkEpics, name, title = 'Releases', detail, register, azure, assign, featureSetup, qeMapping, threshold = 80, typed, titled = false, info, action, empty, featureTitle = (release) => releaseFeatureTitle(name, [release.group, release.name].filter(Boolean).join(' '), release.release) }: { onOpenBulkEpics?: () => void; featureTitle?: (release: ReleaseEntry) => string; name: string; title?: string; detail?: string; register: ReleaseEntry[]; featureSetup?: FeatureSetups | null; qeMapping?: QeMappingFile | null; azure?: AzureWorkspace; assign?: { me: string; canChoose: boolean }; fuzzy?: boolean; threshold?: number; typed?: boolean; titled?: boolean; info?: ReactNode; action?: ReactNode; empty?: ReactNode }) {
   const [open, setOpen] = useState('')
   const [groupBy, setGroupBy] = useState<string[]>(typed ? ['type'] : [])
   const [collapsed, setCollapsed] = useState<string[]>([])
@@ -66,14 +70,22 @@ function ReleaseTable({ name, title = 'Releases', detail, register, azure, assig
   // CON-94: bulk creation needs "Bulk create Features"; CON-102: without it Create Features is disabled and says why.
   const write = useWriteBlock(), bulkWhy = write.why('work.bulk')
   const bulk = (titled || Boolean(typed)) && Boolean(azure)
+  // QV-59: no bulk creation Epic is built in — without one mapped, Create Features is disabled and says where to map it.
+  const ioccEpic = useBulkEpic('IOCC').epicId, contentEpic = useBulkEpic('Content').epicId
+  const bulkStream = typed ? 'IOCC' as const : 'Content' as const, bulkEpic = typed ? ioccEpic : contentEpic
   const [picked, setPicked] = useState<string[]>([])
   const [bulkOpen, setBulkOpen] = useState(false)
   const featureMatch = (release: ReleaseEntry) => matches.get(release.key)?.feature
+  const epicFile = useEpicSetupFile()
+  const classes = classificationOf(epicFile, typed ? ioccEpic : undefined)
+  const detected = (release: ReleaseEntry) => ioccEpic ? detectClassification(classes, release.release) : ''
   const columns: DataColumn<ReleaseEntry>[] = [
     ...(bulk ? [{ id: 'pick', label: 'Select', fixed: true, sortable: false, export: false as const, value: (release: ReleaseEntry) => picked.includes(release.key) ? 'yes' : '', render: (release: ReleaseEntry) => { const full = fullMatch(featureMatch(release)); return <input type="checkbox" aria-label={`Select ${release.name}`} disabled={full} title={full ? `Feature #${featureMatch(release)!.item.id} on QMS-0025 matches this release 100%: nothing to create` : undefined} checked={!full && picked.includes(release.key)} onChange={() => setPicked((current) => current.includes(release.key) ? current.filter((key) => key !== release.key) : [...current, release.key])} /> } }] : []),
     { id: 'name', label: 'Release name', value: (release) => release.name, render: (release) => <button type="button" className="text-button" aria-expanded={open === release.key} onClick={() => setOpen(open === release.key ? '' : release.key)}>{open === release.key ? '▾' : '▸'} {release.name}</button> },
-    // QV-52 Content: the Title is the release, so there is no release number column.
-    ...(titled ? [] : [{ id: 'release', label: 'Release', value: (release: ReleaseEntry) => release.release || '', render: (release: ReleaseEntry) => release.release || '—' }]),
+    // QV-52 Content: the Title is the release, so there is no release number column. DPF-12 IOCC: Version, then the
+    // Release Classification detected from it by the rules of the IOCC bulk Epic (DPF-11; '—' without one).
+    ...(titled ? [] : [{ id: 'release', label: typed ? 'Version' : 'Release', value: (release: ReleaseEntry) => release.release || '', render: (release: ReleaseEntry) => release.release || '—' }]),
+    ...(typed ? [{ id: 'class', label: `${classes.label} (detected)`, value: (release: ReleaseEntry) => detected(release), render: (release: ReleaseEntry) => detected(release) || '—', title: () => !ioccEpic ? 'No IOCC bulk creation Epic is set (Admin → Stream options → Bulk creation Epics)' : `Detected from the version by Epic #${ioccEpic}’s ${classes.label} (Admin → Epic & Feature setup)` }] : []),
     { id: 'approved', label: 'Approved', value: (release) => release.approvalDate ?? '', render: (release) => release.approvalDate ? formatDate(release.approvalDate) : '—' },
     { id: 'documents', label: 'Documents', value: (release) => release.documents, align: 'right' },
     ...(grouped ? [{ id: 'type', label: 'Type of Release', value: (release: ReleaseEntry) => release.group || '' }] : []),
@@ -95,7 +107,7 @@ function ReleaseTable({ name, title = 'Releases', detail, register, azure, assig
   </> : null
   return <TablePanel title={title} detail={detail} info={info} action={action} count={register.length ? `${register.length} release${register.length === 1 ? '' : 's'}` : undefined}>
       {bulkOpen && azure && (typed ? <IoccBulkCreate releases={register.filter((release) => picked.includes(release.key))} featureTitle={featureTitle} featureMatch={featureMatch} azure={azure} featureSetup={featureSetup} qeMapping={qeMapping} onClose={() => { setBulkOpen(false); setPicked([]) }} /> : <ContentBulkCreate releases={register.filter((release) => picked.includes(release.key))} featureTitle={featureTitle} featureMatch={featureMatch} azure={azure} onClose={() => { setBulkOpen(false); setPicked([]) }} />)}
-      {register.length ? <DataTable id={`releases:${name}:${title}`} className="release-register" columns={columns} rows={register} rowKey={(release) => release.key} exportName={`${name} ${title}`} toolbar={bulk ? <><span className="muted">{picked.length} selected</span><button type="button" className="ghost" disabled={!register.length} onClick={() => setPicked(register.filter((release) => !fullMatch(featureMatch(release))).map((release) => release.key))}>Select all shown</button><button type="button" className="ghost" disabled={!picked.length} onClick={() => setPicked([])}>Clear</button><WriteBlocked reason={bulkWhy} /><button type="button" className="primary" disabled={!picked.length || !assign?.canChoose || Boolean(bulkWhy)} title={bulkWhy || (assign?.canChoose ? 'Create a Feature for each selected release, all assigned to one person' : 'Needs the right to create work items for other people (Admin → People & roles → Role rights)')} onClick={() => setBulkOpen(true)}>Create Features ({picked.length})</button></> : grouping} expand={documents} group={groups ? (_, row, span) => groupLines(groups, row, span) : undefined} /> : empty ?? <EmptyState title="No releases." />}
+      {register.length ? <DataTable id={`releases:${name}:${title}`} className="release-register" columns={columns} rows={register} rowKey={(release) => release.key} exportName={`${name} ${title}`} toolbar={bulk ? <><span className="muted">{picked.length} selected</span><button type="button" className="ghost" disabled={!register.length} onClick={() => setPicked(register.filter((release) => !fullMatch(featureMatch(release))).map((release) => release.key))}>Select all shown</button><button type="button" className="ghost" disabled={!picked.length} onClick={() => setPicked([])}>Clear</button><WriteBlocked reason={bulkWhy} />{!bulkWhy && !bulkEpic && <BulkEpicNotSet stream={bulkStream} onOpen={onOpenBulkEpics} />}<button type="button" className="primary" disabled={!picked.length || !assign?.canChoose || Boolean(bulkWhy) || !bulkEpic} title={bulkWhy || (!bulkEpic ? bulkEpicMissing(bulkStream) : '') || (assign?.canChoose ? 'Create a Feature for each selected release, all assigned to one person' : 'Needs the right to create work items for other people (Admin → People & roles → Role rights)')} onClick={() => setBulkOpen(true)}>Create Features ({picked.length})</button></> : grouping} expand={documents} group={groups ? (_, row, span) => groupLines(groups, row, span) : undefined} /> : empty ?? <EmptyState title="No releases." />}
     </TablePanel>
 }
 

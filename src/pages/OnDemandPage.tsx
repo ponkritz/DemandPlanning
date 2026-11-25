@@ -45,7 +45,10 @@ import { publishKey } from '../publishSchedule'
 // OND-63…OND-67: dataMode — the viewer's Live | Sample toggle of the page (src/useDataMode.ts); in Sample the store gives
 // the page with its sample rows, every change is disabled with the reason and exports are marked.
 // OND-73…OND-79, OND-90: publisherName — the name a published interactive HTML file says it was published by.
-export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-insights', menu, viewer, addPageReason = '', onAddPage, views, dataMode, publisherName = '', publisher }: { git: GitStorage; store: OnDemandStore; pageId: string; me: string; onOpen: (id: string) => void; kind?: PageKind; menu: MenuLayoutStore; viewer: Viewer; addPageReason?: string; onAddPage: () => void; views?: PersonalViewsStore; dataMode?: DataModeStore; publisherName?: string; publisher: PublishAuthorization }) {
+// TVL-15: embedded — the page shown as an owners' tab of Tool Validations: no page frame, and nothing of the menu (＋ Add
+// page…, Rename page…, Hide page, Delete page… and the hidden-page notice): the tab is renamed, moved and removed on
+// Tool Validations → Setup → Tabs.
+export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-insights', menu, viewer, addPageReason = '', onAddPage, views, dataMode, publisherName = '', publisher, embedded = false }: { git: GitStorage; store: OnDemandStore; pageId: string; me: string; onOpen: (id: string) => void; kind?: PageKind; menu: MenuLayoutStore; viewer: Viewer; addPageReason?: string; onAddPage: () => void; views?: PersonalViewsStore; dataMode?: DataModeStore; publisherName?: string; publisher: PublishAuthorization; embedded?: boolean }) {
   // OND-39: the page with its hidden rows (listed only with Show hidden rows); the Insights get it without them.
   const listed = store.pages.find((entry) => entry.id === pageId) ?? store.pages[0]
   const page = (listed && store.full(listed.id)) || listed
@@ -214,14 +217,16 @@ export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-ins
     <div className="segmented">{(['live', 'sample'] as const).map((value) => <button key={value} type="button" aria-pressed={mode === value} onClick={() => { if (value !== mode) { setDrawer(null); dataMode.setMode(page.id, value) } }}>{value === 'live' ? 'Live' : 'Sample'}</button>)}</div>
   </div>
 
-  return <ExportNoteContext.Provider value={sample ? sampleExportNote : null}><Page className="on-demand-page" intro="A table the team sets up itself, shared with everyone through Git."
+  return <ExportNoteContext.Provider value={sample ? sampleExportNote : null}><Page className="on-demand-page" embedded={embedded} intro={embedded ? undefined : 'A table the team sets up itself, shared with everyone through Git.'}
     // OND-61: one main action (＋ Add page… for those who may add pages), the others in the page's ⋯ menu — each
     // disabled item with its reason as its tooltip, Delete page… in the danger colour.
-    actions={<>{modeToggle}<ViewActions label={`page ${page.name}`} primary={gitReason || addPageReason ? undefined : <button type="button" className="ghost" onClick={onAddPage}>＋ Add page…</button>} items={[
-      ...(gitReason || addPageReason ? [{ key: 'add', label: '＋ Add page…', disabled: true, title: gitReason || addPageReason }] : []),
-      { key: 'rename', label: 'Rename page…', disabled: Boolean(menuReason), title: menuReason || undefined, onClick: () => setPageDialog('rename') },
-      { key: 'hide', label: hidden ? 'Show page' : 'Hide page', disabled: Boolean(hidingReason), title: hidingReason || undefined, onClick: toggleHidden },
-      { key: 'delete', label: 'Delete page…', danger: true, disabled: Boolean(removeReason), title: removeReason || undefined, onClick: () => setPageDialog('remove') },
+    actions={<>{modeToggle}<ViewActions label={`page ${page.name}`} primary={embedded || gitReason || addPageReason ? undefined : <button type="button" className="ghost" onClick={onAddPage}>＋ Add page…</button>} items={[
+      ...(!embedded && (gitReason || addPageReason) ? [{ key: 'add', label: '＋ Add page…', disabled: true, title: gitReason || addPageReason }] : []),
+      ...(embedded ? [] : [
+        { key: 'rename', label: 'Rename page…', disabled: Boolean(menuReason), title: menuReason || undefined, onClick: () => setPageDialog('rename') },
+        { key: 'hide', label: hidden ? 'Show page' : 'Hide page', disabled: Boolean(hidingReason), title: hidingReason || undefined, onClick: toggleHidden },
+        { key: 'delete', label: 'Delete page…', danger: true, disabled: Boolean(removeReason), title: removeReason || undefined, onClick: () => setPageDialog('remove') },
+      ]),
       { key: 'publish', label: 'Publish interactive HTML…', disabled: Boolean(publishReason), title: publishReason || undefined, onClick: () => setPublishing(publishScope) },
       ...(showConvert ? [{ key: 'convert', label: 'Convert to row files…', disabled: Boolean(convertReason), title: convertReason || undefined, onClick: () => setConverting(true) }] : []),
       ...(git.connected ? [{ key: 'reload', label: '↻ Reload from Git', onClick: () => { if (pending.length && !window.confirm(`Discard the changes to ${page.name} that are not saved to Git?`)) return; store.discard(page.id); void store.reload() } }] : []),
@@ -232,7 +237,7 @@ export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-ins
     {suggestConvert && !sample && <Notice tone="info" className="od-convert-hint">This page has {page.rows.length.toLocaleString('en-US')} rows; converting it to row files keeps it fast and lets several people edit at once.{' '}<button type="button" className="ghost" onClick={() => setConverting(true)}>Convert to row files…</button>{' '}<button type="button" className="text-button" onClick={dismissHint}>Dismiss</button></Notice>}
     {gitReason && <Notice tone={git.isSample ? 'warning' : 'info'}>{gitReason}{!git.connected && store.inGit(page.id) ? ' The page last loaded in this browser is shown.' : ''}</Notice>}
     {store.errors.map((error) => <Notice key={error} tone="error">On-Demand: {error}</Notice>)}
-    {hidden && <Notice tone="info" className="od-hidden-note">{page.name} is hidden: it is not in the menu, on Home or in search for anyone. Its rows stay in Git and dashboards keep reading them; it opens from Admin → Pages & menu.{!hidingReason && <>{' '}<button type="button" className="ghost" onClick={toggleHidden}>Show page</button></>}</Notice>}
+    {hidden && !embedded && <Notice tone="info" className="od-hidden-note">{page.name} is hidden: it is not in the menu, on Home or in search for anyone. Its rows stay in Git and dashboards keep reading them; it opens from Admin → Pages & menu.{!hidingReason && <>{' '}<button type="button" className="ghost" onClick={toggleHidden}>Show page</button></>}</Notice>}
     {store.loaded && !store.inGit(page.id) && <Notice tone="info">{page.name} is not in Git yet: it is created with its first save to Git.</Notice>}
     {locking.active && git.lockFallback && <Notice tone="info">Row locks are kept in the folder locks/ of the data branch: the data repository did not allow a branch “locks”. They work the same.</Notice>}
     {locking.error && <Notice tone="warning">The row locks of {page.name} could not be read ({locking.error}). Who is editing a row is not shown; two edits of the same row are still merged field by field.</Notice>}

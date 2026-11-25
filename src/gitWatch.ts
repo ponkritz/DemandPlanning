@@ -38,6 +38,7 @@ const fileNames: [RegExp, string][] = [
   [/(^|\/)personal-views\/[^/]+\.json$/, 'Your views'],
   [/(^|\/)history-hours\.json$/, 'Historical hours'],
   [/(^|\/)kpi-tracker\.json$/, 'KPI tracker'],
+  [/(^|\/)tool-validations\.json$/, 'Tool Validations master list'],
   [/(^|\/)on-demand\/([a-z0-9-]+)\.json$/, 'On-Demand page $2'],
   [/(^|\/)on-demand\/([a-z0-9-]+)\/(?:page\.json|rows)$/, 'On-Demand page $2'],
   [/(^|\/)row-locks\.json$/, 'Row lock timeout'],
@@ -118,6 +119,8 @@ export function pagesOfFile(path: string, planningPath: string, dashboardsReadin
   if (name === 'monthly-pack-setup.json' || /^monthly-pack\/\d{4}-\d{2}\.json$/.test(name)) return { pages: ['pulse', 'admin:pack'], loader: 'monthlyPack' }
   if (name === 'history-hours.json') return { pages: [...reportPages, 'admin:history', 'admin:capacity'], loader: 'history' }
   if (name === 'kpi-tracker.json') return { pages: ['kpitracker'], loader: 'remount' }
+  // TVL-02: the Tool Validations master list is shown on its Release page (a read-only view of the board page).
+  if (name === 'tool-validations.json') return { pages: ['board'], loader: 'toolValidations' }
   // A file this build does not map: every page, and only a full reload loads it.
   return { pages: ['*'], loader: 'reload' }
 }

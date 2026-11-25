@@ -136,7 +136,7 @@ export function MyActivitiesPage({ azure, store, my, month, assign, featureSetup
   // KPI cards (ACT-11): the figures of Monthly Time Writing for the person (their month Tasks), their capacity as on
   // My dashboard, and the monthly update.
   const kpiItems = my.known ? azure.items.filter((item) => item.workItemType !== 'Task' || isMine(item, my.me)) : []
-  const kpi = azureInsights(kpiItems, month, utcToday())
+  const kpi = azureInsights(kpiItems, month, utcToday(), absenceEpicId)
   // CAP-56: found by every name the person goes by (their work email's Assigned To names too); when they are not in
   // the month's capacity, the tile says why instead of 0h.
   const names = my.known ? myNames(azure.items, my.me) : []
