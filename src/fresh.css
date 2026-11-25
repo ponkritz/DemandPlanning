@@ -1216,6 +1216,7 @@ tbody tr.tvl-hl-red td{background:var(--hl-red-bg)}tbody tr.tvl-hl-red td:first-
 .dsh-status-toggle{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}.dsh-status-toggle .check{margin:0}.dsh-status-toggle>small{flex-basis:100%;font-size:11px;font-weight:400;color:var(--muted);line-height:1.4}
 /* PIR-02…PIR-05: PI Review — the filter bar, and the Discussion in the Feature drawer as plain text. */
 .pir-filters .inline-select select{min-width:9rem}.pir-filters .check{margin-top:0;font-size:12px}
+.pir-filters .person-picker input{min-width:200px}.pir-filters .person-picker input:disabled{cursor:not-allowed;opacity:.7}.pir-filters .write-blocked{flex-basis:100%;padding:0}
 .pir-title{margin:0;font-size:14px;color:var(--heading);overflow-wrap:anywhere}
 .pir-discussion{display:grid;gap:8px;padding-top:4px}
 .pir-discussion-head{display:flex;justify-content:space-between;align-items:center;gap:8px}.pir-discussion-head h3{margin:0;font-size:14px;color:var(--heading)}
@@ -1227,6 +1228,29 @@ tbody tr.tvl-hl-red td{background:var(--hl-red-bg)}tbody tr.tvl-hl-red td:first-
 .pir-table table.no-wrap .pir-clip{display:block;max-width:18rem;overflow:hidden;text-overflow:ellipsis}
 .pir-latest{display:grid;gap:6px;padding-top:4px}.pir-latest h3{margin:0;font-size:14px;color:var(--heading)}.pir-latest .pir-comment-head,.pir-latest p{margin:0}
 .pir-split dd{margin:0;font-size:13px;white-space:pre-line;overflow-wrap:anywhere}
+.pir-suggested,.pir-split.pir-suggested dd{font-style:italic;color:var(--text-2)}.pir-suggested-mark{font-style:normal;font-size:11px;color:var(--muted)}
 /* QEM-13, OND-100: Replace… — the preview under the fields; the reason a disabled Replace gives, left of the buttons. */
 .replace-preview{display:grid;gap:8px}.replace-preview p{margin:0}.replace-rows{max-height:260px;overflow:auto}.replace-rows table{table-layout:fixed;width:100%}.replace-rows td{overflow-wrap:anywhere;padding:8px 14px}.replace-form>p.muted,.replace-preview p.muted{font-size:12px;margin:0}
 .replace-form .modal-actions{align-items:center;flex-wrap:wrap}.replace-form .modal-actions .write-blocked{margin-right:auto}
+/* A destructive main action in a pop-up footer lines up with Cancel (UI-STANDARDS §4, §6). */
+.modal-actions .danger-button{margin-top:0}
+/* OND-105: the Upload Excel preview — narrow Line, Row ID and Result columns, error rows marked, the error line in body text. */
+.bulk-rows .bulk-col-line{width:64px}.bulk-rows .bulk-col-id{width:120px}.bulk-rows .bulk-col-result{width:100px}.bulk-rows td.num,.bulk-rows th.num{text-align:right}.bulk-rows tr.bulk-error td{color:var(--danger-text)}.bulk-preview .bulk-errors-line{font-size:13px;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.bulk-template-form>p.muted{font-size:12px;margin:0}
+/* PIR-13, PIR-18: the PI review form — the fields beside the Preview of the exact comment (one column on a phone) */
+.modal:has(.pir-review-columns){width:min(1040px,100%)}
+.pir-review-form,.close-review{display:grid;gap:12px}.pir-review-note{margin:0;font-size:12px}
+.pir-review-columns{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
+.pir-review-fields{display:grid;gap:12px;min-width:0}.pir-review-fields>label,.pir-review-fields fieldset>label{display:grid}.pir-review-fields .segmented{justify-self:start}.pir-review-fields .segmented label{display:flex}.pir-review-fields small{font-size:11px;color:var(--muted)}.pir-review-fields textarea{width:100%;resize:vertical}
+.pir-review-fields fieldset{display:grid;gap:8px}.pir-review-fields legend{font-size:12px;font-weight:600;margin-bottom:6px;color:var(--text)}
+.pir-review-preview{display:grid;gap:6px;min-width:0;position:sticky;top:0}.pir-review-preview h3,.close-review h3{margin:0;font-size:14px;color:var(--heading)}
+.pir-review-preview pre{margin:0;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:min(460px,55vh);overflow:auto}
+.close-review{border-top:1px solid var(--line);padding-top:12px}
+@media(max-width:760px){.pir-review-columns{grid-template-columns:1fr}.pir-review-preview{position:static}}
+/* PIR-19…PIR-23: the PI Review form setup — the summary table and the editor (the shared column-list editor, OND-05, beside the comment preview). */
+.pir-setup-table td small{display:block;font-size:11px}.pir-setup-table code{font-size:12px;white-space:normal}
+.modal:has(.pir-setup-editor){width:min(1180px,100%)}
+.pir-setup-editor{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:16px;align-items:start}
+.pir-setup-list{display:grid;gap:10px;min-width:0}.pir-setup-list h3{margin:0;font-size:14px;color:var(--heading)}
+.pir-setup-extra{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:10px;align-items:start}.pir-setup-extra label{display:grid}.pir-setup-extra small{font-size:11px;color:var(--muted)}
+@media(max-width:760px){.pir-setup-editor,.pir-setup-extra{grid-template-columns:1fr}}

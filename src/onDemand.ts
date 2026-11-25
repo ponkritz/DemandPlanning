@@ -465,19 +465,20 @@ export const renamePage = (page: OnDemandPage, name: string, description: string
 export interface ColumnDraft { id: string; name: string; type: OnDemandType; required: boolean; options: { label: string; was?: string }[]; description?: string; currency?: string; isNew?: boolean }
 export const columnDrafts = (columns: OnDemandColumn[]): ColumnDraft[] => columns.map((column) => ({ id: column.id, name: column.name, type: column.type, required: column.required, options: column.options.map((label) => ({ label, was: label })), description: column.description ?? '', ...(column.type === 'currency' ? { currency: column.currency ?? defaultCurrency } : {}) }))
 const cleanDescription = (text: string | undefined) => (text ?? '').trim().replace(/\s+/g, ' ').slice(0, maxDescription)
-export function columnsError(drafts: ColumnDraft[]): string {
-  if (drafts.length > maxColumns) return `At most ${maxColumns} columns.`
+// PIR-22: noun — "column" (the On-Demand pages) or "field" (the PI Review form setup, which shares this check).
+export function columnsError(drafts: ColumnDraft[], noun: 'column' | 'field' = 'column'): string {
+  if (drafts.length > maxColumns) return `At most ${maxColumns} ${noun}s.`
   const names = drafts.map((draft) => cleanName(draft.name).toLowerCase())
-  if (names.some((name) => !name)) return 'Every column needs a name.'
+  if (names.some((name) => !name)) return `Every ${noun} needs a name.`
   const twice = names.find((name, index) => names.indexOf(name) !== index)
-  if (twice) return `There are two columns named “${drafts[names.indexOf(twice)].name.trim()}”.`
+  if (twice) return `There are two ${noun}s named “${drafts[names.indexOf(twice)].name.trim()}”.`
   const money = drafts.find((draft) => draft.type === 'currency' && !currencyPattern.test((draft.currency ?? defaultCurrency).trim().toUpperCase()))
-  if (money) return `“${money.name.trim()}” is a Currency column: its default currency is a 3-letter code such as EUR or USD.`
+  if (money) return `“${money.name.trim()}” is a Currency ${noun}: its default currency is a 3-letter code such as EUR or USD.`
   const long = drafts.find((draft) => (draft.description ?? '').trim().length > maxDescription)
   if (long) return `The description of “${long.name.trim()}” is longer than ${maxDescription} characters.`
   for (const draft of drafts.filter((entry) => hasOptions(entry.type))) {
     const labels = draft.options.map((option) => cleanName(option.label).toLowerCase())
-    if (!labels.length) return `“${draft.name.trim()}” is a ${typeLabel(draft.type)} column: add at least one option.`
+    if (!labels.length) return `“${draft.name.trim()}” is a ${typeLabel(draft.type)} ${noun}: add at least one option.`
     if (labels.some((label) => !label)) return `“${draft.name.trim()}” has an empty option: type it or remove it.`
     const again = labels.find((label, index) => labels.indexOf(label) !== index)
     if (again) return `“${draft.name.trim()}” has the option “${draft.options[labels.indexOf(again)].label.trim()}” twice.`

@@ -1,6 +1,8 @@
 // A small Excel (.xlsx) reader and writer, without a library: an .xlsx file is a zip of XML parts. Reading takes every
 // sheet's cells as text — shared and inline strings, numbers, booleans, and dates (cells whose number format is a date
-// become YYYY-MM-DD, with the time when it has one). Writing makes a plain workbook of text cells, one sheet per table.
+// become YYYY-MM-DD, with the time when it has one). Writing makes a plain workbook of text, number and date cells, one
+// sheet per table; a sheet may also be hidden, keep its header in view and carry data validations (drop-down lists, date,
+// number and text-length checks, input messages) — the bulk-upload template of the On-Demand pages (OND-103, OND-104).
 // Also reads CSV (comma, semicolon or tab separated). Old binary .xls files are not supported.
 
 export interface WorkbookSheet { name: string; rows: string[][] }
@@ -212,7 +214,7 @@ export function readCsv(text: string): string[][] {
 }
 
 // ---- writing ----
-const columnLetter = (index: number) => { let name = ''; for (let n = index + 1; n > 0; n = Math.floor((n - 1) / 26)) name = String.fromCharCode(65 + ((n - 1) % 26)) + name; return name }
+export const columnLetter = (index: number) => { let name = ''; for (let n = index + 1; n > 0; n = Math.floor((n - 1) / 26)) name = String.fromCharCode(65 + ((n - 1) % 26)) + name; return name }
 export function sheetName(name: string, used: Set<string>) {
   const base = (name.replace(/[[\]:*?/\\]/g, ' ').trim() || 'Sheet').slice(0, 31)
   let candidate = base, n = 2
@@ -223,26 +225,88 @@ export function sheetName(name: string, used: Set<string>) {
 // A cell of a written sheet (UI-11): text, a number, or a date — a date is written as a real Excel date-time (a serial
 // number with a date format), from the viewer's wall-clock time, so Excel can show it as a long date and time.
 export type XlsxCell = string | number | { date: Date; time?: boolean } | null | undefined
-export interface XlsxSheet { name: string; rows: XlsxCell[][] }
+// OND-103…OND-105: a sheet may be hidden (state="hidden", e.g. the lists of a template's dropdowns), keep its first row in
+// view (freeze), give its columns widths (in characters), mark header cells ('required': bold on a light fill, 'muted':
+// bold grey, for a column not to edit) and carry data validations (<dataValidations>, ECMA-376 Part 1 §18.3.1.32).
+export interface XlsxValidation {
+  // The cells, e.g. "C2:C2001"; several ranges separated by a space.
+  sqref: string
+  // list: a drop-down — items (written inline, "A,B") or source (a range such as 'Lists'!$A$2:$A$9); date / decimal /
+  // textLength: a value between (or up to) the bounds; none: only the input message (prompt).
+  type: 'list' | 'date' | 'decimal' | 'textLength' | 'none'
+  items?: string[]; source?: string
+  operator?: 'between' | 'lessThanOrEqual'
+  formula1?: string | number; formula2?: string | number
+  // false: any value is accepted (a list then only offers its items).
+  strict?: boolean
+  promptTitle?: string; prompt?: string; errorTitle?: string; error?: string
+}
+export interface XlsxSheet { name: string; rows: XlsxCell[][]; hidden?: boolean; freeze?: boolean; widths?: number[]; headerMarks?: ('required' | 'muted' | '')[]; validations?: XlsxValidation[] }
+// The longest list source Excel takes in a data validation (its formula1), in characters.
+export const maxListFormula = 255
+// An inline list for a data validation: the items between double quotes, separated by commas, a quote inside an item
+// doubled. Null when it cannot be inline — an item holds a comma (Excel would split it) or a line break, the list is
+// empty, or the formula is longer than Excel's 255 characters: the list then goes on a (hidden) sheet as a range.
+export function inlineList(items: string[]): string | null {
+  if (!items.length || items.some((item) => item.includes(',') || /[\r\n]/.test(item))) return null
+  const formula = `"${items.map((item) => item.replaceAll('"', '""')).join(',')}"`
+  return formula.length > maxListFormula ? null : formula
+}
+// A sheet name as a formula writes it: always quoted, a quote inside doubled ('It''s'!$A$1).
+export const sheetRef = (name: string) => `'${name.replaceAll("'", "''")}'`
 export const excelSerial = (date: Date) => (Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), date.getHours(), date.getMinutes(), date.getSeconds()) - Date.UTC(1899, 11, 30)) / 86_400_000
 const dateTimeFormats: Record<string, string> = { 'yyyy-mm-dd hh:mm': 'yyyy-mm-dd hh:mm', 'dd-mmm-yyyy hh:mm': 'dd-mmm-yyyy hh:mm', 'dd/mm/yyyy hh:mm': 'dd/mm/yyyy hh:mm', 'mm/dd/yyyy hh:mm': 'mm/dd/yyyy hh:mm' }
+// One <dataValidation> (OND-104): its type and operator, allowBlank, the input message (prompt, at most 255 characters,
+// its title at most 32), the error message when the rule is strict, the cells, then formula1 / formula2. All text is
+// escaped for XML; a list without items (and no range) is left out.
+const cut = (text: string | undefined, max: number) => (text ?? '').slice(0, max)
+function validationXml(rule: XlsxValidation) {
+  const list = rule.type === 'list' ? rule.source ?? inlineList(rule.items ?? []) : null
+  if (rule.type === 'list' && !list) return ''
+  const strict = rule.strict !== false && rule.type !== 'none'
+  const attrs = [
+    rule.type === 'none' ? '' : `type="${rule.type}"`,
+    rule.type !== 'list' && rule.type !== 'none' && rule.operator && rule.operator !== 'between' ? `operator="${rule.operator}"` : '',
+    'allowBlank="1"',
+    rule.prompt ? 'showInputMessage="1"' : '',
+    strict ? 'showErrorMessage="1"' : '',
+    rule.errorTitle && strict ? `errorTitle="${escapeXml(cut(rule.errorTitle, 32))}"` : '',
+    rule.error && strict ? `error="${escapeXml(cut(rule.error, 255))}"` : '',
+    rule.promptTitle && rule.prompt ? `promptTitle="${escapeXml(cut(rule.promptTitle, 32))}"` : '',
+    rule.prompt ? `prompt="${escapeXml(cut(rule.prompt, 255))}"` : '',
+    `sqref="${escapeXml(rule.sqref)}"`,
+  ].filter(Boolean).join(' ')
+  const formula = (value: string | number | undefined) => value == null ? '' : escapeXml(String(value))
+  const body = rule.type === 'list' ? `<formula1>${escapeXml(list!)}</formula1>` : rule.type === 'none' ? '' : `<formula1>${formula(rule.formula1)}</formula1>${rule.formula2 != null && (rule.operator ?? 'between') === 'between' ? `<formula2>${formula(rule.formula2)}</formula2>` : ''}`
+  return body ? `<dataValidation ${attrs}>${body}</dataValidation>` : `<dataValidation ${attrs}/>`
+}
 export function writeXlsx(sheets: (WorkbookSheet | XlsxSheet)[], dateFormat = 'yyyy-mm-dd hh:mm'): Uint8Array {
   const dateTime = dateTimeFormats[dateFormat] ?? dateTimeFormats['yyyy-mm-dd hh:mm'], dateOnly = dateTime.replace(/\s*hh:mm$/, '')
-  const cellXml = (value: XlsxCell, ref: string, header: boolean) => {
+  // Styles: 1 bold (a header), 4 a required header (bold on a light fill), 5 a column not to edit (bold grey).
+  const cellXml = (value: XlsxCell, ref: string, header: boolean, mark: '' | 'required' | 'muted' = '') => {
     if (value === '' || value == null) return ''
-    if (typeof value === 'number') return Number.isFinite(value) ? `<c r="${ref}"${header ? ' s="1"' : ''}><v>${value}</v></c>` : ''
+    const style = header ? ` s="${mark === 'required' ? 4 : mark === 'muted' ? 5 : 1}"` : ''
+    if (typeof value === 'number') return Number.isFinite(value) ? `<c r="${ref}"${style}><v>${value}</v></c>` : ''
     if (typeof value === 'object') return Number.isNaN(value.date.getTime()) ? '' : `<c r="${ref}" s="${value.time === false ? 3 : 2}"><v>${excelSerial(value.date)}</v></c>`
-    return `<c r="${ref}" t="inlineStr"${header ? ' s="1"' : ''}><is><t xml:space="preserve">${escapeXml(value)}</t></is></c>`
+    return `<c r="${ref}" t="inlineStr"${style}><is><t xml:space="preserve">${escapeXml(value)}</t></is></c>`
   }
   const used = new Set<string>()
   const named = (sheets.length ? sheets : [{ name: 'Sheet1', rows: [] }]).map((sheet) => ({ ...sheet, name: sheetName(sheet.name, used) }))
-  const sheetXml = (rows: XlsxCell[][]) => `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${rows.map((row, r) => `<row r="${r + 1}">${row.map((value, c) => cellXml(value, `${columnLetter(c)}${r + 1}`, r === 0)).join('')}</row>`).join('')}</sheetData></worksheet>`
+  const sheetXml = (sheet: XlsxSheet | WorkbookSheet) => {
+    const { rows } = sheet, extra = sheet as XlsxSheet
+    // The parts in the order the schema asks for: sheetViews, cols, sheetData, dataValidations.
+    const views = extra.freeze ? '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A2" sqref="A2"/></sheetView></sheetViews>' : ''
+    const cols = extra.widths?.length ? `<cols>${extra.widths.map((width, c) => `<col min="${c + 1}" max="${c + 1}" width="${Math.max(4, Math.min(120, Math.round(width)))}" customWidth="1"/>`).join('')}</cols>` : ''
+    const rules = (extra.validations ?? []).map(validationXml).filter(Boolean)
+    const validations = rules.length ? `<dataValidations count="${rules.length}">${rules.join('')}</dataValidations>` : ''
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${views}${cols}<sheetData>${rows.map((row, r) => `<row r="${r + 1}">${row.map((value, c) => cellXml(value, `${columnLetter(c)}${r + 1}`, r === 0, r === 0 ? extra.headerMarks?.[c] ?? '' : '')).join('')}</row>`).join('')}</sheetData>${validations}</worksheet>`
+  }
   return zip([
     ['[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${named.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')}</Types>`],
     ['_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`],
-    ['xl/workbook.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${named.map((sheet, i) => `<sheet name="${escapeXml(sheet.name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('')}</sheets></workbook>`],
+    ['xl/workbook.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${named.map((sheet, i) => `<sheet name="${escapeXml(sheet.name)}" sheetId="${i + 1}"${(sheet as XlsxSheet).hidden ? ' state="hidden"' : ''} r:id="rId${i + 1}"/>`).join('')}</sheets></workbook>`],
     ['xl/_rels/workbook.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${named.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('')}<Relationship Id="rId${named.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`],
-    ['xl/styles.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="2"><numFmt numFmtId="164" formatCode="${escapeXml(dateTime)}"/><numFmt numFmtId="165" formatCode="${escapeXml(dateOnly)}"/></numFmts><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs></styleSheet>`],
-    ...named.map((sheet, i): [string, string] => [`xl/worksheets/sheet${i + 1}.xml`, sheetXml(sheet.rows)]),
+    ['xl/styles.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="2"><numFmt numFmtId="164" formatCode="${escapeXml(dateTime)}"/><numFmt numFmtId="165" formatCode="${escapeXml(dateOnly)}"/></numFmts><fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FF595959"/><name val="Calibri"/></font></fonts><fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFF2CC"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE7E6E6"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="6"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/><xf numFmtId="0" fontId="2" fillId="3" borderId="0" xfId="0" applyFont="1" applyFill="1"/></cellXfs></styleSheet>`],
+    ...named.map((sheet, i): [string, string] => [`xl/worksheets/sheet${i + 1}.xml`, sheetXml(sheet)]),
   ])
 }

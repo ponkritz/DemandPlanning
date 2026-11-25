@@ -48,6 +48,9 @@ export interface AzureRequest extends AzureConfig {
   rev?: number
   // add-comment: the comment as plain text.
   comment?: string
+  // add-comment, PIR-13 (CON-113): a PI Review post — the reviewed Feature's Assigned To email ('' when not known). It
+  // needs "PI Review: post the review of a Feature", or "Add a comment" when the writer is that assignee.
+  reviewOf?: string
   // comments (DSK-11, PIR-05): the next page of the Discussion, as Azure DevOps returned it (at most 2,048 characters).
   continuationToken?: string
 }
@@ -77,6 +80,9 @@ export const validHours = (value: number) => Number.isFinite(value) && value >= 
 export const isAssignee = (value: unknown): value is string => typeof value === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
 
 const htmlText = (value: string) => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('\n', '<br>')
+// BKL-20, PIR-14: what a comment is sent as — its text with & < > escaped and line breaks as <br>; no markup is ever
+// taken from the user (the desktop proxy does the same).
+export const commentHtml = htmlText
 
 export function featurePatch(config: AzureConfig, feature: FeatureInput & { areaPath: string; adhoc?: boolean } & StoryFields) {
   const patch: { op: string; path: string; value: unknown }[] = [
@@ -139,7 +145,7 @@ async function requestComments(request: AzureRequest) {
   } catch { throw new Error(adding ? `The comment on #${request.workItemId} could not be confirmed. Check the Discussion in Azure DevOps before retrying.` : 'Azure DevOps could not be reached. Check your network/VPN.') }
   if (response.status === 401) throw new Error('The PAT was rejected or has expired. Check your PAT.')
   if (response.status === 403) throw new Error(`Access denied. Check project access and PAT Work Items (${adding ? 'Read & Write' : 'Read'}) scope.`)
-  if (response.status === 429 && !adding) throw new Error(rateLimitMessage(response.headers.get('Retry-After')))
+  if (response.status === 429) throw new Error(`${rateLimitMessage(response.headers.get('Retry-After'))}${adding ? ' The comment was not added: post it again later.' : ''}`)
   if (!response.ok) { const detail = await response.json().catch(() => ({})) as { message?: string }; throw new Error(`Azure DevOps ${adding ? 'did not add the comment' : 'did not return the Discussion'} (${response.status})${detail.message ? `: ${detail.message.replaceAll(request.pat.trim(), '[redacted]').slice(0, 600)}` : '.'}`) }
   if (!(response.headers.get('content-type') ?? '').includes('application/json')) throw new Error('Azure DevOps returned a sign-in page. Check the PAT and organization access.')
   return response.json()
@@ -166,11 +172,19 @@ export const isApiVersionError = (text: string) => /api[- ]?version|version of t
 // CON-101 (fail closed): nothing is allowed until the app sets the guard; refused tells why (no roles file loaded).
 let writesAllowed: (permission: AzureWritePermission) => boolean = () => false
 let refusedBecause = 'The access roles are not loaded yet, so the app is read-only. Nothing was changed.'
-export function guardAzureWrites(check: (permission: AzureWritePermission) => boolean, refused = 'Your role does not allow this change in Azure DevOps. An Admin can change this in Admin → People & roles → Role rights.') { writesAllowed = check; refusedBecause = refused }
+// CON-113: the writer's work email (the Time Writing connection's), for a PI Review post on their own Feature.
+let writerEmail = ''
+export function guardAzureWrites(check: (permission: AzureWritePermission) => boolean, refused = 'Your role does not allow this change in Azure DevOps. An Admin can change this in Admin → People & roles → Role rights.', email = '') { writesAllowed = check; refusedBecause = refused; writerEmail = email.trim().toLowerCase() }
+// CON-113, PIR-13: a PI Review post is allowed with "PI Review: post the review of a Feature" (the leads), or with "Add a
+// comment" for the Feature's own assignee (the writer's work email is the Feature's Assigned To email).
+export function reviewPostAllowed(reviewOf: string, allowed: (permission: AzureWritePermission) => boolean = writesAllowed, email = writerEmail) {
+  const assignee = reviewOf.trim().toLowerCase()
+  return allowed('pireview.post') || (allowed('work.comment') && Boolean(assignee) && assignee === email.trim().toLowerCase())
+}
 // OI-10: with the synthetic sample loaded nothing is written to Azure DevOps, from any page (set by the workspace).
 let sampleLoaded = () => false
 export function guardSampleWrites(isSample: () => boolean) { sampleLoaded = isSample }
-export type AzureWritePermission = 'azure.write' | 'work.edit' | 'work.state' | 'work.move' | 'work.hours' | 'work.comment'
+export type AzureWritePermission = 'azure.write' | 'work.edit' | 'work.state' | 'work.move' | 'work.hours' | 'work.comment' | 'pireview.post'
 export function writePermissions(request: Pick<AzureRequest, 'operation' | 'state' | 'iterationPath'>): AzureWritePermission[] {
   switch (request.operation) {
     case 'create-feature': case 'create-child': return ['azure.write']
@@ -191,7 +205,8 @@ export function assertWritableBase(config: Pick<AzureConfig, 'organization' | 'b
 export async function requestAzure(request: AzureRequest): Promise<unknown> {
   if (changesAzure(request.operation)) assertNotViewingAs()
   if (changesAzure(request.operation) && sampleLoaded()) throw new Error('Synthetic sample data is loaded: nothing is written to Azure DevOps. Fetch your data first.')
-  if (changesAzure(request.operation) && !writePermissions(request).every((permission) => writesAllowed(permission))) throw new Error(refusedBecause)
+  if (request.reviewOf != null && (request.operation !== 'add-comment' || typeof request.reviewOf !== 'string')) throw new Error('Invalid PI Review post.')
+  if (changesAzure(request.operation) && !(request.operation === 'add-comment' && request.reviewOf != null ? reviewPostAllowed(request.reviewOf) : writePermissions(request).every((permission) => writesAllowed(permission)))) throw new Error(request.reviewOf != null && writesAllowed('work.comment') ? 'Only the Feature’s assignee or a lead with “PI Review: post the review of a Feature” can post its review. Nothing was posted.' : refusedBecause)
   assertWritableBase(request, request.operation)
   if ((request.operation === 'create-feature' || request.operation === 'create-child') && !isAssignee(request.feature?.assignedTo)) throw new Error('A new work item must be assigned to someone (an email). Nothing was created.')
   const storyProblem = storyFieldsProblem(request.feature, request.operation === 'create-child' && request.workItemType === 'User Story')

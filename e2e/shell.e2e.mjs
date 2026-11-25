@@ -340,7 +340,7 @@ test('TC-GIT-20: a data repository the token cannot read (404 for everything) â€
   // connection with its server's PAT (synced from the earlier repository) cached from before.
   const streams = JSON.stringify({ schema: 1, kind: 'custom-streams', streams: [{ name: 'Lab Systems', rule: 'title', fuzzy: false }] })
   const connection = { id: 'lab', url: 'https://dev.azure.com/example-org/Lab', reason: 'Lab Systems', viewName: 'Lab Systems', role: 'backlog-view', query: 'SELECT [System.Id] FROM WorkItems', showInMenu: true, token: '' }
-  const { page, context, errors } = await openPage(app, { init: ({ streams, connection }) => {
+  const { page: first, context, errors } = await openPage(app, { init: ({ streams, connection }) => {
     if (localStorage.getItem('demand-planning-git-storage-v1')) return
     localStorage.setItem('demand-planning-git-storage-v1', JSON.stringify({ owner: 'example-org', repo: 'new-storage', branch: 'main', path: 'planning-data.json' }))
     localStorage.setItem('demand-planning-git-token-v1', 'test-token')
@@ -349,14 +349,21 @@ test('TC-GIT-20: a data repository the token cannot read (404 for everything) â€
     localStorage.setItem('demand-planning-server-pats-v1', JSON.stringify({ 'https://dev.azure.com/example-org': 'synthetic-pat' }))
     localStorage.setItem('demand-planning-views-git-baseline-v1', JSON.stringify({ lab: 'synced from the earlier repository' }))
   }, initArg: { streams, connection } })
-  const guide = page.getByRole('dialog').filter({ hasText: 'Could not fetch from Azure DevOps' })
-  await page.addLocatorHandler(guide, async () => { await guide.getByRole('button', { name: 'Close', exact: true }).last().click() })
   await context.route('https://dev.azure.com/**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{"value":[],"workItems":[]}' }))
   // GitHub answers 404 for everything in the repository, the branch included: the token cannot see it.
   const asked = []
   await context.route('https://api.github.com/**', (route) => { asked.push(new URL(route.request().url()).pathname); return route.fulfill({ status: 404, contentType: 'application/json', body: '{"message":"Not Found"}' }) })
+  // A new page, not a reload: the first page is closed first, so none of its start-up reads still in flight is
+  // routed here and counted as a probe of this page.
+  await first.close()
+  const page = await context.newPage()
+  page.on('pageerror', (error) => errors.push(error.message))
+  const slowdown = Number(process.env.E2E_CPU_SLOWDOWN ?? 1)
+  if (slowdown > 1) await (await context.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: slowdown })
+  const guide = page.getByRole('dialog').filter({ hasText: 'Could not fetch from Azure DevOps' })
+  await page.addLocatorHandler(guide, async () => { await guide.getByRole('button', { name: 'Close', exact: true }).last().click() })
   const viewsRead = page.waitForEvent('requestfinished', (request) => request.url().includes('/new-storage/contents/azure-views'))
-  await page.reload()
+  await page.goto(app.url)
   // The read-only notice says the repository cannot be read, not "no access roles yet", and offers no Set up roles.
   const notice = page.locator('.notice.access-read-only')
   await notice.filter({ hasText: 'the data repository cannot be read' }).waitFor()
@@ -831,9 +838,9 @@ test('TC-SET-06: Admin lists the shared setup pages, My settings opens from your
   assert.equal(await text(page.locator('header.topbar h1')), 'My settings')
   assert.deepEqual((await sections.getByRole('tab').allInnerTexts()).map((label) => label.trim()), ['Your work email', 'Servers and PATs', 'My views', 'My naming patterns', 'My page usage'])
   assert.match(await text(page.locator('.scope-line')), /Only you Â· This computer/)
-  // EPS-08: Epic setup and Feature setup are one page, starting from the list of all Epic setups.
+  // EPS-08: Epic setup and Feature setup are one page, starting from the list of all Epic setups; PIR-19: the PI Review form setup is its last section.
   await navigate(page, 'Epic & Feature setup')
-  assert.deepEqual((await sections.getByRole('tab').allInnerTexts()).map((label) => label.trim()), ['Setup per Epic', 'Value lists', 'User Story templates'])
+  assert.deepEqual((await sections.getByRole('tab').allInnerTexts()).map((label) => label.trim()), ['Setup per Epic', 'Value lists', 'User Story templates', 'PI Review form'])
   assert.deepEqual(errors, [])
   await context.close()
 })

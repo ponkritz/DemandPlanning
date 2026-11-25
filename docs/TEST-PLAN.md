@@ -395,7 +395,7 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-CON-25 Configurable Time Writing story** — Req CON-57 — L1 `azure-devops.test.mjs` (a setup file without it keeps “{feature} - Time Writing”; a configured title, Area Path, Iteration Path and assignee are used and the month Task goes under that story). **UAT**
 
-**TC-NAV-17 Menu groups and collapsing** — Req NAV-17, NAV-18, OV-10 — L1 `format.test.mjs` (Data Insights holds Overview, Pulse Check, PI Review; My Work order My Tasks [Board], Monthly Time Writing, Bulk actions); browser check on sample data: the menu shows the five headings; Pulse Check shows the month's releases (Overview keeps This month and Trends); collapsing My Work and Release Details hides them and stays so after a reload; at 900 px width every page is still reachable. **UAT**
+**TC-NAV-17 Menu groups and collapsing** — Req NAV-17, NAV-18, OV-10 — L1 `format.test.mjs` (Data Insights holds Overview, Pulse Check, PI Review; My Work order Time Writing, My Tasks [Board], Sprint check, My PI Review); browser check on sample data: the menu shows the five headings; Pulse Check shows the month's releases (Overview keeps This month and Trends); collapsing My Work and Release Details hides them and stays so after a reload; at 900 px width every page is still reachable. **UAT**
 
 **TC-CON-23 Feature setup per Epic** — Req CON-52, CON-53 — L1 `azure-devops.test.mjs` (placeholders, plain text, unknown braces kept, missing values; the file is parsed and written clean; a Feature from its Epic setup gets the chosen stories, the Time Writing story and the Task with title, Original Estimate, Area Path, Iteration Path and assignee; completing again creates nothing; a placeholder the title cannot fill stops it); browser check with GitHub and Azure DevOps mocked: Settings → Feature setup, add “US 1 ({service})” and “US 4”, Original Estimate 6 → preview shows “US 1 (Service)”; Save to Git writes feature-setup.json; ＋ Feature under that Epic with “CP | Care Pathways | v3.1” lists “US 1 (Care Pathways)” and “US 4” ticked, the Task “October 2026 | CP | Care Pathways | v3.1” with 6 h, and no PU / Full Release choice. **UAT**
 
@@ -1011,6 +1011,10 @@ Cases marked **UAT** are also run in acceptance testing.
 **TC-QV-51 Selected month / All months toggle on the Release pages** — Req QV-71 — E2E `documents-and-data.e2e.mjs` ("TC-QV-43: every Release page has the source bar, counts, Releases | Source data tabs (Tool Validations: Expiry list | Master list | Azure | Setup) and the common columns in order": the bar's Show is a toggle Selected month | All months, Selected month chosen by default and its tooltip naming the header month; All months shows every month) ; E2E `custom-streams.e2e.mjs` (the custom stream's bar has the toggle) ; browser check: on DP, IOCC, Content and S&S IT the month is not repeated in the bar; switching to All months and back changes the Releases table.
 
 **TC-QV-52 CP: Selected month / All months** — Req QV-72 — L1 `cp-reporting.test.mjs` ("QV-72: CP All months — every release container with a QA/QE signature in any month, completion review only per month (TC-QV-52)") ; browser check: on CP choose All months — the Releases table lists every signed release container of every month, the counts stay the header month's; Selected month returns to the month's releases.
+
+**TC-CON-68 Remove a shared view for everyone, the next start of every browser drops it, Restore brings it back** — Req CON-109, CON-110, CON-111, CON-112, GIT-26, SET-17 — **UAT** — L1 `views-remove.test.mjs` ("CON-111: a removal marker is applied once — the shared view goes (also when changed here), My views and PATs stay (TC-CON-68)", "CON-110: Git wins for a removed view — not added from Git, not merged back by a computer that still has it (TC-CON-68)", "GIT-26: the first sync from another repository removes nothing for a removal marker there and marks it as seen (TC-CON-68)", "CON-109, CON-110, CON-112: Remove and Delete for everyone in Git — backup, marker, setup without it, data files deleted; Restore clears the marker (TC-CON-68, TC-CON-69)", "TC-CON-68: shared view removal refuses a repository whose privacy cannot be verified"); E2E `remove-views-for-everyone.e2e.mjs` ("TC-CON-68: the Tool Owner removes a shared view for everyone — the next start of another browser drops it with a notice, keeps My view and the PAT; Restore brings it back"); UAT with two people on two computers on the same data repository: the second person has the shared views, one view of their own (My views) and a server PAT. The Tool Owner opens Admin → Data & sharing → Other views, ⋯ of a shared view → Remove for everyone… — the pop-up names the view and says it affects everyone who uses the shared setup (the number of people is not known) and that My views and PATs are kept; Remove for everyone. The second person (whose ⋯ items are disabled with "Only the Tool Owner …") restarts the app: the notice "The Tool Owner removed 1 shared view: …" shows once, the view is gone from Other views and the menu, their own view and PAT are still there; a further restart shows no notice. The Tool Owner restores the view in Admin → Streams → Removed connections (listed first, "Removed for everyone by …"); after the second person's next start it is back.
+
+**TC-CON-69 Delete a shared view for everyone with its data in Git** — Req CON-110, CON-111 — L1 `views-remove.test.mjs` ("CON-109, CON-110, CON-112: Remove and Delete for everyone in Git — backup, marker, setup without it, data files deleted; Restore clears the marker (TC-CON-68, TC-CON-69)"); E2E `remove-views-for-everyone.e2e.mjs` ("TC-CON-69: Delete for everyone lists and deletes the view’s data file in Git; a browser that still has the view loses it"); browser check (Tool Owner, Git storage that can save): ⋯ → Delete for everyone… on an on-prem view with data in Git lists `azure-data/<id>.json`; after Delete for everyone the file is gone from the repository (its history stays in GitHub), `azure-views-removed.json` records it with mode "delete", and another browser that still had the view loses it at its next start and does not get it back from the on-prem data in Git.
 
 **TC-CON-67 Upload latest export… on a Windchill export page** — Req CON-108 — E2E `documents-and-data.e2e.mjs` ("TC-QV-44: the result of an action on a Release page — a Windchill import, a file that is not an export — is listed in Background jobs, not as a notice on the page": ⋯ → Upload latest export… opens the file picker; the export is imported for the same page, listed in Background jobs) ; browser check: on an existing export page choose ⋯ → Upload latest export… and a newer CSV — the counts and Releases follow the new file, the page keeps its name.
 
@@ -1901,6 +1905,14 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-OND-98 Replace a value on an On-Demand Table page: preview, locked and hidden rows, History, Background jobs** — Req OND-100, OND-101, OND-102, OND-21 — **UAT** — L1 `replace-values.test.mjs` ("Replace: a cell matches as a whole, ignoring case and the spaces around it (TC-QEM-10, TC-OND-98)", "OND-100, OND-101: the On-Demand replace — locked rows skipped and counted, hidden rows left, a History entry per changed row (TC-OND-98)", "OND-100: Multi-select values are replaced one by one; Dropdown and Multi-select take only an option; Number, Currency and Date are not offered (TC-OND-98)", "OND-101: on a page of row files the replace writes every changed row file in one commit, applied to the rows as they are in Git (TC-OND-98)"); E2E `replace-values.e2e.mjs` ("TC-OND-98: on an On-Demand Table page, Replace… in the ⋯ menu replaces the QE in every row — preview, Replace, saved to Git with a History entry per row"); browser check (also on a 4x slower CPU): on a Table page with a QE column, ⋯ → **Replace…**, Column QE, Find "Alex Example (2 rows)", Replace with "Sam Example": "2 rows will change" with their IDs; **Replace** — Background jobs "Replace · {page} · QE": "Replaced “Alex Example” with “Sam Example” in QE: 2 rows"; each row's History shows the entry with the comment; a hidden row holding Alex Example is unchanged. On a page of row files, a second person editing one of the rows: the preview says "1 matching row is being edited by someone else and is skipped" and that row stays. In Sample, with View as, a read-only token or without "Edit On-Demand data", Replace… is greyed out with the reason as its tooltip; a Dropdown replaced with a value outside its options is refused with the reason.
 
+**TC-OND-99 Download the Excel template with data validation** — Req OND-103, OND-104 — **UAT** — L1 `bulk-upload.test.mjs` ("OND-104: writeXlsx writes data validations — inline list, range list, date, decimal, text length, input messages — in the schema order (TC-OND-99)", "OND-104: an inline list doubles quotes; an item with a comma, a line break or a list over 255 characters needs the range form (TC-OND-99)", "OND-103, OND-104: the template — one sheet named after the page, Row ID first, the columns in order, a validation per column, long lists on a hidden Lists sheet (TC-OND-99)"); E2E `bulk-upload.e2e.mjs` ("TC-OND-99: ⋯ → Download Excel template… gives the page’s columns with the rows shown, their Row IDs and data validation"); browser check (also on a 4x slower CPU): on a Table page with a Dropdown, a long Dropdown (30 options), a Multi-select, a Number and a Date column, ⋯ → **Download Excel template…**: "With the 3 rows shown" is preselected; **Download template** gives "{page} - upload template.xlsx"; opened in Excel (or LibreOffice Calc): one visible sheet named after the page, Row ID first (grey), the required column highlighted, the header kept in view; a Dropdown cell offers its options and refuses another value; the long Dropdown offers the options of the hidden Lists sheet; a Multi-select cell offers its options and accepts "A; B"; a Date cell refuses "tomorrow", a Number cell "many"; selecting a header or cell shows its input message. In Sample the item is greyed out with the reason.
+
+**TC-OND-100 Upload a filled template: preview, Save to Git, History** — Req OND-105, OND-106, OND-21 — **UAT** — L1 `bulk-upload.test.mjs` ("OND-105: the header row is matched by name ignoring case and spaces; unknown columns ignored, duplicates and missing required ones listed (TC-OND-100)", "OND-105: each cell is checked for its column — options in their spelling, Multi-select split at ;, numbers, dates, amounts, required, length (TC-OND-100)", "OND-105, OND-106: the plan — rows with a Row ID update, rows without are added, unchanged counted, a Row ID not found is an error, locked rows skipped, hidden rows updated (TC-OND-100)", "OND-106: the save — updates and adds applied to the page as it is in Git, a History entry “Bulk upload from {file}” per row, locked and deleted rows skipped (TC-OND-100)", "OND-106: on a page of row files every added and changed row file is written in one commit, the new rows with the next IDs (TC-OND-100)", "OND-105: a CSV file is read the same way (TC-OND-100)"); E2E `bulk-upload.e2e.mjs` ("TC-OND-100: ⋯ → Upload Excel… — 2 rows added, 1 updated, 1 unchanged, 1 with an error in the preview; Save to Git saves the valid rows with a History entry each"); browser check (also on a 4x slower CPU): fill the template — change a value of one row, add two rows without a Row ID, add one row with a value outside a Dropdown's list, add a column "Comment" — and ⋯ → **Upload Excel…**: the preview shows "2 added · 1 updated · 1 unchanged · 1 with errors", "Ignored column … “Comment”", the error row first with its reason, "Only the 3 valid rows are saved to Git"; **Download error report (CSV)** lists the error row; **Save to Git** — Background jobs "Bulk upload · {page} · {file}": "2 rows added, 1 row updated; 1 row with errors not saved"; the new rows have the next IDs and each changed row's History shows "Bulk upload from {file}". A Row ID changed to one that does not exist gives "Row not found"; on a page of row files a row someone else is editing is skipped and counted, and every changed row file is in one commit; a hidden row is updated by its ID.
+
+**TC-OND-101 Formula text in an uploaded file is stored as text** — Req OND-108 — L1 `bulk-upload.test.mjs` ("OND-108: text a spreadsheet would run as a formula is stored with an apostrophe first, as every CSV export does (TC-OND-101)"); browser check: a Text cell "=HYPERLINK(“http://example.com”;“x”)" and "@SUM(A1)" uploaded — the preview says "2 text values starting with =, +, - or @ are stored with an apostrophe first"; the saved rows show the text with the apostrophe and the table's Excel and CSV exports open as text in Excel; "-12.5" stays as it is.
+
+**TC-OND-102 Upload rights and limits** — Req OND-107 — L1 `bulk-upload.test.mjs` ("OND-107: the limits — 10 MB and .xlsx / .csv only before reading, 5,000 rows read, 2,000 added or updated, a page of at most 5,000 rows (TC-OND-102)"); browser check: a file of 11 MB is refused before it is read with the reason; an .xls file is refused ("Old .xls files cannot be read…"); a template with 2,001 new rows is refused whole ("2,001 rows would be added or updated; one upload changes at most 2,000…") and Save to Git stays disabled; in Sample, with View as, a read-only token, without Git storage or without "Edit On-Demand data", **Upload Excel…** is greyed out with the reason as its tooltip.
+
 ### 6.29 Custom streams
 
 **TC-STR-01 Built-in then custom streams everywhere; the longest name wins** — Req STR-02 — L1 `custom-streams.test.mjs` ("STR-02: allStreams — the built-in streams then the custom ones; a connection goes to the stream with the longest name (TC-STR-01)"); browser check as Tool Owner with a custom stream "Labeling" mapped and fetched: it is listed in the Stream mapping (Custom), under Release Details (in A–Z order, NAV-52), on the Home tile Release Details, in Pulse Check (Releases and Supported), in the Dashboard delivery counts, in Reports → Monthly pack setup (stream ticks) and in Release naming patterns; its view is not under Other views; a custom "DP Labels" connection is not DP's
@@ -2174,9 +2186,47 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-PIR-07 The latest comment by date and time** — Req PIR-07 — L1 `pi-review.test.mjs` ("PIR-07: the latest comment is the newest by date and time, whoever wrote it; the same time: the higher ID (TC-PIR-07)": not the first in the list nor by author, UTC offsets compared as instants, the higher ID at the same time, an unreadable date as the oldest, none for an empty Discussion).
 
-**TC-PIR-08 Split a review comment by its headings** — Req PIR-08 — L1 `pi-review.test.mjs` ("PIR-08: the three headings split the comment, in any order, inline or on their own lines (TC-PIR-08)", "PIR-08: a heading word inside a sentence is not taken; no headings give an empty result (TC-PIR-08)", "PIR-08: Move to next PI — Yes / No / Partly (or Y / N) normalized with the rest after a dash; other text as written (TC-PIR-08)": all three headings inline and on lines, any order, bullets / numbers / # / bold, colon / dash / line end, singular and plural, the Move variants, missing and empty sections, a repeated heading joined, a line's leading bullet dropped; "struggles with the rig", "Learning-curve", "planned for next PI:" and "Mylearnings:" not taken; Yes / YES / no. / Partially / Y normalized, "N/A", "Not decided" and "Nothing moves" as written).
+**TC-PIR-08 Split a review comment by its headings** — Req PIR-08 — L1 `pi-review.test.mjs` ("PIR-08: the three headings split the comment, in any order, inline or on their own lines (TC-PIR-08)", "PIR-08: a heading word inside a sentence is not taken; no headings give an empty result (TC-PIR-08)", "PIR-08: Move to next PI — Yes / No / Partly (or Y / N) normalized with the rest after a dash; other text as written (TC-PIR-08)": all three headings inline and on lines, any order, bullets / numbers / # / bold, colon / dash / line end, singular and plural, the Move variants, missing and empty sections, a repeated heading joined, a line's leading bullet dropped; "struggles with the rig", "Learning-curve", "planned for next PI:" and "Mylearnings:" not taken; Yes / YES / no. / Partially / Y normalized, "N/A", "Not decided" and "Nothing moves" as written), ("PIR-08: every synonym heading is taken at a line start, with a colon, a dash and a space, or the line end (TC-PIR-08)", "PIR-08: inline forms — a colon after any heading word inside a line, a dash and a space after Struggle / Learning / Lesson (TC-PIR-08)": each synonym of the three sections with a colon, a bullet + bold + en dash, # + line end and a number + dash, synonyms of one section joined, the Move normalisation for Spill-over / Carry over; "a learning – …", "lesson: …", "Lessons learned — …" and "Blockers: … Takeaways: … Carry over: no" inside a line; "we had issues with …", "there were risks - …", "Learning-curve", "lesson-plan", "improve:", "went well:", "next PI:", "next time:" inside a line and "Mylessons:" not taken).
+
+**TC-PIR-10 Suggested from keywords when the comment has no heading** — Req PIR-11, PIR-08 — L1 `pi-review.test.mjs` ("PIR-11: without any heading, sentences with keywords are suggested for each column (TC-PIR-10)", "PIR-11: a negation before a keyword is not taken; the Move value only when it clearly follows the move phrase (TC-PIR-10)", "PIR-08, PIR-11: headings take priority over keywords; Split from is Headings, Keywords or None (TC-PIR-10)": a comment of four sentences over lines and ". ! ?" gives each column its sentences, one with keywords of two columns in both; each column's keywords alone, plurals, wildcards, case and ’; "later" and "blockchain" not taken; "No blockers", "No issues at all", "Not blocked", "It wasn’t late", "Without major delays", "no real problem" not taken, "No blocker, but … late" and "No idea why we were delayed" taken; "Carry over to next PI: yes, the docs" → Yes, "Spill over - no." → No, "… no longer needed", a value before the phrase and two Move sentences give none; a heading anywhere (even empty) wins over keywords; Split from Headings / Keywords / None; the exported `reviewKeywords` list).
+
+**TC-PIR-11 A lead sees suggested Struggles, Learnings and Move for a comment written without headings** — Req PIR-08, PIR-09, PIR-10, PIR-11 — **UAT** — E2E `pi-review.e2e.mjs` ("TC-PIR-11: a newest comment without headings has its Struggles, Learnings and Move to Next PI suggested from keywords, marked, and exported with Split from": against the mocked Azure DevOps of TC-PIR-06 with a third Feature 204 whose newest comment has no heading (an older one has) — after ↻ Read all Discussions ("3 of 3 read.") 204 shows "(suggested) We were blocked by the vendor for two Sprints.", "(suggested) Next time we book the rig at PI planning." and "(suggested) Partly — the rig test." in italics with the tooltip "Suggested from keywords, not headings: …", the negated "No issues with the docs." not taken; 201 is split by its headings, unmarked; the Move to next PI filter Partly leaves 204; the CSV export has Split from: Headings, None and Keywords; the drawer's Latest comment says "Suggested from keywords" with the three texts); UAT: on the released build a lead writes a review comment without headings ("We were blocked by … Next time we … Carry over to next PI — partly, …") on a test Feature, runs Read all Discussions and checks the "(suggested)" cells, the drawer note and Split from in an Excel export.
+
+**TC-PIR-12 The team's two review formats, any PI number** — Req PIR-12 — L1 `pi-review.test.mjs` ("PIR-12: the team's two formats — Learnings : / Struggles : and … of the Feature, the Move question with any PI number (TC-PIR-12)") ; browser check: a PI 26.3 Feature whose newest comment uses either format shows its Learnings, Struggles and Move with "· to PI 26.4".
 
 **TC-PIR-09 A lead sees each Feature's latest review comment in five columns** — Req PIR-07, PIR-08, PIR-09, PIR-10 — **UAT** — E2E `pi-review.e2e.mjs` ("TC-PIR-09: after Read all Discussions the five columns show each Feature's newest comment, split by its headings, can be filtered by Move to next PI and are exported": against the mocked Azure DevOps of TC-PIR-06 — Feature 201's newest comment written with the headings, Feature 202's newest one, listed after an older one, without — the five cells show "—" with the hint before the read; after ↻ Read all Discussions ("2 of 2 read.") 201 shows the local date-time, the whole comment on one line with " · ", "test rig late", "book the rig early · share the calendar" and "Yes — waiting for vendor", 202 only its date and "Ready for review"; the date sorts newest first then oldest first; the Move to next PI filter Yes leaves 201 and Reset filters clears it; the CSV export has the five headings, the whole comment with its line breaks and Move as shown; the drawer's Latest comment block shows the author, date and the three sections); UAT: on the released build a lead writes a review comment with the three headings on a test Feature, opens PI Review, runs Read all Discussions and checks the five columns, the drawer and an Excel export.
+
+**TC-PIR-13 The review comment: format, escaping, next PI and the round trip** — Req PIR-14, PIR-13 — L1 `pi-review-form.test.mjs` ("PIR-14: the comment in the standard format — paragraph lines kept, bullets as "- ", numbers kept, the Move question with the PI, the footer (TC-PIR-13)", "PIR-14: round trip — build → sent as HTML → commentText → splitReviewComment gives back every field; the footer lands nowhere (TC-PIR-13)", "PIR-13: the next PI after the reviewed one — the next later PI in the list, else the last number plus one (TC-PIR-13)").
+
+**TC-PIR-14 The review form's checks, defaults and prefill** — Req PIR-13, PIR-18 — L1 `pi-review-form.test.mjs` ("PIR-13: the form checks — required fields, the PI, and a line PI Review would read back differently (TC-PIR-14)", "PIR-13: the form starts from the latest review split by headings; Partly starts at No (TC-PIR-14)").
+
+**TC-PIR-15 The Review meeting and Additional Remarks headings** — Req PIR-15 — L1 `pi-review-form.test.mjs` ("PIR-15: the Review meeting and Additional Remarks headings and their short forms (TC-PIR-15)").
+
+**TC-CON-70 Who may post a PI review** — Req CON-113, CON-94, CON-101 — L1 `pi-review-form.test.mjs` ("CON-113: who may post — the assignee (with Add a comment), a lead (PI Review: post), nobody else; the page reasons (TC-CON-70)": the assignee, a lead, another Team Member, Add a comment denied, no work email, roles not loaded, View as, sample data, no PAT, on premises; the write guard refuses before anything is sent; the body sent escaped; 401, 403 and 429 name the reason; "CON-113: “PI Review: post the review of a Feature” (permissions 7) — Tool Owner, Admin and People Manager in the starting matrix and for an older file (TC-CON-70)").
+
+**TC-PIR-16 The Feature's assignee writes and posts its review** — Req PIR-13, PIR-14, PIR-15, PIR-16, PIR-01, CON-113, IF-02 — **UAT** — E2E `pi-review-form.e2e.mjs` ("TC-PIR-16: the Feature’s assignee writes its review — prefilled, previewed, posted as a new comment, and read back into the table; another Feature is disabled with the reason": a Team Member, assignee of Feature 201, against a fake dev.azure.com that records the comment POST — the Assigned to filter and the search over the columns; Write review… on Ben's Feature 202 disabled with the reason; in the drawer Write review… prefilled from the latest review (Partly → No, said so), Moves to PI 2026.5; the advice required; the Preview equals the comment built; Post → confirmation → the fake receives exactly the escaped comment; the Discussion read again shows it in the drawer's Latest comment and the table's Move to Next PI, Review mode and Additional Remarks; the Review mode filter; "Post review · #201" in Background jobs); UAT (day 4): on the released build the owner of a test Feature writes its review in PI Review, checks the preview, posts it, finds the comment in the Feature's Discussion in Azure DevOps and the new values in the table; a colleague who is not the assignee sees Write review… disabled with the reason; a correction is posted as a new review and wins.
+
+**TC-PIR-17 My PI Review: my Features and my review status** — Req PIR-17, PIR-13, PIR-24, NAV-17 — E2E `pi-review-form.e2e.mjs` ("TC-PIR-17: My PI Review lists my Features of the current PI with my review status, and Write review… posts from there": the current PI chosen; only my Features 201 and 205, Not reviewed; as a Team Member the Person control disabled with the reason line and Reset filters disabled; the review of 205 posted from the row; then Reviewed with its date, Move "No · to PI 2026.5", Offline Review, "1 of 2 reviewed"); L1 `pi-review-form.test.mjs` ("PIR-17: my latest review — the newest comment I wrote with the review headings (TC-PIR-17)").
+
+**TC-PIR-18 Closing a Feature posts its review first** — Req PIR-18, BKL-39, PIR-13 — **UAT** — E2E `pi-review-form.e2e.mjs` ("TC-PIR-18: closing a Feature asks its review — Move pre-selected No, the advice required — posts it first and closes only once it is posted": Close on my Feature 205 in My Tasks [Board] shows the PI review section with No pre-selected and Moves to PI 2026.5; without the advice nothing is sent; a failed post (500) closes nothing and offers Close without the review; again: the POST, then the PATCH to Closed, the comment as built, "Post review · #205" in Background jobs); UAT (day 4): a Feature owner closes a test Feature from My Tasks [Board], answers the review and finds the comment in its Discussion before the Feature is Closed.
+
+**TC-PIR-19 Without a setup the built-in form applies** — Req PIR-19, PIR-14 — L1 `pi-review-setup.test.mjs` ("PIR-19: without a setup the built-in form gives exactly the comment of PIR-14, and every split is the same (TC-PIR-19)": the comment, the splits of older formats, the empty form with Move = No and the file's round trip unchanged).
+
+**TC-PIR-20 The configured form is written, checked and read back; older comments keep their columns** — Req PIR-20, PIR-13, PIR-17, PIR-18 — L1 `pi-review-setup.test.mjs` ("PIR-19, PIR-20: the configured form — order, headings, an added paragraph and Dropdown, the Move default — is written and read back; older comments keep their columns (TC-PIR-20)", "PIR-20: the form checks follow the setup — a required added field, a Dropdown answer, a removed field; the prefill takes the added fields (TC-PIR-20)").
+
+**TC-PIR-21 The setup checks** — Req PIR-21, PIR-22, OND-05 — L1 `pi-review-setup.test.mjs` ("PIR-21, PIR-22: the setup checks — empty and duplicate headings, a heading colliding with another field, {PI}, the limits, the shared column checks (TC-PIR-21)": empty, duplicate and colliding headings ("Issues", "What went wrong"), a colon, {PI} missing or misplaced, Move removed or with other options, a built-in's type, one option, a default not in the options, the shared column check worded for fields and unchanged for columns, at most 15 fields, the fields through the shared editor's drafts and back).
+
+**TC-PIR-22 The strict reader, the merged save and newer data in Git** — Req PIR-19, GIT-17, GIT-18 — L1 `pi-review-setup.test.mjs` ("PIR-19: the strict reader refuses a file that is not a usable setup; the merge keeps both saves (TC-PIR-22)", "PIR-19: a newer form setup in Git is loaded quietly, except on Admin → Epic & Feature setup (TC-PIR-22)"); L1 `git-storage.test.mjs` ("TC-PIR-22: PI form setup saves only to a verified private repository").
+
+**TC-PIR-23 The Scrum Master changes the PI Review form** — Req PIR-19, PIR-20, PIR-21, PIR-22, CON-114, OND-05 — **UAT** — E2E `pi-review-form-setup.e2e.mjs` ("TC-PIR-23: the Scrum Master changes the PI Review form in the shared column editor — a colliding heading refused, saved to Git; Write review… follows it and posts the new field": against a mocked GitHub and a fake dev.azure.com — the built-in form shown; in Edit form… (the On-Demand column editor) Move to next PI locked and the built-ins' type locked, the types Long text and Dropdown (one value); a Dropdown field "Customer impact" added with three options and moved up, the Move default set to Yes; the heading "Issues" refused (already read as Struggles), nothing saved; fixed, Required, the Comment preview, Save to Git writes pi-review-form.json; My PI Review → Write review… shows the field and Yes pre-selected, asks for the required choice, previews and posts exactly the comment the setup builds); UAT (day 4): the Scrum Master adds a field, a Team Member writes a review with it and the PI Review table shows it as a column.
+
+**TC-PIR-24 Read only for everyone else; the added field as a column** — Req PIR-23, PIR-20, CON-114 — E2E `pi-review-form-setup.e2e.mjs` ("TC-PIR-24: a People Manager sees the form setup read only with the reason; PI Review reads the added field into a column of its own": Edit form… disabled with the reason line; after ↻ Read all Discussions the Customer impact column after Additional Remarks shows the answer; Form setup opens the setup); L1 `pi-review-setup.test.mjs` ("CON-114, PIR-23: who may change the form setup, and why not (TC-CON-71)": View as, roles not loaded, the permission, sample data, no Git, a read-only token, the file unusable, loading).
+
+**TC-PIR-25 The next PI from the Azure DevOps iteration dates, with the PI number as fallback** — Req PIR-25, PIR-13, PIR-18 — L1 `pi-review-form.test.mjs` ("PIR-25: the next PI is the dated PI that starts first after the reviewed PI ends — not the next number (TC-PIR-25)": PI 27.1 by its dates although PI 26.5 is the next number, the note, an unsorted tree and other letter case, a PI without a number skipped; "PIR-25: dated only by its Sprints — a PI takes the span of the dated iterations under it; its own dates win (TC-PIR-25)"; "PIR-25: overlapping dates — the earliest start after the reviewed PI’s start, said so (TC-PIR-25)": the overlapping PI 26.5 rather than PI 26.6, the overlap note, the same start by the lower number; "PIR-25: the fallback to the PI number — no iterations, no dates, the reviewed PI not in the tree, no later dated PI (TC-PIR-25)": each reason in the note, unreadable dates as none); E2E `pi-review-form.e2e.mjs` ("TC-PIR-26: a lead chooses another person and a PI in My PI Review and sees only that person’s Features; TC-PIR-25: the review form takes the next PI from the Azure DevOps dates": Moves to PI 2027.1 with "From Azure DevOps iteration dates: PI 2027.1 starts …, after PI 2026.4 ends …" for a tree listed out of order; the earlier scenarios TC-PIR-16…18 keep PI 2026.5 from the number when the next PI has no dates); browser check: the Close pop-up of a Feature (My Tasks [Board]) shows the same note under Moves to.
+
+**TC-PIR-26 My PI Review: the Person and PI filters** — Req PIR-24, PIR-17, PIR-02, CON-113 — **UAT** — E2E `pi-review-form.e2e.mjs` ("TC-PIR-26: a lead chooses another person and a PI in My PI Review and sees only that person’s Features; TC-PIR-25: the review form takes the next PI from the Azure DevOps dates": as a People Manager with no Feature of her own, the PI list of PI Review with the current PI chosen, "No Features assigned to you in PI 2026.4."; Person enabled, its list Me then the PI's assignees; Ben Okafor chosen: "Features of Ben Okafor", only Feature 202, Their review Not reviewed; Write review… on his Feature enabled; another PI: "No Features assigned to Ben Okafor in PI 2027.1."; Reset filters back to My Features and the current PI); E2E "TC-PIR-17: …" (a Team Member: Person disabled with the reason); L1 `pi-review-form.test.mjs` ("PIR-24: who may show another person — a lead with “PI Review: post the review of a Feature”; the person matched by email where known (TC-PIR-26)"); UAT (day 4): a lead opens My PI Review, chooses a team member and a PI, sees only that person's Features and their review status; a Feature owner sees Person disabled with the reason.
+
+**TC-CON-71 "PI Review: set up the review form"** — Req CON-114, CON-94, CON-101 — L1 `pi-review-setup.test.mjs` ("CON-114, PIR-23: who may change the form setup, and why not (TC-CON-71)": Scrum Master and Tool Owner in the starting matrix, not Admin; permissions 8; an older file gets it as the starting matrix does; Not set stays after saving; none without a roles file); `access.test.mjs` (an older file's Scrum Master gets it).
 
 ## 7. Requirements coverage matrix
 
@@ -2265,12 +2315,12 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CON-91 | TC-ACC-04 |
 | CON-92 | TC-ACC-04, TC-ACC-05 |
 | CON-93 | TC-CON-57 |
-| CON-94 | TC-CON-58, TC-OND-06 |
+| CON-94 | TC-CON-58, TC-OND-06, TC-CON-70, TC-CON-71 |
 | CON-95 | TC-CON-59, TC-CON-60 |
 | CON-96 | TC-CON-60 |
 | CON-97 | TC-CON-60 |
-| CON-98 | TC-CON-61 |
-| CON-99 | TC-CON-61 |
+| CON-98 | TC-CON-61, TC-CON-68 |
+| CON-99 | TC-CON-61, TC-CON-68 |
 | CON-100 | TC-CON-62 |
 | CON-101 | TC-CON-63, TC-CON-64 |
 | CON-102 | TC-CON-64 |
@@ -2369,7 +2419,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | BKL-36 | TC-BKL-25 |
 | BKL-37 | TC-BKL-26 |
 | BKL-38 | TC-BKL-27 |
-| BKL-39 | TC-BKL-28 |
+| BKL-39 | TC-BKL-28, TC-PIR-18 |
 | BKL-40 | TC-BKL-29 |
 | BKL-41 | TC-BKL-30 |
 | BKL-42 | TC-BKL-31 |
@@ -2498,7 +2548,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | GIT-23 | TC-GIT-15 |
 | GIT-24 | TC-GIT-16 |
 | GIT-25 | TC-GIT-18, TC-GIT-20 |
-| GIT-26 | TC-GIT-19 |
+| GIT-26 | TC-GIT-19, TC-CON-68 |
 | GIT-19 | TC-GIT-12 |
 | GIT-17 (Tool Validations master list) | TC-TVL-01, TC-TVL-24 |
 | GIT-17 (On-Demand pages) | TC-OND-05, TC-OND-11, TC-OND-17, TC-OND-22, TC-PGB-08, TC-DSH-04, TC-OND-41 |
@@ -2515,7 +2565,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | SET-14 | TC-SET-06 |
 | SET-15 | TC-SET-06 |
 | SET-16 | TC-SET-06 |
-| SET-17 | TC-SET-07 |
+| SET-17 | TC-SET-07, TC-CON-68 |
 | SET-18 | TC-SET-08 |
 | SET-10…12 | TC-SET-04 |
 | STO-01, STO-02 | TC-STO-01 |
@@ -2717,7 +2767,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | OND-02 | TC-OND-01, TC-OND-08 |
 | OND-03 | TC-OND-01, TC-OND-03 |
 | OND-04 | TC-OND-01, TC-OND-03 |
-| OND-05 | TC-OND-01, TC-OND-04 |
+| OND-05 | TC-OND-01, TC-OND-04, TC-PIR-21, TC-PIR-23 |
 | OND-06 | TC-OND-04, TC-OND-18 |
 | OND-07 | TC-OND-06, TC-OND-07 |
 | OND-08 | TC-OND-02 |
@@ -2733,7 +2783,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | OND-18 | TC-OND-15 |
 | OND-19 | TC-OND-16 |
 | OND-20 | TC-OND-16, TC-OND-17 |
-| OND-21 | TC-OND-16, TC-OND-17, TC-OND-98 |
+| OND-21 | TC-OND-16, TC-OND-17, TC-OND-98, TC-OND-100 |
 | OND-22 | TC-OND-16, TC-OND-18 |
 | OND-23 | TC-OND-16, TC-OND-18 |
 | OND-24 | TC-OND-19 |
@@ -2797,6 +2847,12 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | OND-100 | TC-OND-98 |
 | OND-101 | TC-OND-98 |
 | OND-102 | TC-OND-98 |
+| OND-103 | TC-OND-99 |
+| OND-104 | TC-OND-99 |
+| OND-105 | TC-OND-100 |
+| OND-106 | TC-OND-100 |
+| OND-107 | TC-OND-102 |
+| OND-108 | TC-OND-101 |
 | CON-103 | TC-OND-06, TC-OND-07, TC-OND-13 |
 | CON-104 | TC-CON-65 |
 | CON-105 | TC-CON-66 |
@@ -2810,6 +2866,12 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CON-106 | TC-PGB-06 |
 | CON-107 | TC-DSH-13 |
 | CON-108 | TC-CON-67 |
+| CON-109 | TC-CON-68 |
+| CON-110 | TC-CON-68, TC-CON-69 |
+| CON-111 | TC-CON-68, TC-CON-69 |
+| CON-112 | TC-CON-68 |
+| CON-113 | TC-CON-70, TC-PIR-16, TC-PIR-26 |
+| CON-114 | TC-CON-71, TC-PIR-23, TC-PIR-24 |
 | PGB-01 | TC-PGB-01, TC-PGB-07 |
 | PGB-02 | TC-PGB-01, TC-PGB-03, TC-PGB-04 |
 | PGB-03 | TC-PGB-01, TC-PGB-02, TC-PGB-08 |
@@ -2947,16 +3009,31 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | TVL-34 | TC-TVL-32, TC-TVL-18 |
 | TVL-35 | TC-TVL-32, TC-TVL-18 |
 | TVL-36 | TC-TVL-33, TC-TVL-18 |
-| PIR-01 | TC-PIR-06 |
-| PIR-02 | TC-PIR-01, TC-PIR-06 |
+| PIR-01 | TC-PIR-06, TC-PIR-16 |
+| PIR-02 | TC-PIR-01, TC-PIR-06, TC-PIR-26 |
 | PIR-03 | TC-PIR-02, TC-PIR-06 |
 | PIR-04 | TC-PIR-06 |
 | PIR-05 | TC-PIR-03, TC-PIR-05, TC-PIR-06 |
 | PIR-06 | TC-PIR-04, TC-PIR-06 |
 | PIR-07 | TC-PIR-07, TC-PIR-09 |
-| PIR-08 | TC-PIR-08, TC-PIR-09 |
-| PIR-09 | TC-PIR-09 |
-| PIR-10 | TC-PIR-09 |
+| PIR-08 | TC-PIR-08, TC-PIR-09, TC-PIR-10, TC-PIR-11 |
+| PIR-09 | TC-PIR-09, TC-PIR-11 |
+| PIR-10 | TC-PIR-09, TC-PIR-11 |
+| PIR-11 | TC-PIR-10, TC-PIR-11 |
+| PIR-12 | TC-PIR-12 |
+| PIR-13 | TC-PIR-13, TC-PIR-14, TC-PIR-16, TC-PIR-17, TC-PIR-25 |
+| PIR-14 | TC-PIR-13, TC-PIR-16 |
+| PIR-15 | TC-PIR-15, TC-PIR-16 |
+| PIR-16 | TC-PIR-16 |
+| PIR-17 | TC-PIR-17, TC-PIR-26 |
+| PIR-18 | TC-PIR-14, TC-PIR-18, TC-PIR-25 |
+| PIR-19 | TC-PIR-19, TC-PIR-22, TC-PIR-23 |
+| PIR-20 | TC-PIR-20, TC-PIR-23, TC-PIR-24 |
+| PIR-21 | TC-PIR-21, TC-PIR-23 |
+| PIR-22 | TC-PIR-21, TC-PIR-23 |
+| PIR-23 | TC-PIR-24, TC-CON-71 |
+| PIR-24 | TC-PIR-26, TC-PIR-17 |
+| PIR-25 | TC-PIR-25 |
 | IF-05 | TC-KPT-02 |
 | NFR-02 | TC-STO-01 |
 | NFR-03…05 | TC-DSK-02, TC-INS-01 |
@@ -2965,7 +3042,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | NFR-09 | TC-CSP-01 |
 | NFR-07 | TC-INS-01 |
 | IF-01, IF-03, IF-04 | TC-INS-04 |
-| IF-02 | TC-DSK-02 |
+| IF-02 | TC-DSK-02, TC-PIR-16 |
 
 ### Use-case coverage
 
@@ -2978,7 +3055,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-05 | TC-MON-07, TC-FET-11 |
 | UC-06 | TC-ATM-01…11, TC-ATM-21, TC-ATM-22, TC-ATM-23, TC-TWN-03, TC-CON-20, TC-CON-33, TC-CON-34, TC-CON-43, TC-BKL-30, TC-BKL-31, TC-BKL-32 |
 | UC-07 | TC-BKL-01…09, TC-BKL-34, TC-BKL-35, TC-BKL-36, TC-BKL-15, TC-BKL-16, TC-BKL-17, TC-BKL-18, TC-BKL-19, TC-BKL-20, TC-BKL-21, TC-BKL-22, TC-BKL-23, TC-BKL-24, TC-BKL-25, TC-BKL-26, TC-BKL-27, TC-BKL-28, TC-DPF-06, TC-NAV-36, TC-CON-23, TC-CON-25…27, TC-CON-29…32, TC-CON-35 |
-| UC-08 | TC-QV-01…05, TC-FET-07, TC-CON-08, TC-CON-11…16, TC-QV-08, TC-QV-09, TC-QV-10, TC-QV-11, TC-QV-12, TC-QV-13, TC-QV-14, TC-QV-15, TC-QV-16, TC-CON-37, TC-CON-38, TC-CON-39, TC-CON-40, TC-CON-41, TC-QV-18, TC-QV-19, TC-QV-20, TC-QV-21, TC-QV-22, TC-CON-42, TC-QV-41, TC-QV-42, TC-CON-61, TC-NAV-51, TC-QV-43, TC-QV-44, TC-QV-45, TC-QV-46, TC-STR-01…07, TC-UI-13…16, TC-TVL-14…18 |
+| UC-08 | TC-QV-01…05, TC-FET-07, TC-CON-08, TC-CON-11…16, TC-QV-08, TC-QV-09, TC-QV-10, TC-QV-11, TC-QV-12, TC-QV-13, TC-QV-14, TC-QV-15, TC-QV-16, TC-CON-37, TC-CON-38, TC-CON-39, TC-CON-40, TC-CON-41, TC-QV-18, TC-QV-19, TC-QV-20, TC-QV-21, TC-QV-22, TC-CON-42, TC-QV-41, TC-QV-42, TC-CON-61, TC-NAV-51, TC-QV-43, TC-QV-44, TC-QV-45, TC-QV-46, TC-STR-01…07, TC-UI-13…16, TC-TVL-14…18, TC-CON-68, TC-CON-69 |
 | UC-09 | TC-OV-11…15, TC-CAP-01, TC-CAP-02, TC-CAP-03, TC-CAP-08, TC-CAP-10, TC-CAP-11, TC-CAP-12, TC-CAP-13, TC-CAP-14, TC-CAP-15, TC-CAP-16, TC-CAP-17, TC-CAP-18, TC-CAP-19, TC-CAP-20, TC-CAP-21, TC-CAP-22, TC-CAP-23, TC-CAP-24, TC-CAP-25, TC-CAP-26, TC-CAP-27, TC-QV-17, TC-CON-21, TC-QV-10, TC-QV-11, TC-QV-21, TC-CHT-17, TC-CHT-19 |
 | UC-10 | TC-OV-11 (Months, Streams), TC-OV-13 |
 | UC-11 | TC-BAS-01…04 |
@@ -2992,7 +3069,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-19 | TC-INS-04, TC-CI-01, TC-CI-02, TC-CI-03, TC-CI-07, TC-CI-08, TC-DOC-03 |
 | UC-20 | TC-DOC-01, TC-DOC-02, TC-DOC-03, TC-DOC-04, TC-DOC-05, TC-DOC-06 |
 | UC-21 | TC-SCR-01 |
-| UC-22 | TC-ACC-01, TC-ACC-02, TC-CON-57, TC-CON-58, TC-CON-63, TC-CON-64, TC-CON-65, TC-CON-66, TC-PGB-06, TC-GIT-15, TC-MYD-07 |
+| UC-22 | TC-ACC-01, TC-ACC-02, TC-CON-57, TC-CON-58, TC-CON-63, TC-CON-64, TC-CON-65, TC-CON-66, TC-PGB-06, TC-GIT-15, TC-MYD-07, TC-CON-70, TC-CON-71 |
 | UC-23 | TC-QEM-01…10 |
 | UC-24 | TC-PCK-01…10 |
 | UC-25 | TC-WSP-01…07 |
@@ -3007,10 +3084,10 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-34 | TC-EPS-01, TC-EPS-02, TC-EPS-03, TC-EPS-04, TC-EPS-05, TC-EPS-06 |
 | UC-35 | TC-ADM-01, TC-ADM-02, TC-ADM-03 |
 | UC-36 | TC-STT-01, TC-STT-02, TC-STT-03 |
-| UC-37 | TC-OND-01…34, TC-OND-40…65, TC-OND-90…98, TC-CHT-01…42, TC-CHT-50…59 |
+| UC-37 | TC-OND-01…34, TC-OND-40…65, TC-OND-90…102, TC-CHT-01…42, TC-CHT-50…59 |
 | UC-38 | TC-PGB-01…16, TC-DSH-01…16, TC-CHT-02, TC-CHT-11, TC-CHT-13…27, TC-CHT-29…37, TC-CHT-39, TC-CHT-40, TC-CHT-42, TC-CHT-50…57, TC-CHT-59, TC-TVL-12, TC-TVL-23 |
 | UC-39 | TC-TVL-01…33 |
-| UC-40 | TC-PIR-01…09 |
+| UC-40 | TC-PIR-01…26 |
 
 ## 8. Result record
 

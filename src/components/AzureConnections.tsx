@@ -1,6 +1,6 @@
 import { utcMonthKey } from '../businessTime'
 import { useState } from 'react'
-import { EmptyState, Modal, Notice, Panel, Pill, type Tone, Info } from './ui'
+import { EmptyState, Modal, Notice, Panel, Pill, type Tone, Info, WriteBlocked } from './ui'
 import { formatDateTime } from '../format'
 import { allStreams, dataSetOfProfile, dataSets, defaultMatchThreshold, namesStream, profileForDataSet, profileForStream, streamOfProfile, toolCategoryGuess, toolDocumentsSettingFor, toolQueries, toolRoleLabel, type ToolQueryRole } from '../streams'
 import { ToolQueriesPanel } from './ToolQueriesPanel'
@@ -23,6 +23,9 @@ import { ReleaseCountsAdmin } from './ReleaseCounts'
 import { BulkEpicsPanel } from './BulkEpicsPanel'
 import { markPendingShare, markViewsSynced } from '../viewDefinitions'
 import { RemovedConnections } from './RemovedConnections'
+import { RemoveViewForEveryone } from './RemoveViewForEveryone'
+import { ViewActions } from './ViewActions'
+import { removalBlocked, type RemovalMode } from '../viewDefinitions'
 
 const roleLabel: Record<AzureConnectionRole, string> = { 'time-tracking': 'Time Writing (read & write)', 'release-source': 'Releases · DHFI (read only)', documents: 'Documents · Vault (read only)', reference: 'Reference (read only)', 'backlog-view': 'Backlog view (read only)' }
 const roleUse: Record<AzureConnectionRole, string> = {
@@ -38,7 +41,7 @@ const empty = (role: AzureConnectionRole = 'time-tracking'): ConnectionInput => 
 // Azure DevOps connection setup, shown as the first section of Settings.
 // section: the one part to show (SET-14: Servers and PATs, Stream mapping, Other views, Read-only sources, Synthetic
 // sample); without it, every part.
-export function AzureConnections({ azure, store, git, onOpenBoard, canManage = true, canManageStreams = canManage, canEnterCounts = canManage, section }: { azure: AzureWorkspace; store: PageProps['store']; git?: GitStorage; onOpenBoard: () => void; canManage?: boolean; canManageStreams?: boolean; canEnterCounts?: boolean; section?: 'email' | 'servers' | 'mapping' | 'epics' | 'bulk' | 'counts' | 'views' | 'sources' | 'sample' }) {
+export function AzureConnections({ azure, store, git, onOpenBoard, canManage = true, canManageStreams = canManage, canEnterCounts = canManage, canRemoveForEveryone = false, viewingAs = false, section }: { azure: AzureWorkspace; store: PageProps['store']; git?: GitStorage; onOpenBoard: () => void; canManage?: boolean; canManageStreams?: boolean; canEnterCounts?: boolean; canRemoveForEveryone?: boolean; viewingAs?: boolean; section?: 'email' | 'servers' | 'mapping' | 'epics' | 'bulk' | 'counts' | 'views' | 'sources' | 'sample' }) {
   const show = (part: string) => !section || section === part
   const threshold = normalizeReleaseSourceSettings(store.state.releaseSourceSettings).matchThreshold ?? defaultMatchThreshold
   const { connectionProfiles, connectionStatus, activeConnectionProfileId, busy } = azure
@@ -49,6 +52,9 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
   const [toolAdd, setToolAdd] = useState<{ picked?: ToolQueryRole } | null>(null)
   const [cleanup, setCleanup] = useState<{ tone: 'success' | 'warning' | 'error'; text: string } | null>(null)
   const [fetchingAll, setFetchingAll] = useState(false)
+  // CON-109, CON-110: the Tool Owner's Remove / Delete for everyone of a shared view (fail closed: no right, no action).
+  const [removing, setRemoving] = useState<{ view: AzureConnectionProfileSummary; mode: RemovalMode } | null>(null)
+  const removeBlocked = removalBlocked({ allowed: canRemoveForEveryone, viewingAs, git, isSample: azure.isSample })
   const [dismissed, setDismissed] = useState(loadDismissedPresets)
   const presets = pendingPresets(connectionProfiles, dismissed)
   // Only the data of connections that exist here (data of a removed or duplicate connection is not listed).
@@ -294,6 +300,7 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
       {extras.length > 0 && keep && <Notice tone="warning">{timeWriting.length} Time Writing (QMS-0025) connections: only “{keep.reason}” is used; {extras.map((profile) => `“${profile.reason}”`).join(', ')} {extras.length === 1 ? 'is a duplicate' : 'are duplicates'}. <button type="button" className="text-button" onClick={() => void removeDuplicates()}>Keep “{keep.reason}”, remove the other{extras.length === 1 ? '' : 's'}</button></Notice>}
       {keep && twins.map((profile) => <Notice key={profile.id} tone="warning">“{profile.reason}” reads the same backlog as the Time Writing connection “{keep.reason}”. If “{profile.reason}” loads and “{keep.reason}” does not, <button type="button" className="text-button" onClick={() => void switchTimeWriting(profile)}>use “{profile.reason}” as Time Writing and remove “{keep.reason}”</button>.</Notice>)}
       {cleanup && <Notice tone={cleanup.tone}>{cleanup.text}</Notice>}
+      {others.length > 0 && removeBlocked && <WriteBlocked reason={`Remove / Delete for everyone: ${removeBlocked}`} />}
       {others.length ? <div className="azure-table"><table className="connection-table"><thead><tr><th>Connection</th><th>Used for</th><th>Organization / project</th><th>Query</th><th>Status</th><th /></tr></thead><tbody>{others.map((profile) => {
         const parts = splitAzureUrl(profile.url, profile.baseUrl), [tone, label] = statusTone(profile), status = connectionStatus[profile.id]
         const active = profile.role === 'time-tracking' && profile.id === activeConnectionProfileId
@@ -303,10 +310,14 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
           <td>{parts.baseUrl.replace('https://', '')}{profile.baseUrl && <Pill tone="info">On-prem</Pill>}<small>{parts.project}{parts.team ? ` · team ${parts.team}` : ''}{profile.apiVersion ? ` · API ${profile.apiVersion}` : ''}</small></td>
           <td>{profile.query ? <span className="query-chip" title={profile.query}>Custom query</span> : <small>{profile.role === 'time-tracking' || profile.role === 'backlog-view' ? 'Team Epic backlog' : 'Default'}</small>}</td>
           <td><Pill tone={tone}>{label}</Pill><small>{status?.message ?? lastFetch(profile)}</small></td>
-          <td><div className="button-row nowrap"><button type="button" className="ghost" disabled={status?.state === 'busy' || fetchingAll} onClick={() => void azure.fetchConnection(profile.id)}>Fetch</button><button type="button" className="ghost" disabled={status?.state === 'busy' || fetchingAll} onClick={() => void azure.testConnection(profile.id)}>Test</button>{profile.role === 'backlog-view' && <button type="button" className="ghost" disabled={status?.state === 'busy' || fetchingAll || busy} onClick={() => void switchTimeWriting(profile)}>Use as Time Writing</button>}<button type="button" className="ghost" onClick={() => edit(profile)}>Edit</button><button type="button" className="ghost" title="New connection with the same settings and PAT" onClick={() => clone(profile)}>Clone</button><button type="button" className="text-button" onClick={() => { if (window.confirm(`Remove “${profile.reason}” from this browser? Its PAT is not revoked in Azure DevOps.`)) azure.removeConnection(profile.id) }}>Remove</button></div></td>
+          <td><div className="button-row nowrap"><button type="button" className="ghost" disabled={status?.state === 'busy' || fetchingAll} onClick={() => void azure.fetchConnection(profile.id)}>Fetch</button><button type="button" className="ghost" disabled={status?.state === 'busy' || fetchingAll} onClick={() => void azure.testConnection(profile.id)}>Test</button>{profile.role === 'backlog-view' && <button type="button" className="ghost" disabled={status?.state === 'busy' || fetchingAll || busy} onClick={() => void switchTimeWriting(profile)}>Use as Time Writing</button>}<button type="button" className="ghost" onClick={() => edit(profile)}>Edit</button><button type="button" className="ghost" title="New connection with the same settings and PAT" onClick={() => clone(profile)}>Clone</button><button type="button" className="text-button" onClick={() => { if (window.confirm(`Remove “${profile.reason}” from this browser? Its PAT is not revoked in Azure DevOps.`)) azure.removeConnection(profile.id) }}>Remove</button><ViewActions label={`Shared view ${viewNameOf(profile)}`} items={[
+            { key: 'remove', label: 'Remove for everyone…', disabled: Boolean(removeBlocked), title: removeBlocked || 'Remove this view from the shared setup in Git for everyone (a backup is kept; Removed connections can restore it)', onClick: () => setRemoving({ view: profile, mode: 'remove' }) },
+            { key: 'delete', label: 'Delete for everyone…', danger: true, disabled: Boolean(removeBlocked), title: removeBlocked || 'Remove this view for everyone and delete its data files in Git', onClick: () => setRemoving({ view: profile, mode: 'delete' }) },
+          ]} /></div></td>
         </tr>
       })}</tbody></table></div>
         : otherPresets.length ? null : <EmptyState title="No other views." detail="Time Writing and the streams are in the Stream mapping above; add any other view here." />}
+      {removing && git && <RemoveViewForEveryone view={removing.view} mode={removing.mode} git={git} azure={azure} onClose={() => setRemoving(null)} onDone={(result) => { setRemoving(null); setCleanup(result) }} />}
     </Panel>}
     {show('sources') && sources.length > 0 && <Panel className="connection-panel" eyebrow="READ ONLY" title="Fetched read-only sources" info="Snapshots from document and reference connections, stored with the app data.">
       <div className="azure-table"><table><thead><tr><th>Connection</th><th>Project</th><th>Work items</th><th>By type</th><th>Fetched</th></tr></thead><tbody>{sources.map((source) => {

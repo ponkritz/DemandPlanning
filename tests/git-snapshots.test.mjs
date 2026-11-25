@@ -11,6 +11,7 @@ test('only on-prem read-only views go through Git; the file has the settings and
   assert.equal(sharedThroughGit(connection), true)
   assert.equal(sharedThroughGit({ ...connection, role: 'time-tracking' }), false, 'QMS-0025 Time Writing is fetched directly')
   assert.equal(sharedThroughGit({ ...connection, baseUrl: undefined }), false, 'cloud views are fetched directly')
+  assert.equal(sharedThroughGit({ ...connection, mine: true }), false, 'personal views are fetched directly')
   const text = serializeSnapshot(snapshotFile({ ...connection, token: 'pat' }, { ...source('2026-10-20T10:00:00Z'), fromGit: true }))
   assert.equal(text.includes('pat"') || text.includes('token') || text.includes('fromGit'), false)
   assert.equal(parseSnapshot(text).source.items.length, 2)

@@ -1,6 +1,6 @@
 import test, { after, before } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { mkdirSync, readFileSync } from 'node:fs'
 import { navigate, openPage, startApp, text } from './helpers.mjs'
 
 // PI Review, release 1 (PIR-01…PIR-06; TC-PIR-06, UAT): against a mocked Azure DevOps — the Time Writing fetch, the
@@ -10,6 +10,9 @@ import { navigate, openPage, startApp, text } from './helpers.mjs'
 // PI Review columns (PIR-07…PIR-10; TC-PIR-09, UAT): Feature 201's newest comment is written with the headings, so the
 // drawer's Latest comment and the table's five columns show it split; Feature 202's newest comment (listed after an
 // older one) has no headings, so only Date and Comment are filled; Export carries the five columns.
+// PI Review keyword fallback (PIR-11; TC-PIR-11, UAT): Feature 204's newest comment has no heading but sentences with
+// keywords, so its Struggles, Learnings and Move to Next PI are suggested — marked "(suggested)" with the tooltip — the
+// drawer says "Suggested from keywords" and Export's Split from says Keywords (Headings for 201, None for 202).
 let app
 before(async () => { app = await startApp() })
 after(async () => { await app.stop() })
@@ -32,23 +35,29 @@ const firstPage = [
   { id: 4, text: '<div>Blocked by the <b>test rig</b>, asked <a href="#" data-vss-mention="version:2.0,aa11">@Ana Costa</a> to help</div>', createdBy: { displayName: 'Rita Gomez' }, createdDate: '2026-11-20T09:00:00Z' },
   { id: 3, text: '<p>Lesson: book the rig early</p><script>window.hacked = true</script>', createdBy: { displayName: 'Ben Okafor' }, createdDate: '2026-11-18T09:00:00Z' },
 ]
+// Feature 204 (TC-PIR-11): the newest comment without a heading, an older one with headings.
+export const keywordFeature = raw(204, 'Feature', 'Lab move review', 'Project\\PI 2026.4', 100)
+const keywordComments = [
+  { id: 12, text: '<div>Struggles: old text</div>', createdBy: { displayName: 'Rita Gomez' }, createdDate: '2026-11-10T09:00:00Z' },
+  { id: 13, text: '<div>We were blocked by the vendor for two Sprints. No issues with the docs.</div><div>Next time we book the rig at PI planning.</div><div>Spill over to next PI — partly, the rig test.</div>', createdBy: { displayName: 'Ben Okafor' }, createdDate: '2026-11-22T10:00:00Z' },
+]
 const secondPage = [
   { id: 2, text: 'Gone', isDeleted: true, createdBy: { displayName: 'Ben Okafor' }, createdDate: '2026-11-10T09:00:00Z' },
   { id: 1, text: '<p>Screenshot <img src="https://example.invalid/x.png" onerror="window.hacked = true"> attached</p>', createdBy: { displayName: 'Ana Costa' }, createdDate: '2026-11-02T09:00:00Z' },
 ]
 
 // A fake dev.azure.com for the Time Writing fetch, the iterations and the comments; `seen` records the comment URLs.
-export function fakeAzure(seen = []) {
+export function fakeAzure(seen = [], world = piWorld) {
   return (route) => {
     const request = route.request(), url = new URL(request.url()), path = decodeURIComponent(url.pathname)
     const json = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
     if (path.endsWith('/_apis/work/teamsettings/teamfieldvalues')) return json({ field: { referenceName: 'System.AreaPath' }, values: [{ value: 'Project\\Quality', includeChildren: true }] })
     if (path.endsWith('/_apis/work/backlogs/Microsoft.EpicCategory/workItems')) return json({ workItems: [{ target: { id: 100 } }] })
-    if (path.endsWith('/_apis/wit/workitemsbatch')) { const ids = JSON.parse(request.postData() ?? '{}').ids ?? []; return json({ value: piWorld.filter((item) => ids.includes(item.id)) }) }
+    if (path.endsWith('/_apis/wit/workitemsbatch')) { const ids = JSON.parse(request.postData() ?? '{}').ids ?? []; return json({ value: world.filter((item) => ids.includes(item.id)) }) }
     if (path.endsWith('/_apis/wit/wiql')) {
       const query = JSON.parse(request.postData() ?? '{}').query ?? ''
       const parents = (/\[System\.Parent\] IN \(([\d,]+)\)/.exec(query)?.[1] ?? '').split(',').map(Number), after = Number(/\[System\.Id\] > (\d+)/.exec(query)?.[1] ?? 0)
-      return json({ workItems: piWorld.filter((item) => parents.includes(item.fields['System.Parent']) && item.id > after).map((item) => ({ id: item.id })) })
+      return json({ workItems: world.filter((item) => parents.includes(item.fields['System.Parent']) && item.id > after).map((item) => ({ id: item.id })) })
     }
     if (path.endsWith('/_apis/work/teamsettings/iterations')) return json({ value: [dated('Sprint 2', 'Project\\PI 2026.4\\Sprint 2', '2000-01-01', '2099-12-31'), dated('Sprint 6', 'Project\\PI 2026.3\\Sprint 6', '2000-01-01', '2000-01-14')] })
     if (path.endsWith('/_apis/wit/classificationnodes/iterations')) return json(node('', [node('PI 2026.3', [node('PI 2026.3\\Sprint 6', [], { startDate: '2000-01-01T00:00:00Z', finishDate: '2000-01-14T00:00:00Z' })]), node('PI 2026.4', [node('PI 2026.4\\Sprint 2', [], { startDate: '2000-01-01T00:00:00Z', finishDate: '2099-12-31T00:00:00Z' })])]))
@@ -58,6 +67,7 @@ export function fakeAzure(seen = []) {
       const token = url.searchParams.get('continuationToken')
       if (comments[1] === '201') return json(token === piToken ? { comments: secondPage, count: 2 } : { comments: firstPage, count: 2, continuationToken: piToken })
       if (comments[1] === '202') return json({ comments: [{ id: 8, text: 'Kick-off: Struggles are expected', createdBy: { displayName: 'Rita Gomez' }, createdDate: '2026-11-01T09:00:00Z' }, { id: 9, text: 'Ready for review', createdBy: { displayName: 'Ana Costa' }, createdDate: '2026-11-19T09:00:00Z' }], count: 2 })
+      if (comments[1] === '204') return json({ comments: keywordComments, count: 2 })
       return json({ comments: [], count: 0 })
     }
     return json({ value: [] })
@@ -65,13 +75,13 @@ export function fakeAzure(seen = []) {
 }
 
 // Opens the app with the Time Writing connection, the mocked Azure DevOps, and PI Review open.
-export async function openPiReview(options = {}) {
+export async function openPiReview({ world, ...options } = {}) {
   const seen = []
   const { page, context, errors } = await openPage(app, { roles: 'Tool Owner', ...options, init: (connection) => {
     localStorage.setItem('demand-planning-azure-connection-profiles-v1', JSON.stringify([connection]))
     localStorage.setItem('demand-planning-work-email-v1', 'lead@example.com')
   }, initArg: profile })
-  await context.route('https://dev.azure.com/**', fakeAzure(seen))
+  await context.route('https://dev.azure.com/**', fakeAzure(seen, world))
   const guide = page.getByRole('dialog').filter({ hasText: 'Could not fetch from Azure DevOps' })
   await page.addLocatorHandler(guide, () => guide.getByRole('button', { name: 'Close', exact: true }).last().click())
   await page.reload()
@@ -86,6 +96,11 @@ async function cell(page, key, label) {
   assert.ok(at >= 0, `column ${label} in ${headings.join(' | ')}`)
   return text(page.locator(`.pir-table tr[data-row-key="${key}"] td`).nth(at))
 }
+// The tooltip of a Feature's cell in the column headed `label`.
+async function cellTitle(page, key, label) {
+  const headings = await page.locator('.pir-table thead th').evaluateAll((cells) => cells.map((th) => (th.querySelector('.sort-button')?.textContent ?? th.textContent ?? '').replace(/[▴▾]/g, '').trim()))
+  return page.locator(`.pir-table tr[data-row-key="${key}"] td`).nth(headings.indexOf(label)).getAttribute('title')
+}
 const localDateTime = (page, iso) => page.evaluate((value) => new Intl.DateTimeFormat(undefined, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZoneName: 'short' }).format(new Date(value)), iso)
 const rowKeys = (page) => page.locator('.pir-table tbody tr[data-row-key]').evaluateAll((rows) => rows.map((row) => row.dataset.rowKey))
 
@@ -99,7 +114,7 @@ test('TC-PIR-06: the current PI is preselected, its Features listed, a Discussio
   // PIR-03, PIR-04: the PI's Features by ID; the toggle adds the Feature with a User Story in the PI.
   await page.locator('.pir-table tr[data-row-key="example/project/202"]').waitFor()
   assert.deepEqual(await rowKeys(page), ['example/project/201', 'example/project/202'])
-  assert.match(await text(page.locator('.pir-table tr[data-row-key="example/project/201"]')), /^201 DP 4\.2 release review DP releases Active Rita Gomez — PI 2026\.4 — — — — — —$/)
+  assert.match(await text(page.locator('.pir-table tr[data-row-key="example/project/201"]')), /^201 DP 4\.2 release review DP releases Active Rita Gomez — PI 2026\.4 — — — — — — — — Write review…$/)
   assert.match(await text(page.locator('.data-table-status')), /^2 of 2 Features$/)
   await page.getByRole('checkbox', { name: 'Also Features with User Stories in this PI' }).check()
   await page.locator('.pir-table tr[data-row-key="example/project/203"]').waitFor()
@@ -139,7 +154,7 @@ test('TC-PIR-09: after Read all Discussions the five columns show each Feature\'
   const five = ['Date and Time of Comment', 'Comment', 'Struggles', 'Learnings', 'Move to Next PI']
   const values = async (key) => { const found = []; for (const label of five) found.push(await cell(page, key, label)); return found }
   assert.deepEqual(await values('example/project/201'), ['—', '—', '—', '—', '—'])
-  assert.match(await page.locator('.pir-table tr[data-row-key="example/project/201"] td').last().getAttribute('title'), /not read yet: open the Feature, or ↻ Read all Discussions/)
+  assert.match(await cellTitle(page, 'example/project/201', 'Move to Next PI'), /not read yet: open the Feature, or ↻ Read all Discussions/)
   await page.getByRole('button', { name: '↻ Read all Discussions' }).click()
   await page.locator('.jobs-button').click()
   const panel = page.getByRole('dialog', { name: 'Background jobs' })
@@ -148,7 +163,7 @@ test('TC-PIR-09: after Read all Discussions the five columns show each Feature\'
   // PIR-07, PIR-09: each Feature's newest comment by date — split for 201; for 202 (listed after an older one) whole only.
   assert.deepEqual(await values('example/project/201'), [await localDateTime(page, '2026-11-21T14:30:00Z'), 'Struggles: test rig late · Learnings: book the rig early · share the calendar · Move to next PI: Yes - waiting for vendor', 'test rig late', 'book the rig early · share the calendar', 'Yes — waiting for vendor'])
   assert.deepEqual(await values('example/project/202'), [await localDateTime(page, '2026-11-19T09:00:00Z'), 'Ready for review', '', '', ''])
-  assert.match(await page.locator('.pir-table tr[data-row-key="example/project/201"] td').last().getAttribute('title'), /^Yes — waiting for vendor$/)
+  assert.match(await cellTitle(page, 'example/project/201', 'Move to Next PI'), /^Yes — waiting for vendor$/)
   // PIR-09: sorted by the date, newest first on the first click; filtered by the Move value.
   const byDate = page.locator('.pir-table thead .sort-button', { hasText: 'Date and Time of Comment' })
   await byDate.click()
@@ -181,7 +196,63 @@ test('TC-PIR-09: after Read all Discussions the five columns show each Feature\'
   await drawer.getByRole('heading', { name: 'Discussion (4)' }).waitFor()
   const latest = drawer.getByRole('region', { name: 'Latest comment' })
   assert.equal(await text(latest.locator('.pir-comment-head')), `Ben Okafor ${await localDateTime(page, '2026-11-21T14:30:00Z')}`)
-  assert.deepEqual(await latest.locator('dd').allInnerTexts(), ['test rig late', 'book the rig early\nshare the calendar', 'Yes — waiting for vendor'])
+  assert.deepEqual(await latest.locator('dd').allInnerTexts(), ['test rig late', 'book the rig early\nshare the calendar', 'Yes — waiting for vendor', '—', '—'])
+  await page.keyboard.press('Escape')
+  await drawer.waitFor({ state: 'detached' })
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
+// PI_REVIEW_SHOTS=<folder>: a screenshot of the table with a split and a suggested row for the review (not taken otherwise).
+const shots = process.env.PI_REVIEW_SHOTS
+test('TC-PIR-11: a newest comment without headings has its Struggles, Learnings and Move to Next PI suggested from keywords, marked, and exported with Split from', async () => {
+  const { page, context, errors } = await openPiReview({ world: [...piWorld, keywordFeature], ...(shots ? { width: 1440, height: 900, scale: 2 } : {}) })
+  await page.locator('.pir-table tr[data-row-key="example/project/204"]').waitFor()
+  await page.getByRole('button', { name: '↻ Read all Discussions' }).click()
+  await page.locator('.jobs-button').click()
+  const panel = page.getByRole('dialog', { name: 'Background jobs' })
+  await panel.locator('li.job', { hasText: 'Reading Discussions · PI 2026.4' }).filter({ hasText: '3 of 3 read.' }).waitFor()
+  await panel.getByRole('button', { name: 'Close', exact: true }).click()
+  // PIR-11: 204's newest comment (no heading) — the sentences with keywords, each marked "(suggested)"; the sentence
+  // "No issues with the docs." is not taken (negation); the Move value only from "partly" right after the phrase.
+  const row = 'example/project/204'
+  assert.equal(await cell(page, row, 'Struggles'), '(suggested) We were blocked by the vendor for two Sprints.')
+  assert.equal(await cell(page, row, 'Learnings'), '(suggested) Next time we book the rig at PI planning.')
+  assert.equal(await cell(page, row, 'Move to Next PI'), '(suggested) Partly — the rig test.')
+  assert.equal(await page.locator(`.pir-table tr[data-row-key="${row}"] .pir-suggested`).count(), 3)
+  const struggles = page.locator(`.pir-table tr[data-row-key="${row}"] td`, { has: page.locator('.pir-suggested', { hasText: 'blocked by the vendor' }) })
+  assert.equal(await struggles.getAttribute('title'), 'Suggested from keywords, not headings:\nWe were blocked by the vendor for two Sprints.')
+  // PIR-08: 201 split by its headings, not marked.
+  assert.equal(await cell(page, 'example/project/201', 'Struggles'), 'test rig late')
+  assert.equal(await page.locator('.pir-table tr[data-row-key="example/project/201"] .pir-suggested').count(), 0)
+  // PIR-09, PIR-11: the Move filter uses the suggested value too.
+  await page.getByRole('button', { name: /^Move to next PI:/ }).click()
+  await page.getByRole('listbox', { name: 'Move to next PI' }).getByRole('checkbox', { name: 'Partly', exact: true }).check()
+  await page.locator('.pir-table tr[data-row-key="example/project/201"]').waitFor({ state: 'detached' })
+  assert.deepEqual(await rowKeys(page), [row])
+  await page.keyboard.press('Escape')
+  await page.getByRole('listbox', { name: 'Move to next PI' }).waitFor({ state: 'detached' })
+  await page.getByRole('button', { name: 'Reset filters' }).click()
+  await page.locator('.pir-table tr[data-row-key="example/project/201"]').waitFor()
+  if (shots) { mkdirSync(shots, { recursive: true }); await page.emulateMedia({ colorScheme: 'light' }); await page.locator('.pir-table .data-table-scroll').evaluate((box) => { box.scrollLeft = box.scrollWidth }); await page.screenshot({ path: `${shots}/pi-review-split-1440-light.png` }) }
+  // PIR-11: Export adds Split from (hidden in the table, exported always): Headings, None, Keywords.
+  const download = page.waitForEvent('download')
+  const exportButton = page.locator('.pir-table').getByRole('button', { name: /^Export/ }).first()
+  const menu = /▾/.test(await exportButton.innerText())
+  await exportButton.click()
+  if (menu) await page.getByRole('menuitem', { name: 'CSV (.csv)' }).click()
+  const csv = readFileSync(await (await download).path(), 'utf8').replace(/\r\n/g, '\n')
+  assert.match(csv, /Struggles,Learnings,Move to Next PI,Review mode,Additional Remarks,Split from\n/)
+  assert.match(csv, /Yes — waiting for vendor,,,Headings\n/)
+  assert.match(csv, /2026-11-19[^,]*,Ready for review,,,,,,None\n/)
+  assert.match(csv, /,We were blocked by the vendor for two Sprints\.,Next time we book the rig at PI planning\.,Partly — the rig test\.,,,Keywords\n?/)
+  // PIR-10, PIR-11: the drawer's Latest comment says the texts are suggested.
+  await page.locator(`.pir-table tr[data-row-key="${row}"] td`).nth(1).click()
+  const drawer = page.locator('aside.drawer[role="dialog"]', { has: page.getByRole('heading', { name: 'Feature #204', exact: true }) })
+  await drawer.getByRole('heading', { name: 'Discussion (2)' }).waitFor()
+  const latest = drawer.getByRole('region', { name: 'Latest comment' })
+  assert.match(await text(latest.locator('.pir-suggested-note')), /^Suggested from keywords/)
+  assert.deepEqual(await latest.locator('.pir-split.pir-suggested dd').allInnerTexts(), ['We were blocked by the vendor for two Sprints.', 'Next time we book the rig at PI planning.', 'Partly — the rig test.'])
   await page.keyboard.press('Escape')
   await drawer.waitFor({ state: 'detached' })
   assert.deepEqual(errors, [])

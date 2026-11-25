@@ -140,7 +140,7 @@ test('CON-103: the On-Demand rights — area for every role, setup and data edit
   const admin = rightsFor(policy, 'lead@example.com'), member = rightsFor(policy, 'x@example.com')
   assert.ok(admin.actions.has('ondemand.setup') && admin.actions.has('ondemand.edit'))
   assert.ok(!member.actions.has('ondemand.setup') && !member.actions.has('ondemand.edit') && member.areas.has('ondemand'))
-  assert.match(serializeAccess(policy), /"permissions": 6/)
+  assert.match(serializeAccess(policy), /"permissions": 8/)
   // A file saved before (permissions 3): every role it lists sees the area; Tool Owner and Admin get both rights.
   const v3 = JSON.parse(serializeAccess(policy))
   v3.permissions = 3

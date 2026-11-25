@@ -142,7 +142,7 @@ test('CON-106: “Manage pages and menu groups” — Tool Owner only in the sta
   const policy = defaultPolicy('lead@example.com')
   assert.ok(policy.roles['Tool Owner'].actions.includes('pages.manage'))
   for (const role of ['Admin', 'Product Owner', 'People Manager', 'Scrum Master', 'Team Member']) assert.ok(!policy.roles[role].actions.includes('pages.manage'), `${role} has no pages.manage`)
-  assert.match(serializeAccess(policy), /"permissions": 6/)
+  assert.match(serializeAccess(policy), /"permissions": 8/)
   // A file written with permissions 4: a listed Tool Owner gets it, nobody else.
   const v4 = JSON.parse(serializeAccess(policy)); v4.permissions = 4
   for (const rights of Object.values(v4.roles)) rights.actions = rights.actions.filter((key) => key !== 'pages.manage')

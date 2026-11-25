@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { privateGitWrites, decodeBase64, encodeBase64, GitConflictError, historyUrl, parsePlanning, planningData, readPlanningFile, serializePlanning, validateGitConfig, defaultGitRepository, writePlanningFile, loadGitConfig, saveGitConfig, movedRepositoryTarget } from '../src/gitStorage.ts'
+import { privateGitWrites, decodeBase64, encodeBase64, GitConflictError, historyUrl, parsePlanning, planningData, readPlanningFile, serializePlanning, validateGitConfig, defaultGitRepository, writePlanningFile, writeTextFile, loadGitConfig, saveGitConfig, movedRepositoryTarget } from '../src/gitStorage.ts'
 
 const config = { owner: 'acme', repo: 'demand-planning-data', branch: 'main', path: 'planning-data.json' }
 const state = { baselineRules: [{ stream: 'CP', types: {}, items: [{ label: 'Documents', hoursPerUnit: 2, baseUnits: 14, driver: 'assets', unitsPerDriver: 11 }] }], releaseScopes: [{ release: 'CP | Care Pathways | v3.1', stream: 'CP', history: [{ at: '2026-10-01T10:00:00Z', drivers: { assets: 10 }, reason: 'Initial' }] }], resourceProfiles: { 'Zoë Müller': { region: 'Netherlands', role: 'QE' }, 'Arjun Rao': { region: 'India', role: 'Lead', peopleManager: true } } }
@@ -43,6 +43,24 @@ test('TC-OND-26: Git tree, ref and row lock writes refuse public or unverified d
   const queryUrl = 'https://api.github.com/graphql'
   await send(queryUrl, { method: 'POST', body: JSON.stringify({ query: 'query { viewer { login } }' }) })
   assert.deepEqual(calls.slice(4), [[queryUrl, 'POST']], 'batched GraphQL reads use the read path')
+})
+
+test('TC-PIR-22: PI form setup saves only to a verified private repository', async () => {
+  const path = { ...config, path: 'pi-review-form.json' }
+  const repoUrl = 'https://api.github.com/repos/acme/demand-planning-data'
+  for (const [visibility, expectedWrites] of [['public', 0], ['private', 1]]) {
+    let writes = 0
+    const send = privateGitWrites(path, 'synthetic', async (url, init) => {
+      if (url === repoUrl) return response(200, { visibility })
+      assert.equal(init?.method, 'PUT')
+      writes += 1
+      return response(201, { content: { sha: 'saved' }, commit: { html_url: '' } })
+    })
+    const write = writeTextFile(path, 'synthetic', '{}', 'existing', 'Save PI Review form', send)
+    if (expectedWrites) await write
+    else await assert.rejects(write, /private Git data repository/)
+    assert.equal(writes, expectedWrites)
+  }
 })
 
 test('config validation and browser persistence', () => {

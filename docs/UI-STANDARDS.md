@@ -264,6 +264,7 @@ wrong for a real case as an Improvement to the standard.
 
 | Date | Change | Approved by |
 |---|---|---|
+| 2026-11-25 | §12 Pre-selected — **an exception**: in the PI review form (Write review…, PIR-13) and the Close pop-up's PI review (PIR-18) **Move to next PI = No is pre-selected**, although the answer is posted to the Feature's Discussion for others to read ("Default Move to next PI = No"). The Review meeting advice keeps no default and must be chosen; the pre-selected No shows in the form and in the Preview before posting. | Product owner, 2026-11-25 |
 | 2026-11-24 | §7 Period: **Show: Selected month / All months** is a segmented toggle, no longer a drop-down repeating the month ("Month is repeating … make it as a Toggle", QV-71). | Product owner, 2026-11-24 |
 | 2026-11-24 | §3 Missing permission — **row buttons with a reason per row** (an exception): on the Tool Validations Master list a tool from Azure DevOps has Edit and Remove disabled with its own reason as each button's tooltip (Edit: change it in Azure DevOps; Remove: until Azure DevOps no longer returns it), and one line above the table covers both, with Edit notes… for the notes (TVL-30). | Product owner, 2026-11-24 |
 | 2026-11-24 | §10 (2) Counts: Tool Validations shows them on its Master list tab only, as Validations ("Keep the Supported Validations and Completed Validation Card only in Master List", TVL-23). | Product owner, 2026-11-24 |

@@ -1,8 +1,8 @@
 import { useId, useState } from 'react'
 
 // A person list you can type into: clicking shows the whole list (with "me" first), typing narrows it, and a click,
-// Enter or the arrow keys pick a name. Empty value = me.
-export function PersonPicker({ value, people, onChange, meLabel, label }: { value: string; people: string[]; onChange: (name: string) => void; meLabel: string; label: string }) {
+// Enter or the arrow keys pick a name. Empty value = me. disabled: shown but not changeable (the caller shows why).
+export function PersonPicker({ value, people, onChange, meLabel, label, disabled = false, title }: { value: string; people: string[]; onChange: (name: string) => void; meLabel: string; label: string; disabled?: boolean; title?: string }) {
   const listId = useId()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -19,7 +19,7 @@ export function PersonPicker({ value, people, onChange, meLabel, label }: { valu
   }
   return <span className="person-picker">
     <input type="text" role="combobox" aria-label={label} aria-expanded={open} aria-controls={listId} aria-autocomplete="list" aria-activedescendant={open && options.length ? `${listId}-${active}` : undefined}
-      value={open ? query : value} placeholder={open ? 'Type to search…' : meLabel}
+      value={open ? query : value} placeholder={open ? 'Type to search…' : meLabel} disabled={disabled} title={title}
       onFocus={() => { setOpen(true); setQuery(''); setActive(0) }} onClick={() => { if (!open) { setOpen(true); setQuery(''); setActive(0) } }} onBlur={() => { setOpen(false); setQuery('') }}
       onChange={(event) => { setQuery(event.target.value); setOpen(true); setActive(0) }} onKeyDown={keyDown} />
     {open && <ul id={listId} role="listbox" className="person-options">

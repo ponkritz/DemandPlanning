@@ -54,6 +54,7 @@ export const settingsIndex: SettingsEntry[] = [
   { tab: 'epics', section: 'setup', page: 'Epic & Feature setup', label: 'Feature fields per Epic', words: 'program platform title pattern master data fields copy to epics' },
   { tab: 'epics', section: 'lists', page: 'Epic & Feature setup', label: 'Value lists', words: 'drop-down dropdown master data values' },
   { tab: 'epics', section: 'templates', page: 'Epic & Feature setup', label: 'User Story templates', words: 'story stories template reuse library tag' },
+  { tab: 'epics', section: 'pireview', page: 'Epic & Feature setup', label: 'PI Review form', words: 'pi review form fields headings learnings struggles move to next pi review meeting remarks comment scrum master' },
   { tab: 'resources', section: 'people', page: 'People & roles', label: 'People', words: 'region role reports to joined left team status access bulk default time tracking started' },
   { tab: 'resources', section: 'tree', page: 'People & roles', label: 'Team tree', words: 'reporting lines manager reports to org chart' },
   { tab: 'resources', section: 'capacity-roles', page: 'People & roles', label: 'Capacity roles', words: 'qe lead manager counted capacity' },

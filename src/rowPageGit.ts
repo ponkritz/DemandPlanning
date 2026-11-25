@@ -1,7 +1,7 @@
 import { GitConflictError, deleteFileAt, listEntries, readTextFile, siblingConfig, writeTextFile, type Fetch, type GitConfig } from './gitStorage.ts'
 import { stampMessage } from './gitSaveQueue.ts'
 import { commitFiles, readBlobs, readTree } from './gitTrees.ts'
-import { newRowKey, onDemandPath, parseOnDemandPage, type OnDemandPage, type OnDemandRow } from './onDemand.ts'
+import { newRowKey, onDemandPath, parseOnDemandPage, rowKeyPattern, type OnDemandPage, type OnDemandRow } from './onDemand.ts'
 import { assembleRowPage, convertedFiles, counterPath, diffPages, isMovedMarker, keyOfRowFile, pageFolder, pageJsonPath, parseCounter, rowFilePath, rowsFolder, serializeCounter, serializeHead, serializeRow } from './rowFiles.ts'
 import { lockDecision, lockFolderOf, lockPath, newLock, parseLock, renewLock, serializeLock, type RowLock } from './rowLocks.ts'
 
@@ -87,17 +87,31 @@ export async function convertPage(config: GitConfig, token: string, id: string, 
 const rebase = (config: GitConfig, files: Record<string, string | null>) => Object.fromEntries(Object.entries(files).map(([path, text]) => [siblingConfig(config, path).path, text]))
 // OND-33: a change of the page that touches many rows at once (a renamed option or a type change of Set up columns…):
 // page.json and every changed row file in one commit, the change applied to the page as it is at that commit.
-export async function commitPageChange(config: GitConfig, token: string, id: string, change: (page: OnDemandPage) => OnDemandPage, message: string, cache: Map<string, string>, fetchImpl: Fetch = fetch) {
+// OND-106: rows added with it (a bulk upload) go in the same commit — each with a key no row at that commit has and the
+// next readable IDs from counter.json at that commit, which is moved on in the same commit; when someone added a row
+// meanwhile (their counter update moved the branch), the commit is made again from theirs (commitFiles), so no key or
+// ID is given twice.
+export async function commitPageChange(config: GitConfig, token: string, id: string, change: (page: OnDemandPage) => OnDemandPage, message: string, cache: Map<string, string>, fetchImpl: Fetch = fetch, random: () => number = Math.random) {
   return commitFiles(at(config, ''), token, async (commit) => {
     const read = await loadRowPage(config, token, id, cache, fetchImpl, commit)
     if (!read) throw new Error(`${pageJsonPath(id)} is not in Git.`)
     const next = change(read.page)
     const diff = diffPages(read.page, next)
-    if (diff.added.length) throw new Error('Rows are added one at a time.')
     const files: Record<string, string | null> = {}
     if (diff.head) files[pageJsonPath(id)] = serializeHead(next)
     for (const row of diff.updated) files[rowFilePath(id, row.key!)] = serializeRow(row)
     for (const row of diff.removed) if (row.key) files[rowFilePath(id, row.key)] = null
+    if (diff.added.length) {
+      const taken = new Set(read.page.rows.flatMap((row) => row.key ? [row.key] : []))
+      const counter = parseCounter((await readTextFile(at(config, counterPath(id), commit), token, fetchImpl)).text)
+      let seq = Math.max(counter ?? 1, read.page.rows.reduce((max, row) => Math.max(max, row.seq ?? 0), read.page.lastSeq ?? 0) + 1, 1)
+      for (const row of diff.added) {
+        const key = row.key && rowKeyPattern.test(row.key) && !taken.has(row.key) ? row.key : newRowKey(read.page.keyPrefix, taken, random)
+        taken.add(key)
+        files[rowFilePath(id, key)] = serializeRow({ ...row, key, seq: seq++ })
+      }
+      files[counterPath(id)] = serializeCounter(seq)
+    }
     return { files: rebase(config, files), message }
   }, fetchImpl)
 }

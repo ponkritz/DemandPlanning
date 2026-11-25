@@ -644,13 +644,13 @@ What feeds each line and KPI row is set in **Admin → Reports → Monthly pack*
 
 ### PI Review
 
-**Data Insights → PI Review** shows the Features of a PI and what was discussed on them in Azure DevOps — the starting point for the PI Review meeting. It reads only: nothing is written to Azure DevOps or Git.
+**Data Insights → PI Review** shows the Features of a PI and what was discussed on them in Azure DevOps — the starting point for the PI Review meeting. It writes nothing to Git; the only thing it writes to Azure DevOps is a review you post with **Write review…** (below), as a new comment.
 
 1. **Choose the PI.** The **PI** list in the table's filter bar holds the PIs of your Time Writing connection and of the fetched data, newest first. The **current PI** (its Sprint's dates cover today, in UTC) is chosen for you and marked **Current PI**. If two PIs are current at the same time nothing is chosen: pick one. If the iterations cannot be read, the latest PI with Features is shown and a warning says why. Your choice is remembered in this browser.
-2. **Look at the Features.** The table lists the Features whose Iteration is in the PI (not Removed ones, not those under the absence Epic), by ID. Tick **Also Features with User Stories in this PI** to add Features that stayed in an older PI while their stories moved on. Filter by **Epic** and **State**, search, **Reset filters**, and **Export** (with the Export data right).
+2. **Look at the Features.** The table lists the Features whose Iteration is in the PI (not Removed ones, not those under the absence Epic), by ID. Tick **Also Features with User Stories in this PI** to add Features that stayed in an older PI while their stories moved on. Filter by **Epic**, **State** and **Assigned to**, search (the search looks in every column shown and the whole latest comment), **Reset filters**, and **Export** (with the Export data right).
 3. **Read a Discussion.** Click a Feature: a drawer opens with its details and its **Discussion** — every comment (up to the newest 1,000), newest first, as plain text. Formatting is not kept: a mention shows as **@Name** and an image as **[image]**. Use **↻ Read again** after new comments, ‹ › to go to the next Feature, and **Open in Azure DevOps →** to see the work item.
 4. **Read them all.** **↻ Read all Discussions** reads every Feature's Discussion in the background (the top bar shows "Reading Discussions · x of n"). If Azure DevOps asks the app to slow down it waits and tries again once; if it keeps asking, the job stops with "x of n read" — click again later to read the rest. The **Comments** column shows each Feature's count.
-5. **See the latest review comment in columns.** Once a Feature's Discussion is read (in the drawer or with Read all), the columns **Date and Time of Comment**, **Comment**, **Struggles**, **Learnings** and **Move to Next PI** show its **latest comment** — the newest by date and time, whoever wrote it. The date and time are in your time zone; a long text is cut in the cell, and pointing at it shows the whole text. Before the Discussion is read the cells show "—". Sort by any of them, search the comment text, filter with **Move to next PI** (Yes, No, Partly, Other text, Not given, Discussion not read), and **Export** them. The drawer shows the same split under **Latest comment**, above the Discussion.
+5. **See the latest review comment in columns.** Once a Feature's Discussion is read (in the drawer or with Read all), the columns **Date and Time of Comment**, **Comment**, **Struggles**, **Learnings** and **Move to Next PI** show its **latest comment** — the newest by date and time, whoever wrote it. The date and time are in your time zone; a long text is cut in the cell, and pointing at it shows the whole text. Before the Discussion is read the cells show "—". Sort by any of them, search the comment text, filter with **Move to next PI** (Yes, No, Partly, Other text, Not given, Discussion not read) and **Review mode** (Discuss during Meeting, Offline Review, …), and **Export** them. **Review mode** shows the answer to "Advise to discuss the Feature during the Review meeting" and **Additional Remarks** the remarks. The drawer shows the same split under **Latest comment**, above the Discussion.
 
 **How to write the review comment so it is split.** Write the three headings, each followed by a colon — on their own lines or in one line — as the **newest** comment of the Feature (a later reply, even "Thanks!", becomes the latest comment):
 
@@ -663,12 +663,72 @@ Move to next PI: Yes - waiting for the vendor's fix
 
 The Feature then shows **Struggles** "the test rig arrived two Sprints late", **Learnings** "book the rig at PI planning · share the lab calendar with the team" (each line break shown as " · ") and **Move to Next PI** "Yes — waiting for the vendor's fix".
 
-- Letter case does not matter, and **Struggle** / **Learning** (singular) work too. For Move you may write *Move to next PI*, *Moved to next PI*, *Move to the next PI* or, at the start of a line, *Next PI*.
-- A heading counts at the **start of a line** (a bullet, number, # or bold before it is fine) followed by a colon, a dash and a space, or nothing; **inside a line** only when a colon follows it. "We had struggles with the rig" is not a heading.
+- Letter case does not matter, and these headings count too:
+
+  | Column | Accepted headings |
+  |---|---|
+  | **Struggles** | Struggles, Struggle, Struggles of the Feature, Challenges, Issues, Problems, Blockers, Impediments, Risks (each also singular), Pain points, What went wrong, What didn't go well |
+  | **Learnings** | Learnings, Learning, Learnings of the Feature, Lessons, Lesson, Lessons learnt, Lessons learned, Takeaways, What went well, Improvements, and at the start of a line Went well, Improve, Next time |
+  | **Move to Next PI** | Whether the feature needs to be shifted to PI 26.4 (any PI number; also *moved* / *carried over*, and *Does the feature need to be …*), Move to next PI, Moved to next PI, Move to the next PI, Moving to next PI, Continue in next PI, Spill over, Spillover, Spill-over, Carry over, Carryover, Carry-over, and at the start of a line Next PI |
+
+  Two headings of the same column (e.g. *Issues* and *Risks*) are joined.
+- **The team's two formats both work** (sub-points as bullets, numbers or one per line):
+  ```
+  Learnings :                                    Learnings of the Feature
+  - Start reviews earlier                        • Early alignment helped
+  Struggles :                                    Struggles of the Feature
+  1. Waiting for vendor documents                • Lab access delayed
+  Whether the feature needs to be shifted to PI 26.4
+  Yes - two stories left                         Whether the feature needs to be shifted to PI 26.4 : No
+  ```
+  The answer may follow on the next line, after a colon, a dash or a "?", or after a space when it starts with Yes / No / Partly. The PI named in the question is read from the comment (any number, so it works for every PI review) and shown after the answer, e.g. "Yes — two stories left · to PI 26.4".
+- A heading counts at the **start of a line** (a bullet, number, # or bold before it is fine) followed by a colon, a dash (- – —) and a space, or nothing; **inside a line** when a colon follows it ("… Lesson: share the calendar"), and for *Struggle*, *Learning* and *Lesson* also a dash and a space ("… a learning – book the rig early"). "We had struggles with the rig" or "there were issues" is not a heading.
 - Start the Move text with **Yes**, **No** or **Partly** (or Y / N) to use the filter; anything else (e.g. "N/A", "to be decided") is shown as written under Other text.
-- A comment without the headings shows only its date and the whole comment. The whole comment is always shown next to the split, so check it when a section looks wrong.
+- **No heading at all? Suggested values.** When the newest comment has none of the headings, the app looks for **keywords** sentence by sentence (a sentence ends at a line break or after ". ", "! ", "? "): *blocked, blocker, delay(ed), issue, problem, risk, escalated, dependency, waiting, rework, missed, slipped, could not, unable, late, impediment, struggle, challenge* go to **Struggles**; *learned, learnt, lesson, next time, improve, went well, worked well, better to, recommend, should have, takeaway, learning* to **Learnings**; *carry over, next PI, spill over, move to, moving to, continue in* to **Move to Next PI**. A sentence with words of two columns goes to both; "no blockers", "not blocked" or "wasn't late" are not taken. These texts are only a guess: the cell shows **(suggested)** before them in italics (pointing at it says "Suggested from keywords, not headings"), the drawer's Latest comment says **Suggested from keywords**, and Export has a column **Split from** (Headings, Keywords or None). A suggested Move gets Yes / No / Partly only when the sentence says so right after the phrase, e.g. "Carry over to next PI — partly, the docs" → "Partly — the docs". Write the headings to be sure.
+- A comment with neither headings nor keywords shows only its date and the whole comment. The whole comment is always shown next to the split, so check it when a section looks wrong.
 
 The Discussions are read with your own PAT (Work Items, Read) and kept only until you reload the page. Tagging struggles and learnings in the app, saving them to Git and recording the Move to next PI decision come in later releases.
+
+#### Write the PI review in the app (from PI 26.4)
+
+Instead of typing the headings yourself, fill in the review form; the app writes the comment in the standard format for you.
+
+1. **Open the form.** Click **Write review…** in the Feature's drawer (bottom right) or in the **Actions** column of its row — or open **My Work → My PI Review**, which lists only your Features of the PI with **My review** (Reviewed / Not reviewed) and its date. Its filter row has **PI** (the current PI first) and **Person** (**Me** first) and **Reset filters** (back to Me and the current PI). A lead with "PI Review: post the review of a Feature" can choose another person in Person: the page then shows only that person's Features (their Assigned To, by work email where known) with **Their review** and its date, and Write review… still follows the posting rights below. For everyone else Person is greyed out and the line under it says why.
+2. **Who can post.** The Feature's **assignee** (your work email on the Time Writing connection is the Feature's Assigned To) and the **leads** (Tool Owner, Admin, People Manager — the right "PI Review: post the review of a Feature"). For anyone else the button is greyed out and says why; it is also greyed out with sample data, in View as, without the PAT, or on an on-premises connection (reviews go to dev.azure.com only).
+3. **Fill in the paragraphs.** One point per line; start a line with **-** or **1.** for a list.
+   - **Learnings** and **Struggles** — required (write "None" if there are none).
+   - **Move to next PI** — **Yes** or **No** (**No** is pre-selected). **Moves to** is filled in with the PI after the reviewed one: the PI that **starts first after the reviewed PI ends**, by the PI dates in Azure DevOps (a PI without dates of its own takes its Sprints' dates; when two PIs overlap, the one starting next). The line under it says where it came from — "From Azure DevOps iteration dates: …" or, when Azure DevOps has no usable dates (no PAT, sample data, an undated PI, no later dated PI), the reason and "worked out from the PI number" (the next PI in the list, else e.g. PI 26.4 → PI 26.5). Change it if needed. **Reason** is optional.
+   - **Advise to discuss the Feature during the Review meeting?** — **Discuss during Meeting** or **Offline Review** (required, no default).
+   - **Additional Remarks** — optional.
+   If the Feature already has a review, the form starts from it, so a correction only changes what is wrong.
+4. **Check the Preview.** It shows the exact comment, for example:
+   ```
+   Learnings :
+   Book the rig early
+   - share the lab calendar
+   Struggles :
+   Vendor documents late
+   Whether the feature needs to be shifted to PI 26.5 : Yes - two stories left
+   Advise to discuss the Feature during the Review meeting : Discuss during Meeting
+   Additional Remarks :
+   Thanks to the lab team
+   — posted from Demand Planning (PI Review)
+   ```
+   The last line marks it as posted from the app; PI Review ignores it. If a line of yours looks like a heading (e.g. "Issues: …" inside Learnings), the form asks you to reword it, so the columns stay right.
+5. **Post.** **Post to Azure DevOps** asks you to confirm, then posts the comment as you (your PAT). The result is under **Background jobs** ("Post review · #id"); the Discussion is read again and the columns show the new values. A posted comment cannot be deleted from the app: to correct it, write the review again — the newest comment counts.
+
+**When you close a Feature** (Close in My Tasks [Board], Sprint check or Time Writing), the Close pop-up asks the same questions for that Feature (Learnings and Struggles optional, **Move to next PI = No** pre-selected, the Review meeting advice required) and **posts the review first, then closes**. If the review cannot be posted nothing is closed: choose **Close without the review** or **Cancel**. When several Features are closed at once, write their reviews in PI Review or My PI Review.
+
+#### Change the review form (Scrum Master, Tool Owner)
+
+The fields of the review form are a shared setup: when the review changes, the Scrum Master or the Tool Owner changes the form in the app, and everyone's next review uses it.
+
+1. **Open it.** **Admin → Epic & Feature setup → PI Review form**, or **Form setup** at the top of PI Review. Everyone sees the form in use: each field with the heading it writes in the comment, its type, options, whether it is required and its default. Without a setup in Git it says *The built-in form*.
+2. **Edit form…** opens the editor — the same column editor as **Set up columns…** on the On-Demand pages. For each field: **Name** (the label in the form), **Type** (**Long text** for a paragraph, **Dropdown (one value)** for a choice), **Required**, ↑ ↓ to reorder, ✕ to remove, the **Heading in the comment**, the **Default** of a Dropdown, a **Help text**, and the **options** of a Dropdown. **＋ Add field** adds one (at most 15); **Use the built-in form** starts again from the built-in fields. The **Comment preview** shows what a review written with the form looks like.
+3. **Move to next PI** keeps its behaviour — Yes / No, the PI it moves to and the reason — so its name, type, options and Required are locked and it cannot be removed; its heading (with **{PI}** where the PI is written), its default (No unless you change it) and its help can be changed. The other built-in fields keep their type.
+4. **Save to Git.** The form is checked first: a heading that is empty, used twice, or already read as another field (for example "Issues" or "What went wrong" is read as Struggles, so older reviews would land in the wrong column) is refused, and a review written with every field must read back exactly. The result is in **Background jobs** ("PI Review form · Save to Git").
+
+PI Review reads your headings and still the built-in ones and the earlier formats, so older reviews keep their columns; each field you add is a column of its own in PI Review. **Edit form…** is greyed out, with the reason next to it, for everyone without the right "PI Review: set up the review form" (Scrum Master and Tool Owner by default), in View as, with the synthetic sample and without Git storage.
 
 ### Planning Overview and Capacity vs Actual (Testing)
 
@@ -859,7 +919,7 @@ Large pages can be converted to **row files** (see below). On such a page **Edit
 
 ### The page menu (⋯)
 
-The **⋯** next to the page's main action holds **Rename page…**, **Hide page**, **Delete page…** (Tool Owner), **Replace…**, **Convert to row files…** (Tool Owner), **Publish interactive HTML…** and **↻ Reload from Git**.
+The **⋯** next to the page's main action holds **Rename page…**, **Hide page**, **Delete page…** (Tool Owner), **Download Excel template…**, **Upload Excel…**, **Replace…**, **Convert to row files…** (Tool Owner), **Publish interactive HTML…** and **↻ Reload from Git**.
 
 ![The page menu of CoNQ](user-guide/images/page-menu.png)
 
@@ -873,6 +933,23 @@ When one person hands their work over to another — a QE leaves and their relea
 4. Check the preview — **"N rows will change"** and the first rows with the old and new value — and choose **Replace**.
 
 The change is saved to Git at once. On an On-Demand page each changed row gets an entry in its **History** ("Replaced “Alex Example” with “Sam Example” in QE") and the result is in **Background jobs**; hidden rows are not changed, and rows someone else is editing are skipped (the preview says how many). On QE Mapping every row of the tab is changed, also rows a search or filter hides; the commit names the change. Without the right to edit the page or QE Mapping, without Git storage that can save, with sample data, or while viewing as someone else, **Replace…** is greyed out with the reason.
+
+### Add and update many rows from Excel (bulk upload)
+
+To add or change many rows at once, fill the page's Excel template and upload it. Both are in the page's **⋯** menu on a Table or Table + Insights page (and CoNQ).
+
+1. Choose **⋯ → Download Excel template…**. Pick **With the N rows shown** (the rows the table shows now, each with its Row ID — to change them) or **Empty template** (only the header row — to add rows), then **Download template**.
+2. Open "{page} - upload template.xlsx" in Excel. The sheet has the page's columns in order; **Row ID** is the first column (grey) — **do not change it**: it finds the row to update. Required columns are highlighted. Click a header or cell to see what to fill.
+3. Fill the rows:
+   - **Change a value** in a row with a Row ID to update that row. An emptied cell clears the value.
+   - **Add a row** below without a Row ID to add a new row.
+   - **Dropdown** columns: pick a value from the list. **Multi-select** columns: pick one value, or type several separated by **;** (for example `Customer; Audit`). **Dates** as dates (2026-11-25), **numbers** as numbers, **Currency** as an amount with its code (`1200.50 EUR`).
+   - Delete rows you do not change, or leave them: unchanged rows are only counted.
+4. Save the file as .xlsx (or CSV) and choose **⋯ → Upload Excel…**, then the file.
+5. Check the preview: **"N added · N updated · N unchanged · N with errors"**, the columns that were ignored or are missing, and the first rows with what happens to each (rows with errors first, with the reason). **Download error report (CSV)** lists every row with an error.
+6. Choose **Save to Git**. Only the valid rows are saved; rows with errors are left out — fix them in the file and upload it again (rows already saved then count as unchanged).
+
+The result is in **Background jobs**, and each added or changed row's **History** says "Bulk upload from {file}". Rows someone else is editing are skipped and counted; a hidden row can be updated by its Row ID; a Row ID that is not on the page gives **Row not found**. An upload reads at most 10 MB and 5,000 rows and adds or updates up to 2,000 rows. Text starting with = + - or @ is saved with an apostrophe first, so it never runs as a formula. Without the right to edit the page's rows, without Git storage that can save, with sample data or while viewing as someone else, **Upload Excel…** is greyed out with the reason; in Sample the template is too.
 
 ### Convert to row files
 
@@ -1170,6 +1247,16 @@ Your own read-only views are in **My settings → My views**: they appear under 
 ### Data & sharing
 
 **Admin → Data & sharing** has **Git storage** (connect, change or disconnect; **Load latest**), **Load from Git** (**Load everything from Git**), **Shared setup in Git**, **Other views** and **Synthetic sample**.
+
+**Remove a shared view for everyone (Tool Owner).** **Remove** on a row of **Other views** takes a view out of your own browser only — the shared setup in Git brings it back at your next start. To take a shared view away from everyone:
+
+1. Open **Admin → Data & sharing → Other views** and choose **⋯** on the view's row.
+2. Choose **Remove for everyone…** to drop it from the shared setup, or **Delete for everyone…** to also delete its saved data in Git (the pop-up lists the files, e.g. `azure-data/<view>.json`).
+3. Read the pop-up — it affects everyone who uses the shared setup in Git; the app cannot tell how many people that is — and confirm.
+
+A backup of the view (never a PAT) is saved to Git first. At their next start every browser and desktop app removes the view with its saved data and shows once: "The Tool Owner removed 1 shared view: …". Each person's own views (**My views**) and PATs stay. To bring it back for everyone, use **Admin → Streams → Removed connections** → **Look in Git history** → **Restore** (removed views are listed first, with who removed them). Without the Tool Owner role, while viewing as someone else, without Git storage, with a read-only Git token or with the sample data, the two items are greyed out and the line above the table says why. An app version from before this change keeps the view until it is updated.
+
+*CON-109…CON-112*
 
 ### Look & feel
 

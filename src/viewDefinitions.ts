@@ -318,11 +318,17 @@ export function mergeViews(inGit: AzureConnectionProfileSummary[], here: AzureCo
 // e.g. one dropped when another computer overwrote the file. Newest version first; each connection once, as it was in
 // the newest version that had it; one duplicating a connection here (same server, project, role and query) is left out.
 export interface GitVersion { sha: string; date: string; message: string; views: AzureConnectionProfileSummary[] }
-export interface RemovedView { view: AzureConnectionProfileSummary; date: string; message: string; sha: string }
-export function removedFromGit(versions: GitVersion[], current: AzureConnectionProfileSummary[], here: AzureConnectionProfileSummary[]): RemovedView[] {
+// CON-112: the views the Tool Owner removed for everyone come first, from their removal marker (with who and when),
+// whatever the age of the version that last had them.
+export interface RemovedView { view: AzureConnectionProfileSummary; date: string; message: string; sha: string; removal?: ViewRemoval }
+export function removedFromGit(versions: GitVersion[], current: AzureConnectionProfileSummary[], here: AzureConnectionProfileSummary[], removals: ViewRemoval[] = []): RemovedView[] {
   const present = new Set([...current, ...here].map((view) => view.id))
   const keys = new Set([...current, ...here].map(connectionKey))
   const found = new Map<string, RemovedView>()
+  for (const removal of [...removals].sort((a, b) => b.at.localeCompare(a.at))) {
+    if (!removal.view.url || present.has(removal.id) || keys.has(connectionKey(removal.view))) continue
+    found.set(removal.id, { view: removal.view, date: removal.at, message: `${removal.mode === 'delete' ? 'Deleted' : 'Removed'} for everyone${removal.by ? ` by ${removal.by}` : ''}`, sha: '', removal })
+  }
   for (const version of [...versions].sort((a, b) => b.date.localeCompare(a.date))) {
     for (const view of version.views) {
       if (present.has(view.id) || found.has(view.id) || view.mine || keys.has(connectionKey(view))) continue
@@ -330,4 +336,87 @@ export function removedFromGit(versions: GitVersion[], current: AzureConnectionP
     }
   }
   return [...found.values()]
+}
+
+// CON-109…CON-112: a shared view the Tool Owner removed (or deleted) for everyone. The removal markers are kept in a file
+// of their own next to the shared setup (azure-views-removed.json), so an older app that rewrites azure-views.json
+// never drops them. While a view is marked removed, Git's shared setup wins for it: it is left out of the setup read from
+// Git, out of every save of the setup (CON-98 merge), out of the on-prem data loaded from Git and never saved back there.
+// Each browser removes it here once (per repository and marker); My views (SET-17) and PATs are never touched.
+export const viewsRemovedPath = 'azure-views-removed.json'
+const removedKind = 'azure-views-removed'
+export type RemovalMode = 'remove' | 'delete'
+// view: the definition as it was (never a PAT or email); backup: its copy in azure-views-backups/; files: the data files
+// deleted in Git (Delete only).
+export interface ViewRemoval { id: string; name: string; by: string; at: string; mode: RemovalMode; backup: string; files?: string[]; view: AzureConnectionProfileSummary }
+const idPattern = /^[a-zA-Z0-9_-]{1,80}$/
+export function parseViewRemovals(text: string | null): ViewRemoval[] {
+  if (!text) return []
+  let raw: unknown
+  try { raw = JSON.parse(text) } catch { return [] }
+  const file = raw as { schema?: unknown; kind?: unknown; removed?: unknown }
+  if (!file || file.schema !== 1 || file.kind !== removedKind || !Array.isArray(file.removed)) return []
+  return file.removed.flatMap((entry): ViewRemoval[] => {
+    const item = entry as Partial<ViewRemoval>
+    if (!item || typeof item.id !== 'string' || !idPattern.test(item.id) || typeof item.at !== 'string' || !Number.isFinite(Date.parse(item.at))) return []
+    const view = item.view && typeof item.view === 'object' && item.view.id === item.id && typeof item.view.url === 'string' ? clean(item.view) : { id: item.id, reason: typeof item.name === 'string' && item.name ? item.name : item.id, url: '', role: 'reference' as const }
+    return [{ id: item.id, name: typeof item.name === 'string' && item.name ? item.name : item.id, by: typeof item.by === 'string' ? item.by : '', at: item.at, mode: item.mode === 'delete' ? 'delete' : 'remove', backup: typeof item.backup === 'string' ? item.backup : '', ...(Array.isArray(item.files) ? { files: item.files.filter((name): name is string => typeof name === 'string') } : {}), view }]
+  })
+}
+export const serializeViewRemovals = (removals: ViewRemoval[]) => `${JSON.stringify({ schema: 1, kind: removedKind, removed: [...removals].sort((a, b) => a.id.localeCompare(b.id)).map((entry) => ({ ...entry, view: clean(entry.view) })) }, null, 2)}\n`
+// The marker for a view, replacing an older one for the same view; and without it (Restore, CON-112).
+export const withRemoval = (removals: ViewRemoval[], entry: ViewRemoval) => [...removals.filter((item) => item.id !== entry.id), { ...entry, view: clean(entry.view) }]
+export const withoutRemoval = (removals: ViewRemoval[], id: string) => removals.filter((item) => item.id !== id)
+// The views of the shared setup in Git that are not marked removed.
+export const notRemoved = <T extends { id: string }>(views: T[], removals: ViewRemoval[]) => { const gone = new Set(removals.map((entry) => entry.id)); return views.filter((view) => !gone.has(view.id)) }
+// The backup of one removed view: azure-views-backups/azure-views-<UTC time>-removed-<id>.json, in the views-file format.
+export const removalBackupName = (id: string, at: Date) => viewsBackupName(at).replace(/\.json$/, `-removed-${id}.json`)
+
+// Which markers this browser has applied, per repository (owner/repo@branch:path): `${id}@${at}`.
+const removalsAppliedKey = 'demand-planning-views-removed-applied-v1'
+function readApplied(storage: Pick<Storage, 'getItem'>): Record<string, string[]> {
+  try { const raw = JSON.parse(storage.getItem(removalsAppliedKey) ?? '{}') as unknown; return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, string[]> : {} } catch { return {} }
+}
+const removalKey = (entry: Pick<ViewRemoval, 'id' | 'at'>) => `${entry.id}@${entry.at}`
+export function removalsPending(removals: ViewRemoval[], repository: string, storage: Pick<Storage, 'getItem'> = localStorage) {
+  const seen = new Set(readApplied(storage)[repository] ?? [])
+  return removals.filter((entry) => !seen.has(removalKey(entry)))
+}
+export function markRemovalsApplied(removals: ViewRemoval[], repository: string, storage: Pick<Storage, 'getItem' | 'setItem'> = localStorage) {
+  if (!removals.length) return
+  const all = readApplied(storage)
+  all[repository] = [...new Set([...(all[repository] ?? []), ...removals.map(removalKey)])]
+  try { storage.setItem(removalsAppliedKey, JSON.stringify(all)) } catch { /* applied again next start: removes only what is still here */ }
+}
+// At start (not the first sync from another repository, GIT-26): every marker not applied here yet removes that shared
+// view here — also when it was changed here — once. My views and PATs stay (a PAT saved only on the view becomes its
+// server's PAT). Returns the views removed here (a marker for a view that is not here is only recorded).
+export function applyViewRemovals(removals: ViewRemoval[], repository: string, storage: Pick<Storage, 'getItem' | 'setItem'> = localStorage): AzureConnectionProfileSummary[] {
+  const pending = removalsPending(removals, repository, storage)
+  if (!pending.length) return []
+  const ids = new Set(pending.map((entry) => entry.id))
+  const removed: AzureConnectionProfileSummary[] = []
+  for (const profile of listAzureConnectionProfiles(storage)) {
+    if (!ids.has(profile.id) || profile.mine) continue
+    try { keepServerPat(profile, storage); forgetAzureConnectionProfile(profile.id, storage); removed.push(profile) } catch { /* kept: tried again next start */ }
+  }
+  try { const next = readBaseline(storage); for (const id of ids) delete next[id]; storage.setItem(baselineKey, JSON.stringify(next)) } catch { /* compared again next time */ }
+  markPendingShare([...ids], false, storage)
+  markRemovalsApplied(pending, repository, storage)
+  return removed
+}
+// CON-109: why the Tool Owner's Remove / Delete for everyone is not available, or '' (fail closed: no right, no removal).
+export function removalBlocked({ allowed, viewingAs, git, isSample }: { allowed: boolean; viewingAs: boolean; git?: { connected: boolean; readOnly: boolean; isSample?: boolean }; isSample: boolean }) {
+  if (viewingAs) return 'Not while viewing as someone else: View as is read-only.'
+  if (!allowed) return 'Only the Tool Owner (“Change the stream mapping”) can remove a shared view for everyone.'
+  if (!git?.connected) return 'Connect Git storage (Admin → Data & sharing) first: the shared setup is in Git.'
+  if (git.readOnly) return 'Your Git token is read-only, so the shared setup in Git cannot be changed.'
+  if (isSample || git.isSample) return 'Not while the synthetic sample data is loaded.'
+  return ''
+}
+// The one-time notice after shared views were removed here.
+export function removalNotice(removed: AzureConnectionProfileSummary[]) {
+  if (!removed.length) return ''
+  const one = removed.length === 1
+  return `The Tool Owner removed ${removed.length} shared view${one ? '' : 's'}: ${removed.map((profile) => profile.viewName || profile.reason).join(', ')}. ${one ? 'It was' : 'They were'} removed here with ${one ? 'its' : 'their'} saved data; your own views (My views) and your PATs are kept.`
 }

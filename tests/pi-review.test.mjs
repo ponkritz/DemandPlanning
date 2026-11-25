@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { defaultPi, epicOf, latestComment, moveLabel, oneLine, piFeatures, piOptions, readDiscussions, splitReviewComment } from '../src/piReview.ts'
+import { defaultPi, epicOf, latestComment, moveLabel, oneLine, piFeatures, piOptions, readDiscussions, reviewKeywords, reviewSentences, reviewSplit, splitByKeywords, splitReviewComment } from '../src/piReview.ts'
 import { continuationTokenProblem, guardAzureWrites, rateLimitMessage, rateLimitWait, readComments, readDiscussion, requestAzure } from '../src/azureDevOps.ts'
 import { commentText } from '../src/workItemEdit.ts'
 guardAzureWrites(() => true)
@@ -192,4 +192,95 @@ test('PIR-08: Move to next PI — Yes / No / Partly (or Y / N) normalized with t
   assert.deepEqual(move('Nothing moves'), [undefined, 'Nothing moves'])
   assert.equal(moveLabel({}), '')
   assert.equal(oneLine('one\n\n two \nthree'), 'one · two · three')
+})
+
+// PI Review, looser split (PIR-08 synonyms, PIR-11 keyword fallback). Synthetic comments only.
+test('PIR-08: every synonym heading is taken at a line start, with a colon, a dash and a space, or the line end (TC-PIR-08)', () => {
+  const synonyms = {
+    struggles: ['Struggles', 'Challenges', 'Issues', 'Problems', 'Blockers', 'Impediments', 'Risks', 'Pain points', 'What went wrong', 'What didn\'t go well', 'What didn’t go well', 'What did not go well'],
+    learnings: ['Learnings', 'Learning', 'Lessons', 'Lesson', 'Lessons learnt', 'Lessons learned', 'Takeaways', 'Take-aways', 'What went well', 'Went well', 'Improvements', 'Improve', 'Next time'],
+    move: ['Move to next PI', 'Spill over', 'Spillover', 'Spill-over', 'Carry over', 'Carryover', 'Carry-over', 'Next PI', 'Moving to next PI', 'Moving to the next PI', 'Continue in next PI'],
+  }
+  for (const [section, words] of Object.entries(synonyms)) for (const word of words) {
+    for (const form of [`${word}: the text`, `- **${word}** – the text`, `## ${word}\nthe text`, `1. ${word.toUpperCase()} - the text`]) {
+      assert.equal(splitReviewComment(`Intro\n${form}`)[section], 'the text', `${section} from ${JSON.stringify(form)}`)
+      assert.equal(reviewSplit(`Intro\n${form}`).from, 'Headings')
+    }
+  }
+  // Synonyms of one section are joined; the Yes / No / Partly normalisation is the same for the Move synonyms.
+  assert.deepEqual(splitReviewComment('Challenges: rig late\nLessons learnt: book early\nRisks: vendor\nSpill-over: Yes - docs'),
+    { struggles: 'rig late\nvendor', learnings: 'book early', move: 'Yes - docs', moveValue: 'Yes', moveRest: 'docs' })
+  assert.deepEqual(splitReviewComment('What went well: demo\nWhat didn\'t go well: rig\nCarry over — partly, docs'),
+    { learnings: 'demo', struggles: 'rig', move: 'partly, docs', moveValue: 'Partly', moveRest: 'docs' })
+})
+
+test('PIR-08: inline forms — a colon after any heading word inside a line, a dash and a space after Struggle / Learning / Lesson (TC-PIR-08)', () => {
+  assert.deepEqual(splitReviewComment('Demo fine, a learning – book the rig early; struggle - the vendor'), { learnings: 'book the rig early;', struggles: 'the vendor' })
+  assert.deepEqual(splitReviewComment('Review done. lesson: share the calendar'), { learnings: 'share the calendar' })
+  assert.deepEqual(splitReviewComment('Review done. Lessons learned — share the calendar'), { learnings: 'share the calendar' })
+  assert.deepEqual(splitReviewComment('Two points. Blockers: the rig. Takeaways: book early. Carry over: no'), { struggles: 'the rig.', learnings: 'book early.', move: 'no', moveValue: 'No', moveRest: '' })
+  // Plain sentences without a colon or a dash are not headings; the line-start-only words need a line start.
+  assert.deepEqual(splitReviewComment('We had issues with the rig and lessons for the team'), {})
+  assert.deepEqual(splitReviewComment('There were risks - one was the vendor'), {}, 'a dash inside a line only after Struggle / Learning / Lesson')
+  assert.deepEqual(splitReviewComment('Learning-curve was steep\nthe lesson-plan is ready'), {}, 'a dash without a space')
+  assert.deepEqual(splitReviewComment('We need to improve: x\nIt went well: y\nPlanned for next PI: z\nSee you next time: w'), {}, 'Improve, Went well, Next PI and Next time only at a line start')
+  assert.deepEqual(splitReviewComment('Mylessons: x\nnonissues: y'), {}, 'not inside a word')
+})
+
+test('PIR-11: without any heading, sentences with keywords are suggested for each column (TC-PIR-10)', () => {
+  const text = 'We were blocked by the vendor for two Sprints. Next time we book the rig at PI planning!\n- The docs slipped, we learned to review earlier.\nSpill over to next PI — partly, the docs.'
+  assert.deepEqual(reviewSplit(text), {
+    struggles: 'We were blocked by the vendor for two Sprints.\nThe docs slipped, we learned to review earlier.',
+    learnings: 'Next time we book the rig at PI planning!\nThe docs slipped, we learned to review earlier.',
+    move: 'Spill over to next PI — partly, the docs.', moveValue: 'Partly', moveRest: 'the docs.', from: 'Keywords',
+  }, 'a sentence with keywords of two columns goes to both')
+  assert.deepEqual(reviewSentences('One. Two! Three?\n\n- Four'), ['One.', 'Two!', 'Three?', 'Four'])
+  // Each column on its own, plurals, wildcards, case and the curly apostrophe.
+  const one = (sentence) => { const split = splitByKeywords(sentence); return ['struggles', 'learnings', 'move'].filter((section) => split[section]) }
+  for (const sentence of ['Escalated to the vendor', 'Two ISSUES with the rig', 'We couldn’t finish the docs', 'Dependencies on lab A', 'Waiting for the rig', 'The challenge was the rig', 'Delivered late']) assert.deepEqual(one(sentence), ['struggles'], sentence)
+  for (const sentence of ['A lesson for the team', 'We recommend booking early', 'The demo went well', 'Improvements in the reviews', 'Better to book early', 'Key takeaways from the demo']) assert.deepEqual(one(sentence), ['learnings'], sentence)
+  for (const sentence of ['Carry over the docs', 'The docs spilled', 'We continue in PI 2027.1', 'Moving to the new lab', 'Planned for next PI']) assert.deepEqual(one(sentence), ['move'], sentence)
+  // Whole words only.
+  assert.deepEqual(one('Plateau reached later than planned, the blockchain demo'), [])
+  assert.deepEqual(reviewSplit('Ready for review'), { from: 'None' })
+  assert.deepEqual(reviewSplit(''), { from: 'None' })
+  assert.deepEqual(reviewSplit(undefined), { from: 'None' })
+  // The list is one exported, built-in list.
+  assert.ok(reviewKeywords.struggles.includes('blocked') && reviewKeywords.learnings.includes('next time') && reviewKeywords.move.includes('carry over'))
+})
+
+test('PIR-11: a negation before a keyword is not taken; the Move value only when it clearly follows the move phrase (TC-PIR-10)', () => {
+  assert.deepEqual(reviewSplit('No blockers. No issues at all. Not blocked. It wasn’t late. Without major delays. We had no real problem.'), { from: 'None' })
+  assert.deepEqual(splitByKeywords('No blocker, but the rig was late.'), { struggles: 'No blocker, but the rig was late.' }, 'another keyword in the sentence still counts')
+  assert.deepEqual(splitByKeywords('No idea why we were delayed.'), { struggles: 'No idea why we were delayed.' }, 'the negation too far before')
+  const move = (sentence) => { const split = splitByKeywords(sentence); return [split.moveValue, moveLabel(split)] }
+  assert.deepEqual(move('Carry over to next PI: yes, the docs.'), ['Yes', 'Yes — the docs.'])
+  assert.deepEqual(move('Spill over - no.'), ['No', 'No'])
+  assert.deepEqual(move('Move to next PI no longer needed.'), [undefined, 'Move to next PI no longer needed.'], '"no" followed by a word gives no value')
+  assert.deepEqual(move('Yes, the docs carry over.'), [undefined, 'Yes, the docs carry over.'], 'a value before the phrase gives none')
+  assert.deepEqual(move('We carry over the docs. Then next PI - no.'), [undefined, 'We carry over the docs.\nThen next PI - no.'], 'two Move sentences give no value')
+})
+
+test('PIR-08, PIR-11: headings take priority over keywords; Split from is Headings, Keywords or None (TC-PIR-10)', () => {
+  const both = 'We were blocked by the vendor.\nLearnings: book early'
+  assert.deepEqual(reviewSplit(both), { learnings: 'book early', from: 'Headings' }, 'a heading anywhere: no keyword suggestion')
+  assert.deepEqual(reviewSplit('Struggles:'), { from: 'Headings' }, 'an empty heading still counts as headings')
+  assert.equal(reviewSplit('We were blocked by the vendor.').from, 'Keywords')
+  assert.equal(reviewSplit('Ready for review').from, 'None')
+  assert.deepEqual(splitReviewComment('We were blocked by the vendor.'), {}, 'the heading split alone stays empty')
+})
+
+test("PIR-12: the team's two formats — Learnings : / Struggles : and … of the Feature, the Move question with any PI number (TC-PIR-12)", () => {
+  const first = splitReviewComment('Learnings :\n- Start reviews earlier\n- Keep the vendor in the loop\nStruggles :\n1. Waiting for vendor documents\n2. Test rig booked late\nWhether the feature needs to be be shifted to PI 26.4\nYes - two stories left')
+  assert.deepEqual([first.learnings, first.struggles, first.moveValue, first.movePi], ['Start reviews earlier\nKeep the vendor in the loop', 'Waiting for vendor documents\nTest rig booked late', 'Yes', 'PI 26.4'])
+  assert.equal(moveLabel(first), 'Yes — two stories left · to PI 26.4')
+  const second = splitReviewComment('Learnings of the Feature\n• Early alignment helped\nStruggles of the Feature\n• Lab access delayed\nWhether the feature needs to be shifted to PI 26.4 : No')
+  assert.deepEqual([second.learnings, second.struggles, second.moveValue, second.movePi], ['Early alignment helped', 'Lab access delayed', 'No', 'PI 26.4'])
+  // Any PI number; the answer after a "?" on the next line, after a dash, or after a space when it starts with Yes / No / Partly.
+  assert.deepEqual([splitReviewComment('Struggles :\n- B\nWhether the feature needs to be shifted to PI 27.1?\nNo').movePi, splitReviewComment('Struggles :\n- B\nWhether the feature needs to be shifted to PI 27.1?\nNo').moveValue], ['PI 27.1', 'No'])
+  assert.equal(splitReviewComment('Struggles of the Feature\n1) B\nWhether the feature needs to be shifted to PI 26.4 - Partly').moveValue, 'Partly')
+  const space = splitReviewComment('Learnings of the Feature\n- A\nWhether the feature needs to be shifted to PI 26.4 Yes, docs pending')
+  assert.deepEqual([space.learnings, space.moveValue, space.moveRest], ['A', 'Yes', 'docs pending'])
+  // In a sentence it is no heading.
+  assert.deepEqual(splitReviewComment('We discussed whether the feature needs to be shifted to PI 26.4 in the meeting.'), {})
 })

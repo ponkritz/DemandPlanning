@@ -119,6 +119,8 @@ test('TC-STR-06: as Tool Owner add a stream “Labeling” (Azure DevOps, Like C
   ])
   await form.waitFor({ state: 'detached' })
   await row.getByText('Fetched').or(row.getByText('Data saved')).first().waitFor()
+  // The shared setup is saved after the fetch starts (it reads the setup and its removal markers first): wait for the write.
+  for (const end = Date.now() + 30000; !writes.some((entry) => entry.path === 'azure-views.json') && Date.now() < end;) await new Promise((resolve) => setTimeout(resolve, 50))
   const views = writes.filter((entry) => entry.path === 'azure-views.json').pop()
   assert.deepEqual(views.data.views.map((view) => view.viewName), ['Labeling'], 'the connection is shared like every stream connection')
   await shot(page, 'stream-mapping')

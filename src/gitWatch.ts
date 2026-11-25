@@ -39,6 +39,7 @@ const fileNames: [RegExp, string][] = [
   [/(^|\/)history-hours\.json$/, 'Historical hours'],
   [/(^|\/)kpi-tracker\.json$/, 'KPI tracker'],
   [/(^|\/)tool-validations\.json$/, 'Tool Validations master list'],
+  [/(^|\/)pi-review-form\.json$/, 'PI Review form'],
   [/(^|\/)on-demand\/([a-z0-9-]+)\.json$/, 'On-Demand page $2'],
   [/(^|\/)on-demand\/([a-z0-9-]+)\/(?:page\.json|rows)$/, 'On-Demand page $2'],
   [/(^|\/)row-locks\.json$/, 'Row lock timeout'],
@@ -90,7 +91,7 @@ export interface RemoteChange { path: string; sha: string | null; by?: string; a
 // menu layout (the menu is refreshed), the default and own views, the access roles away from People & roles (GIT-23)
 // and the planning data as before (GIT-15).
 // loader: how the newer file is loaded without reloading the app ('reload': only a full reload can).
-export interface FilePages { pages: string[]; quiet?: 'menu' | 'views' | 'planning' | 'access'; loader: string }
+export interface FilePages { pages: string[]; quiet?: 'menu' | 'views' | 'planning' | 'access' | 'piForm'; loader: string }
 const reportPages = ['mydash', 'overview', 'pulse', 'capactual', 'planover']
 const featurePages = ['board', 'windchill', 'mywork', 'activities', 'admin:epics']
 const releasePages = ['board', 'windchill', 'home', 'admin:connections', 'admin:options']
@@ -121,6 +122,9 @@ export function pagesOfFile(path: string, planningPath: string, dashboardsReadin
   if (name === 'kpi-tracker.json') return { pages: ['kpitracker'], loader: 'remount' }
   // TVL-02: the Tool Validations master list is shown on its Release page (a read-only view of the board page).
   if (name === 'tool-validations.json') return { pages: ['board'], loader: 'toolValidations' }
+  // PIR-19: the PI Review form setup is loaded quietly on every page (the form, the comment and the split follow it);
+  // only Admin → Epic & Feature setup, where someone may be editing it, shows the notice.
+  if (name === 'pi-review-form.json') return { pages: ['admin:epics'], quiet: 'piForm', loader: 'piForm' }
   // A file this build does not map: every page, and only a full reload loads it.
   return { pages: ['*'], loader: 'reload' }
 }

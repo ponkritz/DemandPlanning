@@ -41,6 +41,10 @@ export const actions = [
   { key: 'work.hours', group: 'Work items in Azure DevOps', label: 'Enter planned and actual hours (Time Writing)', legacy: 'azure.write' },
   { key: 'work.comment', group: 'Work items in Azure DevOps', label: 'Add a comment', legacy: 'azure.write' },
   { key: 'work.bulk', group: 'Work items in Azure DevOps', label: 'Bulk create Features (DP, IOCC, Content)', legacy: 'azure.write' },
+  // CON-113 (permissions 7, PIR-13): post the PI Review of any Feature as a new comment (the leads). A Feature's own
+  // assignee posts its review with "Add a comment". A file older than permissions 7 gives it as the starting matrix does
+  // (Tool Owner, Admin, People Manager) to the roles it lists.
+  { key: 'pireview.post', group: 'Work items in Azure DevOps', label: 'PI Review: post the review of a Feature', legacy: 'pireview.post', since: 7 },
   { key: 'windchill.import', group: 'Release data', label: 'Import Windchill exports', legacy: 'windchill.import' },
   { key: 'release.counts', group: 'Release data', label: 'Enter release counts (placeholders for CP, DP, IOCC)', legacy: 'settings.manage' },
   { key: 'baselines.edit', group: 'Release data', label: 'Edit baselines (rules and release scope)', legacy: 'baselines.edit' },
@@ -52,6 +56,10 @@ export const actions = [
   // EPS-04 (permissions 3): the Epic setup's fields and its value lists.
   { key: 'setup.epic', group: 'Setup', label: 'Edit the Epic setup (Feature fields per Epic, title pattern, Copy to Epics)', legacy: 'settings.manage', since: 3 },
   { key: 'setup.values', group: 'Setup', label: 'Edit Epic setup value lists and User Story templates', legacy: 'settings.manage', since: 3 },
+  // CON-114 (permissions 8, PIR-19…PIR-24): set up the PI Review form — its fields, the headings written in the comment,
+  // types, options, required, defaults and help (pi-review-form.json in Git). A file older than permissions 8 gives it
+  // as the starting matrix does (Scrum Master and Tool Owner) to the roles it lists; nobody had it before.
+  { key: 'pireview.setup', group: 'Setup', label: 'PI Review: set up the review form (fields, headings, choices)', legacy: 'pireview.setup', since: 8 },
   { key: 'capacity.settings', group: 'Capacity and time', label: 'Capacity and absence, calculation profiles', legacy: 'settings.manage' },
   { key: 'capacity.rules', group: 'Capacity and time', label: 'Bucket rules and insight thresholds', legacy: 'settings.manage' },
   { key: 'capacity.time', group: 'Capacity and time', label: 'Holidays and common activities', legacy: 'settings.manage' },
@@ -105,11 +113,11 @@ export function defaultPolicy(adminEmail = ''): AccessPolicy {
     defaultRole: 'Team Member',
     roles: {
       'Tool Owner': { areas: [...allAreas], actions: [...allActions] },
-      'Admin': { areas: [...allAreas], actions: allActions.filter((action) => action !== 'streams.manage' && action !== 'pages.manage' && action !== 'dashboards.build') },
+      'Admin': { areas: [...allAreas], actions: allActions.filter((action) => action !== 'streams.manage' && action !== 'pages.manage' && action !== 'dashboards.build' && action !== 'pireview.setup') },
       // CON-94: the starting matrix; each cell can be set to Allow, Deny or Not set in Role rights.
       'Product Owner': { areas: ['overview', 'board', 'health', 'release', 'baselines', 'qemapping', 'docs', 'ondemand'], actions: [...workActions, 'work.bulk', 'azure.createForOthers', 'baselines.edit', 'qemapping.edit', 'data.export', 'pack.text'] },
-      'People Manager': { areas: ['overview', 'insights', ...myWork, 'board', 'release', 'baselines', 'qemapping', 'snapshots', 'docs', 'ondemand'], actions: [...workActions, 'work.bulk', 'azure.createForOthers', 'baselines.edit', 'qemapping.edit', 'data.export', 'pack.text'] },
-      'Scrum Master': { areas: ['overview', ...myWork, 'board', 'health', 'release', 'docs', 'ondemand'], actions: [...workActions, 'azure.createForOthers', 'data.export', 'setup.feature', 'setup.epic'] },
+      'People Manager': { areas: ['overview', 'insights', ...myWork, 'board', 'release', 'baselines', 'qemapping', 'snapshots', 'docs', 'ondemand'], actions: [...workActions, 'work.bulk', 'pireview.post', 'azure.createForOthers', 'baselines.edit', 'qemapping.edit', 'data.export', 'pack.text'] },
+      'Scrum Master': { areas: ['overview', ...myWork, 'board', 'health', 'release', 'docs', 'ondemand'], actions: [...workActions, 'azure.createForOthers', 'data.export', 'setup.feature', 'setup.epic', 'pireview.setup'] },
       'Team Member': { areas: ['overview', ...myWork, 'board', 'release', 'docs', 'ondemand'], actions: [...workActions, 'data.export'] },
     },
     members: isEmail(adminEmail) ? { [normalEmail(adminEmail)]: ['Admin'] } : {},
@@ -125,7 +133,7 @@ function inOrder(policy: AccessPolicy): AccessPolicy {
 
 const pick = <T extends string>(value: unknown, allowed: readonly T[]) => Array.isArray(value) ? allowed.filter((entry) => value.includes(entry)) : []
 // The permissions that did not exist before CON-94 (their presence marks a file written with the split permissions).
-const newKeys = new Set<Action>(['setup.epic', 'setup.values', 'work.edit', 'work.state', 'work.move', 'work.hours', 'work.comment', 'work.bulk', 'release.counts', 'qemapping.edit', 'data.export', 'streams.options', 'setup.feature', 'capacity.settings', 'capacity.rules', 'capacity.time', 'capacity.periods', 'capacity.history', 'people.edit', 'people.capacityRoles', 'access.viewAs', 'pack.text', 'pack.setup', 'layout.defaults', 'storage.shared', 'ondemand.setup', 'ondemand.edit', 'pages.manage', 'dashboards.build'])
+const newKeys = new Set<Action>(['setup.epic', 'setup.values', 'work.edit', 'work.state', 'work.move', 'work.hours', 'work.comment', 'work.bulk', 'release.counts', 'qemapping.edit', 'data.export', 'streams.options', 'setup.feature', 'capacity.settings', 'capacity.rules', 'capacity.time', 'capacity.periods', 'capacity.history', 'people.edit', 'people.capacityRoles', 'access.viewAs', 'pack.text', 'pack.setup', 'layout.defaults', 'storage.shared', 'ondemand.setup', 'ondemand.edit', 'pages.manage', 'dashboards.build', 'pireview.post', 'pireview.setup'])
 
 // Reads access.json: unknown roles, areas, actions and invalid emails are dropped; a role missing from the file has no
 // rights. Throws on anything that is not an access policy, so a broken file is reported rather than ignored.
@@ -172,7 +180,7 @@ export function parseAccess(text: string): AccessPolicy {
 
 export function serializeAccess(policy: AccessPolicy) {
   const members = Object.fromEntries(Object.entries(policy.members).filter(([email, assigned]) => isEmail(email) && assigned.length).sort(([a], [b]) => a.localeCompare(b)).map(([email, assigned]) => [normalEmail(email), roles.filter((role) => assigned.includes(role))]))
-  return `${JSON.stringify({ schema: 1, permissions: 6, defaultRole: policy.defaultRole, roles: Object.fromEntries(roles.map((role) => [role, { areas: allAreas.filter((area) => policy.roles[role].areas.includes(area)), actions: allActions.filter((action) => policy.roles[role].actions.includes(action)), ...(policy.roles[role].deny?.length ? { deny: ([...allAreas, ...allActions] as Permission[]).filter((key) => policy.roles[role].deny!.includes(key)) } : {}) }])), members }, null, 2)}\n`
+  return `${JSON.stringify({ schema: 1, permissions: 8, defaultRole: policy.defaultRole, roles: Object.fromEntries(roles.map((role) => [role, { areas: allAreas.filter((area) => policy.roles[role].areas.includes(area)), actions: allActions.filter((action) => policy.roles[role].actions.includes(action)), ...(policy.roles[role].deny?.length ? { deny: ([...allAreas, ...allActions] as Permission[]).filter((key) => policy.roles[role].deny!.includes(key)) } : {}) }])), members }, null, 2)}\n`
 }
 
 // A person's rights: the union of their roles, or the default role when their email is not listed (or not known yet).

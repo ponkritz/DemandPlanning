@@ -1,5 +1,5 @@
 // Single source for navigation labels, header text and grouping so the sidebar and page header always agree.
-export type Page = 'home' | 'mydash' | 'activities' | 'planover' | 'capactual' | 'overview' | 'pulse' | 'pireview' | 'mywork' | 'bulk' | 'baselines' | 'board' | 'health' | 'windchill' | 'brite' | 'snapshots' | 'qemapping' | 'kpitracker' | 'ondemand' | 'admin' | 'docs'
+export type Page = 'home' | 'mydash' | 'activities' | 'planover' | 'capactual' | 'overview' | 'pulse' | 'pireview' | 'mywork' | 'bulk' | 'mypireview' | 'baselines' | 'board' | 'health' | 'windchill' | 'brite' | 'snapshots' | 'qemapping' | 'kpitracker' | 'ondemand' | 'admin' | 'docs'
 export type PageGroup = 'Home' | 'Data Insights' | 'My Work' | 'Testing' | 'I&D Board' | 'Release Details' | 'Other views' | 'On-Demand' | 'Data & governance' | 'Settings'
 
 // hidden: kept in the build but not offered in the menu.
@@ -18,6 +18,8 @@ export const pages: PageMeta[] = [
   { id: 'capactual', label: 'Capacity vs Actual', icon: '◑', group: 'Testing', detail: 'What the team had — capacity after leave and holidays — against the hours it booked: tiles, 12 months, each person and where the hours went.', usesMonth: true },
   { id: 'mywork', label: 'My Tasks [Board]', icon: '◉', group: 'My Work', detail: 'Your pending Azure DevOps items; finish them with Resolved or Closed.', usesMonth: false },
   { id: 'bulk', label: 'Sprint check', icon: '⇉', group: 'My Work', detail: 'Move your User Stories from past Sprints to the current one, and check the states of your Features and User Stories.', usesMonth: false },
+  // PIR-17: the Features assigned to me in a PI and my review of each (Write review…).
+  { id: 'mypireview', label: 'My PI Review', icon: '◈', group: 'My Work', detail: 'The Features assigned to you in a PI and whether you have written their PI review; write it here.', usesMonth: false },
   { id: 'baselines', label: 'Baselines', icon: '⌁', group: 'Data & governance', detail: 'Release baselines from estimation rules and scope, against booked hours; plus the monthly task plan check.', usesMonth: true },
   { id: 'board', label: 'Backlogs', icon: '▤', group: 'I&D Board', detail: 'Plan and track the team’s work in an expandable Epic → Feature → User Story → Task backlog.', usesMonth: false },
   { id: 'health', label: 'Backlog Health', icon: '◎', group: 'I&D Board', detail: 'What the Scrum Master needs from the backlog, for everyone in Time Writing: open work in Sprints that have ended, Features without DoD, unassigned work; each list as CSV.', usesMonth: false },

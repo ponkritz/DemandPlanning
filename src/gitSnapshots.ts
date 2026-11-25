@@ -12,8 +12,8 @@ const kind = 'azure-view-snapshot'
 export const snapshotFolder = 'azure-data'
 export const snapshotFileName = (connectionId: string) => `${connectionId}.json`
 
-// Only on-prem connections (a server address) other than Time Writing go through Git.
-export const sharedThroughGit = (profile: Pick<AzureConnectionProfileSummary, 'baseUrl' | 'role'>) => Boolean(profile.baseUrl) && profile.role !== 'time-tracking'
+// Git snapshots are for shared on-prem views other than Time Writing.
+export const sharedThroughGit = (profile: Pick<AzureConnectionProfileSummary, 'baseUrl' | 'role' | 'mine'>) => Boolean(profile.baseUrl) && profile.role !== 'time-tracking' && !profile.mine
 
 export function snapshotFile(connection: AzureConnectionProfileSummary, source: ViewSnapshot): SnapshotFile {
   const { fromGit: _fromGit, ...rest } = source

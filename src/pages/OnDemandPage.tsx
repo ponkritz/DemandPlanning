@@ -9,7 +9,7 @@ import { ResultTabs } from '../components/ResultTabs'
 import { Drawer, EmptyState, Info, Modal, Notice, Page, Pill, SaveQueueStatus, TablePanel, WriteBlocked } from '../components/ui'
 import { outcomeText, type QueuedOutcome } from '../gitSaveQueue'
 import { formatDateTime } from '../format'
-import { applyColumns, hasTable, isRowHidden, withoutHidden, hasRowKeys, setKeyPrefix, cellProblem, cellSortValue, cellText, columnDrafts, columnEffects, columnsError, currencyCodes, defaultCurrency, displayText, filterRows, hasOptions, lastUpdate, maxDescription, maxLog, maxLongValue, moneyOf, newId, onDemandPath, onDemandTypes, pageFileBytes, suggestRowFiles, renamePage, rowError, rowId, rowSave, valuesOf, type ColumnDraft, type OnDemandColumn, type OnDemandPage as PageFile, type OnDemandRow, type OnDemandValue } from '../onDemand'
+import { applyColumns, hasTable, isRowHidden, withoutHidden, hasRowKeys, setKeyPrefix, cellProblem, cellSortValue, cellText, columnDrafts, columnEffects, columnsError, currencyCodes, defaultCurrency, displayText, filterRows, hasOptions, lastUpdate, maxLog, maxLongValue, moneyOf, newId, onDemandPath, pageFileBytes, suggestRowFiles, renamePage, rowError, rowId, rowSave, valuesOf, type ColumnDraft, type OnDemandColumn, type OnDemandPage as PageFile, type OnDemandRow, type OnDemandValue } from '../onDemand'
 import { useWriteBlock } from '../useCan'
 import type { GitStorage } from '../useGitStorage'
 import type { OnDemandStore } from '../useOnDemand'
@@ -28,7 +28,10 @@ import { PublishDialog } from '../components/PublishDialog'
 import { prepareTable, useSchedules, viewerChoice, type PublishAuthorization } from '../publishRun'
 import { publishKey } from '../publishSchedule'
 import { ReplaceDialog } from '../components/ReplaceDialog'
+import { ColumnListEditor } from '../components/ColumnListEditor'
 import { applyOnDemandReplace, distinctValues, onDemandReplaceCommit, onDemandReplacePlan, replaceError, replaceMessage, replaceableColumns } from '../replaceValues'
+import { TemplateDialog, UploadDialog } from '../components/BulkUploadDialogs'
+import { applyUpload, uploadCommit, uploadResult, type UploadDone, type UploadPlan } from '../bulkUpload'
 
 // OND-03…OND-07 One On-Demand page (CoNQ, or one added under On-Demand): a work table in the shared DataTable — one
 // column per configured column, search, sort, the row count and Export. OND-27: a click on a row (or Enter / Space on it)
@@ -70,6 +73,8 @@ export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-ins
   const schedule = publishScope ? schedules[publishScope] : undefined
   // OND-100: the Replace… pop-up (a value of one column replaced in every row that holds it).
   const [replacing, setReplacing] = useState(false)
+  // OND-103…OND-108: the Download Excel template and Upload Excel pop-ups (bulk upload).
+  const [bulk, setBulk] = useState<'template' | 'upload' | null>(null)
   const block = useWriteBlock()
   // OND-07: what may be changed — the rights of the viewer's roles, a Git token that can save, no synthetic sample.
   const gitReason = !git.connected ? 'Connect Git storage (Admin → Data & sharing) to change the On-Demand pages; they are shared through Git.' : git.readOnly ? 'View only: your Git token can read but not save.' : git.isSample ? 'Synthetic sample data is loaded. Saving to Git is disabled.' : ''
@@ -102,6 +107,8 @@ export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-ins
   useEffect(() => { if (drawerRow) void refreshLocks() }, [drawerRow, refreshLocks])
   // OND-101: the row locks are read again when Replace… opens, so its preview skips the rows being edited now.
   useEffect(() => { if (replacing) void refreshLocks() }, [replacing, refreshLocks])
+  // OND-106: and when Upload Excel… opens, so its preview skips the rows being edited now.
+  useEffect(() => { if (bulk === 'upload') void refreshLocks() }, [bulk, refreshLocks])
   const [converting, setConverting] = useState(false)
   // OND-62: the suggestion to convert a large single-file page, dismissed per page and person in this browser.
   const hintKey = `${me}|${pageId}`
@@ -192,6 +199,18 @@ export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-ins
     })
     setReplacing(false)
   }
+  // OND-103: the template — any viewer of a page with columns; not in Sample (made-up rows with real-looking IDs must
+  // never come back as updates). OND-107: Upload Excel… — the right to edit the page's rows, failing closed as Replace….
+  const templateReason = sample ? `Switch ${page.name} to Live to download its template: sample rows are made up.` : !page.columns.length ? 'The page has no columns yet.' : ''
+  const uploadReason = editRowsReason || (viewer.viewingAs ? 'Read only while viewing as someone else: nothing is saved. Exit View as to upload.' : '') || (!page.columns.length ? 'The page has no columns yet.' : '')
+  async function uploadNow(plan: UploadPlan, fileName: string) {
+    let done: Omit<UploadDone, 'page'> = { added: 0, updated: 0, locked: 0, missing: 0 }
+    await inBackground(`Bulk upload · ${page.name} · ${fileName}`, async () => {
+      const saved = await store.update(page.id, (base) => { const next = applyUpload(base, plan, { by: me, fileName, locked: lockedKeys }); done = next; return next.page }, uploadCommit(page, fileName, plan))
+      return { value: saved, text: resultText(saved, uploadResult(done, plan.errors.length)) }
+    })
+    setBulk(null)
+  }
   const canDelete = !gitReason && !sample && viewer.manager && !viewer.readOnly
   const hiddenCount = page.rows.filter(isRowHidden).length
   const visibleCount = page.rows.length - hiddenCount
@@ -251,6 +270,8 @@ export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-ins
         { key: 'hide', label: hidden ? 'Show page' : 'Hide page', disabled: Boolean(hidingReason), title: hidingReason || undefined, onClick: toggleHidden },
         { key: 'delete', label: 'Delete page…', danger: true, disabled: Boolean(removeReason), title: removeReason || undefined, onClick: () => setPageDialog('remove') },
       ]),
+      { key: 'template', label: 'Download Excel template…', disabled: Boolean(templateReason), title: templateReason || 'An Excel file of the page’s columns with drop-down lists and checks, to fill and upload', onClick: () => setBulk('template') },
+      { key: 'upload', label: 'Upload Excel…', disabled: Boolean(uploadReason), title: uploadReason || 'Add and update rows from the filled template, after a preview', onClick: () => setBulk('upload') },
       { key: 'replace', label: 'Replace…', disabled: Boolean(replaceReason), title: replaceReason || 'Replace a value of one column in every row that holds it', onClick: () => setReplacing(true) },
       { key: 'publish', label: 'Publish interactive HTML…', disabled: Boolean(publishReason), title: publishReason || undefined, onClick: () => setPublishing(publishScope) },
       ...(showConvert ? [{ key: 'convert', label: 'Convert to row files…', disabled: Boolean(convertReason), title: convertReason || undefined, onClick: () => setConverting(true) }] : []),
@@ -306,6 +327,8 @@ export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-ins
       check={(id, find, to) => replaceError(page.columns.find((entry) => entry.id === id), find, to)}
       note={<p className="muted">Hidden rows are not changed. Each changed row gets an entry in its History; saved to Git at once{rowFiles ? ', every changed row file in one commit' : ''}.</p>}
       onReplace={replaceNow} onCancel={() => setReplacing(false)} />}
+    {bulk === 'template' && <TemplateDialog eyebrow={eyebrowOf(page)} page={page} shown={rows} onCancel={() => setBulk(null)} />}
+    {bulk === 'upload' && <UploadDialog eyebrow={eyebrowOf(page)} page={page} locked={lockedKeys} rowFiles={rowFiles} onSave={uploadNow} onCancel={() => setBulk(null)} />}
     {/* OND-91: Publish now cuts the rows with the publisher's Insights filter row as it is now. */}
     {publishing && publishing === publishScope && !publishReason && (() => { const cut = { kind: 'table' as const, choice: viewerChoice(page.id, views) }; return <PublishDialog pageId={page.id} name={page.name} publishScope={publishing} authorization={publisher} publishedBy={publisherName || me} cut={cut} prepare={prepareTable(page, kind, cut, publisherName || me)} onClose={() => setPublishing(null)} /> })()}
     {converting && <ConvertDialog page={page} onCancel={() => setConverting(false)} onConvert={async () => {
@@ -639,8 +662,6 @@ function ColumnsDialog({ page, onCancel, onSave }: { page: PageFile; onCancel: (
   const [error, setError] = useState('')
   const [effects, setEffects] = useState<string[] | null>(null)
   const [busy, setBusy] = useState(false)
-  const edit = (index: number, change: Partial<ColumnDraft>) => { setDrafts(drafts.map((draft, at) => at === index ? { ...draft, ...change } : draft)); setError(''); setEffects(null) }
-  const move = <T,>(list: T[], at: number, by: number) => { const to = at + by; if (to < 0 || to >= list.length) return list; const next = [...list];[next[at], next[to]] = [next[to], next[at]]; return next }
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
     const problem = columnsError(drafts)
@@ -661,31 +682,11 @@ function ColumnsDialog({ page, onCancel, onSave }: { page: PageFile; onCancel: (
       </div> : <>
         <label className="od-prefix">Row key prefix<input aria-label="Row key prefix" required maxLength={8} pattern="[A-Za-z0-9]{1,8}" value={prefix} disabled={prefixFixed} onChange={(event) => { setPrefix(event.target.value.toUpperCase()); setError('') }} />
           <small>{prefixFixed ? `Fixed: rows already have keys such as ${page.rows.find((row) => row.key)?.key}.` : `Every row gets a key such as ${prefix || page.keyPrefix}-261123-K7Q2 (prefix, date, 4 random characters) the moment it is added. 1 to 8 letters or digits; it cannot change once rows have keys.`}</small></label>
-        {!drafts.length && <EmptyState title="No columns yet." detail="Add the first one with ＋ Add column." />}
-        <ol className="od-columns">{drafts.map((draft, index) => <li key={draft.id} className="od-column">
-          <div className="od-column-head">
-            <label>Name<input aria-label={`Column ${index + 1} name`} autoFocus={index === drafts.length - 1 && draft.isNew} required maxLength={120} value={draft.name} onChange={(event) => edit(index, { name: event.target.value })} /></label>
-            <label>Type<select aria-label={`Column ${index + 1} type`} value={draft.type} onChange={(event) => edit(index, { type: event.target.value as ColumnDraft['type'] })}>{onDemandTypes.map((type) => <option key={type.key} value={type.key}>{type.label}</option>)}</select></label>
-            <label className="check"><input type="checkbox" checked={draft.required} onChange={(event) => edit(index, { required: event.target.checked })} />Required</label>
-            <span className="button-row od-column-moves">
-              <button type="button" className="ghost" aria-label={`Move ${draft.name || `column ${index + 1}`} up`} disabled={index === 0} onClick={() => { setDrafts(move(drafts, index, -1)); setEffects(null) }}>↑</button>
-              <button type="button" className="ghost" aria-label={`Move ${draft.name || `column ${index + 1}`} down`} disabled={index === drafts.length - 1} onClick={() => { setDrafts(move(drafts, index, 1)); setEffects(null) }}>↓</button>
-              <button type="button" className="text-button danger-text" aria-label={`Remove column ${draft.name || index + 1}`} onClick={() => { setDrafts(drafts.filter((_, at) => at !== index)); setError(''); setEffects(null) }}>✕</button>
-            </span>
-          </div>
-          {draft.type === 'currency' && <CurrencyDefault index={index} value={draft.currency ?? defaultCurrency} onChange={(currency) => edit(index, { currency })} />}
-          <label className="od-description">Description (optional)<textarea aria-label={`Column ${index + 1} description`} rows={2} maxLength={maxDescription} value={draft.description ?? ''} placeholder="How or what to fill, e.g. “The cost in the supplier’s currency, without VAT.”" onChange={(event) => edit(index, { description: event.target.value })} /><small>Shown under the field in the row drawer and behind ⓘ on the column heading; up to {maxDescription} characters.</small></label>
-          {hasOptions(draft.type) && <div className="od-options"><small>Options of “{draft.name || `column ${index + 1}`}”</small>
-            {draft.options.map((option, at) => <div key={at} className="od-option">
-              <input aria-label={`${draft.name || `Column ${index + 1}`} option ${at + 1}`} maxLength={120} value={option.label} onChange={(event) => edit(index, { options: draft.options.map((entry, i) => i === at ? { ...entry, label: event.target.value } : entry) })} />
-              <button type="button" className="ghost" aria-label={`Move option ${option.label || at + 1} up`} disabled={at === 0} onClick={() => edit(index, { options: move(draft.options, at, -1) })}>↑</button>
-              <button type="button" className="ghost" aria-label={`Move option ${option.label || at + 1} down`} disabled={at === draft.options.length - 1} onClick={() => edit(index, { options: move(draft.options, at, 1) })}>↓</button>
-              <button type="button" className="text-button danger-text" aria-label={`Remove option ${option.label || at + 1}`} onClick={() => edit(index, { options: draft.options.filter((_, i) => i !== at) })}>✕</button>
-            </div>)}
-            <button type="button" className="text-button" onClick={() => edit(index, { options: [...draft.options, { label: '' }] })}>＋ Add option</button>
-          </div>}
-        </li>)}</ol>
-        <div><button type="button" className="ghost" onClick={() => { setDrafts([...drafts, { id: newId('c'), name: '', type: 'text', required: false, options: [], isNew: true }]); setEffects(null) }}>＋ Add column</button> <Info label="Types">Text: any text on one line (up to 2,000 characters). Long text: a paragraph (up to 10,000 characters), shown in 3 lines in the table, in full in the row drawer and in the export. Number: a number (right-aligned, sorted as a number). Currency: an amount and its currency, the column’s default currency to start with (shown “1,200.00 EUR”; Insights never add up different currencies). Date: a date. Dropdown (one value): one option of its list. Multi-select: any number of options of its list. Changing a type keeps the values: one that does not fit is marked until changed.</Info></div>
+        {/* OND-05, OND-06: the shared column-list editor (also the PI Review form setup's, PIR-22). */}
+        <ColumnListEditor drafts={drafts} onChange={(next, change) => { setDrafts(next); if (change === 'edit' || change === 'remove') setError(''); setEffects(null) }}
+          newDraft={() => ({ id: newId('c'), name: '', type: 'text', required: false, options: [], isNew: true })}
+          extra={(draft, index, edit) => draft.type === 'currency' && <CurrencyDefault index={index} value={draft.currency ?? defaultCurrency} onChange={(currency) => edit({ currency })} />}
+          addNote={<Info label="Types">Text: any text on one line (up to 2,000 characters). Long text: a paragraph (up to 10,000 characters), shown in 3 lines in the table, in full in the row drawer and in the export. Number: a number (right-aligned, sorted as a number). Currency: an amount and its currency, the column’s default currency to start with (shown “1,200.00 EUR”; Insights never add up different currencies). Date: a date. Dropdown (one value): one option of its list. Multi-select: any number of options of its list. Changing a type keeps the values: one that does not fit is marked until changed.</Info>} />
       </>}
       {error && <Notice tone="error">{error}</Notice>}
       <div className="modal-actions">

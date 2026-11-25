@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { listAzureConnectionProfiles } from '../azureCredentials'
-import { markViewsSynced, parseViews, restoreViews, serializeViews, viewsBackupFolder, viewsBackupName, viewsFile } from '../viewDefinitions'
+import { markViewsSynced, notRemoved, parseViews, restoreViews, serializeViews, viewsBackupFolder, viewsBackupName, viewsFile } from '../viewDefinitions'
 import { downloadJson } from '../download'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { GitStorage } from '../useGitStorage'
@@ -32,7 +32,8 @@ export function AzureViewsGitPanel({ git, azure }: { git: GitStorage; azure: Azu
     try {
       const file = await git.readViews()
       if (file.text == null) { setNotice({ tone: 'warning', text: `${git.viewsPath} does not exist in Git yet. Save the views first.` }); return }
-      const views = parseViews(file.text)
+      // CON-110: a view the Tool Owner removed for everyone is not restored from an older copy of the setup.
+      const views = notRemoved(parseViews(file.text), (await git.readViewRemovals()).removals)
       if (!window.confirm(`Restore ${views.length} connection${views.length === 1 ? '' : 's'} from Git? Connections with the same ID are overwritten (their PAT is kept); others here are not touched.`)) return
       const result = restoreViews(views, pat)
       markViewsSynced(views.filter((view) => !result.skipped.includes(view.viewName || view.reason)))
