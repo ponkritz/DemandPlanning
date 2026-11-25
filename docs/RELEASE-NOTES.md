@@ -2,6 +2,19 @@
 
 Version history of the I&D Quality Demand Planning app, newest first. Every merged change bumps the version in `package.json` and adds its entry here, in the same pull request (CI-09; [CONFIGURATION-MANAGEMENT.md](CONFIGURATION-MANAGEMENT.md) §4): **major** for a change that breaks existing data, shared setup files or the way users work; **minor** for a new or changed feature; **patch** for a fix, a dependency update or documentation only. `pnpm test` fails when the newest version here is not the version in `package.json`. CI tags each version `vX.Y.Z` on its merge commit and publishes its GitHub release with the installers and this entry (CI-10); the build number of a version is the CI build of that merge (shown in the app under Force Update, and in `latest.json`). Open bugs and accepted limitations of every version are in [KNOWN-ISSUES.md](KNOWN-ISSUES.md); the third-party components of every version are in [SWBOM.md](SWBOM.md).
 
+## v5.6.0 — 2026-11-25
+
+**Added**
+- **On-Demand table controls** — group and filter rows by column, use a horizontal scrollbar above the footer, and keep collapsed groups out of exports, select all, and row navigation (UI-24…UI-29, OND-132).
+- **Pivot tables** — build pivots with nested rows and columns, subtotals, and a custom value label (CHT-74…CHT-83).
+
+**Updated**
+- **PI Review** — count a review for the selected PI, record when there are no learnings or struggles, and use the next PI from the Azure DevOps iteration tree. Authorized users can open PI Review Setup from its own page or from either review view (PIR-12…PIR-14, PIR-25…PIR-32).
+- **Navigation** — find QMS-0025 under My Work and Backlog Health under Data & governance (NAV-53).
+- **Git saves** — show clearer errors and retry once for eligible failures (GIT-27).
+
+Synced Test2 through commit `dc7ffa6`.
+
 ## v5.5.0 — 2026-11-25
 
 **Added**
