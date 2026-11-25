@@ -619,12 +619,15 @@ export async function readWorkItemForEdit(config: AzureConfig, pat: string, work
   return { item: mapAzureWorkItem(raw, config), rev: raw.rev!, description: editableText(text('System.Description')), acceptanceCriteria: editableText(text('Microsoft.VSTS.Common.AcceptanceCriteria')),
     priority: number('Microsoft.VSTS.Common.Priority'), risk: text('Microsoft.VSTS.Common.Risk'), valueArea: text('Microsoft.VSTS.Common.ValueArea') }
 }
-export interface WorkItemComment { id: number; text: string; author: string; date: string }
+// PIR-34: authorEmail — the author's unique name when it is an email (to match the viewer for Edit review…); date is the
+// comment's createdDate (an edit in Azure DevOps keeps it), edited — the comment was changed after it was written.
+export interface WorkItemComment { id: number; text: string; author: string; date: string; authorEmail?: string; edited?: boolean }
+const emailOf = (value: unknown) => { const name = value && typeof value === 'object' && 'uniqueName' in value ? String((value as { uniqueName: unknown }).uniqueName ?? '').trim().toLowerCase() : ''; return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(name) ? name : '' }
 // BKL-20, PIR-05: the whole Discussion, newest first, as plain text (commentText): every page, following the
 // continuationToken Azure DevOps returns (DSK-11), up to `limit` comments (1,000); deleted comments are left out.
 // capped: more comments were there than the limit.
 export const maxDiscussionComments = 1000
-type RawComment = { id?: unknown; text?: unknown; createdBy?: unknown; createdDate?: unknown; isDeleted?: unknown }
+type RawComment = { id?: unknown; text?: unknown; createdBy?: unknown; createdDate?: unknown; modifiedDate?: unknown; isDeleted?: unknown }
 export async function readDiscussion(config: AzureConfig, pat: string, workItemId: number, transport: AzureTransport = requestAzure, limit = maxDiscussionComments): Promise<{ comments: WorkItemComment[]; capped: boolean }> {
   const comments: WorkItemComment[] = [], seen = new Set<string>()
   let token = '', read = 0
@@ -635,7 +638,9 @@ export async function readDiscussion(config: AzureConfig, pat: string, workItemI
       if (read >= limit) break
       read += 1
       if (comment.isDeleted === true || typeof comment.id !== 'number') continue
-      comments.push({ id: comment.id, text: commentText(typeof comment.text === 'string' ? comment.text : ''), author: identityName(comment.createdBy) || 'Unknown', date: typeof comment.createdDate === 'string' ? comment.createdDate : '' })
+      const date = typeof comment.createdDate === 'string' ? comment.createdDate : '', authorEmail = emailOf(comment.createdBy)
+      const edited = typeof comment.modifiedDate === 'string' && Boolean(date) && Date.parse(comment.modifiedDate) > Date.parse(date) + 1000
+      comments.push({ id: comment.id, text: commentText(typeof comment.text === 'string' ? comment.text : ''), author: identityName(comment.createdBy) || 'Unknown', date, ...(authorEmail ? { authorEmail } : {}), ...(edited ? { edited } : {}) })
     }
     const next = typeof page.continuationToken === 'string' ? page.continuationToken : ''
     // A token seen before would read the same pages again: stop there.

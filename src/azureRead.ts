@@ -246,9 +246,14 @@ export async function readFieldNames(config: AzureConfig, pat: string, transport
 // The members of the connection's team (CAP-30): read only, for Admin → People & roles → People. Needs a PAT that may read the
 // project's teams (Project and Team, Read); names and emails only.
 export async function fetchTeamMembers(config: AzureConfig, pat: string, transport: AzureTransport = requestAzure) {
+  const members = (await readTeamIdentities(config, pat, transport)).map(({ name, email }) => ({ name, ...(email ? { email } : {}) }))
+  return [...new Map(members.map((member) => [member.name, member])).values()].sort((a, b) => a.name.localeCompare(b.name))
+}
+// LST-04, LST-06: the same read, every member kept with their Azure DevOps identity id (identity.id, a GUID): two members
+// with the same display name stay two. The id is the stable key of the built-in lists; the email is for the screen only.
+export async function readTeamIdentities(config: AzureConfig, pat: string, transport: AzureTransport = requestAzure): Promise<{ name: string; id?: string; email?: string }[]> {
   if (!config.organization || !config.project || !config.team) throw new Error('The Time Writing connection needs an organization, project and team.')
   if (!pat.trim()) throw new Error('Enter the PAT of the Time Writing connection first.')
-  const response = await transport({ ...config, pat: pat.trim(), operation: 'team-members' }) as { value?: { identity?: { displayName?: unknown; uniqueName?: unknown; isContainer?: unknown } }[] }
-  const members = (response.value ?? []).flatMap(({ identity }) => identity && identity.isContainer !== true && typeof identity.displayName === 'string' && identity.displayName.trim() ? [{ name: identity.displayName.trim().slice(0, 120), ...(typeof identity.uniqueName === 'string' && /^[^\s@]+@[^\s@]+$/.test(identity.uniqueName) ? { email: identity.uniqueName.trim().toLowerCase().slice(0, 200) } : {}) }] : [])
-  return [...new Map(members.map((member) => [member.name, member])).values()].sort((a, b) => a.name.localeCompare(b.name))
+  const response = await transport({ ...config, pat: pat.trim(), operation: 'team-members' }) as { value?: { identity?: { id?: unknown; displayName?: unknown; uniqueName?: unknown; isContainer?: unknown } }[] }
+  return (response.value ?? []).flatMap(({ identity }) => identity && identity.isContainer !== true && typeof identity.displayName === 'string' && identity.displayName.trim() ? [{ name: identity.displayName.trim().slice(0, 120), ...(typeof identity.id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identity.id.trim()) ? { id: identity.id.trim().toLowerCase() } : {}), ...(typeof identity.uniqueName === 'string' && /^[^\s@]+@[^\s@]+$/.test(identity.uniqueName) ? { email: identity.uniqueName.trim().toLowerCase().slice(0, 200) } : {}) }] : [])
 }

@@ -28,7 +28,7 @@ export const projectApiBase = (config: Pick<AzureConfig, 'organization' | 'proje
 // Azure DevOps Services accepts 7.1; older Azure DevOps Server versions need a lower version (e.g. 6.0 or 5.0).
 export const apiVersionOf = (config: Pick<AzureConfig, 'apiVersion'>) => config.apiVersion && /^\d{1,2}\.\d(-preview(\.\d)?)?$/.test(config.apiVersion) ? config.apiVersion : '7.1'
 export interface AzureRequest extends AzureConfig {
-  operation: 'backlog-epics' | 'updates' | 'areas' | 'team-members' | 'iterations' | 'iteration-tree' | 'fields' | 'query' | 'items' | 'create-feature' | 'create-child' | 'update-time-writing-effort' | 'update-work-item' | 'edit-work-item' | 'comments' | 'add-comment'
+  operation: 'backlog-epics' | 'updates' | 'areas' | 'team-members' | 'iterations' | 'iteration-tree' | 'fields' | 'query' | 'items' | 'create-feature' | 'create-child' | 'update-time-writing-effort' | 'update-work-item' | 'edit-work-item' | 'comments' | 'add-comment' | 'update-comment'
   pat: string
   query?: string
   ids?: number[]
@@ -53,6 +53,9 @@ export interface AzureRequest extends AzureConfig {
   // add-comment, PIR-13 (CON-113): a PI Review post — the reviewed Feature's Assigned To email ('' when not known). It
   // needs "PI Review: post the review of a Feature", or "Add a comment" when the writer is that assignee.
   reviewOf?: string
+  // update-comment (PIR-34): the comment to replace — a PI review the viewer wrote, edited with Edit review… (only an
+  // app-built review list: htmlComment and reviewOf are required, the same checks as add-comment).
+  commentId?: number
   // comments (DSK-11, PIR-05): the next page of the Discussion, as Azure DevOps returned it (at most 2,048 characters).
   continuationToken?: string
 }
@@ -140,19 +143,22 @@ export function rateLimitWait(failure: unknown): number | null {
   const seconds = /Retry after (\d+) s\./.exec(text)
   return seconds ? Number(seconds[1]) : 0
 }
+// PIR-34: update-comment — PATCH …/comments/{commentId} with the new text (the Work Items Comments "Update Comment" call,
+// the same preview api-version as the read and the add; LIM-94 records that it was not verified against the docs here).
 async function requestComments(request: AzureRequest) {
-  const adding = request.operation === 'add-comment'
-  const url = `${projectApiBase(request)}/_apis/wit/workItems/${request.workItemId}/comments?api-version=${commentsApiVersion}${adding ? '' : `&order=desc&$top=200${request.continuationToken ? `&continuationToken=${encodeURIComponent(request.continuationToken)}` : ''}`}`
+  const updating = request.operation === 'update-comment'
+  const adding = request.operation === 'add-comment' || updating
+  const url = `${projectApiBase(request)}/_apis/wit/workItems/${request.workItemId}/comments${updating ? `/${request.commentId}` : ''}?api-version=${commentsApiVersion}${adding ? '' : `&order=desc&$top=200${request.continuationToken ? `&continuationToken=${encodeURIComponent(request.continuationToken)}` : ''}`}`
   let response: Response
   try {
-    response = await fetch(url, { method: adding ? 'POST' : 'GET', redirect: 'error', credentials: 'omit', signal: AbortSignal.timeout(45000),
+    response = await fetch(url, { method: updating ? 'PATCH' : adding ? 'POST' : 'GET', redirect: 'error', credentials: 'omit', signal: AbortSignal.timeout(45000),
       headers: { Authorization: `Basic ${btoa(`:${request.pat}`)}`, 'Content-Type': 'application/json', Accept: 'application/json' },
       ...(adding ? { body: JSON.stringify({ text: request.htmlComment ? request.comment! : htmlText(request.comment!) }) } : {}) })
   } catch { throw new Error(adding ? `The comment on #${request.workItemId} could not be confirmed. Check the Discussion in Azure DevOps before retrying.` : 'Azure DevOps could not be reached. Check your network/VPN.') }
   if (response.status === 401) throw new Error('The PAT was rejected or has expired. Check your PAT.')
   if (response.status === 403) throw new Error(`Access denied. Check project access and PAT Work Items (${adding ? 'Read & Write' : 'Read'}) scope.`)
   if (response.status === 429) throw new Error(`${rateLimitMessage(response.headers.get('Retry-After'))}${adding ? ' The comment was not added: post it again later.' : ''}`)
-  if (!response.ok) { const detail = await response.json().catch(() => ({})) as { message?: string }; throw new Error(`Azure DevOps ${adding ? 'did not add the comment' : 'did not return the Discussion'} (${response.status})${detail.message ? `: ${detail.message.replaceAll(request.pat.trim(), '[redacted]').slice(0, 600)}` : '.'}`) }
+  if (!response.ok) { const detail = await response.json().catch(() => ({})) as { message?: string }; throw new Error(`Azure DevOps ${updating ? 'did not update the comment' : adding ? 'did not add the comment' : 'did not return the Discussion'} (${response.status})${detail.message ? `: ${detail.message.replaceAll(request.pat.trim(), '[redacted]').slice(0, 600)}` : '.'}`) }
   if (!(response.headers.get('content-type') ?? '').includes('application/json')) throw new Error('Azure DevOps returned a sign-in page. Check the PAT and organization access.')
   return response.json()
 }
@@ -196,12 +202,12 @@ export function writePermissions(request: Pick<AzureRequest, 'operation' | 'stat
     case 'create-feature': case 'create-child': return ['azure.write']
     case 'edit-work-item': return ['work.edit']
     case 'update-time-writing-effort': return ['work.hours']
-    case 'add-comment': return ['work.comment']
+    case 'add-comment': case 'update-comment': return ['work.comment']
     case 'update-work-item': return [...(request.state ? ['work.state' as const] : []), ...(request.iterationPath || !request.state ? ['work.move' as const] : [])]
     default: return []
   }
 }
-export const changesAzure = (operation: AzureRequest['operation']) => operation === 'create-feature' || operation === 'create-child' || operation === 'update-time-writing-effort' || operation === 'update-work-item' || operation === 'edit-work-item' || operation === 'add-comment'
+export const changesAzure = (operation: AzureRequest['operation']) => operation === 'create-feature' || operation === 'create-child' || operation === 'update-time-writing-effort' || operation === 'update-work-item' || operation === 'edit-work-item' || operation === 'add-comment' || operation === 'update-comment'
 
 // Writes go to Azure DevOps Services (dev.azure.com) only: on-premises servers are read-only, whatever the connection's
 // role. Checked here and again in the desktop proxy.
@@ -211,21 +217,25 @@ export function assertWritableBase(config: Pick<AzureConfig, 'organization' | 'b
 export async function requestAzure(request: AzureRequest): Promise<unknown> {
   if (changesAzure(request.operation)) assertNotViewingAs()
   if (changesAzure(request.operation) && sampleLoaded()) throw new Error('Synthetic sample data is loaded: nothing is written to Azure DevOps. Fetch your data first.')
-  if (request.reviewOf != null && (request.operation !== 'add-comment' || typeof request.reviewOf !== 'string')) throw new Error('Invalid PI Review post.')
-  if (changesAzure(request.operation) && !(request.operation === 'add-comment' && request.reviewOf != null ? reviewPostAllowed(request.reviewOf) : writePermissions(request).every((permission) => writesAllowed(permission)))) throw new Error(request.reviewOf != null && writesAllowed('work.comment') ? 'Only the Feature’s assignee or a lead with “PI Review: post the review of a Feature” can post its review. Nothing was posted.' : refusedBecause)
+  const review = request.operation === 'add-comment' || request.operation === 'update-comment'
+  if (request.reviewOf != null && (!review || typeof request.reviewOf !== 'string')) throw new Error('Invalid PI Review post.')
+  // PIR-34: an update is only ever a PI review edited from My PI Review: the review's rights, its HTML check, its comment id.
+  if (request.operation === 'update-comment' && (request.reviewOf == null || request.htmlComment !== true || !Number.isSafeInteger(request.commentId) || request.commentId! < 1)) throw new Error('Only a PI review can be edited. Nothing was changed.')
+  if (request.commentId != null && request.operation !== 'update-comment') throw new Error('Invalid comment.')
+  if (changesAzure(request.operation) && !(review && request.reviewOf != null ? reviewPostAllowed(request.reviewOf) : writePermissions(request).every((permission) => writesAllowed(permission)))) throw new Error(request.reviewOf != null && writesAllowed('work.comment') ? 'Only the Feature’s assignee or a lead with “PI Review: post the review of a Feature” can post its review. Nothing was posted.' : refusedBecause)
   assertWritableBase(request, request.operation)
   if ((request.operation === 'create-feature' || request.operation === 'create-child') && !isAssignee(request.feature?.assignedTo)) throw new Error('A new work item must be assigned to someone (an email). Nothing was created.')
   const storyProblem = storyFieldsProblem(request.feature, request.operation === 'create-child' && request.workItemType === 'User Story')
   if (storyProblem) throw new Error(`${storyProblem} Nothing was created.`)
   if (request.feature?.adhoc != null && (request.feature.adhoc !== true || request.operation !== 'create-child' || request.workItemType !== 'Task')) throw new Error('Only a new Task can be tagged ad-hoc. Nothing was created.')
   if (request.operation === 'edit-work-item') { const problem = !Number.isSafeInteger(request.workItemId) || request.workItemId! < 1 || !Number.isSafeInteger(request.rev) || request.rev! < 1 ? 'Invalid work item or revision.' : editProblem(request.edit ?? {}); if (problem) throw new Error(`${problem} Nothing was changed.`) }
-  if ((request.operation === 'comments' || request.operation === 'add-comment' || request.operation === 'updates') && (!Number.isSafeInteger(request.workItemId) || request.workItemId! < 1)) throw new Error('Invalid work item.')
+  if ((request.operation === 'comments' || review || request.operation === 'updates') && (!Number.isSafeInteger(request.workItemId) || request.workItemId! < 1)) throw new Error('Invalid work item.')
   const tokenProblem = continuationTokenProblem(request)
   if (tokenProblem) throw new Error(tokenProblem)
-  if (request.operation === 'add-comment' && (typeof request.comment !== 'string' || !request.comment.trim() || request.comment.length > 100_000)) throw new Error('Enter a comment (at most 100,000 characters). Nothing was added.')
-  if (request.htmlComment != null && (request.htmlComment !== true || request.operation !== 'add-comment' || request.reviewOf == null || !safeCommentHtml(request.comment ?? ''))) throw new Error('The review comment holds markup the app does not send. Nothing was posted.')
+  if (review && (typeof request.comment !== 'string' || !request.comment.trim() || request.comment.length > 100_000)) throw new Error('Enter a comment (at most 100,000 characters). Nothing was added.')
+  if (request.htmlComment != null && (request.htmlComment !== true || !review || request.reviewOf == null || !safeCommentHtml(request.comment ?? ''))) throw new Error('The review comment holds markup the app does not send. Nothing was posted.')
   if (window.azureDevOps) return window.azureDevOps.request(request)
-  if (request.operation === 'comments' || request.operation === 'add-comment') return requestComments(request)
+  if (request.operation === 'comments' || review) return requestComments(request)
   const base = projectApiBase(request)
   const updating = request.operation === 'update-time-writing-effort' || request.operation === 'update-work-item' || request.operation === 'edit-work-item'
   const writing = request.operation === 'create-feature' || request.operation === 'create-child' || updating

@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { GitQueueError } from './gitSaveQueue'
 import { conqPage, onDemandPath, pageListChange, withoutHidden, parseOnDemandPage, serializeOnDemandPage, sortPages, type OnDemandPage } from './onDemand'
 import { headOf, pageFolder, rowPageQueue } from './rowFiles'
 import { SampleWriteError, samplePage } from './sampleRows'
 import { defaultLockSettings, parseLockSettings, serializeLockSettings, type LockSettings } from './rowLocks'
 import type { GitStorage } from './useGitStorage'
+import { attachLists, resolveLists, type CatalogEntry } from './sharedLists'
 
 // OND-02, OND-08: the On-Demand pages from Git (one file each in on-demand/), read when Git is connected; the pages last
 // read are kept in this browser so the menu and the pages show while Git is not connected. While the folder holds no
@@ -34,7 +35,11 @@ const messageOf = (failure: unknown) => failure instanceof Error ? failure.messa
 // OND-63…OND-66: isSample(id) — the viewer looks at the page in Sample (useDataMode): every list of pages given out here
 // (pages, full, stored: the Data tab, the Insights and the dashboards) has the page with its sample rows, and every save
 // of that page is refused (SampleWriteError) before anything is sent to Git.
-export function useOnDemand(git: GitStorage, isSample: (id: string) => boolean = () => false) {
+// LST-08, LST-09: lists — the built-in lists in use: every page given out shows its built-in list columns with the lists'
+// items (renamed people by their key); a change is made on the page from Git with only the items attached, so a save
+// writes what was changed and nothing the lists changed meanwhile.
+export function useOnDemand(git: GitStorage, isSample: (id: string) => boolean = () => false, lists: CatalogEntry[] = []) {
+  const catalog = useMemo(() => new Map(lists.map((entry) => [entry.ref, entry])), [lists])
   const scope = git.accessScope
   const { listOnDemand, readOnDemand, readRowPage, readLockSettings } = git
   // OND-36: the inactivity timeout of row locks (row-locks.json), read with the pages.
@@ -108,7 +113,7 @@ export function useOnDemand(git: GitStorage, isSample: (id: string) => boolean =
   // OND-39: everyone gets the pages without their hidden rows (table, Insights, exports, dashboards); the table page
   // asks for the full page (full) to list them with Show hidden rows.
   const shown = (page: OnDemandPage) => isSample(page.id) ? samplePage(page) : page
-  const allPages = sortPages(saved.map(apply)).map(shown)
+  const allPages = sortPages(saved.map(apply)).map(shown).map((page) => resolveLists(page, catalog))
   const pages = allPages.map(withoutHidden)
   const refuse = (id: string) => { if (isSample(id)) throw new SampleWriteError(stored.current.find((page) => page.id === id)?.name ?? id) }
   const put = (page: OnDemandPage) => {
@@ -141,7 +146,8 @@ export function useOnDemand(git: GitStorage, isSample: (id: string) => boolean =
       return next.length ? { ...current, [id]: next } : without(current, id)
     })
     if (keep) mark('saving')
-    try { const saved = base.storage === 'rows' ? await saveRows(base, change, message) : await save(change(base), message); if (keep) mark(null); return saved }
+    const withLists: Change = (page) => change(attachLists(page, catalog))
+    try { const saved = base.storage === 'rows' ? await saveRows(base, withLists, message) : await save(withLists(base), message); if (keep) mark(null); return saved }
     catch (failure) { if (keep) mark(failure instanceof GitQueueError ? 'queued' : 'failed', messageOf(failure)); throw failure }
   }
   // OND-33: a row-file page's change written as its files (git.saveRowPage); the page read again becomes the page shown.
@@ -179,7 +185,7 @@ export function useOnDemand(git: GitStorage, isSample: (id: string) => boolean =
     lockSettings, saveLockSettings: async (next: LockSettings, message: string) => { const result = await git.writeLockSettings(serializeLockSettings(next), message); setLockSettings(parseLockSettings(result.text)); return result },
     reloadLockSettings: async () => setLockSettings(parseLockSettings((await readLockSettings()).text)),
     full: (id: string) => allPages.find((page) => page.id === id) ?? null,
-    stored: (id: string) => { const found = saved.find((page) => page.id === id); return found ? shown(found) : null },
+    stored: (id: string) => { const found = saved.find((page) => page.id === id); return found ? attachLists(shown(found), catalog) : null },
     isSample,
     // OND-28: the pending changes of a page (saves that failed before they were queued), and Discard.
     pending: (id: string) => (kept[id] ?? []).filter((entry) => entry.state === 'failed').map(({ label, error }) => ({ label, error })),

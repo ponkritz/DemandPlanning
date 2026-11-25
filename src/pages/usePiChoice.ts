@@ -1,23 +1,31 @@
 import { useEffect, useMemo, useState } from 'react'
 import { readAzureIterations, type AzureIteration } from '../azureDevOps'
-import { defaultPi, piOptions, samePi } from '../piReview'
+import { defaultPi, defaultReviewStart, piLabel, piOptions, samePi, type PiDefault } from '../piReview'
+import { piCutoff, piOptionsFrom, reviewStartLabel, shownFrom } from '../piReviewStart'
 import { useNow } from '../useNow'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 
 // PIR-02 (PI Review), PIR-17 (My PI Review): the PI picker's PIs — the Time Writing connection's iteration tree (null
 // when not read or when the read failed) and the fetched items — the default PI (the current one by the Sprint dates)
 // and the viewer's choice, remembered in this browser under storageKey.
-export function usePiChoice({ config, pat, items, isSample }: Pick<AzureWorkspace, 'config' | 'pat' | 'items' | 'isSample'>, storageKey: string) {
+// PIR-33: start — "PI Review starts from": the PIs that ended before it are not offered (piOptionsFrom), so a remembered
+// choice of such a PI, and a default before it, fall back to the current PI (else the PI is chosen by the viewer).
+export function usePiChoice({ config, pat, items, isSample }: Pick<AzureWorkspace, 'config' | 'pat' | 'items' | 'isSample'>, storageKey: string, start: string = defaultReviewStart) {
   const iterations = usePiIterations({ config, pat, isSample })
   const today = useNow(3_600_000)
-  const options = useMemo(() => piOptions(iterations.list ?? [], items), [iterations.list, items])
-  const fallback = useMemo(() => defaultPi(iterations.list, items, today, iterations.problem), [iterations.list, items, today, iterations.problem])
+  const all = useMemo(() => piOptions(iterations.list ?? [], items), [iterations.list, items])
+  const cutoff = useMemo(() => piCutoff(start, iterations.list, all), [start, iterations.list, all])
+  const { shown: options, hidden } = useMemo(() => piOptionsFrom(all, cutoff), [all, cutoff])
+  const fallback = useMemo((): PiDefault => {
+    const found = defaultPi(iterations.list, items.filter((item) => shownFrom(item.iterationPath, cutoff)), today, iterations.problem)
+    return found.pi && !shownFrom(found.pi, cutoff) ? { pi: '', why: 'none', note: `${piLabel(found.pi)} is before PI Review starts (${reviewStartLabel(start)}): choose a PI.` } : found
+  }, [iterations.list, items, today, iterations.problem, cutoff, start])
   const current = fallback.why === 'current' ? fallback.pi : ''
   const [chosen, setChosen] = useState(() => { try { return localStorage.getItem(storageKey) ?? '' } catch { return '' } })
   const remembered = options.find((pi) => samePi(pi, chosen))
   const pi = remembered ?? (iterations.done ? fallback.pi : '')
   const choose = (value: string) => { setChosen(value); try { if (value) localStorage.setItem(storageKey, value); else localStorage.removeItem(storageKey) } catch { /* the choice is a convenience only */ } }
-  return { iterations, options, fallback, current, remembered, pi, choose }
+  return { iterations, options, hidden, cutoff, fallback, current, remembered, pi, choose }
 }
 
 // PIR-02, PIR-25: the Time Writing connection's iteration tree, read once when the hook is used (the PI pickers, the

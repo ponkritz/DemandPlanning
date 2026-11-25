@@ -175,7 +175,7 @@ test('CON-107: “Build On-Demand Dashboards” — Tool Owner only in the start
   const policy = defaultPolicy('lead@example.com')
   assert.ok(policy.roles['Tool Owner'].actions.includes('dashboards.build'))
   for (const role of ['Admin', 'Product Owner', 'People Manager', 'Scrum Master', 'Team Member']) assert.ok(!policy.roles[role].actions.includes('dashboards.build'), `${role} has no dashboards.build`)
-  assert.match(serializeAccess(policy), /"permissions": 8/)
+  assert.match(serializeAccess(policy), /"permissions": 9/)
   // A file written with permissions 5: a listed Tool Owner gets it, nobody else — not the roles with Set up On-Demand pages.
   const v5 = JSON.parse(serializeAccess(policy)); v5.permissions = 5
   for (const rights of Object.values(v5.roles)) rights.actions = rights.actions.filter((key) => key !== 'dashboards.build')

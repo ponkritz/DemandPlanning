@@ -1,4 +1,4 @@
-import { capLog, cellText, newId, valuesOf, type LogEntry, type OnDemandColumn, type OnDemandPage, type OnDemandValue } from './onDemand.ts'
+import { capLog, cellText, currentValue, listRefs, newId, valuesOf, type LogEntry, type OnDemandColumn, type OnDemandPage, type OnDemandValue } from './onDemand.ts'
 import { replaceSheet, type QeMappingFile, type QeSheet } from './qeMapping.ts'
 
 // QEM-13, OND-100…OND-102 Replace…: one value of one column replaced by another in every row that holds it — e.g. a QE
@@ -83,6 +83,8 @@ export function replaceError(column: OnDemandColumn | undefined, find: string, t
   if (!find.trim()) return 'Choose or type the value to find.'
   if (!to.trim()) return 'Type the new value.'
   if (to.trim().length > maxReplaceValue) return `The new value is longer than ${maxReplaceValue.toLocaleString('en-US')} characters.`
+  // LST-10: a built-in list column takes only a value of its list (the list is changed in Admin, not here).
+  if (column.list && !column.options.includes(to.trim())) return `“${to.trim()}” is not in the built-in list of ${column.name}. Choose one of its values, or add it to the list (Admin → Epic & Feature setup → Value lists) first.`
   if ((column.type === 'dropdown' || column.type === 'multi') && !column.options.includes(to.trim())) return `“${to.trim()}” is not an option of ${column.name}. Add it with Set up columns… first, or choose one of its options.`
   return ''
 }
@@ -94,7 +96,8 @@ export function onDemandReplacePlan(page: OnDemandPage, columnId: string, find: 
   const plan: ReplacePlan = { changes: [], locked: 0, hidden: 0 }
   if (!column || !replaceableTypes.includes(column.type) || !target) return plan
   for (const row of page.rows) {
-    const next = replacedValue(column, row.cells[columnId], find, target)
+    // LST-09: a built-in list value is found by the name the list has now (a renamed person).
+    const next = replacedValue(column, currentValue(column, row), find, target)
     if (next == null) continue
     if (row.hidden) plan.hidden++
     else if (row.key && locked.has(row.key)) plan.locked++
@@ -116,9 +119,14 @@ export function applyOnDemandReplace(page: OnDemandPage, columnId: string, find:
   const comment = replaceMessage(find, target, column.name).slice(0, 500)
   const rows = page.rows.map((row) => {
     if (!ids.has(row.id)) return row
-    const value = replacedValue(column, row.cells[columnId], find, target)!
+    const value = replacedValue(column, currentValue(column, row), find, target)!
     const entry: LogEntry = { id: newId('l', random, now), at, by, comment, changes: [{ column: columnId, from: cellText(row.cells[columnId]).slice(0, 500), to: cellText(value).slice(0, 500) }] }
-    return { ...row, cells: { ...row.cells, [columnId]: value }, log: capLog([...(row.log ?? []), entry]) }
+    // LST-09: the keys follow the new value (the new person's email from the list, the others' kept).
+    const { refs: before, ...rest } = row
+    const keys = listRefs(column, value, { cells: { [columnId]: currentValue(column, row) ?? '' }, refs: before })
+    const refs = { ...before, ...(keys ? { [columnId]: keys } : {}) }
+    if (!keys) delete refs[columnId]
+    return { ...rest, ...(Object.keys(refs).length ? { refs } : {}), cells: { ...row.cells, [columnId]: value }, log: capLog([...(row.log ?? []), entry]) }
   })
   return { page: { ...page, rows }, changed: ids.size, locked: plan.locked }
 }

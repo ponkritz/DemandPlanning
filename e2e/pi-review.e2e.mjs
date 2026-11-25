@@ -110,7 +110,8 @@ test('TC-PIR-06: the current PI is preselected, its Features listed, a Discussio
   const select = page.getByLabel('PI', { exact: true })
   await page.locator('.pir-filters .pill', { hasText: 'Current PI' }).waitFor()
   assert.equal(await select.inputValue(), 'Project\\PI 2026.4')
-  assert.deepEqual(await select.locator('option').allInnerTexts(), ['PI 2026.4 (current)', 'PI 2026.3'])
+  // PIR-33: PI 2026.3 (its Sprint ended in 2000) ended before PI Review starts: not offered.
+  assert.deepEqual(await select.locator('option').allInnerTexts(), ['PI 2026.4 (current)'])
   // PIR-03, PIR-04: the PI's Features by ID; the toggle adds the Feature with a User Story in the PI.
   await page.locator('.pir-table tr[data-row-key="example/project/202"]').waitFor()
   assert.deepEqual(await rowKeys(page), ['example/project/201', 'example/project/202'])

@@ -21,9 +21,22 @@ export const onDemandTypes: { key: OnDemandType; label: string }[] = [
 export const typeLabel = (type: OnDemandType) => onDemandTypes.find((entry) => entry.key === type)?.label ?? type
 export const hasOptions = (type: OnDemandType) => type === 'dropdown' || type === 'multi'
 export type OnDemandValue = string | string[]
+// LST-08: a built-in list column is a Dropdown or Multi-select whose `list` names a shared list — "team:<id>" (a list of
+// Azure DevOps team members, shared-lists.json, src/sharedLists.ts) or "values:<id>" (a Value list of the Epic setup,
+// epic-setup.json). Its choices are the list's items; `options` keeps the names as they were when the columns were last
+// saved, so an app version without built-in lists still shows a Dropdown with those choices (LIM-105).
+export const listRefPattern = /^(team|values):[a-z0-9-]{1,60}$/
+export const listTypeLabels: Record<'dropdown' | 'multi', string> = { dropdown: 'Dropdown (built-in list)', multi: 'Multi-select (built-in list)' }
+export const columnTypeLabel = (column: { type: OnDemandType; list?: string }) => column.list != null && hasOptions(column.type) ? listTypeLabels[column.type as 'dropdown' | 'multi'] : typeLabel(column.type)
+// LST-09: an item of a built-in list — the name shown and stored in the rows, and for a person their Azure DevOps
+// identity id (identity.id of the team-members read: an opaque GUID, the stable key that follows a renamed person; never
+// an email).
+export interface ListItem { name: string; id?: string }
+export const listKeyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 // OND-25: description — how or what to fill (optional, shown under the field and as ⓘ on the header); OND-23: currency
-// — the default currency of a Currency column (ISO 4217 code).
-export interface OnDemandColumn { id: string; name: string; type: OnDemandType; options: string[]; required: boolean; description?: string; currency?: string }
+// — the default currency of a Currency column (ISO 4217 code). LST-08: list — the built-in list of the column; items and
+// listMissing are set at run time from the lists in use (never written): the list's items, or that it is not found.
+export interface OnDemandColumn { id: string; name: string; type: OnDemandType; options: string[]; required: boolean; description?: string; currency?: string; list?: string; items?: ListItem[]; listMissing?: boolean }
 // OND-21: one entry of a row's update log — who, when (UTC) and what changed per field (column id, old → new as text),
 // written by the app on every saved change; a comment only when a file holds one (the app writes none). The first entry is the row being added (added: true).
 export interface RowChange { column: string; from: string; to: string }
@@ -35,7 +48,9 @@ export interface LogEntry { id: string; at: string; by: string; added?: true; ac
 // the Insights, the exports and the dashboards.
 // link (MYD-24): a row built by a data source of My dashboard links to its origin (an Azure DevOps work item, https only);
 // never read from or written to a page file.
-export interface OnDemandRow { id: string; key?: string; link?: string; seq?: number; addedBy?: string; addedAt?: string; log?: LogEntry[]; hidden?: { by: string; at: string }; cells: Record<string, OnDemandValue> }
+// LST-09: refs — per built-in list column, the stable key (a person's Azure DevOps identity id, '' for none) of each value, in the
+// order of the values; the row shows the name the list has now for that key (a renamed person still matches).
+export interface OnDemandRow { id: string; key?: string; link?: string; seq?: number; addedBy?: string; addedAt?: string; log?: LogEntry[]; hidden?: { by: string; at: string }; refs?: Record<string, string[]>; cells: Record<string, OnDemandValue> }
 // OND-31: storage 'rows' — the page is kept as one file per row (on-demand/<id>/page.json, rows/<key>.json, counter.json,
 // src/rowFiles.ts); absent — the single page file on-demand/<id>.json (OND-08).
 // OND-63, OND-66: sample — the page as shown in Sample (src/sampleRows.ts): its rows are made up; it is never written.
@@ -407,6 +422,34 @@ const cleanCells = (columns: OnDemandColumn[], cells: Record<string, OnDemandVal
 const logText = (value: OnDemandValue | undefined) => { const text = cellText(value); return text.length > maxLogText ? `${text.slice(0, maxLogText - 1)}…` : text }
 // The last 100 entries of a log, oldest first.
 export const capLog = (log: LogEntry[]) => [...log].sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id)).slice(-maxLog)
+// LST-09: the keys of a built-in list column's values — each value's item in the list (by name: its identity id, '' for an
+// item without one), else, for a value the list no longer has, the key the value had in the row before (a removed person
+// keeps their key). Nothing when no value has a key.
+export function listRefs(column: OnDemandColumn, value: OnDemandValue | undefined, before?: Pick<OnDemandRow, 'cells' | 'refs'>): string[] | undefined {
+  if (!column.list || !hasOptions(column.type)) return undefined
+  const old = valuesOf(before?.cells[column.id]), oldRefs = before?.refs?.[column.id] ?? []
+  const refs = valuesOf(value).map((entry) => {
+    const item = column.items?.find((candidate) => candidate.name === entry)
+    if (item) return item.id ?? ''
+    const at = old.indexOf(entry)
+    return at >= 0 ? oldRefs[at] ?? '' : ''
+  })
+  return refs.some(Boolean) ? refs : undefined
+}
+// LST-09: a built-in list value as the list names it now — each value whose key is an item of the list takes that item's
+// name (a renamed person); the others are kept as they are (a removed person, marked "not in the list").
+export function currentValue(column: OnDemandColumn, row: Pick<OnDemandRow, 'cells' | 'refs'>): OnDemandValue | undefined {
+  const value = row.cells[column.id], refs = row.refs?.[column.id]
+  if (!column.items?.length || !refs?.length || value == null) return value
+  const byKey = new Map(column.items.flatMap((item) => item.id ? [[item.id, item.name] as const] : []))
+  const names = valuesOf(value).map((entry, at) => (refs[at] && byKey.get(refs[at])) || entry)
+  if (names.every((entry, at) => entry === valuesOf(value)[at])) return value
+  return Array.isArray(value) ? [...new Set(names)] : names[0]
+}
+export function rowRefs(columns: OnDemandColumn[], cells: Record<string, OnDemandValue>, before?: Pick<OnDemandRow, 'cells' | 'refs'>): Record<string, string[]> | undefined {
+  const out = Object.fromEntries(columns.flatMap((column): [string, string[]][] => { const refs = listRefs(column, cells[column.id], before); return refs ? [[column.id, refs]] : [] }))
+  return Object.keys(out).length ? out : undefined
+}
 export interface RowEdit { by?: string; random?: () => number; now?: () => number }
 // Adds or changes a row. OND-18: a new row gets its key at once. OND-20: a new row records who added it (the viewer's
 // work email, else their name, else "unknown") and when (UTC), never changed afterwards. OND-21: every add and every
@@ -420,11 +463,16 @@ export function upsertRow(page: OnDemandPage, row: OnDemandRow, edit: RowEdit = 
   const entry = (changes: RowChange[], added = false): LogEntry => ({ id: newId('l', random, now), at, by, ...(added ? { added: true as const } : {}), changes })
   if (!existing) {
     const changes = page.columns.flatMap((column) => isEmpty(cells[column.id]) ? [] : [{ column: column.id, from: '', to: logText(cells[column.id]) }])
-    return { ...page, rows: [...page.rows, { id: row.id, key, addedBy: by, addedAt: at, log: [entry(changes, true)], cells }] }
+    const refs = rowRefs(page.columns, cells)
+    return { ...page, rows: [...page.rows, { id: row.id, key, addedBy: by, addedAt: at, log: [entry(changes, true)], ...(refs ? { refs } : {}), cells }] }
   }
   const changes = page.columns.flatMap((column) => cellText(existing.cells[column.id]) === cellText(cells[column.id]) ? [] : [{ column: column.id, from: logText(existing.cells[column.id]), to: logText(cells[column.id]) }])
   if (!changes.length) return page
-  const next: OnDemandRow = { ...existing, key, cells, log: capLog([...(existing.log ?? []), entry(changes)]) }
+  // LST-09: the keys follow the values saved.
+  const { refs: _before, ...kept } = existing
+  void _before
+  const refs = rowRefs(page.columns, cells, existing)
+  const next: OnDemandRow = { ...kept, key, ...(refs ? { refs } : {}), cells, log: capLog([...(existing.log ?? []), entry(changes)]) }
   return { ...page, rows: page.rows.map((current) => current.id === row.id ? next : current) }
 }
 export const removeRow = (page: OnDemandPage, id: string): OnDemandPage => {
@@ -480,8 +528,9 @@ export const renamePage = (page: OnDemandPage, name: string, description: string
 
 // ---- columns (OND-05, OND-06) ----
 // The Columns pop-up edits a copy: each option remembers the label it had (was), so a rename is told from a removal.
-export interface ColumnDraft { id: string; name: string; type: OnDemandType; required: boolean; options: { label: string; was?: string }[]; description?: string; currency?: string; isNew?: boolean }
-export const columnDrafts = (columns: OnDemandColumn[]): ColumnDraft[] => columns.map((column) => ({ id: column.id, name: column.name, type: column.type, required: column.required, options: column.options.map((label) => ({ label, was: label })), description: column.description ?? '', ...(column.type === 'currency' ? { currency: column.currency ?? defaultCurrency } : {}) }))
+// LST-08: list — the built-in list of a Dropdown or Multi-select ('' while none is chosen; absent: options of its own).
+export interface ColumnDraft { id: string; name: string; type: OnDemandType; required: boolean; options: { label: string; was?: string }[]; description?: string; currency?: string; list?: string; isNew?: boolean }
+export const columnDrafts = (columns: OnDemandColumn[]): ColumnDraft[] => columns.map((column) => ({ id: column.id, name: column.name, type: column.type, required: column.required, options: column.options.map((label) => ({ label, was: label })), description: column.description ?? '', ...(column.type === 'currency' ? { currency: column.currency ?? defaultCurrency } : {}), ...(column.list != null && hasOptions(column.type) ? { list: column.list } : {}) }))
 const cleanDescription = (text: string | undefined) => (text ?? '').trim().replace(/\s+/g, ' ').slice(0, maxDescription)
 // PIR-22: noun — "column" (the On-Demand pages) or "field" (the PI Review form setup, which shares this check).
 export function columnsError(drafts: ColumnDraft[], noun: 'column' | 'field' = 'column'): string {
@@ -495,6 +544,8 @@ export function columnsError(drafts: ColumnDraft[], noun: 'column' | 'field' = '
   const long = drafts.find((draft) => (draft.description ?? '').trim().length > maxDescription)
   if (long) return `The description of “${long.name.trim()}” is longer than ${maxDescription} characters.`
   for (const draft of drafts.filter((entry) => hasOptions(entry.type))) {
+    // LST-08: a built-in list column takes its choices from the list: it needs the list, not options of its own.
+    if (draft.list != null) { if (!listRefPattern.test(draft.list)) return `“${draft.name.trim()}” is a ${columnTypeLabel(draft)} ${noun}: choose its list.`; continue }
     const labels = draft.options.map((option) => cleanName(option.label).toLowerCase())
     if (!labels.length) return `“${draft.name.trim()}” is a ${typeLabel(draft.type)} ${noun}: add at least one option.`
     if (labels.some((label) => !label)) return `“${draft.name.trim()}” has an empty option: type it or remove it.`
@@ -525,6 +576,8 @@ export function columnEffects(page: OnDemandPage, drafts: ColumnDraft[]): string
       const misfit = problems.length ? `; ${problems.length} ${problems.length === 1 ? 'does' : 'do'} not fit and ${problems.length === 1 ? 'is' : 'are'} shown as “${problems[0]}” until changed` : ''
       lines.push(`“${column.name}” changes from ${typeLabel(column.type)} to ${typeLabel(draft.type)}: ${kept}${several}${misfit}.`)
     }
+    // LST-08: a column that takes its choices from another built-in list (or from one for the first time).
+    if (draft.list && draft.list !== column.list && rows.length) lines.push(`“${column.name}” takes its choices from a built-in list: its ${count(rows.length, 'value')} ${rows.length === 1 ? 'is' : 'are'} kept; a value not in the list is shown as “not in the list” until changed.`)
     for (const [from, to] of renames) { const n = rows.filter((row) => valuesOf(row.cells[column.id]).includes(from)).length; if (n) lines.push(`Option “${from}” of “${column.name}” is renamed “${to}” in ${count(n, 'row')}.`) }
     if (hasOptions(draft.type)) {
       const kept = new Set(draft.options.map((option) => option.was).filter(Boolean))
@@ -541,10 +594,15 @@ export function columnEffects(page: OnDemandPage, drafts: ColumnDraft[]): string
 export function applyColumns(page: OnDemandPage, drafts: ColumnDraft[], id: () => string = () => newId('c')): OnDemandPage {
   const columns: OnDemandColumn[] = drafts.map((draft) => {
     const description = cleanDescription(draft.description)
-    return { id: draft.isNew || !draft.id ? id() : draft.id, name: cleanName(draft.name), type: draft.type, required: draft.required, options: hasOptions(draft.type) ? draft.options.map((option) => cleanName(option.label)) : [], ...(description ? { description } : {}), ...(draft.type === 'currency' ? { currency: (draft.currency ?? defaultCurrency).trim().toUpperCase() } : {}) }
+    // LST-08: a built-in list column keeps its list and, as options, the list's names (cut to the options' limit).
+    const list = hasOptions(draft.type) && draft.list && listRefPattern.test(draft.list) ? draft.list : ''
+    const options = hasOptions(draft.type) ? draft.options.map((option) => cleanName(option.label)) : []
+    return { id: draft.isNew || !draft.id ? id() : draft.id, name: cleanName(draft.name), type: draft.type, required: draft.required, options: list ? [...new Set(options.filter(Boolean))].slice(0, maxOptions) : options, ...(description ? { description } : {}), ...(draft.type === 'currency' ? { currency: (draft.currency ?? defaultCurrency).trim().toUpperCase() } : {}), ...(list ? { list } : {}) }
   })
+  // LST-09: a value's key stays while its column keeps the same built-in list and type (the values are not converted).
+  const keepsRefs = (draft: ColumnDraft, index: number) => { const before = page.columns.find((column) => column.id === draft.id); return Boolean(!draft.isNew && before?.list && before.list === columns[index].list && before.type === draft.type) }
   // The row keeps its key, ID, who added it and its log (OND-18…21); only its values follow the columns.
-  const rows = page.rows.map((row) => ({ ...row, cells: Object.fromEntries(drafts.flatMap((draft, index) => {
+  const rows = page.rows.map(({ refs: before, ...row }) => ({ ...row, ...refsPart(Object.fromEntries(drafts.flatMap((draft, index): [string, string[]][] => before?.[draft.id] && keepsRefs(draft, index) ? [[columns[index].id, before[draft.id]]] : []))), cells: Object.fromEntries(drafts.flatMap((draft, index) => {
     if (draft.isNew) return []
     const before = page.columns.find((column) => column.id === draft.id)
     const value = row.cells[draft.id]
@@ -556,6 +614,8 @@ export function applyColumns(page: OnDemandPage, drafts: ColumnDraft[], id: () =
   })) }))
   return { ...page, columns, rows }
 }
+
+const refsPart = (refs: Record<string, string[]>) => Object.keys(refs).length ? { refs } : {}
 
 // ---- export ----
 // The table as exported (OND-03, OND-19…23): ID, Key, the columns (a Currency as "1,200.00 EUR", a Long text in full),
@@ -585,7 +645,9 @@ export function parseOnDemandPage(raw: string, expectedId?: string): OnDemandPag
     const options = hasOptions(type) && Array.isArray(column.options) ? [...new Set(column.options.map((option) => cleanName(text(option, 120))).filter(Boolean))].slice(0, maxOptions) : []
     const description = cleanDescription(text(column.description, maxDescription))
     const code = typeof column.currency === 'string' ? column.currency.trim().toUpperCase() : ''
-    return [{ id: column.id, name: cleanName(text(column.name, 120)) || column.id, type, options, required: column.required === true, ...(description ? { description } : {}), ...(type === 'currency' ? { currency: currencyPattern.test(code) ? code : defaultCurrency } : {}) }]
+    // LST-08: a list reference only on a Dropdown or Multi-select, and only of the known form.
+    const list = hasOptions(type) && typeof column.list === 'string' && listRefPattern.test(column.list) ? column.list : ''
+    return [{ id: column.id, name: cleanName(text(column.name, 120)) || column.id, type, options, required: column.required === true, ...(description ? { description } : {}), ...(type === 'currency' ? { currency: currencyPattern.test(code) ? code : defaultCurrency } : {}), ...(list ? { list } : {}) }]
   }).slice(0, maxColumns)
   const rowIds = new Set<string>(), rowKeys = new Set<string>(), rowSeqs = new Set<number>()
   const rows = (file.rows as unknown[]).flatMap((entry): OnDemandRow[] => {
@@ -605,18 +667,33 @@ export function parseOnDemandPage(raw: string, expectedId?: string): OnDemandPag
     const hiddenBy = row.hidden && typeof row.hidden === 'object' ? row.hidden as Record<string, unknown> : null
     const hidden = hiddenBy && isoTime(hiddenBy.at) ? { by: text(hiddenBy.by, 200).trim() || 'unknown', at: isoTime(hiddenBy.at) } : null
     const cells = row.cells && typeof row.cells === 'object' && !Array.isArray(row.cells) ? row.cells as Record<string, unknown> : {}
-    return [{ id: row.id, ...(key ? { key } : {}), ...(seq ? { seq } : {}), ...(addedBy ? { addedBy } : {}), ...(addedAt ? { addedAt } : {}), ...(log.length ? { log } : {}), ...(hidden ? { hidden } : {}), cells: Object.fromEntries(columns.flatMap((column): [string, OnDemandValue][] => {
+    const values: Record<string, OnDemandValue> = Object.fromEntries(columns.flatMap((column): [string, OnDemandValue][] => {
       const value = cells[column.id]
       if (column.type === 'multi') { const list = [...new Set((Array.isArray(value) ? value : [value]).map((item) => text(item, maxValue).trim()).filter(Boolean))].slice(0, maxOptions); return list.length ? [[column.id, list]] : [] }
       // Every single value is read up to the Long text size, so changing a column's type never cuts a value (OND-06).
       const single = (Array.isArray(value) ? value.map((item) => text(item, maxLongValue)).filter(Boolean).join(', ') : text(value, maxLongValue)).trim().slice(0, maxLongValue)
       return single ? [[column.id, single]] : []
-    })) }]
+    }))
+    const refs = parseRefs(row.refs, columns, values)
+    return [{ id: row.id, ...(key ? { key } : {}), ...(seq ? { seq } : {}), ...(addedBy ? { addedBy } : {}), ...(addedAt ? { addedAt } : {}), ...(log.length ? { log } : {}), ...(hidden ? { hidden } : {}), ...(refs ? { refs } : {}), cells: values }]
   }).slice(0, maxRows)
   const name = cleanName(text(file.name, 80)) || id
   const keyPrefix = typeof file.keyPrefix === 'string' && keyPrefixPattern.test(file.keyPrefix) ? file.keyPrefix : prefixFor(name)
   const colors = parseColors(file.colors)
   return { schema: 1, kind: 'on-demand-page', id, name, description: text(file.description, 300).trim(), keyPrefix, columns, rows, insights: parseInsights(file.insights), ...(colors ? { colors } : {}), ...(file.storage === 'rows' ? { storage: 'rows' as const } : {}), ...(typeof file.lastSeq === 'number' && Number.isInteger(file.lastSeq) && file.lastSeq >= 1 && file.lastSeq <= maxSeq ? { lastSeq: file.lastSeq } : {}), ...insightFiltersPart(parseInsightFilterSetup(file.insightFilters)) }
+}
+// LST-09: a row's keys as read — only for a built-in list column of the page and one per value (else that column's keys
+// are dropped), each an identity id (a GUID, lower case) or ''; a column whose keys are all '' is left out.
+function parseRefs(raw: unknown, columns: OnDemandColumn[], cells: Record<string, OnDemandValue>): Record<string, string[]> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const input = raw as Record<string, unknown>
+  const out = Object.fromEntries(columns.flatMap((column): [string, string[]][] => {
+    const list = input[column.id]
+    if (!column.list || !Array.isArray(list) || list.length !== valuesOf(cells[column.id]).length) return []
+    const refs = list.map((entry) => typeof entry === 'string' && listKeyPattern.test(entry.trim()) ? entry.trim().toLowerCase() : '')
+    return refs.some(Boolean) ? [[column.id, refs]] : []
+  }))
+  return Object.keys(out).length ? out : undefined
 }
 // OND-20, OND-21: a time in the file — kept as a UTC ISO time when it is one, else dropped.
 const isoTime = (value: unknown) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value) && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : ''
@@ -678,7 +755,7 @@ export function serializeOnDemandPage(input: OnDemandPage, { fill = true }: { fi
   if (input.sample) throw new Error(`Sample data is shown for ${input.name}: nothing is saved to Git. Switch to Live to change it.`)
   // OND-18, OND-19: a saved file has a key and a sequential number on every row.
   const page = fill ? withRowNumbers(withRowKeys(input)) : input
-  const out = `${JSON.stringify({ schema: 1, kind: 'on-demand-page', id: page.id, name: page.name, description: page.description, keyPrefix: page.keyPrefix, columns: page.columns.map(({ id, name, type, options, required, description, currency }) => ({ id, name, type, ...(hasOptions(type) ? { options } : {}), ...(required ? { required } : {}), ...(description ? { description } : {}), ...(type === 'currency' ? { currency: currency ?? defaultCurrency } : {}) })), rows: page.rows.map(({ id, key, seq, addedBy, addedAt, log, hidden, cells }) => ({ id, ...(key ? { key } : {}), ...(seq ? { seq } : {}), ...(addedBy ? { addedBy } : {}), ...(addedAt ? { addedAt } : {}), ...(log?.length ? { log: log.map(logOut) } : {}), ...(hidden ? { hidden } : {}), cells })), ...(page.insights.length ? { insights: page.insights.map(insightOut) } : {}), ...(page.colors && Object.keys(page.colors).length ? { colors: page.colors } : {}), ...(page.storage === 'rows' ? { storage: 'rows' } : {}), ...(page.lastSeq ? { lastSeq: page.lastSeq } : {}), ...insightFiltersPart(page.insightFilters) }, null, 1)}\n`
+  const out = `${JSON.stringify({ schema: 1, kind: 'on-demand-page', id: page.id, name: page.name, description: page.description, keyPrefix: page.keyPrefix, columns: page.columns.map(({ id, name, type, options, required, description, currency, list }) => ({ id, name, type, ...(hasOptions(type) ? { options } : {}), ...(required ? { required } : {}), ...(description ? { description } : {}), ...(type === 'currency' ? { currency: currency ?? defaultCurrency } : {}), ...(list && hasOptions(type) ? { list } : {}) })), rows: page.rows.map(({ id, key, seq, addedBy, addedAt, log, hidden, refs, cells }) => ({ id, ...(key ? { key } : {}), ...(seq ? { seq } : {}), ...(addedBy ? { addedBy } : {}), ...(addedAt ? { addedAt } : {}), ...(log?.length ? { log: log.map(logOut) } : {}), ...(hidden ? { hidden } : {}), ...(refs && Object.keys(refs).length ? { refs } : {}), cells })), ...(page.insights.length ? { insights: page.insights.map(insightOut) } : {}), ...(page.colors && Object.keys(page.colors).length ? { colors: page.colors } : {}), ...(page.storage === 'rows' ? { storage: 'rows' } : {}), ...(page.lastSeq ? { lastSeq: page.lastSeq } : {}), ...insightFiltersPart(page.insightFilters) }, null, 1)}\n`
   if (new TextEncoder().encode(out).length > onDemandMaxBytes) throw new Error(`The page is too large to save to Git (over ${Math.round(onDemandMaxBytes / 1000)} KB). Remove rows, or split it into two pages.`)
   return out
 }
@@ -723,7 +800,7 @@ function mergeRows(base: OnDemandRow[] | null, mine: OnDemandRow[], theirs: OnDe
     const a = t.get(merged.id), b = m.get(merged.id)
     const log = capLog([...(a?.log ?? []), ...(b?.log ?? [])].filter((entry, index, list) => list.findIndex((other) => other.id === entry.id) === index))
     const seq = a?.seq ?? b?.seq, addedBy = a?.addedBy ?? b?.addedBy, addedAt = a?.addedAt ?? b?.addedAt
-    const row: OnDemandRow = { id: merged.id, ...(merged.key ? { key: merged.key } : {}), ...(seq ? { seq } : {}), ...(addedBy ? { addedBy } : {}), ...(addedAt ? { addedAt } : {}), ...(log.length ? { log } : {}), ...(merged.hidden ? { hidden: merged.hidden } : {}), cells: merged.cells }
+    const row: OnDemandRow = { id: merged.id, ...(merged.key ? { key: merged.key } : {}), ...(seq ? { seq } : {}), ...(addedBy ? { addedBy } : {}), ...(addedAt ? { addedAt } : {}), ...(log.length ? { log } : {}), ...(merged.hidden ? { hidden: merged.hidden } : {}), ...(merged.refs ? { refs: merged.refs } : {}), cells: merged.cells }
     return { row, inGit: Boolean(seq) && a?.seq === seq }
   })
   const taken = new Set(fixed.flatMap((entry) => entry.inGit && entry.row.seq ? [entry.row.seq] : []))

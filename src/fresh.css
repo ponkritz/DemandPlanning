@@ -1288,3 +1288,11 @@ tbody tr.tvl-hl-red td{background:var(--hl-red-bg)}tbody tr.tvl-hl-red td:first-
 /* CHT-78: a Pivot table's Rows and Columns in the chart editor — a line per field with ↑ ↓ ✕, then ＋ then by. */
 .pivot-fields{display:grid;gap:6px;border:0;padding:0;margin:0}.pivot-fields legend{font-weight:600;padding:0;margin-bottom:4px}.pivot-field{display:flex;align-items:center;gap:6px}.pivot-field select{flex:1;min-width:0}.pivot-fields>.text-button{justify-self:start}
 .data-table-export-note{display:block;max-width:240px;padding:4px 8px 6px;font-size:12px;line-height:1.35}
+/* LST-03…LST-07: the team lists from Azure DevOps — the table's actions on one line, the refresh difference and the log. */
+.shared-lists-table .button-row{flex-wrap:nowrap}.shared-lists-table .button-row button{white-space:nowrap}
+.shared-list-diff{display:grid;gap:10px;border-top:1px solid var(--line);padding-top:12px}.shared-list-diff p{margin:0}
+.shared-list-diff h3{margin:0 0 4px;font-size:14px;color:var(--heading)}.shared-list-diff ul{margin:0;padding-left:18px;max-height:220px;overflow:auto;font-size:13px}
+.shared-list-diff small{display:block;font-size:11px}.shared-list-log{margin:0 0 10px;padding-left:18px;font-size:13px}.shared-list-log p{margin:2px 0}
+.od-list-pick small{font-weight:400;color:var(--muted)}
+/* LST-08: the On-Demand column editor gives the type room for "Multi-select (built-in list)" (not below 640 px). */
+@media(min-width:641px){.od-columns-form .od-column-head{grid-template-columns:minmax(0,1.6fr) minmax(0,1.7fr) auto auto}}

@@ -11,7 +11,7 @@ function collectionBase(input) {
 }
 const projectBase = (input) => `${collectionBase(input)}/${encodeURIComponent(input.project)}`
 // Writes go to Azure DevOps Services (dev.azure.com) only: on-premises servers are read-only, whatever the connection's role.
-const writeOperations = ['create-feature', 'create-child', 'update-time-writing-effort', 'update-work-item', 'edit-work-item', 'add-comment']
+const writeOperations = ['create-feature', 'create-child', 'update-time-writing-effort', 'update-work-item', 'edit-work-item', 'add-comment', 'update-comment']
 function assertWritableBase(input) {
   if (!writeOperations.includes(input?.operation)) return
   if (new URL(collectionBase(input)).hostname !== 'dev.azure.com') throw new Error('Changes are written to Azure DevOps Services (dev.azure.com) only; on-premises servers are read-only. Nothing was changed.')
@@ -180,11 +180,16 @@ function azureEditRequest(input) {
 // Discussion: read the comments of a work item, or add one (plain text; line breaks become <br>; a PI review as its checked list HTML). The Comments API is a
 // preview API with its own fixed version; it is not negotiated.
 const commentsApiVersion = '7.1-preview.4'
+// PIR-34 (SM-192): update-comment — a PI review the viewer wrote, replaced with PATCH …/comments/{commentId}: only the
+// app's review HTML (htmlComment, reviewOf, the same allowlist as add-comment) and a positive comment id.
 function azureCommentsRequest(input) {
-  if (!input || !['comments', 'add-comment'].includes(input.operation)) throw new Error('Invalid Discussion request.')
+  if (!input || !['comments', 'add-comment', 'update-comment'].includes(input.operation)) throw new Error('Invalid Discussion request.')
   const connection = azureReadRequest({ ...input, operation: 'areas' })
   if (!Number.isSafeInteger(input.workItemId) || input.workItemId < 1) throw new Error('Invalid work item.')
-  const adding = input.operation === 'add-comment'
+  const updating = input.operation === 'update-comment'
+  const adding = input.operation === 'add-comment' || updating
+  if (updating && (input.htmlComment !== true || input.reviewOf == null || !Number.isSafeInteger(input.commentId) || input.commentId < 1)) throw new Error('Only a PI review can be edited. Nothing was changed.')
+  if (input.commentId != null && !updating) throw new Error('Invalid comment.')
   if (adding && (typeof input.comment !== 'string' || !input.comment.trim() || input.comment.length > 100000)) throw new Error('Enter a comment (at most 100,000 characters).')
   // PIR-14 (SM-183): a PI review is the app's own list HTML — accepted only as <ul>, <ol>, <li>, <p> without attributes
   // and escaped text (the same check as safeCommentHtml in src/azureClient.ts), and sent as it is; every other comment
@@ -195,8 +200,8 @@ function azureCommentsRequest(input) {
   // characters, sent URL-encoded in the query string of the same fixed host and path.
   const token = input.continuationToken
   if (token != null && (adding || typeof token !== 'string' || !token.length || token.length > 2048)) throw new Error(adding ? 'A page token is accepted only when reading the Discussion.' : 'Invalid Discussion page token.')
-  return { url: `${projectBase(input)}/_apis/wit/workItems/${input.workItemId}/comments?api-version=${commentsApiVersion}${adding ? '' : `&order=desc&$top=200${token ? `&continuationToken=${encodeURIComponent(token)}` : ''}`}`, fixedVersion: true, options: {
-    method: adding ? 'POST' : 'GET', redirect: 'error', headers: { ...connection.options.headers, 'Content-Type': 'application/json' }, body: adding ? JSON.stringify({ text: html ? input.comment : htmlText(input.comment.trim()) }) : undefined,
+  return { url: `${projectBase(input)}/_apis/wit/workItems/${input.workItemId}/comments${updating ? `/${input.commentId}` : ''}?api-version=${commentsApiVersion}${adding ? '' : `&order=desc&$top=200${token ? `&continuationToken=${encodeURIComponent(token)}` : ''}`}`, fixedVersion: true, options: {
+    method: updating ? 'PATCH' : adding ? 'POST' : 'GET', redirect: 'error', headers: { ...connection.options.headers, 'Content-Type': 'application/json' }, body: adding ? JSON.stringify({ text: html ? input.comment : htmlText(input.comment.trim()) }) : undefined,
   } }
 }
 
@@ -208,10 +213,10 @@ const isApiVersionError = (text) => /api[- ]?version|version of the api|VssVersi
 // proxy), which on-prem servers with a company certificate need; tests pass a stub. Redirects are never followed.
 async function requestAzureDevOps(input, fetchImpl = fetch) {
   const creating = input?.operation === 'create-feature' || input?.operation === 'create-child'
-  const updating = input?.operation === 'update-time-writing-effort' || input?.operation === 'update-work-item' || input?.operation === 'edit-work-item' || input?.operation === 'add-comment'
+  const updating = input?.operation === 'update-time-writing-effort' || input?.operation === 'update-work-item' || input?.operation === 'edit-work-item' || input?.operation === 'add-comment' || input?.operation === 'update-comment'
   const writing = creating || updating
   if (writing) assertWritableBase(input)
-  const request = creating ? azureFeatureRequest(input) : input?.operation === 'update-time-writing-effort' ? azureTimeWritingEffortRequest(input) : input?.operation === 'update-work-item' ? azureWorkItemUpdateRequest(input) : input?.operation === 'edit-work-item' ? azureEditRequest(input) : input?.operation === 'comments' || input?.operation === 'add-comment' ? azureCommentsRequest(input) : azureReadRequest(input)
+  const request = creating ? azureFeatureRequest(input) : input?.operation === 'update-time-writing-effort' ? azureTimeWritingEffortRequest(input) : input?.operation === 'update-work-item' ? azureWorkItemUpdateRequest(input) : input?.operation === 'edit-work-item' ? azureEditRequest(input) : input?.operation === 'comments' || input?.operation === 'add-comment' || input?.operation === 'update-comment' ? azureCommentsRequest(input) : azureReadRequest(input)
   const collection = projectBase(input).split('/').slice(0, -1).join('/').toLowerCase()
   const explicit = typeof input.apiVersion === 'string' && apiVersion(input) === input.apiVersion
   const versions = request.fixedVersion ? [commentsApiVersion] : explicit ? [input.apiVersion] : detectedVersions.has(collection) ? [detectedVersions.get(collection)] : ['7.1', '6.0', '5.0']

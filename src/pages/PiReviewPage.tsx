@@ -8,11 +8,12 @@ import { capacityContext } from '../capacity'
 import { formatDate, formatDateTime } from '../format'
 import { discussionOf, discussionsVersion, epicOf, latestComment, moveLabel, oneLine, piFeatures, piLabel, readDiscussions, reviewModeLabel, reviewModes, reviewSplit, samePi, subscribeDiscussions, type ReviewSplit, type SplitFrom } from '../piReview'
 import { isReviewLead, readDiscussionInto as readInto, reviewPageBlock, reviewPostBlock } from '../piReviewPost'
-import { ReviewDialog } from './PiReviewForm'
+import { ReviewAction, ReviewDialog } from './PiReviewForm'
 import { PiSetupGear } from '../components/PiFormSetupPanel'
-import { formSetupOf, useReviewViewer, useReviewWriter } from '../piReviewWriter'
+import { formSetupOf, useOwnReview, useReviewViewer, useReviewWriter } from '../piReviewWriter'
 import { customFields, type PiFormSetup } from '../piReviewSetup'
 import { usePiChoice } from './usePiChoice'
+import { cutoffNote, reviewStartLabel, reviewStartOf } from '../piReviewStart'
 import type { WorkItemComment } from '../azureDevOps'
 import type { AzureWorkItem } from '../domain'
 import type { AzureWorkspace } from '../useAzureWorkspace'
@@ -72,7 +73,9 @@ export function PiReviewPage({ azure, store }: { azure: AzureWorkspace; store: P
   const reading = jobs.some((job) => job.key === jobKey && job.state === 'running')
   const absenceEpicId = capacityContext(store.state).absenceEpicId
   // PIR-02: the PIs, the default (current) PI and the remembered choice.
-  const { iterations, options, fallback, current, remembered, pi, choose } = usePiChoice(azure, piKey)
+  // PIR-33: only the PIs that did not end before "PI Review starts from" (the form setup's date).
+  const start = reviewStartOf(setup)
+  const { iterations, options, cutoff, fallback, current, remembered, pi, choose } = usePiChoice(azure, piKey, start)
   const [withStories, setWithStories] = useState(false)
   const [filters, setFilters] = useState<Filters>(noFilters)
   const [open, setOpen] = useState<{ key: string; order: string[] } | null>(null)
@@ -137,9 +140,10 @@ export function PiReviewPage({ azure, store }: { azure: AzureWorkspace; store: P
     { id: 'split-from', label: 'Split from', defaultHidden: true, export: 'always', hint: 'How Struggles, Learnings and Move to Next PI were filled from the newest comment: Headings, Keywords (suggested: the comment has no heading) or None. Exported even while hidden.',
       value: ({ item }) => latestOf(item)?.split.from ?? '', title: ({ item }) => latestOf(item) ? undefined : unreadHint,
       render: ({ item }) => latestOf(item)?.split.from ?? <span className="muted">—</span> },
-    // PIR-13: the row action — Write review…, disabled with the reason (the page's, or the Feature's right) as its tooltip.
+    // PIR-13: the row action — Write review…, disabled with the reason (the page's, or the Feature's right) as its tooltip;
+    // PIR-34: Edit review… in its place when my own review of the Feature counts for the chosen PI.
     { id: 'actions', label: 'Actions', export: false, sortable: false,
-      render: ({ item }) => { const why = reviewPostBlock(poster, item); return <button type="button" className="ghost" disabled={Boolean(why)} title={why || `Write the PI review of Feature #${item.id}`} aria-label={`Write review of Feature ${item.id}`} onClick={() => void writer.start(item)}>Write review…</button> } },
+      render: ({ item }) => { const own = ownReview(item); return <ReviewAction item={item} own={own} why={reviewPostBlock(poster, item)} onWrite={() => void writer.start(item)} onEdit={() => { if (own) writer.startEdit(item, own.comment) }} /> } },
   ]
 
   // PIR-16: the search covers every column shown (as the cells show it, and the whole latest comment).
@@ -175,24 +179,26 @@ export function PiReviewPage({ azure, store }: { azure: AzureWorkspace; store: P
   const step = (by: number) => { if (!open) return; const key = open.order[open.order.indexOf(open.key) + by]; if (key && byKey.has(key)) setOpen({ ...open, key }) }
   // PIR-13: Write review… (the drawer and the row action) — the shared form and post (useReviewWriter).
   const writer = useReviewWriter(pi, { list: iterations.list, reading: !iterations.done })
+  // PIR-34: my own review of a Feature that counts for the chosen PI (the rule of My PI Review), for Edit review….
+  const ownReview = useOwnReview(pi, { list: iterations.list, reading: !iterations.done, problem: iterations.problem })
   const pageBlock = reviewPageBlock(poster)
   const postNote = pageBlock || (rows.length && !isReviewLead(poster) ? `You can post the review of the Features assigned to you${poster.email ? ` (${poster.email})` : ''}; a lead with “PI Review: post the review of a Feature” can post on every Feature.` : '')
 
   const notice = !iterations.done ? null : fallback.why === 'overlap' || ((fallback.why === 'fallback' || fallback.why === 'none') && !remembered) ? fallback.note : ''
 
-  return <Page intro="The Features of a PI and their Discussions, read from Azure DevOps with your PAT, kept for this page load only. Write review… posts a Feature’s review to its Discussion as a new comment."
+  return <Page intro="The Features of a PI and their Discussions, read from Azure DevOps with your PAT, kept for this page load only. Write review… posts a Feature’s review to its Discussion as a new comment; Edit review… changes your own review in place."
     actions={<><button type="button" className="ghost" disabled={Boolean(readAllWhy)} title={readAllWhy || undefined} onClick={readAll}>↻ Read all Discussions</button>{readAllWhy && rows.length > 0 && !reading && <WriteBlocked reason={readAllWhy} />}{/* PIR-30: ⚙ PI Review Setup, last (UI-STANDARDS §6), when the page is in the viewer's menu. */}<PiSetupGear /></>}>
     {!items.length && <EmptyState title="No QMS-0025 data yet." detail="Fetch the Time Writing connection (↻ in the top bar) or load the synthetic sample; the PIs and Features come from that data." />}
     {notice && <Notice tone="warning">{notice}</Notice>}
-    {items.length > 0 && <TablePanel title="Features" info="The Features whose Iteration Path is in the chosen PI (with the toggle also those with a User Story in the PI), without Removed Features and those under the absence Epic. The PIs come from the Time Writing connection’s iterations and the fetched data; the current PI (by the Sprint dates, UTC) is chosen first, and your last choice is remembered in this browser. Click a Feature to read its Discussion; Write review… posts the Feature’s review as a new comment in its Discussion.">
+    {items.length > 0 && <TablePanel title="Features" info={`The Features whose Iteration Path is in the chosen PI (with the toggle also those with a User Story in the PI), without Removed Features and those under the absence Epic. The PIs come from the Time Writing connection’s iterations and the fetched data; the current PI (by the Sprint dates, UTC) is chosen first, and your last choice is remembered in this browser. ${cutoffNote(cutoff)} Click a Feature to read its Discussion; Write review… posts the Feature’s review as a new comment in its Discussion.`}>
       {rows.length > 0 && <WriteBlocked reason={postNote} />}
       <DataTable id="pireview:features" className="pir-table" columns={columns} rows={shown} rowKey={(row) => row.item.key} exportName={`PI Review ${pi ? piLabel(pi) : ''}`.trim()} toolbar={toolbar}
         status={`${shown.length} of ${plural(rows.length, 'Feature')}`} defaultSort={{ id: 'id' }}
         onRowOpen={(row, order) => setOpen({ key: row.item.key, order: order.map((entry) => entry.item.key) })} rowLabel={(row) => `Feature ${row.item.id}: open`}
         empty={<EmptyState title={!pi ? 'Choose a PI.' : rows.length ? 'No Feature matches the filters.' : `No Features in ${piLabel(pi)}.`} detail={!pi ? 'Pick the PI to review in the PI list.' : rows.length ? 'Change the filters, or Reset filters.' : 'Tick “Also Features with User Stories in this PI”, choose another PI, or fetch the data again.'} />} />
     </TablePanel>}
-    {open && openRow && <FeatureDrawer key={openRow.item.key} row={openRow} setup={setup} position={{ at: open.order.indexOf(open.key), of: open.order.length }} onStep={step} onClose={() => setOpen(null)} config={config} pat={pat} blocked={readBlocked} postBlocked={reviewPostBlock(poster, openRow.item)} onWrite={() => void writer.start(openRow.item)} />}
-    {writer.writing && byKey.get(writer.writing.item.key) && <ReviewDialog key={`review:${writer.writing.item.key}`} writing={writer.writing} blocked={reviewPostBlock(poster, writer.writing.item)} onPost={writer.post} onClose={writer.cancel} />}
+    {open && openRow && <FeatureDrawer key={openRow.item.key} row={openRow} setup={setup} position={{ at: open.order.indexOf(open.key), of: open.order.length }} onStep={step} onClose={() => setOpen(null)} config={config} pat={pat} blocked={readBlocked} postBlocked={reviewPostBlock(poster, openRow.item)} own={ownReview(openRow.item)} onWrite={() => void writer.start(openRow.item)} onEdit={(comment) => writer.startEdit(openRow.item, comment)} />}
+    {writer.writing && byKey.get(writer.writing.item.key) && <ReviewDialog key={`review:${writer.writing.item.key}`} writing={writer.writing} blocked={reviewPostBlock(poster, writer.writing.item)} onPost={writer.post} onPostNew={writer.postNew} onClose={writer.cancel} />}
   </Page>
 }
 
@@ -209,7 +215,7 @@ function textColumnOf(id: string, label: string, hint: string, pick: (latest: La
 
 // PIR-05: one Feature in a drawer (UI-STANDARDS §4a), read only: its details, then its Discussion, newest first, as
 // plain text (mentions as @Name, images as [image]); read when the drawer opens unless read before, ↻ Read again.
-function FeatureDrawer({ row, position, onStep, onClose, config, pat, blocked, postBlocked, onWrite, setup }: { setup: PiFormSetup; row: Row; position: { at: number; of: number }; onStep: (by: number) => void; onClose: () => void; config: AzureConfig | null; pat: string; blocked: string; postBlocked: string; onWrite: () => void }) {
+function FeatureDrawer({ row, position, onStep, onClose, config, pat, blocked, postBlocked, onWrite, setup, own, onEdit }: { setup: PiFormSetup; row: Row; position: { at: number; of: number }; onStep: (by: number) => void; onClose: () => void; config: AzureConfig | null; pat: string; blocked: string; postBlocked: string; onWrite: () => void; own?: { comment: WorkItemComment }; onEdit: (comment: WorkItemComment) => void }) {
   const { item, epic } = row
   const entry = discussionOf(item.key)
   const read = () => { if (!blocked && config) readInto(config, pat, item).catch(() => { /* shown from the entry */ }) }
@@ -221,7 +227,7 @@ function FeatureDrawer({ row, position, onStep, onClose, config, pat, blocked, p
       <small className="muted">{position.at + 1} of {position.of}</small>
       <button type="button" className="ghost" aria-label="Next Feature" disabled={position.at < 0 || position.at >= position.of - 1} onClick={() => onStep(1)}>›</button>
     </span>}
-    footer={<><WriteBlocked reason={postBlocked} /><div className="drawer-actions">{item.url && <a className="text-button" href={item.url} target="_blank" rel="noreferrer">Open in Azure DevOps →</a>}<button type="button" className="primary" disabled={Boolean(postBlocked)} title={postBlocked || undefined} onClick={onWrite}>Write review…</button></div></>}>
+    footer={<><WriteBlocked reason={postBlocked} /><div className="drawer-actions">{item.url && <a className="text-button" href={item.url} target="_blank" rel="noreferrer">Open in Azure DevOps →</a>}<ReviewAction item={item} own={own} why={postBlocked} primary onWrite={onWrite} onEdit={() => { if (own) onEdit(own.comment) }} /></div></>}>
     <p className="pir-title"><strong>{item.title}</strong></p>
     <dl className="od-row-facts">
       <div><dt>State</dt><dd>{item.state || '—'}</dd></div>
@@ -239,7 +245,8 @@ function FeatureDrawer({ row, position, onStep, onClose, config, pat, blocked, p
       {blocked && <WriteBlocked reason={blocked} />}
       {entry?.state === 'loading' && <p className="muted" role="status">Loading the Discussion…</p>}
       {entry?.state === 'error' && <Notice tone="error">The Discussion was not read: {entry.error} Use ↻ Read again.</Notice>}
-      {entry?.state === 'done' && !entry.comments.length && <EmptyState title="No comments in the Discussion." />}
+      {entry?.state === 'done' && !entry.comments.length && <EmptyState title={entry.ignored ? `No comments since ${reviewStartLabel(entry.from ?? '')}.` : 'No comments in the Discussion.'} />}
+      {entry?.state === 'done' && Boolean(entry.ignored) && <p className="muted">{entry.ignored === 1 ? '1 older comment' : `${entry.ignored?.toLocaleString()} older comments`} (before {reviewStartLabel(entry.from ?? '')}, when PI Review starts) {entry.ignored === 1 ? 'is' : 'are'} ignored.</p>}
       {entry?.state === 'done' && entry.capped && <p className="muted">Showing the newest 1,000 comments; older ones are not read.</p>}
       {entry?.state === 'done' && entry.comments.length > 0 && <ol className="pir-comments">
         {entry.comments.map((comment) => <li key={comment.id}>

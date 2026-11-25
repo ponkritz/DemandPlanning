@@ -228,7 +228,7 @@ test('CON-113: “PI Review: post the review of a Feature” (permissions 7) —
   const policy = defaultPolicy()
   for (const role of ['Tool Owner', 'Admin', 'People Manager']) assert.ok(policy.roles[role].actions.includes('pireview.post'), role)
   for (const role of ['Product Owner', 'Scrum Master', 'Team Member']) assert.ok(!policy.roles[role].actions.includes('pireview.post'), role)
-  assert.match(serializeAccess(policy), /"permissions": 8/)
+  assert.match(serializeAccess(policy), /"permissions": 9/)
   const v6 = JSON.parse(serializeAccess(policy)); v6.permissions = 6
   for (const rights of Object.values(v6.roles)) rights.actions = rights.actions.filter((key) => key !== 'pireview.post')
   const read = parseAccess(JSON.stringify(v6))

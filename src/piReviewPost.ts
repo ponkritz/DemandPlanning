@@ -7,7 +7,7 @@ import { piName, piPathOf, type Me } from './myWork.ts'
 import { formatDate } from './format.ts'
 import { commentText } from './workItemEdit.ts'
 import { readDiscussion } from './azureDevOps.ts'
-import { headingText, piPlaceholder, reviewFooter, reviewSplit, reviewedPiPlaceholder, setDiscussion, tidyReviewText, type ReviewSplit } from './piReview.ts'
+import { commentsFrom, discussionsFrom, headingText, piPlaceholder, reviewFooter, reviewSplit, reviewedPiPlaceholder, setDiscussion, tidyReviewText, type ReviewSplit } from './piReview.ts'
 import { builtInFormSetup, fieldOf, setupProblems, type PiFormField, type PiFormSetup } from './piReviewSetup.ts'
 import type { AzureWorkItem } from './domain'
 import type { WorkItemComment } from './azureDevOps.ts'
@@ -39,8 +39,8 @@ const piPattern = /(?:^|[^\p{L}\p{N}])(?:pi|program ?increment)[ ._:-]*(\d+(?:\.
 export const piText = (name: string) => { const match = piPattern.exec(tidyPiName(name)); return match ? `PI ${match[1]}` : '' }
 // PIR-25: a PI's number parts ("Q\\PI 26.4" → [26, 4]); null without a PI number. Compared with a two-digit year read
 // as 20xx, so PI 26.4 and PI 2026.4 are the same PI and PI 26.4 comes before PI 2027.1.
-const piParts = (path: string) => { const text = piText(piName(path)); return text ? text.slice(3).split('.').map(Number) : null }
-const comparable = (parts: readonly number[]) => parts.length >= 2 && parts[0] < 100 ? [parts[0] + 2000, ...parts.slice(1)] : [...parts]
+export const piParts = (path: string) => { const text = piText(piName(path)); return text ? text.slice(3).split('.').map(Number) : null }
+export const comparable = (parts: readonly number[]) => parts.length >= 2 && parts[0] < 100 ? [parts[0] + 2000, ...parts.slice(1)] : [...parts]
 export function comparePiNumbers(a: readonly number[], b: readonly number[]): number {
   const x = comparable(a), y = comparable(b)
   for (let index = 0; index < Math.max(x.length, y.length); index++) { const diff = (x[index] ?? -1) - (y[index] ?? -1); if (diff) return diff }
@@ -392,10 +392,50 @@ export async function postReview(config: AzureConfig, pat: string, feature: Pick
   return response.id
 }
 
+// PIR-34: Edit review… — replace a review comment the viewer wrote (the Work Items Comments update, PATCH
+// …/comments/{commentId}) with the form's new text, built and checked as a post (reviewCommentHtml, safeCommentHtml) and
+// with the same rights (CON-113). Azure DevOps lets only the author edit a comment. Returns the comment's ID.
+export async function updateReview(config: AzureConfig, pat: string, feature: Pick<AzureWorkItem, 'id' | 'assignedToEmail'>, commentId: number, text: string, transport: AzureTransport = requestAzure): Promise<number> {
+  if (!text.trim() || text.length > maxReviewLength) throw new Error('The review is empty or too long. Nothing was changed.')
+  const response = await transport({ ...config, pat, operation: 'update-comment', workItemId: feature.id, commentId, comment: text, htmlComment: true, reviewOf: feature.assignedToEmail ?? '' }) as { id?: unknown }
+  if (typeof response?.id !== 'number') throw new Error(`The edit of the review on #${feature.id} could not be confirmed. Check the Discussion in Azure DevOps before trying again.`)
+  return response.id
+}
+// PIR-34: a comment written by the viewer — by the author's email (its unique name) when Azure DevOps gave one and the
+// viewer's work email is known, else by the display name (letter case and spaces ignored).
+export function isOwnComment(comment: Pick<WorkItemComment, 'author' | 'authorEmail'>, me: { email?: string; name?: string }): boolean {
+  const email = me.email?.trim().toLowerCase()
+  if (comment.authorEmail && email) return comment.authorEmail.trim().toLowerCase() === email
+  const name = me.name?.trim().replace(/\s+/g, ' ').toLowerCase()
+  return Boolean(name) && comment.author.trim().replace(/\s+/g, ' ').toLowerCase() === name
+}
+// PIR-34: the review Edit review… edits — the viewer's own newest review comment (split by the review headings, the
+// comments on or after "PI Review starts from" only, as read) when it counts for the chosen PI (PIR-26: `counts`);
+// undefined otherwise (no own review, or the newest is for another PI: Write review… posts a new one).
+export function editTargetOf(comments: readonly WorkItemComment[], me: { email?: string; name?: string }, counts: (review: { date: string; reviewedPi?: string }) => boolean, setup?: PiFormSetup): { comment: WorkItemComment; split: ReviewSplit } | undefined {
+  const newest = [...comments].sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id)
+  for (const comment of newest) {
+    if (!isOwnComment(comment, me)) continue
+    const split = reviewSplit(comment.text, setup)
+    if (split.from !== 'Headings') continue
+    return counts({ date: comment.date, reviewedPi: split.reviewedPi }) ? { comment, split } : undefined
+  }
+  return undefined
+}
+
+// PIR-34: the review Edit review… offers on a Feature, on PI Review and My PI Review alike — the viewer's own newest
+// review comment of the Discussion as read (on or after "PI Review starts from"), when it counts for the chosen PI
+// (PIR-26: its period, null while the iterations are read → none); undefined otherwise (Write review… is offered).
+export function ownReviewOf(comments: readonly WorkItemComment[] | undefined, feature: Pick<AzureWorkItem, 'state' | 'closedDate'>, period: ReviewPeriod | null, me: { email?: string; name?: string }, setup?: PiFormSetup): { comment: WorkItemComment; split: ReviewSplit } | undefined {
+  if (!comments || !period) return undefined
+  return editTargetOf(comments, me, (review) => reviewCountOf(review, feature, period).counts, setup)
+}
+
 // PIR-05, PIR-13: read one Feature's Discussion into PI Review's memory (the error kept for the drawer and the table).
 export async function readDiscussionInto(config: AzureConfig, pat: string, item: Pick<AzureWorkItem, 'key' | 'id'>) {
   setDiscussion(item.key, { state: 'loading' })
-  try { const { comments, capped } = await readDiscussion(config, pat, item.id); setDiscussion(item.key, { state: 'done', comments, capped, readAt: new Date().toISOString() }) }
+  // PIR-33: only the comments on or after "PI Review starts from" are kept.
+  try { const from = discussionsFrom(), read = await readDiscussion(config, pat, item.id), kept = commentsFrom(read.comments, from); setDiscussion(item.key, { state: 'done', comments: kept.comments, capped: read.capped, readAt: new Date().toISOString(), from, ignored: kept.ignored }) }
   catch (failure) { setDiscussion(item.key, { state: 'error', error: failure instanceof Error ? failure.message : 'Could not read the Discussion.' }); throw failure }
 }
 // PIR-17: the PI of a Feature (its Iteration Path's PI part), for the Move question's next PI.

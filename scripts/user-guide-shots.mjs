@@ -469,6 +469,37 @@ const shots = {
     await context.close()
     rmSync(dir, { recursive: true, force: true })
   },
+  // LST-06, LST-08: the QE list from an Azure DevOps team — a built-in list column in Set up columns…, and ↻ Refresh…
+  // with one person added, one removed and one renamed (a made-up team on a fake dev.azure.com).
+  async builtinLists(app) {
+    // A made-up Azure DevOps identity id per person (the key of a list's items, LST-04).
+    const guideId = (email) => `${(Object.keys(people).indexOf(email) + 1).toString(16).padStart(8, 'a')}-0000-4000-8000-000000000000`
+    const qe = { id: 'qe-team', name: 'QE team', source: { kind: 'azure-team', server: 'https://dev.azure.com/example-org', project: 'Quality', team: 'QE Team' }, items: ['ana.costa@example.com', 'ben.okafor@example.com', 'chen.wei@example.com'].map((email) => ({ name: people[email], id: guideId(email) })), createdBy: 'Ana Costa', createdAt: `${year}-11-20T08:00:00.000Z`, refreshedAt: `${year}-11-20T08:00:00.000Z`, refreshedBy: 'Ana Costa', log: [] }
+    const gh = fakeGitHub({ owner: 'example-team', repo: 'planning-data', files: { ...files(), 'shared-lists.json': `${JSON.stringify({ schema: 1, kind: 'shared-lists', lists: [qe] }, null, 1)}\n` } })
+    const connection = { id: 'tw-guide', url: 'https://dev.azure.com/example-org/Quality/_backlogs/backlog/QE%20Team/Features', reason: 'Time Writing', token: 'x'.repeat(52), role: 'time-tracking', creatorEmail: owner }
+    const { page, context } = await open(app, { kind: 'git', gh, extra: `localStorage.setItem('demand-planning-azure-connection-profiles-v1', ${JSON.stringify(JSON.stringify([connection]))})` })
+    const members = [['Ana Costa', 'ana.costa@example.com'], ['Ben Okafor-Smith', 'ben.okafor@example.com'], ['Diya Sharma', 'diya.sharma@example.com']].map(([displayName, uniqueName]) => ({ identity: { id: guideId(uniqueName), displayName, uniqueName } }))
+    await context.route(/https:\/\/dev\.azure\.com\/.*\/teams\/[^/]+\/members/, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ value: members }) }))
+    await navigate(page, 'CoNQ')
+    await page.locator('.od-panel table tbody tr').first().waitFor()
+    await page.getByRole('button', { name: 'Set up columns…' }).click()
+    const setup = page.getByRole('dialog', { name: 'Set up columns' })
+    await setup.getByRole('button', { name: '＋ Add column' }).click()
+    const at = await setup.locator('li.od-column').count()
+    await setup.getByLabel(`Column ${at} name`).fill('Auditor')
+    await setup.getByLabel(`Column ${at} type`).selectOption({ label: 'Dropdown (built-in list)' })
+    await setup.getByLabel('Auditor list').selectOption({ label: 'QE team (Azure DevOps team QE Team · 3 people)' })
+    await setup.locator('li.od-column').last().scrollIntoViewIfNeeded()
+    await shot(page, 'builtin-list-column-editor', { target: setup.locator('li.od-column').last() })
+    await setup.getByRole('button', { name: 'Cancel' }).click()
+    await navigate(page, 'Epic & Feature setup')
+    await page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'Value lists' }).click()
+    await page.getByRole('button', { name: 'Refresh QE team' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Refresh QE team' })
+    await dialog.getByText('1 added · 1 removed · 1 renamed · 1 unchanged').waitFor()
+    await shot(page, 'builtin-list-refresh-diff', { target: dialog })
+    await context.close()
+  },
   async conq(app) {
     const gh = fakeGitHub({ owner: 'example-team', repo: 'planning-data', files: files() })
     const { page, context } = await open(app, { kind: 'git', gh })

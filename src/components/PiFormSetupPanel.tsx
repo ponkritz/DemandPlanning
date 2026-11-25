@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { Modal, Notice, Panel, SaveQueueStatus, SettingsSummary, WriteBlocked } from './ui'
-import { formatDateTime } from '../format'
+import { formatDate, formatDateTime } from '../format'
+import { reviewStartOf } from '../piReviewStart'
 import { emptyReviewForm, formSetupProblems, reviewBlocks, withFieldValue, type ReviewForm } from '../piReviewPost'
 import { ReviewPreview } from '../pages/PiReviewForm'
 import { headingText, piPlaceholder, reviewedPiPlaceholder } from '../piReview'
-import { builtInFields, fieldDrafts, fieldsOf, isBuiltInField, isChoice, maxFormFields, newFieldId, piFieldTypes, piFormFile, setupChanges, setupGearLabel, showsSetupGear, type PiFormField, type PiFormSetup } from '../piReviewSetup'
+import { defaultReviewStart, isReviewStartDay, builtInFields, fieldDrafts, fieldsOf, isBuiltInField, isChoice, maxFormFields, newFieldId, piFieldTypes, piFormFile, setupChanges, setupGearLabel, showsSetupGear, type PiFormField, type PiFormSetup } from '../piReviewSetup'
 import { typeLabel, type ColumnDraft } from '../onDemand'
 import { ColumnListEditor } from './ColumnListEditor'
 import type { PiFormStore } from '../usePiFormSetup'
@@ -119,3 +120,42 @@ function PiFormEditor({ setup, by, blocked, onSave, onClose }: { setup: PiFormSe
   </Modal>
 }
 const fieldWords = { one: 'field', One: 'Field', many: 'fields' }
+
+// PIR-33: "PI Review starts from" — a shared date in the PI Review form setup (pi-review-form.json, reviewStart; 21 Sep
+// 2026 when not set): PIs that ended before it are not offered in PI Review and My PI Review, comments before it are
+// ignored. Shown as a summary with Edit… (UI-STANDARDS §3), saved to Git with the form; the same rights and reasons as
+// Edit form… (PIR-31).
+export function ReviewStartPanel({ store, block, by }: { store: PiFormStore; block: string; by: string }) {
+  const [editing, setEditing] = useState(false)
+  const start = reviewStartOf(store.setup)
+  const set = Boolean(store.setup.reviewStart)
+  return <Panel className="admin-section pir-start" eyebrow="PI REVIEW" title="PI Review starts from" info={<>
+    <p>The first day PI Review looks at. The PI list of <strong>PI Review</strong> and <strong>My PI Review</strong> leaves out the PIs that ended before it (by their dates in Azure DevOps; a PI without dates by its number), and a remembered PI before it falls back to the current PI. Comments in a Feature’s Discussion written before it are ignored: <strong>↻ Read all Discussions</strong> and a Feature’s Discussion keep only the later ones, and the latest review, the Reviewed status and the review form’s prefill use only those. The next PI is never suggested before it.</p>
+    <p>Shared with everyone in Git, in {piFormFile}; without a date there, {formatDate(defaultReviewStart)} applies.</p>
+  </>}>
+    <SettingsSummary rows={[['PI Review starts from', `${formatDate(start)}${set ? '' : ' (the default)'}`]]} />
+    <div className="button-row"><button type="button" className="ghost" disabled={Boolean(block)} title={block || undefined} onClick={() => setEditing(true)}>Edit start date…</button><WriteBlocked reason={block} /></div>
+    {editing && <ReviewStartEditor start={start} blocked={block} onSave={async (day) => {
+      await store.save({ ...store.setup, reviewStart: day, changedAt: `${new Date().toISOString().slice(0, 19)}Z`, ...(by ? { changedBy: by } : {}) }, `PI Review starts from ${day}`)
+      setEditing(false)
+    }} onClose={() => setEditing(false)} />}
+  </Panel>
+}
+
+function ReviewStartEditor({ start, blocked, onSave, onClose }: { start: string; blocked: string; onSave: (day: string) => Promise<void>; onClose: () => void }) {
+  const [day, setDay] = useState(start)
+  const [busy, setBusy] = useState(false)
+  const [failure, setFailure] = useState('')
+  const valid = isReviewStartDay(day)
+  const why = blocked || (busy ? 'Saving to Git…' : !valid ? 'Enter a date (2000–2099).' : day === start ? 'Nothing changed yet.' : '')
+  async function save() {
+    if (why) return
+    setBusy(true); setFailure('')
+    try { await onSave(day) } catch (error) { setFailure(error instanceof Error ? error.message : String(error)) } finally { setBusy(false) }
+  }
+  return <Modal title="PI Review starts from" eyebrow="SETTINGS · PI REVIEW" onClose={() => { if (!busy) onClose() }}>
+    <label>PI Review starts from<input type="date" aria-label="PI Review starts from" required value={day} onChange={(event) => { setDay(event.target.value); setFailure('') }} /><small>PIs that ended before this day are not offered; comments written before it are ignored.</small></label>
+    {failure && <Notice tone="error">Not saved: {failure}</Notice>}
+    <div className="modal-actions"><WriteBlocked reason={why} /><button type="button" className="ghost" disabled={busy} onClick={onClose}>Cancel</button><button type="button" className="primary" disabled={Boolean(why)} onClick={() => void save()}>Save to Git</button></div>
+  </Modal>
+}

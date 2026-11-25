@@ -689,6 +689,8 @@ The Feature then shows **Struggles** "the test rig arrived two Sprints late", **
 
 The Discussions are read with your own PAT (Work Items, Read) and kept only until you reload the page. Tagging struggles and learnings in the app, saving them to Git and recording the Move to next PI decision come in later releases.
 
+**PI Review starts from 21 September 2026.** PI Review and My PI Review offer only the PIs that had not ended by that date (PI 26.4 is the first), and they ignore comments written before it: the Discussion drawer shows only the later comments and says how many older ones were left out, and the columns, **Reviewed** in My PI Review and the review form's prefill use only the later ones. If a PI you chose before is older, the page opens on the current PI. The Scrum Master or the Tool Owner can move the date on **Admin → PI Review Setup** (see below).
+
 #### Write the PI review in the app (from PI 26.4)
 
 Instead of typing the headings yourself, fill in the review form; the app writes the comment in the standard format for you.
@@ -719,6 +721,8 @@ Instead of typing the headings yourself, fill in the review form; the app writes
    The headings name the **reviewed PI** — the PI chosen on the page (in the Close pop-up, the Feature's own PI) — so the reviews of a PI can be collected; PI Review shows it in its **Reviewed PI** column. Without a known PI the headings are just "Learnings:" and "Struggles:". The last line marks it as posted from the app; PI Review ignores it (the ⓘ next to Preview says so too). What you type is sent as text (a "<b>" stays "<b>"), never as formatting. If a line of yours looks like a heading (e.g. "Issues: …" inside Learnings), the form asks you to reword it, so the columns stay right.
 5. **Post.** **Post to Azure DevOps** asks you to confirm, then posts the comment as you (your PAT). The result is under **Background jobs** ("Post review · #id"); the Discussion is read again and the columns show the new values. A posted comment cannot be deleted from the app: to correct it, write the review again — the newest comment counts.
 
+**Edit your review (My PI Review, PI Review).** When your newest review of a Feature counts for the chosen PI, its row in **My Work → My PI Review** and on **PI Review** (and the Feature's drawer there, once its Discussion is read) has **Edit review…** in place of Write review…. It opens the same form, filled in from that review ("Editing your review comment of …"). Change what you need and click **Save to Azure DevOps**, then confirm: the app **replaces that same comment** in the Discussion — Azure DevOps marks it edited and keeps its date, so it still counts for the same PI. The result is under **Background jobs** ("Edit review · #id") and the table shows the new values. Only your own review can be edited (Azure DevOps allows only the author); a lead looking at another person's Features uses Write review…. If the edit fails, the form opens again with your text, the reason and **Post as a new review instead**.
+
 **When you close a Feature** (Close in My Tasks [Board], Sprint check or Time Writing), the Close pop-up asks the same questions for that Feature (Learnings and Struggles optional, **Move to next PI = No** pre-selected — Moves to and Reason appear with Yes — the Review meeting advice required, the explanations behind ⓘ How to fill in) and **posts the review first, then closes**. If the review cannot be posted nothing is closed: choose **Close without the review** or **Cancel**. When several Features are closed at once, write their reviews in PI Review or My PI Review.
 
 #### Change the review form (Scrum Master, Tool Owner)
@@ -729,6 +733,8 @@ The fields of the review form are a shared setup: when the review changes, the S
 2. **Edit form…** opens the editor — the same column editor as **Set up columns…** on the On-Demand pages. For each field: **Name** (the label in the form), **Type** (**Long text** for a paragraph, **Dropdown (one value)** for a choice), **Required**, ↑ ↓ to reorder, ✕ to remove, the **Heading in the comment**, the **Default** of a Dropdown, a **Help text**, and the **options** of a Dropdown. **＋ Add field** adds one (at most 15); **Use the built-in form** starts again from the built-in fields. The **Comment preview** shows what a review written with the form looks like.
 3. **Move to next PI** keeps its behaviour — Yes / No, the PI it moves to and the reason — so its name, type, options and Required are locked and it cannot be removed; its heading (with **{PI}** where the next PI is written), its default (No unless you change it) and its help can be changed. The other built-in fields keep their type. **{REVIEWED PI}** in any heading (at most once) is where the reviewed PI is written — the built-in Learnings and Struggles headings are "Learnings of {REVIEWED PI}" and "Struggles of {REVIEWED PI}"; a form saved before keeps its headings as saved.
 4. **Save to Git.** The form is checked first: a heading that is empty, used twice, or already read as another field (for example "Issues" or "What went wrong" is read as Struggles, so older reviews would land in the wrong column) is refused, and a review written with every field must read back exactly. The result is in **Background jobs** ("PI Review form · Save to Git").
+
+**PI Review starts from.** The panel above the form shows the date PI Review starts from (21 September 2026 unless changed). **Edit start date…** opens a pop-up with the date; **Save to Git** saves it for everyone. PIs that ended before the date are not offered, and comments written before it are ignored.
 
 PI Review reads your headings and still the built-in ones and the earlier formats, so older reviews keep their columns; each field you add is a column of its own in PI Review. **Edit form…** is greyed out, with the reason next to it, in View as (an Admin viewing as a Scrum Master sees the ⚙ and the page, read only), with the synthetic sample and without Git storage.
 
@@ -900,12 +906,29 @@ People who may set up the page use **Set up columns…** to add, rename, reorder
 
 ![Set up columns](user-guide/images/set-up-columns.png)
 
-1. **＋ Add column**, then give it a name and a **type**: Text, Long text, Number, Currency, Date, Dropdown (one value) or Multi-select.
+1. **＋ Add column**, then give it a name and a **type**: Text, Long text, Number, Currency, Date, Dropdown (one value), Multi-select, Dropdown (built-in list) or Multi-select (built-in list) (see *Built-in lists* below).
 2. For a Dropdown or Multi-select, add its **options**. For a Currency, choose its default currency.
 3. Tick **Required** where a value must be given, and add a **Description** — how or what to fill. It shows under the field and behind ⓘ on the column heading.
 4. Press **Save**. If the change touches values already in the rows, the pop-up first lists what happens and asks.
 
 Nothing is lost silently: values that no longer fit are kept and marked (for example *not in the list*) until someone changes them.
+
+### Built-in lists: the QE list from Azure DevOps
+
+A column can pick from a list the team shares instead of options of its own — for example the **QE list**, the members of your Azure DevOps team.
+
+![Set up columns with a built-in list](user-guide/images/builtin-list-column-editor.png)
+
+1. In **Admin → Epic & Feature setup → Value lists**, under the Value lists, the panel **Team lists from Azure DevOps** lists the team lists. **＋ New list…**: give the list a name (e.g. *QE team*), check the server and project (your Time Writing connection's to start with), type the team and press **↻ Read the team**. The members are listed (with their emails as a hint); **Save to Git** saves the list for everyone — names and Azure DevOps ids only, no emails.
+2. In **Set up columns…** choose the type **Dropdown (built-in list)** (one person) or **Multi-select (built-in list)** (several), then the list in **Built-in list**. The Epic setup's Value lists can be chosen here too.
+3. The row form offers the list's names. The row keeps the name and, for a person, their Azure DevOps id. Two people with the same name are offered as, for example, *Sam Lee (#3f2a)* and *Sam Lee (#9c1b)* — the name and the start of their id.
+4. When people join or leave the team, open the list and press **↻ Refresh…**. You see who is **added**, **removed** and **renamed** (the same person in Azure DevOps, a new name), and how many rows use a removed person, before you **Save to Git**. **Log** shows every change of the list.
+
+![Refresh a list](user-guide/images/builtin-list-refresh-diff.png)
+
+A person who left the team stays in the rows that name them, marked *not in the list*; a renamed person keeps their rows under the new name. Replace… takes only a name of the list, and the Excel template's drop-down is the list as it is now.
+
+Who may change the lists: the Tool Owner, the Admin and the Scrum Master (*Manage built-in lists*), and the co-owners of an On-Demand page (they cannot remove a list). Everyone else sees the lists read only, with the reason next to the buttons. Nothing is written to Azure DevOps: the team is only read, with your own PAT.
 
 ### Open, edit and save a row
 

@@ -4,6 +4,7 @@ import { mkdirSync } from 'node:fs'
 import { navigate, openPage, startApp, text } from './helpers.mjs'
 import { buildReviewComment } from '../src/piReviewPost.ts'
 import { defaultPolicy, serializeAccess } from '../src/access.ts'
+import { builtInFormSetup, serializePiFormSetup } from '../src/piReviewSetup.ts'
 
 // PI Review, the review form (PIR-13…PIR-18, PIR-24, PIR-25, PIR-32, CON-113; TC-PIR-16 UAT, TC-PIR-17, TC-PIR-18 UAT,
 // TC-PIR-25, TC-PIR-26 UAT, TC-PIR-32, TC-PIR-33): against a fake
@@ -50,6 +51,18 @@ function fakeAzure(state) {
       state.log.push(`PATCH ${item.id} ${item.fields['System.State']}`)
       return json(item)
     }
+    // PIR-34: Edit review… — the update of one comment (PATCH …/comments/{id}), recorded; failNextEdit refuses the next one.
+    const edit = /\/_apis\/wit\/workItems\/(\d+)\/comments\/(\d+)$/.exec(path)
+    if (edit && request.method() === 'PATCH') {
+      const id = Number(edit[1]), commentId = Number(edit[2]), found = (state.comments[id] ?? []).find((entry) => entry.id === commentId)
+      if (state.failNextEdit) { state.failNextEdit = false; state.log.push(`PATCH comment ${commentId} failed`); return json({ message: 'The comment could not be updated' }, 500) }
+      if (!found) return json({ message: 'Not found' }, 404)
+      const body = JSON.parse(request.postData() ?? '{}')
+      state.edits.push({ id, commentId, body })
+      state.log.push(`PATCH comment ${commentId}`)
+      Object.assign(found, { text: body.text, modifiedDate: new Date().toISOString() })
+      return json(found)
+    }
     const comments = /\/_apis\/wit\/workItems\/(\d+)\/comments$/.exec(path)
     if (comments) {
       const id = Number(comments[1]), list = state.comments[id] ??= []
@@ -78,13 +91,15 @@ const span = (start, finish) => ({ startDate: `${start}T00:00:00Z`, finishDate: 
 const datedTree = () => node('', [node('PI 2027.2', [], span(dayFromToday(61), dayFromToday(150))), node('PI 2026.4', [node('PI 2026.4\\Sprint 2', [], span('2000-01-01', '2099-12-31'))], span(dayFromToday(-60), dayFromToday(30))), node('PI 2027.1', [], span(dayFromToday(31), dayFromToday(60)))])
 // Lena Berg is a People Manager (a lead: "PI Review: post the review of a Feature"); everyone else a Team Member.
 const withLead = () => { const policy = JSON.parse(teamMembersSeePiReview()); policy.members['lena.berg@example.com'] = ['People Manager']; return JSON.stringify(policy) }
-async function open({ email = 'rita.gomez@example.com', width = 1300, height = 1000, scale, roles = teamMembersSeePiReview(), tree, team, world: items = world(), comments } = {}) {
-  const state = { tree, team, world: items, comments: comments ?? { 201: [{ id: 5, text: '<div>Struggles: test rig late</div><div>Learnings: book the rig early</div><div>Move to next PI: Partly - waiting for vendor</div>', createdBy: ben, createdDate: '2026-11-21T14:30:00Z' }] }, posts: [], log: [], failNextPost: false }
-  const { page, context, errors } = await openPage(app, { width, height, scale, init: ([connection, mail, roles]) => {
+// PIR-33: start — "PI Review starts from", as the last form setup read from Git kept in this browser (no Git here).
+async function open({ email = 'rita.gomez@example.com', width = 1300, height = 1000, scale, roles = teamMembersSeePiReview(), tree, team, world: items = world(), comments, start } = {}) {
+  const state = { tree, team, world: items, comments: comments ?? { 201: [{ id: 5, text: '<div>Struggles: test rig late</div><div>Learnings: book the rig early</div><div>Move to next PI: Partly - waiting for vendor</div>', createdBy: ben, createdDate: '2026-11-21T14:30:00Z' }] }, posts: [], edits: [], log: [], failNextPost: false, failNextEdit: false }
+  const { page, context, errors } = await openPage(app, { width, height, scale, init: ([connection, mail, roles, setup]) => {
+    if (setup) localStorage.setItem('demand-planning-pi-review-form-v1', setup)
     localStorage.setItem('demand-planning-access-v1', roles)
     localStorage.setItem('demand-planning-azure-connection-profiles-v1', JSON.stringify([connection]))
     localStorage.setItem('demand-planning-work-email-v1', mail)
-  }, initArg: [profile(email), email, roles] })
+  }, initArg: [profile(email), email, roles, start ? serializePiFormSetup({ ...builtInFormSetup(), reviewStart: start }) : ''] })
   await context.route('https://dev.azure.com/**', fakeAzure(state))
   const guide = page.getByRole('dialog').filter({ hasText: 'Could not fetch from Azure DevOps' })
   await page.addLocatorHandler(guide, () => guide.getByRole('button', { name: 'Close', exact: true }).last().click())
@@ -146,7 +161,7 @@ test('TC-PIR-16: the Feature’s assignee writes its review — prefilled, previ
   await page.locator('.pir-table tr[data-row-key="example/project/201"] td').nth(1).click()
   const drawer = page.locator('aside.drawer[role="dialog"]', { has: page.getByRole('heading', { name: 'Feature #201', exact: true }) })
   await drawer.getByRole('heading', { name: 'Discussion (1)' }).waitFor()
-  await drawer.getByRole('button', { name: 'Write review…' }).click()
+  await drawer.getByRole('button', { name: 'Write review of Feature 201' }).click()
   const dialog = page.getByRole('dialog', { name: 'Review of Feature #201' })
   await dialog.waitFor()
   assert.equal(await dialog.getByRole('textbox', { name: /^Learnings/ }).inputValue(), 'book the rig early')
@@ -395,7 +410,7 @@ const periodWorld = () => [
 const status = async (page, id) => text(rowOf(page, id).locator('td').nth(3))
 
 test('TC-PIR-27: My PI Review counts a review for the chosen PI — in its dates or at close — and shows a review for another PI as Not reviewed with its date and PI; choosing another PI recomputes it', async () => {
-  const { page, context, errors, state } = await open({ tree: relativeTree(), world: periodWorld(), comments: { 301: [ritaReview(11, -10, 'Calibrate first')], 302: [ritaReview(12, -150, 'Audit early')], 303: [ritaReview(13, -104, 'Move benches at night')] }, ...(shots ? { width: 1440, height: 900, scale: 2 } : {}) })
+  const { page, context, errors, state } = await open({ tree: relativeTree(), world: periodWorld(), comments: { 301: [ritaReview(11, -10, 'Calibrate first')], 302: [ritaReview(12, -150, 'Audit early')], 303: [ritaReview(13, -104, 'Move benches at night')] }, start: dayFromToday(-250), ...(shots ? { width: 1440, height: 900, scale: 2 } : {}) })
   await navigate(page, 'My PI Review')
   await page.locator('.pir-filters .pill', { hasText: 'Current PI' }).waitFor()
   assert.equal(await page.getByLabel('PI', { exact: true }).inputValue(), 'Project\\PI 2026.4')
@@ -429,7 +444,7 @@ test('TC-PIR-27: My PI Review counts a review for the chosen PI — in its dates
 })
 
 test('TC-PIR-27: the chosen PI has no dates — every review counts, and the page says so', async () => {
-  const { page, context, errors } = await open({ tree: node('', [node('PI 2026.4', [node('PI 2026.4\\Sprint 2')])]), team: [], world: periodWorld(), comments: { 302: [ritaReview(12, -150, 'Audit early')] } })
+  const { page, context, errors } = await open({ tree: node('', [node('PI 2026.4', [node('PI 2026.4\\Sprint 2')])]), team: [], world: periodWorld(), comments: { 302: [ritaReview(12, -150, 'Audit early')] }, start: dayFromToday(-250) })
   await navigate(page, 'My PI Review')
   await page.getByLabel('PI', { exact: true }).selectOption('Project\\PI 2026.4')
   await rowOf(page, '302').locator('.pill', { hasText: /^Reviewed$/ }).waitFor()
@@ -484,4 +499,96 @@ test('TC-PIR-28: “No learnings or struggles” — not ticked; ticked it write
   assert.deepEqual([await cell(page, 'example/project/205', 'Learnings'), await cell(page, 'example/project/205', 'Struggles'), await cell(page, 'example/project/205', 'Reviewed PI')], ['None', 'None', 'PI 2026.4'])
   assert.deepEqual(errors, [])
   await context.close()
+})
+
+// PIR-34: Rita's own review of Feature 205, written in PI 2026.4 (after PI Review starts).
+const ritaOwnReview = () => ({ id: 41, text: buildReviewComment({ learnings: 'Calibrate first', struggles: 'Parts late', move: 'No', moveReason: '', movePi: 'PI 2026.5', mode: 'Offline Review', remarks: '', reviewedPi: 'PI 2026.4' }), createdBy: rita, createdDate: '2026-11-20T10:00:00Z' })
+test('TC-PIR-35: Edit review… changes my own review in place — prefilled, saved as an update of the same comment, read back into the table; a failed edit offers Post as a new review instead; no Edit without my review', async () => {
+  const { page, context, errors, state } = await open({ comments: { 205: [ritaOwnReview()] }, ...(shots ? { width: 1440, height: 900, scale: 2 } : {}) })
+  await navigate(page, 'My PI Review')
+  await rowOf(page, '205').locator('.pill', { hasText: /^Reviewed$/ }).waitFor()
+  // My reviewed Feature has Edit review… in place of Write review…; my Feature without a review has none.
+  const edit = page.getByRole('button', { name: 'Edit review of Feature 205' })
+  assert.equal(await edit.isDisabled(), false)
+  assert.equal(await page.getByRole('button', { name: 'Edit review of Feature 201' }).count(), 0)
+  assert.equal(await page.getByRole('button', { name: 'Write review of Feature 205' }).count(), 0, 'one action per row')
+  assert.equal(await page.getByRole('button', { name: 'Write review of Feature 201' }).count(), 1)
+  await edit.click()
+  const dialog = page.getByRole('dialog', { name: 'Edit review of Feature #205' })
+  await dialog.waitFor()
+  assert.match(await text(dialog.locator('.pir-review-note')), /^Editing your review comment of .+\.$/)
+  assert.equal(await dialog.getByRole('textbox', { name: /^Learnings/ }).inputValue(), 'Calibrate first')
+  assert.equal(await dialog.getByRole('radio', { name: 'Offline Review' }).isChecked(), true)
+  await dialog.getByRole('textbox', { name: /^Learnings/ }).fill('Calibrate first\n- book the rig early')
+  await dialog.getByRole('radio', { name: 'Discuss during Meeting' }).check()
+  if (shots) { mkdirSync(shots, { recursive: true }); await page.emulateMedia({ colorScheme: 'light' }); await page.screenshot({ path: `${shots}/my-pi-review-edit-review-form-1440-light.png` }) }
+  await dialog.getByRole('button', { name: 'Save to Azure DevOps' }).click()
+  await page.getByRole('dialog', { name: 'Save the edited review of Feature #205?' }).getByRole('button', { name: 'Save review to #205' }).click()
+  await jobDone(page, 'Edit review · #205', 'Edited the review of #205 and read back')
+  await until(async () => await cell(page, '205', 'Review mode') === 'Discuss during Meeting', 'the edited review in the table')
+  assert.deepEqual(state.edits.map((entry) => [entry.id, entry.commentId]), [[205, 41]], 'the same comment updated')
+  assert.match(state.edits[0].body.text, /<li>book the rig early<\/li>/)
+  assert.deepEqual(state.posts, [], 'no new comment')
+  assert.match(await text(rowOf(page, '205').locator('td').nth(3)), /^Reviewed$/, 'its date stays: it still counts for PI 2026.4')
+  if (shots) await page.screenshot({ path: `${shots}/my-pi-review-edit-review-button-1440-light.png` })
+  // A failed edit: the form opens again with what was typed, the error and Post as a new review instead.
+  state.failNextEdit = true
+  await edit.click()
+  await dialog.getByRole('textbox', { name: /^Struggles/ }).fill('Parts late\n- customs')
+  await dialog.getByRole('button', { name: 'Save to Azure DevOps' }).click()
+  await page.getByRole('dialog', { name: 'Save the edited review of Feature #205?' }).getByRole('button', { name: 'Save review to #205' }).click()
+  await dialog.locator('.notice', { hasText: 'The review was not edited' }).waitFor()
+  assert.equal(await dialog.getByRole('textbox', { name: /^Struggles/ }).inputValue(), 'Parts late\n- customs')
+  await dialog.getByRole('button', { name: 'Post as a new review instead' }).click()
+  await page.getByRole('dialog', { name: 'Post the review to Feature #205?' }).getByRole('button', { name: 'Post review to #205' }).click()
+  await jobDone(page, 'Post review · #205', 'Posted to the Discussion of #205 and read back')
+  assert.deepEqual(state.posts.map((post) => post.id), [205])
+  assert.equal(state.edits.length, 1)
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+const until = async (check, what) => { for (const end = Date.now() + 60000; Date.now() < end;) { if (await check()) return; await new Promise((resolve) => setTimeout(resolve, 50)) } assert.fail(`timed out waiting for ${what}`) }
+
+// PIR-34 on PI Review: Rita edits her own review from the row and the drawer; Lena (a lead) sees Write review… on
+// Rita's reviewed Feature and Edit review… only on the Feature she reviewed herself.
+const lena = { displayName: 'Lena Berg', uniqueName: 'lena.berg@example.com' }
+const reviews = () => ({ 205: [ritaOwnReview()], 202: [{ ...ritaOwnReview(), id: 43, createdBy: lena }] })
+test('TC-PIR-36: PI Review offers Edit review… on my own review — in the row and the drawer, saved as an update of the same comment; a lead gets no Edit on another person’s review', async () => {
+  const { page, context, errors, state } = await open({ comments: reviews(), ...(shots ? { width: 1440, height: 900, scale: 2 } : {}) })
+  await navigate(page, 'PI Review')
+  await rowOf(page, 'example/project/205').waitFor()
+  await page.getByRole('button', { name: '↻ Read all Discussions' }).click()
+  await page.getByRole('button', { name: 'Edit review of Feature 205' }).waitFor()
+  assert.equal(await page.getByRole('button', { name: 'Write review of Feature 205' }).count(), 0, 'one action per row')
+  assert.equal(await page.getByRole('button', { name: 'Edit review of Feature 202' }).count(), 0, 'Lena’s review is not Rita’s')
+  assert.equal(await page.getByRole('button', { name: 'Write review of Feature 202' }).isDisabled(), true)
+  if (shots) { mkdirSync(shots, { recursive: true }); await page.emulateMedia({ colorScheme: 'light' }); await page.locator('.pir-table .data-table-scroll').evaluate((box) => { box.scrollLeft = box.scrollWidth }); await page.screenshot({ path: `${shots}/pi-review-edit-review-row-1440-light.png` }); await page.locator('.pir-table .data-table-scroll').evaluate((box) => { box.scrollLeft = 0 }) }
+  // The drawer's footer offers the same Edit review….
+  await rowOf(page, 'example/project/205').locator('td').nth(1).click()
+  const drawer = page.locator('aside.drawer[role="dialog"]', { has: page.getByRole('heading', { name: 'Feature #205', exact: true }) })
+  await drawer.getByRole('button', { name: 'Edit review of Feature 205' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Edit review of Feature #205' })
+  assert.equal(await dialog.getByRole('textbox', { name: /^Learnings/ }).inputValue(), 'Calibrate first')
+  await dialog.getByRole('radio', { name: 'Discuss during Meeting' }).check()
+  await dialog.getByRole('button', { name: 'Save to Azure DevOps' }).click()
+  await page.getByRole('dialog', { name: 'Save the edited review of Feature #205?' }).getByRole('button', { name: 'Save review to #205' }).click()
+  await dialog.waitFor({ state: 'detached' })
+  await page.keyboard.press('Escape')
+  await drawer.waitFor({ state: 'detached' })
+  await jobDone(page, 'Edit review · #205', 'Edited the review of #205 and read back')
+  await until(async () => await cell(page, 'example/project/205', 'Review mode') === 'Discuss during Meeting', 'the edited review in the table')
+  assert.deepEqual(state.edits.map((entry) => [entry.id, entry.commentId]), [[205, 41]])
+  assert.deepEqual(state.posts, [])
+  assert.deepEqual(errors, [])
+  await context.close()
+  // Lena, a lead: Write review… (a new comment) on Rita's reviewed Feature; Edit review… on her own review of 202.
+  const lead = await open({ email: 'lena.berg@example.com', roles: withLead(), comments: reviews() })
+  await navigate(lead.page, 'PI Review')
+  await rowOf(lead.page, 'example/project/205').waitFor()
+  await lead.page.getByRole('button', { name: '↻ Read all Discussions' }).click()
+  await lead.page.getByRole('button', { name: 'Edit review of Feature 202' }).waitFor()
+  assert.equal(await lead.page.getByRole('button', { name: 'Edit review of Feature 205' }).count(), 0, 'no Edit on Rita’s review')
+  assert.equal(await lead.page.getByRole('button', { name: 'Write review of Feature 205' }).isDisabled(), false)
+  assert.deepEqual(lead.errors, [])
+  await lead.context.close()
 })

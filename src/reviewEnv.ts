@@ -9,7 +9,8 @@ import type { PiFormSetup } from './piReviewSetup.ts'
 // PIR-19: formSetup — the PI Review form setup in use (pi-review-form.json in Git, else the built-in form), for the form,
 // the comment and the split; openFormSetup opens Admin → PI Review Setup (PIR-29; the ⚙ of PIR-30).
 export interface ReviewEnv {
-  email: string; viewingAs: string; isSample: boolean; config: AzureConfig | null; pat: string; items: AzureWorkItem[]
+  // PIR-34: name — the viewer's Azure DevOps display name, to know their own comments when a comment has no email.
+  email: string; name?: string; viewingAs: string; isSample: boolean; config: AzureConfig | null; pat: string; items: AzureWorkItem[]
   addAudit: (event: Omit<AuditEvent, 'id' | 'timestamp'>) => void
   formSetup?: PiFormSetup; openFormSetup?: () => void
 }

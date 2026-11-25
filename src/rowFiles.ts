@@ -24,7 +24,8 @@ export const keyOfRowFile = (name: string) => { const match = /^([A-Z0-9-]{1,30}
 export const rowPageQueue = (id: string) => `${pageFolder(id)}/`
 
 // ---- the files ----
-const rowOut = ({ id, key, seq, addedBy, addedAt, log, hidden, cells }: OnDemandRow) => ({ schema: 1, kind: 'on-demand-row', id, ...(key ? { key } : {}), ...(seq ? { seq } : {}), ...(addedBy ? { addedBy } : {}), ...(addedAt ? { addedAt } : {}), ...(log?.length ? { log: log.map(({ id: entry, at, by, added, action, comment, changes }) => ({ id: entry, at, by, ...(added ? { added } : {}), ...(action ? { action } : {}), ...(comment ? { comment } : {}), changes })) } : {}), ...(hidden ? { hidden } : {}), cells })
+// LST-09: refs — the keys of the row's built-in list values (written only when the row has any).
+const rowOut = ({ id, key, seq, addedBy, addedAt, log, hidden, refs, cells }: OnDemandRow) => ({ schema: 1, kind: 'on-demand-row', id, ...(key ? { key } : {}), ...(seq ? { seq } : {}), ...(addedBy ? { addedBy } : {}), ...(addedAt ? { addedAt } : {}), ...(log?.length ? { log: log.map(({ id: entry, at, by, added, action, comment, changes }) => ({ id: entry, at, by, ...(added ? { added } : {}), ...(action ? { action } : {}), ...(comment ? { comment } : {}), changes })) } : {}), ...(hidden ? { hidden } : {}), ...(refs && Object.keys(refs).length ? { refs } : {}), cells })
 export const serializeRow = (row: OnDemandRow) => `${JSON.stringify(rowOut(row), null, 1)}\n`
 // page.json: the page file of OND-08 without rows, marked storage 'rows' (the parser and the merge of OND-09 read it).
 export const serializeHead = (page: OnDemandPage) => serializeOnDemandPage({ ...page, rows: [], storage: 'rows' }, { fill: false })
@@ -92,15 +93,20 @@ export function mergeRowText(baseText: string | null, mineText: string, theirsTe
   const cellsOf = (row: Record<string, unknown> | null) => (row?.cells && typeof row.cells === 'object' && !Array.isArray(row.cells) ? row.cells : {}) as Record<string, unknown>
   const b = cellsOf(base), m = cellsOf(mine), t = cellsOf(theirs)
   const cells: Record<string, unknown> = {}
+  // LST-09: a value's keys go with the value — taken from the save whose value is kept.
+  const refsOf = (row: Record<string, unknown> | null) => (row?.refs && typeof row.refs === 'object' && !Array.isArray(row.refs) ? row.refs : {}) as Record<string, unknown>
+  const mr = refsOf(mine), tr = refsOf(theirs), refs: Record<string, unknown> = {}
   for (const column of new Set([...Object.keys(t), ...Object.keys(m), ...Object.keys(b)])) {
     const value = !base ? (mineLater ? m[column] : t[column]) ?? (mineLater ? t[column] : m[column]) : same(m[column], b[column]) ? t[column] : same(t[column], b[column]) ? m[column] : mineLater ? m[column] : t[column]
     if (value !== undefined) cells[column] = value
+    const keys = same(value, m[column]) && mr[column] !== undefined ? mr[column] : same(value, t[column]) ? tr[column] : undefined
+    if (value !== undefined && keys !== undefined) refs[column] = keys
   }
   const logs = [...(Array.isArray(theirs.log) ? theirs.log : []), ...(Array.isArray(mine.log) ? mine.log : [])] as { id: string; at: string }[]
   const log = capLog(logs.filter((entry, index) => entry && typeof entry.id === 'string' && logs.findIndex((other) => other?.id === entry.id) === index) as never)
   const pick = (field: string) => theirs[field] ?? mine[field]
   // OND-39: hidden is one more field (who hid it and when), merged as the values are.
   const hidden = !base ? (mineLater ? mine.hidden : theirs.hidden) : same(mine.hidden, base.hidden) ? theirs.hidden : same(theirs.hidden, base.hidden) ? mine.hidden : mineLater ? mine.hidden : theirs.hidden
-  const row = { id: pick('id'), key: mine.key ?? theirs.key, seq: pick('seq'), addedBy: pick('addedBy'), addedAt: pick('addedAt'), log, ...(hidden ? { hidden } : {}), cells } as unknown as OnDemandRow
+  const row = { id: pick('id'), key: mine.key ?? theirs.key, seq: pick('seq'), addedBy: pick('addedBy'), addedAt: pick('addedAt'), log, ...(hidden ? { hidden } : {}), ...(Object.keys(refs).length ? { refs } : {}), cells } as unknown as OnDemandRow
   return serializeRow(row)
 }

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { ListCatalogContext } from '../useSharedLists'
 import { ViewActions } from '../components/ViewActions'
 import { useUnsavedEdit } from '../pageEdits'
 import { PageNameField } from '../components/PageDialogs'
@@ -622,7 +623,10 @@ function Field({ column, value, first, onChange }: { column: OnDemandColumn; val
   // OND-25: the column's description under the field, as help (UI-STANDARDS §3).
   const help = column.description ? <small className="od-help">{column.description}</small> : null
   const flag = problem ? <small className="od-flag">Kept as it was: {problem}</small> : null
+  // LST-11: a built-in list that is not found (removed, or not read yet): the choices last saved, marked.
+  const missing = column.listMissing ? <small className="od-flag">The built-in list of this column is not found: the choices are those last saved.</small> : null
   if (column.type === 'multi') return <fieldset className="od-multi"><legend>{label}</legend>
+    {missing}
     {[...column.options, ...extra].map((option) => <label key={option} className="check"><input type="checkbox" checked={valuesOf(value).includes(option)} onChange={(event) => onChange(event.target.checked ? [...valuesOf(value), option] : valuesOf(value).filter((entry) => entry !== option))} />{option}{!column.options.includes(option) && <small className="od-flag">not in the list</small>}</label>)}
     {help}
   </fieldset>
@@ -635,7 +639,7 @@ function Field({ column, value, first, onChange }: { column: OnDemandColumn; val
     {column.type === 'dropdown'
       ? <select autoFocus={first} aria-label={column.name} required={column.required} value={cellText(value)} onChange={(event) => onChange(event.target.value)}><option value="">— Choose —</option>{column.options.map((option) => <option key={option} value={option}>{option}</option>)}{extra.map((option) => <option key={option} value={option}>{option} (not in the list)</option>)}</select>
       : <input autoFocus={first} aria-label={column.name} required={column.required} type={column.type === 'number' ? 'number' : column.type === 'date' ? 'date' : 'text'} step={column.type === 'number' ? 'any' : undefined} maxLength={column.type === 'text' ? 2000 : undefined} value={cellText(value)} onChange={(event) => onChange(event.target.value)} />}
-    {help}
+    {help}{missing}
     {column.type !== 'dropdown' && flag}
   </label>
 }
@@ -668,6 +672,9 @@ function ColumnsDialog({ page, onCancel, onSave }: { page: PageFile; onCancel: (
   const [error, setError] = useState('')
   const [effects, setEffects] = useState<string[] | null>(null)
   const [busy, setBusy] = useState(false)
+  // LST-08: the built-in lists a column can take its choices from (team lists and Value lists).
+  const catalog = useContext(ListCatalogContext)
+  const lists = useMemo(() => catalog.map((entry) => ({ ref: entry.ref, name: entry.name, detail: entry.detail, values: [...new Set(entry.items.map((item) => item.name))] })), [catalog])
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
     const problem = columnsError(drafts)
@@ -689,10 +696,10 @@ function ColumnsDialog({ page, onCancel, onSave }: { page: PageFile; onCancel: (
         <label className="od-prefix">Row key prefix<input aria-label="Row key prefix" required maxLength={8} pattern="[A-Za-z0-9]{1,8}" value={prefix} disabled={prefixFixed} onChange={(event) => { setPrefix(event.target.value.toUpperCase()); setError('') }} />
           <small>{prefixFixed ? `Fixed: rows already have keys such as ${page.rows.find((row) => row.key)?.key}.` : `Every row gets a key such as ${prefix || page.keyPrefix}-261123-K7Q2 (prefix, date, 4 random characters) the moment it is added. 1 to 8 letters or digits; it cannot change once rows have keys.`}</small></label>
         {/* OND-05, OND-06: the shared column-list editor (also the PI Review form setup's, PIR-22). */}
-        <ColumnListEditor drafts={drafts} onChange={(next, change) => { setDrafts(next); if (change === 'edit' || change === 'remove') setError(''); setEffects(null) }}
+        <ColumnListEditor drafts={drafts} lists={lists} onChange={(next, change) => { setDrafts(next); if (change === 'edit' || change === 'remove') setError(''); setEffects(null) }}
           newDraft={() => ({ id: newId('c'), name: '', type: 'text', required: false, options: [], isNew: true })}
           extra={(draft, index, edit) => draft.type === 'currency' && <CurrencyDefault index={index} value={draft.currency ?? defaultCurrency} onChange={(currency) => edit({ currency })} />}
-          addNote={<Info label="Types">Text: any text on one line (up to 2,000 characters). Long text: a paragraph (up to 10,000 characters), shown in 3 lines in the table, in full in the row drawer and in the export. Number: a number (right-aligned, sorted as a number). Currency: an amount and its currency, the column’s default currency to start with (shown “1,200.00 EUR”; Insights never add up different currencies). Date: a date. Dropdown (one value): one option of its list. Multi-select: any number of options of its list. Changing a type keeps the values: one that does not fit is marked until changed.</Info>} />
+          addNote={<Info label="Types">Text: any text on one line (up to 2,000 characters). Long text: a paragraph (up to 10,000 characters), shown in 3 lines in the table, in full in the row drawer and in the export. Number: a number (right-aligned, sorted as a number). Currency: an amount and its currency, the column’s default currency to start with (shown “1,200.00 EUR”; Insights never add up different currencies). Date: a date. Dropdown (one value): one option of its list. Multi-select: any number of options of its list. Dropdown (built-in list) and Multi-select (built-in list): one or more values of a shared list — the members of an Azure DevOps team or a Value list (Admin → Epic & Feature setup → Value lists) — as the list is now; a person keeps their rows when renamed, and a value the list no longer has is kept and marked. Changing a type keeps the values: one that does not fit is marked until changed.</Info>} />
       </>}
       {error && <Notice tone="error">{error}</Notice>}
       <div className="modal-actions">

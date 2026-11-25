@@ -129,7 +129,7 @@ test('CON-114, PIR-31: who may change the form setup, and why not (TC-CON-71)', 
   const policy = defaultPolicy()
   for (const role of ['Tool Owner', 'Scrum Master']) assert.ok(policy.roles[role].actions.includes('pireview.setup'), role)
   for (const role of ['Admin', 'Product Owner', 'People Manager', 'Team Member']) assert.ok(!policy.roles[role].actions.includes('pireview.setup'), role)
-  assert.match(serializeAccess(policy), /"permissions": 8/)
+  assert.match(serializeAccess(policy), /"permissions": 9/)
   // A file written before permissions 8: Scrum Master and Tool Owner get it as the starting matrix does; saved again, a
   // cell set to Not set stays so.
   const v7 = JSON.parse(serializeAccess(policy)); v7.permissions = 7

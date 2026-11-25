@@ -3,6 +3,8 @@ import { recordJob } from './backgroundJobs'
 import { outcomeText } from './gitSaveQueue'
 import { formSetupProblems } from './piReviewPost'
 import { builtInSetup, parsePiFormSetup, piFormFile, serializePiFormSetup, type PiFormSetup } from './piReviewSetup'
+import { setDiscussionsFrom } from './piReview'
+import { reviewStartOf } from './piReviewStart'
 import type { GitStorage } from './useGitStorage'
 
 // PIR-19: the PI Review form setup from Git (pi-review-form.json), read when Git storage is connected; the last good file
@@ -55,9 +57,13 @@ export function usePiFormSetup(git: GitStorage) {
     }
   }, [git])
 
+  // PIR-33: the Discussions are read with the setup's "PI Review starts from" (a change reads them again).
+  const setup = state.file ?? builtInSetup
+  useEffect(() => { setDiscussionsFrom(reviewStartOf(setup)) }, [setup])
+
   return {
     // The form in use: the file in Git, else the built-in form.
-    setup: state.file ?? builtInSetup, file: state.file, error: fresh ? state.error : '', loaded: fresh && state.loaded, connected: Boolean(scope),
+    setup, file: state.file, error: fresh ? state.error : '', loaded: fresh && state.loaded, connected: Boolean(scope),
     save, reload: load, history: git.piFormHistory, queue: git.queueState(piFormFile), retry: () => git.retryQueued(piFormFile),
   }
 }

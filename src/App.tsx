@@ -87,7 +87,12 @@ import { GitSyncBar } from './components/GitStorage'
 import { confirmReplace, defaultGitRepository, isRepositoryUnreadable, movedRepositoryTarget, normalizeSetupLinks, setCommitSaver, type SetupLinks } from './gitStorage'
 import { guideKey, requiredOpen, setupSteps } from './setupGuide'
 import { azureResources, capacityContext, setAccessRoles, setAzureEmails } from './capacity'
-import { hasServerPat, serverKey } from './azureCredentials'
+import { hasServerPat, loadServerPat, serverKey } from './azureCredentials'
+import { ListCatalogContext, useSharedLists } from './useSharedLists'
+import { listCatalog, listsBlock, listUsage, ownsAPage, removeListBlock, serverPatKey } from './sharedLists'
+import { collectionUrl } from './azureClient'
+import { valuesOf } from './onDemand'
+import type { SharedListsEnv } from './components/SharedListsPanel'
 
 // Pages load on demand (their own chunk), so the first download is the shell and the start page only; the
 // Documentation page brings the bundled documents with it.
@@ -249,6 +254,9 @@ export default function App() {
   const epicSetup = useEpicSetup(git)
   // PIR-19: the PI Review form setup (pi-review-form.json in Git), the built-in form without one.
   const piForm = usePiFormSetup(git)
+  // LST-02, LST-08: the built-in lists (shared-lists.json in Git) and the Epic setup's Value lists, for the On-Demand columns.
+  const sharedLists = useSharedLists(git)
+  const listCatalogEntries = useMemo(() => listCatalog(sharedLists.file, epicSetup.file?.lists ?? []), [sharedLists.file, epicSetup.file])
   // EPS-06: the fetched on-prem data, for the drop-downs of Feature fields that name an on-prem field.
   // DSH-16: the Time Writing hours of the On-Demand Dashboards — Team overview's items (with the historical hours) and
   // capacity settings; viewing follows who may see Team overview ("Team insights").
@@ -265,7 +273,7 @@ export default function App() {
   // OND-01…10: the On-Demand pages (CoNQ, and those added), each in the menu by its name.
   // OND-63: Live | Sample per table page and person; the store gives the pages in Sample with their sample rows.
   const dataMode = useDataMode(personalViews)
-  const onDemand = useOnDemand(git, dataMode.isSample)
+  const onDemand = useOnDemand(git, dataMode.isSample, listCatalogEntries)
   const [onDemandId, setOnDemandId] = useState(() => { try { return localStorage.getItem('demand-planning-on-demand-page-v1') ?? '' } catch { return '' } })
   const onDemandPage = onDemand.pages.find((entry) => entry.id === onDemandId) ?? onDemand.pages[0]
   // PGB-02…PGB-11: the menu layout (menu-layout.json): custom groups, group settings, each added page's place, type and
@@ -448,7 +456,18 @@ export default function App() {
   // PIR-13, PIR-17, PIR-18: what posting a PI review needs (PI Review, My PI Review, the Close pop-up).
   // CON-114, PIR-31: who may change the PI Review form setup, and why not.
   const piFormBlock = formSetupBlock({ viewingAs: access.viewingAs ? viewAsLabel(access.viewingAs) : '', readOnly: access.readOnly, can: access.can }, git, piForm)
-  const reviewEnv: ReviewEnv = { email: access.email, viewingAs: access.viewingAs ? viewAsLabel(access.viewingAs) : '', isSample: azure.isSample, config: azure.config, pat: azure.pat, items: azure.items, addAudit: store.addAudit, formSetup: piForm.setup, openFormSetup: () => openSettings('pireview') }
+  // CON-115, LST-12: who may change the built-in lists (the right, or a page co-owner) and the setup the panel needs.
+  const listsViewer = { email: viewedEmail, viewingAs: access.viewingAs ? viewAsLabel(access.viewingAs) : '', readOnly: access.readOnly, can: access.can }
+  const timeWritingServer = azure.config ? collectionUrl(azure.config) : ''
+  const listsEnv: SharedListsEnv = {
+    store: sharedLists, block: listsBlock(listsViewer, ownsAPage(menu.layout, viewedEmail), git, sharedLists), removeBlock: (usedBy) => removeListBlock(listsViewer, git, sharedLists, usedBy),
+    by: my.self.me.name?.trim() || 'someone', // LST-04: a display name only, never the work email
+    connection: azure.config ? { server: timeWritingServer, project: azure.config.project, team: azure.config.team } : null,
+    patFor: (server) => serverPatKey(server) === serverPatKey(timeWritingServer) && azure.pat.trim() ? azure.pat.trim() : loadServerPat(serverPatKey(server)),
+    usage: (ref) => listUsage(onDemand.pages, ref),
+    rowsWith: (ref, names) => onDemand.pages.reduce((sum, page) => sum + page.rows.filter((row) => page.columns.some((column) => column.list === ref && valuesOf(row.cells[column.id]).some((value) => names.includes(value)))).length, 0),
+  }
+  const reviewEnv: ReviewEnv = { email: access.email, name: my.self.me.name ?? '', viewingAs: access.viewingAs ? viewAsLabel(access.viewingAs) : '', isSample: azure.isSample, config: azure.config, pat: azure.pat, items: azure.items, addAudit: store.addAudit, formSetup: piForm.setup, openFormSetup: () => openSettings('pireview') }
   const storageLabel = store.cache.status === 'error' ? '⚠ Not saved locally' : store.cache.status === 'saving' ? '◌ Saving locally' : '○ Local IndexedDB'
   const buildStatus = <BuildStatus pending={store.hasPendingSave} failed={store.ready && store.cache.status === 'error'} busy={azure.busy} preview={Boolean(azure.preview)} details={<p className="storage-line" title="Where app data is saved"><strong>Data saved:</strong> {storageLabel}</p>} onBackup={store.ready ? () => exportStateJson({ ...store.state, azureWorkItems: mergeAzureWorkItems(store.state.azureWorkItems ?? [], azure.preview?.items ?? []), ...(azure.preview ? { azureBacklogScope: azure.preview.scope } : {}) }) : undefined} />
 
@@ -530,7 +549,8 @@ export default function App() {
   // GIT-23: the access roles are loaded quietly too, except on Admin → People & roles (someone may be editing them there).
   const rolesPage = pageKey === 'admin:resources'
   // PIR-19, PIR-29: the PI Review form too, except on Admin → PI Review Setup (someone may be editing it there).
-  const quietTarget = (target: FilePages) => target.quiet === 'menu' || target.quiet === 'views' || (target.quiet === 'access' && !rolesPage) || (target.quiet === 'piForm' && pageKey !== 'admin:pireview')
+  // LST-02: the built-in lists too, except on Admin → Epic & Feature setup (someone may be refreshing one there).
+  const quietTarget = (target: FilePages) => target.quiet === 'menu' || target.quiet === 'views' || (target.quiet === 'access' && !rolesPage) || (target.quiet === 'piForm' && pageKey !== 'admin:pireview') || (target.quiet === 'lists' && pageKey !== 'admin:epics')
   // An added page's file is named by the page's name ("CoNQ"; its blocks for a dashboard).
   const pageChanges = changesForPage(git.remoteChanges, pageKey, targetOf, quietTarget).map((change) => {
     const added = /(?:^|\/)(on-demand|dashboards)\/([a-z0-9-]+)(?:\.json|\/page\.json|\/rows)$/.exec(change.path), name = added && onDemand.pages.find((entry) => entry.id === added[2])?.name
@@ -555,6 +575,7 @@ export default function App() {
       else if (loader === 'customStreams') await customStreams.reload()
       else if (loader === 'toolValidations') await toolValidations.reload()
       else if (loader === 'piForm') await piForm.reload()
+      else if (loader === 'sharedLists') await sharedLists.reload()
       else if (loader === 'connections') { await git.syncViews(); azure.reloadConnectionProfiles() }
       else if (loader === 'monthlyPack') { await monthlyPack.reloadSetup(); await monthlyPack.reloadNotes() }
       else if (loader === 'history') await history.reload()
@@ -584,14 +605,15 @@ export default function App() {
     const changes = rightsChanges(before, rightsFor(policy, access.email, false))
     if (changes.length) setAccessNote({ page: at, text: accessChangedText(change?.otherWindow ? 'you in another window of this browser' : change?.by ?? '', changes) })
   }
-  const quietLoad = useRef({ menu: menu.reload, views: personalViews.reload, pages: () => onDemand.loadNew(keepOpen), access: loadAccessQuietly, piForm: piForm.reload })
-  useEffect(() => { quietLoad.current = { menu: menu.reload, views: personalViews.reload, pages: () => onDemand.loadNew(keepOpen), access: loadAccessQuietly, piForm: piForm.reload } })
+  const quietLoad = useRef({ menu: menu.reload, views: personalViews.reload, pages: () => onDemand.loadNew(keepOpen), access: loadAccessQuietly, piForm: piForm.reload, lists: sharedLists.reload })
+  useEffect(() => { quietLoad.current = { menu: menu.reload, views: personalViews.reload, pages: () => onDemand.loadNew(keepOpen), access: loadAccessQuietly, piForm: piForm.reload, lists: sharedLists.reload } })
   useEffect(() => {
     if (!quietPaths) return
     if (quietPaths.includes('menu-layout.json@')) { void quietLoad.current.menu(); void quietLoad.current.pages().catch(() => undefined) }
     if (/personal-views/.test(quietPaths)) quietLoad.current.views()
     if (/(^|\/|\|)access\.json@/.test(quietPaths)) void quietLoad.current.access().catch(() => undefined)
     if (/(^|\/|\|)pi-review-form\.json@/.test(quietPaths)) void quietLoad.current.piForm()
+    if (/(^|\/|\|)shared-lists\.json@/.test(quietPaths)) void quietLoad.current.lists()
   }, [quietPaths])
   useEffect(() => { setAccessNote((note) => note && note.page !== pageKey ? null : note) }, [pageKey])
   if (!store.ready) return <main className="content"><h1>I&amp;D Quality Demand Planning</h1>{store.loadError ? <Notice tone="error"><p>{store.loadError}</p><p>Do not clear browser data. If you still have an older tab open with unsaved changes, export its JSON backup first.</p><button className="primary" onClick={store.retryLoad}>Retry loading saved data</button></Notice> : <p role="status">Loading saved browser data…</p>}{buildStatus}</main>
@@ -600,7 +622,7 @@ export default function App() {
   // saves a built-in chart's size for everyone with Git connected (not with the synthetic sample); View as saves nothing.
   const chartSizeEnv = { views: personalViews, viewOnly: Boolean(access.viewingAs), canSetDefault: access.can('layout.defaults') && git.connected && !git.readOnly && !git.isSample }
   // UI-12: every table follows the shared design default.
-  return <PageNamesContext.Provider value={menuNames}><OwnerPeopleContext.Provider value={ownerPeople}><TableDefaultsContext.Provider value={tableDesign}><CustomStreamsContext.Provider value={customStreams}><ReleaseSettingsContext.Provider value={store.state.releaseSourceSettings}><ReviewEnvContext.Provider value={reviewEnv}><CanContext.Provider value={access.can}><ReadOnlyContext.Provider value={access.readOnly}><EpicSetupContext.Provider value={epicSetup.file}><OnPremContext.Provider value={onPremSources}><ToolValidationsContext.Provider value={toolEnv}><HeaderSlot.Provider value={headerSlot}><ChartSizeEnvContext.Provider value={chartSizeEnv}><div className={`app-shell${navOpen ? ' nav-open' : ''}${menuMini ? ' nav-mini' : ''}`}>
+  return <ListCatalogContext.Provider value={listCatalogEntries}><PageNamesContext.Provider value={menuNames}><OwnerPeopleContext.Provider value={ownerPeople}><TableDefaultsContext.Provider value={tableDesign}><CustomStreamsContext.Provider value={customStreams}><ReleaseSettingsContext.Provider value={store.state.releaseSourceSettings}><ReviewEnvContext.Provider value={reviewEnv}><CanContext.Provider value={access.can}><ReadOnlyContext.Provider value={access.readOnly}><EpicSetupContext.Provider value={epicSetup.file}><OnPremContext.Provider value={onPremSources}><ToolValidationsContext.Provider value={toolEnv}><HeaderSlot.Provider value={headerSlot}><ChartSizeEnvContext.Provider value={chartSizeEnv}><div className={`app-shell${navOpen ? ' nav-open' : ''}${menuMini ? ' nav-mini' : ''}`}>
     {navOpen && <div className="nav-backdrop" onClick={() => setNavOpen(false)} aria-hidden="true" />}
     <aside className="sidebar" id="primary-navigation">
       <div className="brand" title="I&amp;D Quality Demand Planning"><div className="brand-mark"><BrandMark /></div><div><strong>I&amp;D Quality</strong><span>Demand Planning</span></div><button type="button" className="nav-mini-toggle" aria-pressed={menuMini} aria-label={menuMini ? 'Expand the menu' : 'Collapse the menu'} title={menuMini ? 'Show the menu with names' : 'Fold the menu to icons'} onClick={toggleMenuMini}>{menuMini ? '»' : '«'}</button></div>
@@ -690,11 +712,11 @@ export default function App() {
       {page === 'admin' && settingsTab === 'pages' && <PagesMenuPage duplicates={duplicateNames} git={git} store={onDemand} menu={menu} viewer={viewer} onOpen={openOnDemand} onAddPage={(group) => setAddPageFor(group ?? '')} />}
       {/* PIR-29: Admin → PI Review Setup, the PI Review form setup on a page of its own. */}
       {page === 'admin' && settingsTab === 'pireview' && <PiReviewSetupPage store={piForm} block={piFormBlock} by={my.self.me.name?.trim() || azure.creatorEmail.trim()} />}
-      {page === 'admin' && settingsTab !== 'pages' && settingsTab !== 'pireview' && <AdminPage look={{ startView, onStartView: switchView, onCustomizeMenu: () => setMenuEditor(true) }} key={`${settingsTab}:${settingsVisit}`} tab={settingsTab} onOpenTab={openSettings} {...pageProps} azure={azure} git={git} access={access} featureSetup={featureSetup} epicSetup={epicSetup} setupSteps={steps} onSearch={() => setSearchOpen(true)} qeColumnNames={[...new Set((qeMapping.file?.sheets ?? []).flatMap((sheet) => sheet.columns.map((column) => column.name)))]} monthlyPack={monthlyPack} history={history} loadEverything={loadEverything} onOpenBoard={() => setPage('board')} />}
+      {page === 'admin' && settingsTab !== 'pages' && settingsTab !== 'pireview' && <AdminPage look={{ startView, onStartView: switchView, onCustomizeMenu: () => setMenuEditor(true) }} key={`${settingsTab}:${settingsVisit}`} tab={settingsTab} onOpenTab={openSettings} {...pageProps} azure={azure} git={git} access={access} featureSetup={featureSetup} epicSetup={epicSetup} sharedLists={listsEnv} setupSteps={steps} onSearch={() => setSearchOpen(true)} qeColumnNames={[...new Set((qeMapping.file?.sheets ?? []).flatMap((sheet) => sheet.columns.map((column) => column.name)))]} monthlyPack={monthlyPack} history={history} loadEverything={loadEverything} onOpenBoard={() => setPage('board')} />}
       {page === 'docs' && <DocsPage key={docsVisit} git={git} onConfigure={() => openSettings('storage', 'git')} />}
       </Fragment></Suspense>
       {addPageFor != null && <AddPageDialog viewer={viewer} layout={menu.layout} group={addPageFor || undefined} onCancel={() => setAddPageFor(null)} onCreate={async (input) => { const id = await createPage(onDemand, menu, input); setAddPageFor(null); openOnDemand(id) }} />}
       <footer className="app-footer" aria-label="Version" ref={footerRef}><ZoomControl /><DesktopDownload />{buildStatus}</footer>
     </main>
-  </div></ChartSizeEnvContext.Provider></HeaderSlot.Provider></ToolValidationsContext.Provider></OnPremContext.Provider></EpicSetupContext.Provider></ReadOnlyContext.Provider></CanContext.Provider></ReviewEnvContext.Provider></ReleaseSettingsContext.Provider></CustomStreamsContext.Provider></TableDefaultsContext.Provider></OwnerPeopleContext.Provider></PageNamesContext.Provider>
+  </div></ChartSizeEnvContext.Provider></HeaderSlot.Provider></ToolValidationsContext.Provider></OnPremContext.Provider></EpicSetupContext.Provider></ReadOnlyContext.Provider></CanContext.Provider></ReviewEnvContext.Provider></ReleaseSettingsContext.Provider></CustomStreamsContext.Provider></TableDefaultsContext.Provider></OwnerPeopleContext.Provider></PageNamesContext.Provider></ListCatalogContext.Provider>
 }

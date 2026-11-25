@@ -20,7 +20,13 @@ export type BuiltInFieldId = 'learnings' | 'struggles' | 'move' | 'review' | 're
 export const builtInFieldIds: readonly BuiltInFieldId[] = ['learnings', 'struggles', 'move', 'review', 'remarks']
 export const isBuiltInField = (id: string): id is BuiltInFieldId => (builtInFieldIds as readonly string[]).includes(id)
 export interface PiFormField { id: string; label: string; heading: string; type: PiFieldType; options: string[]; required: boolean; defaultValue: string; help: string }
-export interface PiFormSetup { schema: 1; kind: typeof piFormKind; fields: PiFormField[]; changedAt?: string; changedBy?: string }
+// PIR-33: reviewStart — "PI Review starts from" (YYYY-MM-DD): PIs that ended before it are not offered and comments
+// before it are ignored; missing in older files (and without the file), then defaultReviewStart applies.
+export interface PiFormSetup { schema: 1; kind: typeof piFormKind; fields: PiFormField[]; reviewStart?: string; changedAt?: string; changedBy?: string }
+// PIR-33: the default start (21 Sep 2026), defined with the Discussions it filters.
+export { defaultReviewStart } from './piReview.ts'
+// PIR-33: a calendar day written YYYY-MM-DD (a real day of 2000…2099).
+export const isReviewStartDay = (value: unknown): value is string => typeof value === 'string' && /^20\d{2}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`)) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value
 
 // PIR-22: the limits of the setup.
 export const maxFormFields = 15
@@ -68,6 +74,7 @@ export function setupProblems(setup: PiFormSetup): string[] {
   const fields = setup.fields
   if (!fields.length) problems.push('The form needs at least Move to next PI.')
   if (fields.length > maxFormFields) problems.push(`The form has ${fields.length} fields; at most ${maxFormFields}.`)
+  if (setup.reviewStart !== undefined && !isReviewStartDay(setup.reviewStart)) problems.push(`PI Review starts from: “${setup.reviewStart}” is not a date (YYYY-MM-DD).`)
   if (!fields.some((field) => field.id === 'move')) problems.push('Move to next PI cannot be removed: it is the PI decision PI Review filters by.')
   const ids = new Set<string>(), headings = new Map<string, string>()
   for (const [index, field] of fields.entries()) {
@@ -137,14 +144,15 @@ export function parsePiFormSetup(source: string): PiFormSetup {
     if (field.options !== undefined && !(Array.isArray(field.options) && field.options.every((option) => typeof option === 'string'))) throw new Error(`${piFormFile}: the options of field ${index + 1} are not a list of texts.`)
     return { id: field.id, label: text(field.label).trim(), heading: text(field.heading).trim(), type: field.type, options: ((field.options as string[] | undefined) ?? []).map((option) => option.trim()), required: field.required === true, defaultValue: text(field.defaultValue).trim(), help: text(field.help).trim() }
   })
-  const setup: PiFormSetup = { schema: 1, kind: piFormKind, fields, ...(typeof input.changedAt === 'string' && input.changedAt ? { changedAt: input.changedAt } : {}), ...(typeof input.changedBy === 'string' && input.changedBy.trim() ? { changedBy: input.changedBy.trim().slice(0, 200) } : {}) }
+  if (input.reviewStart !== undefined && !isReviewStartDay(input.reviewStart)) throw new Error(`${piFormFile}: reviewStart (PI Review starts from) is not a date written YYYY-MM-DD.`)
+  const setup: PiFormSetup = { schema: 1, kind: piFormKind, fields, ...(typeof input.reviewStart === 'string' ? { reviewStart: input.reviewStart } : {}), ...(typeof input.changedAt === 'string' && input.changedAt ? { changedAt: input.changedAt } : {}), ...(typeof input.changedBy === 'string' && input.changedBy.trim() ? { changedBy: input.changedBy.trim().slice(0, 200) } : {}) }
   const problems = setupProblems(setup)
   if (problems.length) throw new Error(`${piFormFile} cannot be used: ${problems.join(' ')}`)
   return setup
 }
 export function serializePiFormSetup(setup: PiFormSetup): string {
   const fields = setup.fields.map((field) => ({ id: field.id, label: field.label.trim(), heading: field.heading.trim(), type: field.type, ...(field.type === 'dropdown' ? { options: field.options.map((option) => option.trim()) } : {}), required: field.required, ...(field.defaultValue ? { defaultValue: field.defaultValue } : {}), ...(field.help.trim() ? { help: field.help.trim() } : {}) }))
-  return `${JSON.stringify({ schema: 1, kind: piFormKind, fields, ...(setup.changedAt ? { changedAt: setup.changedAt } : {}), ...(setup.changedBy ? { changedBy: setup.changedBy } : {}) }, null, 2)}\n`
+  return `${JSON.stringify({ schema: 1, kind: piFormKind, fields, ...(setup.reviewStart ? { reviewStart: setup.reviewStart } : {}), ...(setup.changedAt ? { changedAt: setup.changedAt } : {}), ...(setup.changedBy ? { changedBy: setup.changedBy } : {}) }, null, 2)}\n`
 }
 const safeParse = (source: string | null) => { if (!source) return null; try { return parsePiFormSetup(source) } catch { return null } }
 // GIT-17: two saves of the form setup meanwhile — the fields by id (both sides' changes kept; where both changed one
@@ -158,7 +166,9 @@ export const mergePiFormText: Merge = (baseText, mineText, theirsText, mineLater
   const order = merge3(base?.fields.map((field) => field.id), mine.fields.map((field) => field.id), theirs.fields.map((field) => field.id), mineLater) ?? mine.fields.map((field) => field.id)
   const ordered = [...order.filter((id) => fields[id]), ...Object.keys(fields).filter((id) => !order.includes(id))]
   const later = mineLater ? mine : theirs
-  const merged: PiFormSetup = { schema: 1, kind: piFormKind, fields: ordered.map((id) => fields[id]), ...(later.changedAt ? { changedAt: later.changedAt } : {}), ...(later.changedBy ? { changedBy: later.changedBy } : {}) }
+  // PIR-33: the start date of the side that changed it (the later save when both did).
+  const reviewStart = mine.reviewStart === theirs.reviewStart ? mine.reviewStart : mine.reviewStart === base?.reviewStart ? theirs.reviewStart : theirs.reviewStart === base?.reviewStart ? mine.reviewStart : later.reviewStart
+  const merged: PiFormSetup = { schema: 1, kind: piFormKind, fields: ordered.map((id) => fields[id]), ...(reviewStart ? { reviewStart } : {}), ...(later.changedAt ? { changedAt: later.changedAt } : {}), ...(later.changedBy ? { changedBy: later.changedBy } : {}) }
   try { return serializePiFormSetup(parsePiFormSetup(serializePiFormSetup(merged))) } catch { return mineLater ? mineText : theirsText }
 }
 

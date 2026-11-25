@@ -63,11 +63,27 @@ export function piFeatures(items: AzureWorkItem[], pi: string, { absenceEpicId, 
   return items.filter((item) => item.workItemType === 'Feature' && !isRemoved(item) && !underAbsence(item) && (inPi(item) || storyFeatures.has(item.id))).sort((a, b) => a.id - b.id)
 }
 
+// PIR-33: the comments on or after "PI Review starts from" (its UTC day compared with the date, YYYY-MM-DD) — a comment
+// written before it, or with an unreadable date, is ignored; ignored counts them. No date: every comment.
+export function commentsFrom(comments: readonly WorkItemComment[], start: string): { comments: WorkItemComment[]; ignored: number } {
+  if (!start) return { comments: [...comments], ignored: 0 }
+  const kept = comments.filter((comment) => { const time = Date.parse(comment.date); return Number.isFinite(time) && new Date(time).toISOString().slice(0, 10) >= start })
+  return { comments: kept, ignored: comments.length - kept.length }
+}
+
 // The Discussions read so far, by work item key, for this page load only (PIR-05, PIR-06): never stored.
-export type Discussion = { state: 'loading' } | { state: 'done'; comments: WorkItemComment[]; capped: boolean; readAt: string } | { state: 'error'; error: string }
+// PIR-33: comments — only those on or after the start date in use when they were read (from); ignored — how many before it.
+export type Discussion = { state: 'loading' } | { state: 'done'; comments: WorkItemComment[]; capped: boolean; readAt: string; from?: string; ignored?: number } | { state: 'error'; error: string }
 const discussions = new Map<string, Discussion>()
 const listeners = new Set<() => void>()
 let version = 0
+// PIR-33: the start date the Discussions are read with (set from the form setup in use, App); a change forgets those read
+// before, so every page reads them again with the new date.
+// PIR-33: the product owner's date (25 Nov 2026: "Date filter is set to 21-September-2026"), PI 26.4 the first PI shown.
+export const defaultReviewStart = '2026-09-21'
+let discussionStart = defaultReviewStart
+export const discussionsFrom = () => discussionStart
+export function setDiscussionsFrom(start: string) { if (start === discussionStart) return; discussionStart = start; clearDiscussions() }
 export const discussionOf = (key: string) => discussions.get(key)
 export const discussionsVersion = () => version
 export function subscribeDiscussions(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener) } }

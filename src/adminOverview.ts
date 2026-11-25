@@ -53,6 +53,7 @@ export const settingsIndex: SettingsEntry[] = [
   { tab: 'epics', section: 'setup', page: 'Epic & Feature setup', label: 'Setup per Epic', words: 'list every epic all epics defaults overview' },
   { tab: 'epics', section: 'setup', page: 'Epic & Feature setup', label: 'Feature fields per Epic', words: 'program platform title pattern master data fields copy to epics' },
   { tab: 'epics', section: 'lists', page: 'Epic & Feature setup', label: 'Value lists', words: 'drop-down dropdown master data values' },
+  { tab: 'epics', section: 'lists', page: 'Epic & Feature setup', label: 'Team lists from Azure DevOps', words: 'built-in list team members qe list people azure devops refresh dropdown on-demand column' },
   { tab: 'epics', section: 'templates', page: 'Epic & Feature setup', label: 'User Story templates', words: 'story stories template reuse library tag' },
   { tab: 'pireview', page: 'PI Review Setup', label: 'PI Review Setup', words: 'pi review form setup gear fields headings learnings struggles move to next pi review meeting remarks comment scrum master' },
   { tab: 'resources', section: 'people', page: 'People & roles', label: 'People', words: 'region role reports to joined left team status access bulk default time tracking started' },

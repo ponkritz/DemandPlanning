@@ -4,14 +4,15 @@ import { EmptyState, Notice, Page, Pill, TablePanel, WriteBlocked } from '../com
 import { formatDate, formatDateTime } from '../format'
 import { isMine, type Me } from '../myWork'
 import { PersonPicker } from '../components/PersonPicker'
-import { discussionOf, discussionsVersion, moveLabel, oneLine, piFeatures, piLabel, readDiscussions, reviewModeLabel, samePi, subscribeDiscussions, type ReviewSplit } from '../piReview'
+import { discussionOf, discussionsFrom, discussionsVersion, moveLabel, oneLine, piFeatures, piLabel, readDiscussions, reviewModeLabel, samePi, subscribeDiscussions, type ReviewSplit } from '../piReview'
 import { rateLimitWait } from '../azureDevOps'
 import { myReviewOf, otherPersonBlock, otherPiHint, personOf, readDiscussionInto, reviewCountOf, reviewPageBlock, reviewPeriodOf, reviewPostBlock, type ReviewCount, type ReviewPeriod } from '../piReviewPost'
-import { ReviewDialog } from './PiReviewForm'
+import { ReviewAction, ReviewDialog } from './PiReviewForm'
 import { PiSetupGear } from '../components/PiFormSetupPanel'
-import { formSetupOf, useReviewViewer, useReviewWriter } from '../piReviewWriter'
+import { formSetupOf, useOwnReview, useReviewViewer, useReviewWriter } from '../piReviewWriter'
 import type { PiFormSetup } from '../piReviewSetup'
 import { usePiChoice } from './usePiChoice'
+import { cutoffNote, reviewStartOf } from '../piReviewStart'
 import type { WorkItemComment } from '../azureDevOps'
 import type { AzureWorkItem } from '../domain'
 import type { AzureWorkspace } from '../useAzureWorkspace'
@@ -50,7 +51,8 @@ export function MyPiReviewPage({ azure, my }: { azure: AzureWorkspace; my: MyWor
   // PIR-19: my review is found by the headings of the form setup in use (and the built-in ones).
   const setup = formSetupOf(poster.env)
   useSyncExternalStore(subscribeDiscussions, discussionsVersion)
-  const { options, current, pi, choose, fallback, remembered, iterations } = usePiChoice(azure, piKey)
+  // PIR-33: only the PIs that did not end before "PI Review starts from" (the form setup's date).
+  const { options, current, pi, choose, fallback, remembered, iterations, cutoff } = usePiChoice(azure, piKey, reviewStartOf(setup))
   // PIR-24: whose Features — me (my own work email, else my name; not the top bar's Person of other pages) or, for a
   // lead, the person chosen. The person list: the assignees of the PI's Features.
   const [person, setPerson] = useState('')
@@ -65,9 +67,10 @@ export function MyPiReviewPage({ azure, my }: { azure: AzureWorkspace; my: MyWor
   const filtered = Boolean(who) || Boolean(remembered && !samePi(remembered, fallback.pi))
   const resetFilters = () => { setPerson(''); choose('') }
   const readBlocked = isSample ? 'Synthetic sample data is loaded: the Discussions are not read from Azure DevOps.' : !config || !pat.trim() ? 'Connect the Time Writing connection (with its PAT) to read the Discussions.' : ''
-  // PIR-17, PIR-24: read the shown Features' Discussions not read yet (3 at a time), once per Feature list.
+  // PIR-17, PIR-24: read the shown Features' Discussions not read yet (3 at a time), once per Feature list — and again
+  // when "PI Review starts from" changed (PIR-33: the Discussions read before are forgotten).
   const readKey = useRef('')
-  const listKey = rows.map((item) => item.key).join(',')
+  const listKey = rows.length ? `${discussionsFrom()}|${rows.map((item) => item.key).join(',')}` : ''
   useEffect(() => {
     if (readBlocked || !config || !listKey || readKey.current === listKey) return
     readKey.current = listKey
@@ -78,6 +81,9 @@ export function MyPiReviewPage({ azure, my }: { azure: AzureWorkspace; my: MyWor
   // PIR-26: the dates of the chosen PI (recomputed when the PI filter changes); null while the iterations are read.
   const period = useMemo(() => !iterations.done ? null : reviewPeriodOf(pi, iterations.list, { problem: iterations.problem }), [pi, iterations.done, iterations.list, iterations.problem])
   const status = (item: AzureWorkItem) => statusOf(item, name, period, setup)
+  // PIR-34: Edit review… — my own review comment that counts for the chosen PI (useOwnReview, shared with PI Review);
+  // never when a lead shows another person (their comments are theirs to edit).
+  const editTarget = useOwnReview(pi, { list: iterations.list, reading: !iterations.done, problem: iterations.problem }, { others: Boolean(who) || !self.known, me: { email: poster.email || self.me.email, name: self.me.name } })
   const pageBlock = reviewPageBlock(poster)
 
   const columns: DataColumn<AzureWorkItem>[] = [
@@ -91,7 +97,8 @@ export function MyPiReviewPage({ azure, my }: { azure: AzureWorkspace; my: MyWor
     { id: 'move', label: 'Move to Next PI', value: (item) => { const split = status(item).split; return split ? moveLabel(split) : '' }, render: (item) => { const split = status(item).split; return split ? <span className="pir-clip">{oneLine(moveLabel(split))}</span> : <span className="muted">—</span> } },
     { id: 'review-mode', label: 'Review mode', value: (item) => { const split = status(item).split; return split ? reviewModeLabel(split) : '' } },
     { id: 'actions', label: 'Actions', export: false, sortable: false,
-      render: (item) => { const why = reviewPostBlock(poster, item); return <button type="button" className="ghost" disabled={Boolean(why)} title={why || `Write the PI review of Feature #${item.id}`} aria-label={`Write review of Feature ${item.id}`} onClick={() => void writer.start(item)}>Write review…</button> } },
+      // PIR-34: one action per row — Edit review… in place of Write review… when my own review counts for the PI.
+      render: (item) => { const own = editTarget(item); return <ReviewAction item={item} own={own} why={reviewPostBlock(poster, item)} onWrite={() => void writer.start(item)} onEdit={() => { if (own) writer.startEdit(item, own.comment) }} /> } },
   ]
   const reviewed = rows.filter((item) => status(item).state === 'reviewed').length
   const notice = !iterations.done ? '' : fallback.why === 'overlap' || ((fallback.why === 'fallback' || fallback.why === 'none') && !remembered) ? fallback.note : ''
@@ -108,16 +115,16 @@ export function MyPiReviewPage({ azure, my }: { azure: AzureWorkspace; my: MyWor
     <WriteBlocked reason={personBlock} />
   </span>
   // PIR-30: ⚙ PI Review Setup in the page actions, when the page is in the viewer's menu (UI-STANDARDS §6).
-  return <Page intro="The Features assigned to you (a lead can choose another person) in a PI and whether their PI review is written. Write review… posts it as a new comment in the Feature’s Discussion in Azure DevOps." actions={<PiSetupGear />}>
+  return <Page intro="The Features assigned to you (a lead can choose another person) in a PI and whether their PI review is written. Write review… posts it as a new comment in the Feature’s Discussion in Azure DevOps; Edit review… changes your own review of the chosen PI in place." actions={<PiSetupGear />}>
     {notice && <Notice tone="warning">{notice}</Notice>}
     {periodNote && <Notice tone="warning">{periodNote}</Notice>}
     {!shownMe ? <EmptyState title="Who are you in Azure DevOps?" detail="Enter your work email on the Time Writing connection, or choose your name in My Tasks [Board]." />
-      : <TablePanel title={who ? `Features of ${who}` : 'My Features'} info="The Features of the chosen PI assigned to you — or, for a lead, to the person chosen (Assigned To, matched by work email where known) — not Removed, not under the absence Epic. Their Discussions are read from Azure DevOps when the page opens and kept for this page load; the review column says whether that person wrote a review comment (with the review headings) for the chosen PI, and when. A review counts for the chosen PI when its headings name that PI, or — without a PI in them — when it is dated within the PI’s dates in Azure DevOps (its own, else its Sprints’; compared in UTC), or when the Feature is Closed and the review is dated on or after its Closed Date. A review for another PI shows as Not reviewed with its date and PI; choosing another PI recomputes the column. When the chosen PI has no dates, every review counts, and the page says so.">
+      : <TablePanel title={who ? `Features of ${who}` : 'My Features'} info={`The Features of the chosen PI assigned to you — or, for a lead, to the person chosen (Assigned To, matched by work email where known) — not Removed, not under the absence Epic. Their Discussions are read from Azure DevOps when the page opens and kept for this page load; the review column says whether that person wrote a review comment (with the review headings) for the chosen PI, and when. A review counts for the chosen PI when its headings name that PI, or — without a PI in them — when it is dated within the PI’s dates in Azure DevOps (its own, else its Sprints’; compared in UTC), or when the Feature is Closed and the review is dated on or after its Closed Date. A review for another PI shows as Not reviewed with its date and PI; choosing another PI recomputes the column. When the chosen PI has no dates, every review counts, and the page says so. ${cutoffNote(cutoff)}`}>
         <WriteBlocked reason={readBlocked || pageBlock} />
         <DataTable id="mypireview:features" className="pir-table" columns={columns} rows={rows} rowKey={(item) => item.key} exportName={`My PI Review ${pi ? piLabel(pi) : ''}${who ? ` ${who}` : ''}`.trim()} toolbar={toolbar}
           status={`${reviewed} of ${rows.length} reviewed`} defaultSort={{ id: 'id' }}
           empty={<EmptyState title={!pi ? 'Choose a PI.' : `No Features assigned to ${who || 'you'} in ${piLabel(pi)}.`} detail={!pi ? 'Pick the PI in the PI list.' : who ? 'Choose another PI or person, or Reset filters.' : 'Choose another PI, or fetch the data again.'} />} />
       </TablePanel>}
-    {writer.writing && <ReviewDialog key={`review:${writer.writing.item.key}`} writing={writer.writing} blocked={reviewPostBlock(poster, writer.writing.item)} onPost={writer.post} onClose={writer.cancel} />}
+    {writer.writing && <ReviewDialog key={`review:${writer.writing.item.key}`} writing={writer.writing} blocked={reviewPostBlock(poster, writer.writing.item)} onPost={writer.post} onPostNew={writer.postNew} onClose={writer.cancel} />}
   </Page>
 }

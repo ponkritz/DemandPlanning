@@ -37,8 +37,9 @@ function templateCell(column: OnDemandColumn, value: OnDemandValue | undefined):
 }
 const typeHint = (column: OnDemandColumn): string => {
   switch (column.type) {
-    case 'dropdown': return 'Choose one value of the list.'
-    case 'multi': return `One or more values of the list; separate several values with ${multiSeparator} (e.g. A${multiSeparator} B).`
+    // LST-10: a built-in list column offers the list's values as the list is now.
+    case 'dropdown': return column.list ? 'Choose one value of the built-in list.' : 'Choose one value of the list.'
+    case 'multi': return `One or more values of the ${column.list ? 'built-in ' : ''}list; separate several values with ${multiSeparator} (e.g. A${multiSeparator} B).`
     case 'number': return 'A number.'
     case 'currency': return `An amount, optionally with its currency code, e.g. 1200.50 ${column.currency ?? 'EUR'}.`
     case 'date': return 'A date, e.g. 2026-11-25.'
