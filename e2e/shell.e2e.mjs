@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { cachedRoles, loadSample, navigate, openPage, openPerson, peopleSource, profileItem, rolesFile, startApp, text, toggleFilter } from './helpers.mjs'
 import { fakeGitHub } from './fakeGitHub.mjs'
 
-// Shell, navigation and first-run scenarios of the UAT (TC-NAV-01, TC-NAV-03, TC-NAV-37, TC-NAV-52, TC-HIS-01, TC-ACC-04, TC-NAV-31, TC-NAV-33, TC-UI-01, TC-SMP-01,
+// Shell, navigation and first-run scenarios of the UAT (TC-NAV-01, TC-NAV-03, TC-NAV-37, TC-NAV-52, TC-NAV-53, TC-HIS-01, TC-ACC-04, TC-NAV-31, TC-NAV-33, TC-UI-01, TC-SMP-01,
 // TC-UPD-02, TC-GIT-06, TC-GIT-16, TC-GIT-17, TC-GIT-20, TC-SET-05), automated against the built web app.
 let app
 before(async () => { app = await startApp() })
@@ -14,7 +14,7 @@ test('TC-NAV-01 / TC-NAV-17: the sidebar shows the groups in order, with Documen
   assert.equal(await text(page.locator('header.topbar h1')), 'Home', 'the app opens on Home (NAV-42)')
   assert.match(await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute('content'), /script-src 'self' file:; .*object-src 'none'/, 'NFR-09: the built page carries its Content-Security-Policy')
   const groups = await page.locator('.sidebar nav .nav-group').allInnerTexts()
-  assert.deepEqual(groups.map((group) => group.replace(/^[▾▸]\s*/, '').trim().toLowerCase()), ['data insights', 'my work', 'i&d board', 'release details', 'on-demand', 'data & governance', 'admin'])
+  assert.deepEqual(groups.map((group) => group.replace(/^[▾▸]\s*/, '').trim().toLowerCase()), ['data insights', 'my work', 'release details', 'on-demand', 'data & governance', 'admin'], 'no I&D Board heading: its pages moved to My Work and Data & governance (NAV-53)')
   const entries = (await page.locator('.sidebar nav .nav-items button').allInnerTexts()).map((entry) => entry.replace(/\s+/g, ' ').trim())
   for (const entry of ['My dashboard', 'Team overview', 'Pulse Check', 'My Tasks [Board]', 'Time Writing', 'Sprint check', 'Backlog Health', 'Streams', 'Stream options', 'Data & sharing', 'People & roles', 'Epic & Feature setup', 'Documentation']) assert.ok(entries.some((item) => item.endsWith(entry)), `${entry} is in the menu`)
   assert.match(await text(page.locator('footer.app-footer')), /v\d+\.\d+\.\d+/, 'the footer shows the version (NAV-15, NAV-49)')
@@ -85,7 +85,7 @@ test('TC-NAV-42: Home is the start page — a tile per area with links to its pa
   assert.equal(await text(page.locator('header.topbar h1')), 'Home')
   assert.equal((await page.locator('.sidebar nav .nav-items button').first().innerText()).replace(/\s+/g, ' ').trim().replace(/^\S+\s/, ''), 'Home', 'Home is first in the menu')
   const tiles = page.getByRole('listitem')
-  assert.deepEqual((await tiles.locator('.home-tile-title').allInnerTexts()).map((entry) => entry.trim()), ['My Work', 'My dashboard', 'Team Insights', 'I&D Board', 'Release Details', 'Planning & Baselines', 'QE Mapping', 'On-Demand', 'Snapshots & Documents', 'Admin', 'My settings'])
+  assert.deepEqual((await tiles.locator('.home-tile-title').allInnerTexts()).map((entry) => entry.trim()), ['My Work', 'My dashboard', 'Team Insights', 'Release Details', 'Planning & Baselines', 'QE Mapping', 'On-Demand', 'Snapshots & Documents', 'Admin', 'My settings'])
   const release = page.locator('article[aria-label="Release Details"]')
   assert.equal(await release.locator('.home-link').count(), 7, 'six links and “+n more”')
   await release.getByRole('button', { name: /^Show \d+ more Release Details pages$/ }).click()
@@ -94,9 +94,9 @@ test('TC-NAV-42: Home is the start page — a tile per area with links to its pa
   await page.getByLabel('Search pages').fill('stream options')
   assert.deepEqual((await tiles.locator('.home-tile-title').allInnerTexts()).map((entry) => entry.trim()), ['Admin'])
   assert.deepEqual((await page.locator('article[aria-label="Admin"]').locator('.home-link-label').allInnerTexts()), ['Stream options'], 'only the matching link')
-  await page.getByLabel('Search pages').fill('backlog')
-  assert.deepEqual((await tiles.locator('.home-tile-title').allInnerTexts()).map((entry) => entry.trim()), ['I&D Board'], 'a tile whose description matches keeps all its links')
-  assert.equal(await page.locator('article[aria-label="I&D Board"]').locator('.home-link').count(), 2)
+  await page.getByLabel('Search pages').fill('backlog health')
+  assert.deepEqual((await tiles.locator('.home-tile-title').allInnerTexts()).map((entry) => entry.trim()), ['Snapshots & Documents'], 'a tile whose description matches keeps all its links')
+  assert.deepEqual(await page.locator('article[aria-label="Snapshots & Documents"]').locator('.home-link-label').allInnerTexts(), ['Snapshots', 'Backlog Health', 'Documentation'], 'NAV-53: Backlog Health before Documentation')
   await page.getByLabel('Search pages').fill('nothing like this')
   assert.match(await text(page.locator('.home')), /Nothing matches “nothing like this”/)
   await page.getByLabel('Search pages').fill('')
@@ -108,6 +108,47 @@ test('TC-NAV-42: Home is the start page — a tile per area with links to its pa
   assert.equal(await text(page.locator('header.topbar h1')), 'Pulse Check')
   assert.deepEqual(errors, [])
   await context.close()
+})
+
+test('TC-NAV-53: QMS-0025 is the last entry of My Work and Backlog Health sits before Documentation in Data & governance; no I&D Board heading, its old collapsed state forgotten; who sees them is unchanged', async () => {
+  // An earlier version kept I&D Board collapsed in this browser: the key is dropped, so Expand all has nothing to do.
+  const { page, context, errors } = await openPage(app, { roles: 'Tool Owner', init: () => { localStorage.setItem('demand-planning-nav-collapsed-v1', JSON.stringify(['I&D Board'])) } })
+  const section = (name) => page.locator('.sidebar nav .nav-section', { has: page.locator('button.nav-group', { hasText: name }) })
+  const labels = async (name) => (await section(name).locator('.nav-items button').allInnerTexts()).map((entry) => entry.replace(/^\s*\S+\s*/u, '').replace(/\s+\d+$/, '').replace(/\s+/g, ' ').trim())
+  await section('MY WORK').locator('.nav-items button', { hasText: 'QMS-0025' }).waitFor()
+  assert.deepEqual(await labels('MY WORK'), ['Time Writing', 'My Tasks [Board]', 'Sprint check', 'My PI Review', 'QMS-0025'])
+  assert.deepEqual(await labels('DATA & GOVERNANCE'), ['Baselines', 'QE Mapping', 'Snapshots', 'Backlog Health', 'Documentation'], 'Backlog Health right before Documentation')
+  assert.equal(await page.locator('.sidebar nav button.nav-group', { hasText: 'I&D BOARD' }).count(), 0, 'no I&D Board heading')
+  assert.ok(await page.getByRole('button', { name: 'Expand all', exact: true }).isDisabled(), 'the old I&D Board key does not count')
+  // The open page's heading: QMS-0025 is in My Work, Backlog Health in Data & governance (a collapsed heading is highlighted).
+  await navigate(page, 'QMS-0025')
+  assert.equal(await text(page.locator('header.topbar h1')), 'QMS-0025')
+  await section('MY WORK').locator('button.nav-group').click()
+  assert.match(await section('MY WORK').locator('button.nav-group').getAttribute('class'), /nav-group-active/, 'collapsed My Work holds the open backlog')
+  await section('MY WORK').locator('button.nav-group').click()
+  await navigate(page, 'Backlog Health')
+  await section('DATA & GOVERNANCE').locator('button.nav-group').click()
+  assert.match(await section('DATA & GOVERNANCE').locator('button.nav-group').getAttribute('class'), /nav-group-active/, 'collapsed Data & governance holds Backlog Health')
+  // Home: My Work ends with QMS-0025; Snapshots & Documents has Backlog Health before Documentation; no I&D Board tile.
+  await page.locator('.sidebar nav button', { hasText: 'Home' }).first().click()
+  assert.deepEqual(await page.locator('article[aria-label="My Work"]').locator('.home-link-label').allInnerTexts(), ['Time Writing', 'My Tasks [Board]', 'Sprint check', 'My PI Review', 'QMS-0025'])
+  assert.deepEqual(await page.locator('article[aria-label="Snapshots & Documents"]').locator('.home-link-label').allInnerTexts(), ['Snapshots', 'Backlog Health', 'Documentation'])
+  assert.equal(await page.locator('article[aria-label="I&D Board"]').count(), 0)
+  await context.close()
+  // Rights follow the page, not the group: a Team Member sees QMS-0025 in My Work but still no Backlog Health.
+  const member = await openPage(app, { roles: 'Team Member' })
+  await member.page.locator('.sidebar nav .nav-items button', { hasText: 'QMS-0025' }).waitFor()
+  assert.equal(await member.page.locator('.sidebar nav button', { hasText: 'Backlog Health' }).count(), 0, 'Backlog Health stays closed to a Team Member')
+  assert.equal(await member.page.locator('article[aria-label="Snapshots & Documents"]').locator('.home-link-label', { hasText: 'Backlog Health' }).count(), 0)
+  await member.context.close()
+  // A Product Owner (no Time Writing, My Tasks or Sprint check) sees My Work with QMS-0025 only, and Backlog Health.
+  const owner = await openPage(app, { roles: 'Product Owner' })
+  await owner.page.locator('.sidebar nav .nav-items button', { hasText: 'QMS-0025' }).waitFor()
+  const ownerWork = owner.page.locator('.sidebar nav .nav-section', { has: owner.page.locator('button.nav-group', { hasText: 'MY WORK' }) })
+  assert.deepEqual((await ownerWork.locator('.nav-items button').allInnerTexts()).map((entry) => entry.replace(/^\s*\S+\s*/u, '').trim()), ['QMS-0025'])
+  assert.equal(await owner.page.locator('.sidebar nav button', { hasText: 'Backlog Health' }).count(), 1)
+  await owner.context.close()
+  assert.deepEqual(errors, [])
 })
 
 test('TC-NAV-37: Expand all and Collapse all open and close every menu heading, and are remembered', async () => {
@@ -838,9 +879,10 @@ test('TC-SET-06: Admin lists the shared setup pages, My settings opens from your
   assert.equal(await text(page.locator('header.topbar h1')), 'My settings')
   assert.deepEqual((await sections.getByRole('tab').allInnerTexts()).map((label) => label.trim()), ['Your work email', 'Servers and PATs', 'My views', 'My naming patterns', 'My page usage'])
   assert.match(await text(page.locator('.scope-line')), /Only you · This computer/)
-  // EPS-08: Epic setup and Feature setup are one page, starting from the list of all Epic setups; PIR-19: the PI Review form setup is its last section.
+  // EPS-08: Epic setup and Feature setup are one page, starting from the list of all Epic setups; PIR-29: the PI Review
+  // form setup is a page of its own (Admin → PI Review Setup), no longer a section here.
   await navigate(page, 'Epic & Feature setup')
-  assert.deepEqual((await sections.getByRole('tab').allInnerTexts()).map((label) => label.trim()), ['Setup per Epic', 'Value lists', 'User Story templates', 'PI Review form'])
+  assert.deepEqual((await sections.getByRole('tab').allInnerTexts()).map((label) => label.trim()), ['Setup per Epic', 'Value lists', 'User Story templates'])
   assert.deepEqual(errors, [])
   await context.close()
 })

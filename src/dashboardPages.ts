@@ -1,7 +1,7 @@
 import { csvCell } from './csv.ts'
 import { merge3 } from './gitSaveQueue.ts'
-import { blankNarrative, cleanOptions, hasOptions, measureKeys, moneyOf, narrativeError, narrativeOut, parseColors, parseNarrative, valuesOf, type ChartOptions, type Narrative, type Insight, type InsightFilter, type InsightMeasure, type OnDemandColumn, type OnDemandPage, type OnDemandRow, type ColorPins } from './onDemand.ts'
-import { bucketsOf, categoryColumns, chartData, dateGroupLabels, filterColumns, formatValue, grainOf, insightProblems, kpiData, measureText, noneKey, numberOf, otherKey, passesFilter, secondColumns, valueColumns, withType, type ChartData } from './onDemandInsights.ts'
+import { blankNarrative, cleanOptions, hasOptions, measureKeys, moneyOf, narrativeError, narrativeOut, parseColors, parseNarrative, pivotLevels, pivotLevelsOut, valuesOf, type ChartOptions, type Narrative, type Insight, type InsightFilter, type InsightMeasure, type OnDemandColumn, type OnDemandPage, type OnDemandRow, type ColorPins } from './onDemand.ts'
+import { bucketsOf, categoryColumns, chartData, pivotColumnFields, pivotRowFields, dateGroupLabels, filterColumns, formatValue, grainOf, insightProblems, kpiData, measureText, noneKey, numberOf, otherKey, passesFilter, secondColumns, valueColumns, withType, type ChartData } from './onDemandInsights.ts'
 
 // DSH-01…DSH-12 On-Demand Dashboard pages: a page type of the page builder (PGB-01) that is read only for everyone and
 // built by its owners from blocks — KPI tiles, bar, line and pie charts and summary tables — over the rows of any table
@@ -18,7 +18,7 @@ export const blockTypes: { key: BlockType; label: string; hint: string }[] = [
   { key: 'line', label: 'Line chart', hint: 'A value per month of a Date column.' },
   { key: 'pie', label: 'Pie chart', hint: 'Each category’s share of the total; more than 5 categories: the 5 largest and “Other”.' },
   { key: 'pareto', label: 'Pareto chart', hint: 'Categories largest first as columns, the cumulative share (%) as a line on a 0–100% axis and an 80% line.' },
-  { key: 'table', label: 'Summary table', hint: 'Rows by one field (largest first), optional columns by another, with totals; the first 10 rows, Show all, Export.' },
+  { key: 'table', label: 'Pivot table', hint: 'Rows by up to 3 fields (largest first) and optional columns by up to 2, with subtotals and totals; groups open and close, a click lists the rows behind a number; the first 10 rows, Show all, Export.' },
   { key: 'narrative', label: 'Narrative (text)', hint: 'Sentences about the measure — the total, the highest and lowest, the change against the previous period — and rules of your own, as plain text (CHT-60).' },
 ]
 export const blockTypeLabel = (type: BlockType) => blockTypes.find((entry) => entry.key === type)?.label ?? type
@@ -33,6 +33,7 @@ export interface DashboardBlock {
   options?: ChartOptions // CHT: the chart's display options, as an insight's
   narrative?: Narrative // CHT-60: a Narrative's sentences and rules, as an insight's
   hideStatus?: boolean // TVL-26: a block on the Tool Validations master list or expiry list without Status and Days left
+  rows2?: string; rows3?: string; second2?: string // CHT-79: a Pivot table's nested rows and columns, as an insight's
 }
 export interface DashboardTab { id: string; name: string }
 // A filter of the filter row: the viewer ticks values of a Dropdown / Multi-select column of one data source.
@@ -142,15 +143,16 @@ export function parseDashboard(raw: string, expectedId?: string, pattern: RegExp
     // CHT: the display options validated as an insight's (a KPI tile takes none); unknown ones dropped.
     const options = type === 'kpi' ? undefined : cleanOptions(type, measure, item.options)
     return [{ id: item.id as string, title, type, source: item.source, category: type === 'kpi' ? '' : ref(item.category), second: type === 'kpi' || type === 'pie' || type === 'pareto' || type === 'narrative' ? '' : ref(item.second), measure, value: measure === 'count' ? '' : ref(item.value), filters: blockFilters,
-      sort: type === 'line' ? 'label' : type === 'table' || type === 'kpi' || type === 'pareto' || type === 'narrative' ? 'value' : item.sort === 'label' ? 'label' : 'value', period: ref(item.period), tab: tab && tabIds.has(tab) ? tab : '', ...(options ? { options } : {}), ...(item.hideStatus === true && isToolSource(item.source) ? { hideStatus: true } : {}), ...(type === 'narrative' ? { narrative: parseNarrative((item as { narrative?: unknown }).narrative) } : {}) }]
+      sort: type === 'line' ? 'label' : type === 'table' || type === 'kpi' || type === 'pareto' || type === 'narrative' ? 'value' : item.sort === 'label' ? 'label' : 'value', period: ref(item.period), tab: tab && tabIds.has(tab) ? tab : '', ...(options ? { options } : {}), ...(item.hideStatus === true && isToolSource(item.source) ? { hideStatus: true } : {}), ...(type === 'narrative' ? { narrative: parseNarrative((item as { narrative?: unknown }).narrative) } : {}), ...pivotLevels(type, item as Record<string, unknown>, ref) }]
   })
   if (blocks.length > maxBlocks) dropped.push(`Only the first ${maxBlocks} blocks are shown (${blocks.length} in the file).`)
   const colors = parseColors(file.colors)
   return { dashboard: { schema: 1, kind: 'dashboard', id, tabs: keptTabs, filters: filters.slice(0, maxViewerFilters), blocks: blocks.slice(0, maxBlocks), ...(colors ? { colors } : {}) }, dropped }
 }
 // CHT: options and colours are written only when set, so a dashboard without them stays byte for byte as before.
-const blockOut = ({ id, title, type, source, category, second, measure, value, filters, sort, period, tab, options, narrative, hideStatus }: DashboardBlock) =>
-  ({ id, title, type, source, ...(category ? { category } : {}), ...(second ? { second } : {}), measure, ...(value ? { value } : {}), ...(filters.length ? { filters } : {}), sort, ...(period ? { period } : {}), ...(tab ? { tab } : {}), ...(options && Object.keys(options).length ? { options } : {}), ...(type === 'narrative' ? { narrative: narrativeOut(narrative) } : {}), ...(hideStatus && isToolSource(source) ? { hideStatus: true } : {}) })
+// CHT-79: a Pivot table's nested fields after the field they follow, only when set (an older app drops them, LIM-104).
+const blockOut = ({ id, title, type, source, category, second, measure, value, filters, sort, period, tab, options, narrative, hideStatus, rows2, rows3, second2 }: DashboardBlock) =>
+  ({ id, title, type, source, ...(category ? { category } : {}), ...(second ? { second } : {}), ...pivotLevelsOut({ type, rows2: category ? rows2 : undefined, rows3, second2: second ? second2 : undefined }), measure, ...(value ? { value } : {}), ...(filters.length ? { filters } : {}), sort, ...(period ? { period } : {}), ...(tab ? { tab } : {}), ...(options && Object.keys(options).length ? { options } : {}), ...(type === 'narrative' ? { narrative: narrativeOut(narrative) } : {}), ...(hideStatus && isToolSource(source) ? { hideStatus: true } : {}) })
 export function serializeDashboard(dashboard: Dashboard) {
   const out = `${JSON.stringify({ schema: 1, kind: 'dashboard', id: dashboard.id, tabs: dashboard.tabs.map(({ id, name }) => ({ id, name })), filters: dashboard.filters.map(({ id, source, column }) => ({ id, source, column })), blocks: dashboard.blocks.map(blockOut), ...(dashboard.colors && Object.keys(dashboard.colors).length ? { colors: dashboard.colors } : {}) }, null, 1)}\n`
   if (new TextEncoder().encode(out).length > dashboardMaxBytes) throw new Error(`The dashboard is too large to save (over ${Math.round(dashboardMaxBytes / 1000)} KB). Remove blocks or filters.`)
@@ -240,7 +242,7 @@ export function setTabsAndFilters(dashboard: Dashboard, tabs: DashboardTab[], fi
 }
 
 // ---- a block's fields (DSH-05) ----
-export const asInsight = (block: DashboardBlock): Insight => ({ id: block.id, title: block.title, type: block.type, category: block.category, second: block.second, measure: block.measure, value: block.value, filters: block.filters, sort: block.type === 'table' ? 'value' : block.sort, ...(block.options ? { options: block.options } : {}), ...(block.narrative ? { narrative: block.narrative } : {}) })
+export const asInsight = (block: DashboardBlock): Insight => ({ id: block.id, title: block.title, type: block.type, category: block.category, second: block.second, measure: block.measure, value: block.value, filters: block.filters, sort: block.type === 'table' ? 'value' : block.sort, ...(block.options ? { options: block.options } : {}), ...(block.narrative ? { narrative: block.narrative } : {}), ...(block.type === 'table' ? pivotLevelsOut(block) : {}) })
 export const periodColumns = (page: OnDemandPage) => page.columns.filter((column) => column.type === 'date')
 export function blankBlock(dataset: Dataset, id: string, type: BlockType = 'kpi', tab = ''): DashboardBlock {
   const page = dataset.page
@@ -269,16 +271,19 @@ export function withStatusShown(dataset: Dataset, block: DashboardBlock, shown: 
   const hidden: DashboardBlock = { ...block, hideStatus: true, filters: block.filters.filter((filter) => !toolStatusColumns.includes(filter.column)) }
   const view = blockDataset(dataset, hidden)
   const gone = (id: string) => toolStatusColumns.includes(id)
-  if (gone(hidden.second)) hidden.second = ''
+  if (gone(hidden.second)) hidden.second = hidden.second2 && !gone(hidden.second2) ? hidden.second2 : ''
+  if (hidden.second2 && (gone(hidden.second2) || hidden.second === hidden.second2)) delete hidden.second2
+  if (hidden.rows3 && gone(hidden.rows3)) delete hidden.rows3
+  if (hidden.rows2 && gone(hidden.rows2)) { if (hidden.rows3) hidden.rows2 = hidden.rows3; else delete hidden.rows2; delete hidden.rows3 }
   if (gone(hidden.period)) hidden.period = ''
   if (gone(hidden.value)) { hidden.measure = 'count'; hidden.value = '' }
-  if (gone(hidden.category)) hidden.category = hidden.type === 'kpi' ? '' : hidden.type === 'narrative' ? '' : categoryColumns(view.page, hidden.type)[0]?.id ?? ''
+  if (gone(hidden.category)) hidden.category = hidden.type === 'kpi' ? '' : hidden.type === 'narrative' ? '' : categoryColumns(view.page, hidden.type).find((column) => ![hidden.second, hidden.second2, hidden.rows2, hidden.rows3].includes(column.id))?.id ?? ''
   return hidden.type === 'kpi' ? hidden : withBlockType(view, hidden, hidden.type)
 }
 // The block after its type or data source changed: fields that no longer fit are cleared or replaced by the first that fits.
 export function withBlockType(dataset: Dataset, block: DashboardBlock, type: BlockType): DashboardBlock {
   const page = dataset.page
-  if (type === 'kpi') { const out: DashboardBlock = { ...block, type, category: '', second: '', sort: 'value' }; delete out.options; delete out.narrative; return out }
+  if (type === 'kpi') { const out: DashboardBlock = { ...block, type, category: '', second: '', sort: 'value' }; delete out.options; delete out.narrative; delete out.rows2; delete out.rows3; delete out.second2; return out }
   // The insight's rules (OND-15, CHT): fields that no longer fit cleared, the measure and the options made to fit.
   const next = withType(page, asInsight(block), type)
   const out: DashboardBlock = { ...block, type, category: next.category, second: next.second, measure: next.measure, value: next.value, sort: type === 'table' ? 'value' : next.sort }
@@ -286,7 +291,9 @@ export function withBlockType(dataset: Dataset, block: DashboardBlock, type: Blo
   else delete out.options
   if (next.narrative) out.narrative = next.narrative
   else delete out.narrative
-  return out
+  // CHT-79: the nested fields that still fit (withType keeps them only for a Pivot table).
+  delete out.rows2; delete out.rows3; delete out.second2
+  return { ...out, ...pivotLevelsOut(next) }
 }
 export function withSource(dataset: Dataset, block: DashboardBlock): DashboardBlock {
   const fresh = blankBlock(dataset, block.id, block.type, block.tab)
@@ -395,8 +402,9 @@ export function blockSubject(dataset: Dataset, block: DashboardBlock, currency =
   const measure = measureText(page, asInsight(block), currency)
   if (block.type === 'kpi') return measure
   if (block.type === 'narrative' && !block.category) return measure
-  const by = block.type === 'line' ? `per ${dateGroupLabels[grainOf(asInsight(block))].unit} of ${column(block.category)}` : `by ${column(block.category)}`
-  const split = block.second ? `, ${block.type === 'table' ? 'columns by' : block.type === 'line' ? 'one line per' : block.options?.grouping === 'grouped' ? 'grouped by' : 'stacked by'} ${column(block.second)}` : ''
+  // CHT-74: a Pivot table names its nested fields, outermost first.
+  const by = block.type === 'line' ? `per ${dateGroupLabels[grainOf(asInsight(block))].unit} of ${column(block.category)}` : `by ${pivotRowFields(block).map(column).join(', then ') || column(block.category)}`
+  const split = block.second ? `, ${block.type === 'table' ? 'columns by' : block.type === 'line' ? 'one line per' : block.options?.grouping === 'grouped' ? 'grouped by' : 'stacked by'} ${pivotColumnFields(block).map(column).join(', then ')}` : ''
   return `${measure} ${by}${split}`
 }
 export function periodNote(dataset: Dataset, block: DashboardBlock) {

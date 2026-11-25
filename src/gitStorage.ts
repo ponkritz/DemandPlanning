@@ -110,6 +110,16 @@ export function privateGitWrites(config: GitConfig, token: string, fetchImpl: ty
 
 export const historyUrl = (config: GitConfig) => `https://github.com/${config.owner}/${config.repo}/commits/${config.branch}/${encodePath(config.path)}`
 
+// GIT-27: GitHub answered with a server error (500, 502, 503, 504) — the request may or may not have been carried out.
+export class GitServerError extends Error {
+  readonly status: number; readonly detail: string
+  constructor(message: string, status: number, detail: string) { super(message); this.status = status; this.detail = detail }
+}
+export const serverErrorStatuses = [500, 502, 503, 504]
+// GIT-27: no answer at all — the browser's own network error ("Failed to fetch" in Chrome and Edge, "NetworkError when
+// attempting to fetch resource." in Firefox, "Load failed" in Safari): offline, DNS, a VPN or proxy, a firewall, or an
+// answer the browser had to drop (a gateway error without the CORS headers).
+export const isNetworkFailure = (error: unknown) => error instanceof TypeError || /failed to fetch|networkerror|load failed|network ?error|network request failed/i.test(error instanceof Error ? error.message : String(error ?? ''))
 export async function failure(response: Response, config: GitConfig, action: string): Promise<Error> {
   if (response.status === 401) return new Error('GitHub rejected the token. Create a fine-grained token with Contents: Read and write on this repository.')
   if (response.status === 403) return new Error(`GitHub refused to ${action}: the token needs Contents: Read and write on ${config.owner}/${config.repo}, or the rate limit was reached.`)
@@ -117,7 +127,8 @@ export async function failure(response: Response, config: GitConfig, action: str
   if (response.status === 404) return new Error(`Repository ${config.owner}/${config.repo} or branch ${config.branch} was not found, or the token cannot access it.`)
   let detail = ''
   try { detail = String(((await response.json()) as { message?: unknown }).message ?? '') } catch { /* no JSON body */ }
-  return new Error(`GitHub could not ${action} (HTTP ${response.status})${detail ? `: ${detail}` : ''}.`)
+  const message = `GitHub could not ${action} (HTTP ${response.status})${detail ? `: ${detail}` : ''}.`
+  return serverErrorStatuses.includes(response.status) ? new GitServerError(message, response.status, detail) : new Error(message)
 }
 
 // Whether the token may write to the repository (null when unknown). The repository's permissions say what the user

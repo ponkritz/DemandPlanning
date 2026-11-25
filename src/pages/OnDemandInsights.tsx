@@ -20,7 +20,8 @@ import { NarrativeFields } from '../components/NarrativeFields'
 import { EditorTabs } from '../components/EditorTabs'
 import { coloredColumnOf, editorCounts, editorTabLabels, editorTabsFor, filterError, firstErrorTab, panelId, splitProblems, tabId, type EditorTab } from '../chartEditor'
 import { narrativeInfo } from '../narratives'
-import { blankInsight, categoryColumns, filterColumns, filterText, insightError, insightProblems, insightRules, insightSubject, insightTypeLabel, insightTypes, measureColumns, measuresFor, noneKey, noneLabel, secondColumns, secondLabel, withType } from '../onDemandInsights'
+import { blankInsight, categoryColumns, filterColumns, filterText, insightError, insightProblems, insightRules, insightSubject, insightTypeLabel, insightTypes, measureColumns, measuresFor, noneKey, noneLabel, secondColumns, secondLabel, withPivotFields, withType } from '../onDemandInsights'
+import { PivotFields } from '../components/PivotFields'
 
 // CHT-36: a KPI (one number) is a card in the row above the charts unless its owners show it as a panel.
 const isCard = (insight: Insight) => insight.type === 'kpi' && insight.options?.view !== 'panel'
@@ -228,8 +229,10 @@ function InsightDialog({ page, insight, isNew, onCancel, onSave }: { page: OnDem
         {insightTypes.map((type) => <label key={type.key} className="check" title={type.hint}><input type="radio" name="insight-type" checked={draft.type === type.key} onChange={() => { setDraft(withType(page, draft, type.key)); setError('') }} />{type.label}</label>)}
         <small>{insightTypes.find((type) => type.key === draft.type)?.hint}</small>
       </fieldset>
-      {draft.type !== 'kpi' && draft.type !== 'narrative' && <label>{draft.type === 'line' ? 'Months of' : draft.type === 'table' ? 'Rows by' : 'Categories by'}
-        <select aria-label={draft.type === 'line' ? 'Months of' : draft.type === 'table' ? 'Rows by' : 'Categories by'} value={draft.category} onChange={(event) => edit({ category: event.target.value, second: draft.second === event.target.value ? '' : draft.second })}>
+      {/* CHT-78: a Pivot table's Rows and Columns, each with ＋ then by. */}
+      {draft.type === 'table' && <PivotFields page={page} insight={{ ...draft, type: 'table' }} onChange={(rows, columns) => { setDraft(withPivotFields(draft, rows, columns)); setError('') }} />}
+      {draft.type !== 'kpi' && draft.type !== 'narrative' && draft.type !== 'table' && <label>{draft.type === 'line' ? 'Months of' : 'Categories by'}
+        <select aria-label={draft.type === 'line' ? 'Months of' : 'Categories by'} value={draft.category} onChange={(event) => edit({ category: event.target.value, second: draft.second === event.target.value ? '' : draft.second })}>
           {!categoryColumns(page, draft.type).some((column) => column.id === draft.category) && <option value={draft.category}>— Choose —</option>}
           {categoryColumns(page, draft.type).map((column) => <option key={column.id} value={column.id}>{column.name} ({column.type === 'date' ? 'by month' : column.type === 'multi' ? 'Multi-select' : column.type === 'dropdown' ? 'Dropdown' : 'Text'})</option>)}
         </select>
@@ -237,13 +240,13 @@ function InsightDialog({ page, insight, isNew, onCancel, onSave }: { page: OnDem
       </label>}
       {/* CHT-66: a Narrative's Group by takes the place of Categories by. */}
       {draft.type === 'narrative' && <NarrativeFields part="data" page={page} insight={draft} onChange={(next) => { setDraft(next); setError('') }} />}
-      {draft.type !== 'pie' && draft.type !== 'pareto' && draft.type !== 'kpi' && draft.type !== 'narrative' && <label>{secondLabel(draft.type)} (optional)
+      {draft.type !== 'pie' && draft.type !== 'pareto' && draft.type !== 'kpi' && draft.type !== 'narrative' && draft.type !== 'table' && <label>{secondLabel(draft.type)} (optional)
         <select aria-label={secondLabel(draft.type)} value={draft.second} onChange={(event) => edit({ second: event.target.value })}>
           <option value="">— None —</option>
           {draft.second && !seconds.some((column) => column.id === draft.second) && <option value={draft.second}>(not available)</option>}
           {seconds.map((column) => <option key={column.id} value={column.id}>{column.name}</option>)}
         </select>
-        <small>{draft.type === 'table' ? 'A second field across: one column per value, with totals.' : 'A Dropdown or Multi-select column.'}</small>
+        <small>A Dropdown or Multi-select column.</small>
       </label>}
       <div className="form-row">
         <label>Measure

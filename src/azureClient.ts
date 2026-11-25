@@ -46,8 +46,10 @@ export interface AzureRequest extends AzureConfig {
   // edit-work-item: the fields to change and the revision they were read at (WorkItemEdit, workItemEdit.ts).
   edit?: WorkItemEdit
   rev?: number
-  // add-comment: the comment as plain text.
+  // add-comment: the comment as plain text (escaped, line breaks as <br>) — or, with htmlComment (PIR-14, a PI Review post
+  // only), the app-built review list, sent as it is once safeCommentHtml accepts it.
   comment?: string
+  htmlComment?: boolean
   // add-comment, PIR-13 (CON-113): a PI Review post — the reviewed Feature's Assigned To email ('' when not known). It
   // needs "PI Review: post the review of a Feature", or "Add a comment" when the writer is that assignee.
   reviewOf?: string
@@ -83,6 +85,10 @@ const htmlText = (value: string) => value.replaceAll('&', '&amp;').replaceAll('<
 // BKL-20, PIR-14: what a comment is sent as — its text with & < > escaped and line breaks as <br>; no markup is ever
 // taken from the user (the desktop proxy does the same).
 export const commentHtml = htmlText
+// PIR-14 (SM-183): the only HTML the app sends as a comment — its own review list: the tags <ul>, <ol>, <li> and <p>
+// without attributes, every other character escaped (& only as &amp; &lt; &gt; &quot; &#39;; no raw < > " ').
+// Checked in the web transport and again in the desktop proxy (electron/azure-devops.cjs) before anything is sent.
+export const safeCommentHtml = (html: string) => /^(?:<\/?(?:ul|ol|li|p)>|&(?:amp|lt|gt|quot|#39);|[^<>&"'])*$/.test(html)
 
 export function featurePatch(config: AzureConfig, feature: FeatureInput & { areaPath: string; adhoc?: boolean } & StoryFields) {
   const patch: { op: string; path: string; value: unknown }[] = [
@@ -141,7 +147,7 @@ async function requestComments(request: AzureRequest) {
   try {
     response = await fetch(url, { method: adding ? 'POST' : 'GET', redirect: 'error', credentials: 'omit', signal: AbortSignal.timeout(45000),
       headers: { Authorization: `Basic ${btoa(`:${request.pat}`)}`, 'Content-Type': 'application/json', Accept: 'application/json' },
-      ...(adding ? { body: JSON.stringify({ text: htmlText(request.comment!) }) } : {}) })
+      ...(adding ? { body: JSON.stringify({ text: request.htmlComment ? request.comment! : htmlText(request.comment!) }) } : {}) })
   } catch { throw new Error(adding ? `The comment on #${request.workItemId} could not be confirmed. Check the Discussion in Azure DevOps before retrying.` : 'Azure DevOps could not be reached. Check your network/VPN.') }
   if (response.status === 401) throw new Error('The PAT was rejected or has expired. Check your PAT.')
   if (response.status === 403) throw new Error(`Access denied. Check project access and PAT Work Items (${adding ? 'Read & Write' : 'Read'}) scope.`)
@@ -217,6 +223,7 @@ export async function requestAzure(request: AzureRequest): Promise<unknown> {
   const tokenProblem = continuationTokenProblem(request)
   if (tokenProblem) throw new Error(tokenProblem)
   if (request.operation === 'add-comment' && (typeof request.comment !== 'string' || !request.comment.trim() || request.comment.length > 100_000)) throw new Error('Enter a comment (at most 100,000 characters). Nothing was added.')
+  if (request.htmlComment != null && (request.htmlComment !== true || request.operation !== 'add-comment' || request.reviewOf == null || !safeCommentHtml(request.comment ?? ''))) throw new Error('The review comment holds markup the app does not send. Nothing was posted.')
   if (window.azureDevOps) return window.azureDevOps.request(request)
   if (request.operation === 'comments' || request.operation === 'add-comment') return requestComments(request)
   const base = projectApiBase(request)

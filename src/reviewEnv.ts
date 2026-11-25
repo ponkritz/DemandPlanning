@@ -7,7 +7,7 @@ import type { PiFormSetup } from './piReviewSetup.ts'
 // pop-up): the viewer's work email and View as, the Time Writing connection and its PAT, the fetched items (for the PI
 // list) and the audit. Provided by the app; without a provider nothing can be posted.
 // PIR-19: formSetup — the PI Review form setup in use (pi-review-form.json in Git, else the built-in form), for the form,
-// the comment and the split; openFormSetup opens it (Admin → Epic & Feature setup → PI Review form).
+// the comment and the split; openFormSetup opens Admin → PI Review Setup (PIR-29; the ⚙ of PIR-30).
 export interface ReviewEnv {
   email: string; viewingAs: string; isSample: boolean; config: AzureConfig | null; pat: string; items: AzureWorkItem[]
   addAudit: (event: Omit<AuditEvent, 'id' | 'timestamp'>) => void

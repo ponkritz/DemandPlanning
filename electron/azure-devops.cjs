@@ -177,7 +177,7 @@ function azureEditRequest(input) {
     method: 'PATCH', redirect: 'error', headers: { ...connection.options.headers, 'Content-Type': 'application/json-patch+json' }, body: JSON.stringify(patch),
   } }
 }
-// Discussion: read the comments of a work item, or add one (plain text; line breaks become <br>). The Comments API is a
+// Discussion: read the comments of a work item, or add one (plain text; line breaks become <br>; a PI review as its checked list HTML). The Comments API is a
 // preview API with its own fixed version; it is not negotiated.
 const commentsApiVersion = '7.1-preview.4'
 function azureCommentsRequest(input) {
@@ -186,12 +186,17 @@ function azureCommentsRequest(input) {
   if (!Number.isSafeInteger(input.workItemId) || input.workItemId < 1) throw new Error('Invalid work item.')
   const adding = input.operation === 'add-comment'
   if (adding && (typeof input.comment !== 'string' || !input.comment.trim() || input.comment.length > 100000)) throw new Error('Enter a comment (at most 100,000 characters).')
+  // PIR-14 (SM-183): a PI review is the app's own list HTML — accepted only as <ul>, <ol>, <li>, <p> without attributes
+  // and escaped text (the same check as safeCommentHtml in src/azureClient.ts), and sent as it is; every other comment
+  // is plain text, escaped here.
+  const html = input.htmlComment
+  if (html != null && (html !== true || !adding || input.reviewOf == null || !/^(?:<\/?(?:ul|ol|li|p)>|&(?:amp|lt|gt|quot|#39);|[^<>&"'])*$/.test(input.comment))) throw new Error('The review comment holds markup the app does not send. Nothing was posted.')
   // DSK-11: the next page of the Discussion — a page token on the read only, a non-empty text of at most 2,048
   // characters, sent URL-encoded in the query string of the same fixed host and path.
   const token = input.continuationToken
   if (token != null && (adding || typeof token !== 'string' || !token.length || token.length > 2048)) throw new Error(adding ? 'A page token is accepted only when reading the Discussion.' : 'Invalid Discussion page token.')
   return { url: `${projectBase(input)}/_apis/wit/workItems/${input.workItemId}/comments?api-version=${commentsApiVersion}${adding ? '' : `&order=desc&$top=200${token ? `&continuationToken=${encodeURIComponent(token)}` : ''}`}`, fixedVersion: true, options: {
-    method: adding ? 'POST' : 'GET', redirect: 'error', headers: { ...connection.options.headers, 'Content-Type': 'application/json' }, body: adding ? JSON.stringify({ text: htmlText(input.comment.trim()) }) : undefined,
+    method: adding ? 'POST' : 'GET', redirect: 'error', headers: { ...connection.options.headers, 'Content-Type': 'application/json' }, body: adding ? JSON.stringify({ text: html ? input.comment : htmlText(input.comment.trim()) }) : undefined,
   } }
 }
 

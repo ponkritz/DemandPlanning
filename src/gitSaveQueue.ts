@@ -1,4 +1,4 @@
-import { deleteFile, fileCommits, fileSha, GitConflictError, readTextFile, writeBinaryFile, writeTextFile, type GitConfig } from './gitStorage.ts'
+import { deleteFile, fileCommits, fileSha, GitConflictError, GitServerError, isNetworkFailure, readTextFile, writeBinaryFile, writeTextFile, type GitConfig } from './gitStorage.ts'
 
 // GIT-17 (design defaults review, decision 8): saves to the shared Git files that used to be last-writer-wins — the
 // historical hours, the default views, the KPI tracker copy, the connection backups and the Monthly pack template — are
@@ -107,6 +107,32 @@ export const mergeViewsBackupText: Merge = (baseText, mineText, theirsText, mine
   return `${JSON.stringify({ schema: 1, kind: mine.kind, views }, null, 2)}\n`
 }
 
+// ---- Failures in plain words (GIT-27) ---------------------------------------------------------------------------
+// A save that got no answer (the browser's "Failed to fetch") or a server error (HTTP 500, 502, 503, 504) is tried once
+// more by itself after a short pause (1–2 s): it is safe to repeat, because every write first reads the file again and
+// sends the version it read — when the first write did reach Git the file is already the same (nothing is written
+// again), and a write over a version that changed meanwhile is refused as a conflict and merged (GIT-17). When it fails
+// again the change is kept and the message says, in plain words, what happened and what to do; the browser's or
+// GitHub's own words follow in brackets.
+export const transientPause = () => 1000 + Math.round(Math.random() * 1000)
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+export const isTransient = (failure: unknown) => failure instanceof GitServerError || isNetworkFailure(failure)
+// The size of the file (KB) and, for a page kept in one file (on-demand/<id>.json), the hint to convert it (OND-32).
+const sizeHint = (path: string, bytes: number) => {
+  const kb = Math.max(1, Math.round(bytes / 1000))
+  return /(^|\/)on-demand\/[^/]+\.json$/.test(path) ? `the page file is ${kb.toLocaleString('en-US')} KB — a page with many rows saves faster as row files (the page’s ⋯ → Convert to row files…)` : `the file is ${kb.toLocaleString('en-US')} KB`
+}
+export function saveFailureText(failure: unknown, path: string, bytes = 0): string {
+  const raw = failure instanceof Error ? failure.message : String(failure ?? '')
+  if (failure instanceof GitServerError) return `GitHub had a problem saving ${path} (HTTP ${failure.status}). Your change is kept here — press Retry in a minute. If it keeps failing, ${sizeHint(path, bytes)}.${failure.detail ? ` (GitHub: ${failure.detail})` : ''}`
+  if (isNetworkFailure(failure)) return `GitHub could not be reached (network, VPN or proxy): ${path} is not saved. Your change is kept here — check the connection and press Retry. (Browser: ${raw})`
+  return raw
+}
+// A save's failure as the queue reports it: a network or server failure in plain words (GIT-27), any other as it is.
+export function plainSaveError(failure: unknown, path: string, bytes = 0): unknown {
+  return isTransient(failure) ? new Error(saveFailureText(failure, path, bytes)) : failure
+}
+
 // ---- Writing --------------------------------------------------------------------------------------------------
 export interface QueuedOutcome { sha: string | null; commitUrl: string; merged: boolean; unchanged: boolean; keptNewer: boolean }
 export interface TextChange { text: string; base: string | null; at: string; message: string; merge: Merge }
@@ -115,20 +141,26 @@ export interface TextChange { text: string; base: string | null; at: string; mes
 // and commits the result with the version just read. A conflict at write time starts again from the read.
 // replaced (GIT-18): the version in Git this save replaced (or found already the same), so a listing that still shows it
 // is not taken for newer data saved by someone else.
-export async function writeQueuedText(target: GitConfig, token: string, change: TextChange, fetchImpl: Fetch = fetch, tries = maxSaveTries): Promise<QueuedOutcome & { text: string; replaced: string | null }> {
+// GIT-27: a network or server failure (of the read or the write) starts again from the read once, after `pause` ms.
+export async function writeQueuedText(target: GitConfig, token: string, change: TextChange, fetchImpl: Fetch = fetch, tries = maxSaveTries, pause: () => number = transientPause): Promise<QueuedOutcome & { text: string; replaced: string | null }> {
+  let again = true
   for (let attempt = 1; attempt <= tries; attempt++) {
-    const latest = await readTextFile(target, token, fetchImpl)
     let next = change.text
-    if (latest.text != null && latest.text !== change.base && latest.text !== change.text) {
-      const theirs = await latestStamp(target, token, fetchImpl)
-      next = change.merge(change.base, change.text, latest.text, !theirs || change.at >= theirs)
-    }
-    const merged = next !== change.text
-    if (latest.text === next) return { sha: latest.sha, commitUrl: '', merged, unchanged: true, keptNewer: false, text: next, replaced: latest.sha }
     try {
+      const latest = await readTextFile(target, token, fetchImpl)
+      if (latest.text != null && latest.text !== change.base && latest.text !== change.text) {
+        const theirs = await latestStamp(target, token, fetchImpl)
+        next = change.merge(change.base, change.text, latest.text, !theirs || change.at >= theirs)
+      }
+      const merged = next !== change.text
+      if (latest.text === next) return { sha: latest.sha, commitUrl: '', merged, unchanged: true, keptNewer: false, text: next, replaced: latest.sha }
       const written = await writeTextFile(target, token, next, latest.sha, stampMessage(change.message, change.at), fetchImpl)
       return { ...written, merged, unchanged: false, keptNewer: false, text: next, replaced: latest.sha }
-    } catch (failure) { if (!(failure instanceof GitConflictError)) throw failure }
+    } catch (failure) {
+      if (failure instanceof GitConflictError) continue
+      if (again && isTransient(failure)) { again = false; attempt -= 1; await sleep(pause()); continue }
+      throw plainSaveError(failure, target.path, new TextEncoder().encode(next).length)
+    }
   }
   throw new GitQueueError(`${target.path} kept changing in Git while saving (${tries} tries). Your change is kept here and not lost: choose Retry to save it again.`)
 }

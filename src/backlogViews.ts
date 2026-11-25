@@ -36,7 +36,7 @@ export function saveBacklogTab(id: string, storage: Pick<Storage, 'setItem'> = l
 // The menu's "Other views": every read-only view shown in the menu that is not one of the default Azure streams
 // (DP, CP, IOCC, Content, Tool Validations, which sit under Release Details), from an on-prem server or the cloud, and
 // every Windchill export shown in the menu that is not a default Windchill stream (S&S IT). Without this heading such
-// views had no place in the menu. The Time Writing backlog stays under I&D Board.
+// views had no place in the menu. The Time Writing backlog is under My Work (NAV-53).
 type StreamProfile = Parameters<typeof profileForStream>[1][number]
 export function otherMenuViews<W extends { id: string; name: string; exportFile?: string; logic?: 'standard' | 'ecp'; projectLevel?: number }>(views: BacklogView[], profiles: StreamProfile[], windchill: W[]) {
   const streamIds = new Set(allStreams().map((stream) => profileForStream(stream, profiles)?.id).filter(Boolean))

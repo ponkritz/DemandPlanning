@@ -3,7 +3,7 @@ import { arcPath, barPath, columnPath, epicSlots, niceTicks, otherColor, useElem
 import { useDataLabels } from '../useDataLabels'
 import { useHeightFactor } from '../useChartSize'
 import { additive, displayText, rowId, type ColorPins as Pins, type Insight, type OnDemandPage, type OnDemandRow } from '../onDemand'
-import { chartData, countLines, currencyText, dateGroupLabels, drillRows, formatShown, formatValue, grainOf, insightProblems, isGrouped, measureText, noneKey, otherKey, valueText, type Bucket, type ChartData, type InsightData } from '../onDemandInsights'
+import { chartData, countLines, currencyText, dateGroupLabels, drillRows, formatShown, formatValue, grainOf, insightProblems, isGrouped, isNestedPivot, ownValueName, measureText, noneKey, otherKey, valueText, type Bucket, type ChartData, type InsightData } from '../onDemandInsights'
 import { darkText, labelOn, pinColor } from '../chartColors'
 import { AxisTitles, WrappedLabel } from './chartLabels'
 import { barLabelAt, chartKind, dataTableModel, fitText, groupedRowHeight, groupedSlots, inside, keepApart, labelNumber, labelPercent, labelText, lineLabelAt, minorTicks, pieLabels, resolveElements, shortName, textWidth, trendLines, trendName, type LabelContent, type ResolvedElements } from '../chartElements'
@@ -12,6 +12,7 @@ import { DataTable, type DataColumn } from './DataTable'
 import { Info, Metric, Modal, Notice } from './ui'
 import { ChartFrame, LegendBar, LegendLine, Tooltip, TooltipRow } from './WorkloadCharts'
 import { NarrativeView } from './NarrativeView'
+import { NestedPivot } from './NestedPivot'
 
 // OND-12 The charts and the summary table of an On-Demand insight, drawn from aggregate() (src/onDemandInsights.ts) in
 // the app's chart frame (UI-STANDARDS §9: legend, Data labels, Table / Chart, axis names) with the --viz-series-*
@@ -90,7 +91,9 @@ export function InsightView({ page, insight, colors: pins, drill = true, narrowe
   const props: ChartProps = { page, insight, data, pins, onDrill, el, raw }
   return <>
     {status}
-    {insight.type === 'table' ? <PivotTable page={page} insight={insight} data={data} />
+    {/* CHT-74: a table with nested rows or columns is the nested Pivot table (drill-down and Export of its own). */}
+    {isNestedPivot(insight) ? <NestedPivot page={page} insight={insight} currency={data.currency} drill={drill} exportName={drill ? insight.title || 'Pivot table' : undefined} />
+      : insight.type === 'table' ? <PivotTable page={page} insight={insight} data={data} />
       : insight.type === 'pareto' || insight.type === 'bar' && insight.options?.orientation === 'vertical' ? <ColumnChart {...props} />
       : insight.type === 'bar' ? <BarChart {...props} />
       : insight.type === 'line' ? <LineChart {...props} />
@@ -106,7 +109,8 @@ const name = (page: OnDemandPage, id: string) => page.columns.find((column) => c
 export function PivotTable({ page, insight, data, share = false }: { page: OnDemandPage; insight: Insight; data: InsightData & Partial<ChartData>; share?: boolean }) {
   const split = Boolean(insight.second)
   const unit = data.unit ?? ''
-  const measure = unit || insight.options?.cumulative ? valueText(page, insight, data.currency) : measureText(page, insight, data.currency)
+  // CHT-83: the owners' Value name when given.
+  const measure = unit || insight.options?.cumulative || ownValueName(insight) ? valueText(page, insight, data.currency) : measureText(page, insight, data.currency)
   const show = (value: number | null | undefined) => formatShown(value, unit)
   const sum = data.values.reduce((all, row) => all + (row[0] ?? 0), 0)
   const pareto = insight.type === 'pareto' && data.shares && data.cumulative
@@ -520,13 +524,17 @@ function DrillDialog({ page, insight, data, category, series, onClose }: { page:
   const rows = drillRows(page, insight, data, category, series)
   const cat = data.categories[category]
   const ser = series != null && insight.second ? data.series[series] : undefined
+  return <RowsBehind page={page} insight={insight} rows={rows} where={`${cat?.label ?? ''}${ser ? ` · ${ser.label}` : ''}`} currency={data.currency} onClose={onClose} />
+}
+// CHT-80: the pop-up of the rows behind a number — of a chart's bar, slice or point, or of a Pivot table's cell,
+// subtotal or total (where: the groups, "Epic A · Jan 2026").
+export function RowsBehind({ page, insight, rows, where, currency, onClose }: { page: OnDemandPage; insight: Insight; rows: OnDemandRow[]; where: string; currency: string; onClose: () => void }) {
   const columns: DataColumn<OnDemandRow>[] = [
     { id: 'drill-id', label: 'ID', value: (row) => rowId(page, row) || row.key || '', ...(page.rows.some((row) => row.link) ? { render: (row: OnDemandRow) => row.link && /^https:\/\//.test(row.link) ? <a href={row.link} target="_blank" rel="noreferrer">{rowId(page, row) || row.key || 'Open'}</a> : rowId(page, row) || row.key || '' } : {}) },
     ...page.columns.map((column): DataColumn<OnDemandRow> => ({ id: `drill-${column.id}`, label: column.name, align: column.type === 'number' || column.type === 'currency' ? 'right' : undefined, value: (row) => displayText(column, row.cells[column.id]) })),
   ]
-  const where = `${cat?.label ?? ''}${ser ? ` · ${ser.label}` : ''}`
   return <Modal eyebrow={`${insight.type === 'table' ? 'TABLE' : 'CHART'} · ${(insight.title || 'Untitled').toUpperCase()}`} title={`Rows behind ${where}`} wide form={false} onClose={onClose}>
-    <p className="muted">{rows.length} row{rows.length === 1 ? '' : 's'} counted in {where} ({measureText(page, insight, data.currency)}{data.currency ? '; rows in the shown currency' : ''}){insight.options?.cumulative ? ' — this category’s own rows; the chart shows the running total' : ''}. Read only: edit rows on the table page.</p>
+    <p className="muted">{rows.length} row{rows.length === 1 ? '' : 's'} counted in {where} ({valueText(page, insight, currency)}{currency ? '; rows in the shown currency' : ''}){insight.options?.cumulative ? ' — this category’s own rows; the chart shows the running total' : ''}. Read only: edit rows on the table page.</p>
     <DataTable id={`drill:${page.id}`} columns={columns} rows={rows} rowKey={(row) => row.id} exportName={`${insight.title || 'Rows'} – ${where}`} status={`${rows.length} row${rows.length === 1 ? '' : 's'}`} />
     <div className="modal-actions"><button type="button" className="primary" onClick={onClose}>Close</button></div>
   </Modal>

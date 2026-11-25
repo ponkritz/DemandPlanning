@@ -493,6 +493,33 @@ const shots = {
     await page.keyboard.press('Escape')
     await context.close()
   },
+  // UI-25…UI-28: CoNQ grouped by Status, then Category, with one group closed; the filter row; the Save view for
+  // everyone pop-up with Start collapsed.
+  async 'table-group-by'(app) {
+    const gh = fakeGitHub({ owner: 'example-team', repo: 'planning-data', files: files() })
+    const { page, context } = await open(app, { kind: 'git', gh })
+    await navigate(page, 'CoNQ')
+    const data = page.locator('.od-panel .data-table').first()
+    await data.locator('tbody tr').first().waitFor()
+    const bar = data.getByRole('group', { name: 'Group and filter the table' })
+    await bar.getByRole('combobox', { name: 'Group by' }).selectOption({ label: 'Status' })
+    await bar.getByRole('combobox', { name: 'Group level 2' }).selectOption({ label: 'Category' })
+    await data.locator('tr.data-table-group[data-group-depth="1"]').first().waitFor()
+    await data.locator('tr.data-table-group[data-group-depth="1"]').first().getByRole('button').click()
+    await shot(page, 'table-group-by', { clip: { x: 240, y: 0, width: 1200, height: 900 } })
+    await bar.getByRole('combobox', { name: 'Group by' }).selectOption({ label: 'No grouping' })
+    await bar.getByRole('button', { name: 'Filter by column' }).click()
+    await data.getByRole('combobox', { name: 'Filter Department' }).selectOption('Assembly')
+    await bar.getByText(/match the column filter/).waitFor()
+    await shot(page, 'table-filter-row', { clip: { x: 240, y: 0, width: 1200, height: 640 } })
+    await bar.getByRole('combobox', { name: 'Group by' }).selectOption({ label: 'Status' })
+    await data.getByRole('button', { name: /^Columns/ }).click()
+    await data.locator('fieldset.column-chooser').getByRole('button', { name: 'Save view for everyone' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Save view for everyone' })
+    await dialog.getByRole('checkbox', { name: 'Start collapsed' }).check()
+    await shot(page, 'save-view-collapsed', { target: dialog })
+    await context.close()
+  },
   async 'sample-mode'(app) {
     const gh = fakeGitHub({ owner: 'example-team', repo: 'planning-data', files: files() })
     const { page, context } = await open(app, { kind: 'git', gh })

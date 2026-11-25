@@ -123,8 +123,8 @@ export function pagesOfFile(path: string, planningPath: string, dashboardsReadin
   // TVL-02: the Tool Validations master list is shown on its Release page (a read-only view of the board page).
   if (name === 'tool-validations.json') return { pages: ['board'], loader: 'toolValidations' }
   // PIR-19: the PI Review form setup is loaded quietly on every page (the form, the comment and the split follow it);
-  // only Admin → Epic & Feature setup, where someone may be editing it, shows the notice.
-  if (name === 'pi-review-form.json') return { pages: ['admin:epics'], quiet: 'piForm', loader: 'piForm' }
+  // only Admin → PI Review Setup (PIR-29), where someone may be editing it, shows the notice.
+  if (name === 'pi-review-form.json') return { pages: ['admin:pireview'], quiet: 'piForm', loader: 'piForm' }
   // A file this build does not map: every page, and only a full reload loads it.
   return { pages: ['*'], loader: 'reload' }
 }

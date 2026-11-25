@@ -91,6 +91,11 @@ test('TC-UI-16: the Tool Owner saves the CoNQ table’s view for everyone; anoth
   const width = await data.locator('thead th', { hasText: 'Category' }).evaluate((cell) => cell.style.width)
   assert.match(width, /^\d+px$/, 'Category has a width of its own')
   await panel.getByRole('button', { name: 'Save view for everyone' }).click()
+  // On an On-Demand table (grouping and column filters, UI-28) the save is confirmed in a pop-up that names them.
+  const confirm = owner.page.getByRole('dialog', { name: 'Save view for everyone' })
+  assert.match(await text(confirm), /Group by: no grouping\. Column filters: none\./)
+  assert.equal(await confirm.getByRole('checkbox', { name: 'Start collapsed' }).isDisabled(), true, 'nothing to collapse without grouping')
+  await confirm.getByRole('button', { name: 'Save view for everyone' }).click()
   await until(() => Boolean(shared(gh)[tableKey]), 'the view for everyone written to Git')
   const saved = shared(gh)
   assert.ok(saved[tableKey].hidden.includes('c2'), 'Sites hidden')

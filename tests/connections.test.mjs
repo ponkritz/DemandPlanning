@@ -270,6 +270,6 @@ test('Other views: read-only views and Windchill exports that are not a default 
   const views = backlogViews(profiles, 'tw')
   const windchill = [{ id: 'w1', name: 'S&S IT', exportFile: 'a.csv' }, { id: 'w2', name: 'Supplier audit', exportFile: 'b.csv' }, { id: 'w3', name: 'Not imported yet' }]
   const others = otherMenuViews(views, profiles, windchill)
-  assert.deepEqual(others.azure.map((view) => view.id), ['mine', 'cloud'], 'streams CP and IOCC stay under Release Details; the backlog under I&D Board; hidden views stay hidden')
+  assert.deepEqual(others.azure.map((view) => view.id), ['mine', 'cloud'], 'streams CP and IOCC stay under Release Details; the backlog under My Work (NAV-53); hidden views stay hidden')
   assert.deepEqual(others.windchill.map((view) => view.id), ['w2'], 'S&S IT is a stream; an export without a file is not listed')
 })

@@ -44,18 +44,16 @@ import type { CalculationProfile, ProfileTerms } from '../calculationProfiles'
 import type { FeatureSetup } from '../useFeatureSetup'
 import type { Access } from '../useAccess'
 import type { PageProps } from './types'
-import { resolveSettings, settingsPagesFor, type SettingsTab } from '../settingsTabs'
+import { shownSettingsTab, type SettingsTab } from '../settingsTabs'
 import { SectionTabs } from '../components/SectionTabs'
 import { MonthlyPackSetupPanel } from '../components/MonthlyPackSetupPanel'
-import { PiFormSetupPanel } from '../components/PiFormSetupPanel'
-import type { PiFormStore } from '../usePiFormSetup'
 import type { MonthlyPackStore } from '../useMonthlyPack'
 
 const shortMonthName = (month: string) => new Intl.DateTimeFormat('en', { month: 'short', year: 'numeric' }).format(new Date(`${month}-01T00:00:00`))
 
 // The Windchill host and views setup is hidden (Windchill exports are imported under Release Details instead).
 // Everyone sets up their own connections and tokens here; the shared sections need the role right to manage them.
-export function AdminPage({ store, month, azure, git, access, featureSetup, epicSetup, piForm, setupSteps = [], onSearch = () => undefined, qeColumnNames = [], monthlyPack, history, loadEverything, onOpenBoard, tab: requested, onOpenTab, look }: PageProps & { look?: { startView: StartView; onStartView: (view: StartView) => void; onCustomizeMenu: () => void }; tab: SettingsTab; onOpenTab: (tab: SettingsTab, section?: string) => void; azure: AzureWorkspace; git: GitStorage; access: Access; featureSetup: FeatureSetup; epicSetup: EpicSetupStore; piForm?: { store: PiFormStore; block: string; by: string }; setupSteps?: SetupStep[]; onSearch?: () => void; qeColumnNames?: string[]; monthlyPack: MonthlyPackStore; history: HistoryStore; loadEverything: () => Promise<{ loaded: string[]; failed: string[] }>; onOpenBoard: () => void }) {
+export function AdminPage({ store, month, azure, git, access, featureSetup, epicSetup, setupSteps = [], onSearch = () => undefined, qeColumnNames = [], monthlyPack, history, loadEverything, onOpenBoard, tab: requested, onOpenTab, look }: PageProps & { look?: { startView: StartView; onStartView: (view: StartView) => void; onCustomizeMenu: () => void }; tab: SettingsTab; onOpenTab: (tab: SettingsTab, section?: string) => void; azure: AzureWorkspace; git: GitStorage; access: Access; featureSetup: FeatureSetup; epicSetup: EpicSetupStore; setupSteps?: SetupStep[]; onSearch?: () => void; qeColumnNames?: string[]; monthlyPack: MonthlyPackStore; history: HistoryStore; loadEverything: () => Promise<{ loaded: string[]; failed: string[] }>; onOpenBoard: () => void }) {
   const [everything, setEverything] = useState<{ busy: boolean; loaded?: string[]; failed?: string[] }>({ busy: false })
   // CON-94: each shared section needs its own permission.
   const can = access.can
@@ -242,8 +240,7 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, epic
 
   // One Settings page at a time (chosen in the menu, SET-14); the shared pages only for roles that manage shared settings.
   // SET-15: My settings for everyone; an older page key opens the page it moved to.
-  const asked = resolveSettings(requested).tab
-  const tab = asked === 'my' || asked === 'look' || settingsPagesFor(can).some((page) => page.key === asked) ? asked : 'connections'
+  const tab = shownSettingsTab(requested, can)
   // ADM-01: the Overview's shared-setup checks.
   const ioccBulk = useBulkEpic('IOCC').epicId, dpBulk = useBulkEpic('DP').epicId, contentBulk = useBulkEpic('Content').epicId
   const facts = { policy: Boolean(access.policy), toolOwner: toolOwnerExists(access.policy), epicSetups: epicSetup.file?.epics.filter((entry) => entry.fields.length).length ?? 0, sharedFeatureSetups: featureSetup.shared?.epics.length ?? 0, bulkEpicsUnset: ([['DP', dpBulk], ['IOCC', ioccBulk], ['Content', contentBulk]] as const).filter(([, epicId]) => !epicId).map(([stream]) => stream), unsaved: git.dirty, gitConnected: git.connected, gitReadOnly: git.readOnly,
@@ -357,8 +354,7 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, epic
       { key: 'setup', label: 'Setup per Epic', scope: 'both', node: <EpicFeatureEditor setup={featureSetup} epicSetup={epicSetup} git={git} items={azure.items} qeColumnNames={qeColumnNames} /> },
       { key: 'lists', label: 'Value lists', scope: 'everyone', node: <EpicSetupPanel section="lists" setup={epicSetup} git={git} items={azure.items} canEdit={can('setup.epic')} canEditLists={can('setup.values')} /> },
       { key: 'templates', label: 'User Story templates', scope: 'everyone', node: <StoryTemplatesPanel setup={epicSetup} featureSetup={featureSetup} git={git} items={azure.items} canEdit={can('setup.values')} /> },
-      // PIR-19…PIR-23: the PI Review form — shown to everyone, changed by the roles with "PI Review: set up the review form".
-      ...(piForm ? [{ key: 'pireview', label: 'PI Review form', scope: 'everyone' as const, node: <PiFormSetupPanel store={piForm.store} block={piForm.block} by={piForm.by} /> }] : []),
+      // PIR-29: the PI Review form is a page of its own, Admin → PI Review Setup (PiReviewSetupPage).
     ]} />}
     {tab === 'audit' && <Panel eyebrow="HISTORY" title="Changes" info="The changes made to the shared planning data, newest first, with who and what. Filter by area or text.">
       <div className="query-toolbar"><select aria-label="Area" value={auditFilter.entity} onChange={(event) => setAuditFilter({ ...auditFilter, entity: event.target.value })}><option value="">All areas</option>{auditEntities.map((entity) => <option key={entity}>{entity}</option>)}</select><input className="search" aria-label="Search changes" placeholder="Search changes" value={auditFilter.text} onChange={(event) => setAuditFilter({ ...auditFilter, text: event.target.value })} /><small className="muted">{auditShown.length} of {store.state.audits.length}</small></div>

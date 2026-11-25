@@ -9,6 +9,7 @@ import { formatDate, formatDateTime } from '../format'
 import { discussionOf, discussionsVersion, epicOf, latestComment, moveLabel, oneLine, piFeatures, piLabel, readDiscussions, reviewModeLabel, reviewModes, reviewSplit, samePi, subscribeDiscussions, type ReviewSplit, type SplitFrom } from '../piReview'
 import { isReviewLead, readDiscussionInto as readInto, reviewPageBlock, reviewPostBlock } from '../piReviewPost'
 import { ReviewDialog } from './PiReviewForm'
+import { PiSetupGear } from '../components/PiFormSetupPanel'
 import { formSetupOf, useReviewViewer, useReviewWriter } from '../piReviewWriter'
 import { customFields, type PiFormSetup } from '../piReviewSetup'
 import { usePiChoice } from './usePiChoice'
@@ -129,6 +130,8 @@ export function PiReviewPage({ azure, store }: { azure: AzureWorkspace; store: P
       title: ({ item }) => { const latest = latestOf(item); return !latest ? unreadHint : reviewModeLabel(latest.split) || undefined },
       render: ({ item }) => { const latest = latestOf(item); return !latest ? <span className="muted">—</span> : <span className="pir-clip">{oneLine(reviewModeLabel(latest.split))}</span> } },
     textColumn('remarks', 'Additional Remarks', 'The text after the heading “Additional Remarks:” (or Remarks, Additional comments) in the newest comment.', (latest) => latest.split.remarks),
+    // PIR-28: the reviewed PI the newest comment's headings name ("Learnings of PI 26.4:"), also in the export.
+    textColumn('reviewed-pi', 'Reviewed PI', 'The PI the newest comment’s headings name as reviewed, e.g. “Learnings of PI 26.4:” or “Struggles for PI 26.4:” — empty when its headings name none (older reviews).', (latest) => latest.split.reviewedPi),
     // PIR-20: a column for each field added in the PI Review form setup, by its label.
     ...customFields(setup).map((field) => textColumn(`field-${field.id}`, field.label, `The text after the heading “${field.heading}:” in the newest comment (a field added in the PI Review form setup, Admin → Epic & Feature setup → PI Review form).`, (latest) => latest.split.extra?.[field.id])),
     { id: 'split-from', label: 'Split from', defaultHidden: true, export: 'always', hint: 'How Struggles, Learnings and Move to Next PI were filled from the newest comment: Headings, Keywords (suggested: the comment has no heading) or None. Exported even while hidden.',
@@ -178,7 +181,7 @@ export function PiReviewPage({ azure, store }: { azure: AzureWorkspace; store: P
   const notice = !iterations.done ? null : fallback.why === 'overlap' || ((fallback.why === 'fallback' || fallback.why === 'none') && !remembered) ? fallback.note : ''
 
   return <Page intro="The Features of a PI and their Discussions, read from Azure DevOps with your PAT, kept for this page load only. Write review… posts a Feature’s review to its Discussion as a new comment."
-    actions={<>{poster.env?.openFormSetup && <button type="button" className="ghost" title="The fields of the review form and the headings written in the comment (Admin → Epic & Feature setup → PI Review form)" onClick={poster.env.openFormSetup}>Form setup</button>}<button type="button" className="ghost" disabled={Boolean(readAllWhy)} title={readAllWhy || undefined} onClick={readAll}>↻ Read all Discussions</button>{readAllWhy && rows.length > 0 && !reading && <WriteBlocked reason={readAllWhy} />}</>}>
+    actions={<><button type="button" className="ghost" disabled={Boolean(readAllWhy)} title={readAllWhy || undefined} onClick={readAll}>↻ Read all Discussions</button>{readAllWhy && rows.length > 0 && !reading && <WriteBlocked reason={readAllWhy} />}{/* PIR-30: ⚙ PI Review Setup, last (UI-STANDARDS §6), when the page is in the viewer's menu. */}<PiSetupGear /></>}>
     {!items.length && <EmptyState title="No QMS-0025 data yet." detail="Fetch the Time Writing connection (↻ in the top bar) or load the synthetic sample; the PIs and Features come from that data." />}
     {notice && <Notice tone="warning">{notice}</Notice>}
     {items.length > 0 && <TablePanel title="Features" info="The Features whose Iteration Path is in the chosen PI (with the toggle also those with a User Story in the PI), without Removed Features and those under the absence Epic. The PIs come from the Time Writing connection’s iterations and the fetched data; the current PI (by the Sprint dates, UTC) is chosen first, and your last choice is remembered in this browser. Click a Feature to read its Discussion; Write review… posts the Feature’s review as a new comment in its Discussion.">

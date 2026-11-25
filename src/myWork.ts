@@ -194,10 +194,11 @@ export function assignablePeople(items: AzureWorkItem[]) {
 export type StateCheckKind = 'close-feature' | 'close-story' | 'feature-needs-active-story' | 'activate-feature' | 'feature-old-pi'
 export interface StateCheck { kind: StateCheckKind; item: AzureWorkItem; children: AzureWorkItem[]; targetPi?: string }
 // ATM-30: the PI part of an Iteration Path — up to and including the first segment named PI or Program Increment
-// ("Quality\\PI 2026.4\\Sprint 2" → "Quality\\PI 2026.4"); undefined when the path has none.
+// ("Quality\\PI 2026.4\\Sprint 2" → "Quality\\PI 2026.4"); undefined when the path has none. PIR-25: "PI" may be
+// followed directly by its number ("PI26.4").
 export function piPathOf(iterationPath: string | undefined) {
   const parts = (iterationPath ?? '').split('\\')
-  const at = parts.findIndex((part) => /\b(?:pi|program\s*increment)\b/i.test(part))
+  const at = parts.findIndex((part) => /\b(?:pi(?:\b|(?=\d))|program\s*increment\b)/i.test(part))
   return at < 0 ? undefined : parts.slice(0, at + 1).join('\\')
 }
 export const piName = (path: string) => path.slice(path.lastIndexOf('\\') + 1)

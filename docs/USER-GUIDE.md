@@ -365,7 +365,7 @@ The app opens on **Home**: one tile per area. Click a tile to open the area, or 
 
 ![Home with the synthetic sample loaded](user-guide/images/home.png)
 
-The menu on the left groups the pages: **Data Insights**, **My Work**, **I&D Board**, **Release Details**, **On-Demand**, **Data & governance** and **Admin** (and **Testing** for Admins).
+The menu on the left groups the pages: **Data Insights**, **My Work** (ending with the QMS-0025 backlog), **Release Details**, **On-Demand**, **Data & governance** (with **Backlog Health** before Documentation) and **Admin** (and **Testing** for Admins). QMS-0025 and Backlog Health were under **I&D Board** in earlier versions; that heading is gone, and who may open them has not changed.
 
 ![The menu](user-guide/images/menu.png)
 
@@ -499,7 +499,7 @@ View as is read only: nothing is saved to Azure DevOps or Git while it is on. Re
 
 ### The QMS-0025 backlog
 
-**I&D Board → QMS-0025** is the Time Writing backlog as a tree: Epic → Feature → User Story → Task.
+**My Work → QMS-0025** is the Time Writing backlog as a tree: Epic → Feature → User Story → Task.
 
 ![The QMS-0025 backlog](user-guide/images/backlog.png)
 
@@ -557,8 +557,8 @@ Its built-in sections — My hours, My open work, My streams and releases, Relea
 **Add a block**
 
 1. Press **＋ Add block…**.
-2. On **Data**, type a **Title**, choose the type — KPI tile, Bar chart, Line chart, Pie chart, Pareto, Summary table or Narrative (text) — and the **Data source**.
-3. Choose **Categories by** (or **Rows by**), the **Measure** and its column, and, when the source has dates, **Period filter on**.
+2. On **Data**, type a **Title**, choose the type — KPI tile, Bar chart, Line chart, Pie chart, Pareto, Pivot table or Narrative (text) — and the **Data source**.
+3. Choose **Categories by** (or, for a Pivot table, **Rows** and **Columns** with **＋ then by**), the **Measure** and its column, and, when the source has dates, **Period filter on**.
 4. Set the other tabs if you need them (**Filters**, **Format**, **Elements**; see [Add a chart or table](#add-a-chart-or-table)) and press **Add block**.
 
 ![The block pop-up: the data sources My dashboard can read](user-guide/images/my-dashboard-sources.png)
@@ -681,7 +681,7 @@ The Feature then shows **Struggles** "the test rig arrived two Sprints late", **
   Whether the feature needs to be shifted to PI 26.4
   Yes - two stories left                         Whether the feature needs to be shifted to PI 26.4 : No
   ```
-  The answer may follow on the next line, after a colon, a dash or a "?", or after a space when it starts with Yes / No / Partly. The PI named in the question is read from the comment (any number, so it works for every PI review) and shown after the answer, e.g. "Yes — two stories left · to PI 26.4".
+  The answer may follow on the next line, after a colon, a dash (also "Feature- Nil") or a "?", or after a space when it starts with Yes / No / Partly. The PI may be written "PI 26.4", "PI26.4", "PI-26.4" or "PI.26.4". "Nil" (or N/A) alone reads as none, like "None". The short form "Learning-good exposure, Struggle-long list CRs" counts when both are there. The PI named in the question is read from the comment (any number, so it works for every PI review) and shown after the answer, e.g. "Yes — two stories left · to PI 26.4".
 - A heading counts at the **start of a line** (a bullet, number, # or bold before it is fine) followed by a colon, a dash (- – —) and a space, or nothing; **inside a line** when a colon follows it ("… Lesson: share the calendar"), and for *Struggle*, *Learning* and *Lesson* also a dash and a space ("… a learning – book the rig early"). "We had struggles with the rig" or "there were issues" is not a heading.
 - Start the Move text with **Yes**, **No** or **Partly** (or Y / N) to use the filter; anything else (e.g. "N/A", "to be decided") is shown as written under Other text.
 - **No heading at all? Suggested values.** When the newest comment has none of the headings, the app looks for **keywords** sentence by sentence (a sentence ends at a line break or after ". ", "! ", "? "): *blocked, blocker, delay(ed), issue, problem, risk, escalated, dependency, waiting, rework, missed, slipped, could not, unable, late, impediment, struggle, challenge* go to **Struggles**; *learned, learnt, lesson, next time, improve, went well, worked well, better to, recommend, should have, takeaway, learning* to **Learnings**; *carry over, next PI, spill over, move to, moving to, continue in* to **Move to Next PI**. A sentence with words of two columns goes to both; "no blockers", "not blocked" or "wasn't late" are not taken. These texts are only a guess: the cell shows **(suggested)** before them in italics (pointing at it says "Suggested from keywords, not headings"), the drawer's Latest comment says **Suggested from keywords**, and Export has a column **Split from** (Headings, Keywords or None). A suggested Move gets Yes / No / Partly only when the sentence says so right after the phrase, e.g. "Carry over to next PI — partly, the docs" → "Partly — the docs". Write the headings to be sure.
@@ -693,42 +693,44 @@ The Discussions are read with your own PAT (Work Items, Read) and kept only unti
 
 Instead of typing the headings yourself, fill in the review form; the app writes the comment in the standard format for you.
 
-1. **Open the form.** Click **Write review…** in the Feature's drawer (bottom right) or in the **Actions** column of its row — or open **My Work → My PI Review**, which lists only your Features of the PI with **My review** (Reviewed / Not reviewed) and its date. Its filter row has **PI** (the current PI first) and **Person** (**Me** first) and **Reset filters** (back to Me and the current PI). A lead with "PI Review: post the review of a Feature" can choose another person in Person: the page then shows only that person's Features (their Assigned To, by work email where known) with **Their review** and its date, and Write review… still follows the posting rights below. For everyone else Person is greyed out and the line under it says why.
+1. **Open the form.** Click **Write review…** in the Feature's drawer (bottom right) or in the **Actions** column of its row — or open **My Work → My PI Review**, which lists only your Features of the PI with **My review** (Reviewed / Not reviewed) and its date. **Reviewed** means your review counts **for the PI chosen in the PI filter**: its headings name that PI ("Learnings of PI 26.4:"), or — for an older review without a PI in its headings — it is dated within that PI's dates in Azure DevOps (the PI's own dates, else its Sprints'; compared in UTC), or the Feature is **Closed** and your review is dated on or after its Closed Date (the review you answer when closing it; shown "At close"). A review written for another PI shows **Not reviewed** with "Last review 12 June 2026 (PI 2026.3)" under it, so you see why — write the review for this PI. Choosing another PI in the filter recomputes the column. When the chosen PI has no dates in Azure DevOps (or they cannot be read, e.g. without the PAT), every review counts as before and a line above the table says so. Its filter row has **PI** (the current PI first) and **Person** (**Me** first) and **Reset filters** (back to Me and the current PI). A lead with "PI Review: post the review of a Feature" can choose another person in Person: the page then shows only that person's Features (their Assigned To, by work email where known) with **Their review** and its date, and Write review… still follows the posting rights below. For everyone else Person is greyed out and the line under it says why.
 2. **Who can post.** The Feature's **assignee** (your work email on the Time Writing connection is the Feature's Assigned To) and the **leads** (Tool Owner, Admin, People Manager — the right "PI Review: post the review of a Feature"). For anyone else the button is greyed out and says why; it is also greyed out with sample data, in View as, without the PAT, or on an on-premises connection (reviews go to dev.azure.com only).
-3. **Fill in the paragraphs.** One point per line; start a line with **-** or **1.** for a list.
-   - **Learnings** and **Struggles** — required (write "None" if there are none).
-   - **Move to next PI** — **Yes** or **No** (**No** is pre-selected). **Moves to** is filled in with the PI after the reviewed one: the PI that **starts first after the reviewed PI ends**, by the PI dates in Azure DevOps (a PI without dates of its own takes its Sprints' dates; when two PIs overlap, the one starting next). The line under it says where it came from — "From Azure DevOps iteration dates: …" or, when Azure DevOps has no usable dates (no PAT, sample data, an undated PI, no later dated PI), the reason and "worked out from the PI number" (the next PI in the list, else e.g. PI 26.4 → PI 26.5). Change it if needed. **Reason** is optional.
+3. **Fill in the paragraphs.** The form keeps its help behind **ⓘ How to fill in** (above the fields: what posting does, which answer is pre-selected and each field's help) and the **ⓘ** next to Preview; point at it or tab to it to read it. One point per line — each line becomes a bullet under its heading; a leading **-**, ***** or **•** is dropped, and numbered lines (**1.**, **2)**) become a numbered list.
+   - **Learnings** and **Struggles** — required (write "None" if there are none). **No learnings or struggles** (above them, not ticked) writes "None" in both and greys them out; untick it to get back what you typed. If the form setup has only one of the two, the tick box sets that one and its label says so; with neither there is no tick box.
+   - **Move to next PI** — **Yes** or **No** (**No** is pre-selected). With **No**, nothing more is asked: Moves to and Reason are hidden, and a reason you typed is kept but not posted (the comment still names the next PI: "Whether the feature needs to be shifted to PI 27.1 : No"). With **Yes**, **Moves to** and **Reason** (optional) appear. Moves to is filled in with the PI after **today's PI** — whatever PI you are reviewing: the app finds the PI whose dates in Azure DevOps hold today (its own dates, else its Sprints'), then the PI that **starts next** (when two overlap, the one starting next). A Feature of PI 26.4 reviewed on 10 January 2027, during PI 27.1, gets PI 27.2; reviewed during PI 26.4, PI 27.1. Every PI in the iteration tree counts, also future ones, and names are read as typed in Azure DevOps — "PI 25.1", "PI.25.1", "PI 25.1 (Jan–Mar)", under a year folder, or in each team's subtree (one PI). When no later PI has dates, the next PI **by number** in the tree; when no PI has dates over today (or two have), the app says the dates are missing and uses the next PI by number after the last PI that ended, else the year rollover — the last PI of a year moves to the next year's first (**PI 26.4 → PI 27.1**, PI 2026.4 → PI 2027.1), any other adds one; a year has 4 PIs unless a higher number is seen (PI 25.6 means 6). Under Moves to one short line says **From the Azure DevOps dates.**, or shows a **warning** when the dates were missing ("PI dates missing in Azure DevOps — check this PI."); the **ⓘ** beside it gives the details ("today (25 Nov 2026) is in PI 2026.4 (…); the next PI is PI 2027.1, starting …") and names up to five iteration names without a PI number ("PI Planning"). Change Moves to if needed.
    - **Advise to discuss the Feature during the Review meeting?** — **Discuss during Meeting** or **Offline Review** (required, no default).
    - **Additional Remarks** — optional.
-   If the Feature already has a review, the form starts from it, so a correction only changes what is wrong.
-4. **Check the Preview.** It shows the exact comment, for example:
-   ```
-   Learnings :
-   Book the rig early
-   - share the lab calendar
-   Struggles :
-   Vendor documents late
-   Whether the feature needs to be shifted to PI 26.5 : Yes - two stories left
-   Advise to discuss the Feature during the Review meeting : Discuss during Meeting
-   Additional Remarks :
-   Thanks to the lab team
+   If the Feature already has a review, the form starts from it, so a correction only changes what is wrong. When that review was written for another PI, the line at the top says so ("written for PI 2026.3: check it before posting").
+4. **Check the Preview.** It shows the comment as it will look in Azure DevOps — a bulleted list — for example:
+
+   - Learnings of PI 26.4:
+     - Book the rig early
+     - share the lab calendar
+   - Struggles of PI 26.4:
+     - None
+   - Whether the feature needs to be shifted to PI 26.5 : Yes
+     - two stories left
+   - Advise to discuss the Feature during the Review meeting : Discuss during Meeting
+   - Additional Remarks:
+     - Thanks to the lab team
+
    — posted from Demand Planning (PI Review)
-   ```
-   The last line marks it as posted from the app; PI Review ignores it. If a line of yours looks like a heading (e.g. "Issues: …" inside Learnings), the form asks you to reword it, so the columns stay right.
+
+   The headings name the **reviewed PI** — the PI chosen on the page (in the Close pop-up, the Feature's own PI) — so the reviews of a PI can be collected; PI Review shows it in its **Reviewed PI** column. Without a known PI the headings are just "Learnings:" and "Struggles:". The last line marks it as posted from the app; PI Review ignores it (the ⓘ next to Preview says so too). What you type is sent as text (a "<b>" stays "<b>"), never as formatting. If a line of yours looks like a heading (e.g. "Issues: …" inside Learnings), the form asks you to reword it, so the columns stay right.
 5. **Post.** **Post to Azure DevOps** asks you to confirm, then posts the comment as you (your PAT). The result is under **Background jobs** ("Post review · #id"); the Discussion is read again and the columns show the new values. A posted comment cannot be deleted from the app: to correct it, write the review again — the newest comment counts.
 
-**When you close a Feature** (Close in My Tasks [Board], Sprint check or Time Writing), the Close pop-up asks the same questions for that Feature (Learnings and Struggles optional, **Move to next PI = No** pre-selected, the Review meeting advice required) and **posts the review first, then closes**. If the review cannot be posted nothing is closed: choose **Close without the review** or **Cancel**. When several Features are closed at once, write their reviews in PI Review or My PI Review.
+**When you close a Feature** (Close in My Tasks [Board], Sprint check or Time Writing), the Close pop-up asks the same questions for that Feature (Learnings and Struggles optional, **Move to next PI = No** pre-selected — Moves to and Reason appear with Yes — the Review meeting advice required, the explanations behind ⓘ How to fill in) and **posts the review first, then closes**. If the review cannot be posted nothing is closed: choose **Close without the review** or **Cancel**. When several Features are closed at once, write their reviews in PI Review or My PI Review.
 
 #### Change the review form (Scrum Master, Tool Owner)
 
 The fields of the review form are a shared setup: when the review changes, the Scrum Master or the Tool Owner changes the form in the app, and everyone's next review uses it.
 
-1. **Open it.** **Admin → Epic & Feature setup → PI Review form**, or **Form setup** at the top of PI Review. Everyone sees the form in use: each field with the heading it writes in the comment, its type, options, whether it is required and its default. Without a setup in Git it says *The built-in form*.
+1. **Open it.** **Admin → PI Review Setup** in the menu, or the **⚙** button (PI Review Setup) at the top right of **My PI Review** or **PI Review**. Both are shown only to people with the right "PI Review: set up the review form" (Scrum Master and Tool Owner by default; an Admin can change who has it in Role rights); everyone else's reviews simply follow the form. You see the form in use: each field with the heading it writes in the comment, its type, options, whether it is required and its default. Without a setup in Git it says *The built-in form*.
 2. **Edit form…** opens the editor — the same column editor as **Set up columns…** on the On-Demand pages. For each field: **Name** (the label in the form), **Type** (**Long text** for a paragraph, **Dropdown (one value)** for a choice), **Required**, ↑ ↓ to reorder, ✕ to remove, the **Heading in the comment**, the **Default** of a Dropdown, a **Help text**, and the **options** of a Dropdown. **＋ Add field** adds one (at most 15); **Use the built-in form** starts again from the built-in fields. The **Comment preview** shows what a review written with the form looks like.
-3. **Move to next PI** keeps its behaviour — Yes / No, the PI it moves to and the reason — so its name, type, options and Required are locked and it cannot be removed; its heading (with **{PI}** where the PI is written), its default (No unless you change it) and its help can be changed. The other built-in fields keep their type.
+3. **Move to next PI** keeps its behaviour — Yes / No, the PI it moves to and the reason — so its name, type, options and Required are locked and it cannot be removed; its heading (with **{PI}** where the next PI is written), its default (No unless you change it) and its help can be changed. The other built-in fields keep their type. **{REVIEWED PI}** in any heading (at most once) is where the reviewed PI is written — the built-in Learnings and Struggles headings are "Learnings of {REVIEWED PI}" and "Struggles of {REVIEWED PI}"; a form saved before keeps its headings as saved.
 4. **Save to Git.** The form is checked first: a heading that is empty, used twice, or already read as another field (for example "Issues" or "What went wrong" is read as Struggles, so older reviews would land in the wrong column) is refused, and a review written with every field must read back exactly. The result is in **Background jobs** ("PI Review form · Save to Git").
 
-PI Review reads your headings and still the built-in ones and the earlier formats, so older reviews keep their columns; each field you add is a column of its own in PI Review. **Edit form…** is greyed out, with the reason next to it, for everyone without the right "PI Review: set up the review form" (Scrum Master and Tool Owner by default), in View as, with the synthetic sample and without Git storage.
+PI Review reads your headings and still the built-in ones and the earlier formats, so older reviews keep their columns; each field you add is a column of its own in PI Review. **Edit form…** is greyed out, with the reason next to it, in View as (an Admin viewing as a Scrum Master sees the ⚙ and the page, read only), with the synthetic sample and without Git storage.
 
 ### Planning Overview and Capacity vs Actual (Testing)
 
@@ -743,7 +745,7 @@ Admins see a **Testing** group with pages that are being tried out:
 
 ### Backlog Health
 
-**I&D Board → Backlog Health** lists what needs attention in the backlog, for everyone:
+**Data & governance → Backlog Health** lists what needs attention in the backlog, for everyone:
 
 - **In older Sprints** — open work whose Sprint has ended.
 - **Features without DoD** — Features whose Description does not mention a DoD.
@@ -867,8 +869,30 @@ On-Demand pages are tables the team sets up itself, without a new release of the
 ![CoNQ with made-up rows](user-guide/images/conq-table.png)
 
 - Search, sort by a heading, choose **Columns**, and **Export** to Excel or CSV.
+- **Group by** and **Filter by column** (see below) narrow and organise the rows.
 - Every row gets a **key** when it is added (for example `CONQ-261124-K7Q2`) and a readable **ID** (`CONQ-0001`) when it is saved.
 - **Every save goes straight to Git**, as its own commit. There is no separate save step; progress and results are in Background jobs.
+
+### Group by and Filter by column
+
+The row under the search box groups and filters the table.
+
+![CoNQ grouped by State, then by Assignee, with one group closed](user-guide/images/table-group-by.png)
+
+1. Choose a column in **Group by**. Each group row shows ▸ / ▾, the column, the value and how many rows it has; "(blank)" comes last.
+2. Choose another column in **then by** for a second level (up to four). The rows inside a group keep the table's sort.
+3. Click a group row to close or open it. **Collapse all** leaves only the outermost groups; **Expand all** opens every level. A button is greyed out when there is nothing to do.
+4. Press **Filter by column**. A field appears under each heading: type part of a value (any case), or pick a value for a Dropdown or Multi-select column. The filters work together with the search, and the count shows how many rows are left.
+
+![The filter row under the headings](user-guide/images/table-filter-row.png)
+
+- A **Multi-select** row appears under **each** of its options, so the counts of one level can add up to more than the rows. It is still one row: the count, the selection and Export hold it once.
+- Dates and amounts are grouped as shown, so "1,200.00 EUR" and "1,200.00 USD" are two groups. The ID and Key are not offered in Group by (one group per row) but can be filtered.
+- While a filter is set, a line says how many rows match and on which columns, also a column you have hidden. **Clear column filters** removes them; **Hide filters** too.
+- **Export** writes the rows you see, in the order of the groups: rows in a **closed group are left out**, and Export says so ("Exports the 4 rows shown (3 rows in closed groups left out)"). Open the group to include them. A grouped-by column is in the file even when it is hidden.
+- The drawer's **‹ ›** (Previous / Next) — also after **Edit** — and **Select every row shown** work on the rows you see as well; the row count above the table still counts every matching row.
+- Your grouping and filters are part of **your own view** and kept in your browser. Which groups are open is for this visit only.
+- The Tool Owner can save the grouping and filters **for everyone** (see [Save view for everyone](#save-view-for-everyone)), with **Start collapsed** if the page should open with only the outermost groups.
 
 ### Set up columns
 
@@ -976,7 +1000,10 @@ The Tool Owner (and anyone with the right *Table, chart and page defaults*, such
 
 1. Set the table up as it should look: the columns, their order and widths, Wrap text, the density and the sort.
 2. Open **Columns** and press **Save view for everyone**. The view is saved to Git; Background jobs shows the result, and the panel says who saved it and when.
-3. To remove it again, press **Clear the view for everyone** and confirm.
+3. On an On-Demand Table page a pop-up first lists what is saved — also **Group by** and the **column filters** — and offers **Start collapsed**: tick it to open the page with only the outermost groups (off: the groups open expanded). Press **Save view for everyone**.
+4. To remove it again, press **Clear the view for everyone** and confirm.
+
+![Save view for everyone with Start collapsed](user-guide/images/save-view-collapsed.png)
 
 ![The Columns panel with the view line and Save view for everyone](user-guide/images/save-view.png)
 
@@ -985,6 +1012,7 @@ Which view you see:
 - Your own view when you changed the table, else the **view for everyone**, else the table's built-in view.
 - With your own view the panel reads "Your own view · **Use the view for everyone**". When a newer view for everyone has been saved since, it reads "A new view for everyone is available — **Use it**". **Reset layout** also goes back to the view for everyone.
 - Columns that no longer exist are ignored; columns added later come at the end and are shown.
+- Grouping and column filters: your own choice wins, also "no grouping". **Start collapsed** always comes from the view for everyone; you open and close groups as you like during your visit. A view saved before grouping existed keeps working.
 
 Without the right, with a read-only Git token, with the synthetic sample or in View as, the Save and Clear actions are not shown.
 
@@ -1026,11 +1054,24 @@ Each chart also has **Data labels** (your own choice) and **Table** (the numbers
 
 People who may set up the page add charts with **＋ Add chart / table**. The pop-up holds its fields in **tabs**, with a live **Preview** beside them (under them in a narrow window). **Cancel** and the main button always stay in view.
 
-1. On **Data**: type a **Title**, choose the **Type** — Bar / column, Line over time, Pie / donut, Pareto, KPI (one number), Summary table or Narrative (text) — then **Categories by** (the column to group by; for a bar chart an optional **Stacked by**), the **Measure** — Count of rows, Sum, Average, Minimum, Maximum (of a Number or Currency column) or Distinct count — and **Group dates by**, **Show** and the sort.
+1. On **Data**: type a **Title**, choose the **Type** — Bar / column, Line over time, Pie / donut, Pareto, KPI (one number), Pivot table or Narrative (text) — then **Categories by** (the column to group by; for a bar chart an optional **Stacked by**), the **Measure** — Count of rows, Sum, Average, Minimum, Maximum (of a Number or Currency column) or Distinct count — and **Group dates by**, **Show** and the sort.
 2. On **Filters**: **＋ Add filter** narrows this chart only (values of a Dropdown or Multi-select, or a range of months).
 3. On **Format**: the look of the chart — see [Chart options](#chart-options).
 4. On **Elements**: the chart elements and the axis names — see [Chart elements](#chart-elements).
 5. Press **Add chart** (**Save** when you edit one). It is saved to Git at once, for everyone.
+
+**A Pivot table with nested rows and columns**
+
+1. Choose the type **Pivot table**. Under **Rows**, pick the outer field in **Rows by** (for example Epic), then **＋ then by** for the next one (Feature, then State) — up to three.
+2. Under **Columns (optional)**, pick **Columns by** (for example Stream) and **＋ then by** (Month) — up to two.
+3. **↑ ↓** change the order of the fields, **✕** removes one. Date fields follow **Group dates by**.
+4. Every group shows its **subtotal** on its own line, every outer column a **Subtotal** column, and the table its **Total** row and column. An average or a distinct count of a group is worked out from its rows, not by adding up the cells.
+5. On the table, **▸ / ▾** closes or opens a group; **Collapse all** and **Expand all** do it for all. This is only for you and only until you leave the page.
+6. Click any number to see the **rows behind** it. **Export** gives a flat table (a column per row field, the Line column marking Subtotal and Total).
+
+The first 10 outer rows are shown, with **Show all**. A very large table draws at most 2,000 numbers at once and says so; Export always has everything.
+
+**Name the value**: by default the chart calls its value after the measure ("Count of rows"). Type a **Value name** on Data (for example "Services") — or give the value axis a title on Elements — and the legend, the Table view, tooltips, data labels, table headings, Rows behind and Export all use it.
 
 ![The chart pop-up on Data, with a Pareto in the preview](user-guide/images/chart-dialog.png)
 

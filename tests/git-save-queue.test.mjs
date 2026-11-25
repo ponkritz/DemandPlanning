@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { decodeBase64, encodeBase64 } from '../src/gitStorage.ts'
-import { GitQueueError, maxSaveTries, mergeHistoryText, mergeKeyed, mergeKpiTrackerText, mergeViewsBackupText, mergeViewsDefaultsText, SaveQueue, saveStamp, stampMessage, stampOf, writeQueuedBinary, writeQueuedText } from '../src/gitSaveQueue.ts'
+import { decodeBase64, encodeBase64, failure, GitServerError, isNetworkFailure } from '../src/gitStorage.ts'
+import { GitQueueError, isTransient, maxSaveTries, plainSaveError, saveFailureText, mergeHistoryText, mergeKeyed, mergeKpiTrackerText, mergeViewsBackupText, mergeViewsDefaultsText, SaveQueue, saveStamp, stampMessage, stampOf, writeQueuedBinary, writeQueuedText } from '../src/gitSaveQueue.ts'
 
 // GIT-17 (design defaults review, decision 8): saves to the shared files that used to be last-writer-wins are queued with
 // their time (to the second), written in that order as their own commits, and merged into the latest file in Git.
@@ -145,4 +145,47 @@ test('GIT-17: the Monthly pack template is not merged: an older save never repla
   const newer = await writeQueuedBinary(at(path), 't', { bytes: new Uint8Array([1, 2]), at: '2026-11-23T10:00:09Z', message: 'Monthly pack template' }, github.fetch)
   assert.equal(newer.keptNewer, false); assert.equal(github.files[path].content, 'AQI=')
   assert.equal(github.commits.at(-1).message, 'Monthly pack template [saved 2026-11-23T10:00:09Z]')
+})
+
+// GIT-27: a save without an answer or with a server error — in plain words, tried once more by itself, the change kept.
+test('GIT-27: a network failure and a server error are said in plain words; any other error stays as it is (TC-GIT-21)', async () => {
+  for (const raw of [new TypeError('Failed to fetch'), new TypeError('NetworkError when attempting to fetch resource.'), new TypeError('Load failed'), new Error('Failed to fetch')]) assert.equal(isNetworkFailure(raw), true, raw.message)
+  assert.equal(isNetworkFailure(new Error('GitHub rejected the token.')), false)
+  assert.equal(saveFailureText(new TypeError('Failed to fetch'), 'on-demand/resource-mapping.json'), 'GitHub could not be reached (network, VPN or proxy): on-demand/resource-mapping.json is not saved. Your change is kept here — check the connection and press Retry. (Browser: Failed to fetch)')
+  const server = await failure(json(500, { message: 'Server Error' }), config, 'save on-demand/resource-mapping.json')
+  assert.ok(server instanceof GitServerError)
+  assert.equal(server.status, 500)
+  assert.equal(saveFailureText(server, 'on-demand/resource-mapping.json', 412_345), 'GitHub had a problem saving on-demand/resource-mapping.json (HTTP 500). Your change is kept here — press Retry in a minute. If it keeps failing, the page file is 412 KB — a page with many rows saves faster as row files (the page’s ⋯ → Convert to row files…). (GitHub: Server Error)')
+  assert.match(saveFailureText(await failure(json(502, {}), config, 'save x'), 'kpi-tracker.json', 2_000), /^GitHub had a problem saving kpi-tracker\.json \(HTTP 502\)\. .* the file is 2 KB\.$/)
+  for (const status of [503, 504]) assert.ok(isTransient(await failure(json(status, {}), config, 'save x')))
+  for (const status of [401, 403, 404, 422, 418]) assert.equal(isTransient(await failure(json(status, {}), config, 'save x')), false, String(status))
+  const other = new Error('GitHub rejected the token.')
+  assert.equal(plainSaveError(other, 'x.json'), other, 'not changed')
+})
+
+test('GIT-27: a server error or no answer is tried once more by itself — written once; a write that did reach the repository is not written twice (TC-GIT-21)', async () => {
+  const path = 'kpi-tracker.json', text = '{"schema":1,"sheets":[{"name":"Mine","rows":[]}]}\n'
+  const change = { text, base: '{"schema":1,"sheets":[]}\n', at: '2026-11-23T10:00:09Z', message: 'KPI tracker', merge: mergeKpiTrackerText }
+  // The first write answers 500 (nothing written), the second is written.
+  let github = fakeGitHub({ [path]: change.base })
+  let fails = 1, pauses = 0
+  const flaky = (gh, answer) => async (url, init = {}) => { if (init.method === 'PUT' && fails > 0) { fails -= 1; return answer(gh, url, init) } return gh.fetch(url, init) }
+  let result = await writeQueuedText(at(path), 't', change, flaky(github, () => json(500, { message: 'Server Error' })), maxSaveTries, () => { pauses += 1; return 0 })
+  assert.deepEqual([result.unchanged, github.puts, github.text(path) === text, pauses], [false, 1, true, 1])
+  // The first write reached the repository but answered 502: the second try reads it and writes nothing more.
+  github = fakeGitHub({ [path]: change.base }); fails = 1
+  result = await writeQueuedText(at(path), 't', change, flaky(github, async (gh, url, init) => { await gh.fetch(url, init); return json(502, {}) }), maxSaveTries, () => 0)
+  assert.deepEqual([result.unchanged, github.puts, github.text(path) === text], [true, 1, true])
+  // No answer at all (the read): tried again, then written.
+  github = fakeGitHub({ [path]: change.base })
+  let offline = 1
+  const flakyRead = async (url, init = {}) => { if (!init.method && offline > 0) { offline -= 1; throw new TypeError('Failed to fetch') } return github.fetch(url, init) }
+  await writeQueuedText(at(path), 't', change, flakyRead, maxSaveTries, () => 0)
+  assert.equal(github.text(path), text)
+  // Twice a 500: the plain message; the file as it was; nothing half-written, and Retry writes it.
+  github = fakeGitHub({ [path]: change.base }); fails = 2
+  await assert.rejects(writeQueuedText(at(path), 't', change, flaky(github, () => json(500, {})), maxSaveTries, () => 0), /^Error: GitHub had a problem saving kpi-tracker\.json \(HTTP 500\)\. Your change is kept here — press Retry in a minute\./)
+  assert.equal(github.text(path), change.base)
+  await writeQueuedText(at(path), 't', change, github.fetch, maxSaveTries, () => 0)
+  assert.equal(github.text(path), text, 'Retry reads the current version again and writes the change')
 })

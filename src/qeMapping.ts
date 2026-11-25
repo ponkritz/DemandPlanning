@@ -1,5 +1,6 @@
 import type { WorkbookSheet } from './xlsx'
 import { csvCell } from './csv.ts'
+import { groupKeys, groupTree as tableGroupTree, type TableGroup } from './tableGroups.ts'
 
 // QE Mapping: an uploaded Excel (or CSV) kept as it is — every sheet a tab, its first non-empty row the column names,
 // every value text — then edited in the app (cells, rows, columns) and shared through Git as qe-mapping.json.
@@ -77,19 +78,14 @@ export function filterRows(sheet: QeSheet, search: string, filters: Record<strin
 }
 // Rows grouped by one column's value (blank last), groups in natural order.
 export function groupRows(rows: QeRow[], columnId: string) {
-  const groups = new Map<string, QeRow[]>()
-  for (const row of rows) { const key = row.cells[columnId] ?? ''; groups.set(key, [...(groups.get(key) ?? []), row]) }
-  return [...groups.entries()].sort(([a], [b]) => a === '' ? 1 : b === '' ? -1 : a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })).map(([value, items]) => ({ value, rows: items }))
+  return groupTree(rows, [columnId]).map(({ value, rows: items }) => ({ value, rows: items }))
 }
 // Nested grouping (QEM-11): the rows grouped by the first column, each group by the next, and so on. A group's key is
-// its path of values, unique across levels, so that it can be collapsed on its own.
-export interface QeGroup { key: string; columnId: string; value: string; depth: number; rows: QeRow[]; children: QeGroup[] }
-export function groupTree(rows: QeRow[], columnIds: string[], path: string[] = []): QeGroup[] {
-  const [first, ...rest] = columnIds
-  if (!first) return []
-  return groupRows(rows, first).map(({ value, rows: items }) => ({ key: JSON.stringify([...path, value]), columnId: first, value, depth: path.length, rows: items, children: groupTree(items, rest, [...path, value]) }))
-}
-export const groupKeys = (groups: QeGroup[]): string[] => groups.flatMap((group) => [group.key, ...groupKeys(group.children)])
+// its path of values, unique across levels, so that it can be collapsed on its own. The shared table's Group by
+// (UI-25) uses the same code (tableGroups.ts).
+export type QeGroup = TableGroup<QeRow>
+export const groupTree = (rows: QeRow[], columnIds: string[], path: string[] = []): QeGroup[] => tableGroupTree(rows, columnIds, (row, id) => row.cells[id] ?? '', path)
+export { groupKeys }
 export const tableRows = (columns: QeColumn[], rows: QeRow[]) => [columns.map((column) => column.name), ...rows.map((row) => columns.map((column) => row.cells[column.id] ?? ''))]
 export const tableCsv = (columns: QeColumn[], rows: QeRow[]) => tableRows(columns, rows).map((row) => row.map(csvCell).join(',')).join('\r\n')
 

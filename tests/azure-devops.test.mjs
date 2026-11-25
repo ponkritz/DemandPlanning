@@ -765,3 +765,21 @@ test('DSK-11: the desktop proxy accepts a Discussion page token on the read only
   assert.match(urls[0], /&continuationToken=next$/)
   await assert.rejects(requestAzureDevOps({ ...base, operation: 'comments' }, async () => response(429, { 'retry-after': '30' })), /\(429\)\. Retry after 30 s\./)
 })
+
+test('PIR-14 (SM-183): the desktop proxy sends a PI review as its list HTML only when it passes the same allowlist; every other comment stays escaped text; dev.azure.com only (TC-PIR-13)', async () => {
+  const { azureCommentsRequest, requestAzureDevOps } = require('../electron/azure-devops.cjs')
+  const { buildReviewComment } = await import('../src/piReviewPost.ts')
+  const { safeCommentHtml } = await import('../src/azureClient.ts')
+  const base = { organization: 'org', project: 'Quality', team: 'T', pat: 'p', workItemId: 7, operation: 'add-comment' }
+  const html = buildReviewComment({ learnings: '<script>x</script> & "q"', struggles: 'None', move: 'Yes', moveReason: '', movePi: 'PI 27.1', mode: 'Offline Review', remarks: '' })
+  assert.equal(JSON.parse(azureCommentsRequest({ ...base, comment: html, htmlComment: true, reviewOf: 'ana@example.com' }).options.body).text, html, 'sent as built, not escaped again')
+  assert.equal(JSON.parse(azureCommentsRequest({ ...base, comment: '<b>hi</b>\nthere' }).options.body).text, '&lt;b&gt;hi&lt;/b&gt;<br>there', 'a plain comment is still escaped')
+  for (const bad of ['<ul><li onclick="x">a</li></ul>', '<script>x</script>', '<p>"a"</p>', '<img src=x>']) {
+    assert.equal(safeCommentHtml(bad), false)
+    assert.throws(() => azureCommentsRequest({ ...base, comment: bad, htmlComment: true, reviewOf: '' }), /markup the app does not send/, bad)
+  }
+  assert.throws(() => azureCommentsRequest({ ...base, comment: html, htmlComment: true }), /markup the app does not send/, 'only a PI Review post')
+  assert.throws(() => azureCommentsRequest({ ...base, comment: html, htmlComment: 'yes', reviewOf: '' }), /markup the app does not send/)
+  assert.throws(() => azureCommentsRequest({ ...base, operation: 'comments', comment: html, htmlComment: true, reviewOf: '' }), /markup the app does not send/)
+  await assert.rejects(requestAzureDevOps({ ...base, baseUrl: 'https://tfs.example.com/tfs/Coll', comment: html, htmlComment: true, reviewOf: '' }, async () => { throw new Error('not sent') }), /dev\.azure\.com\) only/)
+})

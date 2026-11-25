@@ -10,7 +10,7 @@ export const insightTypes: { key: InsightType; label: string; hint: string }[] =
   { key: 'pie', label: 'Pie / donut', hint: 'Each category’s share of the total; more than 5 categories: the 5 largest and “Other”.' },
   { key: 'pareto', label: 'Pareto', hint: 'Categories largest first as columns, the cumulative share (%) as a line on a 0–100% axis and an 80% line.' },
   { key: 'kpi', label: 'KPI (one number)', hint: 'One number: the count, sum, average, minimum, maximum or distinct count of the rows.' },
-  { key: 'table', label: 'Summary table', hint: 'Rows by one field, optional columns by another, with totals.' },
+  { key: 'table', label: 'Pivot table', hint: 'Rows by up to 3 fields and optional columns by up to 2 (＋ then by), with subtotals and totals; groups open and close, and a click lists the rows behind a number.' },
   { key: 'narrative', label: 'Narrative (text)', hint: 'Sentences about the measure — the total, the highest and lowest, the change against the previous period — and rules of your own, as plain text.' },
 ]
 export const insightTypeLabel = (type: InsightType) => insightTypes.find((entry) => entry.key === type)?.label ?? type
@@ -38,6 +38,26 @@ export const secondLabel = (type: InsightType) => type === 'table' ? 'Columns by
 export const dateGroupLabels: Record<DateGroup, { label: string; unit: string }> = { day: { label: 'Day', unit: 'day' }, week: { label: 'Week (ISO, from Monday)', unit: 'week' }, month: { label: 'Month', unit: 'month' }, quarter: { label: 'Quarter', unit: 'quarter' }, year: { label: 'Year', unit: 'year' } }
 export const grainOf = (insight: Insight): DateGroup => insight.options?.dateGroup ?? 'month'
 
+// ---- Pivot table fields (CHT-74…CHT-79) ----
+// A Pivot table (type 'table') has up to 3 row fields, outermost first (category, rows2, rows3), and up to 2 column
+// fields (second, second2); every other type has its category and second only.
+export const maxPivotRows = 3, maxPivotColumns = 2
+type PivotFields = Pick<Insight, 'type' | 'category' | 'second' | 'rows2' | 'rows3' | 'second2'>
+export const pivotRowFields = (insight: PivotFields) => insight.type !== 'table' ? [insight.category].filter(Boolean) : [insight.category, insight.category ? insight.rows2 ?? '' : '', insight.category && insight.rows2 ? insight.rows3 ?? '' : ''].filter(Boolean)
+export const pivotColumnFields = (insight: PivotFields) => insight.type !== 'table' ? [insight.second].filter(Boolean) : [insight.second, insight.second ? insight.second2 ?? '' : ''].filter(Boolean)
+// A table with more than one row or column field: drawn as the nested Pivot table (CHT-74); a one-level table as before.
+export const isNestedPivot = (insight: PivotFields) => insight.type === 'table' && (pivotRowFields(insight).length > 1 || pivotColumnFields(insight).length > 1)
+// The insight with these row and column fields (outermost first): the stored fields set, the ones not given cleared.
+export function withPivotFields<T extends PivotFields>(insight: T, rows: string[], columns: string[]): T {
+  const out = { ...insight, category: rows[0] ?? '', second: columns[0] ?? '' }
+  delete out.rows2; delete out.rows3; delete out.second2
+  if (insight.type !== 'table') return out
+  if (rows[1]) out.rows2 = rows[1]
+  if (rows[1] && rows[2]) out.rows3 = rows[2]
+  if (columns[0] && columns[1]) out.second2 = columns[1]
+  return out
+}
+
 // A new insight's starting point: the first column that fits, Count of rows, no filter, largest first.
 export function blankInsight(page: OnDemandPage, id: string, type: InsightType = 'bar'): Insight {
   const out: Insight = { id, title: '', type, category: type === 'kpi' ? '' : categoryColumns(page, type)[0]?.id ?? '', second: '', measure: 'count', value: '', filters: [], sort: type === 'line' ? 'label' : 'value' }
@@ -54,7 +74,16 @@ export function withType(page: OnDemandPage, insight: Insight, type: InsightType
   const measure: InsightMeasure = shares && !additive(insight.measure) ? insight.measure === 'distinct' ? 'count' : 'sum' : insight.measure
   const value = measure === 'count' ? '' : measure === insight.measure ? insight.value : valueColumns(page).some((column) => column.id === insight.value) ? insight.value : valueColumns(page)[0]?.id ?? ''
   const options = cleanOptions(type, measure, insight.options)
-  const next: Insight = { ...insight, type, category, second, measure, value, sort: type === 'line' ? 'label' : type === 'pareto' || type === 'narrative' ? 'value' : insight.sort }
+  // CHT-79: a Pivot table keeps its nested fields that still fit (each column once); any other type drops them.
+  const fits = (id: string | undefined) => Boolean(id) && secondColumns(page, 'table').some((column) => column.id === id)
+  const nested = type !== 'table' ? { rows: [category], columns: [second] } : (() => {
+    const rows = [category, ...[insight.rows2, insight.rows3].filter(fits) as string[]]
+    const columns = [second, ...(second && fits(insight.second2) ? [insight.second2!] : [])]
+    const seen = new Set<string>()
+    const once = (list: string[]) => list.filter((id) => id && !seen.has(id) && Boolean(seen.add(id)))
+    return { rows: once(rows), columns: once(columns) }
+  })()
+  const next: Insight = withPivotFields({ ...insight, type, category, second, measure, value, sort: type === 'line' ? 'label' : type === 'pareto' || type === 'narrative' ? 'value' : insight.sort }, nested.rows, nested.columns)
   if (options) next.options = options
   else delete next.options
   if (type === 'narrative') next.narrative = insight.narrative ?? blankNarrative()
@@ -84,6 +113,13 @@ export function insightProblems(page: OnDemandPage, insight: Insight): string[] 
   if (insight.second) {
     if (insight.second === insight.category) problems.push('The same column is used twice: choose another one, or none.')
     else check(insight.second, insight.type === 'table' ? 'for the table’s columns' : insight.type === 'line' ? 'for the lines' : 'for the stacks', secondTypes[insight.type])
+  }
+  // CHT-79: a Pivot table's further row and column fields, each a column of a kind the table takes, each column once.
+  if (insight.type === 'table') {
+    const nested: [string | undefined, string][] = [[pivotRowFields(insight)[1], 'for the rows (level 2)'], [pivotRowFields(insight)[2], 'for the rows (level 3)'], [pivotColumnFields(insight)[1], 'for the columns (level 2)']]
+    for (const [id, role] of nested) if (id) check(id, role, secondTypes.table)
+    const used = [...pivotRowFields(insight), ...pivotColumnFields(insight)]
+    if (isNestedPivot(insight) && new Set(used).size < used.length && insight.second !== insight.category) problems.push('The same column is used twice: choose another one, or none.')
   }
   if (insight.measure !== 'count') check(insight.value, `for the ${measureWord[insight.measure]}`, measureTypes(insight.measure))
   if (!additive(insight.measure) && insight.type === 'pie') problems.push('A pie shows shares of a total: choose Count of rows or Sum.')
@@ -210,7 +246,8 @@ const maxPeriods = (grain: DateGroup) => grain === 'day' ? 4000 : 600
 // The rows an aggregation measures, each with its number and the categories and series it falls in — shared by the
 // aggregation and the drill-down (CHT-10), so the rows listed behind a bar are exactly the rows counted in it.
 interface Prepared { row: OnDemandRow; x: number; d?: string[]; cats: Bucket[]; sers: Bucket[] }
-function prepare(page: OnDemandPage, insight: Insight, currencyWanted?: string) {
+// CHT-76: also the Pivot table's (src/pivotTable.ts), which groups the same measured rows by its nested fields.
+export function prepare(page: OnDemandPage, insight: Insight, currencyWanted?: string) {
   const category = columnOf(page, insight.category)
   const second = insight.second ? columnOf(page, insight.second) : undefined
   const value = insight.measure === 'count' ? undefined : columnOf(page, insight.value)
@@ -395,11 +432,21 @@ export function autoAxisTitles(page: OnDemandPage, insight: Insight, currency = 
   if (insight.type === 'bar' && insight.options?.orientation !== 'vertical') return { x: measure, y: category }
   return { x: category, y: measure }
 }
+// CHT-83: the name the owners gave the value — the Value name, else the title they typed on the value axis (X of
+// horizontal bars, Y of columns, a line or a Pareto); '' when they gave none.
+export function ownValueName(insight: Pick<Insight, 'type' | 'options'>): string {
+  const options = insight.options ?? {}
+  if (options.valueName) return options.valueName
+  if (insight.type === 'bar' && options.orientation !== 'vertical') return options.xTitle ?? ''
+  return insight.type === 'bar' || insight.type === 'line' || insight.type === 'pareto' ? options.yTitle ?? '' : ''
+}
+// The value's name as the chart shows it — in its legend, data table, tooltips, data labels (Series name), table
+// headings, Rows behind and Export (CHT-83: the owners' name when given).
 export function valueText(page: OnDemandPage, insight: Insight, currency = '') {
   const options = insight.options ?? {}
   const shown = additive(insight.measure) && (insight.type === 'bar' || insight.type === 'line')
   const parts = [shown && options.cumulative ? 'running total' : '', shown || insight.type === 'table' ? options.percent && additive(insight.measure) ? '% of total' : '' : ''].filter(Boolean)
-  return `${measureText(page, insight, currency)}${parts.length ? ` — ${parts.join(', ')}` : ''}`
+  return `${ownValueName(insight) || measureText(page, insight, currency)}${parts.length ? ` — ${parts.join(', ')}` : ''}`
 }
 // CHT-25: what a chart counted — "n of m rows counted", rows left out and the currency — for its ⓘ (the chart panel no
 // longer shows it under the title).
@@ -423,8 +470,9 @@ export function currencyText(data: Pick<InsightData, 'currencies' | 'currency'>)
 export function insightSubject(page: OnDemandPage, insight: Insight) {
   const name = (id: string) => columnOf(page, id)?.name ?? '(removed column)'
   if (insight.type === 'kpi' || insight.type === 'narrative' && !insight.category) return measureText(page, insight)
-  const by = insight.type === 'line' ? `per ${dateGroupLabels[grainOf(insight)].unit} of ${name(insight.category)}` : `by ${name(insight.category)}`
-  const split = insight.second ? `, ${isGrouped(insight) ? 'grouped by' : secondLabel(insight.type).toLowerCase()} ${name(insight.second)}` : ''
+  // CHT-74: a Pivot table names its row and column fields, outermost first: "by Epic, then Feature, columns by Stream, then Month".
+  const by = insight.type === 'line' ? `per ${dateGroupLabels[grainOf(insight)].unit} of ${name(insight.category)}` : `by ${pivotRowFields(insight).map(name).join(', then ') || name(insight.category)}`
+  const split = insight.second ? `, ${isGrouped(insight) ? 'grouped by' : secondLabel(insight.type).toLowerCase()} ${pivotColumnFields(insight).map(name).join(', then ')}` : ''
   return `${measureText(page, insight)} ${by}${split}`
 }
 // The filters in words, stated under the chart's title: "Category: Scrap, Rework · Found on: Jan 2026 – Jun 2026".
@@ -443,7 +491,7 @@ export function insightRules(page: OnDemandPage, insight: Insight): string[] {
   const lines: string[] = []
   const options = insight.options ?? {}
   const grain = grainOf(insight)
-  const used = [insight.category, insight.second].map((id) => columnOf(page, id)).filter((column): column is OnDemandColumn => Boolean(column))
+  const used = [...new Set([...pivotRowFields(insight), ...pivotColumnFields(insight)])].map((id) => columnOf(page, id)).filter((column): column is OnDemandColumn => Boolean(column))
   const valueName = columnOf(page, insight.value)?.name ?? 'Number'
   lines.push(insight.measure === 'count' ? 'Each row counts once in its category.' : insight.measure === 'sum' ? `The ${valueName} values of the rows are added up; rows without a number are left out.`
     : insight.measure === 'average' ? `The average of the ${valueName} values of the rows; rows without a number are left out.`
@@ -459,6 +507,12 @@ export function insightRules(page: OnDemandPage, insight: Insight): string[] {
   else if ((insight.type === 'bar' || insight.type === 'pareto' || insight.type === 'table') && top) lines.push(top === 'all' ? 'Every category is shown.' : `The ${top} largest categories; the rest (with “(none)”) as “Other”, last.`)
   if (insight.type === 'line') lines.push(`Every ${dateGroupLabels[grain].unit} from the first to the last is shown, also ${dateGroupLabels[grain].unit}s without rows.`)
   else if (insight.type === 'pareto') lines.push('Largest first (“(none)” and “Other” last); the line is the running share of the sum of the columns, read on the 0–100% axis on the right; the dashed line marks 80%.')
+  else if (isNestedPivot(insight)) {
+    // CHT-75, CHT-76: how a nested Pivot table orders and adds up.
+    lines.push(`${insight.sort === 'value' ? 'The outer rows largest first' : 'The outer rows in the order of the options, by month or by name'}; the rows inside a group and the columns in the order of the options, by date or by name (“(none)” and “Other” last).`)
+    lines.push('Each group has a subtotal (on its own row; for an outer column a Subtotal column) and the table a Total row and column. Subtotals and totals are measured over the group’s rows, each row once — an average, minimum, maximum or distinct count is never made by adding up the cells.')
+    lines.push('▸ / ▾ close and open a group, for you and this visit only. A click on a number lists the rows behind it.')
+  }
   else if (insight.type !== 'table' || !insight.second) lines.push(insight.sort === 'value' ? 'Largest first.' : 'In the order of the options, by month or by name.')
   if (options.cumulative) lines.push(`Running total: each ${insight.type === 'line' ? dateGroupLabels[grain].unit : 'category'} shows its value plus all before it; a click lists the rows of that ${insight.type === 'line' ? dateGroupLabels[grain].unit : 'category'} only.`)
   if (options.percent) lines.push('Values as a share of the total (each row once), in %; with a Multi-select the shares can add up to more than 100%.')

@@ -60,6 +60,8 @@ export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-ins
   const [showHidden, setShowHidden] = useState(() => { try { return (JSON.parse(localStorage.getItem(showHiddenKey) ?? '[]') as string[]).includes(pageId) } catch { return false } })
   const toggleHiddenRows = (on: boolean) => { setShowHidden(on); try { const list = (JSON.parse(localStorage.getItem(showHiddenKey) ?? '[]') as string[]).filter((id) => id !== pageId); localStorage.setItem(showHiddenKey, JSON.stringify(on ? [...list, pageId] : list)) } catch { /* this visit only */ } }
   const [search, setSearch] = useState('')
+  // UI-29: the rows the table shows (search, column filters, closed groups left out), for the Edit button's Previous / Next.
+  const shownRef = useRef<OnDemandRow[]>([])
   // OND-27: the row open in the drawer (by id; a new row until it is saved), the rows in the order shown when it was
   // opened (‹ ›), and whether it opens for editing.
   const [drawer, setDrawer] = useState<{ id: string; order: string[]; draft?: OnDemandRow; edit: boolean } | null>(null)
@@ -220,24 +222,28 @@ export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-ins
   const open = (row: OnDemandRow, shown: OnDemandRow[], edit = false) => setDrawer({ id: row.id, order: shown.map((entry) => entry.id), edit })
   const columns: DataColumn<OnDemandRow>[] = [
     // OND-19: the readable ID, given when the row is saved to Git (sorted by its number).
-    { id: 'od-id', label: 'ID', value: (row) => row.seq ?? Number.MAX_SAFE_INTEGER, exportValue: (row) => rowId(page, row), render: (row) => { const lock = holderOf(row); return <>{row.seq ? <code className="od-key">{rowId(page, row)}</code> : onSave}{row.hidden && <>{' '}<Pill tone="neutral">Hidden</Pill></>}{lock && <>{' '}<LockBadge lock={lock} /></>}</> } },
+    // OND-132: Group by and Filter by column use each value as shown; the ID and the key are filtered, not grouped (one row each).
+    { id: 'od-id', label: 'ID', groupable: false, shown: (row) => rowId(page, row), value: (row) => row.seq ?? Number.MAX_SAFE_INTEGER, exportValue: (row) => rowId(page, row), render: (row) => { const lock = holderOf(row); return <>{row.seq ? <code className="od-key">{rowId(page, row)}</code> : onSave}{row.hidden && <>{' '}<Pill tone="neutral">Hidden</Pill></>}{lock && <>{' '}<LockBadge lock={lock} /></>}</> } },
     // OND-18: the row's key, made when the row is added; rows from before keys get theirs on their next save.
-    { id: 'od-key', label: 'Key', value: (row) => row.key ?? '', render: (row) => row.key ? <code className="od-key">{row.key}</code> : onSave },
+    { id: 'od-key', label: 'Key', groupable: false, value: (row) => row.key ?? '', render: (row) => row.key ? <code className="od-key">{row.key}</code> : onSave },
     ...page.columns.map((column): DataColumn<OnDemandRow> => ({
       id: column.id, label: column.name, hint: column.description, align: column.type === 'number' || column.type === 'currency' ? 'right' : undefined,
       value: (row) => cellSortValue(column, row.cells[column.id]),
+      // OND-132: a Multi-select row is in the group of each of its values; a Date and a Currency as shown ("1,200.00 EUR").
+      shown: (row) => column.type === 'multi' ? valuesOf(row.cells[column.id]) : displayText(column, row.cells[column.id]),
+      filterOptions: hasOptions(column.type) ? column.options : undefined,
       exportValue: (row) => column.type === 'currency' ? displayText(column, row.cells[column.id]) : cellSortValue(column, row.cells[column.id]),
       title: (row) => { const text = cellText(row.cells[column.id]); return text.length > 40 ? text : undefined },
       render: (row) => { const value = row.cells[column.id], problem = cellProblem(column, value); return <>{column.type === 'longtext' ? <span className="od-long">{cellText(value)}</span> : displayText(column, value)}{problem && <>{' '}<small className="od-flag" title={`Kept as it was: ${problem} of “${column.name}”`}>{problem}</small></>}</> },
     })),
     // OND-20, OND-21: who added the row and when (in the viewer's time zone; exported in UTC); the last change, hidden at first.
     { id: 'od-added-by', label: 'Added by', value: (row) => row.addedBy ?? '', render: (row) => row.addedBy || <span className="muted">—</span> },
-    { id: 'od-added-on', label: 'Added on', firstSortDesc: true, value: (row) => row.addedAt ?? '', render: (row) => row.addedAt ? formatDateTime(row.addedAt) : <span className="muted">—</span> },
+    { id: 'od-added-on', label: 'Added on', firstSortDesc: true, shown: (row) => row.addedAt ? formatDateTime(row.addedAt) : '', value: (row) => row.addedAt ?? '', render: (row) => row.addedAt ? formatDateTime(row.addedAt) : <span className="muted">—</span> },
     { id: 'od-updated-by', label: 'Last updated by', defaultHidden: true, export: 'always', value: (row) => lastUpdate(row)?.by ?? '', render: (row) => lastUpdate(row)?.by || <span className="muted">—</span> },
-    { id: 'od-updated-on', label: 'Last updated on', defaultHidden: true, export: 'always', firstSortDesc: true, value: (row) => lastUpdate(row)?.at ?? '', render: (row) => { const last = lastUpdate(row); return last ? formatDateTime(last.at) : <span className="muted">—</span> } },
+    { id: 'od-updated-on', label: 'Last updated on', defaultHidden: true, export: 'always', firstSortDesc: true, shown: (row) => { const last = lastUpdate(row); return last ? formatDateTime(last.at) : '' }, value: (row) => lastUpdate(row)?.at ?? '', render: (row) => { const last = lastUpdate(row); return last ? formatDateTime(last.at) : <span className="muted">—</span> } },
     // OND-27: Edit opens the row's drawer for editing; OND-39: Hide (Show for a hidden row) saves at once.
     { id: '@actions', label: 'Actions', sortable: false, export: false, render: (row) => <span className="button-row nowrap">
-      <button type="button" className="ghost" disabled={Boolean(editRowsReason || lockReason(row))} title={editRowsReason || lockReason(row) || undefined} aria-label={`Edit row ${rowLabel(page, row)}`} onClick={() => open(row, rows, true)}>Edit</button>
+      <button type="button" className="ghost" disabled={Boolean(editRowsReason || lockReason(row))} title={editRowsReason || lockReason(row) || undefined} aria-label={`Edit row ${rowLabel(page, row)}`} onClick={() => open(row, shownRef.current.length ? shownRef.current : rows, true)}>Edit</button>
       <button type="button" className="text-button" disabled={!canRows || Boolean(lockReason(row))} title={rowsReason || lockReason(row) || undefined} aria-label={`${row.hidden ? 'Show' : 'Hide'} row ${rowLabel(page, row)}`} onClick={() => void hideRowNow(row, !row.hidden).catch(() => undefined)}>{row.hidden ? 'Show' : 'Hide'}</button>
     </span> },
   ]
@@ -291,13 +297,13 @@ export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-ins
       info={<>Click a row (or press Enter on it) to open it on the right: its ID, key, who added it and when, every value with its column’s description, and its History; Edit there changes it, and Save to Git saves it for everyone at once. Each column has a type — Text, Long text (a paragraph), Number, Currency (an amount and its currency), Date, Dropdown (one value) or Multi-select with the options of its list — and may have a description (ⓘ on its heading) saying how or what to fill. A value that no longer fits its column (an option removed, the type changed) is kept and marked, e.g. “not in the list”, until it is changed. Every row gets a readable ID such as {page.keyPrefix}-0001 when it is saved to Git, and records who added it and when; every saved change is logged in the row’s History (who, when, what changed — the last {maxLog}). Last updated by / on can be shown with Columns. The export holds the IDs, values, Added by / on and Last updated by / on (in UTC), not the History. Every change — a row, the columns, the name, a chart — is saved to Git {rowFiles ? <>in {path} the moment it is saved: each row is its own file, so two people adding or editing rows at the same time never get in each other’s way. Edit takes the row’s lock — others see who is editing it and cannot edit that row until it is saved, cancelled or {timeoutMinutes} minutes pass without activity (the unsaved values are then kept in that browser as a draft for one day)</> : <>as {onDemandPath(page.id)} the moment it is saved (no separate Save to Git); two saves at the same time are merged row by row and column by column, the later one winning where both changed the same</>}.{store.history(page.id) && <> <a href={store.history(page.id)} target="_blank" rel="noreferrer">History in GitHub</a></>}{owners.length > 0 && <> Co-owners (set up the page and edit its rows): {[...new Set(owners)].join(', ')}.</>}</>}
       action={<button type="button" className="ghost" disabled={!canSetup} title={setupReason || undefined} onClick={() => setColumnsOpen(true)}>Set up columns…</button>}>
       {!gitReason && <WriteBlocked reason={block.noteFor('on this page', ...blocked)} />}
-      {page.columns.length ? <DataTable id={`on-demand:${page.id}`} columns={columns} rows={rows} rowKey={(row) => row.id} exportName={page.name}
+      {page.columns.length ? <DataTable id={`on-demand:${page.id}`} columns={columns} rows={rows} rowKey={(row) => row.id} exportName={page.name} groupFilter shownRef={shownRef}
         onRowOpen={(row, shown) => open(row, shown)} rowLabel={(row) => `Open row ${rowId(page, row) || row.key || rowLabel(page, row)}`}
         toolbar={<><input className="search" type="search" aria-label={`Search ${page.name}`} placeholder="Search all columns" value={search} onChange={(event) => setSearch(event.target.value)} />
           <button type="button" className="ghost" disabled={Boolean(editRowsReason)} title={editRowsReason || undefined} onClick={() => { const draft = { id: newId('r'), cells: {} }; setDrawer({ id: draft.id, order: [], draft, edit: true }) }}>＋ Add row</button>
           {(hiddenCount > 0 || showHidden) && <label className="check od-show-hidden"><input type="checkbox" checked={showHidden} onChange={(event) => toggleHiddenRows(event.target.checked)} />Show hidden rows ({hiddenCount})</label>}</>}
         rowClassName={(row) => row.hidden ? 'od-row-hidden' : undefined}
-        status={`${rows.length} of ${showHidden ? page.rows.length : visibleCount} row${(showHidden ? page.rows.length : visibleCount) === 1 ? '' : 's'}${hiddenCount ? ` (${hiddenCount} hidden${showHidden ? ', shown' : ''})` : ''}`}
+        status={(shown) => `${shown} of ${showHidden ? page.rows.length : visibleCount} row${(showHidden ? page.rows.length : visibleCount) === 1 ? '' : 's'}${hiddenCount ? ` (${hiddenCount} hidden${showHidden ? ', shown' : ''})` : ''}`}
         empty={<EmptyState title={visibleCount || (showHidden && page.rows.length) ? 'No row matches the search.' : 'No rows yet.'} detail={page.rows.length ? undefined : canRows ? 'Add the first one with ＋ Add row.' : undefined} />} />
         : <EmptyState title="No columns yet." detail={canSetup ? 'Add them with Set up columns…: a name and a type for each, and the options of a Dropdown or Multi-select.' : 'Someone allowed to set up On-Demand pages adds the columns.'} />}
       {saveBar}

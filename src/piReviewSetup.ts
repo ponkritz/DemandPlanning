@@ -5,7 +5,7 @@
 // file the built-in form applies (the form of PIR-13). The field "Move to next PI" keeps its special behaviour: Yes /
 // No, the PI it moves to ({PI} in its heading) and the reason; it can be relabelled but not removed.
 import { mergeKeyed, merge3, type Merge } from './gitSaveQueue.ts'
-import { builtInSectionOf, piPlaceholder } from './piReview.ts'
+import { builtInSectionOf, piPlaceholder, reviewedPiPlaceholder } from './piReview.ts'
 import { writeBlockedReason } from './access.ts'
 import { columnsError, typeLabel, type ColumnDraft, type OnDemandType } from './onDemand.ts'
 
@@ -36,9 +36,10 @@ export const listHelp = 'One point per line; start a line with - or 1. for a lis
 export const builtInType: Record<BuiltInFieldId, PiFieldType> = { learnings: 'longtext', struggles: 'longtext', move: 'dropdown', review: 'dropdown', remarks: 'longtext' }
 
 // PIR-19: the built-in form — exactly the form and comment of PIR-13 and PIR-14 (Move to next PI = No pre-selected).
+// PIR-28: Learnings and Struggles name the reviewed PI ("Learnings of PI 26.4:"; "Learnings" when it is not known).
 export const builtInFields = (): PiFormField[] => [
-  { id: 'learnings', label: 'Learnings', heading: 'Learnings', type: 'longtext', options: [], required: true, defaultValue: '', help: listHelp },
-  { id: 'struggles', label: 'Struggles', heading: 'Struggles', type: 'longtext', options: [], required: true, defaultValue: '', help: listHelp },
+  { id: 'learnings', label: 'Learnings', heading: `Learnings of ${reviewedPiPlaceholder}`, type: 'longtext', options: [], required: true, defaultValue: '', help: listHelp },
+  { id: 'struggles', label: 'Struggles', heading: `Struggles of ${reviewedPiPlaceholder}`, type: 'longtext', options: [], required: true, defaultValue: '', help: listHelp },
   { id: 'move', label: 'Move to next PI', heading: `Whether the feature needs to be shifted to ${piPlaceholder}`, type: 'dropdown', options: [...moveOptions], required: true, defaultValue: 'No', help: '' },
   { id: 'review', label: 'Advise to discuss the Feature during the Review meeting?', heading: 'Advise to discuss the Feature during the Review meeting', type: 'dropdown', options: ['Discuss during Meeting', 'Offline Review'], required: true, defaultValue: '', help: '' },
   { id: 'remarks', label: 'Additional Remarks', heading: 'Additional Remarks', type: 'longtext', options: [], required: false, defaultValue: '', help: 'Anything else for the review.' },
@@ -53,7 +54,7 @@ export const customIdPattern = /^f-[a-z0-9]{1,20}$/
 export function newFieldId(taken: readonly string[]) { for (let index = taken.length + 1; ; index += 1) { const id = `f-${index}`; if (!taken.includes(id)) return id } }
 
 // PIR-21: a heading compared with another — letter case, spaces and a final "?" ignored; {PI} as one PI.
-const headingKey = (heading: string) => heading.trim().replace(/\s+/g, ' ').replace(/\s*\?$/, '').replace(piPlaceholder, 'PI 1').toLowerCase()
+const headingKey = (heading: string) => heading.trim().replace(/\s+/g, ' ').replace(/\s*\?$/, '').replace(piPlaceholder, 'PI 1').replace(reviewedPiPlaceholder, 'PI 1').toLowerCase()
 const fieldName: Record<BuiltInFieldId, string> = { learnings: 'Learnings', struggles: 'Struggles', move: 'Move to next PI', review: 'the Review meeting advice', remarks: 'Additional Remarks' }
 
 // PIR-21, PIR-22: the problems of a setup, each naming the field — the shape (limits, types, options, default), empty or
@@ -83,7 +84,7 @@ export function setupProblems(setup: PiFormSetup): string[] {
     if (!heading) problems.push(`${name}: enter the heading written in the comment.`)
     else if (heading.length > maxHeading) problems.push(`${name}: the heading is longer than ${maxHeading} characters.`)
     else if (!/^\p{L}/u.test(heading) || /[:\r\n#*_<>]/.test(heading)) problems.push(`${name}: the heading “${heading}” must start with a letter and hold no colon, line break, #, *, _, < or >.`)
-    else if (!/[\p{L}\p{N}]$|\?$|\)$/u.test(heading.replace(piPlaceholder, 'PI'))) problems.push(`${name}: the heading “${heading}” must end with a letter, a digit, “?” or “)”.`)
+    else if (!/[\p{L}\p{N}]$|\?$|\)$/u.test(heading.replace(piPlaceholder, 'PI').replaceAll(reviewedPiPlaceholder, 'PI'))) problems.push(`${name}: the heading “${heading}” must end with a letter, a digit, “?” or “)”.`)
     else {
       const key = headingKey(heading)
       const other = headings.get(key)
@@ -92,8 +93,12 @@ export function setupProblems(setup: PiFormSetup): string[] {
       const count = heading.split(piPlaceholder).length - 1
       if (field.id === 'move' && count !== 1) problems.push(`${name}: the heading must contain ${piPlaceholder} once, where the PI it moves to is written (e.g. “Whether the feature needs to be shifted to ${piPlaceholder}”).`)
       if (field.id !== 'move' && count) problems.push(`${name}: only the Move to next PI heading may contain ${piPlaceholder}.`)
+      // PIR-28: the reviewed PI at most once, and with a word of the heading besides it.
+      const reviewed = heading.split(reviewedPiPlaceholder).length - 1
+      if (reviewed > 1) problems.push(`${name}: the heading may contain ${reviewedPiPlaceholder} (the reviewed PI) once only.`)
+      else if (reviewed && !heading.replace(reviewedPiPlaceholder, '').replace(/\b(?:of|for|in)\b/gi, '').trim()) problems.push(`${name}: the heading needs words besides ${reviewedPiPlaceholder}.`)
       // PIR-21: a heading older reviews already use for another field would read those reviews into this field.
-      const reads = builtInSectionOf(heading.replace(piPlaceholder, 'PI 1'))
+      const reads = builtInSectionOf(heading.replace(piPlaceholder, 'PI 1').replace(reviewedPiPlaceholder, 'PI 1'))
       if (reads && reads !== field.id) problems.push(`${name}: the heading “${heading}” is already read as ${fieldName[reads]} (one of its headings), so reviews written with it would land in the wrong column. Choose another heading.`)
     }
     // The type: a built-in field keeps its own; Move to next PI is Yes / No, required.
@@ -158,7 +163,7 @@ export const mergePiFormText: Merge = (baseText, mineText, theirsText, mineLater
 }
 
 // ---- who may change it (CON-114) ----
-// PIR-23: why the viewer cannot change the form setup ('' when they can): View as, the roles not loaded (CON-101), the
+// PIR-31: why the viewer cannot change the form setup ('' when they can): View as, the roles not loaded (CON-101), the
 // permission, the synthetic sample, Git storage (not connected, a read-only token), the file unreadable or still loading.
 export interface FormSetupViewer { viewingAs: string; readOnly: boolean; can: (action: 'pireview.setup') => boolean }
 export interface FormSetupGit { connected: boolean; readOnly: boolean; isSample: boolean }
@@ -172,6 +177,16 @@ export function formSetupBlock(viewer: FormSetupViewer, git: FormSetupGit, state
   if (state.error) return `${piFormFile} could not be read from Git, so the form cannot be changed here: ${state.error}`
   if (!state.loaded) return 'The PI Review form is still being read from Git.'
   return ''
+}
+
+// PIR-30: the ⚙ PI Review Setup button in the headers of My PI Review and PI Review — shown exactly when Admin → PI
+// Review Setup is in the viewer's menu (PIR-29): to a holder of "PI Review: set up the review form" (decided by the
+// permission, so Role rights changes count; Scrum Master and Tool Owner by default). In View as it follows the viewed
+// role, as the menu does, and with the synthetic sample it stays, as the menu entries do; the page then opens read only
+// with the reason (PIR-31). Nobody without the right, and nobody before the roles file is loaded (CON-101), sees it.
+export const setupGearLabel = 'PI Review Setup'
+export function showsSetupGear(viewer: { can: (action: 'pireview.setup') => boolean }): boolean {
+  return viewer.can('pireview.setup')
 }
 
 // PIR-22: what changed between two setups, for the commit message and the Background jobs entry.

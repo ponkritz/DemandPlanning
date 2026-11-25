@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { defaultPi, epicOf, latestComment, moveLabel, oneLine, piFeatures, piOptions, readDiscussions, reviewKeywords, reviewSentences, reviewSplit, splitByKeywords, splitReviewComment } from '../src/piReview.ts'
+import { defaultPi, epicOf, isNoneText, latestComment, moveLabel, oneLine, piFeatures, piOptions, readDiscussions, reviewKeywords, reviewSentences, reviewSplit, splitByKeywords, splitReviewComment } from '../src/piReview.ts'
 import { continuationTokenProblem, guardAzureWrites, rateLimitMessage, rateLimitWait, readComments, readDiscussion, requestAzure } from '../src/azureDevOps.ts'
 import { commentText } from '../src/workItemEdit.ts'
 guardAzureWrites(() => true)
@@ -283,4 +283,26 @@ test("PIR-12: the team's two formats — Learnings : / Struggles : and … of th
   assert.deepEqual([space.learnings, space.moveValue, space.moveRest], ['A', 'Yes', 'docs pending'])
   // In a sentence it is no heading.
   assert.deepEqual(splitReviewComment('We discussed whether the feature needs to be shifted to PI 26.4 in the meeting.'), {})
+})
+
+// PIR-12 (product owner's photo of real data, 25 Nov 2026; synthetic copies of the two comments): "PI.26.4" in the Move
+// question, a dash after any heading (also "Feature-" without a space before it), "Nil" read as none; the tight
+// "Learning-… , Struggle-…" form when both are there.
+test('PIR-12: hand-written reviews — "PI.26.4" and a dash after the Move question, "Nil" as none, "Learning-… Struggle-…" (TC-PIR-12)', () => {
+  const written = '<div>Learnings of the Feature - New cell qualification supporting business in addressing a CAPA with concept of DOE matrix run plan</div><div>Struggles of the Feature- Nil</div><div>Whether the Feature needs to be shifted to PI.26.4 - Yes to be shifted to continue the platform support activities</div>'
+  const split = reviewSplit(commentText(written))
+  assert.deepEqual(split, { learnings: 'New cell qualification supporting business in addressing a CAPA with concept of DOE matrix run plan', struggles: 'Nil', move: 'Yes to be shifted to continue the platform support activities', movePi: 'PI 26.4', moveValue: 'Yes', moveRest: 'to be shifted to continue the platform support activities', from: 'Headings' })
+  assert.equal(isNoneText(split.struggles), true, 'Nil is none, like None')
+  assert.deepEqual(['None', 'nil', 'Nill.', 'N/A', 'NA', 'Nil issues', 'Nothing'].map(isNoneText), [true, true, true, true, true, false, false])
+  assert.equal(moveLabel(split), 'Yes — to be shifted to continue the platform support activities · to PI 26.4')
+  // Every spelling of the PI in the Move question and in a {REVIEWED PI} heading.
+  for (const pi of ['PI 26.4', 'PI26.4', 'PI-26.4', 'PI.26.4']) {
+    assert.equal(splitReviewComment(`Whether the feature needs to be shifted to ${pi}: No`).movePi, 'PI 26.4', pi)
+    assert.deepEqual(splitReviewComment(`Learnings of ${pi}: a\nStruggles of ${pi} - b`), { learnings: 'a', struggles: 'b', reviewedPi: 'PI 26.4' }, pi)
+  }
+  // The short form, both sections on one line.
+  assert.deepEqual(reviewSplit('Learning-good exposure, Struggle-long list CRs, Ageing of CRs.'), { learnings: 'good exposure', struggles: 'long list CRs, Ageing of CRs.', from: 'Headings' })
+  assert.deepEqual(splitReviewComment('Learnings-a; Struggles– b'), { learnings: 'a', struggles: 'b' })
+  // Alone, a dash without a space is a word ("Learning-curve"), not a heading.
+  assert.deepEqual(splitReviewComment('Learning-curve was steep'), {})
 })

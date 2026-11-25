@@ -16,11 +16,11 @@ import { usePersonalViews } from './usePersonalViews'
 import { ThemeToggle } from './components/Clock'
 import { DataNotices, DataStatus } from './components/DataStatus'
 import { JobsIndicator } from './components/JobsIndicator'
-import { pages, pageGroups, pageMeta, type Page } from './pages/registry'
+import { navKeyOf, pages, pageGroups, pageMeta, readCollapsedNav, type Page } from './pages/registry'
 import { MyDashboardPage } from './pages/MyDashboardPage'
 import { HomePage } from './pages/HomePage'
 import { loadStartView, saveStartView, startPageOf, visibleTiles, type HomeLink, type HomeTile, type StartView } from './homeTiles'
-import { lookLabel, mySettingsLabel, readSettingsTab, settingsPages, resolveSettings, saveSettingsSection, saveSettingsTab, settingsLabel, settingsPagesFor, type SettingsTab } from './settingsTabs'
+import { lookLabel, mySettingsLabel, readSettingsTab, settingsPages, resolveSettings, saveSettingsSection, saveSettingsTab, settingsLabel, settingsPagesFor, shownSettingsTab, type SettingsTab } from './settingsTabs'
 import { normalizeReleaseSourceSettings, streamPatterns } from './releaseSource'
 import { viewSource } from './viewSources'
 import { cleanDays, ownersReason as toolOwnersReason } from './toolValidations'
@@ -109,13 +109,13 @@ const KpiTrackerPage = lazy(() => import('./pages/KpiTrackerPage').then((module)
 const QeMappingPage = lazy(() => import('./pages/QeMappingPage').then((module) => ({ default: module.QeMappingPage })))
 const OnDemandPage = lazy(() => import('./pages/OnDemandPage').then((module) => ({ default: module.OnDemandPage })))
 const CustomDashboardPage = lazy(() => import('./pages/CustomDashboardPage').then((module) => ({ default: module.CustomDashboardPage })))
+const PiReviewSetupPage = lazy(() => import('./pages/PiReviewSetupPage').then((module) => ({ default: module.PiReviewSetupPage })))
 const PagesMenuPage = lazy(() => import('./pages/PagesMenuPage').then((module) => ({ default: module.PagesMenuPage })))
 const MyWorkPage = lazy(() => import('./pages/MyWorkPage').then((module) => ({ default: module.MyWorkPage })))
 const WindchillPage = lazy(() => import('./components/WindchillViews').then((module) => ({ default: module.WindchillPage })))
 const WindchillExportImport = lazy(() => import('./components/WindchillViews').then((module) => ({ default: module.WindchillExportImport })))
 const SprintCheckPage = lazy(() => import('./pages/SprintCheckPage').then((module) => ({ default: module.SprintCheckPage })))
 const menuMiniKey = 'demand-planning-menu-mini-v1'
-const legacyNavKeys = ['release:ads', 'release:windchill']
 
 
 export default function App() {
@@ -377,8 +377,9 @@ export default function App() {
   const toggleMenuMini = () => setMenuMini((current) => { const next = !current; try { localStorage.setItem(menuMiniKey, next ? '1' : '0') } catch { /* this visit only */ } return next })
   useEffect(() => { setNavOpen(false) }, [page, viewId, windchillId, onDemandId])
   useEffect(() => { if (!navOpen) return; const close = (event: KeyboardEvent) => { if (event.key === 'Escape') setNavOpen(false) }; window.addEventListener('keydown', close); return () => window.removeEventListener('keydown', close) }, [navOpen])
-  // NAV-52: the Release Details sub-lists of earlier versions (release:ads, release:windchill) are gone; their stored keys are dropped.
-  const [collapsed, setCollapsed] = useState<string[]>(() => { try { const saved = JSON.parse(localStorage.getItem('demand-planning-nav-collapsed-v1') ?? '[]'); return Array.isArray(saved) ? saved.filter((key): key is string => typeof key === 'string' && !legacyNavKeys.includes(key)) : [] } catch { return [] } })
+  // NAV-52, NAV-53: the Release Details sub-lists of earlier versions (release:ads, release:windchill) and the I&D Board
+  // heading that held QMS-0025 and Backlog Health are gone; their stored keys are dropped.
+  const [collapsed, setCollapsed] = useState<string[]>(() => { try { return readCollapsedNav(localStorage.getItem('demand-planning-nav-collapsed-v1')) } catch { return [] } })
   const saveCollapsed = (next: string[]) => { try { localStorage.setItem('demand-planning-nav-collapsed-v1', JSON.stringify(next)) } catch { /* this visit only */ } return next }
   const toggleNav = (key: string) => setCollapsed((now) => saveCollapsed(now.includes(key) ? now.filter((entry) => entry !== key) : [...now, key]))
   // Expand all / Collapse all (NAV-37): every heading at once.
@@ -387,7 +388,7 @@ export default function App() {
   const navGroups: string[] = pageGroups.flatMap((group): string[] => group === 'On-Demand' ? [group, ...customGroups.map((entry) => entry.name)] : [group])
   const groupIdOf = (name: string) => builtInGroupOf(name) || customGroups.find((entry) => entry.name === name)?.id || ''
   const groupNameOf = (id: string) => findGroup(menu.layout, id)?.name ?? 'On-Demand'
-  const navKeys = navGroups
+  const navKeys = navGroups.map(navKeyOf)
   const allCollapsed = navKeys.every((key) => collapsed.includes(key))
   const navButton = (key: string, icon: string, label: string, active: boolean, onClick: () => void) => <button key={key} title={menuMini ? label : undefined} className={active ? 'nav-active' : ''} aria-current={active ? 'page' : undefined} onClick={onClick}><span className="nav-icon">{icon}</span>{label}</button>
   // PGB-04: the added pages of a group that the viewer sees — the On-Demand area (all added pages share it, CON-103), in
@@ -411,7 +412,9 @@ export default function App() {
   const menuGitReason = gitReasonOf(git)
   // Settings pages (SET-14): one menu entry each; opening one on a given section (e.g. Stream mapping) shows that
   // section. The page is remounted so it picks up the section asked for.
-  const [settingsTab, setSettingsTab] = useState<SettingsTab>(readSettingsTab)
+  const [settingsAsked, setSettingsTab] = useState<SettingsTab>(readSettingsTab)
+  // CON-94, PIR-29: a page the viewer may not see (PI Review Setup without its right) opens Streams, header included.
+  const settingsTab = shownSettingsTab(settingsAsked, access.can)
   const [settingsVisit, setSettingsVisit] = useState(0)
   // SET-15: an older page or section opens where it lives now.
   const openSettings = (asked: SettingsTab, askedSection?: string) => { const { tab, section } = resolveSettings(asked, askedSection); if (section) saveSettingsSection(tab, section); saveSettingsTab(tab); setSettingsTab(tab); setSettingsVisit((visit) => visit + 1); setPage('admin') }
@@ -443,9 +446,9 @@ export default function App() {
   const dismissGuide = () => { try { localStorage.setItem(guideKey, 'dismissed') } catch { /* this visit only */ } setGuideOpen(false) }
   const pageProps = { store, month, setMonth }
   // PIR-13, PIR-17, PIR-18: what posting a PI review needs (PI Review, My PI Review, the Close pop-up).
-  // CON-114, PIR-23: who may change the PI Review form setup, and why not.
+  // CON-114, PIR-31: who may change the PI Review form setup, and why not.
   const piFormBlock = formSetupBlock({ viewingAs: access.viewingAs ? viewAsLabel(access.viewingAs) : '', readOnly: access.readOnly, can: access.can }, git, piForm)
-  const reviewEnv: ReviewEnv = { email: access.email, viewingAs: access.viewingAs ? viewAsLabel(access.viewingAs) : '', isSample: azure.isSample, config: azure.config, pat: azure.pat, items: azure.items, addAudit: store.addAudit, formSetup: piForm.setup, openFormSetup: () => openSettings('epics', 'pireview') }
+  const reviewEnv: ReviewEnv = { email: access.email, viewingAs: access.viewingAs ? viewAsLabel(access.viewingAs) : '', isSample: azure.isSample, config: azure.config, pat: azure.pat, items: azure.items, addAudit: store.addAudit, formSetup: piForm.setup, openFormSetup: () => openSettings('pireview') }
   const storageLabel = store.cache.status === 'error' ? '⚠ Not saved locally' : store.cache.status === 'saving' ? '◌ Saving locally' : '○ Local IndexedDB'
   const buildStatus = <BuildStatus pending={store.hasPendingSave} failed={store.ready && store.cache.status === 'error'} busy={azure.busy} preview={Boolean(azure.preview)} details={<p className="storage-line" title="Where app data is saved"><strong>Data saved:</strong> {storageLabel}</p>} onBackup={store.ready ? () => exportStateJson({ ...store.state, azureWorkItems: mergeAzureWorkItems(store.state.azureWorkItems ?? [], azure.preview?.items ?? []), ...(azure.preview ? { azureBacklogScope: azure.preview.scope } : {}) }) : undefined} />
 
@@ -464,17 +467,20 @@ export default function App() {
   ] : []
   const settingsLinks: HomeLink[] = settingsPagesFor(access.can).map((entry) => ({ key: `settings:${entry.key}`, label: entry.label, icon: pageMeta('admin').icon, open: () => openSettings(entry.key) }))
   const homeTiles = visibleTiles([
-    tileOf({ key: 'mywork', title: 'My Work', detail: 'Time Writing, your tasks, the Sprint check and your PI reviews.', tone: 'sky', open: firstAllowed('activities', 'mywork'), links: [...pageLink('activities'), ...pageLink('mywork'), ...pageLink('bulk'), ...pageLink('mypireview'), ...addedLinks('my-work')], ...(my.known && azure.items.length ? { badge: `${my.pending.length} open` } : {}) }),
+    // NAV-53: My Work ends with the Time Writing backlog (QMS-0025), as in the menu.
+    tileOf({ key: 'mywork', title: 'My Work', detail: `Time Writing, your tasks, the Sprint check, your PI reviews and the ${timeWriting.name} backlog.`, tone: 'sky', open: firstAllowed('activities', 'mywork'), links: [...pageLink('activities'), ...pageLink('mywork'), ...pageLink('bulk'), ...pageLink('mypireview'), ...(access.sees('board') ? [{ key: 'board', label: timeWriting.name, icon: pageMeta('board').icon, open: () => openView(timeWriting.id) }] : []), ...addedLinks('my-work')], ...(my.known && azure.items.length ? { badge: `${my.pending.length} open` } : {}) }),
     tileOf({ key: 'mydash', title: 'My dashboard', detail: 'Your hours against your capacity, your open work and your streams.', tone: 'peach', open: firstAllowed('mydash'), links: [] }),
     tileOf({ key: 'insights', title: 'Team Insights', detail: 'Team overview, Pulse Check and PI Review.', tone: 'lilac', links: [...pageLink('overview'), ...pageLink('pulse'), ...pageLink('pireview'), ...pageLink('kpitracker'), ...addedLinks('data-insights')] }),
-    tileOf({ key: 'board', title: 'I&D Board', detail: 'The QMS-0025 backlog and its health.', tone: 'mint', open: allowed('board') && access.sees('board') ? () => openView(timeWriting.id) : undefined, links: [...(access.sees('board') ? [{ key: 'board', label: timeWriting.name, icon: pageMeta('board').icon, open: () => openView(timeWriting.id) }] : []), ...pageLink('health'), ...addedLinks('i-d-board'), ...addedLinks('other-views')] }),
+    // NAV-53: I&D Board has no page of its own any more: its tile is shown only while it (or Other views) holds added pages.
+    tileOf({ key: 'board', title: 'I&D Board', detail: 'Pages added to I&D Board and Other views.', tone: 'mint', links: [...addedLinks('i-d-board'), ...addedLinks('other-views')] }),
     tileOf({ key: 'release', title: 'Release Details', detail: 'The releases of each stream: DP, CP, IOCC, Content, Tool Validations and the Windchill exports.', tone: 'lemon', links: [...streamLinks, ...addedLinks('release-details')] }),
     tileOf({ key: 'planning', title: 'Planning & Baselines', detail: 'Release baselines against booked hours, and the pages being tried out.', tone: 'teal', links: [...pageLink('baselines'), ...pageLink('planover'), ...pageLink('capactual'), ...addedLinks('testing')] }),
     tileOf({ key: 'qe', title: 'QE Mapping', detail: 'Which QE covers which platform or product.', tone: 'rose', open: firstAllowed('qemapping'), links: [] }),
     tileOf({ key: 'ondemand', title: 'On-Demand', detail: 'Tables the team sets up itself: CoNQ (Cost of Non-Quality) and more.', tone: 'peach', links: addedLinks('on-demand') }),
     // PGB-04: a tile for each group of your own, with its pages.
     ...customGroups.map((group) => tileOf({ key: `group:${group.id}`, title: group.name, detail: `Pages added to ${group.name}.`, tone: 'lilac', links: addedLinks(group.id) })),
-    tileOf({ key: 'records', title: 'Snapshots & Documents', detail: 'Point-in-time snapshots and the project documents of this build.', tone: 'sand', links: [...pageLink('snapshots'), ...pageLink('docs'), ...addedLinks('data-governance')] }),
+    // NAV-53: Backlog Health is linked here, after Snapshots and before Documentation (its menu group is Data & governance).
+    tileOf({ key: 'records', title: 'Snapshots & Documents', detail: 'Point-in-time snapshots, Backlog Health and the project documents of this build.', tone: 'sand', links: [...pageLink('snapshots'), ...pageLink('health'), ...pageLink('docs'), ...addedLinks('data-governance')] }),
     tileOf({ key: 'admin', title: 'Admin', detail: 'Streams, Epic & Feature setup, people and roles, capacity, reports and sharing.', tone: 'sky', open: () => openSettings('home'), links: settingsLinks }),
     tileOf({ key: 'my', title: mySettingsLabel, detail: 'Your work email, servers and tokens, your views and naming patterns.', tone: 'mint', open: () => openSettings('my'), links: [] }),
   ])
@@ -523,8 +529,8 @@ export default function App() {
   const targetOf = (path: string): FilePages => pagesOfFile(path, git.config?.path ?? '', dashboardsReading)
   // GIT-23: the access roles are loaded quietly too, except on Admin → People & roles (someone may be editing them there).
   const rolesPage = pageKey === 'admin:resources'
-  // PIR-19: the PI Review form too, except on Admin → Epic & Feature setup (someone may be editing it there).
-  const quietTarget = (target: FilePages) => target.quiet === 'menu' || target.quiet === 'views' || (target.quiet === 'access' && !rolesPage) || (target.quiet === 'piForm' && pageKey !== 'admin:epics')
+  // PIR-19, PIR-29: the PI Review form too, except on Admin → PI Review Setup (someone may be editing it there).
+  const quietTarget = (target: FilePages) => target.quiet === 'menu' || target.quiet === 'views' || (target.quiet === 'access' && !rolesPage) || (target.quiet === 'piForm' && pageKey !== 'admin:pireview')
   // An added page's file is named by the page's name ("CoNQ"; its blocks for a dashboard).
   const pageChanges = changesForPage(git.remoteChanges, pageKey, targetOf, quietTarget).map((change) => {
     const added = /(?:^|\/)(on-demand|dashboards)\/([a-z0-9-]+)(?:\.json|\/page\.json|\/rows)$/.exec(change.path), name = added && onDemand.pages.find((entry) => entry.id === added[2])?.name
@@ -632,12 +638,12 @@ export default function App() {
         if (group !== 'On-Demand' && group !== 'Settings' && groupId) sections.push({ key: `${group}:added`, entries: addedButtons(groupId) })
         const shown = sections.filter((section) => section.entries.length)
         if (!shown.length) return null
-        const open = !collapsed.includes(group)
-        const holdsActive = group === (isOther ? 'Other views' : page === 'board' ? (view.onPrem ? 'Release Details' : 'I&D Board') : page === 'ondemand' && onDemandPage ? groupNameOf(placementOf(menu.layout, onDemandPage.id).group) : meta.group)
+        const open = !collapsed.includes(navKeyOf(group))
+        const holdsActive = group === (isOther ? 'Other views' : page === 'board' ? (view.readOnly ? 'Release Details' : meta.group) : page === 'ondemand' && onDemandPage ? groupNameOf(placementOf(menu.layout, onDemandPage.id).group) : meta.group)
         // PGB-05: ⋯ on a group the viewer may add a page to opens ＋ Add page for it.
         const canAdd = Boolean(groupId) && !menuGitReason && !addPageReason(viewer, menu.layout, groupId)
         return <div key={group} className="nav-section">
-          <div className="nav-group-row"><button type="button" className={`nav-group${holdsActive && !open ? ' nav-group-active' : ''}`} aria-expanded={open} onClick={() => toggleNav(group)}><span aria-hidden="true">{open ? '▾' : '▸'}</span>{group === 'Settings' ? <>ADMIN{git.dirty && <span className="nav-badge" title="Shared changes not yet saved to Git" aria-label="1 unsaved shared change">1</span>}</> : group.toUpperCase()}</button>
+          <div className="nav-group-row"><button type="button" className={`nav-group${holdsActive && !open ? ' nav-group-active' : ''}`} aria-expanded={open} onClick={() => toggleNav(navKeyOf(group))}><span aria-hidden="true">{open ? '▾' : '▸'}</span>{group === 'Settings' ? <>ADMIN{git.dirty && <span className="nav-badge" title="Shared changes not yet saved to Git" aria-label="1 unsaved shared change">1</span>}</> : group.toUpperCase()}</button>
           {canAdd && <button type="button" className="nav-group-more" aria-label={`Add a page to ${group}`} title={`Add a page to ${group}`} onClick={() => setAddPageFor(groupId)}>⋯</button>}</div>
           {/* Collapsed lists stay in the page but are hidden on wide screens only: the narrow sidebar has no headings. */}
           <div className={`nav-items${open ? '' : ' nav-collapsed'}`}>{shown.map((section) => <div key={section.key} className="nav-items">{section.entries}</div>)}</div>
@@ -682,7 +688,9 @@ export default function App() {
       {page === 'board' && <BoardPage views={personalViews} canSetDefault={access.can('layout.defaults') && git.connected && !git.readOnly && !git.isSample} azure={azure} store={store} current={view} month={month} git={git} onOpenConnection={openConnection} onOpenSettings={openSettings} assign={assign} featureSetup={featureSetup.setups} qeMapping={qeMapping.file} />}
       {page === 'snapshots' && <SnapshotsPage {...pageProps} git={git} who={my.me.email || my.me.name || 'unknown'} />}
       {page === 'admin' && settingsTab === 'pages' && <PagesMenuPage duplicates={duplicateNames} git={git} store={onDemand} menu={menu} viewer={viewer} onOpen={openOnDemand} onAddPage={(group) => setAddPageFor(group ?? '')} />}
-      {page === 'admin' && settingsTab !== 'pages' && <AdminPage look={{ startView, onStartView: switchView, onCustomizeMenu: () => setMenuEditor(true) }} key={`${settingsTab}:${settingsVisit}`} tab={settingsTab} onOpenTab={openSettings} {...pageProps} azure={azure} git={git} access={access} featureSetup={featureSetup} epicSetup={epicSetup} piForm={{ store: piForm, block: piFormBlock, by: my.self.me.name?.trim() || azure.creatorEmail.trim() }} setupSteps={steps} onSearch={() => setSearchOpen(true)} qeColumnNames={[...new Set((qeMapping.file?.sheets ?? []).flatMap((sheet) => sheet.columns.map((column) => column.name)))]} monthlyPack={monthlyPack} history={history} loadEverything={loadEverything} onOpenBoard={() => setPage('board')} />}
+      {/* PIR-29: Admin → PI Review Setup, the PI Review form setup on a page of its own. */}
+      {page === 'admin' && settingsTab === 'pireview' && <PiReviewSetupPage store={piForm} block={piFormBlock} by={my.self.me.name?.trim() || azure.creatorEmail.trim()} />}
+      {page === 'admin' && settingsTab !== 'pages' && settingsTab !== 'pireview' && <AdminPage look={{ startView, onStartView: switchView, onCustomizeMenu: () => setMenuEditor(true) }} key={`${settingsTab}:${settingsVisit}`} tab={settingsTab} onOpenTab={openSettings} {...pageProps} azure={azure} git={git} access={access} featureSetup={featureSetup} epicSetup={epicSetup} setupSteps={steps} onSearch={() => setSearchOpen(true)} qeColumnNames={[...new Set((qeMapping.file?.sheets ?? []).flatMap((sheet) => sheet.columns.map((column) => column.name)))]} monthlyPack={monthlyPack} history={history} loadEverything={loadEverything} onOpenBoard={() => setPage('board')} />}
       {page === 'docs' && <DocsPage key={docsVisit} git={git} onConfigure={() => openSettings('storage', 'git')} />}
       </Fragment></Suspense>
       {addPageFor != null && <AddPageDialog viewer={viewer} layout={menu.layout} group={addPageFor || undefined} onCancel={() => setAddPageFor(null)} onCreate={async (input) => { const id = await createPage(onDemand, menu, input); setAddPageFor(null); openOnDemand(id) }} />}

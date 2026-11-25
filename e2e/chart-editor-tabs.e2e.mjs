@@ -193,7 +193,7 @@ test('TC-CHT-58: the chart editor opens on Data with the preview beside its tabs
   await editorTab(dialog, 'Elements')
   assert.equal(await dialog.getByRole('group', { name: 'Axes' }).count(), 0)
   await editorTab(dialog, 'Data')
-  await dialog.getByRole('radio', { name: 'Summary table' }).check()
+  await dialog.getByRole('radio', { name: 'Pivot table' }).check()
   assert.deepEqual(await tabNames(dialog), ['Data', 'Filters', 'Format'])
   await dialog.getByRole('button', { name: 'Cancel' }).click()
   await dialog.waitFor({ state: 'detached' })

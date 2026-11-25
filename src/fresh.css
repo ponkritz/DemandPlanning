@@ -988,6 +988,13 @@ td .od-flag{display:inline-block;margin-top:0}
 .od-rules{margin:0;padding-left:18px;display:grid;gap:4px}
 .od-pivot{max-height:60vh}.od-pivot th{position:sticky;top:0;z-index:1;background:var(--surface)}.od-pivot .num{text-align:right}
 .od-pivot-note{font-size:12px;margin:6px 0 0}
+/* CHT-74…CHT-81: the nested Pivot table — two heading rows kept together, groups shaded by level (as the QE Mapping's), subtotal columns marked, every number a button for its rows. */
+.azure-table.od-pivot table.pivot-table{min-width:0}.pivot-table thead{position:sticky;top:0;z-index:1}.od-pivot .pivot-table th{position:static}.pivot-table thead tr:nth-child(2) th{border-top:1px solid var(--line)}
+.pivot-table .pivot-col-group{text-align:center}.pivot-table .pivot-subtotal-col{font-weight:600;background:color-mix(in srgb,var(--surface-2) 60%,var(--surface))}
+.pivot-table tr.pivot-group td{background:var(--surface-2);font-weight:600}.pivot-table tr.pivot-level-1 td,.pivot-table tr.pivot-level-2 td{background:color-mix(in srgb,var(--surface-2) 45%,var(--surface))}
+.pivot-table td{vertical-align:middle}.pivot-table .pivot-label{white-space:nowrap}.pivot-table .pivot-leaf{padding-left:1.2em}.pivot-table .pivot-toggle{font-weight:600;color:var(--text)}
+.pivot-table .pivot-cell{all:unset;cursor:pointer;font:inherit;font-variant-numeric:tabular-nums;border-radius:4px;padding:0 2px}.pivot-table .pivot-cell:hover{color:var(--link);text-decoration:underline}.pivot-table .pivot-cell:focus-visible{outline:3px solid var(--focus);outline-offset:1px}
+.od-pivot-nested .data-table-toolbar{margin-bottom:6px}
 .od-insight-editor{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:18px;align-items:start}
 .od-insight-fields{display:grid;gap:10px}
 .od-insight-preview{border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--surface);min-width:0}.od-insight-preview h3{margin:2px 0 4px;font-size:14px}.od-insight-preview>.muted{font-size:12px;margin:0 0 8px}
@@ -1226,6 +1233,7 @@ tbody tr.tvl-hl-red td{background:var(--hl-red-bg)}tbody tr.tvl-hl-red td:first-
 /* PIR-09, PIR-10: the latest comment's columns — one line cut with … (Wrap text off; the whole text in the tooltip) — and
    its split in the drawer, line breaks kept. */
 .pir-table table.no-wrap .pir-clip{display:block;max-width:18rem;overflow:hidden;text-overflow:ellipsis}
+.pir-status{display:grid;justify-items:start;gap:3px}.pir-status small{font-size:11px}
 .pir-latest{display:grid;gap:6px;padding-top:4px}.pir-latest h3{margin:0;font-size:14px;color:var(--heading)}.pir-latest .pir-comment-head,.pir-latest p{margin:0}
 .pir-split dd{margin:0;font-size:13px;white-space:pre-line;overflow-wrap:anywhere}
 .pir-suggested,.pir-split.pir-suggested dd{font-style:italic;color:var(--text-2)}.pir-suggested-mark{font-style:normal;font-size:11px;color:var(--muted)}
@@ -1245,8 +1253,10 @@ tbody tr.tvl-hl-red td{background:var(--hl-red-bg)}tbody tr.tvl-hl-red td:first-
 .pir-review-fields fieldset{display:grid;gap:8px}.pir-review-fields legend{font-size:12px;font-weight:600;margin-bottom:6px;color:var(--text)}
 .pir-review-preview{display:grid;gap:6px;min-width:0;position:sticky;top:0}.pir-review-preview h3,.close-review h3{margin:0;font-size:14px;color:var(--heading)}
 .pir-review-preview pre{margin:0;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:min(460px,55vh);overflow:auto}
+.pir-review-comment{margin:0;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);font-size:13px;overflow-wrap:anywhere;max-height:min(460px,55vh);overflow:auto}.pir-review-comment ul,.pir-review-comment ol{margin:0;padding-left:22px}.pir-review-comment>ul{list-style:disc}.pir-review-comment li ul{list-style:circle}.pir-review-comment p{margin:8px 0 0;color:var(--muted)}.pir-review-none{display:grid;gap:2px}
 .close-review{border-top:1px solid var(--line);padding-top:12px}
 @media(max-width:760px){.pir-review-columns{grid-template-columns:1fr}.pir-review-preview{position:static}}
+.pir-moves-to{display:grid;gap:4px}.pir-moves-to>label{display:grid}.pir-next-pi .info-button{margin-left:4px}.pir-next-pi-warn{color:var(--warning-text);font-weight:600}.pir-review-help{justify-self:start}
 /* PIR-19…PIR-23: the PI Review form setup — the summary table and the editor (the shared column-list editor, OND-05, beside the comment preview). */
 .pir-setup-table td small{display:block;font-size:11px}.pir-setup-table code{font-size:12px;white-space:normal}
 .modal:has(.pir-setup-editor){width:min(1180px,100%)}
@@ -1254,3 +1264,27 @@ tbody tr.tvl-hl-red td{background:var(--hl-red-bg)}tbody tr.tvl-hl-red td:first-
 .pir-setup-list{display:grid;gap:10px;min-width:0}.pir-setup-list h3{margin:0;font-size:14px;color:var(--heading)}
 .pir-setup-extra{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:10px;align-items:start}.pir-setup-extra label{display:grid}.pir-setup-extra small{font-size:11px;color:var(--muted)}
 @media(max-width:760px){.pir-setup-editor,.pir-setup-extra{grid-template-columns:1fr}}
+.pir-setup-gear{padding:6px 10px;font-size:14px;line-height:1;border-radius:8px}
+/* UI-24: a wide table's sticky horizontal scroll bar — fixed at the bottom of the screen above the sticky footer (its
+   place and width set by StickyScrollbar.tsx from the table's box and the footer's real top edge), in the theme's
+   colours; the native scroll bar follows color-scheme (dark theme) and the system colours (high contrast). */
+.data-table-hscroll{position:fixed;z-index:14;left:0;bottom:0;overflow-x:scroll;overflow-y:hidden;background:var(--surface);border-top:1px solid var(--line);box-shadow:0 -4px 10px -8px var(--shadow-strong,#0004)}
+.data-table-hscroll[hidden]{display:none}
+.data-table-hscroll-spacer{height:1px}
+@media(forced-colors:active){.data-table-hscroll{background:Canvas;border-top-color:CanvasText;box-shadow:none}}
+@media print{.data-table-hscroll{display:none!important}}
+/* UI-25…UI-28: Group by and Filter by column of a DataTable (the On-Demand Table pages first): the group bar under the
+   toolbar, the filter row under the headings, and the group rows indented by their level — the QE Mapping's look. */
+.data-table-group-bar .inline-select{white-space:nowrap}.data-table-group-bar .inline-select select{max-width:200px}
+.data-table-filter-note{font-size:12px}
+.data-table .data-table-filters th{padding:4px 6px;background:var(--surface-2)}
+.data-table-filters input,.data-table-filters select{width:100%;min-width:60px;padding:3px 6px;font-size:12px}
+.data-table-group td{background:var(--surface-2);font-weight:600}
+.data-table-group-1 td,.data-table-group-2 td,.data-table-group-3 td{background:color-mix(in srgb,var(--surface-2) 45%,var(--surface))}
+.data-table-group-toggle{font-weight:600;color:var(--heading)}
+.data-table-group-count{font-weight:400;font-size:12px}
+.data-table-save-summary{margin:0 0 12px;padding-left:18px;display:grid;gap:4px}
+@media print{.data-table-group-bar,.data-table-filters{display:none}}
+/* CHT-78: a Pivot table's Rows and Columns in the chart editor — a line per field with ↑ ↓ ✕, then ＋ then by. */
+.pivot-fields{display:grid;gap:6px;border:0;padding:0;margin:0}.pivot-fields legend{font-weight:600;padding:0;margin-bottom:4px}.pivot-field{display:flex;align-items:center;gap:6px}.pivot-field select{flex:1;min-width:0}.pivot-fields>.text-button{justify-self:start}
+.data-table-export-note{display:block;max-width:240px;padding:4px 8px 6px;font-size:12px;line-height:1.35}

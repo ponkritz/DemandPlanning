@@ -92,9 +92,12 @@ export function editableText(html: string | undefined) {
 }
 // PIR-05: a Discussion comment as plain text — editableText, with a mention (an <a data-vss-mention> link) as "@Name"
 // and an image as "[image]"; no markup is ever kept, so the text is shown without rendering HTML.
+// PIR-14: a list (the review's nested bullets, the app's or written by hand in Azure DevOps) as one line per item — a
+// line break where a list or an item starts, so "Learnings :" and its nested items stay on lines of their own.
 export function commentText(html: string | undefined) {
   if (!html) return ''
   return editableText(html
+    .replace(/<(?:ul|ol|li)\b[^>]*>/gi, '\n').replace(/<\/(?:ul|ol)>/gi, '\n')
     .replace(/<a\b[^>]*data-vss-mention[^>]*>\s*@?([\s\S]*?)<\/a>/gi, (_, name: string) => `@${name.replace(/<[^>]*>/g, '').trim()}`)
     .replace(/<img\b[^>]*>/gi, ' [image] '))
 }

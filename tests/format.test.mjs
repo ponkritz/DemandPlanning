@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { formatHours, formatPercent, formatDate, formatDateTime, monthName, todayIso } from '../src/format.ts'
-import { pages, pageGroups, pageMeta } from '../src/pages/registry.ts'
+import { navKeyOf, pages, pageGroups, pageMeta, readCollapsedNav } from '../src/pages/registry.ts'
 
 test('formatHours renders missing values as a dash and rounds to two decimals', () => {
   assert.equal(formatHours(null), '—'); assert.equal(formatHours(undefined), '—')
@@ -30,5 +30,20 @@ test('page registry has unique ids, known groups and header text for every page'
   assert.equal(pageMeta('overview').label, 'Team overview')
   assert.deepEqual(pages.filter((page) => page.usesMonth).map((page) => page.id), ['mydash', 'pulse', 'activities', 'planover', 'capactual', 'baselines', 'windchill', 'snapshots', 'admin'])
   assert.deepEqual(pages.filter((page) => page.group === 'Data Insights').map((page) => page.id), ['mydash', 'overview', 'pulse', 'pireview', 'kpitracker'])
-  assert.deepEqual(pages.filter((page) => page.group === 'My Work').map((page) => page.label), ['Time Writing', 'My Tasks [Board]', 'Sprint check', 'My PI Review'])
+  assert.deepEqual(pages.filter((page) => page.group === 'My Work').map((page) => page.label), ['Time Writing', 'My Tasks [Board]', 'Sprint check', 'My PI Review', 'Backlogs'])
+})
+test('NAV-53: QMS-0025 ends My Work, Backlog Health sits before Documentation in Data & governance, I&D Board holds no page and its remembered collapsed state is forgotten (TC-NAV-53)', () => {
+  assert.equal(pageMeta('board').group, 'My Work')
+  assert.equal(pageMeta('health').group, 'Data & governance')
+  assert.deepEqual(pages.filter((page) => page.group === 'My Work').map((page) => page.id).slice(-1), ['board'], 'the Time Writing backlog is the last entry of My Work')
+  assert.deepEqual(pages.filter((page) => page.group === 'Data & governance').map((page) => page.id), ['baselines', 'qemapping', 'snapshots', 'health', 'docs'], 'Backlog Health right before Documentation')
+  assert.deepEqual(pages.filter((page) => page.group === 'I&D Board'), [], 'no built-in page in I&D Board')
+  assert.ok(pageGroups.includes('I&D Board'), 'the group stays for the pages added to it (PGB-02)')
+  // The collapsed state: I&D Board's old key and the old Release Details sub-lists are dropped; the others are kept, once each.
+  assert.deepEqual(readCollapsedNav(JSON.stringify(['My Work', 'I&D Board', 'release:ads', 'release:windchill', 'Data & governance', 'My Work', 3])), ['My Work', 'Data & governance'])
+  assert.deepEqual(readCollapsedNav(null), [])
+  assert.deepEqual(readCollapsedNav('not json'), [])
+  assert.deepEqual(readCollapsedNav('{"a":1}'), [])
+  assert.equal(navKeyOf('I&D Board'), 'group:i-d-board', 'a heading I&D Board shown again for added pages has a key of its own')
+  assert.equal(navKeyOf('My Work'), 'My Work')
 })

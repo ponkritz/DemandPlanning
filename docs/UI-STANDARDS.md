@@ -101,6 +101,20 @@ Approved by the product owner on 2026-11-23.
   (text button, danger colour).
 - **Count**: "{shown} of {total} {items}" (e.g. "12 of 40 releases"); a cut list always says so.
 - Headers stay visible when the table scrolls (sticky) when it can be longer than the screen.
+- **Sticky horizontal scroll bar** (approved 2026-11-25): a table wider than its box keeps a horizontal scroll bar at
+  the bottom of the screen, right above the sticky footer, while the table's own bottom is out of view; it goes when the
+  bottom shows (never two bars). It comes with `DataTable` (UI-24) — no page builds its own; a hand-built wide table
+  moves onto `DataTable` to get it.
+- **Group by and Filter by column** (approved 2026-11-25): a table that groups or filters by column gets both from
+  `DataTable` (`groupFilter`, UI-25…UI-28) — no page builds its own. They sit in one row under the toolbar: **Filter by
+  column** (ghost; **Hide filters** clears and hides) then **Group by** and **then by** (`inline-select`, up to four
+  levels) and, once grouped, **Expand all** / **Collapse all** (ghost, each disabled when there is nothing to do). The
+  filter row sits under the headings: a text field per column ("Filter…", contains, any case), a pick list ("All" and
+  the values) for a column with a list. A group row is ▸ / ▾ (`text-button`, `aria-expanded`), "Column: value" with
+  "(blank)" last and "n rows", indented 18 px per level. While a filter is set a line names the filtered columns with
+  **Clear column filters**. Grouping and filters are part of the table's view (Save view for everyone, with **Start
+  collapsed** in its pop-up); which groups are open is per visit. The QE Mapping keeps its own controls with the same
+  wording (QEM-03, QEM-06…11).
 - Inside a `TablePanel` the table's toolbar (filters, search, Columns, Export), its first column and the read-only
   reason line up with the panel's title; the table's lines run the full width (one shared rule, KB-93).
 
@@ -117,8 +131,12 @@ left-aligned; six wordings for the row count and seven schemes for cut lists.
 | Destructive | `text-button danger-text` in a row; `danger-button` for a page-level irreversible action | Remove, Delete, Reset |
 
 - Symbols, only these: **＋** add, **↻** refresh / read again, **✕** remove a chip or line, **→** go to, **⋯** more
-  actions, **▸ / ▾** expand. No other emoji or symbols in labels.
+  actions, **▸ / ▾** expand, **⚙** open the setup of this page. No other emoji or symbols in labels.
 - An icon-only button has an `aria-label` naming the action and its object.
+- **Setup of a page** (approved 2026-11-25): a page whose setup lives on an Admin page offers it as an icon-only **⚙**
+  button (`ghost`) in the **page actions** (§1), last; its `aria-label` and title are the setup page's name (e.g. "PI
+  Review Setup"). It is shown exactly when that Admin page is in the viewer's menu (its permission; in View as the
+  viewed role's) and hidden otherwise — it only opens the page, which says itself why it is read only.
 
 **Today:** private button classes (`act-primary`, `act-ghost`, `backlog-action`); destructive actions in five styles;
 both ⟳ and ↻, both ✕ and ×, both ＋ and +.
@@ -264,6 +282,9 @@ wrong for a real case as an Improvement to the standard.
 
 | Date | Change | Approved by |
 |---|---|---|
+| 2026-11-25 | §5 Tables: **Group by and Filter by column** — built once into `DataTable` and switched on per table (the On-Demand Table pages first): one row under the toolbar with Filter by column, Group by / then by (up to four levels), Expand all / Collapse all; the filter row under the headings (text, or a pick list for a column with a list); group rows ▸ / ▾ with column, value, "(blank)" last and the count; part of the table's view with **Start collapsed** in the Save view for everyone pop-up ("Add Group by, Filter by Column options to the Table page defaults … Along with Group by we will need collapse and Expand as well", UI-25…UI-28, OND-132). | Product owner, 2026-11-25 |
+| 2026-11-25 | §5 Tables: **sticky horizontal scroll bar** — a table wider than its box keeps its horizontal scroll bar at the bottom of the screen right above the sticky footer while its own bottom is out of view, and it goes when the bottom shows; built once into `DataTable` for every table ("The horizontal scrolling should be sticky to above the footer", UI-24). | Product owner, 2026-11-25 |
+| 2026-11-25 | §6 Buttons: **⚙** added to the symbols as "open the setup of this page" — an icon-only `ghost` button in the page actions, `aria-label` and title the setup page's name, shown exactly when that Admin page is in the viewer's menu; first used by My PI Review and PI Review for Admin → PI Review Setup (PIR-29, PIR-30). | Product owner, 2026-11-25 |
 | 2026-11-25 | §12 Pre-selected — **an exception**: in the PI review form (Write review…, PIR-13) and the Close pop-up's PI review (PIR-18) **Move to next PI = No is pre-selected**, although the answer is posted to the Feature's Discussion for others to read ("Default Move to next PI = No"). The Review meeting advice keeps no default and must be chosen; the pre-selected No shows in the form and in the Preview before posting. | Product owner, 2026-11-25 |
 | 2026-11-24 | §7 Period: **Show: Selected month / All months** is a segmented toggle, no longer a drop-down repeating the month ("Month is repeating … make it as a Toggle", QV-71). | Product owner, 2026-11-24 |
 | 2026-11-24 | §3 Missing permission — **row buttons with a reason per row** (an exception): on the Tool Validations Master list a tool from Azure DevOps has Edit and Remove disabled with its own reason as each button's tooltip (Edit: change it in Azure DevOps; Remove: until Azure DevOps no longer returns it), and one line above the table covers both, with Edit notes… for the notes (TVL-30). | Product owner, 2026-11-24 |

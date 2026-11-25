@@ -6,13 +6,15 @@ import { DataTable, type DataColumn } from './DataTable'
 import { ChartOptionsFields } from './ChartOptionsFields'
 import { PreviewHeading } from './ChartElements'
 import { ChartCountInfo, InsightView } from './InsightCharts'
+import { NestedPivot } from './NestedPivot'
 import { EmptyState, Info, Metric, Modal, Notice, Pill } from './ui'
 import { hasOptions, insightKindOf as kindOf, narrativeError, type ColorPins, type InsightFilter, type InsightMeasure } from '../onDemand'
 import { narrativeInfo } from '../narratives'
 import { NarrativeFields } from './NarrativeFields'
 import { EditorTabs } from './EditorTabs'
 import { coloredColumnOf, editorCounts, editorTabLabels, editorTabsFor, filterError, firstErrorTab, panelId, splitProblems, tabId, type EditorTab } from '../chartEditor'
-import { currencyText, formatShown, insightRules, measureColumns, measuresFor, noneKey, noneLabel, secondLabel, valueText } from '../onDemandInsights'
+import { PivotFields } from './PivotFields'
+import { currencyText, formatShown, insightRules, isNestedPivot, withPivotFields, measureColumns, measuresFor, noneKey, noneLabel, secondLabel, valueText } from '../onDemandInsights'
 import { asInsight, noData, blockData, blockDataset, isToolSource, withStatusShown, blockError, blockProblems, blockSubject, blockTypeLabel, blockTypes, categoryColumns, filterColumns, kpiText, kpiValue, periodColumns, periodNote, secondColumns, summaryExportTotals, summaryRows, tableLimit, withBlockType, withSource, type Dashboard, type DashboardBlock, type Dataset, type Narrowed, type SummaryRow } from '../dashboardPages'
 
 // DSH-05, DSH-06 The blocks of a Dashboard page: a KPI tile (Metric, UI-STANDARDS §9), a bar, line or pie chart — the
@@ -62,7 +64,19 @@ function BlockBody({ dataset, block, narrowed, problems, colors, drill = true, q
   if (problems.length || !narrowed) return <Notice tone="warning"><strong>This block cannot be shown:</strong> {problems.join(' ')} {dataset.problem ? '' : 'Its owners edit it to choose the columns again, or remove it.'}</Notice>
   const probe = blockData(narrowed.page, block)
   if (!narrowed.page.rows.length || !probe.categories.length) return <EmptyState {...noData} />
-  return block.type === 'table' ? <SummaryTable block={block} narrowed={narrowed} /> : <InsightView quiet={quiet} page={narrowed.page} insight={asInsight(block)} colors={colors} drill={drill} compare={narrowed.base} />
+  // CHT-74: a Pivot table with nested rows or columns; a one-level one is the summary table as before.
+  return block.type === 'table' && isNestedPivot(asInsight(block)) ? <PivotBlock block={block} narrowed={narrowed} drill={drill} /> : block.type === 'table' ? <SummaryTable block={block} narrowed={narrowed} /> : <InsightView quiet={quiet} page={narrowed.page} insight={asInsight(block)} colors={colors} drill={drill} compare={narrowed.base} />
+}
+
+// CHT-74: a nested Pivot table block — the currency choice of a Currency column (OND-24), then the table.
+function PivotBlock({ block, narrowed, drill }: { block: DashboardBlock; narrowed: Narrowed; drill: boolean }) {
+  const [currency, setCurrency] = useState('')
+  const data = blockData(narrowed.page, block, currency)
+  return <>
+    {data.currencies.length > 1 && <label className="od-currency-pick">Currency<select aria-label={`Currency of ${block.title}`} value={data.currency} onChange={(event) => setCurrency(event.target.value)}>{data.currencies.map((entry) => <option key={entry.code} value={entry.code}>{entry.code} ({entry.rows} row{entry.rows === 1 ? '' : 's'})</option>)}</select></label>}
+    {currencyText(data) && <p className="muted">{currencyText(data)}</p>}
+    <NestedPivot page={narrowed.page} insight={asInsight(block)} currency={data.currency} drill={drill} exportName={drill ? block.title : undefined} />
+  </>
 }
 
 // DSH-06: the summary table — largest first, the first 10 rows with Show all, the shared table's Export (every row).
@@ -135,7 +149,7 @@ export function BlockDialog({ datasets, dashboard, block, isNew, preview, onCanc
   }
   const shown = { ...draft, filters: draft.filters.filter((filter) => filter.values?.length || filter.from || filter.to) }
   const narrowed = dataset.problem ? null : preview(dataset, shown)
-  const categoryLabel = draft.type === 'line' ? 'Months of' : draft.type === 'table' ? 'Rows by' : 'Categories by'
+  const categoryLabel = draft.type === 'line' ? 'Months of' : 'Categories by'
   const onOptions = (options: DashboardBlock['options']) => { const next = { ...draft }; if (options && draft.type !== 'kpi') next.options = options; else delete next.options; setDraft(next); setError('') }
   const onNarrative = (next: ReturnType<typeof asInsight>) => { const out: DashboardBlock = { ...draft, category: next.category }; if (next.narrative) out.narrative = next.narrative; if (next.options) out.options = next.options; else delete out.options; setDraft(out); setError('') }
   const panels: Record<EditorTab, () => ReactNode> = {
@@ -156,7 +170,9 @@ export function BlockDialog({ datasets, dashboard, block, isNew, preview, onCanc
         <Info iconOnly label="About the expiry status"><ul><li><strong>Status</strong> (Overdue / Due soon / No due date / OK) and <strong>Days left</strong> use the <strong>team default window of {source.statusDays ?? 60} days</strong> (Tool Validations → Setup → Team settings), the same for every viewer — not a viewer’s own window of the Expiry list.</li><li>Switched off, this block neither offers nor shows Status and Days left — in the block, its table and its drill-down. Fields on them are replaced and their filters removed.</li></ul></Info>
         <small>{draft.hideStatus ? 'Status and Days left are left out of this block.' : `Status and Days left use the team default window of ${source.statusDays ?? 60} days.`}</small>
       </div>}
-      {chart && <label>{categoryLabel}
+      {/* CHT-78: a Pivot table's Rows and Columns, each with ＋ then by. */}
+      {chart === 'table' && <PivotFields page={page} insight={{ ...draft, type: 'table' }} onChange={(rows, columns) => { setDraft(withPivotFields(draft, rows, columns)); setError('') }} />}
+      {chart && chart !== 'table' && <label>{categoryLabel}
         <select aria-label={categoryLabel} value={draft.category} onChange={(event) => edit({ category: event.target.value, second: draft.second === event.target.value ? '' : draft.second })}>
           {!categories.some((column) => column.id === draft.category) && <option value={draft.category}>— Choose —</option>}
           {categories.map((column) => <option key={column.id} value={column.id}>{column.name} ({column.type === 'date' ? 'by month' : column.type === 'multi' ? 'Multi-select' : column.type === 'dropdown' ? 'Dropdown' : 'Text'})</option>)}
@@ -164,7 +180,7 @@ export function BlockDialog({ datasets, dashboard, block, isNew, preview, onCanc
       </label>}
       {/* CHT-66: a Narrative's Group by takes the place of Categories by. */}
       {narrative && <NarrativeFields part="data" page={page} insight={asDraft} onChange={onNarrative} />}
-      {chart && chart !== 'pie' && chart !== 'pareto' && <label>{secondLabel(chart)} (optional)
+      {chart && chart !== 'pie' && chart !== 'pareto' && chart !== 'table' && <label>{secondLabel(chart)} (optional)
         <select aria-label={secondLabel(chart)} value={draft.second} onChange={(event) => edit({ second: event.target.value })}>
           <option value="">— None —</option>
           {draft.second && !seconds.some((column) => column.id === draft.second) && <option value={draft.second}>(not available)</option>}

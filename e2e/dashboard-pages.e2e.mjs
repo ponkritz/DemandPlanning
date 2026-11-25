@@ -137,7 +137,7 @@ test('TC-DSH-01: a Tool Owner adds a Dashboard page, builds it from a KPI tile, 
   await page.getByRole('button', { name: '＋ Add block…' }).click()
   dialog = page.getByRole('dialog', { name: 'Add a block' })
   await dialog.getByLabel('Title').fill('Cost by category')
-  await dialog.getByRole('radio', { name: 'Summary table' }).check()
+  await dialog.getByRole('radio', { name: 'Pivot table' }).check()
   await dialog.getByLabel('Data source').selectOption({ label: 'Supplier issues (table page)' })
   await dialog.getByLabel('Rows by').selectOption({ label: 'Category (Dropdown)' })
   await dialog.getByLabel('Measure').selectOption('sum')

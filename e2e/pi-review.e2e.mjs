@@ -114,7 +114,7 @@ test('TC-PIR-06: the current PI is preselected, its Features listed, a Discussio
   // PIR-03, PIR-04: the PI's Features by ID; the toggle adds the Feature with a User Story in the PI.
   await page.locator('.pir-table tr[data-row-key="example/project/202"]').waitFor()
   assert.deepEqual(await rowKeys(page), ['example/project/201', 'example/project/202'])
-  assert.match(await text(page.locator('.pir-table tr[data-row-key="example/project/201"]')), /^201 DP 4\.2 release review DP releases Active Rita Gomez — PI 2026\.4 — — — — — — — — Write review…$/)
+  assert.match(await text(page.locator('.pir-table tr[data-row-key="example/project/201"]')), /^201 DP 4\.2 release review DP releases Active Rita Gomez — PI 2026\.4 — — — — — — — — — Write review…$/)
   assert.match(await text(page.locator('.data-table-status')), /^2 of 2 Features$/)
   await page.getByRole('checkbox', { name: 'Also Features with User Stories in this PI' }).check()
   await page.locator('.pir-table tr[data-row-key="example/project/203"]').waitFor()
@@ -235,17 +235,18 @@ test('TC-PIR-11: a newest comment without headings has its Struggles, Learnings 
   await page.getByRole('button', { name: 'Reset filters' }).click()
   await page.locator('.pir-table tr[data-row-key="example/project/201"]').waitFor()
   if (shots) { mkdirSync(shots, { recursive: true }); await page.emulateMedia({ colorScheme: 'light' }); await page.locator('.pir-table .data-table-scroll').evaluate((box) => { box.scrollLeft = box.scrollWidth }); await page.screenshot({ path: `${shots}/pi-review-split-1440-light.png` }) }
-  // PIR-11: Export adds Split from (hidden in the table, exported always): Headings, None, Keywords.
+  // PIR-11: Export adds Split from (hidden in the table, exported always): Headings, None, Keywords. PIR-28: Reviewed PI
+  // before it (empty: these comments name no reviewed PI).
   const download = page.waitForEvent('download')
   const exportButton = page.locator('.pir-table').getByRole('button', { name: /^Export/ }).first()
   const menu = /▾/.test(await exportButton.innerText())
   await exportButton.click()
   if (menu) await page.getByRole('menuitem', { name: 'CSV (.csv)' }).click()
   const csv = readFileSync(await (await download).path(), 'utf8').replace(/\r\n/g, '\n')
-  assert.match(csv, /Struggles,Learnings,Move to Next PI,Review mode,Additional Remarks,Split from\n/)
-  assert.match(csv, /Yes — waiting for vendor,,,Headings\n/)
-  assert.match(csv, /2026-11-19[^,]*,Ready for review,,,,,,None\n/)
-  assert.match(csv, /,We were blocked by the vendor for two Sprints\.,Next time we book the rig at PI planning\.,Partly — the rig test\.,,,Keywords\n?/)
+  assert.match(csv, /Struggles,Learnings,Move to Next PI,Review mode,Additional Remarks,Reviewed PI,Split from\n/)
+  assert.match(csv, /Yes — waiting for vendor,,,,Headings\n/)
+  assert.match(csv, /2026-11-19[^,]*,Ready for review,,,,,,,None\n/)
+  assert.match(csv, /,We were blocked by the vendor for two Sprints\.,Next time we book the rig at PI planning\.,Partly — the rig test\.,,,,Keywords\n?/)
   // PIR-10, PIR-11: the drawer's Latest comment says the texts are suggested.
   await page.locator(`.pir-table tr[data-row-key="${row}"] td`).nth(1).click()
   const drawer = page.locator('aside.drawer[role="dialog"]', { has: page.getByRole('heading', { name: 'Feature #204', exact: true }) })

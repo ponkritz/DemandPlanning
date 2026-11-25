@@ -199,7 +199,7 @@ test('TC-OND-09: Insights — on CoNQ add rows, add a Bar chart of Sum of cost b
   await page.getByRole('button', { name: '＋ Add chart / table' }).click()
   dialog = page.getByRole('dialog', { name: 'Add a chart or table' })
   await dialog.getByLabel('Title').fill('Rows by category and site')
-  await dialog.getByRole('radio', { name: 'Summary table' }).check()
+  await dialog.getByRole('radio', { name: 'Pivot table' }).check()
   await dialog.getByLabel('Rows by').selectOption({ label: 'Category (Dropdown)' })
   await dialog.getByLabel('Columns by').selectOption({ label: 'Sites' })
   await dialog.getByRole('button', { name: 'Add chart' }).click()

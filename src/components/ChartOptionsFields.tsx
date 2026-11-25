@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
-import { additive, cleanOptions, hasOptions, maxAxisTitle, paletteSize, type ChartOptions, type ColorPin, type ColorPins, type DateGroup, type Insight, type OnDemandPage } from '../onDemand'
+import { additive, cleanOptions, hasOptions, maxAxisTitle, maxValueName, paletteSize, type ChartOptions, type ColorPin, type ColorPins, type DateGroup, type Insight, type OnDemandPage } from '../onDemand'
 import { contrastWarning, normalizeHex, pinColor, pinHex } from '../chartColors'
-import { autoAxisTitles, dateGroupLabels, limitsFor } from '../onDemandInsights'
+import { autoAxisTitles, dateGroupLabels, limitsFor, pivotColumnFields, pivotRowFields, valueText } from '../onDemandInsights'
 import { Info } from './ui'
 import { SizeFields } from './ChartSize'
 import { factoryOf, kindOf, sizeFromOptions, withSizeOptions } from '../chartSize'
@@ -22,12 +22,14 @@ export function ChartOptionsFields({ page, insight, pins, onOptions, onPins, sco
   const type = insight.type
   const set = (change: Partial<ChartOptions>) => onOptions(cleanOptions(type, insight.measure, { ...options, ...change }))
   const column = (id: string) => page.columns.find((entry) => entry.id === id)
-  const dated = type !== 'kpi' && [insight.category, insight.second].some((id) => column(id)?.type === 'date')
+  // CHT-76: a Pivot table's nested fields too — one grain for every Date field.
+  const dated = type !== 'kpi' && [...pivotRowFields(insight), ...pivotColumnFields(insight)].some((id) => column(id)?.type === 'date')
   const adds = additive(insight.measure)
   const axes = autoAxisTitles(page, insight)
   // The typed text is kept as typed (spaces between words); the option is the cleaned one.
   const [xText, setXText] = useState(options.xTitle ?? '')
   const [yText, setYText] = useState(options.yTitle ?? '')
+  const [valueNameText, setValueNameText] = useState(options.valueName ?? '')
   const usual = limitsFor({ ...insight, options: undefined }).maxCategories
   // The column whose values have colours: the stacks or lines, a pie's slices.
   const colored = type === 'pie' ? column(insight.category) : type === 'bar' || type === 'line' ? column(insight.second) : undefined
@@ -49,6 +51,11 @@ export function ChartOptionsFields({ page, insight, pins, onOptions, onPins, sco
   if (type === 'kpi' && scope === 'dashboard') return null
   // CHT-70: the Data tab takes the grouping of dates and Show (Top N); the rest are the Format and Elements tabs.
   if (part === 'data') return <>
+    {/* CHT-83: the value's own name, used wherever the chart names its value. */}
+    {type !== 'kpi' && type !== 'narrative' && <label>Value name (optional)
+      <input aria-label="Value name" maxLength={maxValueName} value={valueNameText} placeholder={valueText(page, { ...insight, options: { ...options, valueName: undefined } })} onChange={(event) => { setValueNameText(event.target.value); set({ valueName: event.target.value || undefined }) }} />
+      <small>Names the value in the legend, the data table, tooltips, data labels, table headings, Rows behind and Export. Empty: the {kind && kind !== 'pie' ? 'value axis title when set, else the ' : ''}measure as written.</small>
+    </label>}
     {dated && <label>Group dates by
       <select aria-label="Group dates by" value={options.dateGroup ?? 'month'} onChange={(event) => set({ dateGroup: event.target.value === 'month' ? undefined : event.target.value as DateGroup })}>
         {(Object.keys(dateGroupLabels) as DateGroup[]).map((grain) => <option key={grain} value={grain}>{dateGroupLabels[grain].label}</option>)}

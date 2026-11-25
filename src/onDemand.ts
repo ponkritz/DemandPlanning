@@ -69,10 +69,26 @@ export interface ChartOptions {
   elements?: ChartElements // Excel-style chart elements set by the owners (as before when absent; CHT-26…CHT-35)
   view?: 'panel' // a KPI shown as a chart panel instead of a card in the Insights tab's card row (CHT-36)
   grid?: GridBox // CHT-47: the owners' place and size on the 12-column chart grid (x, y, w, h); `size` / `height` then hold the nearest presets for older apps
+  valueName?: string // CHT-83: the owners' name of the measured value ("Services"), used wherever the chart names its value (the generated "Count of rows" when absent)
 }
 // CHT-60: a Narrative (type 'narrative') keeps its sentences and rules in `narrative`; its category is the optional
 // Group by, '' for none.
-export interface Insight { id: string; title: string; type: InsightType; category: string; second: string; measure: InsightMeasure; value: string; filters: InsightFilter[]; sort: 'value' | 'label'; options?: ChartOptions; narrative?: Narrative }
+// CHT-74, CHT-79: a Pivot table (type 'table') nests its rows and columns — `category` is the outermost row field,
+// `rows2` / `rows3` the next ones, `second` the outer column field and `second2` the inner one. All optional and written
+// only when set, so a one-level table is stored as before; an older app reads such a file as the one-level table of
+// `category` × `second` and drops the three fields when it saves the insight (LIM-104).
+export interface Insight { id: string; title: string; type: InsightType; category: string; second: string; measure: InsightMeasure; value: string; filters: InsightFilter[]; sort: 'value' | 'label'; options?: ChartOptions; narrative?: Narrative; rows2?: string; rows3?: string; second2?: string }
+// CHT-79: the nested fields of a Pivot table as read from a file — only for type 'table', each a column id; a level is
+// kept only under the level before it (rows3 only with rows2, second2 only with second).
+export function pivotLevels(type: unknown, item: Record<string, unknown>, ref: (value: unknown) => string): { rows2?: string; rows3?: string; second2?: string } {
+  if (type !== 'table') return {}
+  const rows2 = ref(item.category) ? ref(item.rows2) : ''
+  const rows3 = rows2 ? ref(item.rows3) : ''
+  const second2 = ref(item.second) ? ref(item.second2) : ''
+  return { ...(rows2 ? { rows2 } : {}), ...(rows3 ? { rows3 } : {}), ...(second2 ? { second2 } : {}) }
+}
+// CHT-79: the nested fields as written — after the field they follow, only when set.
+export const pivotLevelsOut = ({ type, rows2, rows3, second2 }: Pick<Insight, 'type' | 'rows2' | 'rows3' | 'second2'>) => type !== 'table' ? {} : { ...(rows2 ? { rows2 } : {}), ...(rows2 && rows3 ? { rows3 } : {}), ...(second2 ? { second2 } : {}) }
 // CHT-09, CHT-41: a colour pin — a palette colour 1…5 (the --viz-series-* tokens, light and dark) or any colour as
 // "#rrggbb" (the same in both themes).
 export type ColorPin = number | string
@@ -83,7 +99,7 @@ export const measureKeys: InsightMeasure[] = ['count', 'sum', 'average', 'min', 
 // Count and Sum add up; the others cannot be stacked, shown as shares, summed into a running total or a Pareto.
 export const additive = (measure: InsightMeasure) => measure === 'count' || measure === 'sum'
 export const dateGroups: DateGroup[] = ['day', 'week', 'month', 'quarter', 'year']
-export const maxTop = 50, maxTargetLabel = 40, maxColorPins = 200, maxAxisTitle = 60
+export const maxTop = 50, maxTargetLabel = 40, maxColorPins = 200, maxAxisTitle = 60, maxValueName = 60
 // CHT-09: the colours of the chart palette a value can be pinned to (--viz-series-1…5).
 export const paletteSize = 5
 // Which options each type takes; the others are dropped when read and when the type changes.
@@ -109,6 +125,8 @@ export function cleanOptions(type: InsightType, measure: InsightMeasure, raw: un
   if (type !== 'kpi' && type !== 'table' && type !== 'narrative' && (item.height === 'small' || item.height === 'large')) out.height = item.height
   // CHT-24: the axis titles of a chart with axes, plain text of up to 60 characters; empty means automatic.
   if (type === 'bar' || type === 'line' || type === 'pareto') for (const key of ['xTitle', 'yTitle'] as const) { const text = typeof item[key] === 'string' ? (item[key] as string).trim().replace(/\s+/g, ' ').slice(0, maxAxisTitle) : ''; if (text) out[key] = text }
+  // CHT-83: the value's own name — plain text of up to 60 characters, for every type with a measure shown by name.
+  if (type !== 'kpi' && type !== 'narrative' && typeof item.valueName === 'string') { const name = item.valueName.trim().replace(/\s+/g, ' ').slice(0, maxValueName); if (name) out.valueName = name }
   // CHT-35: the chart elements, each checked against the type (and its orientation and Percent of total).
   const elements = cleanElements(type, out, item.elements)
   if (elements) out.elements = elements
@@ -646,11 +664,11 @@ export function parseInsights(list: unknown): Insight[] {
     const options = cleanOptions(type, measure, item.options)
     // CHT-60, CHT-68: a Narrative's sentences and rules, validated (unknown sentences, operators and placeholders dropped).
     const narrative = type === 'narrative' ? { narrative: parseNarrative((item as { narrative?: unknown }).narrative) } : {}
-    return [{ id: item.id, title: cleanName(text(item.title, 120)) || 'Untitled', type, category: type === 'kpi' ? '' : ref(item.category), second: type === 'pie' || type === 'pareto' || type === 'kpi' || type === 'narrative' ? '' : ref(item.second), measure, value: measure === 'count' ? '' : ref(item.value), filters, sort: type === 'line' ? 'label' : type === 'pareto' || type === 'narrative' ? 'value' : item.sort === 'label' ? 'label' : 'value', ...(options ? { options } : {}), ...narrative }]
+    return [{ id: item.id, title: cleanName(text(item.title, 120)) || 'Untitled', type, category: type === 'kpi' ? '' : ref(item.category), second: type === 'pie' || type === 'pareto' || type === 'kpi' || type === 'narrative' ? '' : ref(item.second), measure, value: measure === 'count' ? '' : ref(item.value), filters, sort: type === 'line' ? 'label' : type === 'pareto' || type === 'narrative' ? 'value' : item.sort === 'label' ? 'label' : 'value', ...(options ? { options } : {}), ...narrative, ...pivotLevels(type, item as Record<string, unknown>, ref) }]
   }).slice(0, maxInsights)
 }
 // CHT: the options are written only when an insight has any, so a file without them stays byte for byte as before.
-const insightOut = ({ id, title, type, category, second, measure, value, filters, sort, options, narrative }: Insight) => ({ id, title, type, category, ...(second ? { second } : {}), measure, ...(value ? { value } : {}), ...(filters.length ? { filters } : {}), sort, ...(options && Object.keys(options).length ? { options } : {}), ...(type === 'narrative' ? { narrative: narrativeOut(narrative) } : {}) })
+const insightOut = ({ id, title, type, category, second, measure, value, filters, sort, options, narrative, rows2, rows3, second2 }: Insight) => ({ id, title, type, category, ...(second ? { second } : {}), ...pivotLevelsOut({ type, rows2, rows3, second2: second ? second2 : undefined }), measure, ...(value ? { value } : {}), ...(filters.length ? { filters } : {}), sort, ...(options && Object.keys(options).length ? { options } : {}), ...(type === 'narrative' ? { narrative: narrativeOut(narrative) } : {}) })
 // Schema 1 still: the new fields (a column's description and currency, a row's seq, addedBy, addedAt and log) are
 // optional, so an older file reads as before; an older app version drops them when it saves (LIM-19).
 const logOut = ({ id, at, by, added, action, comment, changes }: LogEntry) => ({ id, at, by, ...(added ? { added } : {}), ...(action ? { action } : {}), ...(comment ? { comment } : {}), changes })

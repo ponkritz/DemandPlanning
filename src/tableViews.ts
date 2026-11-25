@@ -1,4 +1,5 @@
 import type { TableDensity } from './tableDefaults.ts'
+import { maxGroupLevels } from './tableGroups.ts'
 
 // UI-20…UI-23 Save view for everyone: what a table looks like — column order, shown and hidden columns, widths, Wrap
 // text, density and sort — as one view. Three views can apply, in this order: the viewer's own (kept per table in their
@@ -13,6 +14,13 @@ export interface TableView {
   wrap?: boolean
   density?: TableDensity
   sort?: TableSort
+  // UI-25…UI-28 (tables with Group by and Filter by column): the columns grouped by, outermost first (up to 4; [] is
+  // "no grouping", kept so that a person's own choice of none wins over the view for everyone); the column filters
+  // (column id → text); and, in the view for everyone only, whether the groups start collapsed. A view saved before
+  // these existed has none of them and keeps working.
+  groupBy?: string[]
+  filters?: Record<string, string>
+  startCollapsed?: boolean
   // Own views only: the save time of the view for everyone the own view started from (a newer one is announced).
   base?: string
 }
@@ -21,7 +29,7 @@ export type TableViewSource = 'own' | 'everyone' | 'table'
 const maxColumns = 300
 const idOk = (value: unknown): value is string => typeof value === 'string' && value.length > 0 && value.length <= 200
 const list = (value: unknown) => Array.isArray(value) ? [...new Set(value.filter(idOk))].slice(0, maxColumns) : undefined
-const minWidth = 48, maxWidth = 2000
+const minWidth = 48, maxWidth = 2000, maxFilter = 200
 
 // Only known shapes are kept (a view read from Git or from the browser is checked like any other input); nothing set
 // is no view at all.
@@ -40,13 +48,28 @@ export function parseTableView(raw: unknown): TableView | undefined {
   if (value.density === 'compact' || value.density === 'comfortable') view.density = value.density
   const sort = value.sort as Record<string, unknown> | null | undefined
   if (sort && typeof sort === 'object' && idOk(sort.id)) view.sort = { id: sort.id, desc: sort.desc === true }
+  const groupBy = list(value.groupBy)
+  if (groupBy) view.groupBy = groupBy.slice(0, maxGroupLevels)
+  if (value.filters && typeof value.filters === 'object' && !Array.isArray(value.filters)) {
+    view.filters = Object.fromEntries(Object.entries(value.filters as Record<string, unknown>).filter(([id, text]) => idOk(id) && typeof text === 'string' && text.trim()).slice(0, maxColumns).map(([id, text]) => [id, (text as string).slice(0, maxFilter)]))
+  }
+  if (value.startCollapsed === true) view.startCollapsed = true
   if (typeof value.base === 'string' && /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(value.base)) view.base = value.base
   return Object.keys(view).some((key) => key !== 'base') ? view : undefined
 }
 
 // The view that applies: the viewer's own, else the view for everyone, else the table's built-in one (nothing set).
+// UI-28: an own view that has no grouping or column filters at all (saved before they existed) takes them from the view
+// for everyone; "Start collapsed" always comes from the view for everyone (how the groups open is the viewer's, per visit).
 export function chooseTableView(own: TableView | undefined, everyone: TableView | undefined): { view: TableView; source: TableViewSource } {
-  if (own) return { view: own, source: 'own' }
+  if (own) {
+    const view: TableView = { ...own }
+    delete view.startCollapsed
+    if (view.groupBy === undefined && everyone?.groupBy) view.groupBy = everyone.groupBy
+    if (view.filters === undefined && everyone?.filters) view.filters = everyone.filters
+    if (everyone?.startCollapsed) view.startCollapsed = true
+    return { view, source: 'own' }
+  }
   if (everyone) return { view: everyone, source: 'everyone' }
   return { view: {}, source: 'table' }
 }
@@ -60,12 +83,15 @@ export function fitTableView(view: TableView, columnIds: string[]): TableView {
   if (view.hidden) fitted.hidden = view.hidden.filter((id) => known.has(id))
   if (view.widths) fitted.widths = Object.fromEntries(Object.entries(view.widths).filter(([id]) => known.has(id)))
   if (view.sort && !known.has(view.sort.id)) delete fitted.sort
+  if (view.groupBy) fitted.groupBy = view.groupBy.filter((id) => known.has(id))
+  if (view.filters) fitted.filters = Object.fromEntries(Object.entries(view.filters).filter(([id]) => known.has(id)))
   return fitted
 }
 
 // The first change a viewer makes: their own view starts as the view they see (the one for everyone, with its time).
 export const startOwnView = (everyone: TableView | undefined, everyoneAt: string | undefined, change: Partial<TableView>): TableView => {
   const start: TableView = { ...(everyone ?? {}) }
+  delete start.startCollapsed
   if (everyoneAt) start.base = everyoneAt
   else delete start.base
   return { ...start, ...change }
