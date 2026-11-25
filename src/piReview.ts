@@ -1,6 +1,6 @@
-// PI Review, release 1 (PIR-01…PIR-06): the PIs to choose from and the default one, the Features of a PI, and the
-// Discussions of those Features read from Azure DevOps — kept in this page load's memory only (nothing is written to
-// Git, IndexedDB or Azure DevOps).
+// PI Review (PIR-01…PIR-10): the PIs to choose from and the default one, the Features of a PI, the Discussions of
+// those Features read from Azure DevOps and their latest comment split by its headings — kept in this page load's
+// memory only (nothing is written to Git, IndexedDB or Azure DevOps).
 import { currentIterationPairs, type AzureIteration } from './azureRead.ts'
 import { laterPi, piName, piPathOf } from './myWork.ts'
 import type { AzureWorkItem } from './domain'
@@ -103,3 +103,66 @@ export async function readDiscussions<T>(ids: number[], read: (id: number) => Pr
   await Promise.all(Array.from({ length: Math.max(1, Math.min(concurrency, ids.length)) }, worker))
   return { read: done - failed, failed, unread: [...unread, ...queue].sort((a, b) => a - b), stopped }
 }
+
+// PIR-07: the latest comment of a Discussion — the newest by its date and time (an unreadable date counts as oldest; at
+// the same time the higher comment ID), whoever wrote it.
+export function latestComment(comments: WorkItemComment[]): WorkItemComment | undefined {
+  const time = (comment: WorkItemComment) => { const value = Date.parse(comment.date); return Number.isFinite(value) ? value : -Infinity }
+  let newest: WorkItemComment | undefined
+  for (const comment of comments) if (!newest || time(comment) > time(newest) || (time(comment) === time(newest) && comment.id > newest.id)) newest = comment
+  return newest
+}
+
+// PIR-08: a review comment split by its headings — Struggles, Learnings and Move to next PI. A heading counts only
+//  (a) at the start of a line, after an optional bullet (- * • +), number (1. or 1)) or #, and optional bold (** __),
+//      followed by a colon, a dash and a space, or the end of the line; or
+//  (b) anywhere in a line when a colon follows it directly ("Struggles: … Learnings: … Move to next PI: Yes"), not
+//      inside a word; the bare "Next PI" counts only at the start of a line (a), so "planned for next PI: …" is no heading.
+// Letter case is ignored; singular and plural (Struggle(s), Learning(s)); Move / Moved / Moves to (the) next PI and
+// Next PI; a "?" after the heading is allowed. A heading word in a sentence without a colon is not taken. Each section
+// runs to the next heading or the end of the comment, its lines trimmed, a leading bullet (- * •) and empty lines
+// dropped (line breaks kept);
+// text before the first heading belongs to no section; a heading given twice has its texts joined. No heading: an
+// empty result (the whole comment is shown only).
+export type MoveValue = 'Yes' | 'No' | 'Partly'
+export interface ReviewSplit { struggles?: string; learnings?: string; move?: string; moveValue?: MoveValue; moveRest?: string }
+type Section = 'struggles' | 'learnings' | 'move'
+const headingNames = String.raw`(struggles?|learnings?|move[sd]?[ \t]+to[ \t]+(?:the[ \t]+)?next[ \t]+pi|next[ \t]+pi)`
+const bold = String.raw`(?:\*\*|__)?`
+const lineHeading = new RegExp(String.raw`^[ \t]*(?:[-*•+]|\d{1,2}[.)]|#{1,6})?[ \t]*${bold}${headingNames}[ \t]*\??[ \t]*${bold}[ \t]*(?:(?::|[\-–—](?=[ \t]|\r?\n|$))[ \t]*${bold}|(?=\r?\n|$))`, 'gimu')
+const inlineHeading = new RegExp(String.raw`(?<![\p{L}\p{N}])${bold}(struggles?|learnings?|move[sd]?[ \t]+to[ \t]+(?:the[ \t]+)?next[ \t]+pi)[ \t]*\??[ \t]*${bold}[ \t]*:[ \t]*${bold}`, 'giu')
+const sectionOf = (name: string): Section => /^struggle/i.test(name) ? 'struggles' : /^learning/i.test(name) ? 'learnings' : 'move'
+const tidy = (text: string) => text.split(/\r?\n/).map((line) => line.trim().replace(/^[-*•]\s+/, '')).filter(Boolean).join('\n')
+// The Move value: the text starts with yes / y, no / n or partly / partially / partial (any case), followed by the end,
+// a space or punctuation (so "N/A", "Not decided" and "Nothing" give no value).
+const moveStart = /^(yes|y|no|n|partly|partially|partial)(?=$|[\s.,;:!)—–-])[\s.,;:!)—–-]*/i
+export function splitReviewComment(text: string | undefined): ReviewSplit {
+  if (!text) return {}
+  const found = new Map<number, { section: Section; start: number; end: number }>()
+  for (const pattern of [lineHeading, inlineHeading]) {
+    pattern.lastIndex = 0
+    for (let match = pattern.exec(text); match; match = pattern.exec(text)) {
+      const at = match.index + match[0].toLowerCase().indexOf(match[1].toLowerCase())
+      if (!found.has(at)) found.set(at, { section: sectionOf(match[1]), start: match.index, end: match.index + match[0].length })
+    }
+  }
+  const headings = [...found.values()].sort((a, b) => a.start - b.start)
+  const split: ReviewSplit = {}
+  headings.forEach((heading, index) => {
+    const body = tidy(text.slice(heading.end, headings[index + 1]?.start ?? text.length))
+    if (body) split[heading.section] = split[heading.section] ? `${split[heading.section]}\n${body}` : body
+  })
+  if (split.move) {
+    const match = moveStart.exec(split.move)
+    if (match) {
+      const word = match[1].toLowerCase()
+      split.moveValue = word.startsWith('y') ? 'Yes' : word.startsWith('p') ? 'Partly' : 'No'
+      split.moveRest = split.move.slice(match[0].length).trim()
+    }
+  }
+  return split
+}
+// PIR-08: Move to next PI as shown — "Yes — waiting for vendor" with a value, otherwise the text as written.
+export const moveLabel = (split: ReviewSplit) => split.moveValue ? `${split.moveValue}${split.moveRest ? ` — ${split.moveRest}` : ''}` : split.move ?? ''
+// PIR-09: one line for a table cell — the line breaks as " · ".
+export const oneLine = (text: string | undefined) => (text ?? '').split(/\n+/).map((line) => line.trim()).filter(Boolean).join(' · ')

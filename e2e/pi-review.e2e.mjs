@@ -1,11 +1,15 @@
 import test, { after, before } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { navigate, openPage, startApp, text } from './helpers.mjs'
 
 // PI Review, release 1 (PIR-01…PIR-06; TC-PIR-06, UAT): against a mocked Azure DevOps — the Time Writing fetch, the
 // iterations (PI 2026.4 current) and the Comments API with two pages — the current PI is chosen, its Features listed,
 // a Feature's Discussion read in the drawer as plain text from both pages, and Read all Discussions completes as a
 // background job. Synthetic data only; every step waits for what it needs, never for a time.
+// PI Review columns (PIR-07…PIR-10; TC-PIR-09, UAT): Feature 201's newest comment is written with the headings, so the
+// drawer's Latest comment and the table's five columns show it split; Feature 202's newest comment (listed after an
+// older one) has no headings, so only Date and Comment are filled; Export carries the five columns.
 let app
 before(async () => { app = await startApp() })
 after(async () => { await app.stop() })
@@ -24,6 +28,7 @@ const node = (path, children = [], attributes) => ({ name: path.split('\\').at(-
 export const piToken = 'page 2/of+2=='
 // The Discussion of Feature 201 in two pages (newest first), with a mention, an image, a script and a deleted comment.
 const firstPage = [
+  { id: 5, text: '<div><b>Struggles:</b> test rig late</div><div>Learnings: book the rig early<br>share the calendar</div><div>Move to next PI: Yes - waiting for vendor</div>', createdBy: { displayName: 'Ben Okafor' }, createdDate: '2026-11-21T14:30:00Z' },
   { id: 4, text: '<div>Blocked by the <b>test rig</b>, asked <a href="#" data-vss-mention="version:2.0,aa11">@Ana Costa</a> to help</div>', createdBy: { displayName: 'Rita Gomez' }, createdDate: '2026-11-20T09:00:00Z' },
   { id: 3, text: '<p>Lesson: book the rig early</p><script>window.hacked = true</script>', createdBy: { displayName: 'Ben Okafor' }, createdDate: '2026-11-18T09:00:00Z' },
 ]
@@ -52,7 +57,7 @@ export function fakeAzure(seen = []) {
       seen.push(request.url())
       const token = url.searchParams.get('continuationToken')
       if (comments[1] === '201') return json(token === piToken ? { comments: secondPage, count: 2 } : { comments: firstPage, count: 2, continuationToken: piToken })
-      if (comments[1] === '202') return json({ comments: [{ id: 9, text: 'Ready for review', createdBy: { displayName: 'Ana Costa' }, createdDate: '2026-11-19T09:00:00Z' }], count: 1 })
+      if (comments[1] === '202') return json({ comments: [{ id: 8, text: 'Kick-off: Struggles are expected', createdBy: { displayName: 'Rita Gomez' }, createdDate: '2026-11-01T09:00:00Z' }, { id: 9, text: 'Ready for review', createdBy: { displayName: 'Ana Costa' }, createdDate: '2026-11-19T09:00:00Z' }], count: 2 })
       return json({ comments: [], count: 0 })
     }
     return json({ value: [] })
@@ -74,6 +79,14 @@ export async function openPiReview(options = {}) {
   return { page, context, errors, seen }
 }
 
+// The text of a Feature's cell in the column headed `label` (its sort button's text, without the sort arrow).
+async function cell(page, key, label) {
+  const headings = await page.locator('.pir-table thead th').evaluateAll((cells) => cells.map((th) => (th.querySelector('.sort-button')?.textContent ?? th.textContent ?? '').replace(/[▴▾]/g, '').trim()))
+  const at = headings.indexOf(label)
+  assert.ok(at >= 0, `column ${label} in ${headings.join(' | ')}`)
+  return text(page.locator(`.pir-table tr[data-row-key="${key}"] td`).nth(at))
+}
+const localDateTime = (page, iso) => page.evaluate((value) => new Intl.DateTimeFormat(undefined, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZoneName: 'short' }).format(new Date(value)), iso)
 const rowKeys = (page) => page.locator('.pir-table tbody tr[data-row-key]').evaluateAll((rows) => rows.map((row) => row.dataset.rowKey))
 
 test('TC-PIR-06: the current PI is preselected, its Features listed, a Discussion read in the drawer as plain text from both pages, and Read all Discussions completes', async () => {
@@ -86,7 +99,7 @@ test('TC-PIR-06: the current PI is preselected, its Features listed, a Discussio
   // PIR-03, PIR-04: the PI's Features by ID; the toggle adds the Feature with a User Story in the PI.
   await page.locator('.pir-table tr[data-row-key="example/project/202"]').waitFor()
   assert.deepEqual(await rowKeys(page), ['example/project/201', 'example/project/202'])
-  assert.match(await text(page.locator('.pir-table tr[data-row-key="example/project/201"]')), /^201 DP 4\.2 release review DP releases Active Rita Gomez — PI 2026\.4 —$/)
+  assert.match(await text(page.locator('.pir-table tr[data-row-key="example/project/201"]')), /^201 DP 4\.2 release review DP releases Active Rita Gomez — PI 2026\.4 — — — — — —$/)
   assert.match(await text(page.locator('.data-table-status')), /^2 of 2 Features$/)
   await page.getByRole('checkbox', { name: 'Also Features with User Stories in this PI' }).check()
   await page.locator('.pir-table tr[data-row-key="example/project/203"]').waitFor()
@@ -97,16 +110,16 @@ test('TC-PIR-06: the current PI is preselected, its Features listed, a Discussio
   const drawer = page.locator('aside.drawer[role="dialog"]', { has: page.getByRole('heading', { name: 'Feature #201', exact: true }) })
   await drawer.waitFor()
   const items = drawer.locator('.pir-comments > li')
-  await drawer.getByRole('heading', { name: 'Discussion (3)' }).waitFor()
-  assert.deepEqual(await items.locator('.pir-comment-text').allInnerTexts(), ['Blocked by the test rig, asked @Ana Costa to help', 'Lesson: book the rig early', 'Screenshot [image] attached'])
-  assert.match(await text(items.first()), /^Rita Gomez /)
+  await drawer.getByRole('heading', { name: 'Discussion (4)' }).waitFor()
+  assert.deepEqual(await items.locator('.pir-comment-text').allInnerTexts(), ['Struggles: test rig late\n\nLearnings: book the rig early\nshare the calendar\n\nMove to next PI: Yes - waiting for vendor', 'Blocked by the test rig, asked @Ana Costa to help', 'Lesson: book the rig early', 'Screenshot [image] attached'])
+  assert.match(await text(items.first()), /^Ben Okafor /)
   assert.equal(await drawer.locator('.pir-comments img, .pir-comments script, .pir-comments a').count(), 0, 'no markup rendered')
   assert.equal(await page.evaluate(() => window.hacked), undefined)
   assert.ok(seen.some((url) => url.includes('/workItems/201/comments?') && url.includes(`continuationToken=${encodeURIComponent(piToken)}`)), `second page asked with the token: ${seen.join(' ')}`)
   assert.equal(await drawer.getByRole('link', { name: 'Open in Azure DevOps →' }).getAttribute('href'), 'https://dev.azure.com/example/Project/_workitems/edit/201')
   await page.keyboard.press('Escape')
   await drawer.waitFor({ state: 'detached' })
-  assert.equal(await text(page.locator('.pir-table tr[data-row-key="example/project/201"] td').last()), '3')
+  assert.equal(await cell(page, 'example/project/201', 'Comments'), '4')
   // PIR-06: Read all Discussions reads the rest as a background job; the Comments column fills in.
   await page.getByRole('button', { name: '↻ Read all Discussions' }).click()
   await page.locator('.jobs-button').click()
@@ -114,7 +127,63 @@ test('TC-PIR-06: the current PI is preselected, its Features listed, a Discussio
   const job = panel.locator('li.job', { hasText: 'Reading Discussions · PI 2026.4' })
   await job.filter({ hasText: '1 of 1 read.' }).waitFor()
   await panel.getByRole('button', { name: 'Close', exact: true }).click()
-  assert.equal(await text(page.locator('.pir-table tr[data-row-key="example/project/202"] td').last()), '1')
+  assert.equal(await cell(page, 'example/project/202', 'Comments'), '2')
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
+test('TC-PIR-09: after Read all Discussions the five columns show each Feature\'s newest comment, split by its headings, can be filtered by Move to next PI and are exported', async () => {
+  const { page, context, errors } = await openPiReview()
+  await page.locator('.pir-table tr[data-row-key="example/project/202"]').waitFor()
+  // PIR-09: before a Discussion is read the five columns show "—" with the hint.
+  const five = ['Date and Time of Comment', 'Comment', 'Struggles', 'Learnings', 'Move to Next PI']
+  const values = async (key) => { const found = []; for (const label of five) found.push(await cell(page, key, label)); return found }
+  assert.deepEqual(await values('example/project/201'), ['—', '—', '—', '—', '—'])
+  assert.match(await page.locator('.pir-table tr[data-row-key="example/project/201"] td').last().getAttribute('title'), /not read yet: open the Feature, or ↻ Read all Discussions/)
+  await page.getByRole('button', { name: '↻ Read all Discussions' }).click()
+  await page.locator('.jobs-button').click()
+  const panel = page.getByRole('dialog', { name: 'Background jobs' })
+  await panel.locator('li.job', { hasText: 'Reading Discussions · PI 2026.4' }).filter({ hasText: '2 of 2 read.' }).waitFor()
+  await panel.getByRole('button', { name: 'Close', exact: true }).click()
+  // PIR-07, PIR-09: each Feature's newest comment by date — split for 201; for 202 (listed after an older one) whole only.
+  assert.deepEqual(await values('example/project/201'), [await localDateTime(page, '2026-11-21T14:30:00Z'), 'Struggles: test rig late · Learnings: book the rig early · share the calendar · Move to next PI: Yes - waiting for vendor', 'test rig late', 'book the rig early · share the calendar', 'Yes — waiting for vendor'])
+  assert.deepEqual(await values('example/project/202'), [await localDateTime(page, '2026-11-19T09:00:00Z'), 'Ready for review', '', '', ''])
+  assert.match(await page.locator('.pir-table tr[data-row-key="example/project/201"] td').last().getAttribute('title'), /^Yes — waiting for vendor$/)
+  // PIR-09: sorted by the date, newest first on the first click; filtered by the Move value.
+  const byDate = page.locator('.pir-table thead .sort-button', { hasText: 'Date and Time of Comment' })
+  await byDate.click()
+  await page.locator('.pir-table thead th[aria-sort="descending"]', { hasText: 'Date and Time of Comment' }).waitFor()
+  assert.deepEqual(await rowKeys(page), ['example/project/201', 'example/project/202'])
+  await byDate.click()
+  await page.locator('.pir-table thead th[aria-sort="ascending"]', { hasText: 'Date and Time of Comment' }).waitFor()
+  assert.deepEqual(await rowKeys(page), ['example/project/202', 'example/project/201'])
+  await page.getByRole('button', { name: /^Move to next PI:/ }).click()
+  await page.getByRole('listbox', { name: 'Move to next PI' }).getByRole('checkbox', { name: 'Yes', exact: true }).check()
+  await page.locator('.pir-table tr[data-row-key="example/project/202"]').waitFor({ state: 'detached' })
+  assert.deepEqual(await rowKeys(page), ['example/project/201'])
+  await page.keyboard.press('Escape')
+  await page.getByRole('listbox', { name: 'Move to next PI' }).waitFor({ state: 'detached' })
+  await page.getByRole('button', { name: 'Reset filters' }).click()
+  await page.locator('.pir-table tr[data-row-key="example/project/202"]').waitFor()
+  // PIR-09: Export carries the five columns, the whole comment with its line breaks.
+  const download = page.waitForEvent('download')
+  const exportButton = page.locator('.pir-table').getByRole('button', { name: /^Export/ }).first()
+  const menu = /▾/.test(await exportButton.innerText())
+  await exportButton.click()
+  if (menu) await page.getByRole('menuitem', { name: 'CSV (.csv)' }).click()
+  const csv = readFileSync(await (await download).path(), 'utf8').replace(/\r\n/g, '\n')
+  assert.match(csv, /Date and Time of Comment,Comment,Struggles,Learnings,Move to Next PI/)
+  assert.match(csv, /2026-11-21[^,]*,"Struggles: test rig late\n\nLearnings: book the rig early\nshare the calendar\n\nMove to next PI: Yes - waiting for vendor",test rig late,"book the rig early\nshare the calendar",Yes — waiting for vendor/)
+  assert.match(csv, /2026-11-19[^,]*,Ready for review,,,/)
+  // PIR-10: the drawer shows the newest comment split above the Discussion (read already: not read again).
+  await page.locator('.pir-table tr[data-row-key="example/project/201"] td').nth(1).click()
+  const drawer = page.locator('aside.drawer[role="dialog"]', { has: page.getByRole('heading', { name: 'Feature #201', exact: true }) })
+  await drawer.getByRole('heading', { name: 'Discussion (4)' }).waitFor()
+  const latest = drawer.getByRole('region', { name: 'Latest comment' })
+  assert.equal(await text(latest.locator('.pir-comment-head')), `Ben Okafor ${await localDateTime(page, '2026-11-21T14:30:00Z')}`)
+  assert.deepEqual(await latest.locator('dd').allInnerTexts(), ['test rig late', 'book the rig early\nshare the calendar', 'Yes — waiting for vendor'])
+  await page.keyboard.press('Escape')
+  await drawer.waitFor({ state: 'detached' })
   assert.deepEqual(errors, [])
   await context.close()
 })

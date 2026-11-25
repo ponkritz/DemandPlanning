@@ -27,6 +27,8 @@ import { ExportNoteContext, sampleExportNote } from '../exportNote'
 import { PublishDialog } from '../components/PublishDialog'
 import { prepareTable, useSchedules, viewerChoice, type PublishAuthorization } from '../publishRun'
 import { publishKey } from '../publishSchedule'
+import { ReplaceDialog } from '../components/ReplaceDialog'
+import { applyOnDemandReplace, distinctValues, onDemandReplaceCommit, onDemandReplacePlan, replaceError, replaceMessage, replaceableColumns } from '../replaceValues'
 
 // OND-03…OND-07 One On-Demand page (CoNQ, or one added under On-Demand): a work table in the shared DataTable — one
 // column per configured column, search, sort, the row count and Export. OND-27: a click on a row (or Enter / Space on it)
@@ -66,6 +68,8 @@ export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-ins
   const publishScope = publishKey(publisher.repository, publisher.publisher, pageId)
   const schedules = useSchedules()
   const schedule = publishScope ? schedules[publishScope] : undefined
+  // OND-100: the Replace… pop-up (a value of one column replaced in every row that holds it).
+  const [replacing, setReplacing] = useState(false)
   const block = useWriteBlock()
   // OND-07: what may be changed — the rights of the viewer's roles, a Git token that can save, no synthetic sample.
   const gitReason = !git.connected ? 'Connect Git storage (Admin → Data & sharing) to change the On-Demand pages; they are shared through Git.' : git.readOnly ? 'View only: your Git token can read but not save.' : git.isSample ? 'Synthetic sample data is loaded. Saving to Git is disabled.' : ''
@@ -96,6 +100,8 @@ export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-ins
   const refreshLocks = locking.refresh
   const drawerRow = drawer?.id
   useEffect(() => { if (drawerRow) void refreshLocks() }, [drawerRow, refreshLocks])
+  // OND-101: the row locks are read again when Replace… opens, so its preview skips the rows being edited now.
+  useEffect(() => { if (replacing) void refreshLocks() }, [replacing, refreshLocks])
   const [converting, setConverting] = useState(false)
   // OND-62: the suggestion to convert a large single-file page, dismissed per page and person in this browser.
   const hintKey = `${me}|${pageId}`
@@ -168,6 +174,24 @@ export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-ins
       return { value: saved, text: resultText(saved, `${hide ? 'hidden' : 'shown'} ${rowId(page, row) || row.key || ''}`) }
     })
   }
+  // OND-100…OND-102 Replace…: the right to edit the page's rows (OND-07, PGB-09, PGB-10); fails closed — without Git
+  // that can save, in Sample, while viewing as someone else, before the roles are loaded, or without such a right.
+  const replaceColumns = replaceableColumns(page)
+  const replaceReason = editRowsReason || (viewer.viewingAs ? 'Read only while viewing as someone else: nothing is saved. Exit View as to replace values.' : '') || (!page.columns.length ? 'The page has no columns yet.' : !replaceColumns.length ? 'The page has no Text, Long text, Dropdown or Multi-select column.' : !page.rows.some((row) => !row.hidden) ? 'The page has no rows.' : '')
+  // OND-101: rows being edited by someone else (row locks, OND-35) are skipped and counted; hidden rows are left as they are.
+  const lockedKeys = new Set(page.rows.flatMap((row) => row.key && holderOf(row) ? [row.key] : []))
+  const replaceLabel = (row: OnDemandRow) => rowId(page, row) || row.key || rowLabel(page, row)
+  async function replaceNow(columnId: string, find: string, to: string) {
+    const column = page.columns.find((entry) => entry.id === columnId)
+    if (!column) return
+    const preview = onDemandReplacePlan(page, columnId, find, to, { locked: lockedKeys })
+    let done = { changed: 0, locked: 0 }
+    await inBackground(`Replace · ${page.name} · ${column.name}`, async () => {
+      const saved = await store.update(page.id, (base) => { const next = applyOnDemandReplace(base, columnId, find, to, { by: me, locked: lockedKeys }); done = next; return next.page }, onDemandReplaceCommit(page, column.name, find, to, preview.changes.length))
+      return { value: saved, text: resultText(saved, `${replaceMessage(find, to, column.name)}: ${done.changed} row${done.changed === 1 ? '' : 's'}${done.locked ? `; ${done.locked} row${done.locked === 1 ? '' : 's'} being edited by someone else skipped` : ''}`) }
+    })
+    setReplacing(false)
+  }
   const canDelete = !gitReason && !sample && viewer.manager && !viewer.readOnly
   const hiddenCount = page.rows.filter(isRowHidden).length
   const visibleCount = page.rows.length - hiddenCount
@@ -227,6 +251,7 @@ export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-ins
         { key: 'hide', label: hidden ? 'Show page' : 'Hide page', disabled: Boolean(hidingReason), title: hidingReason || undefined, onClick: toggleHidden },
         { key: 'delete', label: 'Delete page…', danger: true, disabled: Boolean(removeReason), title: removeReason || undefined, onClick: () => setPageDialog('remove') },
       ]),
+      { key: 'replace', label: 'Replace…', disabled: Boolean(replaceReason), title: replaceReason || 'Replace a value of one column in every row that holds it', onClick: () => setReplacing(true) },
       { key: 'publish', label: 'Publish interactive HTML…', disabled: Boolean(publishReason), title: publishReason || undefined, onClick: () => setPublishing(publishScope) },
       ...(showConvert ? [{ key: 'convert', label: 'Convert to row files…', disabled: Boolean(convertReason), title: convertReason || undefined, onClick: () => setConverting(true) }] : []),
       ...(git.connected ? [{ key: 'reload', label: '↻ Reload from Git', onClick: () => { if (pending.length && !window.confirm(`Discard the changes to ${page.name} that are not saved to Git?`)) return; store.discard(page.id); void store.reload() } }] : []),
@@ -274,6 +299,13 @@ export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-ins
       position={drawer.draft ? null : { at: drawer.order.indexOf(current.id), of: drawer.order.length }} onStep={step}
       onSave={(row, isNew) => saveRow(row, isNew)} onRetryQueue={() => store.retry(page.id)} onHide={(hide) => hideRowNow(current, hide)} onRemove={canDelete && current.hidden ? () => setRemoving(current) : undefined}
       onClose={() => setDrawer(null)} />}
+    {replacing && <ReplaceDialog eyebrow={eyebrowOf(page)} columns={replaceColumns}
+      values={(id) => { const column = page.columns.find((entry) => entry.id === id); return distinctValues(page.rows.filter((row) => !row.hidden).map((row) => column?.type === 'multi' ? valuesOf(row.cells[id]) : [cellText(row.cells[id])])) }}
+      suggestions={(id) => { const column = page.columns.find((entry) => entry.id === id); return column && hasOptions(column.type) ? column.options : distinctValues(page.rows.filter((row) => !row.hidden).map((row) => [cellText(row.cells[id])])).map((entry) => entry.value) }}
+      plan={(id, find, to) => onDemandReplacePlan(page, id, find, to, { locked: lockedKeys, label: replaceLabel })}
+      check={(id, find, to) => replaceError(page.columns.find((entry) => entry.id === id), find, to)}
+      note={<p className="muted">Hidden rows are not changed. Each changed row gets an entry in its History; saved to Git at once{rowFiles ? ', every changed row file in one commit' : ''}.</p>}
+      onReplace={replaceNow} onCancel={() => setReplacing(false)} />}
     {/* OND-91: Publish now cuts the rows with the publisher's Insights filter row as it is now. */}
     {publishing && publishing === publishScope && !publishReason && (() => { const cut = { kind: 'table' as const, choice: viewerChoice(page.id, views) }; return <PublishDialog pageId={page.id} name={page.name} publishScope={publishing} authorization={publisher} publishedBy={publisherName || me} cut={cut} prepare={prepareTable(page, kind, cut, publisherName || me)} onClose={() => setPublishing(null)} /> })()}
     {converting && <ConvertDialog page={page} onCancel={() => setConverting(false)} onConvert={async () => {

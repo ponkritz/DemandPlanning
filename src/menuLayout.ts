@@ -244,7 +244,8 @@ export function gitReasonOf(git: { connected: boolean; readOnly: boolean; isSamp
 // ---- rights (PGB-08…PGB-11) ----
 // The viewer as the rights see them: their work email (the one on the Time Writing connection, CON-82), their role
 // permissions, whether the roles file is loaded (CON-101) and whether they manage pages and menu groups (CON-106).
-export interface Viewer { email: string; can: (action: Action) => boolean; readOnly: boolean; manager: boolean }
+// viewingAs (OND-102): View as is on — read only, nothing is saved.
+export interface Viewer { email: string; can: (action: Action) => boolean; readOnly: boolean; manager: boolean; viewingAs?: boolean }
 export const readOnlyMenuReason = 'Read only: the access roles are not loaded yet, so nothing can be changed in the menu.'
 export const managerOnlyReason = 'Only a Tool Owner (“Manage pages and menu groups”) can create, rename, reorder, configure or remove menu groups. An Admin can change this in Admin → People & roles → Role rights.'
 // A group co-owner holds their group only while it accepts added pages.

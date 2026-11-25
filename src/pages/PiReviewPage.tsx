@@ -7,13 +7,15 @@ import { rateLimitWait, readAzureIterations, readDiscussion, type AzureConfig, t
 import { capacityContext } from '../capacity'
 import { formatDate, formatDateTime } from '../format'
 import { useNow } from '../useNow'
-import { defaultPi, discussionOf, discussionsVersion, epicOf, piFeatures, piLabel, piOptions, readDiscussions, samePi, setDiscussion, subscribeDiscussions } from '../piReview'
+import { defaultPi, discussionOf, discussionsVersion, epicOf, latestComment, moveLabel, oneLine, piFeatures, piLabel, piOptions, readDiscussions, samePi, setDiscussion, splitReviewComment, subscribeDiscussions, type ReviewSplit } from '../piReview'
+import type { WorkItemComment } from '../azureDevOps'
 import type { AzureWorkItem } from '../domain'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { PageProps } from './types'
 
-// PI Review, release 1 (PIR-01…PIR-06): choose a PI, see its Features, and read each Feature's Discussion (all pages,
-// newest first, as plain text) in a drawer, or every Discussion at once as a background job. Read only: nothing is
+// PI Review (PIR-01…PIR-10): choose a PI, see its Features, and read each Feature's Discussion (all pages, newest
+// first, as plain text) in a drawer, or every Discussion at once as a background job; the latest comment of each read
+// Discussion fills five columns, split by its Struggles / Learnings / Move to next PI headings. Read only: nothing is
 // written to Azure DevOps, Git or this browser's database; the Discussions stay in memory for this page load.
 const piKey = 'demand-planning-pi-review-pi-v1'
 const readStored = () => { try { return localStorage.getItem(piKey) ?? '' } catch { return '' } }
@@ -21,8 +23,26 @@ const writeStored = (value: string) => { try { if (value) localStorage.setItem(p
 const jobKey = 'pireview:read-all'
 const plural = (count: number, word: string, many = `${word}s`) => `${count.toLocaleString()} ${count === 1 ? word : many}`
 type Row = { item: AzureWorkItem; epic?: AzureWorkItem }
-interface Filters { epics: string[]; states: string[]; text: string }
-const noFilters: Filters = { epics: [], states: [], text: '' }
+interface Filters { epics: string[]; states: string[]; moves: string[]; text: string }
+const noFilters: Filters = { epics: [], states: [], moves: [], text: '' }
+
+// PIR-07, PIR-08: the newest comment of a Feature whose Discussion was read in this page load, split by its headings
+// (cached per comment, so sorting and filtering do not parse again). undefined: not read (yet).
+type Latest = { comment?: WorkItemComment; split: ReviewSplit }
+const splits = new WeakMap<WorkItemComment, ReviewSplit>()
+function latestOf(item: AzureWorkItem): Latest | undefined {
+  const entry = discussionOf(item.key)
+  if (entry?.state !== 'done') return undefined
+  const comment = latestComment(entry.comments)
+  if (!comment) return { split: {} }
+  let split = splits.get(comment)
+  if (!split) { split = splitReviewComment(comment.text); splits.set(comment, split) }
+  return { comment, split }
+}
+// PIR-09: the Move to next PI filter — the normalized value, Other (text without one), Not given, Not read.
+const moveOptions: [string, string][] = [['Yes', 'Yes'], ['No', 'No'], ['Partly', 'Partly'], ['other', 'Other text'], ['none', 'Not given'], ['unread', 'Discussion not read']]
+const moveKey = (latest: Latest | undefined) => !latest ? 'unread' : latest.split.moveValue ?? (latest.split.move ? 'other' : 'none')
+const unreadHint = 'The Discussion is not read yet: open the Feature, or ↻ Read all Discussions.'
 
 // Reads one Feature's Discussion into the page's memory (PIR-05); the error is kept for the drawer and the table.
 async function readInto(config: AzureConfig, pat: string, item: AzureWorkItem) {
@@ -67,8 +87,9 @@ export function PiReviewPage({ azure, store }: { azure: AzureWorkspace; store: P
   const text = filters.text.trim().toLowerCase()
   const shown = rows.filter(({ item, epic }) => (!filters.epics.length || filters.epics.includes(epic ? String(epic.id) : ''))
     && (!filters.states.length || filters.states.includes(item.state))
-    && (!text || [String(item.id), item.title, item.assignedTo, epic?.title ?? ''].some((value) => value.toLowerCase().includes(text))))
-  const filtered = filters.epics.length > 0 || filters.states.length > 0 || Boolean(filters.text)
+    && (!filters.moves.length || filters.moves.includes(moveKey(latestOf(item))))
+    && (!text || [String(item.id), item.title, item.assignedTo, epic?.title ?? '', latestOf(item)?.comment?.text ?? ''].some((value) => value.toLowerCase().includes(text))))
+  const filtered = filters.epics.length > 0 || filters.states.length > 0 || filters.moves.length > 0 || Boolean(filters.text)
 
   const readBlocked = isSample ? 'Synthetic sample data is loaded: the Discussions are not read from Azure DevOps.' : !config || !pat.trim() ? 'Connect the Time Writing connection (with its PAT) to read the Discussions.' : ''
   const unread = rows.filter((row) => discussionOf(row.item.key)?.state !== 'done')
@@ -99,6 +120,17 @@ export function PiReviewPage({ azure, store }: { azure: AzureWorkspace; store: P
     { id: 'iteration', label: 'Iteration', value: ({ item }) => item.iterationPath.split('\\').slice(1).join(' › ') || item.iterationPath },
     { id: 'comments', label: 'Comments', align: 'right', hint: 'The number of comments in the Feature’s Discussion, once read (open the Feature, or ↻ Read all Discussions). Read from Azure DevOps and kept for this page load only.', firstSortDesc: true,
       value: ({ item }) => commentsCell(item), render: ({ item }) => { const entry = discussionOf(item.key); return entry?.state === 'done' ? `${entry.comments.length.toLocaleString()}${entry.capped ? '+' : ''}` : entry?.state === 'loading' ? <span className="muted">…</span> : entry?.state === 'error' ? <span className="negative" title={entry.error}>Not read</span> : <span className="muted">—</span> } },
+    // PIR-09: the latest comment and its split; "—" with the hint until the Discussion is read.
+    { id: 'latest-date', label: 'Date and Time of Comment', firstSortDesc: true, hint: 'When the Feature’s newest comment was written (by its date and time, whoever wrote it), in your time zone. Filled once the Discussion is read: open the Feature, or ↻ Read all Discussions.',
+      value: ({ item }) => latestOf(item)?.comment?.date ?? '', title: ({ item }) => { const latest = latestOf(item); return !latest ? unreadHint : latest.comment ? `By ${latest.comment.author}` : 'No comments in the Discussion.' },
+      render: ({ item }) => { const latest = latestOf(item); return latest?.comment ? formatDateTime(latest.comment.date) : <span className="muted">—</span> } },
+    textColumn('latest-comment', 'Comment', 'The whole newest comment, as plain text; the full text is in the tooltip and in the Feature’s drawer.', (latest) => latest.comment?.text),
+    textColumn('struggles', 'Struggles', 'The text after the heading “Struggles:” in the newest comment (empty when the comment has no such heading).', (latest) => latest.split.struggles),
+    textColumn('learnings', 'Learnings', 'The text after the heading “Learnings:” in the newest comment (empty when the comment has no such heading).', (latest) => latest.split.learnings),
+    { id: 'move', label: 'Move to Next PI', hint: 'The text after the heading “Move to next PI:” in the newest comment; when it starts with Yes, No or Partly (or Y / N) that value comes first, e.g. “Yes — waiting for vendor”. Filter it with Move to next PI.',
+      value: ({ item }) => { const latest = latestOf(item); return latest ? moveLabel(latest.split) : '' },
+      title: ({ item }) => { const latest = latestOf(item); return !latest ? unreadHint : moveLabel(latest.split) || undefined },
+      render: ({ item }) => { const latest = latestOf(item); if (!latest) return <span className="muted">—</span>; const label = moveLabel(latest.split); return label ? <span className="pir-clip">{oneLine(label)}</span> : '' } },
   ]
 
   const toolbar = <span className="people-filters pir-filters">
@@ -109,8 +141,9 @@ export function PiReviewPage({ azure, store }: { azure: AzureWorkspace; store: P
     {pi && samePi(pi, current) && <Pill tone="info">Current PI</Pill>}
     <MultiSelect label="Epic" options={epicOptions} value={filters.epics} onChange={(value) => setFilters({ ...filters, epics: value })} />
     <MultiSelect label="State" options={stateOptions} value={filters.states} onChange={(value) => setFilters({ ...filters, states: value })} />
+    <MultiSelect label="Move to next PI" options={moveOptions} value={filters.moves} onChange={(value) => setFilters({ ...filters, moves: value })} />
     <label className="check"><input type="checkbox" checked={withStories} onChange={(event) => setWithStories(event.target.checked)} />Also Features with User Stories in this PI</label>
-    <input type="search" className="search" aria-label="Search Features" placeholder="Search ID, title, Epic or person" value={filters.text} onChange={(event) => setFilters({ ...filters, text: event.target.value })} />
+    <input type="search" className="search" aria-label="Search Features" placeholder="Search Features, comments" title="Searches the ID, title, Epic, person and the latest comment" value={filters.text} onChange={(event) => setFilters({ ...filters, text: event.target.value })} />
     <button type="button" className="ghost" disabled={!filtered} onClick={() => setFilters(noFilters)}>Reset filters</button>
   </span>
 
@@ -131,6 +164,15 @@ export function PiReviewPage({ azure, store }: { azure: AzureWorkspace; store: P
     </TablePanel>}
     {open && openRow && <FeatureDrawer key={openRow.item.key} row={openRow} position={{ at: open.order.indexOf(open.key), of: open.order.length }} onStep={step} onClose={() => setOpen(null)} config={config} pat={pat} blocked={readBlocked} />}
   </Page>
+}
+
+// PIR-09: a text column of the latest comment — one line in the cell (line breaks as " · ", cut with …), the whole
+// text in the tooltip and in the export (line breaks kept); "—" with the hint until the Discussion is read.
+function textColumn(id: string, label: string, hint: string, pick: (latest: Latest) => string | undefined): DataColumn<Row> {
+  const of = (row: Row) => { const latest = latestOf(row.item); return latest ? pick(latest) ?? '' : '' }
+  return { id, label, hint: `${hint} Filled once the Discussion is read: open the Feature, or ↻ Read all Discussions.`, value: of,
+    title: (row) => latestOf(row.item) ? of(row) || undefined : unreadHint,
+    render: (row) => latestOf(row.item) ? <span className="pir-clip">{oneLine(of(row))}</span> : <span className="muted">—</span> }
 }
 
 // PIR-05: one Feature in a drawer (UI-STANDARDS §4a), read only: its details, then its Discussion, newest first, as
@@ -158,6 +200,7 @@ function FeatureDrawer({ row, position, onStep, onClose, config, pat, blocked }:
       <div><dt>Iteration</dt><dd>{item.iterationPath || '—'}</dd></div>
       <div><dt>Target date</dt><dd>{formatDate(item.targetDate)}</dd></div>
     </dl>
+    {entry?.state === 'done' && <LatestComment comments={entry.comments} />}
     <section aria-label="Discussion" className="pir-discussion">
       <div className="pir-discussion-head"><h3>Discussion{entry?.state === 'done' ? ` (${entry.comments.length.toLocaleString()}${entry.capped ? '+' : ''})` : ''}</h3>
         <button type="button" className="ghost" disabled={Boolean(blocked) || entry?.state === 'loading'} title={blocked || undefined} onClick={read}>↻ Read again</button></div>
@@ -175,4 +218,22 @@ function FeatureDrawer({ row, position, onStep, onClose, config, pat, blocked }:
       {entry?.state === 'done' && <small className="muted">Read {formatDateTime(entry.readAt)} as plain text: formatting is not kept, mentions show as @Name and images as [image].</small>}
     </section>
   </Drawer>
+}
+
+// PIR-10: the newest comment's split in the drawer, above the Discussion: when and by whom, then Struggles, Learnings
+// and Move to next PI (or that the comment has none of the headings; the whole comment is the first of the Discussion).
+function LatestComment({ comments }: { comments: WorkItemComment[] }) {
+  const comment = latestComment(comments)
+  if (!comment) return null
+  const split = splitReviewComment(comment.text)
+  const any = Boolean(split.struggles || split.learnings || split.move)
+  return <section aria-label="Latest comment" className="pir-latest">
+    <h3>Latest comment</h3>
+    <p className="pir-comment-head"><strong>{comment.author}</strong> <small className="muted">{formatDateTime(comment.date)}</small></p>
+    {any ? <dl className="od-row-values pir-split">
+      <div><dt>Struggles</dt><dd>{split.struggles || '—'}</dd></div>
+      <div><dt>Learnings</dt><dd>{split.learnings || '—'}</dd></div>
+      <div><dt>Move to Next PI</dt><dd>{moveLabel(split) || '—'}</dd></div>
+    </dl> : <p className="muted">No Struggles, Learnings or Move to next PI heading in this comment: see the whole comment in the Discussion below.</p>}
+  </section>
 }

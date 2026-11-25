@@ -1,7 +1,9 @@
 import { useColumnWidths } from '../components/columnWidths'
-import { useCan } from '../useCan'
+import { useCan, useWriteBlock } from '../useCan'
 import { useMemo, useRef, useState, type ReactNode } from 'react'
-import { EmptyState, Modal, Notice, Page, Panel } from '../components/ui'
+import { EmptyState, Modal, Notice, Page, Panel, WriteBlocked } from '../components/ui'
+import { ReplaceDialog } from '../components/ReplaceDialog'
+import { distinctValues, normalValue, qeReplace, qeReplaceCommit, qeReplacePlan, replaceMessage } from '../replaceValues'
 import { downloadCsv, downloadXlsx } from '../download'
 import { addColumn, addRow, qeNameColumn, deleteColumn, deleteRows, filterRows, fromWorkbook, groupKeys, groupTree, moveColumn, renameColumn, replaceSheet, setCell, tableCsv, tableRows, type QeMappingFile, type QeGroup, type QeRow, type QeSheet } from '../qeMapping'
 import type { QeMappingStore } from '../useQeMapping'
@@ -19,7 +21,9 @@ function loadHidden(): Record<string, string[]> { try { const value = JSON.parse
 const pageSize = 300
 const maxLevels = 4
 
-export function QeMappingPage({ git, store, resources = [] }: { git: GitStorage; store: QeMappingStore; resources?: string[] }) {
+// QEM-13: qeColumnNames — the QE Mapping columns named "with the QE" in the Feature setups (preselected in Replace…);
+// viewOnly — View as is on (read only).
+export function QeMappingPage({ git, store, resources = [], qeColumnNames = [], viewOnly = false }: { git: GitStorage; store: QeMappingStore; resources?: string[]; qeColumnNames?: string[]; viewOnly?: boolean }) {
   const [draft, setDraft] = useState<QeMappingFile | null>(null)
   const [sheetId, setSheetId] = useState('')
   const [search, setSearch] = useState('')
@@ -33,6 +37,8 @@ export function QeMappingPage({ git, store, resources = [] }: { git: GitStorage;
   const [dialog, setDialog] = useState<{ mode: 'add' | 'rename'; id?: string; name: string; error?: string } | null>(null)
   // ＋ Add row (QEM-12): a pop-up with one field per column; Save adds the row and saves the QE Mapping to Git at once.
   const [rowDialog, setRowDialog] = useState<{ cells: Record<string, string>; error?: string; busy?: boolean } | null>(null)
+  // Replace… (QEM-13): a value of one column replaced in every row of the tab, after a preview; saved to Git at once.
+  const [replacing, setReplacing] = useState(false)
   const [menu, setMenu] = useState('')
   const [picking, setPicking] = useState(false)
   const [hiddenBySheet, setHiddenBySheet] = useState(loadHidden)
@@ -44,6 +50,7 @@ export function QeMappingPage({ git, store, resources = [] }: { git: GitStorage;
 
   const can = useCan()
   const editable = git.connected && !git.readOnly && !git.isSample && can('qemapping.edit')
+  const block = useWriteBlock()
   // Column widths dragged on the headings (QEM-09), kept per tab and column in this browser.
   const widths = useColumnWidths('qe-mapping')
   const widthKey = (id: string) => `${sheet?.id ?? ''}:${id}`
@@ -114,6 +121,20 @@ export function QeMappingPage({ git, store, resources = [] }: { git: GitStorage;
       setResult({ tone: 'error', text: `The row was added but not saved to Git: ${failure instanceof Error ? failure.message : String(failure)} Use Save to Git to try again.` })
     }
   }
+  // QEM-13: the same right as editing the QE Mapping; fails closed — without Git that can save, with the sample, while
+  // viewing as someone else or without "Edit the QE Mapping" the button is disabled with the reason.
+  const rightReason = viewOnly ? 'Read only while viewing as someone else: nothing is saved. Exit View as to replace values.' : block.noteFor('in the QE Mapping', 'qemapping.edit')
+  const replaceReason = !git.connected ? 'Connect Git storage (Admin → Data & sharing) to change the QE Mapping.' : git.readOnly ? 'View only: your Git token can read but not save.' : git.isSample ? 'Synthetic sample data is loaded: the QE Mapping cannot be changed.' : rightReason || (!sheet?.rows.length ? 'This tab has no rows.' : '')
+  const replaceDefault = sheet?.columns.find((column) => qeColumnNames.some((name) => normalValue(name) === normalValue(column.name)))?.id ?? ''
+  async function replaceNow(columnId: string, find: string, to: string) {
+    if (!file || !sheet) return
+    const column = sheet.columns.find((entry) => entry.id === columnId)
+    const done = qeReplace(file, sheet.id, columnId, find, to)
+    if (!done.changed || !column) throw new Error('No row changes.')
+    const saved = await store.save(done.file, qeReplaceCommit(sheet, column.name, find, to, done.changed))
+    setDraft(null); setReplacing(false)
+    setResult({ tone: 'success', text: `${replaceMessage(find, to, column.name)}: ${done.changed} row${done.changed === 1 ? '' : 's'} of ${sheet.name}. The QE Mapping is saved to Git.`, url: saved.commitUrl })
+  }
   const exportCsv = () => sheet && downloadCsv(tableCsv(columns, rows), `${(sheet.name || 'qe-mapping').replace(/[^\w-]+/g, '-')}.csv`)
   const exportXlsx = () => file && downloadXlsx(writeXlsx(file.sheets.map((entry) => ({ name: entry.name, rows: tableRows(entry.columns, entry.rows) }))), `${(file.source?.fileName.replace(/\.\w+$/, '') || 'qe-mapping')}.xlsx`)
 
@@ -152,10 +173,12 @@ export function QeMappingPage({ git, store, resources = [] }: { git: GitStorage;
         {allGroupKeys.length > 1 && <><button type="button" className="ghost" disabled={allGroupKeys.every((key) => collapsed.includes(key))} onClick={() => setCollapsed(allGroupKeys)}>Collapse all</button><button type="button" className="ghost" disabled={!collapsed.length} onClick={() => setCollapsed([])}>Expand all</button></>}
         <button type="button" className="ghost" aria-expanded={picking} onClick={() => setPicking(!picking)}>Columns ({columns.length} of {sheet.columns.length})</button>
         {editable && <><button type="button" className="ghost" onClick={newRow}>＋ Add row</button><button type="button" className="ghost" onClick={() => setDialog({ mode: 'add', name: '' })}>＋ Add column</button>{selected.length > 0 && <button type="button" className="ghost danger-text" onClick={removeRows}>Delete {selected.length} row{selected.length === 1 ? '' : 's'}</button>}</>}
+        <button type="button" className="ghost" disabled={Boolean(replaceReason)} title={replaceReason || 'Replace a value of one column in every row of this tab, e.g. hand one QE’s releases over to another'} onClick={() => setReplacing(true)}>Replace…</button>
         {widths.wrapToggle}
         {widths.resized && <button type="button" className="ghost" onClick={widths.reset}>Reset widths</button>}
         <span className="muted">{rows.length} of {sheet.rows.length} rows{search || Object.values(filters).some(Boolean) ? ' · filtered' : ''}</span>
       </div>
+      {git.connected && !git.readOnly && !git.isSample && <WriteBlocked reason={rightReason} />}
       {picking && <fieldset className="column-chooser"><legend>Columns — tick the ones to show (your own choice, kept in this browser)</legend>
         <div className="button-row"><button type="button" className="text-button" onClick={() => setHidden([])}>Show all</button></div>
         <div className="column-chooser-list">{sheet.columns.map((column) => <label key={column.id} className="check"><input type="checkbox" checked={!hidden.includes(column.id)} disabled={!hidden.includes(column.id) && columns.length < 2} onChange={(event) => setHidden(event.target.checked ? hidden.filter((id) => id !== column.id) : [...hidden, column.id])} />{column.name}</label>)}</div>
@@ -202,6 +225,12 @@ export function QeMappingPage({ git, store, resources = [] }: { git: GitStorage;
         <div className="modal-actions"><button type="button" className="ghost" disabled={rowDialog.busy} onClick={() => setRowDialog(null)}>Cancel</button><button className="primary" disabled={rowDialog.busy}>{rowDialog.busy ? 'Saving to Git…' : 'Save'}</button></div>
       </form>
     </Modal>}
+    {replacing && sheet && <ReplaceDialog eyebrow={`QE MAPPING · ${sheet.name.toUpperCase()}`} columns={sheet.columns} initialColumn={replaceDefault}
+      values={(id) => distinctValues(sheet.rows.map((row) => [row.cells[id] ?? '']))}
+      suggestions={(id) => [...new Set([...distinctValues(sheet.rows.map((row) => [row.cells[id] ?? ''])).map((entry) => entry.value), ...(id === qeColumn?.id ? resources : [])])]}
+      plan={(id, find, to) => qeReplacePlan(sheet, id, find, to)}
+      note={<p className="muted">Every row of {sheet.name} is looked at, also rows the search or filters hide.{draft ? ' Your other unsaved changes to the QE Mapping are saved to Git with it.' : ''} Saved to Git at once; the commit names the change.</p>}
+      onReplace={replaceNow} onCancel={() => setReplacing(false)} />}
     {dialog && <Modal title={dialog.mode === 'add' ? 'Add a column' : 'Rename the column'} eyebrow={`QE MAPPING · ${sheet?.name ?? ''}`} form onClose={() => setDialog(null)}>
       <form onSubmit={submitDialog}>
         <label>Column name<input autoFocus required maxLength={120} value={dialog.name} onChange={(event) => setDialog({ ...dialog, name: event.target.value, error: undefined })} /></label>

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { defaultPi, epicOf, piFeatures, piOptions, readDiscussions } from '../src/piReview.ts'
+import { defaultPi, epicOf, latestComment, moveLabel, oneLine, piFeatures, piOptions, readDiscussions, splitReviewComment } from '../src/piReview.ts'
 import { continuationTokenProblem, guardAzureWrites, rateLimitMessage, rateLimitWait, readComments, readDiscussion, requestAzure } from '../src/azureDevOps.ts'
 import { commentText } from '../src/workItemEdit.ts'
 guardAzureWrites(() => true)
@@ -142,4 +142,54 @@ test('PIR-06: Read all Discussions — 3 at a time; a 429 waits (at most 60 s) a
   assert.deepEqual([mixed.read, mixed.failed, mixed.stopped, errors], [2, 1, '', [2]])
   const denied = await readDiscussions([1, 2, 3, 4, 5], async () => { throw new Error('The PAT was rejected or has expired. Check your PAT.') }, { rateWait: rateLimitWait, concurrency: 1 })
   assert.deepEqual([denied.stopped, denied.read, denied.unread], ['access', 0, [1, 2, 3, 4, 5]])
+})
+
+// PI Review columns (PIR-07…PIR-10). Synthetic comments only.
+test('PIR-07: the latest comment is the newest by date and time, whoever wrote it; the same time: the higher ID (TC-PIR-07)', () => {
+  const comment = (id, date, author = 'Ana') => ({ id, text: `c${id}`, author, date })
+  assert.equal(latestComment([comment(1, '2026-11-02T09:00:00Z'), comment(2, '2026-11-20T08:59:00Z', 'Ben'), comment(3, '2026-11-20T08:00:00Z')]).id, 2, 'not the first in the list, nor by author')
+  assert.equal(latestComment([comment(5, '2026-11-20T09:00:00+01:00'), comment(4, '2026-11-20T08:30:00Z')]).id, 4, 'offsets compared as instants')
+  assert.equal(latestComment([comment(7, '2026-11-20T09:00:00Z'), comment(8, '2026-11-20T09:00:00Z')]).id, 8)
+  assert.equal(latestComment([comment(9, 'not a date'), comment(1, '2020-01-01T00:00:00Z')]).id, 1, 'an unreadable date counts as oldest')
+  assert.equal(latestComment([]), undefined)
+})
+
+test('PIR-08: the three headings split the comment, in any order, inline or on their own lines (TC-PIR-08)', () => {
+  assert.deepEqual(splitReviewComment('Struggles: test rig late Learnings: book the rig early Move to next PI: Yes, waiting for vendor'),
+    { struggles: 'test rig late', learnings: 'book the rig early', move: 'Yes, waiting for vendor', moveValue: 'Yes', moveRest: 'waiting for vendor' })
+  assert.deepEqual(splitReviewComment('Intro line is in no section.\nMove to Next PI: No\nLEARNINGS: one\n  two  \n\nStruggles: none worth noting'),
+    { move: 'No', moveValue: 'No', moveRest: '', learnings: 'one\ntwo', struggles: 'none worth noting' })
+  // Bullets, numbers, # and bold before; a colon, a dash or the end of the line after; singular and plural.
+  assert.deepEqual(splitReviewComment('- **Struggle:** the rig\n2. learning - book early\n## Moved to the next PI\npartly. vendor'),
+    { struggles: 'the rig', learnings: 'book early', move: 'partly. vendor', moveValue: 'Partly', moveRest: 'vendor' })
+  assert.deepEqual(splitReviewComment('Struggles\nrig\nNext PI: y'), { struggles: 'rig', move: 'y', moveValue: 'Yes', moveRest: '' })
+  assert.deepEqual(splitReviewComment('Move to the next PI?: n — scope cut'), { move: 'n — scope cut', moveValue: 'No', moveRest: 'scope cut' })
+  // Missing sections stay out; an empty section is left out; a heading given twice is joined.
+  assert.deepEqual(splitReviewComment('Learnings: only this'), { learnings: 'only this' })
+  assert.deepEqual(splitReviewComment('Struggles:\nLearnings: x\nStruggles: b'), { learnings: 'x', struggles: 'b' })
+  assert.deepEqual(splitReviewComment('Struggle: a\nstruggles: b'), { struggles: 'a\nb' })
+  assert.deepEqual(splitReviewComment('Learnings:\n- book the rig\n* share the calendar\n• -3 h saved'), { learnings: 'book the rig\nshare the calendar\n-3 h saved' }, 'a leading bullet of a line dropped')
+})
+
+test('PIR-08: a heading word inside a sentence is not taken; no headings give an empty result (TC-PIR-08)', () => {
+  assert.deepEqual(splitReviewComment('We had struggles with the rig and some learnings too. Next PI we try again.'), {})
+  assert.deepEqual(splitReviewComment('Struggles with the rig were big\nLearning-curve was steep'), {}, 'at a line start but no colon, dash and space, or line end')
+  assert.deepEqual(splitReviewComment('Planned for next PI: maybe\nLearnings: x'), { learnings: 'x' }, 'the bare "Next PI" counts at a line start only')
+  assert.deepEqual(splitReviewComment('Mylearnings: x'), {}, 'not inside a word')
+  assert.deepEqual(splitReviewComment(''), {})
+  assert.deepEqual(splitReviewComment(undefined), {})
+})
+
+test('PIR-08: Move to next PI — Yes / No / Partly (or Y / N) normalized with the rest after a dash; other text as written (TC-PIR-08)', () => {
+  const move = (text) => { const split = splitReviewComment(`Move to next PI: ${text}`); return [split.moveValue, moveLabel(split)] }
+  assert.deepEqual(move('Yes - waiting for vendor'), ['Yes', 'Yes — waiting for vendor'])
+  assert.deepEqual(move('YES'), ['Yes', 'Yes'])
+  assert.deepEqual(move('no.'), ['No', 'No'])
+  assert.deepEqual(move('Partially, the docs only'), ['Partly', 'Partly — the docs only'])
+  assert.deepEqual(move('Y'), ['Yes', 'Yes'])
+  assert.deepEqual(move('N/A'), [undefined, 'N/A'])
+  assert.deepEqual(move('Not decided'), [undefined, 'Not decided'])
+  assert.deepEqual(move('Nothing moves'), [undefined, 'Nothing moves'])
+  assert.equal(moveLabel({}), '')
+  assert.equal(oneLine('one\n\n two \nthree'), 'one · two · three')
 })

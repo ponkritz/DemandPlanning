@@ -266,7 +266,7 @@ export default function App() {
   // co-owners; and the viewer as its rights see them (the work email, the role rights, the Tool Owner right, CON-106).
   const menu = useMenuLayout(git)
   const viewedEmail = access.viewingAs?.kind === 'person' ? (access.viewingAs.email ?? '').trim().toLowerCase() : access.viewingAs ? '' : access.email
-  const viewer: Viewer = { email: viewedEmail, can: access.can, readOnly: access.readOnly, manager: canManagePages(access.policy, access.rights) }
+  const viewer: Viewer = { email: viewedEmail, can: access.can, readOnly: access.readOnly, manager: canManagePages(access.policy, access.rights), viewingAs: Boolean(access.viewingAs) }
   const [addPageFor, setAddPageFor] = useState<string | null>(null)
   // TVL-01…TVL-12: the Tool Validations master list (tool-validations.json in Git), its sources and who may change it —
   // the Tool Owner and the list's co-owners, never while viewing as someone else, with the sample or without a token that
@@ -656,7 +656,7 @@ export default function App() {
       {page === 'kpitracker' && <KpiTrackerPage git={git} canManage={access.can('storage.shared')} who={my.me.name || 'Admin'} />}
       {page === 'ondemand' && onDemandPage && kindOf(menu.layout, onDemandPage.id) === 'dashboard' && <CustomDashboardPage key={onDemandPage.id} git={git} store={onDemand} pageId={onDemandPage.id} menu={menu} viewer={viewer} views={personalViews} onOpen={openOnDemand} addPageReason={addPageReason(viewer, menu.layout, placementOf(menu.layout, onDemandPage.id).group)} onAddPage={() => setAddPageFor(placementOf(menu.layout, onDemandPage.id).group)} hours={{ items: reportAzure.items, settings: dashboardHoursSettings, allowed: access.sees('insights') }} publisherName={publisherName} publisher={publisher} tools={toolDatasetList} />}
       {page === 'ondemand' && onDemandPage && kindOf(menu.layout, onDemandPage.id) !== 'dashboard' && <OnDemandPage key={onDemandPage.id} git={git} store={onDemand} pageId={onDemandPage.id} me={azure.isSample ? '' : azure.creatorEmail.trim().toLowerCase() || my.self.me.name?.trim() || ''} onOpen={openOnDemand} kind={kindOf(menu.layout, onDemandPage.id)} menu={menu} viewer={viewer} addPageReason={addPageReason(viewer, menu.layout, placementOf(menu.layout, onDemandPage.id).group)} onAddPage={() => setAddPageFor(placementOf(menu.layout, onDemandPage.id).group)} views={personalViews} dataMode={dataMode} publisherName={publisherName} publisher={publisher} />}
-      {page === 'qemapping' && <QeMappingPage git={git} store={qeMapping} resources={qeResources} />}
+      {page === 'qemapping' && <QeMappingPage git={git} store={qeMapping} resources={qeResources} viewOnly={Boolean(access.viewingAs)} qeColumnNames={[...new Set([featureSetup.setups?.shared, featureSetup.setups?.personal].flatMap((file) => file?.epics ?? []).flatMap((epic) => epic.qeColumns?.qeColumn ? [epic.qeColumns.qeColumn] : []))]} />}
       {page === 'mywork' && <MyWorkPage azure={azure} store={store} my={my} month={month} onOpenActivities={() => setPage('activities')} assign={assign} featureSetup={featureSetup.setups} />}
       {page === 'bulk' && <SprintCheckPage azure={azure} store={store} my={my} />}
       {page === 'capactual' && <CapacityActualPage azure={reportAzure} store={store} month={month} />}

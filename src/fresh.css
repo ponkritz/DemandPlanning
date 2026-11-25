@@ -1222,3 +1222,11 @@ tbody tr.tvl-hl-red td{background:var(--hl-red-bg)}tbody tr.tvl-hl-red td:first-
 .pir-comments{list-style:none;margin:0;padding:0;display:grid;gap:8px}
 .pir-comments>li{border:1px solid var(--line-soft);border-radius:8px;padding:8px 10px;background:var(--surface-2)}
 .pir-comment-head{margin:0 0 4px;font-size:12px;color:var(--text-2)}.pir-comment-text{margin:0;font-size:13px;white-space:pre-line;overflow-wrap:anywhere}
+/* PIR-09, PIR-10: the latest comment's columns — one line cut with … (Wrap text off; the whole text in the tooltip) — and
+   its split in the drawer, line breaks kept. */
+.pir-table table.no-wrap .pir-clip{display:block;max-width:18rem;overflow:hidden;text-overflow:ellipsis}
+.pir-latest{display:grid;gap:6px;padding-top:4px}.pir-latest h3{margin:0;font-size:14px;color:var(--heading)}.pir-latest .pir-comment-head,.pir-latest p{margin:0}
+.pir-split dd{margin:0;font-size:13px;white-space:pre-line;overflow-wrap:anywhere}
+/* QEM-13, OND-100: Replace… — the preview under the fields; the reason a disabled Replace gives, left of the buttons. */
+.replace-preview{display:grid;gap:8px}.replace-preview p{margin:0}.replace-rows{max-height:260px;overflow:auto}.replace-rows table{table-layout:fixed;width:100%}.replace-rows td{overflow-wrap:anywhere;padding:8px 14px}.replace-form>p.muted,.replace-preview p.muted{font-size:12px;margin:0}
+.replace-form .modal-actions{align-items:center;flex-wrap:wrap}.replace-form .modal-actions .write-blocked{margin-right:auto}

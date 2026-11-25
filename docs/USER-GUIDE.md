@@ -650,8 +650,25 @@ What feeds each line and KPI row is set in **Admin → Reports → Monthly pack*
 2. **Look at the Features.** The table lists the Features whose Iteration is in the PI (not Removed ones, not those under the absence Epic), by ID. Tick **Also Features with User Stories in this PI** to add Features that stayed in an older PI while their stories moved on. Filter by **Epic** and **State**, search, **Reset filters**, and **Export** (with the Export data right).
 3. **Read a Discussion.** Click a Feature: a drawer opens with its details and its **Discussion** — every comment (up to the newest 1,000), newest first, as plain text. Formatting is not kept: a mention shows as **@Name** and an image as **[image]**. Use **↻ Read again** after new comments, ‹ › to go to the next Feature, and **Open in Azure DevOps →** to see the work item.
 4. **Read them all.** **↻ Read all Discussions** reads every Feature's Discussion in the background (the top bar shows "Reading Discussions · x of n"). If Azure DevOps asks the app to slow down it waits and tries again once; if it keeps asking, the job stops with "x of n read" — click again later to read the rest. The **Comments** column shows each Feature's count.
+5. **See the latest review comment in columns.** Once a Feature's Discussion is read (in the drawer or with Read all), the columns **Date and Time of Comment**, **Comment**, **Struggles**, **Learnings** and **Move to Next PI** show its **latest comment** — the newest by date and time, whoever wrote it. The date and time are in your time zone; a long text is cut in the cell, and pointing at it shows the whole text. Before the Discussion is read the cells show "—". Sort by any of them, search the comment text, filter with **Move to next PI** (Yes, No, Partly, Other text, Not given, Discussion not read), and **Export** them. The drawer shows the same split under **Latest comment**, above the Discussion.
 
-The Discussions are read with your own PAT (Work Items, Read) and kept only until you reload the page. Tagging struggles and learnings, saving them to Git and the Move to next PI decision come in later releases.
+**How to write the review comment so it is split.** Write the three headings, each followed by a colon — on their own lines or in one line — as the **newest** comment of the Feature (a later reply, even "Thanks!", becomes the latest comment):
+
+```
+Struggles: the test rig arrived two Sprints late
+Learnings: book the rig at PI planning
+- share the lab calendar with the team
+Move to next PI: Yes - waiting for the vendor's fix
+```
+
+The Feature then shows **Struggles** "the test rig arrived two Sprints late", **Learnings** "book the rig at PI planning · share the lab calendar with the team" (each line break shown as " · ") and **Move to Next PI** "Yes — waiting for the vendor's fix".
+
+- Letter case does not matter, and **Struggle** / **Learning** (singular) work too. For Move you may write *Move to next PI*, *Moved to next PI*, *Move to the next PI* or, at the start of a line, *Next PI*.
+- A heading counts at the **start of a line** (a bullet, number, # or bold before it is fine) followed by a colon, a dash and a space, or nothing; **inside a line** only when a colon follows it. "We had struggles with the rig" is not a heading.
+- Start the Move text with **Yes**, **No** or **Partly** (or Y / N) to use the filter; anything else (e.g. "N/A", "to be decided") is shown as written under Other text.
+- A comment without the headings shows only its date and the whole comment. The whole comment is always shown next to the split, so check it when a section looks wrong.
+
+The Discussions are read with your own PAT (Work Items, Read) and kept only until you reload the page. Tagging struggles and learnings in the app, saving them to Git and recording the Move to next PI decision come in later releases.
 
 ### Planning Overview and Capacity vs Actual (Testing)
 
@@ -842,9 +859,20 @@ Large pages can be converted to **row files** (see below). On such a page **Edit
 
 ### The page menu (⋯)
 
-The **⋯** next to the page's main action holds **Rename page…**, **Hide page**, **Delete page…** (Tool Owner), **Convert to row files…** (Tool Owner), **Publish interactive HTML…** and **↻ Reload from Git**.
+The **⋯** next to the page's main action holds **Rename page…**, **Hide page**, **Delete page…** (Tool Owner), **Replace…**, **Convert to row files…** (Tool Owner), **Publish interactive HTML…** and **↻ Reload from Git**.
 
 ![The page menu of CoNQ](user-guide/images/page-menu.png)
+
+### Replace a value in a column
+
+When one person hands their work over to another — a QE leaves and their releases go to a colleague — **Replace…** changes the name in every row at once. It is in the page's **⋯** menu on a Table or Table + Insights page, and in the toolbar of **QE Mapping**.
+
+1. Choose the **Column** (on QE Mapping the QE column of the Epic & Feature setup is already chosen).
+2. Choose the value in **Find** — each value shows how many rows hold it — or **Another value (type it)…**. A cell matches only as a whole; upper and lower case and spaces around it do not matter.
+3. Type the new value in **Replace with** (the column's values are suggested). In a Dropdown or Multi-select column it must be one of the column's options.
+4. Check the preview — **"N rows will change"** and the first rows with the old and new value — and choose **Replace**.
+
+The change is saved to Git at once. On an On-Demand page each changed row gets an entry in its **History** ("Replaced “Alex Example” with “Sam Example” in QE") and the result is in **Background jobs**; hidden rows are not changed, and rows someone else is editing are skipped (the preview says how many). On QE Mapping every row of the tab is changed, also rows a search or filter hides; the commit names the change. Without the right to edit the page or QE Mapping, without Git storage that can save, with sample data, or while viewing as someone else, **Replace…** is greyed out with the reason.
 
 ### Convert to row files
 
