@@ -2,6 +2,18 @@
 
 Version history of the I&D Quality Demand Planning app, newest first. Every merged change bumps the version in `package.json` and adds its entry here, in the same pull request (CI-09; [CONFIGURATION-MANAGEMENT.md](CONFIGURATION-MANAGEMENT.md) §4): **major** for a change that breaks existing data, shared setup files or the way users work; **minor** for a new or changed feature; **patch** for a fix, a dependency update or documentation only. `pnpm test` fails when the newest version here is not the version in `package.json`. CI tags each version `vX.Y.Z` on its merge commit and publishes its GitHub release with the installers and this entry (CI-10); the build number of a version is the CI build of that merge (shown in the app under Force Update, and in `latest.json`). Open bugs and accepted limitations of every version are in [KNOWN-ISSUES.md](KNOWN-ISSUES.md); the third-party components of every version are in [SWBOM.md](SWBOM.md).
 
+## v5.5.0 — 2026-11-25
+
+**Added**
+- **My PI Review** — choose a PI, filter Features by person where allowed, and post a review to Azure DevOps. A review can also be added when closing a Feature. The next PI is suggested from Azure DevOps iteration dates (PIR-13…PIR-18, PIR-24, PIR-25, CON-113).
+- **PI Review form setup** — authorized users can configure the shared form’s fields, options, defaults, and validation. PI Review also recognizes more comment headings and suggests sections from keywords when a comment has no headings (PIR-08…PIR-12, PIR-19…PIR-23, CON-114).
+- **On-Demand table uploads** — download an Excel template with data validation, then preview an Excel or CSV upload and save its valid rows to Git (OND-103…OND-108).
+
+**Updated**
+- **Shared views** — Tool Owners can remove a shared view for everyone or delete it with its saved data. Removed connections can be restored, and personal views and PATs are preserved (CON-109…CON-112).
+
+Synced Test2 through commit `e3a82b7`.
+
 ## v5.4.0 — 2026-11-25
 
 **Added**
