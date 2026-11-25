@@ -186,7 +186,11 @@ function azureCommentsRequest(input) {
   if (!Number.isSafeInteger(input.workItemId) || input.workItemId < 1) throw new Error('Invalid work item.')
   const adding = input.operation === 'add-comment'
   if (adding && (typeof input.comment !== 'string' || !input.comment.trim() || input.comment.length > 100000)) throw new Error('Enter a comment (at most 100,000 characters).')
-  return { url: `${projectBase(input)}/_apis/wit/workItems/${input.workItemId}/comments?api-version=${commentsApiVersion}${adding ? '' : '&order=desc&$top=200'}`, fixedVersion: true, options: {
+  // DSK-11: the next page of the Discussion — a page token on the read only, a non-empty text of at most 2,048
+  // characters, sent URL-encoded in the query string of the same fixed host and path.
+  const token = input.continuationToken
+  if (token != null && (adding || typeof token !== 'string' || !token.length || token.length > 2048)) throw new Error(adding ? 'A page token is accepted only when reading the Discussion.' : 'Invalid Discussion page token.')
+  return { url: `${projectBase(input)}/_apis/wit/workItems/${input.workItemId}/comments?api-version=${commentsApiVersion}${adding ? '' : `&order=desc&$top=200${token ? `&continuationToken=${encodeURIComponent(token)}` : ''}`}`, fixedVersion: true, options: {
     method: adding ? 'POST' : 'GET', redirect: 'error', headers: { ...connection.options.headers, 'Content-Type': 'application/json' }, body: adding ? JSON.stringify({ text: htmlText(input.comment.trim()) }) : undefined,
   } }
 }
@@ -225,6 +229,8 @@ async function requestAzureDevOps(input, fetchImpl = fetch) {
   if (response.status >= 300 && response.status < 400) throw new Error('Azure DevOps redirected the request (usually to a sign-in page). Check the PAT and that PATs are enabled on this server.')
   if (response.status === 401) throw new Error('PAT rejected or expired. Check Work Items (Read) access.')
   if (input.operation === 'edit-work-item' && (response.status === 412 || response.status === 409)) throw new Error(`#${input.workItemId} was changed in Azure DevOps since you opened it. Nothing was saved: open it again to see the changes, then edit.`)
+  // PIR-06: Azure DevOps asked to slow down; the status and Retry-After go in the message (the web app reads them back).
+  if (response.status === 429 && !writing) { const seconds = Number(response.headers.get('retry-after')); throw new Error(`Azure DevOps is limiting requests (429).${Number.isFinite(seconds) && seconds >= 0 && String(response.headers.get('retry-after') ?? '').trim() ? ` Retry after ${Math.ceil(seconds)} s.` : ''}`) }
   if (response.status === 403) throw new Error(`Access denied by Azure DevOps. Check Work Items (${writing ? 'Read & Write' : 'Read'}) scope and project permissions.`)
   if (writing && (response.status === 400 || response.status === 422)) {
     const detail = await response.json().catch(() => ({}))

@@ -8,20 +8,266 @@ The clips have no sound. Every clip repeats steps that are written out in full n
 
 ## Contents
 
-1. [Before you start](#before-you-start)
-2. [Getting started](#getting-started)
-3. [Finding your way around](#finding-your-way-around)
-4. [Roles and rights](#roles-and-rights)
-5. [Daily work](#daily-work)
-6. [Reports](#reports)
-7. [Release Details](#release-details)
-8. [On-Demand pages](#on-demand-pages)
-9. [Insights: charts, KPI cards and narratives](#insights-charts-kpi-cards-and-narratives)
-10. [On-Demand Dashboards](#on-demand-dashboards)
-11. [Sharing: PDF and interactive HTML](#sharing-pdf-and-interactive-html)
-12. [Admin](#admin)
-13. [Troubleshooting and FAQ](#troubleshooting-and-faq)
-14. [About this guide](#about-this-guide)
+1. [What's new](#whats-new)
+2. [Before you start](#before-you-start)
+3. [Getting started](#getting-started)
+4. [Finding your way around](#finding-your-way-around)
+5. [Roles and rights](#roles-and-rights)
+6. [Daily work](#daily-work)
+7. [Reports](#reports)
+8. [Release Details](#release-details)
+9. [On-Demand pages](#on-demand-pages)
+10. [Insights: charts, KPI cards and narratives](#insights-charts-kpi-cards-and-narratives)
+11. [On-Demand Dashboards](#on-demand-dashboards)
+12. [Sharing: PDF and interactive HTML](#sharing-pdf-and-interactive-html)
+13. [Admin](#admin)
+14. [Troubleshooting and FAQ](#troubleshooting-and-faq)
+15. [About this guide](#about-this-guide)
+
+## What's new
+
+This chapter covers recent changes by area, with steps and any setup needed. For DemandPlanning version numbers and release history, see the [Release notes](RELEASE-NOTES.md).
+
+**Before you start: everyone updates first.** Several changes below store new values in the team's shared files in Git. An older app version does not know them and can drop them when it saves. Ask everyone to update to the latest DemandPlanning build before the Tool Owner sets up the second Tool Validations query, adds categories or adds tabs. In the desktop app choose **Update now** when **Update available** appears (or **↻ Check for updates** in the footer); in the browser use **Force Update** in the footer.
+
+### New in Tool Validations
+
+**Tool List [TFS] and Validation Documents [TFS] tabs**
+
+The **Azure** tab is gone. In its place, after **Master list**, there are two tabs, each with one table of its query's rows and every column the query selects, in the query's order. The **Releases** table and the **Selected month / All months** toggle are no longer on this page: the month's tools are shown on the master list instead.
+
+1. Open **Release Details → Tool Validations**.
+2. Choose **Tool List [TFS]** to see the rows of the Tools query.
+3. Choose **Validation Documents [TFS]** to see every signed document. This tab shows only when Tool Validations reads two queries (see *Count from two queries* below).
+4. Use **Columns** to hide columns you do not need.
+
+If your browser remembered the old Azure tab, the page now opens **Tool List [TFS]**.
+
+*TVL-14, TVL-31*
+
+**New master list columns: ID, Used by, Validated and Type**
+
+The **Master list** shows, next to Tool and Version, the tool's Azure DevOps work item **ID** and three columns of the Tools query: **Used by** (its Source column), **Validated** (its State column) and **Type** (its Type column). Sort and filter them like any column.
+
+One-time setup (Tool Owner or a co-owner of the list):
+
+1. Open **Setup** and, under **Sources**, choose **Edit mapping…** on the Tool Validations query.
+2. Check the four new fields. The app guesses the work item ID and the columns named Source, State and Type. Choose **None** to leave one out.
+3. Choose **Save to Git**.
+
+The values come back at the next fetch (**↻**) of the Tools query.
+
+*TVL-34*
+
+**Current Month Status, and counts from the master list**
+
+Each tool on the **Master list** and the **Expiry list** has a **Current Month Status** for the month in the header:
+
+- **Completed** — the tool's completion date is in the month.
+- **Supported** — one of its documents has a Quality signature in the month.
+- **Completed, Supported** — both, shown as two pills.
+- Empty — neither.
+
+The month's cards, Pulse Check, the Monthly pack and the cumulative chart now count the master list's tools by this status. Pulse Check's Tool Validations quadrant lists the counted tools with name, version, ID and status. For example, in November 2026 a tool "Example Analyzer 2.1" that was completed on 12 November shows **Completed** and counts once under Completed.
+
+*TVL-22, TVL-35, TVL-36*
+
+**The count cards are on the Master list tab**
+
+The month's cards no longer sit above every tab. Open the **Master list** tab to see **Validations in {Month}**, **Completed validations** and **Supported validations**, with **What was counted**. The other Release pages are unchanged.
+
+*TVL-23*
+
+**Count from two queries: Tool List and Validation Documents**
+
+Tool Validations can read two Azure DevOps queries: the **Tool List** query (one row per tool; it feeds the master list and **Completed**) and the **Validation Documents** query (one row per signed document, its Parent the tool; it gives **Supported**). Every document the Validation Documents query returns counts, whatever its work item type. With one query only, the counts stay as before.
+
+One-time setup (Tool Owner):
+
+1. Make sure everyone has updated the app. An older version reads one query only and may count differently.
+2. Open **Admin → Streams → Stream mapping**.
+3. On the row **Tool Validations · Validation Documents**, choose **Add query**. Enter the server, the project and the documents query.
+4. **Add query** asks the **Category**: **Tool List** or **Validation Documents**. It is pre-selected from the query's name or columns. Check it, then choose **Save and refresh data**.
+5. Under **Tool Validations queries**, check that one connection shows **Tool List** and the other **Validation Documents**. If the app took the wrong one, choose the **Validation Documents query** yourself. **None — one query** counts as before.
+6. Choose the **Completion date (Completed)**. **Changed Date** is the default, but it moves whenever someone edits the tool. Pick a date column of the Tools query that is set once, if there is one.
+7. Save the change to Git with the bar above.
+
+Then open **Release Details → Tool Validations → Master list** to see the counts.
+
+*TVL-19, TVL-20, TVL-21, TVL-33*
+
+**Validation Documents: every document, with its tool's name**
+
+The **Validation Documents [TFS]** table lists one row per document, also documents whose Parent is not in the Tools query (for example a retired tool). It starts with:
+
+- **Tool** — the name of the Parent: the tool's name and version from the Tools query, or else the Parent's title read from Azure DevOps by its ID.
+- **Parent ID**.
+- **Tool List (Azure)** — **Listed**, or **Not in Tool List (Azure)**.
+
+A document marked **Not in Tool List (Azure)** is listed, but not counted and not added to the master list. **↻** fetches both queries and then reads the missing Parent names (read only, with the same connection and PAT). A name that cannot be read shows as **#ID**, for example **#1234**: point at it, or open ⓘ on the table, for the reason.
+
+*TVL-31*
+
+**Tools from Azure DevOps are dated by their completion date**
+
+A tool from an Azure DevOps query now takes its **completion date** as its validation date (the field chosen under **Tool Validations queries → Completion date**, Changed Date by default). Its due date is that date **+ 24 months**, unless the query gives a validity period or a due date. The Master list and the Expiry list show **(completion date)** and "completion date + 24 months (default)".
+
+One-time setup, only if your source's mapping was saved before with Author Approval Date (Tool Owner or a co-owner of the list):
+
+1. Open **Setup**, and under **Sources** choose **Edit mapping…** on the source.
+2. For **Validation date**, pick **Completion date** (or **None — the completion date**).
+3. Choose **Save to Git**.
+
+A mapping that names another Validation date field keeps it.
+
+*TVL-29*
+
+**Tools from Azure DevOps are changed in Azure DevOps**
+
+On the **Master list**, **Edit** and **Remove** are greyed out for a tool that comes from Azure DevOps; hover them for the reason. To add a note:
+
+1. Choose **Edit notes…** on the tool's row.
+2. Type the note and save it to Git.
+
+Once Azure DevOps no longer returns the tool, it is marked **Not in source now** and you can **Remove** it. Dates you entered by hand on such a tool are replaced by Azure DevOps' at the next fetch. Adding by hand a tool with the same name and version as one from Azure DevOps is refused, with the reason. Tools added by hand, or from a Windchill export or a table page, work as before.
+
+*TVL-30*
+
+**A category for every source**
+
+Each source is either a **Tool List** (one row per tool; its tools go into the master list) or **Validation Documents** (documents of the validations; listed on its own tab, never added to the master list).
+
+1. Open **Setup** and, under **Sources**, choose **＋ Add source…**.
+2. Choose the source as before, and answer **Category**: **Tool List** or **Validation Documents**. Nothing is chosen until you pick.
+3. For a Tool List, check **Edit mapping…** and then **Merge into master list…**. A Validation Documents source needs no mapping and has no Merge.
+
+To change the category of a source later, open its **Edit mapping…**. Changed to Validation Documents, the source stops feeding the master list; the tools it brought stay, marked **Not in source now**. Sources added before this change are Tool Lists, so they behave as before.
+
+*TVL-32*
+
+**24 months by default**
+
+A tool with a validation date but no validity period and no due date is now valid for **24 months**. Its period shows as **24 (default)** and its due date as "validation date + 24 months (default)". Such a tool is now **Overdue**, due soon or later, instead of having no due date. For example, a tool validated on 1 December 2024 is due on 1 December 2026.
+
+To use another period, enter it (or a due date) with **Edit** or in the source. The Add / Edit tool pop-up says "Leave empty for 24 months (default)" and shows the due date it will use. A source's own tab now shows the same due date as the master list.
+
+*TVL-06, TVL-08, TVL-10*
+
+**Rows highlighted by due date**
+
+The **Master list** and the **Expiry list** tint each tool's row by how soon it is due, and name the band in the **Due date** cell (for example **≤ 30 days** or **Overdue / today**). A legend above the table lists the bands. Until the team saves its own bands, the defaults apply: overdue or due today red, within 30 days amber, within 90 days yellow.
+
+To set the team's bands (Tool Owner or a co-owner of the list):
+
+1. Open **Setup**. **Due date highlights** shows the bands and how many tools fall in each.
+2. Choose **Edit…**. Each band has **Due within (days)** (0 = overdue or due today) and a **Colour**. **＋ Add band** adds one (up to 10); **Remove** takes one away.
+3. Choose **Save to Git**. Everyone sees the same bands. Removing every band turns the highlighting off.
+
+*TVL-27, TVL-28*
+
+**Bring back a hidden page as a tab**
+
+A tab page that was hidden — kept when its tab was removed, or left behind when an older app version dropped the tabs — can be made a tab again, with its data.
+
+1. Open **Setup** and, under **Tabs**, choose **＋ Add existing page as tab…**.
+2. Pick the page, keep or change its name, and choose **Add tab**.
+
+The rights are the same as for **＋ Add tab…**.
+
+*TVL-24*
+
+**The list's co-owners edit the tab pages**
+
+The co-owners of the list (**Setup → Team settings**) are now written as co-owners of each tab's page. They can set up and edit the page also when it is opened from **Admin → Pages & menu**. Co-owners added to a page by hand stay. Nothing to do: it happens when a tab is added and whenever the list's co-owners are saved. If a page is out of line, **Setup → Tabs** says so with **Write the co-owners to the tab pages**; choose it to fix it.
+
+*TVL-25*
+
+**Hide the expiry status on a dashboard block**
+
+A dashboard block over the **Tool Validations master list** or **Tool Validations expiry list** (On-Demand Dashboards and My dashboard) can leave out Status and Days left.
+
+1. Open the block's pop-up.
+2. Under the data source, untick **Show expiry status**.
+3. Save the block as usual. It counts the same tools, without Status and Days left.
+
+The switch is on by default.
+
+*TVL-26*
+
+### New on the Release pages
+
+**A slimmer source bar**
+
+On every Release page the bar above the counts now shows only the period toggle, **↻** and **⋯**, on the right. Warnings about the data stay below it.
+
+1. Open **⋯**. Its first line says where the data comes from and when it was fetched or imported.
+2. Choose **⋯ → About this source…** for the details that used to be behind ⓘ Info: the month filter, the items fetched, DP's milestone names and the Git copy.
+
+*QV-62, QV-70*
+
+**Selected month / All months**
+
+DP, IOCC, Content, S&S IT, ECP, the Windchill pages and custom streams show the period as a toggle **Selected month | All months**, instead of a drop-down that repeated the month already shown in the top bar.
+
+1. Choose the month in the top bar, as before.
+2. Choose **Selected month** for that month's releases, or **All months** for every release.
+
+Point at **Selected month** to see which month it is. Tool Validations no longer has the toggle (see above); CP has it too (see below).
+
+*QV-71*
+
+### New in Bulk creation Epics and Admin
+
+**A shared bulk creation Epic is saved straight to Git**
+
+**Save to Git** on a shared Epic now commits it to Git at once; there is no separate save step.
+
+1. Open **Admin → Stream options → Bulk creation Epics**.
+2. In the **Shared** column of the stream (DP, IOCC or Content), enter the Epic ID, for example 1234.
+3. Choose **Save to Git**. A message below the table says it is saved, or why it failed.
+
+Without a writable Git connection (not connected, a read-only token, or the synthetic sample loaded) the **Shared** field is greyed out and says why. Your own Epic under **Mine** works as before, with **Save**.
+
+*QV-59*
+
+**A missing bulk creation Epic needs attention**
+
+**Admin → Overview** now lists *{stream} bulk creation Epic is not set* (for example *DP bulk creation Epic is not set*) under **Attention** instead of Optional, because that stream's **Create Features** stays greyed out until an Epic is mapped. Its link opens **Bulk creation Epics**.
+
+*ADM-05*
+
+### New for Windchill export pages
+
+**⋯ → Upload latest export…**
+
+An existing Windchill export page (S&S IT, ECP and the other Windchill pages) takes a newer CSV export from its **⋯** menu. The page, its name and its setup stay.
+
+1. Open the Windchill export page under **Release Details**.
+2. Choose **⋯ → Upload latest export…**.
+3. Pick the newer CSV file. The import is listed in **Background jobs**.
+
+**↻** still does the same.
+
+*CON-108*
+
+### New on the CP Release page
+
+**Selected month / All months on CP**
+
+The **CP** Release page now has the same toggle as the other Release pages.
+
+1. Open **Release Details → CP**.
+2. Choose **All months** to list every release container with a QA/QE signature in any month, or **Selected month** for the month in the top bar.
+
+The counts, Pulse Check and the Monthly pack still use the header month.
+
+*QV-72*
+
+### New in PI Review
+
+Open **Data Insights → PI Review**, choose a PI and select a Feature to read its Azure DevOps Discussion. **Read all Discussions** runs in the background. The page keeps comments for the current page load. See [PI Review](#pi-review) for the filters and the bulk-read steps.
+
+*PIR-01…PIR-06*
 
 ## Before you start
 
@@ -398,7 +644,14 @@ What feeds each line and KPI row is set in **Admin → Reports → Monthly pack*
 
 ### PI Review
 
-**Data Insights → PI Review** is planned: a PI summary (Features and Stories planned against closed, hours planned against booked, open work in the PI's Sprints). The page holds a placeholder for now.
+**Data Insights → PI Review** shows the Features of a PI and what was discussed on them in Azure DevOps — the starting point for the PI Review meeting. It reads only: nothing is written to Azure DevOps or Git.
+
+1. **Choose the PI.** The **PI** list in the table's filter bar holds the PIs of your Time Writing connection and of the fetched data, newest first. The **current PI** (its Sprint's dates cover today, in UTC) is chosen for you and marked **Current PI**. If two PIs are current at the same time nothing is chosen: pick one. If the iterations cannot be read, the latest PI with Features is shown and a warning says why. Your choice is remembered in this browser.
+2. **Look at the Features.** The table lists the Features whose Iteration is in the PI (not Removed ones, not those under the absence Epic), by ID. Tick **Also Features with User Stories in this PI** to add Features that stayed in an older PI while their stories moved on. Filter by **Epic** and **State**, search, **Reset filters**, and **Export** (with the Export data right).
+3. **Read a Discussion.** Click a Feature: a drawer opens with its details and its **Discussion** — every comment (up to the newest 1,000), newest first, as plain text. Formatting is not kept: a mention shows as **@Name** and an image as **[image]**. Use **↻ Read again** after new comments, ‹ › to go to the next Feature, and **Open in Azure DevOps →** to see the work item.
+4. **Read them all.** **↻ Read all Discussions** reads every Feature's Discussion in the background (the top bar shows "Reading Discussions · x of n"). If Azure DevOps asks the app to slow down it waits and tries again once; if it keeps asking, the job stops with "x of n read" — click again later to read the rest. The **Comments** column shows each Feature's count.
+
+The Discussions are read with your own PAT (Work Items, Read) and kept only until you reload the page. Tagging struggles and learnings, saving them to Git and the Move to next PI decision come in later releases.
 
 ### Planning Overview and Capacity vs Actual (Testing)
 
@@ -452,7 +705,8 @@ A Windchill search exported to CSV becomes a Release page.
 
 1. Choose **Import Windchill export** (or **＋ S&S IT** / **＋ ECP** for a stream without its export yet).
 2. Choose the CSV file. The page lists the unique releases read from the **Location** folders (or else the document names), each with its documents.
-3. Use **Show: All months** to see every release, not only those of the header month.
+3. Use **All months** (next to ↻) to see every release, not only those of the header month.
+4. To update the page with a newer export, choose **⋯ → Upload latest export…** (or ↻) and pick the new CSV: the same page keeps its name and setup.
 
 ![An imported Windchill export (made-up file)](user-guide/images/windchill.png)
 
@@ -596,7 +850,7 @@ The **⋯** next to the page's main action holds **Rename page…**, **Hide page
 
 When many people add rows at the same time, the Tool Owner converts the page to **one file per row** with **Convert to row files…** (it asks first). Afterwards several people can add rows at once and Edit uses row locks. A page past 500 rows (or 600 KB) shows a line suggesting it.
 
-Update every app first: versions before 10.0 cannot open a converted page.
+Ask everyone to update before converting a page. An app version without support for row files cannot open a converted page.
 
 ### Live and Sample
 

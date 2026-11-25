@@ -2,7 +2,7 @@ import type { AzureWorkItem } from './domain'
 import { utcMonthLabel } from './businessTime.ts'
 import { featureDoD, fillTitle, missingValues, reviewStoryTitle, titleValues, fieldPlaceholders, type TitleField } from './featureSetup.ts'
 import { isTimeWritingStory, planMonthStory, timeWritingMonth } from './azureInsights.ts'
-import { editLocks, editProblem, editableText, isAdhocTask, withAdhocTag, type WorkItemEdit } from './workItemEdit.ts'
+import { commentText, editLocks, editProblem, editableText, isAdhocTask, withAdhocTag, type WorkItemEdit } from './workItemEdit.ts'
 
 export * from './azureClient.ts'
 export * from './azureRead.ts'
@@ -620,12 +620,33 @@ export async function readWorkItemForEdit(config: AzureConfig, pat: string, work
     priority: number('Microsoft.VSTS.Common.Priority'), risk: text('Microsoft.VSTS.Common.Risk'), valueArea: text('Microsoft.VSTS.Common.ValueArea') }
 }
 export interface WorkItemComment { id: number; text: string; author: string; date: string }
+// BKL-20, PIR-05: the whole Discussion, newest first, as plain text (commentText): every page, following the
+// continuationToken Azure DevOps returns (DSK-11), up to `limit` comments (1,000); deleted comments are left out.
+// capped: more comments were there than the limit.
+export const maxDiscussionComments = 1000
+type RawComment = { id?: unknown; text?: unknown; createdBy?: unknown; createdDate?: unknown; isDeleted?: unknown }
+export async function readDiscussion(config: AzureConfig, pat: string, workItemId: number, transport: AzureTransport = requestAzure, limit = maxDiscussionComments): Promise<{ comments: WorkItemComment[]; capped: boolean }> {
+  const comments: WorkItemComment[] = [], seen = new Set<string>()
+  let token = '', read = 0
+  for (;;) {
+    const page = await transport({ ...config, pat, operation: 'comments', workItemId, ...(token ? { continuationToken: token } : {}) }) as { comments?: RawComment[]; continuationToken?: unknown }
+    if (!Array.isArray(page.comments)) throw new Error('Azure DevOps did not return the Discussion.')
+    for (const comment of page.comments) {
+      if (read >= limit) break
+      read += 1
+      if (comment.isDeleted === true || typeof comment.id !== 'number') continue
+      comments.push({ id: comment.id, text: commentText(typeof comment.text === 'string' ? comment.text : ''), author: identityName(comment.createdBy) || 'Unknown', date: typeof comment.createdDate === 'string' ? comment.createdDate : '' })
+    }
+    const next = typeof page.continuationToken === 'string' ? page.continuationToken : ''
+    // A token seen before would read the same pages again: stop there.
+    if (!next || seen.has(next) || !page.comments.length) return { comments: newestFirst(comments), capped: false }
+    if (read >= limit) return { comments: newestFirst(comments), capped: true }
+    seen.add(next); token = next
+  }
+}
+const newestFirst = (comments: WorkItemComment[]) => [...new Map(comments.map((comment) => [comment.id, comment])).values()].sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id)
 export async function readComments(config: AzureConfig, pat: string, workItemId: number, transport: AzureTransport = requestAzure): Promise<WorkItemComment[]> {
-  const page = await transport({ ...config, pat, operation: 'comments', workItemId }) as { comments?: { id?: unknown; text?: unknown; createdBy?: unknown; createdDate?: unknown; isDeleted?: unknown }[] }
-  if (!Array.isArray(page.comments)) throw new Error('Azure DevOps did not return the Discussion.')
-  return page.comments.filter((comment) => comment.isDeleted !== true && typeof comment.id === 'number')
-    .map((comment) => ({ id: comment.id as number, text: editableText(typeof comment.text === 'string' ? comment.text : ''), author: identityName(comment.createdBy) || 'Unknown', date: typeof comment.createdDate === 'string' ? comment.createdDate : '' }))
-    .sort((a, b) => b.date.localeCompare(a.date))
+  return (await readDiscussion(config, pat, workItemId, transport)).comments
 }
 export async function addComment(config: AzureConfig, pat: string, workItemId: number, text: string, transport: AzureTransport = requestAzure): Promise<WorkItemComment> {
   if (!pat.trim()) throw new Error('Enter a Work Items (Read & Write) PAT.')

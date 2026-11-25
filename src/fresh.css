@@ -1214,3 +1214,11 @@ tbody tr.tvl-hl-red td{background:var(--hl-red-bg)}tbody tr.tvl-hl-red td:first-
 .pulse-cumulative-switches{gap:16px;margin:2px 0 6px;flex-wrap:wrap}.pulse-cumulative-switches .check{margin:0;font-size:12px;color:var(--text)}
 .viz-legend i.viz-key-dashed{width:18px;height:0;border-top:2px dashed;border-radius:0;background:none}
 .dsh-status-toggle{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}.dsh-status-toggle .check{margin:0}.dsh-status-toggle>small{flex-basis:100%;font-size:11px;font-weight:400;color:var(--muted);line-height:1.4}
+/* PIR-02…PIR-05: PI Review — the filter bar, and the Discussion in the Feature drawer as plain text. */
+.pir-filters .inline-select select{min-width:9rem}.pir-filters .check{margin-top:0;font-size:12px}
+.pir-title{margin:0;font-size:14px;color:var(--heading);overflow-wrap:anywhere}
+.pir-discussion{display:grid;gap:8px;padding-top:4px}
+.pir-discussion-head{display:flex;justify-content:space-between;align-items:center;gap:8px}.pir-discussion-head h3{margin:0;font-size:14px;color:var(--heading)}
+.pir-comments{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.pir-comments>li{border:1px solid var(--line-soft);border-radius:8px;padding:8px 10px;background:var(--surface-2)}
+.pir-comment-head{margin:0 0 4px;font-size:12px;color:var(--text-2)}.pir-comment-text{margin:0;font-size:13px;white-space:pre-line;overflow-wrap:anywhere}

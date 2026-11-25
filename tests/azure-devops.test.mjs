@@ -746,3 +746,22 @@ test('CON-100: a connection without a role is read-only, except the one older Ti
   assert.equal(roleOf(old, [old], new Set(['old'])), 'reference', 'a role-less connection from the shared setup in Git is read-only')
   assert.equal(roleOf({ id: 'x', role: 'documents' }, []), 'documents', 'a saved role is kept')
 })
+
+test('DSK-11: the desktop proxy accepts a Discussion page token on the read only — a text of at most 2,048 characters, URL-encoded on the fixed host and path; 429 names Retry-After (TC-PIR-05)', async () => {
+  const { azureCommentsRequest } = require('../electron/azure-devops.cjs')
+  const base = { organization: 'org', project: 'Quality', team: 'T', pat: 'p', workItemId: 7 }
+  assert.equal(azureCommentsRequest({ ...base, operation: 'comments' }).url, 'https://dev.azure.com/org/Quality/_apis/wit/workItems/7/comments?api-version=7.1-preview.4&order=desc&$top=200')
+  const paged = azureCommentsRequest({ ...base, operation: 'comments', continuationToken: 'a b&c=d/../x#y' })
+  assert.equal(paged.url, 'https://dev.azure.com/org/Quality/_apis/wit/workItems/7/comments?api-version=7.1-preview.4&order=desc&$top=200&continuationToken=a%20b%26c%3Dd%2F..%2Fx%23y')
+  assert.equal(new URL(paged.url).host, 'dev.azure.com')
+  assert.equal(new URL(paged.url).pathname, '/org/Quality/_apis/wit/workItems/7/comments')
+  assert.equal(paged.options.method, 'GET')
+  assert.ok(azureCommentsRequest({ ...base, operation: 'comments', continuationToken: 'x'.repeat(2048) }))
+  for (const bad of ['', 'x'.repeat(2049), 42, { toString: () => 'x' }]) assert.throws(() => azureCommentsRequest({ ...base, operation: 'comments', continuationToken: bad }), /Invalid Discussion page token/)
+  assert.throws(() => azureCommentsRequest({ ...base, operation: 'add-comment', comment: 'Hi', continuationToken: 'x' }), /only when reading the Discussion/)
+  const response = (status, headers = {}) => ({ ok: status < 300, status, headers: { get: (name) => ({ 'content-type': 'application/json', ...headers })[name.toLowerCase()] ?? null }, json: async () => ({ comments: [] }), clone() { return this }, text: async () => '' })
+  const urls = []
+  await requestAzureDevOps({ ...base, operation: 'comments', continuationToken: 'next' }, async (url) => { urls.push(url); return response(200) })
+  assert.match(urls[0], /&continuationToken=next$/)
+  await assert.rejects(requestAzureDevOps({ ...base, operation: 'comments' }, async () => response(429, { 'retry-after': '30' })), /\(429\)\. Retry after 30 s\./)
+})

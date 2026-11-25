@@ -200,8 +200,9 @@ export function piPathOf(iterationPath: string | undefined) {
   const at = parts.findIndex((part) => /\b(?:pi|program\s*increment)\b/i.test(part))
   return at < 0 ? undefined : parts.slice(0, at + 1).join('\\')
 }
-const piName = (path: string) => path.slice(path.lastIndexOf('\\') + 1)
-const laterPi = (a: string, b: string) => piName(a).localeCompare(piName(b), undefined, { numeric: true, sensitivity: 'base' }) > 0
+export const piName = (path: string) => path.slice(path.lastIndexOf('\\') + 1)
+// PIR-02: true when PI a is later than PI b, compared by the PI's name with its numbers ("PI 2026.10" after "PI 2026.9").
+export const laterPi = (a: string, b: string) => piName(a).localeCompare(piName(b), undefined, { numeric: true, sensitivity: 'base' }) > 0
 const stateIs = (item: Pick<AzureWorkItem, 'state'>, state: string) => item.state.trim().toLowerCase() === state
 export function stateChecks(items: AzureWorkItem[], me: Me, absenceEpicId?: number): StateCheck[] {
   const byId = new Map(items.map((item) => [item.id, item]))

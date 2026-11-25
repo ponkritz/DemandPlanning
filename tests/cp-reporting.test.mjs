@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { cpMonthReport, cpNameIndex, cpReleaseName, cpSignatures, cpTitleVersion, cpVersionKey, defaultCpReportingSettings, fieldReader } from '../src/cpReporting.ts'
+import { cpAllMonths, cpMonthReport, cpNameIndex, cpReleaseName, cpSignatures, cpTitleVersion, cpVersionKey, defaultCpReportingSettings, fieldReader } from '../src/cpReporting.ts'
 
 // A synthetic CP_Release_Folder tree (no company data): Release containers, folders and documents, with approver slots.
 // The query's columns map display names to reference names (here "Custom.DocType" for "Type").
@@ -158,4 +158,15 @@ test('Platform titles: "PF1.0 / PF2.0 <Name>-<Number>" give the name with its va
   assert.deepEqual([name.name, name.rawVersion, name.displayLabel, name.nameStatus, name.warnings], ['PF2.0 Carpo', 'A12', 'PF2.0 Carpo A12', 'resolved_from_title', []])
   assert.equal(releaseOnlyTitle(name.name, name.rawVersion), 'PF2.0 Carpo | A12', 'the Create Feature title, no "v"')
   assert.equal(cpReleaseName({ id: 8, title: 'Release 26.2 ClinicalPlatform' }, undefined).rawVersion, '26.2', 'the other CP titles read as before')
+})
+
+test('QV-72: CP All months — every release container with a QA/QE signature in any month, completion review only per month (TC-QV-52)', () => {
+  const read = cpSignatures(tree(), columns, defaultCpReportingSettings, 'UTC')
+  const all = cpMonthReport(read, cpAllMonths, undefined)
+  const ids = (rows) => rows.map((row) => row.container.id).sort((a, b) => a - b)
+  assert.deepEqual(ids(all.rows), [100, 200, 300, 400, 500, 600], 'October’s five and November’s 600')
+  assert.equal(all.month, 'all')
+  assert.equal(all.supported, 6)
+  assert.equal(all.completed, cpMonthReport(read, '2026-10').completed + cpMonthReport(read, '2026-11').completed)
+  assert.ok(all.rows.every((row) => !row.completionReview), 'no other-month review in All months')
 })

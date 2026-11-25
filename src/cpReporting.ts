@@ -237,9 +237,16 @@ function treeIndex(tree: ReturnType<typeof cpSignatures>) {
   treeIndexes.set(tree, index)
   return index
 }
+export const cpAllMonths = 'all'
+function allMonths(index: { byMonth: Map<string, Map<number, CpSignature[]>> }) {
+  const merged = new Map<number, CpSignature[]>()
+  for (const releases of index.byMonth.values()) for (const [releaseId, signatures] of releases) merged.set(releaseId, [...(merged.get(releaseId) ?? []), ...signatures])
+  return merged
+}
 export function cpMonthReport(tree: ReturnType<typeof cpSignatures>, month: string, names?: ReturnType<typeof cpNameIndex>, settings: CpReportingSettings = defaultCpReportingSettings) {
   const index = treeIndex(tree)
-  const byRelease = index.byMonth.get(month) ?? new Map<number, CpSignature[]>()
+  // QV-72: month 'all' — every release container with a QA/QE signature in any month (the page's All months).
+  const byRelease = month === cpAllMonths ? allMonths(index) : index.byMonth.get(month) ?? new Map<number, CpSignature[]>()
   const issues = [...tree.issues]
   if (names && !names.withContent) issues.push({ kind: 'name-conflict', ids: [], text: `The names connection has ${names.records} records but none with a Content value: check that its query returns the Content field.` })
   const rows: CpReleaseRow[] = []
@@ -247,7 +254,7 @@ export function cpMonthReport(tree: ReturnType<typeof cpSignatures>, month: stri
     const container = tree.containers.get(releaseId)!
     const notes = signatures.filter((entry) => entry.mainReleaseNotes)
     // Main Release Notes signed by QA/QE in other months too: a completion month that needs review.
-    const otherMonths = [...(index.notesMonths.get(releaseId) ?? [])].filter((entry) => entry !== month)
+    const otherMonths = month === cpAllMonths ? [] : [...(index.notesMonths.get(releaseId) ?? [])].filter((entry) => entry !== month)
     const completionReview = notes.length && otherMonths.length ? `The main Release Notes also has a QA/QE signature in ${otherMonths.sort().join(', ')}; check the completion month.` : undefined
     if (completionReview) issues.push({ kind: 'completion-conflict', ids: [releaseId], text: `Release ${releaseId} “${container.title}”: ${completionReview}` })
     const name = cpReleaseName(container, names, settings.zeroPad)

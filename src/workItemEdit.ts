@@ -90,6 +90,14 @@ export function editableText(html: string | undefined) {
     .split('\n').map((line) => line.replace(/[ \t]+/g, ' ').trim()).join('\n')
     .replace(/\n{3,}/g, '\n\n').trim()
 }
+// PIR-05: a Discussion comment as plain text — editableText, with a mention (an <a data-vss-mention> link) as "@Name"
+// and an image as "[image]"; no markup is ever kept, so the text is shown without rendering HTML.
+export function commentText(html: string | undefined) {
+  if (!html) return ''
+  return editableText(html
+    .replace(/<a\b[^>]*data-vss-mention[^>]*>\s*@?([\s\S]*?)<\/a>/gi, (_, name: string) => `@${name.replace(/<[^>]*>/g, '').trim()}`)
+    .replace(/<img\b[^>]*>/gi, ' [image] '))
+}
 // A Feature's Description as its DoD ("Feature DoD: …", the first paragraph) and the rest; joined back the same way.
 export function splitDoD(text: string) {
   const [first, ...rest] = text.split(/\n\n/)

@@ -11,7 +11,7 @@ export const pages: PageMeta[] = [
   { id: 'mydash', label: 'My dashboard', icon: '◐', group: 'Data Insights', detail: 'Your hours against your capacity, your open work and your streams and releases.', usesMonth: true },
   { id: 'overview', label: 'Team overview', icon: '▦', group: 'Data Insights', detail: 'The team at a glance: six headline tiles, each opening its analysis — capacity and workload, streams, plan quality — for a period and filters.', usesMonth: false },
   { id: 'pulse', label: 'Pulse Check', icon: '◔', group: 'Data Insights', detail: 'Last month’s releases and analysis, ongoing activities, and the current month’s releases.', usesMonth: true },
-  { id: 'pireview', label: 'PI Review', icon: '◈', group: 'Data Insights', detail: 'PI summary for the PI Review (planned).', usesMonth: false },
+  { id: 'pireview', label: 'PI Review', icon: '◈', group: 'Data Insights', detail: 'The Features of a PI and their Discussions, read from Azure DevOps.', usesMonth: false },
   { id: 'kpitracker', label: 'KPI tracker', icon: '◫', group: 'Data Insights', detail: 'The team’s KPI tracker from SharePoint, read only: read live in the desktop app, with the copy saved in Git when SharePoint cannot be reached.', usesMonth: false, hidden: true },
   { id: 'activities', label: 'Time Writing', icon: '✎', group: 'My Work', detail: 'Your activities for the month: add this month’s tasks, enter planned and actual hours, and see what is left before the deadline.', usesMonth: true },
   { id: 'planover', label: 'Planning Overview', icon: '▥', group: 'Testing', detail: 'The team’s month at a glance: workload against capacity, delivery against Target dates, baseline and capacity exceptions, health per Epic.', usesMonth: true },

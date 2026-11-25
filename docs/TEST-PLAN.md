@@ -1010,6 +1010,10 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-QV-51 Selected month / All months toggle on the Release pages** — Req QV-71 — E2E `documents-and-data.e2e.mjs` ("TC-QV-43: every Release page has the source bar, counts, Releases | Source data tabs (Tool Validations: Expiry list | Master list | Azure | Setup) and the common columns in order": the bar's Show is a toggle Selected month | All months, Selected month chosen by default and its tooltip naming the header month; All months shows every month) ; E2E `custom-streams.e2e.mjs` (the custom stream's bar has the toggle) ; browser check: on DP, IOCC, Content and S&S IT the month is not repeated in the bar; switching to All months and back changes the Releases table.
 
+**TC-QV-52 CP: Selected month / All months** — Req QV-72 — L1 `cp-reporting.test.mjs` ("QV-72: CP All months — every release container with a QA/QE signature in any month, completion review only per month (TC-QV-52)") ; browser check: on CP choose All months — the Releases table lists every signed release container of every month, the counts stay the header month's; Selected month returns to the month's releases.
+
+**TC-CON-67 Upload latest export… on a Windchill export page** — Req CON-108 — E2E `documents-and-data.e2e.mjs` ("TC-QV-44: the result of an action on a Release page — a Windchill import, a file that is not an export — is listed in Background jobs, not as a notice on the page": ⋯ → Upload latest export… opens the file picker; the export is imported for the same page, listed in Background jobs) ; browser check: on an existing export page choose ⋯ → Upload latest export… and a newer CSV — the counts and Releases follow the new file, the page keeps its name.
+
 **TC-QV-24 CP releases from the asset Titles** — *(Retired — see TC-QV-25)* Req QV-40 — L1 `streams.test.mjs` ("CP: the release from the asset Title "[Release name] [Release No] [Asset name]", each release once; fuzzy QMS-0025 match (TC-QV-24)"); browser check with a CP query holding three assets of one release in both namings ("Care Pathways 3.1 Test Report", "Care Pathways 3.1.0 SRS", "Risk Analysis v3.1 (Care Pathways)") and one of another (3.2), and a QMS-0025 Feature "CP | Care Pathways | v3.1": Release Details → CP lists two releases (3 and 1 assets), 3.1 with its Feature and %, 3.2 with Create Feature opening the New Feature form titled "Care Pathways | v3.2" (release name and number only) under the CP Epic, and found after it is created; Pulse Check's Releases and Supported summary show "CP [2]"; no page errors. **UAT**
 
 **TC-QV-25 CP release reporting from QA/QE signatures** — Req QV-41…QV-45 — L1 `cp-reporting.test.mjs` ("CP release reporting: Supported and Completed per Release container from QA/QE signatures (TC-QV-25)"; "CP release reporting: slots, roles, dates and month boundaries (TC-QV-25)"; "CP release names: version from the title, Content from the CP_Releases data set, never deciding the count (TC-QV-25)"; "CP Create Feature title: the release name and number only, found again by the board match (TC-QV-25)"; "the CP menu entry: its tree-query connection, listed even when hidden from the menu (TC-QV-25)"; "CP names: the connection with Content is used, a Release with text around the version is read, and a missing version says why (TC-QV-25)"); browser check in the desktop app with the CP connection holding the CP_Release_Folder tree query and a second CP connection with CP_Releases, month October 2026: Release Details → CP shows the counts Releases in October 2026, Completed and Supported, and "n releases · m QA/QE-signed documents" on its Releases table (Release name, Release, Release Notes signed, Documents, Container, Completed, QMS-0025 match); a release with twelve asset folders is one row; a release whose main Release Notes is signed in October is Completed, one with only an asset's Release Notes is not; Clinical Platform Global is under Shared activity; names read "Setebos 26.2" or show their status; a row opens its signatures; Export evidence CSV downloads the month's signatures; Pulse Check's CP quadrant and Supported summary match; no page errors. **UAT**
@@ -2150,6 +2154,20 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 **TC-TVL-32 The master list's ID, Used by, Validated, Type and Current Month Status** — Req TVL-34, TVL-35, TVL-30, TVL-07 — L1 `tool-validations.test.mjs` ("TVL-34: ID, Used by, Validated and Type guessed by column name — System.Id, Source, State, Type (else the work item type); editable, None kept; Azure DevOps sources only (TC-TVL-32)", "TVL-34: the four values kept in tool-validations.json — read strictly, written, merged from Azure DevOps (Azure wins, a blank never clears) and in two saves (GIT-17) (TC-TVL-32)"), `tool-queries.test.mjs` ("TVL-35: the Current Month Status — Completed, Supported, both or blank; months in UTC; only the Tools query’s tools (TC-TVL-32)", "TVL-35: with one query a master list tool is Supported when a row of the query names it with a document in the month (TC-TVL-32)") ; E2E `tool-validation-queries.e2e.mjs` ("TC-TVL-18: …": the Master list's ID 501 / Used by Lab A / Validated Validated / Type Statistics and Current Month Status "Completed Supported" for Minitab 21, "Completed" for JMP 17, blank for LabVIEW 2020 in October; after Validation Completed is chosen LabVIEW Completed, Minitab Supported, JMP blank) ; browser check at 1440 and 390 px, light and dark: the two pills of "Completed, Supported" sit on one line; sort and filter by Current Month Status and by Used by; Export → CSV writes "Completed, Supported"; Setup → Edit mapping… of the Tool Validations query offers ID, Used by, Validated and Type with the guesses, and None saved stays None after a reload; a Windchill source's Edit mapping… does not offer them; the Expiry list shows the status too; a tool added by hand has no status and Edit still works for it.
 
 **TC-TVL-33 Counts and Pulse Check's Tool Validations list from the master list** — Req TVL-36, TVL-22, TVL-23 — L1 `tool-queries.test.mjs` ("TVL-36: the counts and Pulse Check’s Tool Validations list come from the master list — the same numbers as the two queries (TC-TVL-33)") ; E2E `tool-validation-queries.e2e.mjs` ("TC-TVL-18: …": the Master list tiles 2 / 2 / 1, then 2 / 1 / 1, equal the Current Month Status column; Pulse Check's quadrant "1 completed 1 supported" lists "LabVIEW 2020 ID 502 · Completed" and "Minitab 21 ID 501 · Supported"), `documents-and-data.e2e.mjs` ("TC-QV-43: …": one query, Validations and Supported validations on the Master list) ; browser check: for the header month the Master list's Validations in {Month}, Completed validations and Supported validations equal the number of rows with each status (filter the column), Pulse Check's Tool Validations quadrant, the Monthly pack's Tool validation line and the cumulative chart; remove a tool's link (a tool gone from the Tools query, Not in source now) — its status is blank and the counts drop at once.
+### 6.34 PI Review
+
+**TC-PIR-01 The PI list and the default PI** — Req PIR-02 — L1 `pi-review.test.mjs` ("PIR-02: the PI list merges the iterations and the fetched items, ignoring case, newest first (TC-PIR-01)", "PIR-02: the default PI is the current one (UTC); overlapping PIs choose nothing; without iterations the latest PI with Features, said (TC-PIR-01)"); browser check with a test project: the PI list matches the iteration tree, the current PI is chosen with the Current PI chip, the last choice is kept after a reload.
+
+**TC-PIR-02 The Features of a PI and the toggle** — Req PIR-03 — L1 `pi-review.test.mjs` ("PIR-03: the Features of a PI — Removed and absence-Epic Features left out; the toggle adds Features with User Stories in this PI (TC-PIR-02)").
+
+**TC-PIR-03 The whole Discussion as plain text** — Req PIR-05, BKL-20 — L1 `pi-review.test.mjs` ("PIR-05, BKL-20: the Discussion is read page by page with the continuation token, deleted comments dropped, newest first, as plain text (TC-PIR-03)", "PIR-05: the Discussion read stops at the cap (1,000 by default) and says so; a repeated token stops the loop (TC-PIR-03)"), `work-item-edit.test.mjs` ("Discussion: comments newest first as text, …"); browser check with a test project: a Feature with more than 200 comments shows them all in the PI Review drawer and in the Edit form.
+
+**TC-PIR-04 Read all Discussions: 3 at a time, 429 handled** — Req PIR-06 — L1 `pi-review.test.mjs` ("PIR-06: Read all Discussions — 3 at a time; a 429 waits (at most 60 s) and retries once; a second 429 stops with the rest unread (TC-PIR-04)").
+
+**TC-PIR-05 The Discussion page token in both transports** — Req DSK-11, PIR-05 — L1 `pi-review.test.mjs` ("DSK-11, PIR-05: the web transport sends the page token URL-encoded on the read only, at most 2,048 characters; 429 names Retry-After (TC-PIR-05)"), `azure-devops.test.mjs` ("DSK-11: the desktop proxy accepts a Discussion page token on the read only — a text of at most 2,048 characters, URL-encoded on the fixed host and path; 429 names Retry-After (TC-PIR-05)").
+
+**TC-PIR-06 A lead reviews a PI's Features and their Discussions** — Req PIR-01, PIR-02, PIR-03, PIR-04, PIR-05, PIR-06 — **UAT** — E2E `pi-review.e2e.mjs` ("TC-PIR-06: the current PI is preselected, its Features listed, a Discussion read in the drawer as plain text from both pages, and Read all Discussions completes": against a mocked Azure DevOps — the Time Writing fetch, the iterations with PI 2026.4 current and the Comments API in two pages — PI 2026.4 is chosen with the Current PI chip; its two Features are listed by ID, the toggle adds the Feature with a User Story in the PI; the drawer shows the three comments of both pages newest first as text, "@Ana Costa" and "[image]", no markup rendered, the second page asked with the URL-encoded token; Comments shows 3; ↻ Read all Discussions ends with "1 of 1 read." and fills the column); UAT: on the released build a lead opens PI Review on the current PI, reads two Features' Discussions and runs Read all Discussions.
+
 ## 7. Requirements coverage matrix
 
 | Requirement | Test cases |
@@ -2322,7 +2340,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | BKL-17 | TC-BKL-08 |
 | BKL-18 | TC-BKL-09 |
 | BKL-19 | TC-BKL-10, TC-BKL-17 |
-| BKL-20 | TC-BKL-11 |
+| BKL-20 | TC-BKL-11, TC-PIR-03 |
 | BKL-21 | TC-BKL-12 |
 | BKL-22 | TC-BKL-12, TC-BKL-18 |
 | BKL-23 | TC-BKL-13 |
@@ -2404,6 +2422,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | QV-69 | TC-QV-49 |
 | QV-70 | TC-QV-50, TC-QV-43 |
 | QV-71 | TC-QV-51, TC-QV-43 |
+| QV-72 | TC-QV-52 |
 | QV-38 | TC-CON-42 |
 | OVR-01…08 | retired (TC-OVR-01…03 retired) |
 | OV-11 | TC-OV-11 |
@@ -2501,6 +2520,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | DSK-02, DSK-03 | TC-INS-02 |
 | DSK-04…06 | TC-DSK-02 |
 | DSK-07…10 | TC-DSK-03 |
+| DSK-11 | TC-PIR-05 |
 | SMP-01…04 | TC-SMP-01 |
 | SMP-05 | TC-SMP-02 |
 | SMP-06 | TC-SMP-02 |
@@ -2775,6 +2795,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | STR-07 | TC-STR-07 |
 | CON-106 | TC-PGB-06 |
 | CON-107 | TC-DSH-13 |
+| CON-108 | TC-CON-67 |
 | PGB-01 | TC-PGB-01, TC-PGB-07 |
 | PGB-02 | TC-PGB-01, TC-PGB-03, TC-PGB-04 |
 | PGB-03 | TC-PGB-01, TC-PGB-02, TC-PGB-08 |
@@ -2912,6 +2933,12 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | TVL-34 | TC-TVL-32, TC-TVL-18 |
 | TVL-35 | TC-TVL-32, TC-TVL-18 |
 | TVL-36 | TC-TVL-33, TC-TVL-18 |
+| PIR-01 | TC-PIR-06 |
+| PIR-02 | TC-PIR-01, TC-PIR-06 |
+| PIR-03 | TC-PIR-02, TC-PIR-06 |
+| PIR-04 | TC-PIR-06 |
+| PIR-05 | TC-PIR-03, TC-PIR-05, TC-PIR-06 |
+| PIR-06 | TC-PIR-04, TC-PIR-06 |
 | IF-05 | TC-KPT-02 |
 | NFR-02 | TC-STO-01 |
 | NFR-03…05 | TC-DSK-02, TC-INS-01 |
@@ -2965,6 +2992,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-37 | TC-OND-01…34, TC-OND-40…65, TC-OND-90…97, TC-CHT-01…42, TC-CHT-50…59 |
 | UC-38 | TC-PGB-01…16, TC-DSH-01…16, TC-CHT-02, TC-CHT-11, TC-CHT-13…27, TC-CHT-29…37, TC-CHT-39, TC-CHT-40, TC-CHT-42, TC-CHT-50…57, TC-CHT-59, TC-TVL-12, TC-TVL-23 |
 | UC-39 | TC-TVL-01…33 |
+| UC-40 | TC-PIR-01…06 |
 
 ## 8. Result record
 

@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from 'react'
+import { useRef, useState, useSyncExternalStore } from 'react'
 import { isRunning, recordJob, runInBackground, subscribeJobs } from '../backgroundJobs'
 import { projectLevels, windchillOps, windchillCell, type WindchillFilter, type WindchillLogic, type WindchillView } from '../windchillViews'
 import { streamNamed, windchillOptionsForView } from '../streams'
@@ -109,7 +109,16 @@ export function WindchillPage({ view, windchill, git, gitNote, month, board }: {
   const importError = (text: string) => { if (text) recordJob(`windchill:${view.id}`, `Import Windchill export · ${view.name}`, { text, failed: true }) }
   const primary = view.exportFile ? <ExportFileButton label="↻" title="Import newer export" className="primary" onFile={(text, file) => windchill.importExport(text, file, '', view.id)} onError={importError} />
     : <button type="button" className="primary" aria-label={source ? 'Refresh from Windchill' : 'Fetch from Windchill'} title={source ? 'Refresh from Windchill' : 'Fetch from Windchill'} disabled={status?.state === 'busy'} onClick={() => void windchill.fetchView(view.id)}>↻{status?.state === 'busy' ? <small>Searching…</small> : null}</button>
-  const menu = [...(git?.connected ? [{ key: 'git', label: 'Load from Git', disabled: loading, onClick: loadFromGit }] : []), ...(view.exportFile ? [{ key: 'remove', label: 'Remove this export…', danger: true, onClick: () => { if (window.confirm(`Remove the Windchill export “${view.name}” from this app?`)) windchill.removeView(view.id) } }] : [])]
+  // CON-108: ⋯ → Upload latest export… replaces this page's results with a newer export file (the same as ↻), named so
+  // it is found; the page, its name and its setup (Standard / ECP) stay.
+  const uploadInput = useRef<HTMLInputElement>(null)
+  const upload = view.exportFile ? <input ref={uploadInput} type="file" hidden aria-label={`Upload latest export: ${view.name}`} accept=".csv,.txt,text/csv,text/plain" onChange={(event) => {
+    const file = event.currentTarget.files?.[0]
+    event.currentTarget.value = ''
+    if (!file) return
+    void file.text().then((text) => { try { windchill.importExport(text, file.name, '', view.id) } catch (failure) { importError(failure instanceof Error ? failure.message : String(failure)) } }, () => importError('The file could not be read.'))
+  }} /> : null
+  const menu = [...(view.exportFile ? [{ key: 'upload', label: 'Upload latest export…', onClick: () => uploadInput.current?.click() }] : []), ...(git?.connected ? [{ key: 'git', label: 'Load from Git', disabled: loading, onClick: loadFromGit }] : []), ...(view.exportFile ? [{ key: 'remove', label: 'Remove this export…', danger: true, onClick: () => { if (window.confirm(`Remove the Windchill export “${view.name}” from this app?`)) windchill.removeView(view.id) } }] : [])]
   // (2) QV-64: the releases (ECP: projects) with a document dated in the header month, as the Releases table lists
   // them; Supported counts the same releases, as Pulse Check's Supported line does for a Windchill stream. Completed is
   // left out: an export has no completion event (no signature, milestone or Release Notes rule), only document dates.
@@ -127,6 +136,7 @@ export function WindchillPage({ view, windchill, git, gitNote, month, board }: {
     <ReleaseSourceBar name={view.name} source={view.exportFile ? `Windchill export ${view.exportFile}` : view.entitySet}
       fetched={source ? `${source.rows.length} results · ${view.exportFile ? 'imported' : 'fetched'} ${formatDateTime(source.fetchedAt)}${source.fromGit ? ' (desktop app, via Git)' : ''}` : undefined}
       about={about} period={source && month ? <PeriodSelect month={month} value={scope} onChange={setScope} /> : undefined} primary={primary} menu={menu}>
+      {upload}
       {!view.exportFile && <WindchillImport view={view} windchill={windchill} />}
       {/* Warnings about the data shown (§8): the last fetch failed, so the results are older; the Git copy is not saved. */}
       {source && status?.state === 'error' && <Notice tone="warning">Not refreshed: {status.message} The results shown are from {formatDateTime(source.fetchedAt)}.</Notice>}

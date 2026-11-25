@@ -38,6 +38,8 @@ Every child is validated, saved, linked and read back. Multi-item creation is no
 
 The web app sends HTTPS requests directly to `dev.azure.com`; organization/network/browser restrictions can block cross-origin requests. The desktop package uses a narrow preload/IPC bridge for source reads and explicitly requested Feature creation. Neither mode sends tokens through GitHub. Requests do not follow redirects with credentials; errors are shown without logging tokens.
 
+**Discussions (comments).** The Edit form (BKL-20) and **PI Review** (PIR-05) read a work item's comments with `GET {collection}/{project}/_apis/wit/workItems/{id}/comments?api-version=7.1-preview.4&order=desc&$top=200`, a preview API on dev.azure.com. When the answer carries a `continuationToken`, the next page is read by sending it back URL-encoded as `&continuationToken=…`, until no token comes back or 1,000 comments are read. The PAT needs **Work Items → Read** only (adding a comment from the Edit form needs Read & Write). The desktop proxy accepts the token on this read only, as a text of at most 2,048 characters, on the same fixed host and path (DSK-11). An HTTP 429 answer is reported with its Retry-After seconds; PI Review's Read all Discussions waits that long (at most 60 s) and tries once more. The comment HTML is turned into plain text before it is shown; no HTML is rendered.
+
 Saved source records use the existing app store: local browser/device storage; shared setup goes to the Git data repository. Azure DevOps connectivity does not by itself centralize planning data or enforce app roles.
 
 ## Mapping still to confirm with live evidence

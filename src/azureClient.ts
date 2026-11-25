@@ -48,6 +48,8 @@ export interface AzureRequest extends AzureConfig {
   rev?: number
   // add-comment: the comment as plain text.
   comment?: string
+  // comments (DSK-11, PIR-05): the next page of the Discussion, as Azure DevOps returned it (at most 2,048 characters).
+  continuationToken?: string
 }
 export interface FeatureInput { parentId: number; title: string; description: string; acceptanceCriteria: string; areaPath?: string; iterationPath?: string; assignedTo?: string; startDate?: string; targetDate?: string; assignToCreator?: boolean; storyIterationPath?: string; taskOriginalEstimate?: number; taskCompletedWork?: number }
 
@@ -109,9 +111,26 @@ export const conflictMessage = (id: number) => `#${id} was changed in Azure DevO
 // Work-item Discussion: read the comments and add one (Azure DevOps work-item Comments API, a preview API on
 // dev.azure.com). The comment is sent as text: line breaks become <br>, no markup is taken from the user.
 export const commentsApiVersion = '7.1-preview.4'
+// DSK-11, PIR-05: a Discussion page token is only accepted on the read, as a non-empty text of at most 2,048 characters,
+// and is sent URL-encoded in the query string (never in the path or as a host).
+export const maxContinuationToken = 2048
+export function continuationTokenProblem(request: Pick<AzureRequest, 'operation' | 'continuationToken'>) {
+  if (request.continuationToken == null) return ''
+  if (request.operation !== 'comments') return 'A page token is accepted only when reading the Discussion.'
+  return typeof request.continuationToken === 'string' && request.continuationToken.length > 0 && request.continuationToken.length <= maxContinuationToken ? '' : 'Invalid Discussion page token.'
+}
+// PIR-06: Azure DevOps asked to slow down (HTTP 429). The message carries the status and the Retry-After seconds, so the
+// reason survives the desktop proxy (only the message crosses IPC); rateLimitWait reads them back.
+export const rateLimitMessage = (retryAfter: string | null) => { const seconds = Number(retryAfter); return `Azure DevOps is limiting requests (429).${Number.isFinite(seconds) && seconds >= 0 && retryAfter?.trim() ? ` Retry after ${Math.ceil(seconds)} s.` : ''}` }
+export function rateLimitWait(failure: unknown): number | null {
+  const text = failure instanceof Error ? failure.message : String(failure ?? '')
+  if (!/\(429\)/.test(text)) return null
+  const seconds = /Retry after (\d+) s\./.exec(text)
+  return seconds ? Number(seconds[1]) : 0
+}
 async function requestComments(request: AzureRequest) {
   const adding = request.operation === 'add-comment'
-  const url = `${projectApiBase(request)}/_apis/wit/workItems/${request.workItemId}/comments?api-version=${commentsApiVersion}${adding ? '' : '&order=desc&$top=200'}`
+  const url = `${projectApiBase(request)}/_apis/wit/workItems/${request.workItemId}/comments?api-version=${commentsApiVersion}${adding ? '' : `&order=desc&$top=200${request.continuationToken ? `&continuationToken=${encodeURIComponent(request.continuationToken)}` : ''}`}`
   let response: Response
   try {
     response = await fetch(url, { method: adding ? 'POST' : 'GET', redirect: 'error', credentials: 'omit', signal: AbortSignal.timeout(45000),
@@ -120,6 +139,7 @@ async function requestComments(request: AzureRequest) {
   } catch { throw new Error(adding ? `The comment on #${request.workItemId} could not be confirmed. Check the Discussion in Azure DevOps before retrying.` : 'Azure DevOps could not be reached. Check your network/VPN.') }
   if (response.status === 401) throw new Error('The PAT was rejected or has expired. Check your PAT.')
   if (response.status === 403) throw new Error(`Access denied. Check project access and PAT Work Items (${adding ? 'Read & Write' : 'Read'}) scope.`)
+  if (response.status === 429 && !adding) throw new Error(rateLimitMessage(response.headers.get('Retry-After')))
   if (!response.ok) { const detail = await response.json().catch(() => ({})) as { message?: string }; throw new Error(`Azure DevOps ${adding ? 'did not add the comment' : 'did not return the Discussion'} (${response.status})${detail.message ? `: ${detail.message.replaceAll(request.pat.trim(), '[redacted]').slice(0, 600)}` : '.'}`) }
   if (!(response.headers.get('content-type') ?? '').includes('application/json')) throw new Error('Azure DevOps returned a sign-in page. Check the PAT and organization access.')
   return response.json()
@@ -179,6 +199,8 @@ export async function requestAzure(request: AzureRequest): Promise<unknown> {
   if (request.feature?.adhoc != null && (request.feature.adhoc !== true || request.operation !== 'create-child' || request.workItemType !== 'Task')) throw new Error('Only a new Task can be tagged ad-hoc. Nothing was created.')
   if (request.operation === 'edit-work-item') { const problem = !Number.isSafeInteger(request.workItemId) || request.workItemId! < 1 || !Number.isSafeInteger(request.rev) || request.rev! < 1 ? 'Invalid work item or revision.' : editProblem(request.edit ?? {}); if (problem) throw new Error(`${problem} Nothing was changed.`) }
   if ((request.operation === 'comments' || request.operation === 'add-comment' || request.operation === 'updates') && (!Number.isSafeInteger(request.workItemId) || request.workItemId! < 1)) throw new Error('Invalid work item.')
+  const tokenProblem = continuationTokenProblem(request)
+  if (tokenProblem) throw new Error(tokenProblem)
   if (request.operation === 'add-comment' && (typeof request.comment !== 'string' || !request.comment.trim() || request.comment.length > 100_000)) throw new Error('Enter a comment (at most 100,000 characters). Nothing was added.')
   if (window.azureDevOps) return window.azureDevOps.request(request)
   if (request.operation === 'comments' || request.operation === 'add-comment') return requestComments(request)

@@ -30,7 +30,7 @@ import { CpReportView } from '../components/CpReportView'
 import { completedCount, cpReportFor, defaultStreamReleases, supportedCount, toolReportFor } from '../releaseOverview'
 import { ToolListTable, ValidationDocumentsTable } from '../components/ToolQueriesView'
 import { completionFieldOptions, fetchParentTitles, parentIdsToRead, selectColumns, toolMonthStatus, type ParentTitles } from '../toolQueries'
-import { defaultCpReportingSettings } from '../cpReporting'
+import { cpAllMonths, defaultCpReportingSettings } from '../cpReporting'
 import { toolQueryHowLabel } from '../streams'
 import type { AzureWorkItem } from '../domain'
 import { ddtMonthOf, dpListedIn, dpMilestoneNames, dpMilestones, dpMilestoneText, dpMonthCounts, dpMonthText, dpPlannedMilestones } from '../dpMilestones'
@@ -175,6 +175,8 @@ function ReadOnlyView({ id, name, role, azure, store, month, gitNote, onOpenConn
   const namingPatterns = streamPatterns(savedSettings, streamName)
   // CP: its release-folder tree (the first CP connection) is read whole and reported by QA/QE signature month (cpReporting).
   const cp = stream?.rule === 'cp' ? cpReportFor(store.state, listAzureConnectionProfiles(), month) : undefined
+  // QV-72: All months on CP lists every release container with a QA/QE signature in any month; the counts stay the header month's.
+  const cpShown = cp && allMonths ? cpReportFor(store.state, listAzureConnectionProfiles(), cpAllMonths) : cp
   const isCp = Boolean(cp && cp.profile.id === id)
   // TVL-19…TVL-22: Tool Validations with its two queries — this page is its Tools query's (counts on the Master list tab,
   // the Tool List [TFS] and Validation Documents [TFS] tabs, TVL-14, TVL-31); the Signed documents query's own page,
@@ -341,15 +343,15 @@ function ReadOnlyView({ id, name, role, azure, store, month, gitNote, onOpenConn
         {bulkOpen && <DpBulkCreate rows={(source?.items ?? []).filter((item) => picked.includes(item.id))} azure={azure} featureSetup={featureSetup} qeMapping={qeMapping} featureMatch={featureMatch} onClose={() => { setBulkOpen(false); setPicked([]) }} />}
         <QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={unresolved} queryOnly choose lead={dpLead} more={dpColumns} extra={boardColumn} actions={dpBulk} />
       </TablePanel>} raw={raw(items)} />
-    : isCp && cp ? <ResultTabs id={`azure:${id}`} rawCount={source.items.length} main={<CpReportView report={cp.report} azure={azure} assign={assign} featureSetup={featureSetup} threshold={threshold} enrichment={cp.enrichmentName} />} raw={raw(source.items)} />
+    : isCp && cp ? <ResultTabs id={`azure:${id}`} rawCount={source.items.length} main={<CpReportView report={(cpShown ?? cp).report} azure={azure} assign={assign} featureSetup={featureSetup} threshold={threshold} enrichment={cp.enrichmentName} />} raw={raw(source.items)} />
     : role === 'release-source' || stream ? <ReleaseView name={name} items={items} backlog={azure.items} azure={azure} assign={assign} featureSetup={featureSetup} qeMapping={qeMapping} rule={stream?.rule} patterns={namingPatterns} area={area} fuzzy={stream?.fuzzy} onOpenBulkEpics={openBulkEpics} threshold={threshold} columns={viewColumns} orderBy={orderBy} unresolved={unresolved} />
     : <TablePanel><QueryView name={name} items={items} columns={viewColumns} orderBy={orderBy} unresolved={unresolved} /></TablePanel>
   return <Page className="release-page">
-    {/* (1) QV-48, QV-70: the source bar; Show (not on CP, whose report is always the header month), ↻ and ⋯. */}
+    {/* (1) QV-48, QV-70: the source bar; Show (on CP too since QV-72: All months lists every release container signed in any month; its counts stay the header month's), ↻ and ⋯. */}
     <ReleaseSourceBar name={name} source={`${config ? `${config.organization} / ${config.project}` : 'connection not found'}${profile?.query ? ' · query' : config?.team ? ` · team ${config.team}` : ''}`}
       fetched={source ? `fetched ${formatDateTime(source.fetchedAt)}${'fromGit' in source && source.fromGit ? ' (desktop app, via Git)' : ''}` : undefined}
       about={notes.length > 0 ? notes.map((note) => <p key={note}>{note}</p>) : undefined}
-      period={source && !isCp && !toolPage && !isToolDocuments ? <PeriodSelect month={month} value={scope} onChange={setScope} /> : undefined} primary={refresh} menu={menu}>
+      period={source && !toolPage && !isToolDocuments ? <PeriodSelect month={month} value={scope} onChange={setScope} /> : undefined} primary={refresh} menu={menu}>
       {source && status?.state === 'error' && <Notice tone="warning">Not refreshed: {status.message} The data shown is from {formatDateTime(source.fetchedAt)}.</Notice>}
       {!azure.isSample && gitNote?.tone === 'error' && <Notice tone="error">{gitNote.text}</Notice>}
       {stale && !busy && <Notice tone="warning">The saved data was fetched with different columns than the connection's query now has. Refresh from Azure to load every column's values.</Notice>}
