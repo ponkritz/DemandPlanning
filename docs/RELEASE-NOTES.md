@@ -2,6 +2,21 @@
 
 Version history of the I&D Quality Demand Planning app, newest first. Every merged change bumps the version in `package.json` and adds its entry here, in the same pull request (CI-09; [CONFIGURATION-MANAGEMENT.md](CONFIGURATION-MANAGEMENT.md) §4): **major** for a change that breaks existing data, shared setup files or the way users work; **minor** for a new or changed feature; **patch** for a fix, a dependency update or documentation only. `pnpm test` fails when the newest version here is not the version in `package.json`. CI tags each version `vX.Y.Z` on its merge commit and publishes its GitHub release with the installers and this entry (CI-10); the build number of a version is the CI build of that merge (shown in the app under Force Update, and in `latest.json`). Open bugs and accepted limitations of every version are in [KNOWN-ISSUES.md](KNOWN-ISSUES.md); the third-party components of every version are in [SWBOM.md](SWBOM.md).
 
+## v5.3.0 — 2026-11-25
+
+**Added**
+- **Tool Validations reporting** — browse the master and expiry lists, Tool List [TFS], Validation Documents [TFS], and custom tabs. Review due-date highlights and the current month’s status. Pulse Check, the Monthly Pack and dashboard sources use the shared validation data (TVL-01…TVL-36, MYD-15, QV-64).
+- **Pulse Check reporting** — exclude selected streams from the Pulse Check totals and view cumulative completed releases by stream in the Year view (QV-66…QV-69, MYD-25).
+- **Release Classification rules** — set classification rules based on the release number for bulk Feature creation (DPF-10…DPF-12).
+- **PI Review** — select a PI, filter its Features and read their Azure DevOps Discussions individually or in a background job (PIR-01…PIR-06).
+
+**Updated**
+- **Release Details** — browse one alphabetical list, switch between Selected month and All months including on CP, and open source details from the page menu. Upload newer CSV exports from a Windchill page’s menu (NAV-52, QV-70…QV-72, CON-108).
+- **Bulk Feature creation** — use shared mapped Epics for DP, IOCC and Content (QV-59, DPF-04, CNB-01, ADM-05).
+- **Git storage** — load the active settings in Change connection, distinguish an unreadable repository from missing files, and preserve connections and PATs during the first sync after a repository switch (GIT-13, GIT-24…GIT-26).
+
+Synced Test2 through commit `60e2518`.
+
 ## v5.2.0 — 2026-11-24
 
 **Added**
