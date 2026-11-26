@@ -46,3 +46,11 @@ export function reloadBlockReason({ pending, failed, busy, preview, exported, ac
   if (!acknowledged) return 'Confirm that you have saved or backed up your work before reloading.'
   return ''
 }
+
+// UPD-07: a view's code (a lazily loaded chunk) that is no longer on the server — a newer build was deployed while this
+// page was open, so the old chunk names are gone (Chrome/Edge "Failed to fetch dynamically imported module", Firefox
+// "error loading dynamically imported module", Safari "Importing a module script failed").
+export const isStaleBuildError = (error: unknown) => /failed to fetch dynamically imported module|error loading dynamically imported module|importing a module script failed/i.test(error instanceof Error ? error.message : String(error ?? ''))
+// UPD-07: the address that loads the newest build: the page with a new _dp_refresh, so the browser cannot answer from
+// its cached copy of the old page (which names the old chunks); location.reload() would load that copy again.
+export const freshLoadUrl = (href: string, nonce = String(Date.now())) => updateUrls(href, nonce).reload

@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
+import { subscribeJobs } from '../backgroundJobs'
+import { loadEverythingRunning } from '../loadEverythingJob'
 import { dpQueryDateColumns } from '../dpQueryColumns'
 import { EpicFeatureEditor } from '../components/EpicFeatureEditor'
 import { AdminOverview } from '../components/AdminOverview'
@@ -58,8 +60,10 @@ const shortMonthName = (month: string) => new Intl.DateTimeFormat('en', { month:
 
 // The Windchill host and views setup is hidden (Windchill exports are imported under Release Details instead).
 // Everyone sets up their own connections and tokens here; the shared sections need the role right to manage them.
-export function AdminPage({ store, month, azure, git, access, featureSetup, epicSetup, sharedLists, setupSteps = [], onSearch = () => undefined, monthlyPack, history, loadEverything, onOpenBoard, tab: requested, onOpenTab, look }: PageProps & { look?: { startView: StartView; onStartView: (view: StartView) => void; onCustomizeMenu: () => void }; tab: SettingsTab; onOpenTab: (tab: SettingsTab, section?: string) => void; azure: AzureWorkspace; git: GitStorage; access: Access; featureSetup: FeatureSetup; epicSetup: EpicSetupStore; sharedLists?: SharedListsEnv; setupSteps?: SetupStep[]; onSearch?: () => void; monthlyPack: MonthlyPackStore; history: HistoryStore; loadEverything: () => Promise<{ loaded: string[]; failed: string[] }>; onOpenBoard: () => void }) {
+export function AdminPage({ store, month, azure, git, access, featureSetup, epicSetup, sharedLists, setupSteps = [], onSearch = () => undefined, monthlyPack, history, loadEverything, onOpenBoard, tab: requested, onOpenTab, look }: PageProps & { look?: { startView: StartView; onStartView: (view: StartView) => void; onCustomizeMenu: () => void }; tab: SettingsTab; onOpenTab: (tab: SettingsTab, section?: string) => void; azure: AzureWorkspace; git: GitStorage; access: Access; featureSetup: FeatureSetup; epicSetup: EpicSetupStore; sharedLists?: SharedListsEnv; setupSteps?: SetupStep[]; onSearch?: () => void; monthlyPack: MonthlyPackStore; history: HistoryStore; loadEverything: () => Promise<{ loaded: string[]; failed: string[] }> | null; onOpenBoard: () => void }) {
   const [everything, setEverything] = useState<{ busy: boolean; loaded?: string[]; failed?: string[] }>({ busy: false })
+  // GIT-33, GIT-34: Load everything runs as the background job of the forced load (Jobs done); one at a time.
+  const loadJobRunning = useSyncExternalStore(subscribeJobs, loadEverythingRunning)
   // CON-94: each shared section needs its own permission.
   const can = access.can
   const peopleShared = can('people.edit') || can('people.capacityRoles')
@@ -274,8 +278,9 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, epic
     {tab === 'storage' && <SectionTabs page="storage" sections={[
       { key: 'git', label: 'Git storage', scope: 'computer', node: <GitStoragePanel git={git} /> },
       ...(git.connected ? [{ key: 'load', label: 'Load from Git', scope: 'computer' as const, node: <Panel className="connection-panel" eyebrow="GIT" title="Load everything from Git" info="Loads everything shared through Git at once: planning data, the connection setup, on-prem view data, Windchill exports, access roles and the Feature setup. Data here is replaced only by newer data from Git; connections you changed here are kept."
-        action={<button type="button" className="primary" disabled={everything.busy || git.isSample} onClick={() => { setEverything({ busy: true }); void loadEverything().then((result) => setEverything({ busy: false, ...result })) }}>{everything.busy ? 'Loading…' : 'Load everything from Git'}</button>}>
+        action={<button type="button" className="primary" disabled={loadJobRunning || git.isSample} onClick={() => { const done = loadEverything(); if (!done) return; setEverything({ busy: true }); void done.then((result) => setEverything({ busy: false, ...result })) }}>{loadJobRunning ? 'Loading in the background…' : 'Load everything from Git'}</button>}>
         {git.isSample && <Notice tone="warning">Synthetic sample data is loaded: loading from Git is disabled.</Notice>}
+        {loadJobRunning && <Notice tone="info" className="load-job-running">Loading everything from Git in the background — follow it in Background jobs (top bar); you can go on working.</Notice>}
         {everything.loaded && <Notice tone={everything.failed?.length ? 'warning' : 'success'}>Loaded: {everything.loaded.join('; ') || 'nothing'}.{everything.failed?.length ? ` Not loaded — ${everything.failed.join(' · ')}` : ''}</Notice>}
       </Panel> }] : []),
       ...(can('storage.shared') ? [{ key: 'shared', label: 'Shared setup in Git', scope: 'tool-owner' as const, node: <><RetiredFilesPanel git={git} viewingAs={Boolean(access.viewingAs)} toolOwner={access.rights.roles.includes('Tool Owner')} staleQeEpics={([['DP', dpBulk], ['IOCC', ioccBulk]] as const).flatMap(([stream, id]) => id && needsQePage(chooseSetup(featureSetup.setups, id, true).setup) ? [`Epic #${id} (${stream})`] : [])} /><AzureViewsGitPanel git={git} azure={azure} /></> }] : []),

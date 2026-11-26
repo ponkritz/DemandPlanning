@@ -219,9 +219,9 @@ test('GIT-30, GIT-31: never in View as, with the sample, without Git, without th
   assert.match(prompt, /failedNow && <section className="streams-update-setup"[\s\S]*<GitConnectionForm git=\{git\}/, 'after a failure: the Git storage setup, the same form as the panel')
   const panel = readFileSync(new URL('../src/components/GitStorage.tsx', import.meta.url), 'utf8')
   assert.match(panel, /<GitConnectionForm git=\{git\}/, 'the Git storage panel uses the same form')
-  // Its state is held by the app, so the pop-up stays open while its own load runs (KB: it hid and came back on a slow computer).
+  // GIT-35: hidden while the load job runs (KB: it hid and came back on a slow computer), back in its failed state after.
   const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8')
-  assert.match(app, /!streamsSkipped && \(streamsDue \|\| streamsRun\.busy \|\| streamsRun\.failed\) && <StreamsUpdatePrompt/)
+  assert.match(app, /!streamsSkipped && !loadRunning && \(streamsDue \|\| streamsRun\.failed\) && <StreamsUpdatePrompt/)
   const ui = readFileSync(new URL('../src/components/ui.tsx', import.meta.url), 'utf8')
   assert.match(ui, /\{!blocking && <button type="button" className="icon-button"/)
   assert.match(ui, /close\.current = blocking \? \(\) => undefined : onClose/)
@@ -236,4 +236,41 @@ test('GIT-32: Continue without loading only in a GitHub outage — every failure
   assert.equal(isGitOutage(['A: (HTTP 502)', 'B: Repository o/r or branch main was not found, or the token cannot access it.']), false, 'one setup error: no skip')
   assert.equal(isGitOutage([]), false)
   assert.equal(isGitOutage(undefined), false)
+})
+
+test('GIT-33…GIT-35: Load everything as one background job — listed in Jobs done, one at a time, the version recorded only when every part loaded (TC-GIT-28, TC-GIT-29, TC-GIT-30)', async () => {
+  const { listJobs, resetJobs } = await import('../src/backgroundJobs.ts')
+  const { loadEverythingRunning, loadJobText, startLoadEverything } = await import('../src/loadEverythingJob.ts')
+  resetJobs()
+  const storage = memory()
+  globalThis.localStorage = storage
+  let release = () => undefined
+  const gate = new Promise((resolve) => { release = resolve })
+  const steps = []
+  const first = startLoadEverything(async (progress) => { progress('Loading planning data…'); steps.push('load'); await gate; markOwnStreamsWrite(repo, 'sha-0', 'sha-own'); return { loaded: ['planning data', 'connection setup'], failed: [] } }, repo, () => 'sha-own')
+  assert.ok(first, 'started')
+  assert.equal(loadEverythingRunning(), true)
+  assert.deepEqual(listJobs().map((job) => [job.label, job.state, job.detail]), [['Load everything from Git', 'running', 'Loading planning data…']])
+  assert.equal(startLoadEverything(async () => ({ loaded: [], failed: [] }), repo, () => null), null, 'a second load while one runs starts nothing')
+  assert.equal(listJobs().length, 1)
+  release()
+  assert.deepEqual(await first, { loaded: ['planning data', 'connection setup'], failed: [] })
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.deepEqual(listJobs().map((job) => [job.state, job.detail]), [['done', 'Loaded: planning data; connection setup.']])
+  assert.equal(loadedStreamsVersion(repo, storage), 'sha-own', 'recorded from the load — its own write during the load counted')
+  // A failed part: the job fails naming it, nothing is recorded.
+  const failed = await startLoadEverything(async () => ({ loaded: ['access roles'], failed: ['Connection setup: GitHub could not read azure-views-reset.json (HTTP 500)'] }), repo, () => 'sha-new')
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.equal(failed.failed.length, 1)
+  assert.deepEqual(listJobs()[0].state, 'error')
+  assert.match(listJobs()[0].detail, /^Not loaded — Connection setup: GitHub could not read azure-views-reset\.json \(HTTP 500\)\. Loaded: access roles\.$/)
+  assert.equal(loadedStreamsVersion(repo, storage), 'sha-own')
+  // A load that throws fails the job too.
+  const thrown = await startLoadEverything(async () => { throw new Error('boom') }, repo, () => 'x')
+  assert.deepEqual(thrown, { loaded: [], failed: ['boom'] })
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.equal(loadJobText({ loaded: [], failed: [] }), 'Loaded: nothing.')
+  assert.equal(loadEverythingRunning(), false)
+  assert.deepEqual(steps, ['load'])
+  delete globalThis.localStorage
 })

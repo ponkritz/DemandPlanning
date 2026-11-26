@@ -23,7 +23,7 @@ export function PiFormSetupPanel({ store, block, by }: { store: PiFormStore; blo
   const [editing, setEditing] = useState(false)
   const setup = store.setup
   return <Panel className="admin-section pir-setup" eyebrow="PI REVIEW" title="PI Review form" info={<>
-    <p>The fields of <strong>Write review…</strong> (PI Review, My PI Review and the Close pop-up) and the heading each writes in the Feature’s Discussion comment. PI Review splits the comments by these headings — and still by the built-in ones and the team’s earlier formats, so older reviews keep their columns. A field you add is a column of its own in PI Review.</p>
+    <p>The fields of <strong>Review…</strong> (PI Review, My PI Review and the Close pop-up) and the heading each writes in the Feature’s Discussion comment. PI Review splits the comments by these headings — and still by the built-in ones and the team’s earlier formats, so older reviews keep their columns. A field you add is a column of its own in PI Review.</p>
     <p><strong>Move to next PI</strong> keeps its behaviour: Yes / No, the PI it moves to ({piPlaceholder} in its heading) and the reason; it can be relabelled, not removed. {reviewedPiPlaceholder} in a heading is the reviewed PI (the PI chosen on the page; in the Close pop-up the Feature’s PI), e.g. “Learnings of {reviewedPiPlaceholder}” is written “Learnings of PI 26.4:” — or “Learnings:” when no PI is known. Shared in Git as {piFormFile}; without the file the built-in form is used.</p>
   </>}>
     {store.error && <Notice tone="warning">{piFormFile} could not be used, so the form stays as it was{store.file ? '' : ' (the built-in form)'}: {store.error}</Notice>}

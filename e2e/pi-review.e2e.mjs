@@ -115,7 +115,7 @@ test('TC-PIR-06: the current PI is preselected, its Features listed, a Discussio
   // PIR-03, PIR-04: the PI's Features by ID; the toggle adds the Feature with a User Story in the PI.
   await page.locator('.pir-table tr[data-row-key="example/project/202"]').waitFor()
   assert.deepEqual(await rowKeys(page), ['example/project/201', 'example/project/202'])
-  assert.match(await text(page.locator('.pir-table tr[data-row-key="example/project/201"]')), /^201 DP 4\.2 release review DP releases Active Rita Gomez — PI 2026\.4 — — — — — — — — — Write review…$/)
+  assert.match(await text(page.locator('.pir-table tr[data-row-key="example/project/201"]')), /^201 DP 4\.2 release review DP releases Active Rita Gomez — PI 2026\.4 — — — — — — — — — Review…$/)
   assert.match(await text(page.locator('.data-table-status')), /^2 of 2 Features$/)
   await page.getByRole('checkbox', { name: 'Also Features with User Stories in this PI' }).check()
   await page.locator('.pir-table tr[data-row-key="example/project/203"]').waitFor()

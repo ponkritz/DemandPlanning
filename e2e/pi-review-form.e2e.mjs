@@ -77,6 +77,8 @@ function fakeAzure(state) {
       }
       // PIR-35: each Discussion read (a GET of its comments), by Feature, to count the requests.
       state.reads.push(id)
+      // PIR-36: a Discussion that cannot be read (failRead lists the Features).
+      if (state.failRead?.includes(id)) return json({ message: 'Service unavailable' }, 503)
       return json({ comments: list, count: list.length })
     }
     return json({ value: [] })
@@ -114,8 +116,9 @@ async function cell(page, key, label) {
   assert.ok(at >= 0, `column ${label} in ${headings.join(' | ')}`)
   return text(rowOf(page, key).locator('td').nth(at))
 }
-// A row by its key (PI Review) or by its ID (My PI Review, whose rows do not open).
-const rowOf = (page, key) => /^\d+$/.test(key) ? page.locator('.pir-table tbody tr').filter({ has: page.locator('td:first-child', { hasText: new RegExp(`^${key}$`) }) }) : page.locator(`.pir-table tr[data-row-key="${key}"]`)
+// A row by its key (PI Review) or by its ID (My PI Review, whose rows do not open; its first column is the tick box,
+// PIR-36, so the ID is the second).
+const rowOf = (page, key) => /^\d+$/.test(key) ? page.locator('.pir-table tbody tr').filter({ has: page.locator('td:nth-child(2)', { hasText: new RegExp(`^${key}$`) }) }) : page.locator(`.pir-table tr[data-row-key="${key}"]`)
 const rowKeys = (page) => page.locator('.pir-table tbody tr[data-row-key]').evaluateAll((rows) => rows.map((row) => row.dataset.rowKey))
 async function jobDone(page, label, detail) {
   await page.locator('.jobs-button').click()
@@ -155,7 +158,7 @@ test('TC-PIR-16: the Feature’s assignee writes its review — prefilled, previ
   await page.getByRole('button', { name: 'Reset filters' }).click()
   await page.locator('.pir-table tr[data-row-key="example/project/201"]').waitFor()
   // CON-113: a Team Member who is not the assignee sees Write review… disabled with the reason; the note says why.
-  const other = page.getByRole('button', { name: 'Write review of Feature 202' })
+  const other = page.getByRole('button', { name: 'Review Feature 202' })
   assert.equal(await other.isDisabled(), true)
   assert.match(await other.getAttribute('title'), /^Only the Feature’s assignee \(Ben Okafor\) or a lead with “PI Review: post the review of a Feature” can post its review/)
   assert.match(await text(page.locator('.table-panel > .write-blocked')), /You can post the review of the Features assigned to you \(rita\.gomez@example\.com\)/)
@@ -163,7 +166,7 @@ test('TC-PIR-16: the Feature’s assignee writes its review — prefilled, previ
   await page.locator('.pir-table tr[data-row-key="example/project/201"] td').nth(1).click()
   const drawer = page.locator('aside.drawer[role="dialog"]', { has: page.getByRole('heading', { name: 'Feature #201', exact: true }) })
   await drawer.getByRole('heading', { name: 'Discussion (1)' }).waitFor()
-  await drawer.getByRole('button', { name: 'Write review of Feature 201' }).click()
+  await drawer.getByRole('button', { name: 'Review Feature 201' }).click()
   const dialog = page.getByRole('dialog', { name: 'Review of Feature #201' })
   await dialog.waitFor()
   assert.equal(await dialog.getByRole('textbox', { name: /^Learnings/ }).inputValue(), 'book the rig early')
@@ -238,12 +241,12 @@ test('TC-PIR-17: My PI Review lists my Features of the current PI with my review
   const table = page.locator('.pir-table')
   await rowOf(page, '205').locator('.pill', { hasText: 'Not reviewed' }).waitFor()
   await rowOf(page, '201').locator('.pill', { hasText: 'Not reviewed' }).waitFor()
-  assert.deepEqual(await table.locator('tbody tr td:first-child').allInnerTexts(), ['201', '205'], 'mine only: not Ben’s 202')
+  assert.deepEqual(await table.locator('tbody tr td:nth-child(2)').allInnerTexts(), ['201', '205'], 'mine only: not Ben’s 202')
   // PIR-24: a Team Member sees only their own Features — Person disabled with the reason shown; nothing to reset.
   assert.equal(await page.getByRole('combobox', { name: 'Person' }).isDisabled(), true)
   assert.match(await text(page.locator('.pir-filters .write-blocked')), /^You see your own Features: showing another person’s needs “PI Review: post the review of a Feature”/)
   assert.equal(await page.getByRole('button', { name: 'Reset filters' }).isDisabled(), true)
-  await page.getByRole('button', { name: 'Write review of Feature 205' }).click()
+  await page.getByRole('button', { name: 'Review Feature 205' }).click()
   const dialog = page.getByRole('dialog', { name: 'Review of Feature #205' })
   await dialog.getByRole('textbox', { name: /^Learnings/ }).fill('None')
   await dialog.getByRole('textbox', { name: /^Struggles/ }).fill('Parts late')
@@ -315,11 +318,11 @@ test('TC-PIR-26: a lead chooses another person and a PI in My PI Review and sees
   await page.getByRole('listbox').getByRole('option', { name: 'Ben Okafor', exact: true }).click()
   await page.getByRole('heading', { name: 'Features of Ben Okafor' }).waitFor()
   await rowOf(page, '202').locator('.pill', { hasText: 'Not reviewed' }).waitFor()
-  assert.deepEqual(await page.locator('.pir-table tbody tr td:first-child').allInnerTexts(), ['202'], 'Ben’s Feature only')
+  assert.deepEqual(await page.locator('.pir-table tbody tr td:nth-child(2)').allInnerTexts(), ['202'], 'Ben’s Feature only')
   assert.equal(await cell(page, '202', 'Their review'), 'Not reviewed')
   if (shots) { mkdirSync(shots, { recursive: true }); await page.emulateMedia({ colorScheme: 'light' }); await page.screenshot({ path: `${shots}/my-pi-review-person-1440-light.png` }) }
   // CON-113: a lead may write the review of another person's Feature; PIR-25: Moves to from the iteration dates.
-  await page.getByRole('button', { name: 'Write review of Feature 202' }).click()
+  await page.getByRole('button', { name: 'Review Feature 202' }).click()
   const dialog = page.getByRole('dialog', { name: 'Review of Feature #202' })
   await dialog.waitFor()
   // PIR-13: Move pre-selected No — no Moves to and no Reason; the heading still names the next PI (by today's PI).
@@ -353,7 +356,7 @@ test('TC-PIR-32: the last PI of the year — no later PI in Azure DevOps, the re
   const { page, context, errors, state } = await open({ tree: lastPiTree(), ...(shots ? { width: 1440, height: 900, scale: 2 } : {}) })
   await navigate(page, 'My PI Review')
   await page.locator('.pir-filters .pill', { hasText: 'Current PI' }).waitFor()
-  await page.getByRole('button', { name: 'Write review of Feature 205' }).click()
+  await page.getByRole('button', { name: 'Review Feature 205' }).click()
   const dialog = page.getByRole('dialog', { name: 'Review of Feature #205' })
   await dialog.waitFor()
   await dialog.getByRole('radio', { name: 'Yes', exact: true }).check()
@@ -375,7 +378,7 @@ test('TC-PIR-32: no PI dated over today — Moves to from the number after the l
   const { page, context, errors, state } = await open({ tree: gapTree(), team: [], ...(shots ? { width: 1440, height: 900, scale: 2 } : {}) })
   await navigate(page, 'My PI Review')
   await page.getByLabel('PI', { exact: true }).selectOption('Project\\PI 2026.4')
-  await page.getByRole('button', { name: 'Write review of Feature 205' }).click()
+  await page.getByRole('button', { name: 'Review Feature 205' }).click()
   const dialog = page.getByRole('dialog', { name: 'Review of Feature #205' })
   await dialog.getByRole('radio', { name: 'Yes', exact: true }).check()
   const moves = dialog.getByRole('textbox', { name: /^Moves to/ })
@@ -409,7 +412,7 @@ const periodWorld = () => [
   raw(302, 'Feature', 'Supplier audit pack', 'Project\\PI 2026.4', 100),
   { ...raw(303, 'Feature', 'Lab bench move', 'Project\\PI 2026.4', 100, rita, 'Closed'), fields: { ...raw(303, 'Feature', 'Lab bench move', 'Project\\PI 2026.4', 100, rita, 'Closed').fields, 'Microsoft.VSTS.Common.ClosedDate': `${dayFromToday(-105)}T16:00:00Z` } },
 ]
-const status = async (page, id) => text(rowOf(page, id).locator('td').nth(3))
+const status = async (page, id) => text(rowOf(page, id).locator('td').nth(4))
 
 test('TC-PIR-27: My PI Review counts a review for the chosen PI — in its dates or at close — and shows a review for another PI as Not reviewed with its date and PI; choosing another PI recomputes it', async () => {
   const { page, context, errors, state } = await open({ tree: relativeTree(), world: periodWorld(), comments: { 301: [ritaReview(11, -10, 'Calibrate first')], 302: [ritaReview(12, -150, 'Audit early')], 303: [ritaReview(13, -104, 'Move benches at night')] }, start: dayFromToday(-250), ...(shots ? { width: 1440, height: 900, scale: 2 } : {}) })
@@ -425,7 +428,7 @@ test('TC-PIR-27: My PI Review counts a review for the chosen PI — in its dates
   assert.equal(await page.locator('.content .notice').filter({ hasText: 'every review comment counts' }).count(), 0, 'the PI has dates: no fallback note')
   if (shots) { mkdirSync(shots, { recursive: true }); await page.emulateMedia({ colorScheme: 'light' }); await page.screenshot({ path: `${shots}/my-pi-review-reviewed-in-pi-2026-4-1440-light.png` }) }
   // Write review… on 302: still prefilled from the latest review, labelled as written for PI 2026.3.
-  await page.getByRole('button', { name: 'Write review of Feature 302' }).click()
+  await page.getByRole('button', { name: 'Review Feature 302' }).click()
   const dialog = page.getByRole('dialog', { name: 'Review of Feature #302' })
   assert.match(await text(dialog.locator('.pir-review-note')), /^Prefilled from the latest review comment \(Rita Gomez, .+\), written for PI 2026\.3: check it before posting\./)
   assert.equal(await dialog.getByRole('textbox', { name: /^Learnings/ }).inputValue(), 'Audit early')
@@ -458,7 +461,7 @@ test('TC-PIR-27: the chosen PI has no dates — every review counts, and the pag
 test('TC-PIR-28: “No learnings or struggles” — not ticked; ticked it writes None under both headings and disables both; unticked it restores what was typed; posted and read back as None', async () => {
   const { page, context, errors, state } = await open(shots ? { width: 1440, height: 900, scale: 2 } : {})
   await navigate(page, 'My PI Review')
-  await page.getByRole('button', { name: 'Write review of Feature 205' }).click()
+  await page.getByRole('button', { name: 'Review Feature 205' }).click()
   const dialog = page.getByRole('dialog', { name: 'Review of Feature #205' })
   const none = dialog.getByRole('checkbox', { name: 'No learnings or struggles' })
   const learnings = dialog.getByRole('textbox', { name: /^Learnings/ }), struggles = dialog.getByRole('textbox', { name: /^Struggles/ })
@@ -513,8 +516,9 @@ test('TC-PIR-35: Edit review… changes my own review in place — prefilled, sa
   const edit = page.getByRole('button', { name: 'Edit review of Feature 205' })
   assert.equal(await edit.isDisabled(), false)
   assert.equal(await page.getByRole('button', { name: 'Edit review of Feature 201' }).count(), 0)
-  assert.equal(await page.getByRole('button', { name: 'Write review of Feature 205' }).count(), 0, 'one action per row')
-  assert.equal(await page.getByRole('button', { name: 'Write review of Feature 201' }).count(), 1)
+  assert.equal(await page.getByRole('button', { name: 'Review Feature 205' }).count(), 0, 'one action per row')
+  assert.equal(await page.getByRole('button', { name: 'Review Feature 201' }).count(), 1)
+  const writtenOn = await cell(page, '205', 'Date of my review')
   await edit.click()
   const dialog = page.getByRole('dialog', { name: 'Edit review of Feature #205' })
   await dialog.waitFor()
@@ -531,7 +535,10 @@ test('TC-PIR-35: Edit review… changes my own review in place — prefilled, sa
   assert.deepEqual(state.edits.map((entry) => [entry.id, entry.commentId]), [[205, 41]], 'the same comment updated')
   assert.match(state.edits[0].body.text, /<li>book the rig early<\/li>/)
   assert.deepEqual(state.posts, [], 'no new comment')
-  assert.match(await text(rowOf(page, '205').locator('td').nth(3)), /^Reviewed$/, 'its date stays: it still counts for PI 2026.4')
+  assert.match(await text(rowOf(page, '205').locator('td').nth(4)), /^Reviewed$/, 'its date stays: it still counts for PI 2026.4')
+  // TC-PIR-40 (PIR-38): Date of my review shows when the review was updated; the written date is in its tooltip.
+  await until(async () => await cell(page, '205', 'Date of my review') !== writtenOn, 'the updated date')
+  assert.match(await rowOf(page, '205').locator('td span[title^="Written "]').getAttribute('title'), /^Written .+, updated .+$/)
   if (shots) await page.screenshot({ path: `${shots}/my-pi-review-edit-review-button-1440-light.png` })
   // A failed edit: the form opens again with what was typed, the error and Post as a new review instead.
   state.failNextEdit = true
@@ -561,9 +568,9 @@ test('TC-PIR-36: PI Review offers Edit review… on my own review — in the row
   await rowOf(page, 'example/project/205').waitFor()
   await page.getByRole('button', { name: '↻ Read all Discussions' }).click()
   await page.getByRole('button', { name: 'Edit review of Feature 205' }).waitFor()
-  assert.equal(await page.getByRole('button', { name: 'Write review of Feature 205' }).count(), 0, 'one action per row')
+  assert.equal(await page.getByRole('button', { name: 'Review Feature 205' }).count(), 0, 'one action per row')
   assert.equal(await page.getByRole('button', { name: 'Edit review of Feature 202' }).count(), 0, 'Lena’s review is not Rita’s')
-  assert.equal(await page.getByRole('button', { name: 'Write review of Feature 202' }).isDisabled(), true)
+  assert.equal(await page.getByRole('button', { name: 'Review Feature 202' }).isDisabled(), true)
   if (shots) { mkdirSync(shots, { recursive: true }); await page.emulateMedia({ colorScheme: 'light' }); await page.locator('.pir-table .data-table-scroll').evaluate((box) => { box.scrollLeft = box.scrollWidth }); await page.screenshot({ path: `${shots}/pi-review-edit-review-row-1440-light.png` }); await page.locator('.pir-table .data-table-scroll').evaluate((box) => { box.scrollLeft = 0 }) }
   // The drawer's footer offers the same Edit review….
   await rowOf(page, 'example/project/205').locator('td').nth(1).click()
@@ -590,7 +597,7 @@ test('TC-PIR-36: PI Review offers Edit review… on my own review — in the row
   await lead.page.getByRole('button', { name: '↻ Read all Discussions' }).click()
   await lead.page.getByRole('button', { name: 'Edit review of Feature 202' }).waitFor()
   assert.equal(await lead.page.getByRole('button', { name: 'Edit review of Feature 205' }).count(), 0, 'no Edit on Rita’s review')
-  assert.equal(await lead.page.getByRole('button', { name: 'Write review of Feature 205' }).isDisabled(), false)
+  assert.equal(await lead.page.getByRole('button', { name: 'Review Feature 205' }).isDisabled(), false)
   assert.deepEqual(lead.errors, [])
   await lead.context.close()
 })
@@ -601,7 +608,7 @@ test('TC-PIR-37: PI Review reads my own Features’ Discussions when it opens �
   const { page, context, errors, state } = await open({ comments: reviews(), ...(shots ? { width: 1440, height: 900, scale: 2 } : {}) })
   await navigate(page, 'PI Review')
   await page.getByRole('button', { name: 'Edit review of Feature 205' }).waitFor()
-  assert.equal(await page.getByRole('button', { name: 'Write review of Feature 205' }).count(), 0, 'one action per row')
+  assert.equal(await page.getByRole('button', { name: 'Review Feature 205' }).count(), 0, 'one action per row')
   // Rita's own Features (201, 205) were read, once each; Ben's 202 was not.
   await until(async () => state.reads.includes(201) && await cell(page, 'example/project/201', 'Comments') === '0', 'my Feature 201 read')
   assert.deepEqual([...state.reads].sort(), [201, 205])
@@ -632,4 +639,81 @@ test('TC-PIR-37: PI Review reads my own Features’ Discussions when it opens �
   assert.equal(await cell(lead.page, 'example/project/205', 'Comments'), '—')
   assert.deepEqual(lead.errors, [])
   await lead.context.close()
+})
+
+// PIR-36, PIR-37: Rita ticks three of her Features — 205 with her own review of PI 2026.4 — and writes one review for
+// them; Feature 207's Discussion cannot be read, so it cannot be ticked. Optional screenshots (E2E_SHOTS=<folder>, at
+// E2E_SHOTS_WIDTH px, 1440 by default — run once more with 390 for a phone); the assertions never depend on them.
+const bulkShots = process.env.E2E_SHOTS
+const shotWidth = Number(process.env.E2E_SHOTS_WIDTH) || 1440
+const bulkWorld = () => [...world(), raw(206, 'Feature', 'Audit pack refresh', 'Project\\PI 2026.4', 100), raw(207, 'Feature', 'Sensor bench move', 'Project\\PI 2026.4', 100)]
+async function bulkShot(page, name) {
+  if (!bulkShots) return
+  mkdirSync(bulkShots, { recursive: true })
+  await page.emulateMedia({ colorScheme: 'light' })
+  await page.screenshot({ path: `${bulkShots}/${name}-${shotWidth}-light.png` })
+}
+test('TC-PIR-38: Write review for several Features — tick three (one with my review), one form, posted as ONE background job: two new comments, my review replaced on the third, all shown Reviewed', async () => {
+  const { page, context, errors, state } = await open({ world: bulkWorld(), comments: { 205: [ritaOwnReview()] }, ...(bulkShots ? { width: shotWidth, height: shotWidth > 600 ? 900 : 844, scale: 2 } : {}) })
+  state.failRead = [207]
+  // At phone width the menu opens with ☰ first; the shots wait until it has slid away.
+  if (shotWidth < 600) await page.getByRole('button', { name: 'Open menu' }).click()
+  await navigate(page, 'My PI Review')
+  if (shotWidth < 600) await until(async () => (await page.locator('.sidebar').boundingBox())?.x + (await page.locator('.sidebar').boundingBox())?.width <= 0, 'the menu closed')
+  await rowOf(page, '205').locator('.pill', { hasText: /^Reviewed$/ }).waitFor()
+  await rowOf(page, '206').locator('.pill', { hasText: 'Not reviewed' }).waitFor()
+  await rowOf(page, '201').locator('.pill', { hasText: 'Not reviewed' }).waitFor()
+  // A Feature whose Discussion could not be read cannot be ticked: the tick box is disabled with the reason.
+  const blocked = page.getByRole('checkbox', { name: /^Select Feature 207 \(not possible: Its Discussion could not be read/ })
+  await blocked.waitFor()
+  assert.equal(await blocked.isDisabled(), true)
+  assert.equal(await page.locator('.bulk-bar').count(), 0, 'no bar before a tick')
+  for (const id of ['201', '205', '206']) await page.getByRole('checkbox', { name: `Select Feature ${id}`, exact: true }).check()
+  const bar = page.getByRole('region', { name: 'Selected Features' })
+  assert.match(await text(bar), /^3 selected\s*Update review for 3…\s*Clear selection$/)
+  if (bulkShots) await bar.evaluate((box) => box.scrollIntoView({ block: 'center' }))
+  await bulkShot(page, 'my-pi-review-bulk-selected')
+  // Clear selection and the heading's tick box (it ticks only the rows that can be ticked: not 207).
+  await bar.getByRole('button', { name: 'Clear selection' }).click()
+  await bar.waitFor({ state: 'detached' })
+  await page.getByRole('checkbox', { name: 'Select every row shown' }).check()
+  assert.match(await text(bar), /^3 selected/)
+  await bar.getByRole('button', { name: 'Update review for 3…' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Review of 3 Features' })
+  await dialog.waitFor()
+  assert.match(await text(dialog.locator('.pir-review-note').first()), /^The same review is posted to each Feature below \(PI 2026\.4\), as you \(your PAT\)\. 1 Feature already has your review of this PI: it is replaced\.$/)
+  const list = dialog.getByRole('table', { name: 'Features to review' })
+  assert.deepEqual(await list.locator('tbody tr td:first-child').allInnerTexts(), ['#201', '#205', '#206'])
+  assert.match(await text(list.locator('tbody tr').nth(1)), /Replaces your review of /)
+  assert.match(await text(list.locator('tbody tr').nth(0)), /New comment$/)
+  // The single form's fields and defaults: No pre-selected, nothing prefilled; Moves to the next PI; the Preview.
+  assert.equal(await dialog.getByRole('radio', { name: 'No', exact: true }).isChecked(), true)
+  assert.equal(await dialog.getByRole('textbox', { name: /^Learnings/ }).inputValue(), '')
+  await dialog.getByRole('textbox', { name: /^Learnings/ }).fill('Book the rig early')
+  await dialog.getByRole('textbox', { name: /^Struggles/ }).fill('Parts late')
+  await dialog.getByRole('radio', { name: 'Offline Review' }).check()
+  await dialog.locator('.pir-review-preview', { hasText: 'Book the rig early' }).waitFor()
+  if (bulkShots) await dialog.locator('.modal-scroll').evaluate((box) => { box.scrollTop = 0 })
+  await bulkShot(page, 'my-pi-review-bulk-form')
+  await dialog.getByRole('button', { name: 'Post to 3 Features' }).click()
+  const confirm = page.getByRole('dialog', { name: 'Post the review to 3 Features?' })
+  assert.match(await text(confirm), /A new comment in the Discussion of 2 Features: #201, #206\.\s*Your review comment replaced on 1 Feature: #205\./)
+  await confirm.getByRole('button', { name: 'Post review to 3 Features' }).click()
+  await dialog.waitFor({ state: 'detached' })
+  assert.equal(await page.locator('.bulk-bar').count(), 0, 'the selection is cleared')
+  await jobDone(page, 'PI review for 3 Features', 'Posted 2 (#201, #206) · Replaced 1 (#205) · Failed 0.')
+  // Two new comments and one replaced — the same HTML the single form posts; nothing else written.
+  const expected = buildReviewComment({ learnings: 'Book the rig early', struggles: 'Parts late', move: 'No', moveReason: '', movePi: 'PI 2026.5', mode: 'Offline Review', remarks: '', reviewedPi: 'PI 2026.4' })
+  assert.deepEqual(state.posts.map((post) => post.id).sort(), [201, 206])
+  assert.deepEqual(state.edits.map((entry) => [entry.id, entry.commentId]), [[205, 41]])
+  for (const body of [...state.posts, ...state.edits].map((entry) => entry.body.text)) assert.equal(body, expected)
+  for (const id of ['201', '205', '206']) await rowOf(page, id).locator('.pill', { hasText: /^Reviewed$/ }).waitFor()
+  await until(async () => await cell(page, '205', 'Review mode') === 'Offline Review' && /^3 of 4 reviewed$/.test(await text(page.locator('.data-table-status'))), 'the table showing the new reviews')
+  if (bulkShots) {
+    await page.locator('.jobs-button').click()
+    await page.getByRole('dialog', { name: 'Background jobs' }).waitFor()
+    await bulkShot(page, 'my-pi-review-bulk-job-done')
+  }
+  assert.deepEqual(errors.filter((line) => !/503/.test(line)), [])
+  await context.close()
 })

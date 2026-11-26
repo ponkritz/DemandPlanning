@@ -94,7 +94,9 @@ export interface DataTableProps<T> {
   rowLabel?: (row: T) => string // the accessible name of an opening row
   // CAP-60: rows ticked for a bulk action — a first column of tick boxes (kept first, never exported) with one in the
   // heading that ticks or unticks every row shown; selected holds row keys (rowKey), kept while filters change.
-  selection?: { selected: string[]; onChange: (keys: string[]) => void; label?: (row: T) => string }
+  // UI-31: blocked — why a row cannot be ticked ('' when it can): its tick box is disabled with the reason (its title and
+  // accessible name); the heading's tick box ticks and unticks only the rows that can be ticked.
+  selection?: { selected: string[]; onChange: (keys: string[]) => void; label?: (row: T) => string; blocked?: (row: T) => string }
   // UI-25…UI-28: Group by, Expand all / Collapse all and Filter by column for this table (OND-132: the On-Demand Table
   // pages). Another table gets them with this one prop.
   groupFilter?: boolean
@@ -186,11 +188,14 @@ export function DataTable<T>({ id, columns: ownColumns, rows, rowKey, exportName
   const setFilter = (id: string, text: string) => { const next = { ...filters }; if (text.trim()) next[id] = text; else delete next[id]; setLayout({ filters: next }) }
   const regroup = (next: string[]) => setLayout({ groupBy: next })
 
-  const shownKeys = selection ? visible.map(keyOf) : []
+  const shownKeys = selection ? visible.filter((row) => !selection.blocked?.(row)).map(keyOf) : []
   const allTicked = Boolean(shownKeys.length) && shownKeys.every((key) => selection!.selected.includes(key))
   const columns: DataColumn<T>[] = selection ? [{ id: '@select', label: 'Select', fixed: true, sortable: false, export: false,
     heading: <input type="checkbox" aria-label={allTicked ? 'Clear the selection of every row shown' : 'Select every row shown'} checked={allTicked} disabled={!shownKeys.length} onChange={() => selection.onChange(allTicked ? selection.selected.filter((key) => !shownKeys.includes(key)) : [...new Set([...selection.selected, ...shownKeys])])} />,
-    render: (row: T) => { const key = keyOf(row), on = selection.selected.includes(key); return <input type="checkbox" aria-label={`Select ${selection.label?.(row) ?? key}`} checked={on} onChange={() => selection.onChange(on ? selection.selected.filter((entry) => entry !== key) : [...selection.selected, key])} /> } }, ...ownColumns] : ownColumns
+    render: (row: T) => {
+      const key = keyOf(row), why = selection.blocked?.(row) ?? '', on = !why && selection.selected.includes(key), name = `Select ${selection.label?.(row) ?? key}`
+      return <input type="checkbox" aria-label={why ? `${name} (not possible: ${why})` : name} title={why || undefined} disabled={Boolean(why)} checked={on} onChange={() => selection.onChange(on ? selection.selected.filter((entry) => entry !== key) : [...selection.selected, key])} />
+    } }, ...ownColumns] : ownColumns
   const fixed = columns.filter((column) => column.fixed)
   const movable = columns.filter((column) => !column.fixed)
   const order = defaults.reorder ? orderedIds(movable.map((column) => column.id), layout.order) : movable.map((column) => column.id)

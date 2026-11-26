@@ -1,14 +1,15 @@
 import { useContext, useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { runInBackground, recordJob } from './backgroundJobs'
-import { featurePi, nextPiOf, ownReviewOf, piText, postReview, prefilledOtherPi, readDiscussionInto, reviewPeriodOf, updateReview, reviewFormFrom, reviewSummary, type NextPi, type ReviewForm, type ReviewViewer } from './piReviewPost'
-import { discussionOf, discussionsFrom, discussionsVersion, latestComment, piLabel, piOptions, readDiscussions, reviewSplit, setDiscussion, subscribeDiscussions, type BulkReadResult } from './piReview'
-import { rateLimitWait, type AzureConfig } from './azureDevOps'
+import { isRunning, runInBackground, recordJob } from './backgroundJobs'
+import { ownReviewOf, piText, postReview, prefilledOtherPi, readDiscussionInto, reviewPageBlock, reviewPeriodOf, reviewPostBlock, updateReview, reviewFormFrom, reviewSummary, type NextPi, type ReviewForm, type ReviewViewer } from './piReviewPost'
+import { discussionOf, discussionsFrom, discussionsVersion, latestComment, piLabel, readDiscussions, reviewSplit, setDiscussion, subscribeDiscussions, type BulkReadResult } from './piReview'
+import { rateLimitWait, shownDateOf, type AzureConfig } from './azureDevOps'
 import { ReviewEnvContext, type ReviewEnv } from './reviewEnv'
 import { ReadOnlyContext, useCan } from './useCan'
-import type { AzureIteration, WorkItemComment } from './azureDevOps'
+import type { WorkItemComment } from './azureDevOps'
 import type { AzureWorkItem } from './domain'
 import { builtInFormSetup, builtInSetup, type PiFormSetup } from './piReviewSetup'
-import { notBeforeStart, piCutoff, reviewStartOf } from './piReviewStart'
+import { bulkSummary, markBulk, nextPiFor, reviewedPiOf, runBulkReview, startBulkForm, type BulkTarget, type BulkWriting, type PiIterations } from './piReviewBulk'
+export type { BulkWriting, PiIterations } from './piReviewBulk'
 
 // PIR-13, PIR-17, PIR-18: writing a PI review from any page — the viewer's rights, the form a Feature starts from, the
 // post with its audit, and the Write review… state with its Background jobs entry. The form itself: pages/PiReviewForm.
@@ -28,9 +29,7 @@ export function useReviewViewer(): ReviewViewer & { env: ReviewEnv | null } {
 // PIR-34: editing — Edit review…: the viewer's own review comment the save replaces (its ID and date); failed — why the
 // last save did not go through (the pop-up then offers "Post as a new review instead").
 export type Writing = { item: AzureWorkItem; pi: string; initial: ReviewForm; prefilledFrom?: WorkItemComment; prefilledOther?: string; partly: boolean; setup: PiFormSetup; next: NextPi; moveNote: string; moveShort: string; moveWarn: boolean; editing?: { commentId: number; date: string; failed?: string } }
-// PIR-25: the Azure DevOps iterations the next PI is worked out from — the list (null when not read or not readable)
-// and whether they are still being read.
-export type PiIterations = { list: AzureIteration[] | null; reading?: boolean }
+// PIR-25: PiIterations — the Azure DevOps iterations the next PI is worked out from (piReviewBulk).
 // PIR-19: the form setup in use (the built-in form without a provider or a file).
 export const formSetupOf = (env: ReviewEnv | null | undefined) => env?.formSetup ?? builtInSetup
 
@@ -40,13 +39,12 @@ export const formSetupOf = (env: ReviewEnv | null | undefined) => env?.formSetup
 // review says so. today: the date the next PI is worked out for (the caller's clock; nextPiOf has none).
 // PIR-34: from — the comment to start from (Edit review…: the viewer's own review) instead of the latest one.
 export function startForm(item: AzureWorkItem, pi: string, items: AzureWorkItem[], setup: PiFormSetup = builtInFormSetup(), iterations: PiIterations = { list: null }, today: Date = new Date(), from?: WorkItemComment): Writing {
-  const reviewed = pi || featurePi(item.iterationPath) || ''
+  const reviewed = reviewedPiOf(item, pi)
   const entry = discussionOf(item.key)
   const comment = from ?? (entry?.state === 'done' ? latestComment(entry.comments) : undefined)
   const split = comment ? reviewSplit(comment.text, setup) : undefined
   const headings = split?.from === 'Headings'
-  const options = piOptions(iterations.list ?? [], items)
-  const next = notBeforeStart(nextPiOf(reviewed, iterations.list, options, { reading: iterations.reading, today }), piCutoff(reviewStartOf(setup), iterations.list, options))
+  const next = nextPiFor(reviewed, items, setup, iterations, today)
   // PIR-28: the headings name the reviewed PI ("Learnings of PI 26.4:").
   const initial = { ...reviewFormFrom(split, next.pi, setup), reviewedPi: piText(piLabel(reviewed)) }
   // PIR-26: the latest review is still the prefill; when it does not count for the reviewed PI, the form says so.
@@ -88,7 +86,7 @@ export function useReviewWriter(pi: string, iterations: PiIterations = { list: n
   // PIR-34: Edit review… — the form prefilled from the viewer's own review comment; saving replaces that comment.
   function startEdit(item: AzureWorkItem, comment: WorkItemComment) {
     if (!env?.config) return
-    setWriting({ ...startForm(item, pi, env.items, formSetupOf(env), iterations, new Date(), comment), editing: { commentId: comment.id, date: comment.date } })
+    setWriting({ ...startForm(item, pi, env.items, formSetupOf(env), iterations, new Date(), comment), editing: { commentId: comment.id, date: shownDateOf(comment) } })
   }
   // PIR-34: save an edit — a Background jobs entry "Edit review · #id": update the comment, audit, read the Discussion
   // again; a failed edit opens the pop-up again with what was typed, the error and "Post as a new review instead".
@@ -176,4 +174,48 @@ export function useDiscussionsRead(config: AzureConfig | null, pat: string, feat
   }, [listKey, blocked, config, pat, features]) // eslint-disable-line react-hooks/exhaustive-deps
   if (blocked || !running.has(listKey)) return 0
   return features.filter((item) => { const state = discussionOf(item.key)?.state; return state !== 'done' && state !== 'error' }).length
+}
+
+// PIR-37: Post for several Features — ONE Background jobs entry "PI review for {n} Features": per Feature, one after
+// another, the Discussion read again, then a new comment (postAndAudit, as Write review…) or my review replaced
+// (editAndAudit, as Edit review…), then read again so the table shows it; a failure on one never stops the others; the
+// job ends with what was posted, replaced and failed, with the reasons. One bulk job at a time (no double post); a
+// Feature whose single post or edit is running fails with that reason. me / others / iterations: as useOwnReview.
+export function useBulkReview(pi: string, iterations: PiIterations & { problem?: string }, { others = false, me }: { others?: boolean; me?: { email?: string; name?: string } } = {}) {
+  const writer = useReviewViewer(), { env } = writer
+  const [writing, setWriting] = useState<BulkWriting | null>(null)
+  function start(targets: BulkTarget[]) {
+    if (!env?.config || !targets.length) return
+    setWriting(startBulkForm(targets, pi, env.items, formSetupOf(env), iterations))
+  }
+  function post(form: ReviewForm, text: string) {
+    if (!env?.config || !writing || writing.problem || reviewPageBlock(writer)) return
+    const { targets, pi: reviewed, setup } = writing, config = env.config
+    const viewer = { email: me?.email || env.email || '', name: me?.name || env.name || '' }
+    const label = `PI review for ${targets.length} Feature${targets.length === 1 ? '' : 's'}`
+    setWriting(null)
+    const keys = targets.map(({ item }) => item.key)
+    const started = runInBackground('pireview:bulk', label, async (progress) => {
+      markBulk(keys, true)
+      try {
+        const outcomes = await runBulkReview(targets, {
+          busy: (item) => reviewPostBlock(writer, item) || (isRunning(`pireview:post:${item.key}`) || isRunning(`pireview:edit:${item.key}`) ? `A review of #${item.id} is being written already (see the top bar). Nothing was posted to it here.` : ''),
+          ownNow: async (item) => {
+            await readDiscussionInto(config, env.pat, item, { fresh: true })
+            const entry = discussionOf(item.key)
+            if (entry?.state !== 'done' || entry.capped) throw new Error('The complete Discussion is unavailable.')
+            if (others) return undefined
+            const period = reviewPeriodOf(reviewed, iterations.list, { problem: iterations.problem })
+            return ownReviewOf(entry.comments, item, period, viewer, setup)?.comment
+          },
+          post: (item) => postAndAudit(env, item, form, text, reviewed),
+          edit: (item, commentId) => editAndAudit(env, item, commentId, form, text, reviewed),
+          reread: (item) => readDiscussionInto(config, env.pat, item, { fresh: true }),
+        }, (line) => progress(`${line} ${reviewSummary(form)}.`))
+        return bulkSummary(outcomes)
+      } finally { markBulk(keys, false) }
+    })
+    if (!started) recordJob('pireview:bulk:busy', label, { text: 'A PI review for several Features is being posted already: wait for it to finish, then write again. Nothing was posted.', failed: true })
+  }
+  return { writing, start, post, cancel: () => setWriting(null) }
 }

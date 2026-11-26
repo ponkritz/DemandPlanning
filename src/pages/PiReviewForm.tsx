@@ -1,11 +1,12 @@
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { shownDateOf } from '../azureDevOps'
+import { useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Info, Modal, Notice, WriteBlocked } from '../components/ui'
 import { formatDateTime } from '../format'
 import { buildReviewComment, fieldValue, moveDefaultNote, noneChoice, reviewBlocks, reviewFormProblems, reviewSummary, withFieldValue, withNoTexts, type ReviewBlock, type ReviewForm, type ReviewMove } from '../piReviewPost'
 import { reviewFooter } from '../piReview'
 import { piLabel } from '../piReview'
 import { builtInFormSetup, listHelp, type PiFormField, type PiFormSetup } from '../piReviewSetup'
-import type { Writing } from '../piReviewWriter'
+import type { BulkWriting, Writing } from '../piReviewWriter'
 
 // PIR-13, PIR-14: the review fields (one column, UI-STANDARDS §3) and the Preview of the exact comment. Move to next PI:
 // Yes / No only, No pre-selected; with Yes, the PI it moves to and an optional reason (hidden with No: kept as typed, the
@@ -85,12 +86,12 @@ export function ReviewPreview({ blocks }: { blocks: readonly ReviewBlock[] }) {
 export const postingNote = 'Posting adds a new comment to the Feature’s Discussion; PI Review reads the newest, so a correction is posted as a new review.'
 
 // PIR-13, PIR-34: the review action of a Feature (a table row, the drawer's footer) — **Edit review…** when the viewer's
-// own review counts for the chosen PI (own), else **Write review…**; one button, disabled with the reason.
+// own review counts for the chosen PI (own), else **Review…** (PIR-39: "Instead of Write Review, Just 'Review' is enough"); one button, disabled with the reason.
 export function ReviewAction({ item, own, why, primary = false, onWrite, onEdit }: { item: Pick<Writing['item'], 'id'>; own?: { comment: { date: string } }; why: string; primary?: boolean; onWrite: () => void; onEdit: () => void }) {
   const className = primary ? 'primary' : 'ghost'
   return own
-    ? <button type="button" className={className} disabled={Boolean(why)} title={why || `Edit your review of Feature #${item.id} (${formatDateTime(own.comment.date)})`} aria-label={`Edit review of Feature ${item.id}`} onClick={onEdit}>Edit review…</button>
-    : <button type="button" className={className} disabled={Boolean(why)} title={why || `Write the PI review of Feature #${item.id}`} aria-label={`Write review of Feature ${item.id}`} onClick={onWrite}>Write review…</button>
+    ? <button type="button" className={className} disabled={Boolean(why)} title={why || `Edit your review of Feature #${item.id} (${formatDateTime(shownDateOf(own.comment))})`} aria-label={`Edit review of Feature ${item.id}`} onClick={onEdit}>Edit review…</button>
+    : <button type="button" className={className} disabled={Boolean(why)} title={why || `Review Feature #${item.id}: write its PI review`} aria-label={`Review Feature ${item.id}`} onClick={onWrite}>Review…</button>
 }
 
 // PIR-34: what saving an edit does — in the form's ⓘ.
@@ -133,3 +134,58 @@ export function ReviewDialog({ writing, blocked, onPost, onPostNew, onClose }: {
     </Modal>}
   </Modal>
 }
+
+// PIR-36: the review written once for several Features (My PI Review, "Update review for {n}…"): a full-size pop-up
+// (UI-STANDARDS §4, a bulk action) naming each Feature and what the post does to it — a new comment, or my review of the
+// chosen PI (its date) replaced — and saying how many are replaced; the same fields, form setup, Moves to and Preview as
+// the single form (ReviewFields), the comment the same for every Feature. Post opens the confirmation naming the
+// counts; Post review to {n} Features hands it to the background job (PIR-37) and closes. problem (Features in
+// different PIs) and blocked disable Post with the reason.
+export function BulkReviewDialog({ writing, blocked, onPost, onClose }: { writing: BulkWriting; blocked: string; onPost: (form: ReviewForm, text: string) => void; onClose: () => void }) {
+  const { targets, pi, setup, moveNote, moveShort, moveWarn, problem } = writing
+  const [form, setForm] = useState(writing.initial)
+  const [tried, setTried] = useState(false)
+  const [confirming, setConfirming] = useState(false)
+  const sent = useRef(false) // PIR-37: one post per pop-up, however often the button is pressed
+  const problems = reviewFormProblems(form, { setup })
+  const stop = blocked || problem
+  const why = stop || (tried && problems.length ? 'Fix the fields above first.' : '')
+  const replaced = targets.filter((target) => target.replace)
+  const fresh = targets.length - replaced.length
+  const features = (count: number) => `${count} Feature${count === 1 ? '' : 's'}`
+  const ids = (list: typeof targets) => list.map(({ item }) => `#${item.id}`).join(', ')
+  function submit(event: FormEvent) {
+    event.preventDefault()
+    setTried(true)
+    if (stop || problems.length) return
+    setConfirming(true)
+  }
+  return <Modal title={`Review of ${features(targets.length)}`} eyebrow="PI REVIEW · AZURE DEVOPS WRITE" full onClose={onClose}>
+    <form className="pir-review-form pir-bulk-form" onSubmit={submit} noValidate>
+      <div className="modal-scroll pir-bulk-scroll">
+        <p className="pir-review-note">The same review is posted to each Feature below{pi ? ` (${piLabel(pi)})` : ''}, as you (your PAT). <strong>{replaced.length ? `${features(replaced.length)} already ${replaced.length === 1 ? 'has' : 'have'} your review of this PI: it is replaced.` : 'None has your review of this PI yet: each gets a new comment.'}</strong></p>
+        <div className="azure-table pir-bulk-list"><table aria-label="Features to review">
+          <thead><tr><th scope="col">ID</th><th scope="col">Title</th><th scope="col">State</th><th scope="col">Posting</th></tr></thead>
+          <tbody>{targets.map(({ item, replace }) => <tr key={item.key}>
+            <td className="nowrap">#{item.id}</td><td>{item.title}</td><td>{item.state}</td>
+            <td>{replace ? <span className="warning-text">Replaces your review of {formatDateTime(replace.date)}</span> : 'New comment'}</td>
+          </tr>)}</tbody>
+        </table></div>
+        <ReviewFields form={form} onChange={setForm} pi={pi} partly={false} setup={setup} moveNote={moveNote} moveShort={moveShort} moveWarn={moveWarn} idPrefix="bulk-review" about={`${bulkNote} ${editingNote}`} />
+        {tried && problems.length > 0 && <Notice tone="error">{problems.join(' ')}</Notice>}
+      </div>
+      <div className="modal-actions"><WriteBlocked reason={why} /><button type="button" className="ghost" onClick={onClose}>Cancel</button><button type="submit" className="primary" disabled={Boolean(stop)} title={stop || undefined}>Post to {features(targets.length)}</button></div>
+    </form>
+    {confirming && <Modal title={`Post the review to ${features(targets.length)}?`} eyebrow="PI REVIEW · AZURE DEVOPS WRITE" onClose={() => setConfirming(false)}>
+      <p>In Azure DevOps, as you (your PAT): <strong>{reviewSummary(form)}</strong>.</p>
+      <ul>
+        {fresh > 0 && <li>A new comment in the Discussion of {features(fresh)}: {ids(targets.filter((target) => !target.replace))}.</li>}
+        {replaced.length > 0 && <li>Your review comment replaced on {features(replaced.length)}: {ids(replaced)}.</li>}
+      </ul>
+      <p className="muted">It runs in the background (the top bar), one Feature after another; a Feature that fails does not stop the others. A new comment cannot be deleted from this app.</p>
+      <div className="modal-actions"><WriteBlocked reason={stop} /><button type="button" className="ghost" onClick={() => setConfirming(false)}>Cancel</button><button type="button" className="primary" disabled={Boolean(stop)} onClick={() => { if (sent.current || stop || problems.length) return; sent.current = true; const text = buildReviewComment(form, setup); setConfirming(false); onPost(form, text) }}>Post review to {features(targets.length)}</button></div>
+    </Modal>}
+  </Modal>
+}
+// PIR-36: what posting for several Features does — in the form's ⓘ.
+export const bulkNote = 'The same review goes to every Feature listed: a new comment where you have no review of this PI yet.'

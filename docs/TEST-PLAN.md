@@ -1255,6 +1255,12 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-GIT-27 Continue without loading only during a GitHub outage** — Req GIT-32, GIT-31 — L1 `other-views.test.mjs` ("GIT-32: Continue without loading only in a GitHub outage — every failure a server error or no answer (TC-GIT-27)"); E2E `own-other-views.e2e.mjs` ("TC-GIT-26: a failed load names what failed and shows the Git storage setup in the pop-up — no skip for a setup error; Continue without loading only in a GitHub outage (GIT-32); a saved connection and Retry load everything": a refused token (401) shows the setup and no skip; GitHub answering 500 shows "GitHub is not answering (an outage)" and Continue without loading, which closes the pop-up; it is back at the next start and Load everything closes it); browser check: with the network off, the pop-up offers Continue without loading; with a wrong token it does not.
 
+**TC-GIT-28 Load everything runs as a background job** — Req GIT-33, GIT-35 — **UAT** — L1 `other-views.test.mjs` ("GIT-33…GIT-35: Load everything as one background job — listed in Jobs done, one at a time, the version recorded only when every part loaded (TC-GIT-28, TC-GIT-29, TC-GIT-30)") ; E2E `own-other-views.e2e.mjs` ("TC-GIT-28: Load everything runs as a background job — the pop-up closes at once and stays closed while it runs, the job ends Done in Jobs done; the Admin button runs the same job, one at a time (TC-GIT-29, TC-GIT-30)") ; browser check: in the forced pop-up press Load everything from Git — the pop-up closes at once, the top bar shows "1 running" and Background jobs lists "Load everything from Git · Running" with the part being loaded; the app can be used; the job ends Done with what was loaded and the pop-up does not come back.
+
+**TC-GIT-29 One Load everything at a time; the Admin button runs the same job** — Req GIT-33, GIT-34 — L1 `other-views.test.mjs` ("GIT-33…GIT-35: Load everything as one background job — listed in Jobs done, one at a time, the version recorded only when every part loaded (TC-GIT-28, TC-GIT-29, TC-GIT-30)") ; E2E `own-other-views.e2e.mjs` ("TC-GIT-28: …": the Admin button disabled "Loading in the background…" while the job runs; afterwards it starts the same job, the panel shows its result) ; browser check: while the job runs Admin → Data & sharing → Load from Git shows the button disabled with the line pointing to Background jobs; afterwards Load everything from Git adds a second job and the panel shows Loaded: ….
+
+**TC-GIT-30 A failed background load brings the pop-up back** — Req GIT-35, GIT-31, GIT-32 — L1 `other-views.test.mjs` ("GIT-33…GIT-35: Load everything as one background job — listed in Jobs done, one at a time, the version recorded only when every part loaded (TC-GIT-28, TC-GIT-29, TC-GIT-30)") ; E2E `own-other-views.e2e.mjs` ("TC-GIT-26: …": the job needs a look and the pop-up comes back with what failed, the Git storage setup and Retry; Retry starts a new job) ; browser check: with GitHub refusing the token, Load everything from Git closes the pop-up, the job ends Needs a look naming Connection setup, and the pop-up comes back in its failed state; Retry closes it again and starts a new job.
+
 **TC-GIT-02 Connect, create, save, load** — Req GIT-02…04, GIT-06, GIT-08, GIT-12 — **UAT**
 - Pre: TD-03.
 - Steps:
@@ -1383,6 +1389,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 - Inspection: `dist/build-info.json` and the `<meta name="app-build-id">` tag exist after the build.
 
 **TC-UPD-02 Force Update flow** — Req UPD-02…06 — **UAT**
+
+**TC-UPD-03 A view whose code is gone after a newer deploy loads the new version** — Req UPD-07 — L1 `app-update.test.mjs` ("UPD-07: a view whose code is gone after a newer deploy is recognised, and the new version loads from a fresh address, not the cached page (TC-UPD-03)"); E2E `stale-build.e2e.mjs` ("TC-UPD-03: a view whose code is gone after a newer deploy offers Load the new version, which loads from a fresh address"); browser check: keep the app open across a release, open a page not opened before, choose Load the new version and the page opens on the new build.
 - Steps:
   1. Open Force Update while a fetch runs.
   2. Leave a preview unsaved.
@@ -1579,6 +1587,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 **TC-UI-25 Rows in closed groups left out of Export, select all and Previous / Next** — Req UI-29, OND-132 — L1 `table-groups.test.mjs` ("UI-29: Export, “Select every row shown” and Previous / Next take only the rows visible — rows in closed groups left out until opened (TC-UI-25)"); E2E `table-group-filter.e2e.mjs` ("TC-UI-25: rows in a closed group are left out of Export and of Previous / Next (also from Edit), and come back when the group is opened"); browser check: group an On-Demand page by State and close one group — Export's tooltip and menu say "Exports the n rows shown (m rows in closed groups left out)" and the file holds only the rows shown; a row's drawer (from a click and from Edit) counts and steps over the rows shown only; open the group — the note goes and Export holds every matching row again. "Select every row shown" (a table with a selection column and grouping — none today, LIM-103) uses the same rows, covered by the L1 test.
 
 **TC-UI-26 Full-size pop-up for bulk Create Features** — Req UI-30, UI-18 — L1 `dp-bulk-dates.test.mjs` ("UI-30: the DP and IOCC Create Features pop-ups are the full-size Modal, their list the part that scrolls (TC-UI-26)"); E2E `dp-bulk-dates.e2e.mjs` ("TC-DPF-16: …": at 1440×900 the DP pop-up is at least 90% of the window with a margin around it, the list fits without scrolling sideways, and its heading, ×, Cancel and Create stay in view while the list scrolls); browser check: the IOCC Create Features pop-up looks the same; Escape and × close it, Tab stays inside, dark theme; at phone width it takes the whole screen.
+
+**TC-UI-27 A row that cannot be ticked says why** — Req UI-31, CAP-60 — E2E `pi-review-form.e2e.mjs` ("TC-PIR-38: …": the tick box of Feature 207 disabled with the reason in its name and tooltip; "Select every row shown" ticks only the three rows that can be ticked); browser check: People's bulk edit (TC-CAP-32) unchanged — every person tickable.
 
 **TC-INS-03 Accessibility markup** — Req UI-03, UI-04
 - Inspect the components.
@@ -2430,6 +2440,14 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-PIR-37 PI Review reads my own Features' Discussions when it opens** — Req PIR-35, PIR-34, PIR-17, PIR-24, PIR-06, PIR-33 — L1 `pi-review-edit.test.mjs` ("PIR-35: my own Features are those assigned to me — …": by my work email where the Feature has one (the same name with another email is not mine), else by my name ignoring case and spaces; nothing known about me → none; "PIR-35: the automatic read is skipped with sample data, without a PAT, in View as and when who I am is not known — …": each skip with its reason, an on-premises server not skipped, the same reason as My PI Review when nothing can be read; "PIR-35: a Discussion being read is not requested again — …": two reads at once send one request, a fresh read and a read after the first finished ask again); E2E `pi-review-form.e2e.mjs` ("TC-PIR-37: PI Review reads my own Features’ Discussions when it opens — …": Rita opens PI Review and Feature 205 shows Edit review… without opening it or Read all; the fake dev.azure.com recorded one comments read each of her Features 201 and 205 and none of Ben's 202 (Comments "—"); opening 205's drawer sends no request; ↻ Read all Discussions reads only 202 ("1 of 1 read"), so each Discussion is read once; Lena, a lead with no Feature of her own, has nothing read until she opens 202); browser check (1440 px, light): PI Review right after opening, Edit review… on Feature 205.
 
+**TC-PIR-38 Write one review for several Features** — Req PIR-36, PIR-37, UI-31, PIR-17, PIR-34, PIR-13, CON-113 — **UAT** — L1 `pi-review-bulk.test.mjs` ("PIR-36: a row can be ticked only when Write review… could post it and whether my review is there is known — each other row says why": Write review…'s own reasons word for word, a running bulk job, the PI dates or the Discussion still read, a Discussion that could not be read; "PIR-36: the ticked Features become targets — my review of the chosen PI to replace where I have one; one form for one PI, started as the single form starts": the comment ID to replace, Moves to by the single form's rule (PI 27.1 from the dates), the form setup's defaults with No pre-selected and nothing prefilled, Features of different PIs refused); E2E `pi-review-form.e2e.mjs` ("TC-PIR-38: Write review for several Features — …": Rita's Feature 207, whose Discussion read fails, has a disabled tick box "Select Feature 207 (not possible: Its Discussion could not be read …)"; no bar before a tick; ticking 201, 205 (her own review of PI 2026.4) and 206 shows "3 selected · Update review for 3… · Clear selection"; Clear selection hides it and "Select every row shown" ticks the same three (not 207); the full-size pop-up "Review of 3 Features" says "1 Feature already has your review of this PI: it is replaced.", lists #201, #205, #206 with New comment / Replaces your review of …, Move pre-selected No and Learnings empty; filled once, the Preview follows; Post to 3 Features → the confirmation names the 2 new comments and the 1 replaced → the selection is cleared and Background jobs shows "PI review for 3 Features … Posted 2 (#201, #206) · Replaced 1 (#205) · Failed 0."; the fake dev.azure.com recorded POSTs to 201 and 206 and one PATCH of comment 41 of 205, each body the HTML the single form builds; the three rows show Reviewed and "3 of 4 reviewed"; also at 4× slower CPU); browser check (1440 px and 390 px, light): the ticked rows with the bar, the bulk pop-up (at 390 px its list without the State column, no sideways scrolling), the finished job in Background jobs; Escape and × close the pop-up, Tab stays inside.
+
+**TC-PIR-39 The bulk review job: post or replace per Feature, failures kept apart** — Req PIR-37, PIR-34, PIR-13, PIR-14 — L1 `pi-review-bulk.test.mjs` ("PIR-37: per Feature a new comment, or my review replaced — the very comment the single form posts, one Feature after another": add-comment to 201 and 205, update-comment of comment 41 on 202, every body equal to `buildReviewComment` of the same answers, the Discussion read before and after each write, the progress lines "2 of 3: replacing your review of #202…", the summary "Posted 2 (#201, #205) · Replaced 1 (#202) · Failed 0."; "PIR-37: a failure on one Feature does not stop the others; a review changed since the pop-up opened is never overwritten nor posted twice": a refused post, my review now another comment, a review of mine posted meanwhile, my review gone, a Discussion that cannot be read and a single post running each fail with their reason and nothing sent for them, the Features after them still written, a post not read back named, the job marked failed) ; L1 `pi-review-bulk.test.mjs` ("PIR-37: a review edited elsewhere under the same comment ID is never overwritten (TC-PIR-39)").
+
+**TC-PIR-40 A changed review shows its updated date** — Req PIR-38, PIR-34 — L1 `pi-review-edit.test.mjs` ("PIR-38: a review shows when it was updated — the modifiedDate of an edited comment, else when it was written; which PI it counts for still goes by the written date (TC-PIR-40)"); E2E `pi-review-form.e2e.mjs` (the Edit review… scenario: after the edit, Date of my review changes to the updated date and its tooltip reads "Written …, updated …"); browser check: after a bulk replace (TC-PIR-38) the replaced Feature shows the new date in My PI Review and PI Review.
+
+**TC-PIR-41 The review action reads Review…** — Req PIR-39, PIR-13 — E2E `pi-review.e2e.mjs`, `pi-review-form.e2e.mjs`, `pi-review-start.e2e.mjs`, `pi-review-form-setup.e2e.mjs` (every scenario opens the form with the button "Review Feature {id}", and the PI Review row text ends with "Review…"); browser check: a Feature without my review shows Review…, one with my review Edit review….
+
 **TC-CON-71 "PI Review: set up the review form"** — Req CON-114, PIR-31, CON-94, CON-101 — L1 `pi-review-setup.test.mjs` ("CON-114, PIR-31: who may change the form setup, and why not (TC-CON-71)": Scrum Master and Tool Owner in the starting matrix, not Admin; permissions 8; an older file gets it as the starting matrix does; Not set stays after saving; none without a roles file); `access.test.mjs` (an older file's Scrum Master gets it).
 
 **TC-CON-73 An older access.json with the QE Mapping area is read, not refused** — Req CON-117 — L1 `access.test.mjs` ("CON-117: an older access.json that lists the removed QE Mapping area and its action is read, not refused — the keys are dropped (TC-CON-73)": an area, an action and a denial of `qemapping` are dropped, every other right kept, the file saved again without them, a file whose only split key was `qemapping.edit` still read as split); E2E `shell.e2e.mjs` ("TC-CON-58", "TC-NAV-53": policies that still list `qemapping` open without an error).
@@ -2761,7 +2779,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CAP-57 | TC-CAP-22, TC-CAP-29 |
 | CAP-58 | TC-CAP-30 |
 | CAP-59 | TC-CAP-31 |
-| CAP-60 | TC-CAP-32 |
+| CAP-60 | TC-CAP-32, TC-UI-27 |
 | CAP-61 | TC-CAP-33 |
 | CAP-62 | TC-CAP-34 |
 | BAS-01…04 | TC-BAS-01 |
@@ -2813,6 +2831,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | STO-09 | TC-INS-01 |
 | UPD-01 | TC-UPD-01 |
 | UPD-02…06 | TC-UPD-02 |
+| UPD-07 | TC-UPD-03 |
 | DSK-01 | TC-DSK-01 |
 | DSK-02, DSK-03 | TC-INS-02 |
 | DSK-04…06 | TC-DSK-02 |
@@ -2857,6 +2876,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UI-28 | TC-UI-20, TC-UI-24 |
 | UI-29 | TC-UI-25 |
 | UI-30 | TC-UI-26, TC-DPF-16 |
+| UI-31 | TC-UI-27, TC-PIR-38 |
 | CI-01…04 | TC-INS-04, TC-CI-01 |
 | CI-05 | TC-UPD-01 |
 | CI-06 | TC-CI-02 |
@@ -3139,7 +3159,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CON-110 | TC-CON-68, TC-CON-69 |
 | CON-111 | TC-CON-68, TC-CON-69 |
 | CON-112 | TC-CON-68 |
-| CON-113 | TC-CON-70, TC-PIR-16, TC-PIR-26 |
+| CON-113 | TC-CON-70, TC-PIR-16, TC-PIR-26, TC-PIR-38 |
 | CON-114 | TC-CON-71, TC-PIR-23, TC-PIR-24, TC-PIR-31 |
 | PGB-01 | TC-PGB-01, TC-PGB-07 |
 | PGB-02 | TC-PGB-01, TC-PGB-03, TC-PGB-04 |
@@ -3311,7 +3331,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | PIR-14 | TC-PIR-13, TC-PIR-16, TC-PIR-28, TC-PIR-29 |
 | PIR-15 | TC-PIR-15, TC-PIR-16 |
 | PIR-16 | TC-PIR-16 |
-| PIR-17 | TC-PIR-17, TC-PIR-26, TC-PIR-27, TC-PIR-35 |
+| PIR-17 | TC-PIR-17, TC-PIR-26, TC-PIR-27, TC-PIR-35, TC-PIR-38 |
 | PIR-18 | TC-PIR-14, TC-PIR-18, TC-PIR-25, TC-PIR-28, TC-PIR-33 |
 | PIR-19 | TC-PIR-19, TC-PIR-22, TC-PIR-23, TC-PIR-30, TC-PIR-34 |
 | PIR-20 | TC-PIR-20, TC-PIR-23, TC-PIR-24, TC-PIR-33 |
@@ -3328,8 +3348,12 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | PIR-31 | TC-PIR-24, TC-PIR-30, TC-PIR-31, TC-CON-71 |
 | PIR-32 | TC-PIR-33 |
 | PIR-33 | TC-PIR-34 |
-| PIR-34 | TC-PIR-35, TC-PIR-36, TC-PIR-37 |
+| PIR-34 | TC-PIR-35, TC-PIR-36, TC-PIR-37, TC-PIR-38, TC-PIR-39 |
 | PIR-35 | TC-PIR-37 |
+| PIR-36 | TC-PIR-38 |
+| PIR-37 | TC-PIR-38, TC-PIR-39 |
+| PIR-38 | TC-PIR-40 |
+| PIR-39 | TC-PIR-41 |
 | CON-115 | TC-LST-07, TC-LST-10 |
 | CON-116 | TC-CON-72 |
 | CON-117 | TC-CON-73 |
@@ -3344,6 +3368,9 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | GIT-30 | TC-GIT-25, TC-CON-79 |
 | GIT-31 | TC-GIT-26 |
 | GIT-32 | TC-GIT-27 |
+| GIT-33 | TC-GIT-28, TC-GIT-29 |
+| GIT-34 | TC-GIT-29 |
+| GIT-35 | TC-GIT-28, TC-GIT-30 |
 | SET-20 | TC-SET-10, TC-CON-79 |
 | LST-01 | TC-LST-01, TC-LST-03 |
 | LST-02 | TC-LST-01, TC-LST-08 |
@@ -3385,11 +3412,11 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-09 | TC-OV-11…15, TC-CAP-01, TC-CAP-02, TC-CAP-03, TC-CAP-08, TC-CAP-10, TC-CAP-11, TC-CAP-12, TC-CAP-13, TC-CAP-14, TC-CAP-15, TC-CAP-16, TC-CAP-17, TC-CAP-18, TC-CAP-19, TC-CAP-20, TC-CAP-21, TC-CAP-22, TC-CAP-23, TC-CAP-24, TC-CAP-25, TC-CAP-26, TC-CAP-27, TC-QV-17, TC-CON-21, TC-QV-10, TC-QV-11, TC-QV-21, TC-CHT-17, TC-CHT-19 |
 | UC-10 | TC-OV-11 (Months, Streams), TC-OV-13 |
 | UC-11 | TC-BAS-01…04 |
-| UC-12 | TC-GIT-01…04, TC-GIT-05, TC-GIT-06, TC-GIT-07, TC-GIT-08, TC-ACC-03…05, TC-GIT-09, TC-GIT-10, TC-GIT-11, TC-GIT-12, TC-GIT-13, TC-GIT-14, TC-GIT-15, TC-GIT-16, TC-GIT-17, TC-GIT-18, TC-GIT-19, TC-GIT-20, TC-GIT-21, TC-GIT-22, TC-CON-62, TC-GIT-23, TC-GIT-24, TC-GIT-25, TC-GIT-26, TC-GIT-27 |
+| UC-12 | TC-GIT-01…04, TC-GIT-05, TC-GIT-06, TC-GIT-07, TC-GIT-08, TC-ACC-03…05, TC-GIT-09, TC-GIT-10, TC-GIT-11, TC-GIT-12, TC-GIT-13, TC-GIT-14, TC-GIT-15, TC-GIT-16, TC-GIT-17, TC-GIT-18, TC-GIT-19, TC-GIT-20, TC-GIT-21, TC-GIT-22, TC-CON-62, TC-GIT-23, TC-GIT-24, TC-GIT-25, TC-GIT-26, TC-GIT-27, TC-GIT-28, TC-GIT-29, TC-GIT-30 |
 | UC-13 | TC-SNP-01…03 |
 | UC-14 | TC-SET-01…07, TC-CAP-02, TC-CAP-03, TC-NAV-34, TC-CAP-07, TC-CAP-09, TC-CAP-30, TC-CAP-31, TC-CAP-32, TC-CAP-33, TC-CAP-34, TC-UI-15…17 |, TC-UI-20, TC-SET-09, TC-SET-10 |
 | UC-15 | TC-STO-01…04, TC-SNP-04 |
-| UC-16 | TC-UPD-01, TC-UPD-02 |
+| UC-16 | TC-UPD-01, TC-UPD-02, TC-UPD-03 |
 | UC-17 | TC-DSK-01…03, TC-INS-02 |
 | UC-18 | TC-SMP-01, TC-ATM-06, TC-GIT-04, TC-SMP-02 |
 | UC-19 | TC-INS-04, TC-CI-01, TC-CI-02, TC-CI-03, TC-CI-07, TC-CI-08, TC-DOC-03 |
@@ -3413,7 +3440,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-37 | TC-OND-01…34, TC-OND-40…65, TC-OND-90…103, TC-OND-120…126, TC-OND-128, TC-OND-129, TC-OND-131…137, TC-CHT-01…42, TC-CHT-50…72, TC-UI-20, TC-UI-25 |
 | UC-38 | TC-PGB-01…16, TC-OND-129, TC-OND-131, TC-OND-133, TC-OND-135…137, TC-DSH-01…23, TC-CHT-02, TC-CHT-11, TC-CHT-13…27, TC-CHT-29…37, TC-CHT-39, TC-CHT-40, TC-CHT-42, TC-CHT-50…57, TC-CHT-59, TC-CHT-60…69, TC-CHT-71, TC-CHT-72, TC-TVL-12, TC-TVL-23 |
 | UC-39 | TC-TVL-01…33 |
-| UC-40 | TC-PIR-01…37 |
+| UC-40 | TC-PIR-01…41, TC-UI-27 |
 | UC-41 | TC-LST-01…11, TC-OND-98, TC-OND-99 |
 
 ## 8. Result record

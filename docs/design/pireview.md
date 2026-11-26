@@ -1,11 +1,17 @@
 # PI Review
 
-**Route** `pireview` · Data Insights · Header month hidden.
+**Routes** `pireview` in Data Insights and `mypireview` in My Work. Both choose their own PI.
 
 ## Default design and current behavior
 
-The page renders a shared EmptyState reading “PI Review is planned.” It describes the planned scope of Features and Stories planned vs closed, planned and booked hours per stream and person, and open work in the PI's Sprints. Its component has no props or state. There is no PI selector, aggregation, data read, persistence or export in this route. The Snapshots workflow is a separate view.
+PI Review lists Features for the selected PI using the Time Writing backlog and iteration dates. The Feature drawer shows Azure DevOps Discussions in plain text and the latest review fields. My PI Review filters to the active person, with a person picker for authorized leads.
+
+## Writing reviews
+
+The review form follows the shared PI Review Setup. A Feature’s assignee or a viewer with the required posting permission can submit a review through the cloud Azure DevOps connection. In My PI Review, select eligible Features and use **Update review for N…** to apply one form to all. The background job rereads each Discussion and adds or replaces the viewer’s review only when it still matches the confirmed plan. It reports each result and continues after individual failures.
+
+Review dates display the latest edit time. PI matching continues to use the original creation date.
 
 ## Code
 
-[View](../../src/pages/PiReviewPage.tsx) · [Navigation](../../src/pages/registry.ts)
+[PI Review](../../src/pages/PiReviewPage.tsx) · [My PI Review](../../src/pages/MyPiReviewPage.tsx) · [Review form](../../src/pages/PiReviewForm.tsx) · [Write and audit](../../src/piReviewWriter.ts) · [Navigation](../../src/pages/registry.ts)

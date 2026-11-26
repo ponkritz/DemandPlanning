@@ -29,14 +29,16 @@ const until = async (check, what) => { for (const end = Date.now() + 60000; Date
 const repository = () => fakeGitHub({ files: { 'access.json': serializeAccess(policy), 'azure-views.json': JSON.stringify({ schema: 1, kind: 'azure-devops-views', views: [audit, supplier] }) } })
 
 // A person (work email) with Git storage connected; extra: the connections already in this browser.
-async function open(gh, email, extra = [], { width = 1440, height = 1000, fail } = {}) {
+// fail: the HTTP status GitHub answers for a request (0: normal); hold: a promise a request waits for before it is answered.
+async function open(gh, email, extra = [], { width = 1440, height = 1000, fail, hold } = {}) {
   const { page, context, errors } = await openPage(app, { width, height, loadFromGit: false, ...(shots ? { scale: 2 } : {}), init: ({ profiles, who }) => {
     if (!localStorage.getItem('demand-planning-azure-connection-profiles-v1')) localStorage.setItem('demand-planning-azure-connection-profiles-v1', JSON.stringify(profiles))
     localStorage.setItem('demand-planning-git-storage-v1', JSON.stringify({ owner: 'example', repo: 'storage', branch: 'main', path: 'planning-data.json' }))
     localStorage.setItem('demand-planning-git-token-v1', 'test-token')
     localStorage.setItem('demand-planning-work-email-v1', who)
   }, initArg: { profiles: extra, who: email } })
-  await context.route('https://api.github.com/**', (route) => fail?.(route) ? route.fulfill({ status: fail(route), contentType: 'application/json', body: JSON.stringify({ message: fail(route) === 401 ? 'Bad credentials' : 'Server Error' }) }) : gh.route(route))
+  const answer = (route) => fail?.(route) ? route.fulfill({ status: fail(route), contentType: 'application/json', body: JSON.stringify({ message: fail(route) === 401 ? 'Bad credentials' : 'Server Error' }) }) : gh.route(route)
+  await context.route('https://api.github.com/**', async (route) => { const wait = hold?.(route); if (wait) await wait; return answer(route) })
   await context.route('https://dev.azure.com/**', (route) => route.fulfill({ status: 401, contentType: 'application/json', body: '{}' }))
   await context.route('https://tfs.example.invalid/**', (route) => route.fulfill({ status: 401, contentType: 'application/json', body: '{}' }))
   const guide = page.getByRole('dialog').filter({ hasText: 'Could not fetch from Azure DevOps' })
@@ -58,9 +60,24 @@ async function assertBlocking(page) {
   const covered = await page.evaluate(() => { const nav = document.querySelector('.sidebar nav button'); if (!nav) return false; const box = nav.getBoundingClientRect(); const top = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2); return Boolean(top?.closest('.modal-backdrop')) })
   assert.equal(covered, true, 'the page under it cannot be clicked')
 }
+// GIT-33: the pop-up closes at once and the load runs as a background job, listed in the top bar's Background jobs.
+const loadJob = (page) => page.getByRole('dialog', { name: 'Background jobs' }).locator('li.job', { hasText: 'Load everything from Git' }).first()
+async function jobsPanel(page) {
+  const panel = page.getByRole('dialog', { name: 'Background jobs' })
+  if (!(await panel.count())) await page.locator('.jobs-button').click()
+  await panel.waitFor()
+  return panel
+}
+async function closeJobs(page) { const panel = page.getByRole('dialog', { name: 'Background jobs' }); if (await panel.count()) await panel.getByRole('button', { name: 'Close' }).click() }
+async function loadJobEnds(page, state = 'done') {
+  await jobsPanel(page)
+  await page.locator(`.jobs-panel li.job-${state}`, { hasText: 'Load everything from Git' }).first().waitFor()
+  await closeJobs(page)
+}
 async function loadAll(page) {
   await prompt(page).getByRole('button', { name: 'Load everything from Git' }).click()
   await prompt(page).waitFor({ state: 'detached' })
+  await loadJobEnds(page)
 }
 async function otherViewsTab(page) {
   await navigate(page, 'Data & sharing')
@@ -158,8 +175,10 @@ test('TC-GIT-26: a failed load names what failed and shows the Git storage setup
   // A setup error (the token refused): the setup is shown, and there is no way round it.
   failing = 401
   await prompt(person.page).getByRole('button', { name: 'Load everything from Git' }).click()
+  // The job fails (Jobs done: needs a look) and the pop-up comes back in its failed state (GIT-35).
   const failed = prompt(person.page).locator('.streams-update-failed')
   await failed.waitFor()
+  assert.match(await text(person.page.locator('.jobs-button')), /to check/)
   assert.match(await text(failed), /What failed: Connection setup: /)
   // The Git storage connection setup is inside the pop-up (the same form as Admin → Data & sharing → Git storage).
   const setup = prompt(person.page).getByRole('region', { name: 'Git storage connection' })
@@ -190,11 +209,49 @@ test('TC-GIT-26: a failed load names what failed and shows the Git storage setup
   // Not loaded: the pop-up comes back at the next start; with GitHub back, Load everything closes it for good.
   failing = 0
   await person.page.reload()
-  await prompt(person.page).getByRole('button', { name: 'Load everything from Git' }).click()
-  await prompt(person.page).waitFor({ state: 'detached' })
+  await loadAll(person.page)
   await person.page.reload()
   await person.page.locator('.sidebar nav').waitFor()
   await otherViewsTab(person.page)
+  assert.equal(await prompt(person.page).count(), 0)
+  await person.context.close()
+})
+
+test('TC-GIT-28: Load everything runs as a background job — the pop-up closes at once and stays closed while it runs, the job ends Done in Jobs done; the Admin button runs the same job, one at a time (TC-GIT-29, TC-GIT-30)', async () => {
+  const gh = repository()
+  let gate = null
+  const person = await open(gh, 'dana@example.com', [], { hold: (route) => gate && route.request().method() === 'GET' && route.request().url().includes('azure-views-reset.json') ? gate.promise : null })
+  await prompt(person.page).waitFor()
+  let release = () => undefined
+  gate = { promise: new Promise((resolve) => { release = resolve }) }
+  await prompt(person.page).getByRole('button', { name: 'Load everything from Git' }).click()
+  await prompt(person.page).waitFor({ state: 'detached' })
+  // Running: listed in Background jobs; the app can be used, and the pop-up does not come back meanwhile.
+  await jobsPanel(person.page)
+  await person.page.locator('.jobs-panel li.job-running', { hasText: 'Load everything from Git' }).waitFor()
+  assert.match(await text(loadJob(person.page)), /Running.*Loading connection setup…/)
+  await shot(person.page, 'load-job-running', loadJob(person.page))
+  await closeJobs(person.page)
+  await navigate(person.page, 'Data & sharing')
+  await person.page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'Load from Git' }).click()
+  // One at a time: the Admin button says the load is running and starts nothing.
+  const adminButton = person.page.getByRole('button', { name: 'Loading in the background…' })
+  assert.equal(await adminButton.isDisabled(), true)
+  await person.page.locator('.load-job-running').waitFor()
+  assert.equal(await prompt(person.page).count(), 0, 'the pop-up stays closed while its job runs')
+  gate = null; release()
+  await loadJobEnds(person.page)
+  await jobsPanel(person.page)
+  assert.match(await text(loadJob(person.page)), /Done.*Loaded: planning data.*connection setup/)
+  await shot(person.page, 'load-job-done', loadJob(person.page))
+  await closeJobs(person.page)
+  assert.equal(await prompt(person.page).count(), 0, 'loaded: the pop-up does not come back')
+  // The Admin button runs the same job; its result shows in the panel too.
+  await person.page.getByRole('button', { name: 'Load everything from Git', exact: true }).click()
+  await person.page.locator('.notice', { hasText: /^Loaded: planning data/ }).waitFor()
+  await jobsPanel(person.page)
+  assert.equal(await person.page.locator('.jobs-panel li.job-done', { hasText: 'Load everything from Git' }).count(), 2)
+  await closeJobs(person.page)
   assert.equal(await prompt(person.page).count(), 0)
   await person.context.close()
 })

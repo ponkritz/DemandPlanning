@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { buildReviewComment, discussionReadBlock, editTargetOf, isOwnComment, ownFeatures, ownReadBlock, ownReviewOf, readDiscussionInto, reviewCountOf, reviewPeriodOf, updateReview } from '../src/piReviewPost.ts'
 import { discussionOf } from '../src/piReview.ts'
-import { guardAzureWrites, readDiscussion, requestAzure } from '../src/azureDevOps.ts'
+import { guardAzureWrites, readDiscussion, requestAzure, shownDateOf } from '../src/azureDevOps.ts'
 
 // PIR-34: Edit review… in My PI Review — the comment it edits (the viewer's own review that counts for the chosen PI),
 // the update-comment write (web and desktop proxy) and its checks. Synthetic data only.
@@ -166,4 +166,18 @@ test('PIR-35: a Discussion being read is not requested again — a second read w
   // Once a read has finished, the next one (↻ Read again) asks again too.
   await readDiscussionInto(config, 'p', item, { transport })
   assert.equal(sent.length, 3)
+})
+
+test('PIR-38: a review shows when it was updated — the modifiedDate of an edited comment, else when it was written; which PI it counts for still goes by the written date (TC-PIR-40)', async () => {
+  const transport = async () => ({ comments: [
+    { id: 11, text: '<p>Learnings: x</p>', createdBy: { displayName: 'Rita Gomez', uniqueName: 'rita.gomez@example.com' }, createdDate: '2026-10-05T10:00:00Z', modifiedDate: '2026-11-20T08:00:00Z' },
+    { id: 12, text: 'Thanks', createdBy: { displayName: 'Build Service' }, createdDate: '2026-11-01T10:00:00Z', modifiedDate: '2026-11-01T10:00:00Z' },
+  ] })
+  const { comments } = await readDiscussion({ ...config, pat: 'p' }, 'p', 7, transport)
+  const [plain, edited] = comments
+  assert.equal(edited.updated, '2026-11-20T08:00:00Z')
+  assert.equal(shownDateOf(edited), '2026-11-20T08:00:00Z', 'edited: the updated date')
+  assert.equal(edited.date, '2026-10-05T10:00:00Z', 'the written date is kept for which PI it counts for')
+  assert.equal(plain.updated, undefined)
+  assert.equal(shownDateOf(plain), '2026-11-01T10:00:00Z', 'not edited: the written date')
 })

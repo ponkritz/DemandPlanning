@@ -73,3 +73,15 @@ test('build number is optional and must be a non-negative integer when present',
   assert.throws(() => validateBuildInfo({ ...base, buildNumber: -1 }))
   assert.throws(() => validateBuildInfo({ ...base, buildNumber: '42' }))
 })
+
+test('UPD-07: a view whose code is gone after a newer deploy is recognised, and the new version loads from a fresh address, not the cached page (TC-UPD-03)', async () => {
+  const { isStaleBuildError, freshLoadUrl } = await import('../src/appUpdate.ts')
+  assert.equal(isStaleBuildError(new TypeError('Failed to fetch dynamically imported module: https://example.github.io/Test2/assets/CustomDashboardPage-Dlcsk33V.js')), true)
+  assert.equal(isStaleBuildError(new TypeError('error loading dynamically imported module: https://example.github.io/Test2/assets/X.js')), true)
+  assert.equal(isStaleBuildError(new TypeError('Importing a module script failed.')), true)
+  assert.equal(isStaleBuildError(new Error("Cannot read properties of undefined (reading 'title')")), false, 'a data error keeps the old message')
+  const url = new URL(freshLoadUrl('https://example.github.io/Test2/?_dp_refresh=1&_dp_build=45774194605.1#/custom', '1795680000000'))
+  assert.equal(url.searchParams.get('_dp_refresh'), '1795680000000', 'a new nonce: never the cached copy')
+  assert.equal(url.pathname, '/Test2/')
+  assert.equal(url.hash, '#/custom', 'the same page')
+})

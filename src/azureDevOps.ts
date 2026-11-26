@@ -639,8 +639,13 @@ export async function readWorkItemForEdit(config: AzureConfig, pat: string, work
     priority: number('Microsoft.VSTS.Common.Priority'), risk: text('Microsoft.VSTS.Common.Risk'), valueArea: text('Microsoft.VSTS.Common.ValueArea') }
 }
 // PIR-34: authorEmail — the author's unique name when it is an email (to match the viewer for Edit review…); date is the
-// comment's createdDate (an edit in Azure DevOps keeps it), edited — the comment was changed after it was written.
-export interface WorkItemComment { id: number; text: string; author: string; date: string; authorEmail?: string; edited?: boolean }
+// comment's createdDate (an edit in Azure DevOps keeps it), edited — the comment was changed after it was written;
+// updated (PIR-38) — its modifiedDate when it was edited.
+export interface WorkItemComment { id: number; text: string; author: string; date: string; authorEmail?: string; edited?: boolean; updated?: string }
+// PIR-38 (product owner, 26 Nov 2026: "Updated date"): the date a review shows — when it was last updated (its
+// modifiedDate after an edit, Edit review… or a bulk replace), else when it was written. Which review counts for a PI
+// still goes by the date it was written.
+export const shownDateOf = (comment: Pick<WorkItemComment, 'date' | 'updated'>) => comment.updated || comment.date
 const emailOf = (value: unknown) => { const name = value && typeof value === 'object' && 'uniqueName' in value ? String((value as { uniqueName: unknown }).uniqueName ?? '').trim().toLowerCase() : ''; return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(name) ? name : '' }
 // BKL-20, PIR-05: the whole Discussion, newest first, as plain text (commentText): every page, following the
 // continuationToken Azure DevOps returns (DSK-11), up to `limit` comments (1,000); deleted comments are left out.
@@ -659,7 +664,7 @@ export async function readDiscussion(config: AzureConfig, pat: string, workItemI
       if (comment.isDeleted === true || typeof comment.id !== 'number') continue
       const date = typeof comment.createdDate === 'string' ? comment.createdDate : '', authorEmail = emailOf(comment.createdBy)
       const edited = typeof comment.modifiedDate === 'string' && Boolean(date) && Date.parse(comment.modifiedDate) > Date.parse(date) + 1000
-      comments.push({ id: comment.id, text: commentText(typeof comment.text === 'string' ? comment.text : ''), author: identityName(comment.createdBy) || 'Unknown', date, ...(authorEmail ? { authorEmail } : {}), ...(edited ? { edited } : {}) })
+      comments.push({ id: comment.id, text: commentText(typeof comment.text === 'string' ? comment.text : ''), author: identityName(comment.createdBy) || 'Unknown', date, ...(authorEmail ? { authorEmail } : {}), ...(edited ? { edited, updated: comment.modifiedDate as string } : {}) })
     }
     const next = typeof page.continuationToken === 'string' ? page.continuationToken : ''
     // A token seen before would read the same pages again: stop there.

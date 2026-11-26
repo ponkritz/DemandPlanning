@@ -139,7 +139,7 @@ test('TC-PIR-23: the Scrum Master changes the PI Review form in the shared colum
   // the Scrum Master sees ⚙ PI Review Setup in the page header.
   await navigate(page, 'My PI Review')
   assert.equal(await gear(page).count(), 1, 'the Scrum Master sees the gear')
-  await page.getByRole('button', { name: 'Write review of Feature 205' }).click()
+  await page.getByRole('button', { name: 'Review Feature 205' }).click()
   const review = page.getByRole('dialog', { name: 'Review of Feature #205' })
   await review.waitFor()
   assert.equal(await review.getByRole('radio', { name: 'Yes', exact: true }).isChecked(), true, 'the configured default')
@@ -203,7 +203,7 @@ test('TC-PIR-31: ⚙ PI Review Setup in My PI Review and PI Review — the Tool 
   const owner = await open(gh, 'tom.owner@example.com')
   let page = owner.page
   await navigate(page, 'My PI Review')
-  await page.getByRole('button', { name: 'Write review of Feature 206' }).waitFor()
+  await page.getByRole('button', { name: 'Review Feature 206' }).waitFor()
   const button = gear(page)
   assert.equal(await button.count(), 1, 'the Tool Owner sees the gear')
   assert.equal(await button.getAttribute('title'), 'PI Review Setup')
@@ -239,7 +239,7 @@ test('TC-PIR-31: ⚙ PI Review Setup in My PI Review and PI Review — the Tool 
   const member = await open(gh, 'tia.member@example.com')
   page = member.page
   await navigate(page, 'My PI Review')
-  await page.getByRole('button', { name: 'Write review of Feature 207' }).waitFor()
+  await page.getByRole('button', { name: 'Review Feature 207' }).waitFor()
   assert.equal(await gear(page).count(), 0, 'no gear for the Team Member')
   assert.equal(await page.locator('.sidebar nav button', { hasText: 'PI Review Setup' }).count(), 0, 'not in the menu')
   await shot(page, 'my-pi-review-no-gear-team-member')
