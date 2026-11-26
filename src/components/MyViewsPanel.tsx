@@ -2,7 +2,9 @@ import { useState } from 'react'
 import { myViewServers, newMyView } from '../myViews'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import { saveAzureConnectionProfile } from '../azureCredentials'
+import type { AzureConnectionProfileSummary } from '../azureCredentials'
 import { EmptyState, Notice, Panel, Pill } from './ui'
+import { DeleteMyView } from './DeleteMyView'
 
 // SET-17 My settings → My views: a person's own read-only views on a server they already have a PAT for. Shown under
 // Other views in the menu; kept on this computer only (never in Git or backups); never a stream.
@@ -13,6 +15,8 @@ export function MyViewsPanel({ azure }: { azure: AzureWorkspace }) {
   const [form, setForm] = useState({ name: '', server: '', project: '', query: '' })
   const [problem, setProblem] = useState('')
   const [done, setDone] = useState('')
+  // SET-19: the same pop-up and deletion as ⋯ → Delete this view… on the view's own page.
+  const [deleting, setDeleting] = useState<AzureConnectionProfileSummary | null>(null)
   function add(event: React.FormEvent) {
     event.preventDefault()
     const view = newMyView({ ...form, server: servers.find((server) => server.key === form.server) }, profiles, `my-${crypto.randomUUID().slice(0, 12)}`)
@@ -29,7 +33,7 @@ export function MyViewsPanel({ azure }: { azure: AzureWorkspace }) {
         <td><strong>{profile.viewName || profile.reason}</strong><span className="query-chip" title={profile.query}>Query</span></td>
         <td>{profile.url.replace('https://', '')}{profile.baseUrl && <Pill tone="info">On-prem</Pill>}</td>
         <td><small>{status?.message ?? 'Not fetched yet'}</small></td>
-        <td><div className="button-row nowrap"><button type="button" className="ghost" disabled={status?.state === 'busy'} onClick={() => void azure.fetchConnection(profile.id)}>Fetch</button><button type="button" className="text-button" onClick={() => { if (window.confirm(`Remove your view “${profile.viewName || profile.reason}” from this computer?`)) { azure.removeConnection(profile.id); setDone('') } }}>Remove</button></div></td>
+        <td><div className="button-row nowrap"><button type="button" className="ghost" disabled={status?.state === 'busy'} onClick={() => void azure.fetchConnection(profile.id)}>Fetch</button><button type="button" className="text-button danger-text" onClick={() => setDeleting(profile)}>Delete…</button></div></td>
       </tr>
     })}</tbody></table></div> : <EmptyState title="No views of your own yet." detail="Add one below: it appears under Other views in your menu." />}
     {servers.length ? <form className="connection-form my-view-form" aria-label="Add my view" onSubmit={add}>
@@ -43,5 +47,6 @@ export function MyViewsPanel({ azure }: { azure: AzureWorkspace }) {
     </form> : <Notice tone="info">Enter a PAT for a server first (My settings → Servers and PATs); My views use the server’s PAT.</Notice>}
     {problem && <Notice tone="error">{problem}</Notice>}
     {done && <Notice tone="success">{done}</Notice>}
+    {deleting && <DeleteMyView view={deleting} azure={azure} onClose={() => setDeleting(null)} onDone={(text) => { setDeleting(null); setProblem(''); setDone(text) }} />}
   </Panel>
 }

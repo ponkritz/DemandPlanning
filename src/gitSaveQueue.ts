@@ -133,6 +133,18 @@ export function plainSaveError(failure: unknown, path: string, bytes = 0): unkno
   return isTransient(failure) ? new Error(saveFailureText(failure, path, bytes)) : failure
 }
 
+// GIT-27 for a write that is not one writeQueuedText (a page file saved where its name says, a folder moved, a blocks
+// file placed, OND-124, OND-134): the whole write tried once more after the pause on a network or server failure — safe,
+// as each starts from a fresh read (or the branch's latest commit) — then the failure in plain words; the change stays
+// with Retry where the caller keeps it.
+export async function retryTransient<T>(run: () => Promise<T>, path: string, bytes = 0, pause: () => number = transientPause): Promise<T> {
+  try { return await run() } catch (failure) {
+    if (!isTransient(failure)) throw failure
+    await sleep(pause())
+    try { return await run() } catch (again) { throw plainSaveError(again, path, bytes) }
+  }
+}
+
 // ---- Writing --------------------------------------------------------------------------------------------------
 export interface QueuedOutcome { sha: string | null; commitUrl: string; merged: boolean; unchanged: boolean; keptNewer: boolean }
 export interface TextChange { text: string; base: string | null; at: string; message: string; merge: Merge }

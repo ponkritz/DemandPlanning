@@ -1,5 +1,6 @@
 import { useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { ListCatalogContext } from '../useSharedLists'
+import { OlderCopies } from '../components/OlderCopies'
 import { ViewActions } from '../components/ViewActions'
 import { useUnsavedEdit } from '../pageEdits'
 import { PageNameField } from '../components/PageDialogs'
@@ -19,7 +20,6 @@ import type { MenuLayoutStore } from '../useMenuLayout'
 import { InsightsTab } from './OnDemandInsights'
 import type { PersonalViewsStore } from '../usePersonalViews'
 import { countdown, draftRestore, editPhase, heldBy, shouldRenew, type RowDraft, type RowLock } from '../rowLocks'
-import { pageFolder } from '../rowFiles'
 import { useRowLocks } from '../useRowLocks'
 import { useNow } from '../useNow'
 import type { DataModeStore } from '../useDataMode'
@@ -131,7 +131,8 @@ export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-ins
   const queue = store.queue(page.id)
   const pending = store.pending(page.id)
   const rowFiles = page.storage === 'rows'
-  const path = rowFiles ? `${pageFolder(page.id)}/` : onDemandPath(page.id)
+  // OND-120: where the page is kept in Git now (named after the page; looked up again after each save, OND-124).
+  const path = store.filePath(page.id)
   // OND-35: on a row-file page a row another person is editing cannot be edited or removed here (viewing stays free);
   // the lock names the editor by their work email, so Edit needs one. OND-38: the Tool Owner and the page's co-owners
   // (also a co-owner of its group, who holds the page's rights, PGB-10) may release a stuck lock.
@@ -146,7 +147,7 @@ export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-ins
   const showConvert = !rowFiles && hasTable(kind) && (viewer.manager || rights.setup)
   // OND-62: only the Tool Owner, who can convert, sees the suggestion; everyone else nothing.
   const suggestConvert = showConvert && viewer.manager && !convertReason && !hintDismissed && suggestRowFiles(page.rows.length, fileBytes)
-  const resultText = (saved: QueuedOutcome, what = '') => `${outcomeText(saved)} ${path}${what ? ` — ${what}` : ''}${saved.commitUrl ? ` — ${saved.commitUrl}` : ''}`
+  const resultText = (saved: QueuedOutcome, what = '') => `${outcomeText(saved)} ${store.filePath(page.id)}${what ? ` — ${what}` : ''}${saved.commitUrl ? ` — ${saved.commitUrl}` : ''}`
 
   // OND-28: one change of the page saved to Git at once, as a Background job (§8): "Saving to Git…", then its result.
   const saveChange = (what: string, change: (page: PageFile) => PageFile, message: string, keep = '') => inBackground(`Save to Git · ${page.name} · ${what}`, async () => {
@@ -217,7 +218,7 @@ export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-ins
   const canDelete = !gitReason && !sample && viewer.manager && !viewer.readOnly
   const hiddenCount = page.rows.filter(isRowHidden).length
   const visibleCount = page.rows.length - hiddenCount
-  const retry = () => inBackground(`Retry · ${page.name}`, async () => { await store.retry(page.id); return { value: null, text: `Saved to Git. ${path}` } }).catch(() => undefined)
+  const retry = () => inBackground(`Retry · ${page.name}`, async () => { await store.retry(page.id); return { value: null, text: `Saved to Git. ${store.filePath(page.id)}` } }).catch(() => undefined)
 
   const onSave = <small className="muted" title="Given when the row is saved to Git">on save</small>
   const open = (row: OnDemandRow, shown: OnDemandRow[], edit = false) => setDrawer({ id: row.id, order: shown.map((entry) => entry.id), edit })
@@ -292,10 +293,11 @@ export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-ins
     {store.errors.map((error) => <Notice key={error} tone="error">On-Demand: {error}</Notice>)}
     {hidden && !embedded && <Notice tone="info" className="od-hidden-note">{page.name} is hidden: it is not in the menu, on Home or in search for anyone. Its rows stay in Git and dashboards keep reading them; it opens from Admin → Pages & menu.{!hidingReason && <>{' '}<button type="button" className="ghost" onClick={toggleHidden}>Show page</button></>}</Notice>}
     {store.loaded && !store.inGit(page.id) && <Notice tone="info">{page.name} is not in Git yet: it is created with its first save to Git.</Notice>}
+    <OlderCopies store={store} git={git} viewer={viewer} id={page.id} name={page.name} />
     {locking.active && git.lockFallback && <Notice tone="info">Row locks are kept in the folder locks/ of the data branch: the data repository did not allow a branch “locks”. They work the same.</Notice>}
     {locking.error && <Notice tone="warning">The row locks of {page.name} could not be read ({locking.error}). Who is editing a row is not shown; two edits of the same row are still merged field by field.</Notice>}
     {(() => { const table = <TablePanel className="od-panel" eyebrow={groupName.toUpperCase()} title={page.name} detail={page.description || undefined}
-      info={<>Click a row (or press Enter on it) to open it on the right: its ID, key, who added it and when, every value with its column’s description, and its History; Edit there changes it, and Save to Git saves it for everyone at once. Each column has a type — Text, Long text (a paragraph), Number, Currency (an amount and its currency), Date, Dropdown (one value) or Multi-select with the options of its list — and may have a description (ⓘ on its heading) saying how or what to fill. A value that no longer fits its column (an option removed, the type changed) is kept and marked, e.g. “not in the list”, until it is changed. Every row gets a readable ID such as {page.keyPrefix}-0001 when it is saved to Git, and records who added it and when; every saved change is logged in the row’s History (who, when, what changed — the last {maxLog}). Last updated by / on can be shown with Columns. The export holds the IDs, values, Added by / on and Last updated by / on (in UTC), not the History. Every change — a row, the columns, the name, a chart — is saved to Git {rowFiles ? <>in {path} the moment it is saved: each row is its own file, so two people adding or editing rows at the same time never get in each other’s way. Edit takes the row’s lock — others see who is editing it and cannot edit that row until it is saved, cancelled or {timeoutMinutes} minutes pass without activity (the unsaved values are then kept in that browser as a draft for one day)</> : <>as {onDemandPath(page.id)} the moment it is saved (no separate Save to Git); two saves at the same time are merged row by row and column by column, the later one winning where both changed the same</>}.{store.history(page.id) && <> <a href={store.history(page.id)} target="_blank" rel="noreferrer">History in GitHub</a></>}{owners.length > 0 && <> Co-owners (set up the page and edit its rows): {[...new Set(owners)].join(', ')}.</>}</>}
+      info={<>Click a row (or press Enter on it) to open it on the right: its ID, key, who added it and when, every value with its column’s description, and its History; Edit there changes it, and Save to Git saves it for everyone at once. Each column has a type — Text, Long text (a paragraph), Number, Currency (an amount and its currency), Date, Dropdown (one value) or Multi-select with the options of its list — and may have a description (ⓘ on its heading) saying how or what to fill. A value that no longer fits its column (an option removed, the type changed) is kept and marked, e.g. “not in the list”, until it is changed. Every row gets a readable ID such as {page.keyPrefix}-0001 when it is saved to Git, and records who added it and when; every saved change is logged in the row’s History (who, when, what changed — the last {maxLog}). Last updated by / on can be shown with Columns. The export holds the IDs, values, Added by / on and Last updated by / on (in UTC), not the History. Every change — a row, the columns, the name, a chart — is saved to Git {rowFiles ? <>in {path} the moment it is saved: each row is its own file, so two people adding or editing rows at the same time never get in each other’s way. Edit takes the row’s lock — others see who is editing it and cannot edit that row until it is saved, cancelled or {timeoutMinutes} minutes pass without activity (the unsaved values are then kept in that browser as a draft for one day)</> : <>as {path} the moment it is saved (no separate Save to Git); two saves at the same time are merged row by row and column by column, the later one winning where both changed the same</>}.{store.history(page.id) && <> <a href={store.history(page.id)} target="_blank" rel="noreferrer">History in GitHub</a></>}{owners.length > 0 && <> Co-owners (set up the page and edit its rows): {[...new Set(owners)].join(', ')}.</>}</>}
       action={<button type="button" className="ghost" disabled={!canSetup} title={setupReason || undefined} onClick={() => setColumnsOpen(true)}>Set up columns…</button>}>
       {!gitReason && <WriteBlocked reason={block.noteFor('on this page', ...blocked)} />}
       {page.columns.length ? <DataTable id={`on-demand:${page.id}`} columns={columns} rows={rows} rowKey={(row) => row.id} exportName={page.name} groupFilter shownRef={shownRef}
@@ -338,18 +340,18 @@ export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-ins
     {bulk === 'upload' && <UploadDialog eyebrow={eyebrowOf(page)} page={page} locked={lockedKeys} rowFiles={rowFiles} onSave={uploadNow} onCancel={() => setBulk(null)} />}
     {/* OND-91: Publish now cuts the rows with the publisher's Insights filter row as it is now. */}
     {publishing && publishing === publishScope && !publishReason && (() => { const cut = { kind: 'table' as const, choice: viewerChoice(page.id, views) }; return <PublishDialog pageId={page.id} name={page.name} publishScope={publishing} authorization={publisher} publishedBy={publisherName || me} cut={cut} prepare={prepareTable(page, kind, cut, publisherName || me)} onClose={() => setPublishing(null)} /> })()}
-    {converting && <ConvertDialog page={page} onCancel={() => setConverting(false)} onConvert={async () => {
-      await inBackground(`Convert to row files · ${page.name}`, async () => { const done = await store.convert(page.id); return { value: done, text: `Converted ${onDemandPath(page.id)} to ${pageFolder(page.id)}/ — ${done.page.rows.length} row file${done.page.rows.length === 1 ? '' : 's'}, page.json and counter.json in one commit. — ${done.commitUrl}` } })
+    {converting && <ConvertDialog page={page} file={path} onCancel={() => setConverting(false)} onConvert={async () => {
+      await inBackground(`Convert to row files · ${page.name}`, async () => { const from = store.filePath(page.id), done = await store.convert(page.id); return { value: done, text: `Converted ${from} to ${store.filePath(page.id)} — ${done.page.rows.length} row file${done.page.rows.length === 1 ? '' : 's'}, page.json and counter.json in one commit. — ${done.commitUrl}` } })
       setConverting(false)
     }} />}
-    {removing && <RemoveRowDialog page={page} row={removing} onCancel={() => setRemoving(null)} onRemove={async () => { await removeRowNow(removing); setRemoving(null) }} />}
+    {removing && <RemoveRowDialog page={page} row={removing} path={path} onCancel={() => setRemoving(null)} onRemove={async () => { await removeRowNow(removing); setRemoving(null) }} />}
     {columnsOpen && <ColumnsDialog page={page} onCancel={() => setColumnsOpen(false)} onSave={async (change) => { await saveChange('columns', change, `${page.name}: set up the columns`); setColumnsOpen(false) }} />}
     {pageDialog === 'rename' && <PageNameDialog title="Rename the page" action="Save to Git" name={page.name} description={page.description} except={`ondemand:${page.id}`} note="Saved to Git for everyone at once." onCancel={() => setPageDialog(null)} onSave={async (name, description) => { await saveChange('rename', (base) => renamePage(base, name, description), `On-Demand: rename ${page.name} to ${name.trim()}`); setPageDialog(null) }} />}
-    {pageDialog === 'remove' && <RemovePageDialog page={page} inGit={store.inGit(page.id)} onCancel={() => setPageDialog(null)} onRemove={async () => {
+    {pageDialog === 'remove' && <RemovePageDialog page={page} inGit={store.inGit(page.id)} path={path} onCancel={() => setPageDialog(null)} onRemove={async () => {
       await store.remove(page.id, `On-Demand: delete the page ${page.name} (${page.rows.length} rows)`)
       // PGB-07: its place in the menu goes with it.
       if (menu.layout.pages[page.id]) await menu.save(removePlacement(menu.layout, page.id), `Pages & menu: remove the page ${page.name}`)
-      recordRemoved(page)
+      recordRemoved(page, path)
       setPageDialog(null); const next = store.pages.find((entry) => entry.id !== page.id); if (next) onOpen(next.id)
     }} />}
   </Page></ExportNoteContext.Provider>
@@ -367,7 +369,7 @@ function inBackground<T>(label: string, work: () => Promise<{ value: T; text: st
     })
   })
 }
-const recordRemoved = (page: PageFile) => recordJob(`ondemand:${page.id}`, `Delete page · ${page.name}`, { text: `Deleted ${page.storage === 'rows' ? `${pageFolder(page.id)}/` : onDemandPath(page.id)} with its ${page.rows.length} row${page.rows.length === 1 ? '' : 's'}; its history stays in GitHub.` })
+const recordRemoved = (page: PageFile, path: string) => recordJob(`ondemand:${page.id}`, `Delete page · ${page.name}`, { text: `Deleted ${path} with its ${page.rows.length} row${page.rows.length === 1 ? '' : 's'}; its history stays in GitHub.` })
 
 const showHiddenKey = 'demand-planning-od-show-hidden-v1'
 // OND-62: the convert suggestions dismissed in this browser, as "{work email}|{page id}".
@@ -569,14 +571,14 @@ function ReleaseLockDialog({ page, title, lock, onCancel, onRelease }: { page: P
 }
 
 // OND-32: converting a page to row files asks first in a pop-up naming its rows and what changes.
-export function ConvertDialog({ page, onCancel, onConvert }: { page: PageFile; onCancel: () => void; onConvert: () => Promise<void> }) {
+export function ConvertDialog({ page, file = onDemandPath(page.id), onCancel, onConvert }: { page: PageFile; file?: string; onCancel: () => void; onConvert: () => Promise<void> }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const convert = async () => { setBusy(true); setError(''); try { await onConvert() } catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); setBusy(false) } }
   const count = `${page.rows.length} row${page.rows.length === 1 ? '' : 's'}`
   return <Modal eyebrow={eyebrowOf(page)} title="Convert to row files" onClose={() => { if (!busy) onCancel() }}>
     <form onSubmit={(event) => { event.preventDefault(); void convert() }}>
-      <p>Convert <strong>{page.name}</strong> with its <strong>{count}</strong> from the single file {onDemandPath(page.id)} to one file per row in {pageFolder(page.id)}/, as one commit? Keys, IDs, values, History, columns and charts stay as they are; rows without a key or ID get one now, as their next save would.</p>
+      <p>Convert <strong>{page.name}</strong> with its <strong>{count}</strong> from the single file {file} to one file per row in {file.replace(/\.json$/, '')}/, as one commit? Keys, IDs, values, History, columns and charts stay as they are; rows without a key or ID get one now, as their next save would.</p>
       <p>Afterwards two people can add and edit rows at the same time, and Edit takes the row’s lock. <strong>Older app builds cannot open the page any more</strong> (they say the file is not an On-Demand page): update every app first. This cannot be undone in the app.</p>
       {error && <Notice tone="error">{error}</Notice>}
       <div className="modal-actions"><button type="button" className="ghost" disabled={busy} onClick={onCancel}>Cancel</button><button className="primary" disabled={busy}>{busy ? 'Converting…' : `Convert ${count}`}</button></div>
@@ -585,14 +587,14 @@ export function ConvertDialog({ page, onCancel, onConvert }: { page: PageFile; o
 }
 
 // OND-40: deleting a hidden row (the Tool Owner) asks first in a pop-up naming it (UI-STANDARDS §4), then deletes it from Git at once.
-function RemoveRowDialog({ page, row, onCancel, onRemove }: { page: PageFile; row: OnDemandRow; onCancel: () => void; onRemove: () => Promise<void> }) {
+function RemoveRowDialog({ page, row, path, onCancel, onRemove }: { page: PageFile; row: OnDemandRow; path: string; onCancel: () => void; onRemove: () => Promise<void> }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const name = rowId(page, row) || row.key || rowLabel(page, row)
   const remove = async () => { setBusy(true); setError(''); try { await onRemove() } catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); setBusy(false) } }
   return <Modal eyebrow={eyebrowOf(page)} title="Delete the row" onClose={() => { if (!busy) onCancel() }}>
     <form onSubmit={(event) => { event.preventDefault(); void remove() }}>
-      <p>Delete <strong>{name}</strong>{rowLabel(page, row) !== name ? ` (${rowLabel(page, row)})` : ''} for good, for everyone? It is deleted from {page.storage === 'rows' ? `${pageFolder(page.id)}/rows/` : onDemandPath(page.id)} in Git at once; its number {name} is never given again and its history stays in GitHub. To keep it, leave it hidden.</p>
+      <p>Delete <strong>{name}</strong>{rowLabel(page, row) !== name ? ` (${rowLabel(page, row)})` : ''} for good, for everyone? It is deleted from {page.storage === 'rows' ? `${path}rows/` : path} in Git at once; its number {name} is never given again and its history stays in GitHub. To keep it, leave it hidden.</p>
       {error && <Notice tone="error">{error}</Notice>}
       <div className="modal-actions"><button type="button" className="ghost" disabled={busy} onClick={onCancel}>Cancel</button><button className="danger-button" disabled={busy}>{busy ? 'Deleting…' : `Delete ${name}`}</button></div>
     </form>
@@ -746,13 +748,13 @@ export function PageNameDialog({ title, action, name = '', description = '', not
 }
 
 // OND-10, PGB-20: deleting a page (the Tool Owner) asks first, naming how many rows and columns go with it.
-export function RemovePageDialog({ page, inGit, onCancel, onRemove }: { page: PageFile; inGit: boolean; onCancel: () => void; onRemove: () => Promise<void> }) {
+export function RemovePageDialog({ page, inGit, path = onDemandPath(page.id), onCancel, onRemove }: { page: PageFile; inGit: boolean; path?: string; onCancel: () => void; onRemove: () => Promise<void> }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const remove = async () => { setBusy(true); setError(''); try { await onRemove() } catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); setBusy(false) } }
   return <Modal eyebrow={eyebrowOf(page)} title="Delete the page" onClose={() => { if (!busy) onCancel() }}>
     <form onSubmit={(event) => { event.preventDefault(); void remove() }}>
-      <p>Delete <strong>{page.name}</strong> with its {page.rows.length} row{page.rows.length === 1 ? '' : 's'} and {page.columns.length} column{page.columns.length === 1 ? '' : 's'}, for everyone?{inGit ? page.storage === 'rows' ? <> Its folder {pageFolder(page.id)}/ (every row file) is deleted from Git in one commit; its history stays in GitHub.</> : <> Its file {onDemandPath(page.id)} is deleted from Git; its history stays in GitHub.</> : ' It is not in Git yet.'} To take it out of the menu and keep its data, hide it instead.</p>
+      <p>Delete <strong>{page.name}</strong> with its {page.rows.length} row{page.rows.length === 1 ? '' : 's'} and {page.columns.length} column{page.columns.length === 1 ? '' : 's'}, for everyone?{inGit ? page.storage === 'rows' ? <> Its folder {path} (every row file) is deleted from Git in one commit; its history stays in GitHub.</> : <> Its file {path} is deleted from Git; its history stays in GitHub.</> : ' It is not in Git yet.'} To take it out of the menu and keep its data, hide it instead.</p>
       {error && <Notice tone="error">{error}</Notice>}
       <div className="modal-actions"><button type="button" className="ghost" disabled={busy} onClick={onCancel}>Cancel</button><button className="danger-button" disabled={busy}>{busy ? 'Deleting…' : `Delete page and ${page.rows.length} row${page.rows.length === 1 ? '' : 's'}`}</button></div>
     </form>

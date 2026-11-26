@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { infoText, menuOf, navigate, openPage, rolesFile, startApp, text } from './helpers.mjs'
 
 // On-Demand pages (OND-01…10, CON-103): CoNQ set up with a Dropdown and a Multi-select column, a row added and saved
-// to Git as on-demand/conq.json — each change at once (OND-28) — (TC-OND-01, UAT), and a viewer without the rights
+// to Git as on-demand/CoNQ--conq.json — each change at once (OND-28) — (TC-OND-01, UAT), and a viewer without the rights
 // (TC-OND-07), against a mocked GitHub.
 let app
 before(async () => { app = await startApp() })
@@ -42,7 +42,7 @@ async function mockGitHub(context, files, role = 'Tool Owner') {
   return writes
 }
 
-test('TC-OND-01: On-Demand → CoNQ — add a Dropdown and a Multi-select column with options, add a row, Save to Git writes on-demand/conq.json, and a reload shows it from Git', async () => {
+test('TC-OND-01: On-Demand → CoNQ — add a Dropdown and a Multi-select column with options, add a row, Save to Git writes on-demand/CoNQ--conq.json, and a reload shows it from Git', async () => {
   const files = {}
   const { page, context, errors } = await openPage(app, { init: gitStorage })
   const writes = await mockGitHub(context, files)
@@ -70,7 +70,7 @@ test('TC-OND-01: On-Demand → CoNQ — add a Dropdown and a Multi-select column
   await columns.getByRole('button', { name: 'Save', exact: true }).click()
   await columns.waitFor({ state: 'detached' })
   // OND-28: the columns are saved to Git at once (the page is created in Git with them).
-  assert.deepEqual(writes.filter((write) => write.path === 'on-demand/conq.json').map((write) => write.data.columns.map((column) => column.name)), [['Category', 'Sites']])
+  assert.deepEqual(writes.filter((write) => write.path === 'on-demand/CoNQ--conq.json').map((write) => write.data.columns.map((column) => column.name)), [['Category', 'Sites']])
   assert.equal(await page.locator('.git-bar-dirty').count(), 0, 'no unsaved-changes bar')
 
   // ＋ Add row (the row drawer, OND-27): one value of the Dropdown, two of the Multi-select; Save to Git saves it at once.
@@ -91,8 +91,8 @@ test('TC-OND-01: On-Demand → CoNQ — add a Dropdown and a Multi-select column
   assert.match(await text(table.locator('tbody tr').first()), /Rework Berlin, Lyon/)
   assert.match(await text(page.locator('.od-panel')), /1 of 1 row/)
 
-  // Saved to Git: a second commit of on-demand/conq.json with the columns, their options and the row's values.
-  const saved = writes.filter((write) => write.path === 'on-demand/conq.json')
+  // Saved to Git: a second commit of on-demand/CoNQ--conq.json with the columns, their options and the row's values.
+  const saved = writes.filter((write) => write.path === 'on-demand/CoNQ--conq.json')
   assert.equal(saved.length, 2)
   const file = saved[1].data
   assert.deepEqual([file.kind, file.id, file.name, file.description], ['on-demand-page', 'conq', 'CoNQ', 'Cost of Non-Quality'])
@@ -102,9 +102,11 @@ test('TC-OND-01: On-Demand → CoNQ — add a Dropdown and a Multi-select column
   assert.equal(file.keyPrefix, 'CONQ')
   assert.match(saved[1].message, /^CoNQ: add row CONQ-0001 \(CONQ-.+\) \[saved \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\]( \[by [^\]]+\])?$/, 'a queued save carries its time (GIT-17)')
   assert.equal(JSON.stringify(writes).includes('test-token'), false, 'no token in the data repository')
+  // OND-120, OND-121: a new page is created at "<name>--<id>", and the first named file leaves the note for older apps.
+  assert.deepEqual([...new Set(writes.map((write) => write.path))].filter((path) => path.startsWith('on-demand/')).sort(), ['on-demand/CoNQ--conq.json', 'on-demand/app-update-required.json'])
   // §8: the result is a Background jobs entry.
   await page.locator('.jobs-button').click()
-  assert.match(await text(page.getByRole('dialog', { name: 'Background jobs' }).locator('li.job', { hasText: 'Save to Git · CoNQ · add row' })), /Saved to Git\. on-demand\/conq\.json — added CONQ-0001/)
+  assert.match(await text(page.getByRole('dialog', { name: 'Background jobs' }).locator('li.job', { hasText: 'Save to Git · CoNQ · add row' })), /Saved to Git\. on-demand\/CoNQ--conq\.json — added CONQ-0001/)
   await page.getByRole('dialog', { name: 'Background jobs' }).getByRole('button', { name: 'Close', exact: true }).click()
 
   // Reload without the copy kept in this browser: the page is read back from Git.

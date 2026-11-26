@@ -56,6 +56,17 @@ With Git storage connected (Settings → Storage), **Settings → Views in Git �
 
 Every fresh fetch of an on-prem view is saved automatically to `azure-data/<connection>.json` (also when the data is unchanged — the fetch time is new; needs a Git token that can write). The web app loads it at start; each on-prem view has **Load from Git**, and a fetch that fails or has no PAT falls back to it.
 
+## Saved queries as dashboard data sources
+
+An On-Demand Dashboard's builders can add a saved Azure DevOps query as a data source (DSH-18). The dashboard's file in Git keeps only its **reference** — server, project, query id and name — never a PAT or rows. Each viewer reads it with **their own PAT** for that server (one PAT per server, My settings → Servers and PATs) when the dashboard opens, **read only**:
+
+- `GET {collection}/{project}/_apis/wit/wiql/{id}?$top=5001` — the saved query run by its id (a GUID): its columns and work-item ids (a tree or links query: the links);
+- `GET {collection}/{project}/_apis/wit/fields` — the field names and types (the existing read);
+- `POST {collection}/{project}/_apis/wit/workitemsbatch` — the work items, 200 at a time (the existing read);
+- `GET {collection}/{project}/_apis/wit/queries?$depth=2` — the saved queries of a project, for the builder's picker.
+
+The desktop proxy accepts the two new reads (`saved-query`, `saved-queries`) as GET only, checks the id is a GUID again and builds the URL itself (SM-200); on-premises servers stay read-only. At most 5,000 rows and 30 columns are used (LIM-120). The queries the app already reads (stream queries, Tool Validations, My views) are offered from their fetched data, without a read of their own (DSH-17).
+
 ## Two connections for one stream
 
 A stream can have more than one connection named like it. CP reads its release-folder tree and, for the names, a second connection such as "CP Releases". **Tool Validations** reads a **Tools** query and a **Signed documents** query (TVL-19), named **Tool List** and **Validation Documents** in the app (TVL-33): the Signed documents connection is the one chosen under Stream mapping → Tool Validations queries, else the one named with "documents", "docs", "signed" or "signatures" ("Tool Validations Signed documents", as its Add query names it), else the one whose query selects `[System.Parent]` and an `ApproverName` column; **Add query** on a Tool Validations row asks the category, pre-selected that way, and saves the confirmed choice there; both are read only. **Parent names** (TVL-31): when ↻ on the Tool Validations page has fetched both queries, the app reads the **System.Title** of each document Parent that is not a tool of the Tools query (e.g. a retired tool) by its work item ID — the same read-only batch read as the queries' rows (`POST …/_apis/wit/workitemsbatch`, at most 200 IDs per request; the desktop app through its read proxy), on the Signed documents connection with its server's PAT, never a write, on-premises servers included — and keeps the names with the fetched documents. A batch that fails is read one item at a time; a rejected PAT, refused access or an unreachable server stops at once, and the names not read show as #ID with the reason.
@@ -68,4 +79,6 @@ Only the active Time Writing (QMS-0025) connection is used. If there is more tha
 
 - https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/wiql/query-by-wiql?view=azure-devops-rest-7.1
 - https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/work-items/get-work-items-batch?view=azure-devops-rest-7.1
+- https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/wiql/query-by-id?view=azure-devops-rest-7.1
+- https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/queries/list?view=azure-devops-rest-7.1
 - https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops

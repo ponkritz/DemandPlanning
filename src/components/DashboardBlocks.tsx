@@ -1,4 +1,5 @@
-import { useId, useState, type ReactNode } from 'react'
+import { useContext, useId, useState, type ReactNode } from 'react'
+import { ExportNoteContext } from '../exportNote'
 import { pairFactory, type ChartSize, type SizeSource } from '../chartSize'
 import { ChartPanel } from './ChartSize'
 import { readChartLabels, saveChartLabel } from '../chartLabels'
@@ -35,6 +36,7 @@ export function KpiTile({ dataset, block, narrowed, tabName, onOpenTab }: { data
   const value = kpiValue(narrowed.page, block, currency)
   return <Metric label={block.title} value={narrowed.page.rows.length || block.measure === 'count' ? kpiText(value) : '—'} hint={<>
     <span>{blockSubject(dataset, block, value.currency)} · {narrowed.page.rows.length ? counted(narrowed) : noData.title}</span>
+    {dataset.capped && <span className="dsh-capped" role="note">{dataset.capped}</span>}
     {value.currencies.length > 1 && <label className="od-currency-pick">Currency<select aria-label={`Currency of ${block.title}`} value={value.currency} onChange={(event) => setCurrency(event.target.value)}>{value.currencies.map((entry) => <option key={entry.code} value={entry.code}>{entry.code} ({entry.rows} row{entry.rows === 1 ? '' : 's'})</option>)}</select></label>}
     {tabName && onOpenTab && <button type="button" className="text-button" aria-label={`Open the tab ${tabName} (${block.title})`} onClick={onOpenTab}>Open {tabName} →</button>}
   </>} />
@@ -48,9 +50,12 @@ export function BlockPanel({ id, dataset, block, narrowed, colors, size = pairFa
   // CHT-25: the header shows the title and ⓘ only; what the block measures, its period, filters and rows counted are in ⓘ,
   // and a neutral "Filtered" says when its own filters or the filter row's choices narrow it.
   const filteredBy = [block.filters.length ? `its own filters: ${filters}` : '', narrowed?.filtered ? 'the filter row above' : ''].filter(Boolean).join('; ').replace(/^./, (first) => `Filtered by ${first}`)
-  const pill = filteredBy ? <span className="chart-filtered" title={filteredBy} aria-label={filteredBy}><Pill>Filtered</Pill></span> : null
+  const filterPill = filteredBy ? <span className="chart-filtered" title={filteredBy} aria-label={filteredBy}><Pill>Filtered</Pill></span> : null
+  // DSH-21: a capped Azure query says so in the header (its reason as tooltip) and above the chart.
+  const cappedPill = dataset.capped && !problems.length ? <span className="chart-filtered dsh-capped-pill" title={dataset.capped} aria-label={dataset.capped}><Pill tone="warning">Capped</Pill></span> : null
+  const pill = filterPill || cappedPill ? <>{cappedPill}{filterPill}</> : null
   return <ChartPanel id={id} kind={kindOf(block.type)} className={`od-insight dsh-block dsh-block-${block.type}`} size={size} source={source} arranging={arranging} title={block.title} titleHidden={block.options?.elements?.title === false}
-    info={problems.length || !narrowed ? undefined : <ul className="od-rules"><li>Type: {blockTypeLabel(block.type)} · from {dataset.name}.</li><li>{blockSubject(dataset, block)}.</li><li>{periodNote(dataset, block)}.</li><li>Its own filters: {filters || 'none'}.</li><li>Rows: {counted(narrowed)}.</li>{block.type !== 'table' && <ChartCountInfo page={narrowed.page} insight={asInsight(block)} />}{(block.type === 'narrative' ? narrativeInfo(narrowed.page, asInsight(block)) : insightRules(narrowed.page, asInsight(block))).map((entry) => <li key={entry}>{entry}</li>)}<li>The period (Year / Quarter / Month above) keeps the rows whose {dataset.page.columns.find((column) => column.id === block.period)?.name ?? 'date'} falls in it; rows without that date are left out.</li></ul>}
+    info={problems.length || !narrowed ? undefined : <ul className="od-rules"><li>Type: {blockTypeLabel(block.type)} · from {dataset.name}.</li><li>{blockSubject(dataset, block)}.</li><li>{periodNote(dataset, block)}.</li><li>Its own filters: {filters || 'none'}.</li><li>Rows: {counted(narrowed)}.</li>{dataset.readAt && <li>Read from Azure DevOps: {dataset.readAt.slice(0, 16).replace('T', ' ')} UTC (↻ Refresh Azure queries in the page’s ⋯ reads it again).</li>}{dataset.capped && <li>{dataset.capped}</li>}{block.type !== 'table' && <ChartCountInfo page={narrowed.page} insight={asInsight(block)} />}{(block.type === 'narrative' ? narrativeInfo(narrowed.page, asInsight(block)) : insightRules(narrowed.page, asInsight(block))).map((entry) => <li key={entry}>{entry}</li>)}<li>The period (Year / Quarter / Month above) keeps the rows whose {dataset.page.columns.find((column) => column.id === block.period)?.name ?? 'date'} falls in it; rows without that date are left out.</li></ul>}
     action={pill || action ? <span className="button-row nowrap">{pill}{action}</span> : undefined} onResize={onResize} onReset={onReset}>
     <BlockBody dataset={dataset} block={block} narrowed={narrowed} problems={problems} colors={colors} />
   </ChartPanel>
@@ -61,7 +66,16 @@ function BlockBody({ dataset, block, narrowed, problems, colors, drill = true, q
   // set through the shared chart-labels helper once, before the chart reads it — the insight charts stay as they are.
   // CHT-28: not when the block's builders set data labels on or off for everyone (their choice is the default then).
   useState(() => { if (block.type !== 'table' && block.options?.elements?.labels === undefined && readChartLabels()[`ondemand-${block.id}`] === undefined) saveChartLabel(`ondemand-${block.id}`, true); return true })
+  const outer = useContext(ExportNoteContext)
   if (problems.length || !narrowed) return <Notice tone="warning"><strong>This block cannot be shown:</strong> {problems.join(' ')} {dataset.problem ? '' : 'Its owners edit it to choose the columns again, or remove it.'}</Notice>
+  // DSH-21: a capped source — the line above the block, and every export of it (summary table, Rows behind) marked.
+  if (dataset.capped) return <ExportNoteContext.Provider value={{ prefix: `${outer?.prefix ?? ''}Capped-`, line: [outer?.line, dataset.capped].filter(Boolean).join(' · ') }}>
+    <p className="muted dsh-capped" role="note">{dataset.capped}</p>
+    <BlockContent dataset={dataset} block={block} narrowed={narrowed} colors={colors} drill={drill} quiet={quiet} />
+  </ExportNoteContext.Provider>
+  return <BlockContent dataset={dataset} block={block} narrowed={narrowed} colors={colors} drill={drill} quiet={quiet} />
+}
+function BlockContent({ block, narrowed, colors, drill, quiet }: { dataset: Dataset; block: DashboardBlock; narrowed: Narrowed; colors?: ColorPins; drill: boolean; quiet: boolean }) {
   const probe = blockData(narrowed.page, block)
   if (!narrowed.page.rows.length || !probe.categories.length) return <EmptyState {...noData} />
   // CHT-74: a Pivot table with nested rows or columns; a one-level one is the summary table as before.
@@ -163,7 +177,7 @@ export function BlockDialog({ datasets, dashboard, block, isNew, preview, onCanc
         <select aria-label="Data source" value={draft.source} onChange={(event) => { const next = datasets.find((entry) => entry.key === event.target.value); if (next) { setDraft(withSource(next, draft)); setError('') } }}>
           {datasets.map((entry) => <option key={entry.key} value={entry.key} disabled={Boolean(entry.problem) && entry.key !== draft.source}>{entry.name}{entry.problem ? ' (not available)' : ` (${entry.kind ?? 'table page'})`}</option>)}
         </select>
-        <small>{dataset.problem || dataset.note || `The rows of ${dataset.name} as saved in Git (${page.rows.length} row${page.rows.length === 1 ? '' : 's'}).`}</small>
+        <small>{dataset.problem || dataset.note || `The rows of ${dataset.name} as saved in Git (${page.rows.length} row${page.rows.length === 1 ? '' : 's'}).`}{dataset.capped && !dataset.problem ? ` ${dataset.capped}` : ''}</small>
       </label>
       {isToolSource(draft.source) && !source.problem && <div className="dsh-status-toggle">
         <label className="check"><input type="checkbox" checked={!draft.hideStatus} onChange={(event) => { setDraft(withStatusShown(source, draft, event.target.checked)); setError('') }} />Show expiry status</label>
@@ -263,7 +277,7 @@ export function BlockDialog({ datasets, dashboard, block, isNew, preview, onCanc
       </div>
       <div className="od-editor-footer">
         {error && <Notice tone="error">{error}</Notice>}
-        <p className="muted">{saveNote ?? `Saved to Git for everyone at once (dashboards/${dashboard.id}.json).`}</p>
+        <p className="muted">{saveNote ?? 'Saved to Git for everyone at once (in dashboards/, next to the page).'}</p>
         <div className="modal-actions"><button type="button" className="ghost" disabled={busy} onClick={onCancel}>Cancel</button><button className="primary" disabled={busy}>{busy ? saveLabel ? 'Saving…' : 'Saving to Git…' : isNew ? 'Add block' : saveLabel ?? 'Save to Git'}</button></div>
       </div>
     </form>

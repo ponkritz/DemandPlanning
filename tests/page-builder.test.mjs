@@ -218,14 +218,14 @@ test('PGB-15, PGB-16: page names are compared ignoring case, spaces and width fo
   assert.equal(normalPageName('Co​NQ'), 'conq', 'zero-width characters')
   assert.equal(normalPageName('Ｑｕａｌｉｔｙ　Ｄａｓｈ'), 'quality dash', 'an ideographic space')
   const taken = [
-    { key: 'page:qemapping', name: 'QE Mapping', group: 'Data & governance' },
+    { key: 'page:snapshots', name: 'Snapshots', group: 'Data & governance' },
     { key: 'admin:pages', name: 'Pages & menu', group: 'Admin' },
     { key: 'stream:DP', name: 'DP', group: 'Release Details' },
     { key: 'ondemand:conq', name: 'CoNQ', group: 'On-Demand' },
     { key: 'ondemand:audits', name: 'Audits', group: 'Quality' },
   ]
   assert.equal(pageNameError('conq', taken), 'There is already a page named “CoNQ” (in On-Demand). Choose another name.')
-  assert.equal(pageNameError(' qe  mapping ', taken), 'There is already a page named “QE Mapping” (in Data & governance). Choose another name.', 'a built-in page')
+  assert.equal(pageNameError(' SNAPSHOTS ', taken), 'There is already a page named “Snapshots” (in Data & governance). Choose another name.', 'a built-in page')
   assert.equal(pageNameClash('dp', taken)?.key, 'stream:DP', 'a release stream')
   assert.equal(pageNameClash('AUDITS', taken)?.group, 'Quality', 'in any group')
   assert.equal(pageNameError('CoNQ', taken, 'ondemand:conq'), '', 'a rename keeping its own name')

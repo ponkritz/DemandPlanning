@@ -1,7 +1,8 @@
-import { useContext, useState } from 'react'
+import { useContext, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { runInBackground, recordJob } from './backgroundJobs'
 import { featurePi, nextPiOf, ownReviewOf, piText, postReview, prefilledOtherPi, readDiscussionInto, reviewPeriodOf, updateReview, reviewFormFrom, reviewSummary, type NextPi, type ReviewForm, type ReviewViewer } from './piReviewPost'
-import { discussionOf, latestComment, piLabel, piOptions, reviewSplit, setDiscussion } from './piReview'
+import { discussionOf, discussionsFrom, discussionsVersion, latestComment, piLabel, piOptions, readDiscussions, reviewSplit, setDiscussion, subscribeDiscussions, type BulkReadResult } from './piReview'
+import { rateLimitWait, type AzureConfig } from './azureDevOps'
 import { ReviewEnvContext, type ReviewEnv } from './reviewEnv'
 import { ReadOnlyContext, useCan } from './useCan'
 import type { AzureIteration, WorkItemComment } from './azureDevOps'
@@ -104,7 +105,7 @@ export function useReviewWriter(pi: string, iterations: PiIterations = { list: n
         return { text: `The review of #${item.id} was not edited: ${message} The form is open again: try again, or post it as a new review instead.`, failed: true }
       }
       progress(`Reading the Discussion of #${item.id} again…`)
-      try { await readDiscussionInto(config, env.pat, item) } catch (failure) { return { text: `Edited the review of #${item.id}, but the Discussion could not be read again: ${failure instanceof Error ? failure.message : 'unknown error'}`, failed: true } }
+      try { await readDiscussionInto(config, env.pat, item, { fresh: true }) } catch (failure) { return { text: `Edited the review of #${item.id}, but the Discussion could not be read again: ${failure instanceof Error ? failure.message : 'unknown error'}`, failed: true } }
       return { text: `Edited the review of #${item.id} and read back: ${reviewSummary(form)}.`, failed: false }
     })
     if (!started) recordJob(`pireview:edit:${item.key}:busy`, `Edit review · #${item.id}`, { text: `The review of #${item.id} is being saved already: wait for it. Nothing else was changed.`, failed: true })
@@ -124,7 +125,7 @@ export function useReviewWriter(pi: string, iterations: PiIterations = { list: n
       progress(`Posting the review of #${item.id}…`)
       await postAndAudit(env, item, form, text, reviewed)
       progress(`Reading the Discussion of #${item.id} again…`)
-      try { await readDiscussionInto(config, env.pat, item) } catch (failure) { return { text: `Posted to the Discussion of #${item.id}, but it could not be read again: ${failure instanceof Error ? failure.message : 'unknown error'} Use ↻ Read again in the Feature.`, failed: true } }
+      try { await readDiscussionInto(config, env.pat, item, { fresh: true }) } catch (failure) { return { text: `Posted to the Discussion of #${item.id}, but it could not be read again: ${failure instanceof Error ? failure.message : 'unknown error'} Use ↻ Read again in the Feature.`, failed: true } }
       return { text: `Posted to the Discussion of #${item.id} and read back: ${reviewSummary(form)}.`, failed: false }
     })
     if (!started) recordJob(`pireview:post:${item.key}:busy`, `Post review · #${item.id}`, { text: `A review of #${item.id} is being posted already: wait for it, then write again if needed. Nothing else was posted.`, failed: true })
@@ -149,3 +150,30 @@ export function useOwnReview(pi: string, iterations: PiIterations & { problem?: 
 // PIR-18: forget a Feature's Discussion read in this page load after a review was posted from elsewhere (the Close
 // pop-up), so PI Review reads it again.
 export const forgetDiscussion = (item: Pick<AzureWorkItem, 'key'>) => { if (discussionOf(item.key)) setDiscussion(item.key, undefined) }
+
+// PIR-17, PIR-35: read the Discussions of the given Features (My PI Review: the Features shown; PI Review: my own Features
+// of the chosen PI) that are not read yet in this page load — 3 at a time, waiting when Azure DevOps asks to slow down
+// (readDiscussions, PIR-06), only the comments on or after "PI Review starts from" (PIR-33) — once per Feature list, and
+// again when that date changed. Nothing is read while blocked. Returns how many of them are still to be read while that
+// read runs (0: none), for the page's status line.
+const running = new Set<string>(), runningListeners = new Set<() => void>()
+let runningVersion = 0
+const setRunning = (key: string, on: boolean) => { if (on) running.add(key); else running.delete(key); runningVersion += 1; for (const listener of runningListeners) listener() }
+const subscribeRunning = (listener: () => void) => { runningListeners.add(listener); return () => { runningListeners.delete(listener) } }
+export function useDiscussionsRead(config: AzureConfig | null, pat: string, features: readonly AzureWorkItem[], blocked: string, onDone?: (result: BulkReadResult, count: number) => void) {
+  useSyncExternalStore(subscribeDiscussions, discussionsVersion)
+  useSyncExternalStore(subscribeRunning, () => runningVersion)
+  const readKey = useRef('')
+  const listKey = features.length ? `${discussionsFrom()}|${features.map((item) => item.key).join(',')}` : ''
+  useEffect(() => {
+    if (blocked || !config || !listKey || readKey.current === listKey) return
+    readKey.current = listKey
+    const targets = features.filter((item) => !discussionOf(item.key))
+    if (!targets.length) return
+    const byId = new Map(targets.map((item) => [item.id, item]))
+    setRunning(listKey, true)
+    void readDiscussions(targets.map((item) => item.id), (id) => readDiscussionInto(config, pat, byId.get(id)!), { rateWait: rateLimitWait }).then((result) => { setRunning(listKey, false); onDone?.(result, targets.length) })
+  }, [listKey, blocked, config, pat, features]) // eslint-disable-line react-hooks/exhaustive-deps
+  if (blocked || !running.has(listKey)) return 0
+  return features.filter((item) => { const state = discussionOf(item.key)?.state; return state !== 'done' && state !== 'error' }).length
+}

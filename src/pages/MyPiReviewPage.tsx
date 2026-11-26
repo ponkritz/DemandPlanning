@@ -1,15 +1,14 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useMemo, useState, useSyncExternalStore } from 'react'
 import { DataTable, type DataColumn } from '../components/DataTable'
 import { EmptyState, Notice, Page, Pill, TablePanel, WriteBlocked } from '../components/ui'
 import { formatDate, formatDateTime } from '../format'
 import { isMine, type Me } from '../myWork'
 import { PersonPicker } from '../components/PersonPicker'
-import { discussionOf, discussionsFrom, discussionsVersion, moveLabel, oneLine, piFeatures, piLabel, readDiscussions, reviewModeLabel, samePi, subscribeDiscussions, type ReviewSplit } from '../piReview'
-import { rateLimitWait } from '../azureDevOps'
-import { myReviewOf, otherPersonBlock, otherPiHint, personOf, readDiscussionInto, reviewCountOf, reviewPageBlock, reviewPeriodOf, reviewPostBlock, type ReviewCount, type ReviewPeriod } from '../piReviewPost'
+import { discussionOf, discussionsVersion, moveLabel, oneLine, piFeatures, piLabel, reviewModeLabel, samePi, subscribeDiscussions, type ReviewSplit } from '../piReview'
+import { discussionReadBlock, myReviewOf, otherPersonBlock, otherPiHint, personOf, reviewCountOf, reviewPageBlock, reviewPeriodOf, reviewPostBlock, type ReviewCount, type ReviewPeriod } from '../piReviewPost'
 import { ReviewAction, ReviewDialog } from './PiReviewForm'
 import { PiSetupGear } from '../components/PiFormSetupPanel'
-import { formSetupOf, useOwnReview, useReviewViewer, useReviewWriter } from '../piReviewWriter'
+import { formSetupOf, useDiscussionsRead, useOwnReview, useReviewViewer, useReviewWriter } from '../piReviewWriter'
 import type { PiFormSetup } from '../piReviewSetup'
 import { usePiChoice } from './usePiChoice'
 import { cutoffNote, reviewStartOf } from '../piReviewStart'
@@ -66,17 +65,11 @@ export function MyPiReviewPage({ azure, my }: { azure: AzureWorkspace; my: MyWor
   const rows = useMemo(() => shownMe ? piRows.filter((item) => isMine(item, shownMe)) : [], [piRows, shownMe])
   const filtered = Boolean(who) || Boolean(remembered && !samePi(remembered, fallback.pi))
   const resetFilters = () => { setPerson(''); choose('') }
-  const readBlocked = isSample ? 'Synthetic sample data is loaded: the Discussions are not read from Azure DevOps.' : !config || !pat.trim() ? 'Connect the Time Writing connection (with its PAT) to read the Discussions.' : ''
+  const readBlocked = discussionReadBlock({ isSample, config, pat })
   // PIR-17, PIR-24: read the shown Features' Discussions not read yet (3 at a time), once per Feature list — and again
-  // when "PI Review starts from" changed (PIR-33: the Discussions read before are forgotten).
-  const readKey = useRef('')
-  const listKey = rows.length ? `${discussionsFrom()}|${rows.map((item) => item.key).join(',')}` : ''
-  useEffect(() => {
-    if (readBlocked || !config || !listKey || readKey.current === listKey) return
-    readKey.current = listKey
-    const targets = rows.filter((item) => !discussionOf(item.key))
-    if (targets.length) void readDiscussions(targets.map((item) => item.id), (id) => readDiscussionInto(config, pat, targets.find((item) => item.id === id)!), { rateWait: rateLimitWait })
-  }, [listKey, readBlocked, config, pat, rows])
+  // when "PI Review starts from" changed (PIR-33: the Discussions read before are forgotten). PIR-35: the same read as PI
+  // Review's automatic read of my own Features (useDiscussionsRead).
+  useDiscussionsRead(config, pat, rows, readBlocked)
   const writer = useReviewWriter(pi, { list: iterations.list, reading: !iterations.done })
   // PIR-26: the dates of the chosen PI (recomputed when the PI filter changes); null while the iterations are read.
   const period = useMemo(() => !iterations.done ? null : reviewPeriodOf(pi, iterations.list, { problem: iterations.problem }), [pi, iterations.done, iterations.list, iterations.problem])

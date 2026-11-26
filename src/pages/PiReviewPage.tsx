@@ -2,15 +2,15 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { DataTable, type DataColumn } from '../components/DataTable'
 import { MultiSelect } from '../components/MultiSelect'
 import { Drawer, EmptyState, Notice, Page, Pill, TablePanel, WriteBlocked } from '../components/ui'
-import { listJobs, runInBackground, subscribeJobs } from '../backgroundJobs'
+import { listJobs, recordJob, runInBackground, subscribeJobs } from '../backgroundJobs'
 import { rateLimitWait, type AzureConfig } from '../azureDevOps'
 import { capacityContext } from '../capacity'
 import { formatDate, formatDateTime } from '../format'
 import { discussionOf, discussionsVersion, epicOf, latestComment, moveLabel, oneLine, piFeatures, piLabel, readDiscussions, reviewModeLabel, reviewModes, reviewSplit, samePi, subscribeDiscussions, type ReviewSplit, type SplitFrom } from '../piReview'
-import { isReviewLead, readDiscussionInto as readInto, reviewPageBlock, reviewPostBlock } from '../piReviewPost'
+import { discussionReadBlock, isReviewLead, ownFeatures, ownReadBlock, readDiscussionInto as readInto, reviewPageBlock, reviewPostBlock } from '../piReviewPost'
 import { ReviewAction, ReviewDialog } from './PiReviewForm'
 import { PiSetupGear } from '../components/PiFormSetupPanel'
-import { formSetupOf, useOwnReview, useReviewViewer, useReviewWriter } from '../piReviewWriter'
+import { formSetupOf, useDiscussionsRead, useOwnReview, useReviewViewer, useReviewWriter } from '../piReviewWriter'
 import { customFields, type PiFormSetup } from '../piReviewSetup'
 import { usePiChoice } from './usePiChoice'
 import { cutoffNote, reviewStartLabel, reviewStartOf } from '../piReviewStart'
@@ -18,6 +18,7 @@ import type { WorkItemComment } from '../azureDevOps'
 import type { AzureWorkItem } from '../domain'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { PageProps } from './types'
+import type { Me } from '../myWork'
 
 // PI Review (PIR-01…PIR-16): choose a PI, see its Features, and read each Feature's Discussion (all pages, newest
 // first, as plain text) in a drawer, or every Discussion at once as a background job; the latest comment of each read
@@ -61,7 +62,8 @@ const suggestedTitle = (text: string) => `${suggestedHint}:\n${text}`
 const keywordNote = 'Suggested texts are a guess: check them against the whole Comment.'
 const Suggested = ({ text }: { text: string }) => <span className="pir-clip pir-suggested"><span className="pir-suggested-mark">(suggested)</span> {oneLine(text)}</span>
 
-export function PiReviewPage({ azure, store }: { azure: AzureWorkspace; store: PageProps['store'] }) {
+// PIR-35: self — who I am (my work email, else my name: My PI Review's "me"), for reading my own Features' Discussions.
+export function PiReviewPage({ azure, store, self }: { azure: AzureWorkspace; store: PageProps['store']; self?: { me: Me; known: boolean } }) {
   const { config, pat, items, isSample } = azure
   const poster = useReviewViewer()
   // PIR-19, PIR-20: the form setup in use — its headings split the comments, its added fields are columns of their own.
@@ -87,7 +89,19 @@ export function PiReviewPage({ azure, store }: { azure: AzureWorkspace; store: P
   // PIR-16: the Assigned to filter, from the Features' Assigned To ('' for nobody).
   const personOptions: [string, string][] = [...new Set(rows.map((row) => row.item.assignedTo.trim()))].sort((a, b) => a.localeCompare(b)).map((name) => [name, name || 'Unassigned'])
 
-  const readBlocked = isSample ? 'Synthetic sample data is loaded: the Discussions are not read from Azure DevOps.' : !config || !pat.trim() ? 'Connect the Time Writing connection (with its PAT) to read the Discussions.' : ''
+  const readBlocked = discussionReadBlock({ isSample, config, pat })
+  // PIR-35: my own Features of the chosen PI (Assigned To by my work email, else my name — as My PI Review) have their
+  // Discussions read when the page opens or the PI changes, so Edit review… shows without opening them; nobody else's.
+  // Not with sample data, without a PAT, in View as or when who I am is not known. A Discussion read already (or being
+  // read) is not read again, here or by the drawer, Read all Discussions and Write review… (readDiscussionInto).
+  const me = self?.known ? self.me : undefined
+  const ownBlock = ownReadBlock({ isSample, config, pat, viewingAs: poster.viewingAs }, me)
+  const own = useMemo(() => ownFeatures(rows.map((row) => row.item), me), [rows, me])
+  const ownReading = useDiscussionsRead(config, pat, own, ownBlock, (result, count) => {
+    if (!result.stopped) return
+    const done = result.read + result.failed
+    recordJob('pireview:read-own', `Reading your Discussions · ${piLabel(pi)}`, { text: result.stopped === 'rate-limit' ? `${done} of ${count} read: Azure DevOps kept limiting requests. Open the Feature, or ↻ Read all Discussions later.` : `${done} of ${count} read: Azure DevOps refused the read. Check the PAT (Work Items, Read).`, failed: true })
+  })
   const unread = rows.filter((row) => discussionOf(row.item.key)?.state !== 'done')
   const readAllWhy = readBlocked || (reading ? 'Reading the Discussions — see Background jobs.' : !rows.length ? 'No Features in this PI.' : '')
   // PIR-06: every Discussion not read yet (all again when all are read), 3 at a time, as a background job.
@@ -193,7 +207,7 @@ export function PiReviewPage({ azure, store }: { azure: AzureWorkspace; store: P
     {items.length > 0 && <TablePanel title="Features" info={`The Features whose Iteration Path is in the chosen PI (with the toggle also those with a User Story in the PI), without Removed Features and those under the absence Epic. The PIs come from the Time Writing connection’s iterations and the fetched data; the current PI (by the Sprint dates, UTC) is chosen first, and your last choice is remembered in this browser. ${cutoffNote(cutoff)} Click a Feature to read its Discussion; Write review… posts the Feature’s review as a new comment in its Discussion.`}>
       {rows.length > 0 && <WriteBlocked reason={postNote} />}
       <DataTable id="pireview:features" className="pir-table" columns={columns} rows={shown} rowKey={(row) => row.item.key} exportName={`PI Review ${pi ? piLabel(pi) : ''}`.trim()} toolbar={toolbar}
-        status={`${shown.length} of ${plural(rows.length, 'Feature')}`} defaultSort={{ id: 'id' }}
+        status={<>{`${shown.length} of ${plural(rows.length, 'Feature')}`}{ownReading > 0 && <span role="status"> · {ownReading === 1 ? 'Reading your Feature’s Discussion…' : `Reading your ${ownReading.toLocaleString()} Features’ Discussions…`}</span>}</>} defaultSort={{ id: 'id' }}
         onRowOpen={(row, order) => setOpen({ key: row.item.key, order: order.map((entry) => entry.item.key) })} rowLabel={(row) => `Feature ${row.item.id}: open`}
         empty={<EmptyState title={!pi ? 'Choose a PI.' : rows.length ? 'No Feature matches the filters.' : `No Features in ${piLabel(pi)}.`} detail={!pi ? 'Pick the PI to review in the PI list.' : rows.length ? 'Change the filters, or Reset filters.' : 'Tick “Also Features with User Stories in this PI”, choose another PI, or fetch the data again.'} />} />
     </TablePanel>}

@@ -3,7 +3,7 @@
 // new comment in the Feature's Discussion, written with the person's own PAT to dev.azure.com only.
 import { isCloudBase, collectionUrl, requestAzure, type AzureConfig, type AzureTransport } from './azureClient.ts'
 import { writeBlockedReason, type Action } from './access.ts'
-import { piName, piPathOf, type Me } from './myWork.ts'
+import { isMine, piName, piPathOf, type Me } from './myWork.ts'
 import { formatDate } from './format.ts'
 import { commentText } from './workItemEdit.ts'
 import { readDiscussion } from './azureDevOps.ts'
@@ -432,11 +432,43 @@ export function ownReviewOf(comments: readonly WorkItemComment[] | undefined, fe
 }
 
 // PIR-05, PIR-13: read one Feature's Discussion into PI Review's memory (the error kept for the drawer and the table).
-export async function readDiscussionInto(config: AzureConfig, pat: string, item: Pick<AzureWorkItem, 'key' | 'id'>) {
+// PIR-35: a Discussion being read already (the automatic read of my own Features, the drawer, Read all, Write review…)
+// is not requested again — the caller waits for the same read; fresh (after a post or an edit) always reads anew.
+const reading = new Map<string, Promise<void>>()
+export function readDiscussionInto(config: AzureConfig, pat: string, item: Pick<AzureWorkItem, 'key' | 'id'>, { fresh = false, transport = requestAzure }: { fresh?: boolean; transport?: AzureTransport } = {}): Promise<void> {
+  const from = discussionsFrom(), key = `${item.key}|${from}`
+  const running = fresh ? undefined : reading.get(key)
+  if (running) return running
   setDiscussion(item.key, { state: 'loading' })
   // PIR-33: only the comments on or after "PI Review starts from" are kept.
-  try { const from = discussionsFrom(), read = await readDiscussion(config, pat, item.id), kept = commentsFrom(read.comments, from); setDiscussion(item.key, { state: 'done', comments: kept.comments, capped: read.capped, readAt: new Date().toISOString(), from, ignored: kept.ignored }) }
-  catch (failure) { setDiscussion(item.key, { state: 'error', error: failure instanceof Error ? failure.message : 'Could not read the Discussion.' }); throw failure }
+  const read = (async () => {
+    try { const read = await readDiscussion(config, pat, item.id, transport), kept = commentsFrom(read.comments, from); setDiscussion(item.key, { state: 'done', comments: kept.comments, capped: read.capped, readAt: new Date().toISOString(), from, ignored: kept.ignored }) }
+    catch (failure) { setDiscussion(item.key, { state: 'error', error: failure instanceof Error ? failure.message : 'Could not read the Discussion.' }); throw failure }
+  })()
+  reading.set(key, read)
+  const done = () => { if (reading.get(key) === read) reading.delete(key) }
+  read.then(done, done)
+  return read
+}
+// PIR-35: the Features of a list that are mine — Assigned To by my work email, else my display name (isMine, as My PI
+// Review and PIR-24); none when nothing is known about me.
+export function ownFeatures<T extends Pick<AzureWorkItem, 'assignedTo' | 'assignedToEmail'>>(items: readonly T[], me: Me | undefined): T[] {
+  return me && (me.email?.trim() || me.name?.trim()) ? items.filter((item) => isMine(item, me)) : []
+}
+// PIR-17, PIR-35: why the Discussions are not read from Azure DevOps on this page ('' when they are) — the same reasons on
+// PI Review and My PI Review. Reading is allowed on an on-premises server (only writes are dev.azure.com only).
+export function discussionReadBlock({ isSample, config, pat }: { isSample: boolean; config: AzureConfig | null; pat: string }): string {
+  return isSample ? 'Synthetic sample data is loaded: the Discussions are not read from Azure DevOps.' : !config || !pat.trim() ? 'Connect the Time Writing connection (with its PAT) to read the Discussions.' : ''
+}
+// PIR-35: why PI Review does not read my own Features' Discussions by itself when it opens ('' when it does): the page
+// cannot read (discussionReadBlock), View as (the person viewed as cannot edit their review here: read only), or who I
+// am is not known (no work email or name). The drawer and Read all Discussions stay as they are.
+export function ownReadBlock(viewer: { isSample: boolean; config: AzureConfig | null; pat: string; viewingAs: string }, me: Me | undefined): string {
+  const page = discussionReadBlock(viewer)
+  if (page) return page
+  if (viewer.viewingAs) return `Viewing as ${viewer.viewingAs}: your own Features’ Discussions are not read by themselves.`
+  if (!me?.email?.trim() && !me?.name?.trim()) return 'Who you are in Azure DevOps is not known: enter your work email on the Time Writing connection.'
+  return ''
 }
 // PIR-17: the PI of a Feature (its Iteration Path's PI part), for the Move question's next PI.
 export { piPathOf as featurePi } from './myWork.ts'

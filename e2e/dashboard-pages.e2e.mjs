@@ -116,7 +116,7 @@ test('TC-DSH-01: a Tool Owner adds a Dashboard page, builds it from a KPI tile, 
   await dialog.waitFor({ state: 'detached' })
   await tile(page, 'Issues').waitFor()
   assert.match(await text(tile(page, 'Issues').locator('strong')), /^4$/, 'this year: 4 of the 5 rows')
-  let saved = lastWrite(writes, 'dashboards/quality-dashboard.json')
+  let saved = lastWrite(writes, 'dashboards/Quality dashboard--quality-dashboard.json')
   assert.match(saved.message, /\[saved \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\]( \[by [^\]]+\])?$/, 'a queued save (GIT-17)')
   assert.deepEqual(saved.data.blocks.map((entry) => [entry.type, entry.title, entry.source, entry.measure, entry.period]), [['kpi', 'Issues', 'page:supplier-issues', 'count', 'c3']])
 
@@ -147,7 +147,7 @@ test('TC-DSH-01: a Tool Owner adds a Dashboard page, builds it from a KPI tile, 
   const table = panel(page, 'Cost by category')
   await table.locator('table tbody tr').first().waitFor()
   assert.deepEqual((await table.locator('table tbody tr').allInnerTexts()).map((row) => row.replace(/\s+/g, ' ').trim()), ['Scrap 1,500', 'Rework 450', 'Delay 80', 'Total 2,030'])
-  assert.deepEqual(lastWrite(writes, 'dashboards/quality-dashboard.json').data.blocks.map((entry) => entry.title), ['Issues', 'Issues by category', 'Cost by category'])
+  assert.deepEqual(lastWrite(writes, 'dashboards/Quality dashboard--quality-dashboard.json').data.blocks.map((entry) => entry.title), ['Issues', 'Issues by category', 'Cost by category'])
 
   // The period: last year only — the tile and the table follow; Reset filters goes back to this year.
   await pick(page, 'Year', [String(last)])

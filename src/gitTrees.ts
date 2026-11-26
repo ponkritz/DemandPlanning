@@ -76,12 +76,16 @@ export async function headOf(config: GitConfig, token: string, branch: string, f
 // commit is made on top of it and the branch moved only if nobody committed meanwhile (no force). When someone did, it
 // starts again from their commit, at most `tries` times. The texts travel inside the tree (one request for all files,
 // not one per file: GitHub limits requests that create content).
-export async function commitFiles(config: GitConfig, token: string, build: (commit: string) => Promise<{ files: Record<string, string | null>; message: string }>, fetchImpl: Fetch = fetch, tries = 3): Promise<{ commit: string; commitUrl: string }> {
+// OND-124: a file may also be given by the version (blob sha) it already has in Git — a file moved to another
+// path (a page's folder renamed) travels without being read or sent again.
+export type CommitFile = string | null | { sha: string }
+const knownSha = (sha: string) => { if (!shaPattern.test(sha)) throw new Error('Unknown file version.'); return sha }
+export async function commitFiles(config: GitConfig, token: string, build: (commit: string) => Promise<{ files: Record<string, CommitFile>; message: string }>, fetchImpl: Fetch = fetch, tries = 3): Promise<{ commit: string; commitUrl: string }> {
   assertNotViewingAs()
   for (let attempt = 1; attempt <= tries; attempt++) {
     const head = await headOf(config, token, config.branch, fetchImpl)
     const { files, message } = await build(head.commit)
-    const tree = Object.entries(files).map(([path, text]) => text == null ? { path, mode: '100644', type: 'blob', sha: null } : { path, mode: '100644', type: 'blob', content: text })
+    const tree = Object.entries(files).map(([path, text]) => text == null ? { path, mode: '100644', type: 'blob', sha: null } : typeof text === 'object' ? { path, mode: '100644', type: 'blob', sha: knownSha(text.sha) } : { path, mode: '100644', type: 'blob', content: text })
     const made = await sendJson<{ sha?: unknown }>(fetchImpl, 'POST', `${repoUrl(config)}/git/trees`, token, { base_tree: head.tree, tree }, config, 'prepare the commit')
     const commit = await sendJson<{ sha?: unknown; html_url?: unknown }>(fetchImpl, 'POST', `${repoUrl(config)}/git/commits`, token, { message: await signedGitMessage(config, token, message, fetchImpl), tree: made.sha, parents: [head.commit] }, config, 'make the commit')
     const response = await fetchImpl(`${repoUrl(config)}/git/refs/heads/${encodePath(config.branch)}`, { method: 'PATCH', headers: { ...headers(token), 'Content-Type': 'application/json' }, body: JSON.stringify({ sha: commit.sha, force: false }) })

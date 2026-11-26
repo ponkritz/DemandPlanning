@@ -42,7 +42,8 @@ export function useDashboardPage(git: GitStorage, pageId: string) {
   return {
     dashboard, save, reload: load,
     loaded: fresh && state.loaded, error: fresh ? state.error : '', dropped: fresh ? state.dropped : [], inGit: fresh && state.inGit,
-    path: dashboardPath(pageId), history: git.dashboardHistory(pageId),
+    // OND-134: where the blocks file is (named as the page, or by id for a page from before); the queue is the id's.
+    path: git.dashboardPathOf(pageId), history: git.dashboardHistory(pageId),
     queue: git.queueState(dashboardPath(pageId)),
     retry: () => git.retryQueued(dashboardPath(pageId)),
   }

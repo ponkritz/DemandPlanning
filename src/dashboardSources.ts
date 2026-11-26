@@ -9,9 +9,9 @@ import type { HistoryFile } from './history.ts'
 import { sheetTable, type KpiTracker } from './kpiTracker.ts'
 import { isMine, myNames, piPathOf, type Me } from './myWork.ts'
 import type { OnDemandColumn, OnDemandRow, OnDemandType } from './onDemand.ts'
-import type { QeMappingFile } from './qeMapping.ts'
 import { completedCount, supportedCount, type ReleaseStream } from './releaseOverview.ts'
 import { completedRows, monthCounts, windchillLinesOf, type StreamMonthCount, type WindchillInput } from './cumulativeReleases.ts'
+import { connectionDatasets, isConnectionSource, missingConnection, type ConnectionInput } from './azureQuerySources.ts'
 import { completionDated, daysBetween, dueFromText, dueOf, entryState, entryStateLabel, validityOf, type ToolValidationsFile } from './toolValidations.ts'
 
 // MYD-15…MYD-22 The data sources of My dashboard's blocks, as one registry so that more can be added: each kind of
@@ -28,7 +28,7 @@ export interface SourceField { id: string; name: string; type: FieldType }
 // A built row: its cells by field id, an optional key shown as the row's ID in a drill-down and its link (https only).
 export interface SourceRow { key?: string; link?: string; cells: Record<string, string | string[]> }
 // load: what the person loads for a source whose data is not there yet (the page offers the app's own action).
-export type LoadAction = 'azure' | 'kpi' | 'qe' | 'history' | 'windchill'
+export type LoadAction = 'azure' | 'kpi' | 'history' | 'windchill'
 export interface SourceEntry { dataset: Dataset; kind: string; load?: LoadAction }
 
 // What the sources read — everything already loaded by the app (App.tsx); months: the dashboard period's months.
@@ -43,7 +43,6 @@ export interface SourceInput {
   // MYD-25: windchill — the exports with their views (each a stream of Completed releases); excluded — the person's own
   // Pulse Check Streams filter (QV-66), for the Counted in Pulse Check column.
   releases: { state: Pick<AppState, 'azureSources' | 'releaseSource'> & Partial<Pick<AppState, 'releaseSourceSettings'>>; profiles: AzureConnectionProfileSummary[]; streamsOf: (month: string) => ReleaseStream[]; windchill?: WindchillInput; excluded?: string[] }
-  qe: { file: QeMappingFile | null; loaded: boolean }
   kpi: KpiTracker | null | undefined // undefined: not loaded in this visit yet
   history: { file: HistoryFile | null; loaded: boolean; connected: boolean }
   windchill: { viewId: string; name: string; fetchedAt: string; columns: string[]; rows: Record<string, unknown>[] }[]
@@ -51,6 +50,8 @@ export interface SourceInput {
   hours: (allowed: boolean) => HoursLine[] // DSH-16: the Time Writing lines over the months (worked out only when allowed)
   // TVL-18: the Tool Validations master list as last read from Git (connected: Git storage is set up); absent: not offered.
   tools?: ToolSourceInput
+  // MYD-26 (DSH-17): the Azure DevOps queries the app reads — the streams' and Tool Validations' queries, the viewer's My views.
+  connections?: Omit<ConnectionInput, 'sees'>
 }
 export interface ToolSourceInput { file: ToolValidationsFile; connected: boolean; loaded: boolean }
 
@@ -329,13 +330,6 @@ export const sourceKinds: SourceKind[] = [
       if (!input.sees('insights')) return [entry(blocked(capacitySource, name, kind, notAvailable), name)]
       return [entry(fieldsDataset(capacitySource, name, kind, 'Team overview’s available, contractual, absence, planned and recorded hours per team member and month; a group’s utilization is the Sum of Recorded hours ÷ the Sum of Available hours (an Average of Utilization % is the average of the people’s)', capacityFields, wanted(capacitySource) ? capacityRows(input.items, input.months, input.today, input.settings) : []), name)]
     } },
-  { id: 'qe', label: 'QE Mapping', areas: ['qemapping'], describe: 'The rows of each sheet of the QE Mapping (qe-mapping.json).',
-    entries: (input) => {
-      const name = 'QE Mapping', kind = 'QE Mapping sheet'
-      if (!input.sees('qemapping')) return [entry(blocked('qe:mapping', name, kind, notAvailable), name)]
-      if (!input.qe.file) return [entry(blocked('qe:mapping', name, kind, input.qe.loaded ? 'There is no QE Mapping in Git yet.' : 'Load the QE Mapping to see this.'), name, input.qe.loaded ? undefined : 'qe')]
-      return input.qe.file.sheets.map((sheet) => entry(tableDataset(`qe:${safeId(sheet.id, 60)}`, input.qe.file!.sheets.length > 1 ? `QE Mapping · ${sheet.name}` : name, kind, `The rows of the QE Mapping${input.qe.file!.sheets.length > 1 ? ` sheet ${sheet.name}` : ''} as saved in Git`, sheet.columns.map((column) => column.name), sheet.rows.map((row) => sheet.columns.map((column) => row.cells[column.id] ?? '')), 'qe'), name))
-    } },
   { id: 'kpi', label: 'KPI tracker', areas: ['insights'], describe: 'Every number of the KPI tracker’s Git copy, by sheet, KPI and column.',
     entries: (input, wanted) => {
       const name = 'KPI tracker values', kind = 'KPI tracker'
@@ -354,6 +348,10 @@ export const sourceKinds: SourceKind[] = [
     } },
   { id: 'tools', label: 'Tool Validations', areas: ['release'], describe: 'The Tool Validations master list and its expiry list (tool-validations.json, TVL-18).',
     entries: (input, wanted) => input.tools ? toolDatasets(input.tools, input.sees('release'), input.today, wanted).map((dataset) => entry(dataset, toolKind)) : [] },
+  // MYD-26: each query of the app's own connections (azureQuerySources.ts), its area right checked per query (the
+  // streams and Tool Validations: Release Details; a My view: its owner only), so the kind itself needs no area.
+  { id: 'azv', label: 'Azure DevOps queries', areas: [], describe: 'Each Release Details stream query, the Tool Validations Tool List and Validation Documents queries and your own My views, with all their columns, as last fetched.',
+    entries: (input, wanted) => input.connections ? connectionDatasets({ ...input.connections, sees: input.sees }, wanted).map((found) => entry(found.dataset, found.dataset.kind ?? 'Azure DevOps query', found.load)) : [] },
   { id: 'windchill', label: 'Windchill exports', areas: ['release'], describe: 'The rows of each Windchill export.',
     entries: (input) => {
       const name = 'Windchill export', kind = 'Windchill export'
@@ -365,19 +363,28 @@ export const sourceKinds: SourceKind[] = [
 // Pulse Check and the Monthly pack are not sources of their own: their figures are the release counts (Releases per
 // stream, the Pulse Check rules) and the utilization (Capacity and utilization) — see MYD-22.
 
-// The source keys a stored block may name (MYD-23): the table pages and the Time Writing hours (DSH-04) and each kind above.
-export const mySourcePattern = /^(page:[a-z0-9][a-z0-9-]{0,39}|hours:time-writing|azure:work|releases:streams|releases:completed|capacity:people|kpi:tracker|history:hours|tools:master|tools:expiry|qe:[\w.-]{1,60}|windchill:[\w.-]{1,54})$/
-export const kindOfKey = (key: string) => key === hoursSource ? 'hours' : key === completedSource ? 'completed' : key.split(':')[0] === 'page' ? 'page' : key.split(':')[0] === 'releases' ? 'releases' : key.split(':')[0] === 'capacity' ? 'capacity' : key.split(':')[0]
+// The source keys a stored block may name (MYD-23; qe:… stays so that a block of the removed QE Mapping is kept, MYD-30): the table pages and the Time Writing hours (DSH-04) and each kind above.
+export const mySourcePattern = /^(page:[a-z0-9][a-z0-9-]{0,39}|hours:time-writing|azure:work|releases:streams|releases:completed|capacity:people|kpi:tracker|history:hours|tools:master|tools:expiry|qe:[\w.-]{1,60}|windchill:[\w.-]{1,54}|azv:[A-Za-z0-9_-]{1,80}|azm:[A-Za-z0-9_-]{1,80})$/
+export const kindOfKey = (key: string) => isConnectionSource(key) ? 'azv' : key === hoursSource ? 'hours' : key === completedSource ? 'completed' : key.split(':')[0] === 'page' ? 'page' : key.split(':')[0] === 'releases' ? 'releases' : key.split(':')[0] === 'capacity' ? 'capacity' : key.split(':')[0]
 
 // Every source entry in the registry's order; wanted: the keys whose rows are worked out.
 export const sourceEntries = (input: SourceInput, wanted: (key: string) => boolean = () => true) => sourceKinds.flatMap((kind) => kind.entries(input, wanted))
 // A block's source as the viewer gets it — fail closed: a kind the viewer's role cannot see is "Not available for your
 // role." whatever the key; a source no longer there says so.
+// MYD-30: a source kind removed from the app (QE Mapping, qe:…): a stored block that reads it is kept as written and
+// says so — whatever the role — so that its owner can remove it.
+export const removedSources: Record<string, string> = { qe: 'QE Mapping' }
+export const removedSourceProblem = (label: string) => `This block’s data source (${label}) was removed.`
+export const removedSourceOf = (key: string): string | undefined => { const kind = key.split(':')[0]; return Object.hasOwn(removedSources, kind) ? removedSources[kind] : undefined }
 export function entryOf(entries: SourceEntry[], key: string, sees: (area: Area) => boolean): SourceEntry {
+  const removed = removedSourceOf(key)
+  if (removed) return { dataset: { ...missingDataset(key, removedSourceProblem(removed)), name: removed }, kind: removed }
   const kind = sourceKinds.find((entry) => entry.id === kindOfKey(key))
-  if (kind && !kind.areas.some((area) => sees(area))) return { dataset: { ...missingDataset(key, notAvailable), name: kind.label }, kind: kind.label }
+  if (kind && kind.areas.length && !kind.areas.some((area) => sees(area))) return { dataset: { ...missingDataset(key, notAvailable), name: kind.label }, kind: kind.label }
   const found = entries.find((candidate) => candidate.dataset.key === key)
   if (found) return found
+  // MYD-26: a query that is not among the viewer's (someone else's My view, a removed connection) says why.
+  if (isConnectionSource(key)) return { dataset: missingConnection(key), kind: kind?.label ?? '' }
   // A sheet or export of a kind that is not loaded yet takes that kind's load entry.
   const pending = entries.find((candidate) => kindOfKey(candidate.dataset.key) === kindOfKey(key) && candidate.load)
   if (pending) return pending

@@ -14,8 +14,8 @@ import { RowsBehind } from './InsightCharts'
 
 // CHT-74…CHT-82 The nested Pivot table, the same in the Insights tab and on an On-Demand Dashboard (and in a published
 // file's viewer): a matrix (UI-STANDARDS §5: a hand-built grid, for its two heading rows) with the row fields in one
-// indented first column, ▸ / ▾ on every group (its numbers are its subtotals), Expand all / Collapse all (as the QE
-// Mapping's grouping, QEM-10, QEM-11), the first 10 outer rows with Show all, Export (Excel / CSV, the shared table's
+// indented first column, ▸ / ▾ on every group (its numbers are its subtotals), Expand all / Collapse all (as the shared
+// table's grouping, UI-27), the first 10 outer rows with Show all, Export (Excel / CSV, the shared table's
 // formats and permission) of the flat table, and a click on any number for the rows behind it. What is open or closed is
 // this viewer's for this visit only (never saved).
 

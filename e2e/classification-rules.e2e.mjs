@@ -113,7 +113,7 @@ test('TC-DPF-09: a Tool Owner sets the Release Classification rules per value in
   await releases.getByRole('button', { name: /^Create Features \(\d+\)$/ }).click()
   const dialog = page.getByRole('dialog').filter({ hasText: /Create Features for \d+ DP release/ })
   await dialog.waitFor()
-  assert.deepEqual((await dialog.locator('thead th').allTextContents()).map((header) => header.trim()), ['Release name', 'Version', 'Release Classification', 'Feature title', 'User Stories', 'QE', 'Result'])
+  assert.deepEqual((await dialog.locator('thead th').allTextContents()).map((header) => header.trim()), ['Release name', 'Version', 'Release Classification', 'Feature title', 'User Stories', 'Start date', 'Target date', 'Time Writing Tasks', 'QE', 'Result'])
   const pick = (version) => dialog.locator('tbody tr', { hasText: version }).first()
   const select = (version) => pick(version).getByRole('combobox', { name: /^Release Classification of / })
   assert.equal(await select('7.0').inputValue(), 'New product')

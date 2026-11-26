@@ -73,7 +73,7 @@ test('UI-27: groups open and close one by one; Expand all / Collapse all, each o
 })
 
 test('UI-26: Filter by column keeps rows whose value as shown contains the text in any case; a pick-list value matches exactly; filters add up (TC-UI-22)', () => {
-  assert.equal(matchesColumnFilter(['Rita Gomez'], 'gom'), true, 'contains, any case (QEM-03)')
+  assert.equal(matchesColumnFilter(['Rita Gomez'], 'gom'), true, 'contains, any case (UI-26)')
   assert.equal(matchesColumnFilter(['Rita Gomez'], '  '), true, 'an empty filter keeps everything')
   assert.equal(matchesColumnFilter([], 'x'), false, 'an empty cell does not contain text')
   assert.equal(matchesColumnFilter(['Reopened'], 'open', ['Open', 'Reopened']), false, 'a pick-list value: exactly (any case)')

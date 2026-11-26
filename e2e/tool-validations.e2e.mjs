@@ -1,7 +1,7 @@
 import test, { after, before } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdirSync } from 'node:fs'
-import { navigate, openPage, rolesFile, startApp, text } from './helpers.mjs'
+import { gitDataApi, navigate, openPage, rolesFile, startApp, text } from './helpers.mjs'
 
 // Tool Validations master list (TVL-01…TVL-14): the Tool Owner maps the Tool Validations query; its tools are added to
 // the master list in Git when it is fetched; the page opens on its Expiry list tab, which lists what is overdue, due within
@@ -67,6 +67,8 @@ const toolRegister = () => JSON.stringify({ schema: 1, kind: 'on-demand-page', i
 
 async function mock(context, files, role = 'Tool Owner') {
   const writes = []
+  // OND-124: a page renamed moves its file in one commit (the Git Data API).
+  const gitData = gitDataApi(files, writes)
   await context.route('https://dev.azure.com/**', (route) => {
     const request = route.request(), url = new URL(request.url())
     const json = (body) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
@@ -83,6 +85,7 @@ async function mock(context, files, role = 'Tool Owner') {
     if (url.pathname === '/repos/example/storage/commits') return json([])
     // GIT-25: the branch exists (as in a real repository), so a 404 of a file means it is missing.
     if (url.pathname === '/repos/example/storage/branches/main') return json({ name: 'main' })
+    if (gitData(request, url, json)) return
     const match = /^\/repos\/example\/storage\/contents\/(.*)$/.exec(url.pathname)
     if (!match) return json({ message: 'Not Found' }, 404)
     const path = decodeURIComponent(match[1])
@@ -469,7 +472,7 @@ test('TC-TVL-11: the Tool Owner adds a Table tab and an On-Demand Dashboard tab,
   let saved = await until(() => lastWrite(writes, 'tool-validations.json', (entry) => entry.data.tabs?.length === 1), 'the tab in tool-validations.json')
   assert.deepEqual(saved.data.tabs, [{ pageId: 'open-items', name: 'Open items', kind: 'table' }])
   assert.match(saved.message, /^Tool Validations: add the tab Open items \(Table, page open-items\)/)
-  assert.equal(lastWrite(writes, 'on-demand/open-items.json').data.name, 'Open items', 'the page is in Git as every On-Demand page')
+  assert.equal(lastWrite(writes, 'on-demand/Open items--open-items.json').data.name, 'Open items', 'the page is in Git as every On-Demand page, named after it (OND-120)')
   assert.deepEqual(lastWrite(writes, 'menu-layout.json').data.pages['open-items'], { type: 'table', group: 'on-demand', order: 1, icon: '▦', owners: [], hidden: true }, 'placed hidden: not in the menu')
   await tabs.getByRole('tab', { name: 'Open items' }).waitFor()
   assert.deepEqual(await tabLabels(tabs), ['Expiry list', 'Master list', 'Tool List [TFS]', 'Open items', 'Setup'], 'after the source tabs, before Setup')
@@ -495,7 +498,10 @@ test('TC-TVL-11: the Tool Owner adds a Table tab and an On-Demand Dashboard tab,
   await dialog.getByRole('button', { name: 'Save to Git' }).click()
   await dialog.waitFor({ state: 'detached' })
   await until(() => lastWrite(writes, 'tool-validations.json', (entry) => entry.data.tabs?.[0]?.name === 'Open actions'), 'the tab renamed')
-  await until(() => lastWrite(writes, 'on-demand/open-items.json', (entry) => entry.data.name === 'Open actions'), 'the page renamed')
+  await until(() => lastWrite(writes, 'on-demand/Open actions--open-items.json', (entry) => entry.data.name === 'Open actions'), 'the page renamed')
+  // OND-124: the file moved with the name, in the same commit.
+  assert.equal(files['on-demand/Open items--open-items.json'], undefined, 'the old file is gone')
+  assert.equal(writes.find((entry) => entry.deleted && entry.path === 'on-demand/Open items--open-items.json')?.message, lastWrite(writes, 'on-demand/Open actions--open-items.json').message, 'one commit')
   await tabs.getByRole('tab', { name: 'Open actions' }).waitFor()
   const left = tabsPanel.getByRole('button', { name: 'Move Tool dashboard left' })
   await enabled(left)
@@ -516,14 +522,14 @@ test('TC-TVL-11: the Tool Owner adds a Table tab and an On-Demand Dashboard tab,
   await columns.getByLabel('Column 1 name').fill('Action')
   await columns.getByRole('button', { name: 'Save', exact: true }).click()
   await columns.waitFor({ state: 'detached' })
-  await until(() => lastWrite(writes, 'on-demand/open-items.json', (entry) => entry.data.columns?.length === 1), 'the column saved')
+  await until(() => lastWrite(writes, 'on-demand/Open actions--open-items.json', (entry) => entry.data.columns?.length === 1), 'the column saved')
   const addRow = page.getByRole('button', { name: '＋ Add row' })
   await enabled(addRow)
   await addRow.click()
   const row = page.getByRole('dialog', { name: 'New row' })
   await row.getByLabel('Action').fill('Re-validate LabVIEW 2020')
   await row.getByRole('button', { name: 'Save to Git' }).click()
-  const withRow = await until(() => lastWrite(writes, 'on-demand/open-items.json', (entry) => entry.data.rows?.length === 1), 'the row saved to Git')
+  const withRow = await until(() => lastWrite(writes, 'on-demand/Open actions--open-items.json', (entry) => entry.data.rows?.length === 1), 'the row saved to Git')
   assert.equal(Object.values(withRow.data.rows[0].cells)[0], 'Re-validate LabVIEW 2020')
   await page.locator('.od-panel tbody tr', { hasText: 'Re-validate LabVIEW 2020' }).waitFor()
   await page.keyboard.press('Escape')
@@ -545,7 +551,7 @@ test('TC-TVL-11: the Tool Owner adds a Table tab and an On-Demand Dashboard tab,
   await dialog.waitFor({ state: 'detached' })
   const chart = panelTitled(page, 'Tools by status')
   await chart.locator('.viz-root').waitFor()
-  const block = await until(() => lastWrite(writes, 'dashboards/tool-dashboard.json'), 'the dashboard saved')
+  const block = await until(() => lastWrite(writes, 'dashboards/Tool dashboard--tool-dashboard.json'), 'the dashboard saved')
   assert.deepEqual(block.data.blocks.map((entry) => [entry.type, entry.source, entry.category, entry.period ?? 'none']), [['bar', 'tools:master', 'tv-status', 'none']], 'no period column')
   await page.mouse.move(0, 0)
   await shot(page, 'custom-tabs-dashboard')
@@ -567,7 +573,7 @@ test('TC-TVL-11: the Tool Owner adds a Table tab and an On-Demand Dashboard tab,
   await dialog.getByRole('radio', { name: 'Deleted with its data' }).check()
   await dialog.getByRole('button', { name: 'Remove Open actions and delete its page' }).click()
   await dialog.waitFor({ state: 'detached' })
-  await until(() => writes.find((entry) => entry.deleted && entry.path === 'on-demand/open-items.json'), 'the page deleted')
+  await until(() => writes.find((entry) => entry.deleted && entry.path === 'on-demand/Open actions--open-items.json'), 'the page deleted')
   await until(() => lastWrite(writes, 'menu-layout.json', (entry) => !entry.data.pages['open-items']), 'its place removed')
   assert.deepEqual(lastWrite(writes, 'tool-validations.json').data.tabs.map((tab) => tab.pageId), ['tool-dashboard'])
   await tabs.getByRole('tab', { name: 'Open actions' }).waitFor({ state: 'detached' })
@@ -578,7 +584,7 @@ test('TC-TVL-11: the Tool Owner adds a Table tab and an On-Demand Dashboard tab,
   await until(() => lastWrite(writes, 'tool-validations.json', (entry) => !entry.data.tabs), 'no tabs left')
   await tabs.getByRole('tab', { name: 'Tool dashboard' }).waitFor({ state: 'detached' })
   assert.deepEqual(await tabLabels(tabs), ['Expiry list', 'Master list', 'Tool List [TFS]', 'Setup'])
-  assert.ok(files['dashboards/tool-dashboard.json'] && files['on-demand/tool-dashboard.json'], 'the kept page and its blocks stay in Git')
+  assert.ok(files['dashboards/Tool dashboard--tool-dashboard.json'] && files['on-demand/Tool dashboard--tool-dashboard.json'], 'the kept page and its blocks stay in Git')
   assert.equal(JSON.parse(files['menu-layout.json']).pages['tool-dashboard'].hidden, true, 'hidden')
   assert.deepEqual(errors, [])
   await context.close()

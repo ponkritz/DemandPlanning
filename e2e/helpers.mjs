@@ -143,3 +143,38 @@ export async function editorTab(dialog, name) {
   await dialog.locator('[role="tab"][aria-selected="true"]', { hasText: name }).waitFor()
   return tab
 }
+
+// OND-124: the part of GitHub's Git Data API a page rename (and a delete of a page with more than one file) uses — one
+// commit of many files: the branch's commit, a tree, a commit, the branch moved — for the scenarios that mock GitHub by
+// hand with a map of files (path → text) and a list of writes ({ path, message, data } or { path, message, deleted }).
+// Returns a handler that answers such a request (true) or leaves it (false). One branch; the commit's files are applied
+// to the map when the branch is moved.
+export function gitDataApi(files, writes, repo = '/repos/example/storage') {
+  let head = '0'.repeat(40), counter = 0
+  const trees = new Map(), commits = new Map()
+  const sha = () => (++counter).toString(16).padStart(40, 'a')
+  return (request, url, json) => {
+    const path = url.pathname, method = request.method()
+    if (!path.startsWith(`${repo}/git/`)) return false
+    const rest = path.slice(repo.length)
+    const body = request.postData() ? JSON.parse(request.postData()) : null
+    if (/^\/git\/ref\/heads\//.test(rest) && method === 'GET') { json({ object: { sha: head } }); return true }
+    if (/^\/git\/commits\/[0-9a-f]{40}$/.test(rest) && method === 'GET') { json({ tree: { sha: commits.get(rest.slice('/git/commits/'.length))?.tree ?? 'b'.repeat(40) } }); return true }
+    if (rest === '/git/trees' && method === 'POST') { const made = sha(); trees.set(made, body.tree); json({ sha: made }); return true }
+    if (rest === '/git/commits' && method === 'POST') { const made = sha(); commits.set(made, { tree: made, entries: trees.get(body.tree) ?? [], parent: body.parents[0], message: body.message }); json({ sha: made, html_url: `https://github.com/example/storage/commit/${made}` }); return true }
+    if (/^\/git\/refs\/heads\//.test(rest) && method === 'PATCH') {
+      const made = commits.get(body.sha)
+      if (!made || made.parent !== head) { json({ message: 'Update is not a fast forward' }, 422); return true }
+      head = body.sha
+      for (const entry of made.entries) {
+        if (entry.sha === null) { delete files[entry.path]; writes.push({ path: entry.path, message: made.message, deleted: true }); continue }
+        files[entry.path] = entry.content
+        let data = null
+        try { data = JSON.parse(entry.content) } catch { /* not JSON */ }
+        writes.push({ path: entry.path, message: made.message, data })
+      }
+      json({ object: { sha: head } }); return true
+    }
+    return false
+  }
+}

@@ -21,4 +21,4 @@ Theme defaults to the system choice, with explicit light and dark preferences. D
 
 Admin → Reports → Table and chart defaults changes the shared defaults for participating components. Personal per-table preferences live in the current browser profile. [DataTable.tsx](../../src/components/DataTable.tsx), [tableDefaults.ts](../../src/tableDefaults.ts), [columnWidths.tsx](../../src/components/columnWidths.tsx), [tableDesign.ts](../../src/components/tableDesign.ts), [TableDefaultsPanel.tsx](../../src/components/TableDefaultsPanel.tsx).
 
-Several views use a dedicated table. The editable Azure backlog tree has its own column and expansion logic. QE Mapping has spreadsheet-like editing and independent column tools. Summary tables can be plain HTML. Use the individual design document to confirm which controls and export behavior are available.
+Several views use a dedicated table. The editable Azure backlog tree has its own column and expansion logic. On-Demand tables provide row editing and their own column filters. Summary tables can be plain HTML. Use the individual design document to confirm which controls and export behavior are available.

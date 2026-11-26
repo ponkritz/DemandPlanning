@@ -17,7 +17,7 @@ Baseline: DemandPlanning v3.20.1, commit `86f07bc`. These documents describe the
 | Work | [Time Writing](activities.md), [My Tasks](mywork.md), [Sprint check](bulk.md) |
 | Planning | [Planning Overview](planover.md), [Capacity vs Actual](capactual.md), [Baselines](baselines.md) |
 | Backlogs and releases | [Backlogs and Azure query views](board.md), [Release view variants](release-views.md), [Backlog Health](health.md), [Windchill](windchill.md), [BRITE](brite.md) |
-| Governance | [QE Mapping](qemapping.md), [Snapshots](snapshots.md), [Documentation](docs.md) |
+| Governance | [Resource Mapping](qemapping.md), [Snapshots](snapshots.md), [Documentation](docs.md) |
 | Configuration | [Admin and My settings](admin.md) |
 
 The [route registry](../../src/pages/registry.ts) defines the fixed route IDs. Azure queries and Windchill exports can add named entries at runtime. Those entries have shared renderer designs and use configuration for data and labels. The [requirements](../REQUIREMENTS-SPECIFICATION.md), [test plan](../TEST-PLAN.md), and [traceability matrix](../TRACEABILITY-MATRIX.md) record formal coverage separately.

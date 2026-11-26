@@ -1,7 +1,6 @@
 import { capLog, cellText, currentValue, listRefs, newId, valuesOf, type LogEntry, type OnDemandColumn, type OnDemandPage, type OnDemandValue } from './onDemand.ts'
-import { replaceSheet, type QeMappingFile, type QeSheet } from './qeMapping.ts'
 
-// QEM-13, OND-100…OND-102 Replace…: one value of one column replaced by another in every row that holds it — e.g. a QE
+// OND-100…OND-102 Replace…: one value of one column replaced by another in every row that holds it — e.g. a QE
 // who leaves hands their releases over to one person. A cell matches when it is the value as a whole, ignoring case and
 // the spaces around it ("alex example " matches "Alex Example"; "Alex Example Jr" does not). The new value is written as
 // typed (trimmed). A cell that already holds exactly the new value is not changed. In a Multi-select cell each value of
@@ -33,30 +32,6 @@ export interface ReplaceChange { id: string; label: string; from: string; to: st
 export interface ReplacePlan { changes: ReplaceChange[]; locked: number; hidden: number }
 export const maxReplaceValue = 2000
 export const replaceMessage = (find: string, to: string, column: string) => `Replaced “${find.trim()}” with “${to.trim()}” in ${column}`
-
-// ---- QE Mapping (QEM-13) ----
-// Every row of the tab is looked at, also the ones a search or filter hides from view; a row's label is its row number
-// in the tab (1 = the first row under the heading) with the first other filled value, so the preview can be followed.
-export function qeReplacePlan(sheet: QeSheet, columnId: string, find: string, to: string): ReplacePlan {
-  const target = to.trim()
-  const changes = !target ? [] : sheet.rows.flatMap((row, index): ReplaceChange[] => {
-    const cell = row.cells[columnId] ?? ''
-    if (!sameValue(cell, find) || cell === target) return []
-    const other = sheet.columns.find((column) => column.id !== columnId && row.cells[column.id]?.trim())
-    return [{ id: row.id, label: `Row ${index + 1}${other ? ` · ${row.cells[other.id].trim().slice(0, 60)}` : ''}`, from: cell, to: target }]
-  })
-  return { changes, locked: 0, hidden: 0 }
-}
-export function qeReplace(file: QeMappingFile, sheetId: string, columnId: string, find: string, to: string): { file: QeMappingFile; changed: number } {
-  const sheet = file.sheets.find((entry) => entry.id === sheetId)
-  if (!sheet) return { file, changed: 0 }
-  const plan = qeReplacePlan(sheet, columnId, find, to)
-  if (!plan.changes.length) return { file, changed: 0 }
-  const ids = new Set(plan.changes.map((change) => change.id))
-  const target = to.trim()
-  return { file: replaceSheet(file, { ...sheet, rows: sheet.rows.map((row) => ids.has(row.id) ? { ...row, cells: { ...row.cells, [columnId]: target } } : row) }), changed: ids.size }
-}
-export const qeReplaceCommit = (sheet: QeSheet, column: string, find: string, to: string, changed: number) => `QE Mapping: replace “${find.trim()}” with “${to.trim()}” in ${column} (${sheet.name}, ${changed} row${changed === 1 ? '' : 's'})`
 
 // ---- On-Demand pages (OND-100…OND-102) ----
 // The columns whose values can be replaced: Text, Long text, Dropdown and Multi-select (a Number, Currency or Date is a

@@ -9,7 +9,7 @@ import type { FeatureSetups } from '../featureSetup'
 import { chooseSetup, withLinkedStories } from '../featureSetup'
 import { useBulkEpic } from '../useStreamEpics'
 import { bulkEpicMissing } from '../bulkEpics'
-import type { QeMappingFile } from '../qeMapping'
+import { useQeSource } from '../useQeSource'
 import { ioccPlan, pickQe } from '../dpBulk'
 import type { BoardHit } from '../dpBoardMatch'
 import { createFeatureFromSetup, utcMonthLabel, currentIterationPairs, futureIterationPairs, readAzureIterations, withFeatureDoD, HierarchyCreationError, type AzureIteration } from '../azureDevOps'
@@ -20,21 +20,23 @@ import { Modal, Notice } from './ui'
 // QV-59: Create Features for the selected IOCC releases by the DP rules — under the IOCC bulk Epic (mine, else shared;
 // Admin → Stream options → Bulk creation Epics), each with the DoD and default User Stories of its release type
 // (Release or PU set, Feature setup of that Epic), the Release Classification, the Time Writing story and month Task,
-// all assigned to the QE from the QE Mapping (by the release name), in the PI / Sprint chosen; a background job.
-export function IoccBulkCreate({ releases, azure, featureSetup, qeMapping, featureTitle, featureMatch, onClose }: { releases: ReleaseEntry[]; azure: AzureWorkspace; featureSetup?: FeatureSetups | null; qeMapping?: QeMappingFile | null; featureTitle: (release: ReleaseEntry) => string; featureMatch: (release: ReleaseEntry) => BoardHit | undefined; onClose: () => void }) {
+// all assigned to the QE from the QE page (by the release name), in the PI / Sprint chosen; a background job.
+export function IoccBulkCreate({ releases, azure, featureSetup, featureTitle, featureMatch, onClose }: { releases: ReleaseEntry[]; azure: AzureWorkspace; featureSetup?: FeatureSetups | null; featureTitle: (release: ReleaseEntry) => string; featureMatch: (release: ReleaseEntry) => BoardHit | undefined; onClose: () => void }) {
   const epicId = useBulkEpic('IOCC').epicId ?? 0
   const unlinked = epicId ? chooseSetup(featureSetup, epicId, true).setup : undefined
   const epicFile = useEpicSetupFile()
   // STT-02: stories linked to a User Story template take its current title and description.
   const setup = withLinkedStories(unlinked, epicFile?.storyTemplates)
-  // DPF-06: the QE picked per release in the pop-up (email by release), in place of the QE Mapping's.
+  // DPF-02: the QE page of the bulk Epic's setup.
+  const qe = useQeSource(setup)
+  // DPF-06: the QE picked per release in the pop-up (email by release), in place of the QE page's.
   const [picks, setPicks] = useState<Record<string, string>>({})
   const people = boardPeople(azure.items)
   // DPF-08: the Release Classification per row, from the Epic's list (prefilled from the release number), decides
   // the DoD and User Stories (DPF-07).
   const classes = classificationOf(epicFile, epicId)
   const [classPicks, setClassPicks] = useState<Record<string, string>>({})
-  const mappedPlan = ioccPlan(releases, { setup, qeMapping, board: azure.items, featureTitle, featureMatch, epicId, classes: classPicks, classValues: classes.values, classRules: classes.rules })
+  const mappedPlan = ioccPlan(releases, { setup, qe, board: azure.items, featureTitle, featureMatch, epicId, classes: classPicks, classValues: classes.values, classRules: classes.rules })
   const rawPlan = pickQe(mappedPlan, picks, (line) => line.release.key, people)
   // EPS-03: the Epic setup's fields of the bulk Epic.
   const plan = withEpicFields(rawPlan, epicFieldsFor(epicFile, epicId), (line) => line.release.items, { index: classes.fieldIndex, of: (line) => line.classification })
@@ -79,10 +81,11 @@ export function IoccBulkCreate({ releases, azure, featureSetup, qeMapping, featu
     onClose()
   }
 
-  return <Modal eyebrow="IOCC RELEASES" wide title={`Create Features for ${releases.length} IOCC release${releases.length === 1 ? '' : 's'}`} onClose={onClose}>
+  // UI-30: full size like the DP pop-up — only the list scrolls between the fixed header and actions.
+  return <Modal eyebrow="IOCC RELEASES" full title={`Create Features for ${releases.length} IOCC release${releases.length === 1 ? '' : 's'}`} onClose={onClose}>
     <div className="dp-bulk">
       <p className="muted">Under Epic #{epicId}{epic ? ` “${epic.title}”` : ''}: each Feature gets {setup ? <>the DoD and User Stories of the {classes.label} chosen on its row (Admin → Epic &amp; Feature setup → Epic #{epicId}; a value without its own set uses the Epic’s default)</> : <>DP's built-in Release / PU sets (Epic #{epicId || '—'} has no Feature setup)</>}, its Time Writing story and month Task, all assigned to the person chosen on its row.</p>
-      <div className="azure-table"><table>
+      <div className="azure-table modal-scroll"><table aria-label="IOCC releases to create">
         <thead><tr><th scope="col">Release name</th><th scope="col">Version</th>{classes.values.length > 0 && <th scope="col">{classes.label}</th>}<th scope="col">Feature title</th><th scope="col">User Stories</th><th scope="col">QE</th><th scope="col">Result</th></tr></thead>
         <tbody>{plan.map((line) => <tr key={line.release.key} className={line.skip ? 'muted' : undefined}>
           <td>{line.release.name}</td>

@@ -36,7 +36,7 @@ test('NAV-53: QMS-0025 ends My Work, Backlog Health sits before Documentation in
   assert.equal(pageMeta('board').group, 'My Work')
   assert.equal(pageMeta('health').group, 'Data & governance')
   assert.deepEqual(pages.filter((page) => page.group === 'My Work').map((page) => page.id).slice(-1), ['board'], 'the Time Writing backlog is the last entry of My Work')
-  assert.deepEqual(pages.filter((page) => page.group === 'Data & governance').map((page) => page.id), ['baselines', 'qemapping', 'snapshots', 'health', 'docs'], 'Backlog Health right before Documentation')
+  assert.deepEqual(pages.filter((page) => page.group === 'Data & governance').map((page) => page.id), ['baselines', 'snapshots', 'health', 'docs'], 'Backlog Health right before Documentation')
   assert.deepEqual(pages.filter((page) => page.group === 'I&D Board'), [], 'no built-in page in I&D Board')
   assert.ok(pageGroups.includes('I&D Board'), 'the group stays for the pages added to it (PGB-02)')
   // The collapsed state: I&D Board's old key and the old Release Details sub-lists are dropped; the others are kept, once each.

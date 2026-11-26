@@ -6,11 +6,11 @@ import { accessChangedText, defaultPolicy, rightsChanges, rightsFor } from '../s
 import { stampMessage, stampOf } from '../src/gitSaveQueue.ts'
 
 test('GIT-15: a check names the shared files whose version in Git is not the one loaded here', () => {
-  const seen = { 'planning-data.json': 'a1', 'qe-mapping.json': 'b1', 'monthly-pack/2026-10.json': 'c1', 'monthly-pack-setup.json': null, 'access.json': 'd1' }
+  const seen = { 'planning-data.json': 'a1', 'feature-setup.json': 'b1', 'monthly-pack/2026-10.json': 'c1', 'monthly-pack-setup.json': null, 'access.json': 'd1' }
   assert.deepEqual(watchedFolders(seen), ['', 'monthly-pack'], 'one listing per folder')
   assert.equal(folderOf('data/planning-data.json'), 'data')
   const listings = {
-    '': [{ path: 'planning-data.json', sha: 'a2' }, { path: 'qe-mapping.json', sha: 'b1' }, { path: 'monthly-pack-setup.json', sha: 'e1' }],
+    '': [{ path: 'planning-data.json', sha: 'a2' }, { path: 'feature-setup.json', sha: 'b1' }, { path: 'monthly-pack-setup.json', sha: 'e1' }],
     'monthly-pack': [{ path: 'monthly-pack/2026-10.json', sha: 'c1' }],
   }
   assert.deepEqual(changedFiles(seen, listings), ['access.json', 'monthly-pack-setup.json', 'planning-data.json'], 'changed, created and removed files; unchanged ones not')
@@ -20,7 +20,7 @@ test('GIT-15: a check names the shared files whose version in Git is not the one
 
 test('GIT-15: the banner names the shared files as people know them', () => {
   assert.match(fileLabel('planning-data.json', 'planning-data.json'), /^Planning data/)
-  assert.equal(fileLabel('qe-mapping.json', 'planning-data.json'), 'QE Mapping')
+  assert.equal(fileLabel('feature-setup.json', 'planning-data.json'), 'Feature setup')
   assert.equal(fileLabel('data/monthly-pack/2026-10.json', 'data/planning-data.json'), 'Monthly pack 2026-10')
   assert.equal(fileLabel('azure-views.json', 'planning-data.json'), 'Stream mapping and connections')
   assert.equal(fileLabel('other.json', 'planning-data.json'), 'other.json')
@@ -62,7 +62,7 @@ test('GIT-18: each shared file is shown on the pages that use it; the menu and t
   assert.equal(pagesOfFile('data/menu-layout.json', plan).quiet, 'menu')
   assert.equal(pagesOfFile('data/personal-views/ana@example.com.json', plan).quiet, 'views')
   assert.equal(pagesOfFile('data/personal-views-defaults.json', plan).quiet, 'views')
-  assert.deepEqual(pagesOfFile('data/qe-mapping.json', plan).pages, ['qemapping', 'board'])
+  assert.deepEqual(pagesOfFile('data/qe-mapping.json', plan), { pages: [], loader: 'none' }, 'GIT-28: the removed QE Mapping\'s file never raises a notice')
   assert.deepEqual(pagesOfFile('data/access.json', plan), { pages: ['admin:resources'], quiet: 'access', loader: 'access' }, 'GIT-23: the roles quietly, the notice on People & roles only')
   assert.deepEqual(pagesOfFile(plan, plan), { pages: ['baselines', 'admin:*'], quiet: 'planning', loader: 'planning' })
   assert.ok(pagesOfFile('data/custom-streams.json', plan).pages.includes('admin:connections'))
@@ -121,10 +121,10 @@ test('GIT-22: every commit the app writes names the app user — display name an
 test('GIT-23: a newer access.json loaded quietly — what changed in the viewer\'s own rights, in words (TC-GIT-15)', () => {
   const policy = defaultPolicy(); policy.defaultRole = 'Team Member'
   const before = rightsFor(policy, 'ana@example.com')
-  const granted = structuredClone(policy); granted.roles['Team Member'].actions.push('ondemand.edit'); granted.roles['Team Member'].areas.push('qemapping')
+  const granted = structuredClone(policy); granted.roles['Team Member'].actions.push('ondemand.edit'); granted.roles['Team Member'].areas.push('snapshots')
   const changes = rightsChanges(before, rightsFor(granted, 'ana@example.com'))
-  assert.deepEqual(changes, ['you now see QE Mapping', 'you can now edit On-Demand data (rows)'])
-  assert.equal(accessChangedText('Rita Gomez', changes), 'Your access was changed by Rita Gomez: you now see QE Mapping; you can now edit On-Demand data (rows).')
+  assert.deepEqual(changes, ['you now see Snapshots', 'you can now edit On-Demand data (rows)'])
+  assert.equal(accessChangedText('Rita Gomez', changes), 'Your access was changed by Rita Gomez: you now see Snapshots; you can now edit On-Demand data (rows).')
   const owner = structuredClone(policy); owner.members['ana@example.com'] = ['Tool Owner']
   const removed = structuredClone(owner); removed.roles['Tool Owner'].actions = removed.roles['Tool Owner'].actions.filter((action) => action !== 'ondemand.setup')
   assert.deepEqual(rightsChanges(rightsFor(owner, 'ana@example.com'), rightsFor(removed, 'ana@example.com')), ['“Set up On-Demand pages (pages, columns, options)” removed'])

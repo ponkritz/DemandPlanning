@@ -77,6 +77,11 @@ verbs for the main action; ~9 hand-built error boxes; 154 of 174 disabled button
   **title** in sentence case, `wide` only for tables and multi-column editors.
 - Footer: `.modal-actions`, Cancel then the main action (§3).
 - A pop-up with input stays open on a click beside it; Escape and × close it; the keyboard stays inside (UI-18, UI-19).
+- **Sizes** (approved 2026-11-25): the default for a form; `wide` for a table or a multi-column editor; **`full`** for
+  a **long list or a bulk action** (the DP and IOCC bulk Create Features) — the window less a 20 px margin in which the
+  dimmed page shows, rounded corners, the header (eyebrow, title, ×) fixed at the top and the actions fixed at the
+  bottom, only the list between them scrolling (its part marked `modal-scroll`); the whole screen at phone width.
+  Keyboard and closing rules as every pop-up. Never hand-build a dialog for this.
 - **Confirmations** of a write or a removal use a pop-up that names what will change (like the Close pop-up), not
   `window.confirm`. `window.confirm` is acceptable only for a single, undoable, local change.
 
@@ -113,8 +118,7 @@ Approved by the product owner on 2026-11-23.
   the values) for a column with a list. A group row is ▸ / ▾ (`text-button`, `aria-expanded`), "Column: value" with
   "(blank)" last and "n rows", indented 18 px per level. While a filter is set a line names the filtered columns with
   **Clear column filters**. Grouping and filters are part of the table's view (Save view for everyone, with **Start
-  collapsed** in its pop-up); which groups are open is per visit. The QE Mapping keeps its own controls with the same
-  wording (QEM-03, QEM-06…11).
+  collapsed** in its pop-up); which groups are open is per visit.
 - Inside a `TablePanel` the table's toolbar (filters, search, Columns, Export), its first column and the read-only
   reason line up with the panel's title; the table's lines run the full width (one shared rule, KB-93).
 
@@ -282,6 +286,7 @@ wrong for a real case as an Improvement to the standard.
 
 | Date | Change | Approved by |
 |---|---|---|
+| 2026-11-25 | §4 Pop-ups: **full-size pop-up** — `Modal` `full` for long lists and bulk actions: the window less a 20 px margin with the page dimmed behind, rounded corners, header and actions fixed and only the list scrolling, the whole screen on a phone; first used by the DP and IOCC bulk Create Features ("make the Bulk create Pop Up screen as full screen size… but still like a Pop Up", UI-30). | Product owner, 2026-11-25 |
 | 2026-11-25 | §5 Tables: **Group by and Filter by column** — built once into `DataTable` and switched on per table (the On-Demand Table pages first): one row under the toolbar with Filter by column, Group by / then by (up to four levels), Expand all / Collapse all; the filter row under the headings (text, or a pick list for a column with a list); group rows ▸ / ▾ with column, value, "(blank)" last and the count; part of the table's view with **Start collapsed** in the Save view for everyone pop-up ("Add Group by, Filter by Column options to the Table page defaults … Along with Group by we will need collapse and Expand as well", UI-25…UI-28, OND-132). | Product owner, 2026-11-25 |
 | 2026-11-25 | §5 Tables: **sticky horizontal scroll bar** — a table wider than its box keeps its horizontal scroll bar at the bottom of the screen right above the sticky footer while its own bottom is out of view, and it goes when the bottom shows; built once into `DataTable` for every table ("The horizontal scrolling should be sticky to above the footer", UI-24). | Product owner, 2026-11-25 |
 | 2026-11-25 | §6 Buttons: **⚙** added to the symbols as "open the setup of this page" — an icon-only `ghost` button in the page actions, `aria-label` and title the setup page's name, shown exactly when that Admin page is in the viewer's menu; first used by My PI Review and PI Review for Admin → PI Review Setup (PIR-29, PIR-30). | Product owner, 2026-11-25 |

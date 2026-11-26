@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { GitQueueError } from './gitSaveQueue'
 import { conqPage, onDemandPath, pageListChange, withoutHidden, parseOnDemandPage, serializeOnDemandPage, sortPages, type OnDemandPage } from './onDemand'
-import { headOf, pageFolder, rowPageQueue } from './rowFiles'
+import { headOf, rowPageQueue } from './rowFiles'
 import { SampleWriteError, samplePage } from './sampleRows'
 import { defaultLockSettings, parseLockSettings, serializeLockSettings, type LockSettings } from './rowLocks'
 import type { GitStorage } from './useGitStorage'
 import { attachLists, resolveLists, type CatalogEntry } from './sharedLists'
+import type { CopySet } from './pageFiles'
 
 // OND-02, OND-08: the On-Demand pages from Git (one file each in on-demand/), read when Git is connected; the pages last
 // read are kept in this browser so the menu and the pages show while Git is not connected. While the folder holds no
@@ -23,7 +24,7 @@ function cached(): OnDemandPage[] | null {
 // A page too large for the file (a row-file page of many rows, OND-31) is kept as last read when it fits, else not kept.
 function remember(pages: OnDemandPage[]) { try { localStorage.setItem(cacheKey, JSON.stringify(pages.flatMap((page) => { try { return [serializeOnDemandPage(page, { fill: false })] } catch { return [] } }))) } catch { /* too large or blocked: this visit only */ } }
 
-interface State { scope: string; pages: OnDemandPage[]; inGit: string[]; errors: string[]; loaded: boolean }
+interface State { scope: string; pages: OnDemandPage[]; inGit: string[]; errors: string[]; loaded: boolean; copies: Record<string, CopySet[]> }
 type Change = (page: OnDemandPage) => OnDemandPage
 type Saved = { sha: string; commitUrl: string; merged: boolean; unchanged: boolean; keptNewer: boolean; text: string; page: OnDemandPage }
 // saving: on its way; queued: kept in the GIT-17 queue after the retries (its Retry); failed: not queued (Retry, Discard).
@@ -50,7 +51,10 @@ export function useOnDemand(git: GitStorage, isSample: (id: string) => boolean =
     const read = await readOnDemand(id)
     return read.text == null ? null : parseOnDemandPage(read.text, id)
   }, [readRowPage, readOnDemand])
-  const [state, setState] = useState<State>(() => { const pages = cached(); return { scope: '', pages: pages ?? [], inGit: pages?.map((page) => page.id) ?? [], errors: [], loaded: false } })
+  // OND-135: the older copies of a page, from the listing just made (a ref: the latest function, no reload loop).
+  const copySetsOf = useRef(git.copySetsOf)
+  useEffect(() => { copySetsOf.current = git.copySetsOf })
+  const [state, setState] = useState<State>(() => { const pages = cached(); return { scope: '', pages: pages ?? [], inGit: pages?.map((page) => page.id) ?? [], errors: [], loaded: false, copies: {} } })
   // OND-28: changes whose save failed before it was queued, per page, applied in order on top of the page from Git.
   const [kept, setKept] = useState<Record<string, Kept[]>>({})
   const load = useCallback(async () => {
@@ -58,13 +62,16 @@ export function useOnDemand(git: GitStorage, isSample: (id: string) => boolean =
     try {
       const ids = await listOnDemand()
       const pages: OnDemandPage[] = [], errors: string[] = []
-      for (const { id, rows } of ids) {
+      for (const { id, rows, path } of ids) {
         try { const page = await readPage(id, rows); if (page) pages.push(page) }
-        catch (failure) { errors.push(`${rows ? `${pageFolder(id)}/` : onDemandPath(id)}: ${messageOf(failure)}`) }
+        catch (failure) { errors.push(`${path}: ${messageOf(failure)}`) }
       }
       try { setLockSettings(parseLockSettings((await readLockSettings()).text)) } catch { /* the timeout as before */ }
       if (!errors.length) remember(pages)
-      setState({ scope, pages: sortPages(pages), inGit: pages.map((page) => page.id), errors, loaded: true })
+      // OND-123: an older copy of a page's file next to the one read (both forms, or two names) is flagged.
+      // OND-123, OND-135: the older copies of each page's file and of its Dashboard blocks file.
+      const copies = Object.fromEntries(ids.flatMap((entry) => { const sets = copySetsOf.current(entry.id); return sets.length ? [[entry.id, sets]] : [] }))
+      setState({ scope, pages: sortPages(pages), inGit: pages.map((page) => page.id), errors, loaded: true, copies })
     } catch (failure) { setState((current) => ({ ...current, scope, loaded: true, errors: [messageOf(failure)] })) }
   }, [scope, listOnDemand, readPage, readLockSettings])
   // GIT-18: one page read again from Git (Load the newer data on its notice) — the others stay as they are; a page
@@ -179,6 +186,14 @@ export function useOnDemand(git: GitStorage, isSample: (id: string) => boolean =
   }
   return {
     pages, save, update, retry, remove, reload: load, reloadPage: loadPage, loadNew,
+    // OND-120: where a page is kept in Git ("on-demand/CoNQ--conq.json", a folder "on-demand/CoNQ--conq/" for row files),
+    // else where it is created; OND-123: the older copies of a page's file (the one read first) and the warnings of the
+    // page files (an older copy, the app version the repository needs, OND-128).
+    filePath: (id: string) => git.pagePath(id, stored.current.find((page) => page.id === id)?.name),
+    copies: (id: string) => fresh ? state.copies[id] ?? [] : [],
+    fileWarnings: fresh && git.pageFilesNote ? [git.pageFilesNote] : [],
+    // OND-135: Delete older copy (Tool Owner): the older copies of the page deleted in one commit, then the pages read again.
+    deleteCopies: async (id: string) => { refuse(id); const sets = state.copies[id] ?? []; const name = stored.current.find((page) => page.id === id)?.name ?? id; const done = await git.removeCopies(id, sets, `Pages & menu: delete the older copy of ${name} (${sets.flatMap((set) => set.older).join(', ')})`); await load(); return done },
     // OND-32: Convert to row files (Tool Owner) — one commit; the page shown is read from its folder.
     convert: async (id: string) => { refuse(id); const result = await git.convertOnDemand(id); put(result.page); return result },
     // OND-36: the inactivity timeout, and its change (Admin, Tool Owner).

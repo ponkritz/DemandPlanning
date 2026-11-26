@@ -1,7 +1,7 @@
 // QV-59: the Epic each stream's bulk Feature creation works under — chosen per user (this browser) over a shared
 // default (the shared settings in Git). No Epic is built in; a stream without either has none, and its Create
 // Features is disabled until one is mapped. The Feature setup of that Epic (personal or shared, CON-63) gives the DoD,
-// release type sets, User Stories and QE Mapping columns.
+// release type sets, User Stories and the QE page (DPF-02).
 export const bulkStreams = ['DP', 'IOCC', 'Content'] as const
 export type BulkStream = typeof bulkStreams[number]
 export function normalizeBulkEpics(value: unknown): Partial<Record<BulkStream, number>> | undefined {

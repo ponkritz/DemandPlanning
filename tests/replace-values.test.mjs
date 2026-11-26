@@ -1,17 +1,17 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { applyOnDemandReplace, distinctValues, onDemandReplaceCommit, onDemandReplacePlan, qeReplace, qeReplaceCommit, qeReplacePlan, replaceError, replaceableColumns, sameValue } from '../src/replaceValues.ts'
+import { applyOnDemandReplace, distinctValues, onDemandReplaceCommit, onDemandReplacePlan, replaceError, replaceableColumns, sameValue } from '../src/replaceValues.ts'
 import { parseOnDemandPage, serializeOnDemandPage } from '../src/onDemand.ts'
 import { convertedFiles } from '../src/rowFiles.ts'
 import { commitPageChange, loadRowPage } from '../src/rowPageGit.ts'
 import { fakeGitHub } from '../e2e/fakeGitHub.mjs'
 
-// QEM-13, OND-100…OND-102 Replace…: the match (whole cell, any case, spaces around ignored), the counts, the result,
+// OND-100…OND-102 Replace…: the match (whole cell, any case, spaces around ignored), the counts, the result,
 // the History entries, locked and hidden rows. Synthetic data only.
 const random = (() => { let seed = 11; return () => (seed = (seed * 16807) % 2147483647) / 2147483647 })()
 const now = () => Date.UTC(2026, 10, 25, 9)
 
-test('Replace: a cell matches as a whole, ignoring case and the spaces around it (TC-QEM-10, TC-OND-98)', () => {
+test('Replace: a cell matches as a whole, ignoring case and the spaces around it (TC-OND-98)', () => {
   assert.equal(sameValue('Alex Example', 'alex example'), true)
   assert.equal(sameValue('  ALEX EXAMPLE ', 'Alex Example'), true)
   assert.equal(sameValue('Alex Example Jr', 'Alex Example'), false, 'not a part of the cell')
@@ -20,35 +20,10 @@ test('Replace: a cell matches as a whole, ignoring case and the spaces around it
   assert.equal(sameValue('Alex  Example', 'Alex Example'), false, 'spaces inside the value count')
 })
 
-test('Replace: the distinct values of a column with their row counts, most rows first, spellings merged (TC-QEM-10)', () => {
+test('Replace: the distinct values of a column with their row counts, most rows first, spellings merged (TC-OND-98)', () => {
   assert.deepEqual(distinctValues([['Alex Example'], ['alex example '], ['Sam Example'], [''], ['Alex Example'], ['Kim Example', 'Sam Example']]), [
     { value: 'Alex Example', count: 3 }, { value: 'Sam Example', count: 2 }, { value: 'Kim Example', count: 1 },
   ])
-})
-
-const sheet = () => ({ id: 's1', name: 'Resources', columns: [{ id: 'c1', name: 'Platform' }, { id: 'c2', name: 'QE Name' }], rows: [
-  { id: 'r1', cells: { c1: 'Alpha', c2: 'Alex Example' } },
-  { id: 'r2', cells: { c1: 'Beta', c2: 'Kim Example' } },
-  { id: 'r3', cells: { c1: 'Gamma', c2: ' alex example' } },
-  { id: 'r4', cells: { c1: 'Delta', c2: 'Alex Example Jr' } },
-  { id: 'r5', cells: { c1: 'Epsilon', c2: 'Sam Example' } },
-] })
-
-test('QEM-13: the QE Mapping replace — preview count and rows, every row of the tab changed, the others kept, the commit message (TC-QEM-10)', () => {
-  const plan = qeReplacePlan(sheet(), 'c2', 'Alex Example', ' Sam Example ')
-  assert.deepEqual(plan.changes, [
-    { id: 'r1', label: 'Row 1 · Alpha', from: 'Alex Example', to: 'Sam Example' },
-    { id: 'r3', label: 'Row 3 · Gamma', from: ' alex example', to: 'Sam Example' },
-  ])
-  const file = { schema: 1, kind: 'qe-mapping', sheets: [sheet(), { ...sheet(), id: 's2', name: 'Other' }] }
-  const done = qeReplace(file, 's1', 'c2', 'Alex Example', 'Sam Example')
-  assert.equal(done.changed, 2)
-  assert.deepEqual(done.file.sheets[0].rows.map((row) => row.cells.c2), ['Sam Example', 'Kim Example', 'Sam Example', 'Alex Example Jr', 'Sam Example'])
-  assert.deepEqual(done.file.sheets[1].rows.map((row) => row.cells.c2), sheet().rows.map((row) => row.cells.c2), 'another tab is left as it is')
-  assert.equal(qeReplaceCommit(file.sheets[0], 'QE Name', 'Alex Example', 'Sam Example', 2), 'QE Mapping: replace “Alex Example” with “Sam Example” in QE Name (Resources, 2 rows)')
-  // A cell already holding exactly the new value, or an empty new value, changes nothing.
-  assert.equal(qeReplacePlan(sheet(), 'c2', 'sam example', 'Sam Example').changes.length, 0)
-  assert.equal(qeReplace(file, 's1', 'c2', 'Alex Example', '  ').changed, 0)
 })
 
 const page = () => ({

@@ -1,4 +1,5 @@
 import { useRef, useState, useSyncExternalStore } from 'react'
+import { useExportActions, type OtherViewEnv } from './OtherViewActions'
 import { isRunning, recordJob, runInBackground, subscribeJobs } from '../backgroundJobs'
 import { projectLevels, windchillOps, windchillCell, type WindchillFilter, type WindchillLogic, type WindchillView } from '../windchillViews'
 import { streamNamed, windchillOptionsForView } from '../streams'
@@ -82,7 +83,7 @@ export function WindchillViewsPanel({ windchill }: { windchill: WindchillWorkspa
 // type and when imported or fetched as the first line of ⋯), the counts (QV-64: Releases in the month and Supported, as Pulse Check counts the
 // Windchill streams; no Completed), the Releases | Source data tabs and the Releases table. QV-63: the results of ↻,
 // Import, Load from Git and Save to Git are Background jobs entries; the page keeps only warnings about its data.
-export function WindchillPage({ view, windchill, git, gitNote, month, board }: { view: WindchillView; windchill: WindchillWorkspace; git?: GitStorage; gitNote?: { tone: string; text: string }; month?: string; board?: ReleaseBoard }) {
+export function WindchillPage({ view, windchill, git, gitNote, month, board, otherView }: { otherView?: OtherViewEnv; view: WindchillView; windchill: WindchillWorkspace; git?: GitStorage; gitNote?: { tone: string; text: string }; month?: string; board?: ReleaseBoard }) {
   const [search, setSearch] = useState('')
   const [scope, setScope] = useState<ReleaseScope>('month')
   const gitKey = `windchill-git:${view.id}`
@@ -118,7 +119,9 @@ export function WindchillPage({ view, windchill, git, gitNote, month, board }: {
     if (!file) return
     void file.text().then((text) => { try { windchill.importExport(text, file.name, '', view.id) } catch (failure) { importError(failure instanceof Error ? failure.message : String(failure)) } }, () => importError('The file could not be read.'))
   }} /> : null
-  const menu = [...(view.exportFile ? [{ key: 'upload', label: 'Upload latest export…', onClick: () => uploadInput.current?.click() }] : []), ...(git?.connected ? [{ key: 'git', label: 'Load from Git', disabled: loading, onClick: loadFromGit }] : []), ...(view.exportFile ? [{ key: 'remove', label: 'Remove this export…', danger: true, onClick: () => { if (window.confirm(`Remove the Windchill export “${view.name}” from this app?`)) windchill.removeView(view.id) } }] : [])]
+  const menu = [...(view.exportFile ? [{ key: 'upload', label: 'Upload latest export…', onClick: () => uploadInput.current?.click() }] : []), ...(git?.connected ? [{ key: 'git', label: 'Load from Git', disabled: loading, onClick: loadFromGit }] : []), ...(view.exportFile && !otherView?.other ? [{ key: 'remove', label: 'Remove this export…', danger: true, onClick: () => { if (window.confirm(`Remove the Windchill export “${view.name}” from this app?`)) windchill.removeView(view.id) } }] : [])]
+  // CON-118: an export under Other views has Delete this export… (its files in Git too) in place of Remove this export….
+  const exportActions = useExportActions(view, windchill, git, otherView)
   // (2) QV-64: the releases (ECP: projects) with a document dated in the header month, as the Releases table lists
   // them; Supported counts the same releases, as Pulse Check's Supported line does for a Windchill stream. Completed is
   // left out: an export has no completion event (no signature, milestone or Release Notes rule), only document dates.
@@ -135,7 +138,7 @@ export function WindchillPage({ view, windchill, git, gitNote, month, board }: {
   return <Page className="release-page">
     <ReleaseSourceBar name={view.name} source={view.exportFile ? `Windchill export ${view.exportFile}` : view.entitySet}
       fetched={source ? `${source.rows.length} results · ${view.exportFile ? 'imported' : 'fetched'} ${formatDateTime(source.fetchedAt)}${source.fromGit ? ' (desktop app, via Git)' : ''}` : undefined}
-      about={about} period={source && month ? <PeriodSelect month={month} value={scope} onChange={setScope} /> : undefined} primary={primary} menu={menu}>
+      about={about} period={source && month ? <PeriodSelect month={month} value={scope} onChange={setScope} /> : undefined} primary={primary} menu={menu} last={exportActions.items}>
       {upload}
       {!view.exportFile && <WindchillImport view={view} windchill={windchill} />}
       {/* Warnings about the data shown (§8): the last fetch failed, so the results are older; the Git copy is not saved. */}
@@ -148,6 +151,7 @@ export function WindchillPage({ view, windchill, git, gitNote, month, board }: {
       : <ResultTabs id={`wc:${view.id}`} rawCount={source.rows.length} main={<WindchillReleasesPanel view={view} rows={source.rows} columns={columns} git={git} month={month} scope={scope} board={board} reading={reading} onSetup={view.exportFile ? (setup) => windchill.setSetup(view.id, setup) : undefined} />} raw={<TablePanel><DataTable id={`wc:${view.id}`} columns={rawColumns} rows={rows} rowKey={(_, index) => String(index)} exportName={view.name} limit={1000}
         toolbar={<>{!view.exportFile && <Pill tone="info">{view.filters.length} filter{view.filters.length === 1 ? '' : 's'}</Pill>}<input className="search" aria-label={`Search ${view.name}`} placeholder="Search all columns" value={search} onChange={(event) => setSearch(event.target.value)} /></>}
         status={`${rows.length} of ${source.rows.length}`} /></TablePanel>} />}
+    {exportActions.dialog}
   </Page>
 }
 const noRows: Record<string, unknown>[] = []

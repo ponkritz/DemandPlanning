@@ -152,7 +152,7 @@ export interface AppState {
   releaseSource?: { organization: string; project: string; query: string; fetchedAt: string; items: AzureWorkItem[]; columns?: { ref: string; name: string }[]; orderBy?: { ref: string; desc: boolean }[]; unresolved?: string[] }
   // The design default of every table (UI-12), normalized on read (tableDefaults.ts).
   tableDefaults?: unknown
-  releaseSourceSettings?: { streamSegment?: number; releasePattern?: string; approvalDateField?: string; matchThreshold?: number; namingPatterns?: unknown; featureEpics?: Record<string, number[]>; countOverrides?: unknown; bulkEpics?: unknown; toolValidations?: unknown }
+  releaseSourceSettings?: { streamSegment?: number; releasePattern?: string; approvalDateField?: string; matchThreshold?: number; namingPatterns?: unknown; featureEpics?: Record<string, number[]>; countOverrides?: unknown; bulkEpics?: unknown; dpBulkDates?: unknown; toolValidations?: unknown }
   releasePlans?: ReleasePlan[]
   // Read-only snapshots from additional Azure connections (backlog views, document sources such as Vault, reference data).
   // Windchill views' last results (Settings → Windchill views), fetched from the desktop app or loaded from Git.

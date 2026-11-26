@@ -12,6 +12,7 @@ import type { PersonalViewsStore } from '../usePersonalViews'
 import { viewMetaKey } from '../personalViews'
 import { recordJob } from '../backgroundJobs'
 import { normalizeBacklogColumns } from '../backlogView'
+import { useOtherViewActions, type OtherViewEnv } from '../components/OtherViewActions'
 
 // BKL-47: the QMS-0025 column order a Tool Owner saves for everyone (in the shared views defaults in Git).
 const columnsDefaultKey = 'backlog-columns'
@@ -35,7 +36,7 @@ import { toolQueryHowLabel } from '../streams'
 import type { AzureWorkItem } from '../domain'
 import { ddtMonthOf, dpListedIn, dpMilestoneNames, dpMilestones, dpMilestoneText, dpMonthCounts, dpMonthText, dpPlannedMilestones } from '../dpMilestones'
 import type { DataColumn } from '../components/DataTable'
-import type { QeMappingFile } from '../qeMapping'
+import { useQeSource } from '../useQeSource'
 import { chooseSetup } from '../featureSetup'
 import { dpRowName, dpRowVersion, fullMatch, possibleQes, qeFor } from '../dpBulk'
 import { classificationOf, detectClassification } from '../epicSetup'
@@ -58,10 +59,10 @@ import { normalizeReleaseSourceSettings, streamPatterns } from '../releaseSource
 
 // One page for all configured Azure DevOps views (each its own entry in the sidebar): the Time Writing backlog
 // (QMS-0025) as an editable tree, and every other shown connection as a read-only query view.
-export function BoardPage({ azure, store, current, month, git, onOpenConnection, onOpenSettings, assign, featureSetup, qeMapping, views, canSetDefault = false }: { onOpenSettings?: (tab: SettingsTab, section?: string) => void; views?: PersonalViewsStore; canSetDefault?: boolean; azure: AzureWorkspace; store: PageProps['store']; current: BacklogView; month: string; git?: GitStorage; onOpenConnection: () => void; assign?: { me: string; canChoose: boolean }; featureSetup?: FeatureSetups | null; qeMapping?: QeMappingFile | null }) {
+export function BoardPage({ azure, store, current, month, git, onOpenConnection, onOpenSettings, assign, featureSetup, views, canSetDefault = false, otherView }: { otherView?: OtherViewEnv; onOpenSettings?: (tab: SettingsTab, section?: string) => void; views?: PersonalViewsStore; canSetDefault?: boolean; azure: AzureWorkspace; store: PageProps['store']; current: BacklogView; month: string; git?: GitStorage; onOpenConnection: () => void; assign?: { me: string; canChoose: boolean }; featureSetup?: FeatureSetups | null }) {
   const { items, config, preview, pat, featureCreated, rememberPat } = azure
   const [filter, setFilter] = useState('')
-  if (current.readOnly) return <ReadOnlyView key={current.id} id={current.id} name={current.name} role={current.role} azure={azure} store={store} month={month} gitNote={git?.snapshotNotes[current.id]} onOpenConnection={onOpenConnection} onOpenSettings={onOpenSettings} assign={assign} featureSetup={featureSetup} qeMapping={qeMapping} />
+  if (current.readOnly) return <ReadOnlyView key={current.id} id={current.id} name={current.name} role={current.role} azure={azure} store={store} month={month} gitNote={git?.snapshotNotes[current.id]} otherView={otherView} onOpenConnection={onOpenConnection} onOpenSettings={onOpenSettings} assign={assign} featureSetup={featureSetup} />
   const activeItems = items.filter((item) => item.state.trim().toLowerCase() !== 'removed')
   const shown = activeItems.filter((item) => `${item.id} ${item.title} ${item.workItemType} ${item.state}`.toLowerCase().includes(filter.toLowerCase()))
   const counts = new Map<string, number>()
@@ -137,7 +138,7 @@ function useMissingParentTitles(documentsId: string | undefined, fetchedAt: stri
     void readAndKeepParentTitles(documentsId, missing, update)
   }, [documentsId, fetchedAt, report, titles, update])
 }
-function ReadOnlyView({ id, name, role, azure, store, month, gitNote, onOpenConnection, onOpenSettings, assign, featureSetup, qeMapping }: { onOpenSettings?: (tab: SettingsTab, section?: string) => void; featureSetup?: FeatureSetups | null; qeMapping?: QeMappingFile | null; id: string; name: string; role: BacklogView['role']; azure: AzureWorkspace; store: PageProps['store']; month: string; gitNote?: { tone: string; text: string }; onOpenConnection: () => void; assign?: { me: string; canChoose: boolean } }) {
+function ReadOnlyView({ id, name, role, azure, store, month, gitNote, otherView, onOpenConnection, onOpenSettings, assign, featureSetup }: { otherView?: OtherViewEnv; onOpenSettings?: (tab: SettingsTab, section?: string) => void; featureSetup?: FeatureSetups | null; id: string; name: string; role: BacklogView['role']; azure: AzureWorkspace; store: PageProps['store']; month: string; gitNote?: { tone: string; text: string }; onOpenConnection: () => void; assign?: { me: string; canChoose: boolean } }) {
   // QV-16: the header month, or every month (Show: {month} / All months).
   const [scope, setScope] = useState<ReleaseScope>('month')
   const allMonths = scope === 'all'
@@ -201,7 +202,7 @@ function ReadOnlyView({ id, name, role, azure, store, month, gitNote, onOpenConn
   // DP rows matched to the QMS-0025 board (Feature / User Story by SourceProgram + Title), with Create Feature.
   const boardColumn = useDpBoardColumn(isDp ? items : noItems, azure, threshold, assign, featureSetup)
   // QV-53: DP's Month & Year (the DDT Date's month, which the list filters on) and every milestone's month and status.
-  // DPF-01…04: the release type, the QE from the QE Mapping and the possible QEs, and ticks for Create Features.
+  // DPF-01…04: the release type, the QE from the QE page and the possible QEs, and ticks for Create Features.
   const [picked, setPicked] = useState<number[]>([])
   const [bulkOpen, setBulkOpen] = useState(false)
   const can = useCan(), bulkWhy = useWriteBlock().why('work.bulk')
@@ -209,6 +210,8 @@ function ReadOnlyView({ id, name, role, azure, store, month, gitNote, onOpenConn
   const dpBulkEpic = useBulkEpic('DP').epicId
   const openBulkEpics = onOpenSettings ? () => onOpenSettings('options', 'bulk') : undefined
   const dpSetup = useMemo(() => chooseSetup(featureSetup, dpBulkEpic, true).setup, [featureSetup, dpBulkEpic])
+  // DPF-02: the QE page of the DP bulk Epic's setup.
+  const qeSource = useQeSource(dpSetup)
   const dpEpics = useStreamEpics('DP')
   const dpCandidates = useMemo(() => isDp ? dpBoardCandidates(azure.items, dpEpics) : null, [isDp, azure.items, dpEpics])
   const dpMatches = useDpMatches(isDp ? source?.items : undefined, dpCandidates, threshold)
@@ -227,8 +230,8 @@ function ReadOnlyView({ id, name, role, azure, store, month, gitNote, onOpenConn
   ] : []
   const dpColumns: DataColumn<AzureWorkItem>[] = isDp ? [
     { id: '@dp-pick', label: 'Select', fixed: true, sortable: false, export: false, value: (item) => picked.includes(item.id) ? 'yes' : '', render: (item) => { const full = fullMatch(featureMatch(item)); return <input type="checkbox" aria-label={`Select ${item.title}`} disabled={full} title={full ? `Feature #${featureMatch(item)!.item.id} on QMS-0025 matches this release 100%: nothing to create` : undefined} checked={!full && picked.includes(item.id)} onChange={() => setPicked((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])} /> } },
-    { id: '@dp-qe', label: 'QE', sortable: false, value: (item) => qeFor(item, qeMapping, dpSetup?.qeColumns)?.qe ?? '', title: () => dpSetup?.qeColumns ? `From the QE Mapping: ${dpSetup.qeColumns.matchColumn} → ${dpSetup.qeColumns.qeColumn}` : `Set the QE Mapping columns in Feature setup → Epic ${dpBulkEpic}` },
-    { id: '@dp-backup', label: 'Possible QEs', sortable: false, value: (item) => possibleQes(item, allDp, qeFor(item, qeMapping, dpSetup?.qeColumns)?.qe ?? '').join(', '), title: () => 'Assigned to the earlier releases of the same product (newest first), not the QE and not the release’s own Assigned To' },
+    { id: '@dp-qe', label: 'QE', sortable: false, value: (item) => qeFor(item, qeSource)?.qe ?? '', title: () => 'rows' in qeSource ? 'From the QE page set in the Feature setup of the DP bulk Epic' : `Set the QE page and its columns in Feature setup → Epic ${dpBulkEpic}` },
+    { id: '@dp-backup', label: 'Possible QEs', sortable: false, value: (item) => possibleQes(item, allDp, qeFor(item, qeSource)?.qe ?? '').join(', '), title: () => 'Assigned to the earlier releases of the same product (newest first), not the QE and not the release’s own Assigned To' },
     { id: '@dp-month', label: 'Month & Year', value: (item) => dpMonthText(item), title: (item) => ddtMonthOf(item) ? 'The month of the DDT Date: the month this release is listed in' : dpPlannedMilestones(item).length ? 'No DDT Date: listed in the months of its Planned / ToBePlanned milestones, not counted as Supported or Completed' : 'No DDT Date and no planned milestone: listed only with All months, never counted', sortable: false },
     { id: '@dp-milestones', label: 'Milestones', value: (item) => dpMilestoneText(item), title: () => '✓ = Done with a date: counts as Supported in that month (DDT ✓ also as Completed)', sortable: false },
     ...matchedFeatureColumns<AzureWorkItem>(featureMatch, hoursOf).map((column) => ({ ...column, id: `@dp-${column.id}` })),
@@ -250,6 +253,8 @@ function ReadOnlyView({ id, name, role, azure, store, month, gitNote, onOpenConn
   // a name not read shows as #ID with the reason. The tables never wait for it.
   const fetchAll = isToolTwo && toolTwo ? async () => { const tools = await azure.fetchConnection(id); const documents = await azure.fetchConnection(toolTwo.documents.id); await readAndKeepParentTitles(toolTwo.documents.id, parentIdsToRead(toolTwo.report), store.update); return tools && documents } : () => azure.fetchConnection(id)
   const refresh = <button type="button" className="primary" aria-label={refreshLabel} title={isToolTwo ? `${refreshLabel}: the Tools and the Signed documents queries` : refreshLabel} disabled={busy} onClick={() => inBackground(refreshLabel, fetchAll)}>↻{busy ? <small>{status?.message || 'Fetching…'}</small> : !source ? <small>Fetch</small> : null}</button>
+  // SET-19, CON-116: Delete this view… on a view of your own; a shared view's page has no delete item.
+  const viewActions = useOtherViewActions(id, azure, otherView)
   const menu = [...(azure.canLoadFromGit(id) ? [{ key: 'git', label: 'Load from Git', disabled: busy, onClick: () => inBackground('Load from Git', () => azure.loadFromGit(id)) }] : []), { key: 'settings', label: 'Connection settings', onClick: onOpenConnection }]
   // Information about the view sits behind ⋯ → About this source… (QV-70), not as banners; only errors and warnings stay on the page.
   const notes = [
@@ -340,18 +345,18 @@ function ReadOnlyView({ id, name, role, azure, store, month, gitNote, onOpenConn
     : isToolDocuments ? <TablePanel title="Source data" count={`${source.items.length} row${source.items.length === 1 ? '' : 's'}`}><QueryView name={name} items={source.items} columns={viewColumns} orderBy={orderBy} unresolved={unresolved} summary={false} /></TablePanel>
     : !items.length && source.items.length ? (<TablePanel title={stream ? 'Releases' : undefined}>{isDp ? <EmptyState title={`No release has its DDT Date — or, without one, a planned milestone — in ${monthName(month)}.`} detail="Pick another month in the header, or choose All months (next to ↻). The counts above still include milestones Done in the month." /> : <EmptyState title={`No items in ${monthName(month)}.`} detail={`${source.items.length} items have an approval date (else a changed date) in other months. Pick another month in the header, or choose All months (next to ↻).`} />}</TablePanel>)
     : isDp ? <ResultTabs id={`azure:${id}`} rawCount={items.length} main={<TablePanel title="Releases">
-        {bulkOpen && <DpBulkCreate rows={(source?.items ?? []).filter((item) => picked.includes(item.id))} azure={azure} featureSetup={featureSetup} qeMapping={qeMapping} featureMatch={featureMatch} onClose={() => { setBulkOpen(false); setPicked([]) }} />}
+        {bulkOpen && <DpBulkCreate rows={(source?.items ?? []).filter((item) => picked.includes(item.id))} azure={azure} featureSetup={featureSetup} featureMatch={featureMatch} onClose={() => { setBulkOpen(false); setPicked([]) }} />}
         <QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={unresolved} queryOnly choose lead={dpLead} more={dpColumns} extra={boardColumn} actions={dpBulk} />
       </TablePanel>} raw={raw(items)} />
     : isCp && cp ? <ResultTabs id={`azure:${id}`} rawCount={source.items.length} main={<CpReportView report={(cpShown ?? cp).report} azure={azure} assign={assign} featureSetup={featureSetup} threshold={threshold} enrichment={cp.enrichmentName} />} raw={raw(source.items)} />
-    : role === 'release-source' || stream ? <ReleaseView name={name} items={items} backlog={azure.items} azure={azure} assign={assign} featureSetup={featureSetup} qeMapping={qeMapping} rule={stream?.rule} patterns={namingPatterns} area={area} fuzzy={stream?.fuzzy} onOpenBulkEpics={openBulkEpics} threshold={threshold} columns={viewColumns} orderBy={orderBy} unresolved={unresolved} />
+    : role === 'release-source' || stream ? <ReleaseView name={name} items={items} backlog={azure.items} azure={azure} assign={assign} featureSetup={featureSetup} rule={stream?.rule} patterns={namingPatterns} area={area} fuzzy={stream?.fuzzy} onOpenBulkEpics={openBulkEpics} threshold={threshold} columns={viewColumns} orderBy={orderBy} unresolved={unresolved} />
     : <TablePanel><QueryView name={name} items={items} columns={viewColumns} orderBy={orderBy} unresolved={unresolved} /></TablePanel>
   return <Page className="release-page">
     {/* (1) QV-48, QV-70: the source bar; Show (on CP too since QV-72: All months lists every release container signed in any month; its counts stay the header month's), ↻ and ⋯. */}
     <ReleaseSourceBar name={name} source={`${config ? `${config.organization} / ${config.project}` : 'connection not found'}${profile?.query ? ' · query' : config?.team ? ` · team ${config.team}` : ''}`}
       fetched={source ? `fetched ${formatDateTime(source.fetchedAt)}${'fromGit' in source && source.fromGit ? ' (desktop app, via Git)' : ''}` : undefined}
       about={notes.length > 0 ? notes.map((note) => <p key={note}>{note}</p>) : undefined}
-      period={source && !toolPage && !isToolDocuments ? <PeriodSelect month={month} value={scope} onChange={setScope} /> : undefined} primary={refresh} menu={menu}>
+      period={source && !toolPage && !isToolDocuments ? <PeriodSelect month={month} value={scope} onChange={setScope} /> : undefined} primary={refresh} menu={menu} last={viewActions.items}>
       {source && status?.state === 'error' && <Notice tone="warning">Not refreshed: {status.message} The data shown is from {formatDateTime(source.fetchedAt)}.</Notice>}
       {!azure.isSample && gitNote?.tone === 'error' && <Notice tone="error">{gitNote.text}</Notice>}
       {stale && !busy && <Notice tone="warning">The saved data was fetched with different columns than the connection's query now has. Refresh from Azure to load every column's values.</Notice>}
@@ -359,5 +364,6 @@ function ReadOnlyView({ id, name, role, azure, store, month, gitNote, onOpenConn
     {/* TVL-23: on Tool Validations the counts show on the Master list tab only. */}
     {toolPage ? null : counts}
     {body}
+    {viewActions.dialog}
   </Page>
 }

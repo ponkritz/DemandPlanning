@@ -6,7 +6,9 @@ import { useCan } from '../useCan'
 import type { EpicSetupStore } from '../useEpicSetup'
 import type { FeatureSetup } from '../useFeatureSetup'
 import type { GitStorage } from '../useGitStorage'
+import { QePageFields } from './QePageFields'
 import { useBulkEpic } from '../useStreamEpics'
+import { dpDateColumns, dpDateLabel } from '../dpBulkDates'
 import { Notice } from './ui'
 
 // CON-97 Admin → Epic & Feature setup → Setup per Epic: one screen per Epic. The Epic list (All Epics first) on the
@@ -17,7 +19,8 @@ type Section = 'fields' | 'dod' | 'stories' | 'task'
 const emptyFile = (): FeatureSetupFile => ({ schema: 1, kind: 'feature-setup', epics: [] })
 const sectionField: Record<Exclude<Section, 'fields'>, InheritField> = { dod: 'featureDoD', stories: 'stories', task: 'estimate' }
 
-export function EpicFeatureEditor({ setup, epicSetup, git, items, qeColumnNames = [], initialEpicId = 0 }: { setup: FeatureSetup; epicSetup: EpicSetupStore; git: GitStorage; items: AzureWorkItem[]; qeColumnNames?: string[]; initialEpicId?: number }) {
+// EPS-10: dateColumns — the DP query's date columns a User Story's "Sprint from" offers (the four DP milestones always).
+export function EpicFeatureEditor({ setup, epicSetup, git, items, initialEpicId = 0, dateColumns = dpDateColumns(undefined) }: { setup: FeatureSetup; epicSetup: EpicSetupStore; git: GitStorage; items: AzureWorkItem[]; initialEpicId?: number; dateColumns?: { field: string; label: string }[] }) {
   const can = useCan()
   const dpBulkEpic = useBulkEpic('DP').epicId, ioccBulkEpic = useBulkEpic('IOCC').epicId
   const [epicId, setEpicId] = useState<number>(initialEpicId) // 0 = All Epics
@@ -230,12 +233,9 @@ export function EpicFeatureEditor({ setup, epicSetup, git, items, qeColumnNames 
         <header><span className="efe-n">{isAll ? 2 : 3}</span><div><h3>User Stories{value && ` — ${value}`}</h3><small>Created under the Feature, ticked by default</small></div>{!value && switchView('stories', 'User Stories')}</header>
         {value && !own ? <div className="efe-inherited"><small>FROM THE EPIC’S DEFAULT</small><span>{stories.map((story) => story.title).join('\n') || 'None'}</span></div>
         : !value && !isAll && !custom.stories ? fromDefaults((defaults.stories ?? []).map((story) => story.title).join('\n') || 'None set: only the Review of Deliverables story and your own') : <>
-          <StoriesEditor stories={stories} disabled={!editable} onChange={setStories} templates={allTemplates} offered={offered} canSaveTemplate={canTemplates} onSaveTemplate={saveAsTemplate} />
-          {hasSets && entry && !value && <div className="form-row">
-            <label>QE Mapping column with the Platform / Product{qeColumnNames.length ? <select value={entry.qeColumns?.matchColumn ?? ''} disabled={!editable} onChange={(event) => changeEntry((value) => { value.qeColumns = { matchColumn: event.target.value, qeColumn: value.qeColumns?.qeColumn ?? '' } })}><option value="">Not set</option>{qeColumnNames.map((name) => <option key={name}>{name}</option>)}</select> : <small className="muted">Open QE Mapping once to list its columns.</small>}</label>
-            <label>QE Mapping column with the QE{qeColumnNames.length ? <select value={entry.qeColumns?.qeColumn ?? ''} disabled={!editable} onChange={(event) => changeEntry((value) => { value.qeColumns = { matchColumn: value.qeColumns?.matchColumn ?? '', qeColumn: event.target.value } })}><option value="">Not set</option>{qeColumnNames.map((name) => <option key={name}>{name}</option>)}</select> : null}</label>
-          </div>}
+          <StoriesEditor stories={stories} disabled={!editable} onChange={setStories} dateColumns={dateColumns} templates={allTemplates} offered={offered} canSaveTemplate={canTemplates} onSaveTemplate={saveAsTemplate} />
         </>}
+        {hasSets && !value && <QePageFields entry={entry} disabled={!editable} onChange={(next) => changeEntry((item) => { item.qePage = next })} />}
       </section>
 
       <section className="efe-section" aria-label="Month Task">
@@ -259,7 +259,7 @@ export function EpicFeatureEditor({ setup, epicSetup, git, items, qeColumnNames 
   </div>
 }
 
-function StoriesEditor({ stories, disabled, onChange, templates, offered, canSaveTemplate, onSaveTemplate }: { stories: StoryTemplate[]; disabled: boolean; onChange: (next: StoryTemplate[]) => void; templates: StoryTemplateItem[]; offered: StoryTemplateItem[]; canSaveTemplate: boolean; onSaveTemplate: (index: number) => void }) {
+function StoriesEditor({ stories, disabled, onChange, templates, offered, canSaveTemplate, onSaveTemplate, dateColumns }: { stories: StoryTemplate[]; disabled: boolean; dateColumns: { field: string; label: string }[]; onChange: (next: StoryTemplate[]) => void; templates: StoryTemplateItem[]; offered: StoryTemplateItem[]; canSaveTemplate: boolean; onSaveTemplate: (index: number) => void }) {
   const set = (index: number, update: Partial<StoryTemplate>) => onChange(stories.map((story, at) => at === index ? { ...story, ...update } : story))
   const used = new Set(stories.map((story) => story.templateId).filter(Boolean))
   const others = templates.filter((item) => !offered.some((entry) => entry.id === item.id) && !used.has(item.id))
@@ -277,6 +277,8 @@ function StoriesEditor({ stories, disabled, onChange, templates, offered, canSav
           {!disabled && !linked && canSaveTemplate && story.title.trim() && <button type="button" className="text-button" onClick={() => onSaveTemplate(index)}>Save as template</button>}
           {tools}
         </div>
+        {/* EPS-10: the DP milestone date whose Sprint the story is created in (DP releases only); None: the Sprint chosen. */}
+        <label className="efe-sprint-from">Sprint from<select aria-label={`User Story ${index + 1} Sprint from`} value={story.sprintFrom ?? ''} disabled={disabled} title="DP releases (Create Features and Create Feature on a DP row): the story goes in the Sprint that holds this date of the release; without one, or in a past Sprint, the Sprint chosen." onChange={(event) => set(index, { sprintFrom: event.target.value || undefined })}><option value="">None — the Sprint chosen</option>{[...dateColumns, ...(story.sprintFrom && !dateColumns.some((column) => column.field.toLowerCase() === story.sprintFrom!.toLowerCase()) ? [{ field: story.sprintFrom, label: dpDateLabel(story.sprintFrom) }] : [])].map((column) => <option key={column.field} value={column.field}>{column.label}</option>)}</select></label>
         {linked ? linked.description && <p className="muted efe-desc-text">{linked.description}</p>
           : <details className="efe-desc"><summary>{story.description ? 'Description' : 'Add a description'}{story.templateId ? ' · template removed, kept as a copy' : ''}</summary><textarea aria-label={`User Story ${index + 1} description`} rows={2} value={story.description} disabled={disabled} onChange={(event) => set(index, { description: event.target.value })} /></details>}
       </div>

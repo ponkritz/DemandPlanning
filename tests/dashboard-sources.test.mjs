@@ -3,8 +3,9 @@ import assert from 'node:assert/strict'
 import { toolDatasets, toolExpirySource, toolFields, toolMasterSource, toolRows } from '../src/dashboardSources.ts'
 import { parseToolValidations } from '../src/toolValidations.ts'
 import { parseDashboard } from '../src/dashboardPages.ts'
-import { azureWorkFields, azureWorkRows, azureWorkSource, completedFields, completedSource, capacityFields, capacityRows, capacitySource, enteredRelease, entryOf, fieldsDataset, headingMonth, historyRows, historySource, kindOfKey, kpiRows, kpiSource, mySourcePattern, releaseCountsOf, releaseFields, releaseRows, releasesSource, sourceEntries, sourceKinds } from '../src/dashboardSources.ts'
+import { removedSourceOf, azureWorkFields, azureWorkRows, azureWorkSource, completedFields, completedSource, capacityFields, capacityRows, capacitySource, enteredRelease, entryOf, fieldsDataset, headingMonth, historyRows, historySource, kindOfKey, kpiRows, kpiSource, mySourcePattern, releaseCountsOf, releaseFields, releaseRows, releasesSource, sourceEntries, sourceKinds } from '../src/dashboardSources.ts'
 import { notAvailable } from '../src/dashboardHours.ts'
+import { myDashboardOut, parseMyDashboard } from '../src/myDashboard.ts'
 import { blankBlock, blockData, hoursSource, kpiValue, narrowRows } from '../src/dashboardPages.ts'
 import { personMonths, totals } from '../src/dashboard.ts'
 import { capacityContext } from '../src/capacity.ts'
@@ -25,15 +26,16 @@ const items = [epic, feature, story, task, bug, history]
 const everyone = () => true
 
 test('MYD-15: the registry — every kind declares its fields and the area it needs; keys follow one pattern; a role without the area gets “Not available for your role.” and no rows (TC-MYD-08)', () => {
-  assert.deepEqual(sourceKinds.map((kind) => kind.id), ['page', 'hours', 'azure', 'releases', 'completed', 'capacity', 'qe', 'kpi', 'history', 'tools', 'windchill'])
-  for (const kind of sourceKinds) assert.ok(kind.areas.length && kind.label && kind.describe, kind.id)
+  assert.deepEqual(sourceKinds.map((kind) => kind.id), ['page', 'hours', 'azure', 'releases', 'completed', 'capacity', 'kpi', 'history', 'tools', 'azv', 'windchill'])
+  // MYD-26: the Azure DevOps queries check their area per query (Release Details; a My view: its owner), not per kind.
+  for (const kind of sourceKinds) assert.ok((kind.areas.length || kind.id === 'azv') && kind.label && kind.describe, kind.id)
   for (const key of ['page:conq', hoursSource, azureWorkSource, releasesSource, completedSource, capacitySource, kpiSource, historySource, 'qe:s1', 'windchill:abc123']) assert.ok(mySourcePattern.test(key), key)
   for (const key of ['other:x', 'page:Bad Id', 'qe:', 'azure:all']) assert.equal(mySourcePattern.test(key), false, key)
   assert.deepEqual(['page:x', hoursSource, 'qe:s1', 'windchill:w', capacitySource, completedSource, releasesSource].map(kindOfKey), ['page', 'hours', 'qe', 'windchill', 'capacity', 'completed', 'releases'])
   for (const fields of [azureWorkFields, capacityFields, completedFields]) assert.equal(new Set(fields.map((field) => field.id)).size, fields.length, 'unique field ids')
   // Fail closed: no area, no rows — and the hours / capacity are never worked out.
   let counted = 0
-  const input = { sees: () => false, months: ['2026-08'], today: '2026-08-15', me: { name: 'Ana' }, items, settings: capacityContext({}), releases: { state: {}, profiles: [], streamsOf: () => { counted++; return [] } }, qe: { file: null, loaded: true }, kpi: undefined, history: { file: null, loaded: true, connected: true }, windchill: [], pages: [], hours: () => { counted++; return [] } }
+  const input = { sees: () => false, months: ['2026-08'], today: '2026-08-15', me: { name: 'Ana' }, items, settings: capacityContext({}), releases: { state: {}, profiles: [], streamsOf: () => { counted++; return [] } }, kpi: undefined, history: { file: null, loaded: true, connected: true }, windchill: [], pages: [], hours: () => { counted++; return [] } }
   const entries = sourceEntries(input)
   assert.equal(counted, 0, 'nothing worked out for a role without the areas')
   for (const entry of entries) { assert.equal(entry.dataset.problem, notAvailable, entry.dataset.key); assert.equal(entry.dataset.page.rows.length, 0) }
@@ -44,7 +46,6 @@ test('MYD-15: the registry — every kind declares its fields and the area it ne
   assert.equal(entryOf(built, 'page:gone', everyone).dataset.problem, 'The table page “gone” is no longer there (removed), or you cannot see it.')
   // Data not loaded yet: the source says what to load, with the action.
   assert.deepEqual([entryOf(built, kpiSource, everyone).load, entryOf(built, kpiSource, everyone).dataset.problem], ['kpi', 'Load the KPI tracker to see this.'])
-  assert.equal(entryOf(sourceEntries({ ...input, sees: everyone, qe: { file: null, loaded: false } }), 'qe:s1', everyone).load, 'qe')
   assert.equal(entryOf(sourceEntries({ ...input, sees: everyone, items: [] }), azureWorkSource, everyone).load, 'azure')
   // Only wanted sources work their rows out.
   const lazy = sourceEntries({ ...input, sees: everyone }, (key) => key === azureWorkSource)
@@ -61,7 +62,7 @@ test('MYD-16: Azure DevOps work — Features, User Stories and Tasks with their 
   const mine = azureWorkRows(items, { email: 'ana@x.com', name: 'Ana' })
   assert.deepEqual(mine.map((row) => row.key), [`#${feature.id}`, `#${task.id}`])
   // As a dataset: Count by State, Sum of Completed work — the On-Demand aggregation.
-  const input = { sees: (area) => area === 'mywork', months: [], today: '2026-08-15', me: { email: 'ana@x.com', name: 'Ana' }, items, settings: capacityContext({}), releases: { state: {}, profiles: [], streamsOf: () => [] }, qe: { file: null, loaded: true }, kpi: null, history: { file: null, loaded: true, connected: false }, windchill: [], pages: [], hours: () => [] }
+  const input = { sees: (area) => area === 'mywork', months: [], today: '2026-08-15', me: { email: 'ana@x.com', name: 'Ana' }, items, settings: capacityContext({}), releases: { state: {}, profiles: [], streamsOf: () => [] }, kpi: null, history: { file: null, loaded: true, connected: false }, windchill: [], pages: [], hours: () => [] }
   const dataset = entryOf(sourceEntries(input), azureWorkSource, input.sees).dataset
   assert.match(dataset.note, /Your own Features/)
   const bar = { ...blankBlock(dataset, 'b1', 'bar'), category: 'aw-state', period: '' }
@@ -119,22 +120,17 @@ test('MYD-18: Capacity and utilization — Team overview’s figures per person 
   assert.equal(Number(mine.cells['cp-util']), Math.round(first.actual / first.capacity * 1000) / 10, 'utilization as Team overview’s ratio')
   assert.deepEqual([mine.cells['cp-region'], mine.cells['cp-role']], [first.region ?? '', first.role ?? ''])
   // As a dataset: Sum of Available hours by month over the period.
-  const input = { sees: (area) => area === 'insights', months, today: '2026-10-15', me: {}, items: sample.items, settings, releases: { state: {}, profiles: [], streamsOf: () => [] }, qe: { file: null, loaded: true }, kpi: null, history: { file: null, loaded: true, connected: false }, windchill: [], pages: [], hours: () => [] }
+  const input = { sees: (area) => area === 'insights', months, today: '2026-10-15', me: {}, items: sample.items, settings, releases: { state: {}, profiles: [], streamsOf: () => [] }, kpi: null, history: { file: null, loaded: true, connected: false }, windchill: [], pages: [], hours: () => [] }
   const dataset = entryOf(sourceEntries(input), capacitySource, input.sees).dataset
   assert.equal(kpiValue(dataset.page, { ...blankBlock(dataset, 'k', 'kpi'), measure: 'sum', value: 'cp-available' }).value, all.capacity)
 })
 
-test('MYD-19…MYD-22: QE Mapping sheets, KPI tracker values, historical hours and Windchill exports as sources with their natural fields (TC-MYD-08)', () => {
-  const qe = { schema: 1, kind: 'qe-mapping', sheets: [{ id: 's1', name: 'DP', columns: [{ id: 'c1', name: 'Product' }, { id: 'c2', name: 'QE name' }, { id: 'c3', name: 'Hours' }], rows: [{ id: 'r1', cells: { c1: 'DoseNav', c2: 'Ana', c3: '10' } }, { id: 'r2', cells: { c1: 'Vista', c2: 'Ana', c3: '4' } }, { id: 'r3', cells: { c1: 'Cora', c2: 'Ben' } }] }] }
+test('MYD-20…MYD-22: KPI tracker values, historical hours and Windchill exports as sources with their natural fields (TC-MYD-08)', () => {
   const tracker = { schema: 1, fileUrl: '', fileName: 'kpi.xlsx', readAt: '', readBy: '', sheets: [{ name: 'KPIs', rows: [['KPI', 'Jan 2026', '2026-02', 'Target', 'Note'], ['On-time releases', '90%', '95', '100', 'ok'], ['Escapes', '2', 'n/a', '0', ''], ['', '1', '1', '1', '']] }] }
   const historyFile = { schema: 1, kind: 'history-hours', cutoff: '2026-10', source: 'x', sheet: 'x', importedAt: '', importedBy: '', streamEpics: {}, people: { 'A. Costa': 'Ana' }, rows: [{ person: 'A. Costa', month: '2026-03', stream: 'CP', activity: 'Review', planned: 10, actual: 8, featureId: 12 }] }
   const windchill = [{ viewId: 'w-1', name: 'ECP docs', fetchedAt: '', columns: ['Number', 'State', 'Approved On'], rows: [{ Number: 'D-1', State: 'Released', 'Approved On': '2026-09-02T10:00:00Z' }, { Number: 'D-2', State: 'Released', 'Approved On': '2026-09-20' }, { Number: 'D-3', State: 'In Work', 'Approved On': null }] }]
-  const input = { sees: everyone, months: [], today: '2026-10-15', me: {}, items: [], settings: capacityContext({}), releases: { state: {}, profiles: [], streamsOf: () => [] }, qe: { file: qe, loaded: true }, kpi: tracker, history: { file: historyFile, loaded: true, connected: true }, windchill, pages: [], hours: () => [] }
+  const input = { sees: everyone, months: [], today: '2026-10-15', me: {}, items: [], settings: capacityContext({}), releases: { state: {}, profiles: [], streamsOf: () => [] }, kpi: tracker, history: { file: historyFile, loaded: true, connected: true }, windchill, pages: [], hours: () => [] }
   const entries = sourceEntries(input)
-  const qeSet = entryOf(entries, 'qe:s1', everyone).dataset
-  assert.deepEqual(qeSet.page.columns.map((column) => [column.name, column.type]), [['Product', 'text'], ['QE name', 'dropdown'], ['Hours', 'number']])
-  assert.equal(qeSet.name, 'QE Mapping')
-  assert.equal(entryOf(entries, 'qe:s1', (area) => area !== 'qemapping').dataset.problem, notAvailable)
   // KPI tracker: every number, the month from the heading, percent signs read.
   assert.deepEqual([headingMonth('Jan 2026'), headingMonth('2026-02'), headingMonth('March-26'), headingMonth('03/2026'), headingMonth('Target')], ['2026-01', '2026-02', '2026-03', '2026-03', ''])
   const values = kpiRows(tracker)
@@ -156,7 +152,7 @@ test('MYD-25: Completed releases per stream per month — the Month tabs’ coun
   const columns = ['Name', 'Location', 'Last Modified']
   const windchill = { views: [{ id: 'w1', name: 'S&S IT', exportFile: 'sns.csv', columns }], sources: [{ viewId: 'w1', columns, rows: [{ Name: 'SRS', Location: '/Products/Remote Diagnostics/1.7/DHF', 'Last Modified': '2026-10-03' }] }] }
   const months = ['2026-09', '2026-10', '2026-11', '2026-12']
-  const input = { sees: (area) => area === 'release', months, today: '2026-11-24', me: { name: 'Ana' }, items: [], settings: capacityContext({}), releases: { state, profiles: [], streamsOf: (month) => defaultStreamReleases(state, [], month), windchill, excluded: ['S&S IT'] }, qe: { file: null, loaded: true }, kpi: null, history: { file: null, loaded: true, connected: false }, windchill: [], pages: [], hours: () => [] }
+  const input = { sees: (area) => area === 'release', months, today: '2026-11-24', me: { name: 'Ana' }, items: [], settings: capacityContext({}), releases: { state, profiles: [], streamsOf: (month) => defaultStreamReleases(state, [], month), windchill, excluded: ['S&S IT'] }, kpi: null, history: { file: null, loaded: true, connected: false }, windchill: [], pages: [], hours: () => [] }
   const dataset = entryOf(sourceEntries(input), completedSource, input.sees).dataset
   assert.deepEqual(dataset.page.columns.map((column) => [column.name, column.type]), [['Stream', 'dropdown'], ['Month', 'date'], ['Completed releases', 'number'], ['Counted in Pulse Check', 'dropdown']])
   const cells = (stream, month) => dataset.page.rows.find((row) => row.cells['cr-stream'] === stream && row.cells['cr-month'] === `${month}-01`)?.cells
@@ -207,7 +203,7 @@ test('TVL-18: the Tool Validations master list and expiry list as data sources �
   assert.match(toolDatasets({ ...input, connected: false }, true, '2026-08-15')[0].problem, /^Connect Git storage/)
   assert.equal(toolDatasets(input, true, '2026-08-15', () => false)[0].page.rows.length, 0, 'rows only when wanted')
   // My dashboard: the registry offers both for a role with Release Details; the keys are valid block sources.
-  const registry = { sees: (area) => area === 'release', months: [], today: '2026-08-15', me: { name: 'Ana' }, items: [], settings: capacityContext({}), releases: { state: {}, profiles: [], streamsOf: () => [] }, qe: { file: null, loaded: true }, kpi: undefined, history: { file: null, loaded: true, connected: true }, windchill: [], pages: [], hours: () => [], tools: input }
+  const registry = { sees: (area) => area === 'release', months: [], today: '2026-08-15', me: { name: 'Ana' }, items: [], settings: capacityContext({}), releases: { state: {}, profiles: [], streamsOf: () => [] }, kpi: undefined, history: { file: null, loaded: true, connected: true }, windchill: [], pages: [], hours: () => [], tools: input }
   assert.equal(entryOf(sourceEntries(registry), toolMasterSource, registry.sees).dataset.page.rows.length, 5)
   assert.equal(entryOf(sourceEntries(registry), toolExpirySource, () => false).dataset.problem, notAvailable, 'closed for a role without Release Details')
   for (const key of [toolMasterSource, toolExpirySource]) { assert.ok(mySourcePattern.test(key), key); assert.equal(kindOfKey(key), 'tools') }
@@ -244,4 +240,21 @@ test('TVL-26: “Show expiry status” off — a block on the master list or exp
   assert.deepEqual(out.blocks.map((entry) => entry.hideStatus), [true, undefined])
   const read = parseDashboard(JSON.stringify({ ...out, blocks: [...out.blocks, { ...out.blocks[0], id: 'b3', source: 'page:x' }] }), 'tool-dash').dashboard.blocks
   assert.deepEqual(read.map((entry) => entry.hideStatus), [true, undefined, undefined], 'read back; ignored on a page source')
+})
+
+test('MYD-30: a stored block of the removed QE Mapping source (qe:…) is kept and says its data source was removed, whatever the role (TC-MYD-15)', () => {
+  assert.ok(!sourceKinds.some((kind) => kind.id === 'qe'), 'QE Mapping is no longer offered as a source')
+  assert.ok(mySourcePattern.test('qe:s1') && mySourcePattern.test('qe:mapping'), 'a stored block naming it stays valid')
+  const stored = JSON.stringify({ blocks: [{ id: 'b1', type: 'table', title: 'QEs per product', source: 'qe:s1', columns: [] }, { id: 'b2', type: 'kpi', title: 'Rows', source: 'qe:mapping', measure: 'count' }] })
+  const parsed = parseMyDashboard(JSON.parse(stored))
+  assert.deepEqual(parsed.dashboard.blocks.map((block) => [block.id, block.source]), [['b1', 'qe:s1'], ['b2', 'qe:mapping']], 'read without losing the blocks')
+  assert.deepEqual(parsed.dropped, [])
+  assert.deepEqual(myDashboardOut(parsed.dashboard).blocks.map((block) => block.source), ['qe:s1', 'qe:mapping'], 'saved back as written')
+  for (const sees of [everyone, () => false]) {
+    const found = entryOf([], 'qe:s1', sees)
+    assert.equal(found.dataset.problem, 'This block’s data source (QE Mapping) was removed.')
+    assert.equal(found.dataset.name, 'QE Mapping')
+    assert.equal(found.load, undefined, 'nothing to load')
+  }
+  assert.equal(removedSourceOf('qe:s1'), 'QE Mapping'); assert.equal(removedSourceOf('page:conq'), undefined); assert.equal(removedSourceOf('constructor:x'), undefined)
 })

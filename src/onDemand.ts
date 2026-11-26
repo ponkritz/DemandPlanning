@@ -273,7 +273,7 @@ export const onDemandFolder = 'on-demand'
 // combination (Table, Insights, Dashboard, Release view) changes only this predicate.
 export const hasTable = (kind: string) => kind === 'table' || kind === 'table-insights'
 export const onDemandPath = (id: string) => `${onDemandFolder}/${id}.json`
-// GitHub's contents API reads files up to 1 MB inline; stay below it (as the QE Mapping does).
+// GitHub's contents API reads files up to 1 MB inline; stay below it.
 export const onDemandMaxBytes = 900_000
 export const maxColumns = 60, maxOptions = 200, maxRows = 5000, maxValue = 2000
 // OND-22: a Long text holds up to 10,000 characters (every value is read back up to this, so a Long text column made

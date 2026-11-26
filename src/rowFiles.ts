@@ -1,4 +1,5 @@
-import { capLog, maxSeq, onDemandFolder, onDemandPath, pageIdPattern, parseOnDemandPage, rowId, rowKeyPattern, serializeOnDemandPage, withRowKeys, withRowNumbers, type OnDemandPage, type OnDemandRow } from './onDemand.ts'
+import { capLog, maxSeq, onDemandPath, parseOnDemandPage, rowId, rowKeyPattern, serializeOnDemandPage, withRowKeys, withRowNumbers, type OnDemandPage, type OnDemandRow } from './onDemand.ts'
+import { parseStem, stemFilePath, stemFolderPath } from './pageFiles.ts'
 
 // OND-31…OND-34 Row files: a table page kept as one file per row, so that two people adding or editing rows at the same
 // time write different files (no merge of the whole page, no 900 KB limit of the single file):
@@ -7,16 +8,18 @@ import { capLog, maxSeq, onDemandFolder, onDemandPath, pageIdPattern, parseOnDem
 //   on-demand/<id>/counter.json     the next readable ID (OND-19), taken with a version-checked update
 //   on-demand/<id>.json             after the conversion only a marker {moved}, which an older app reports as not a page
 // A page is "row files" when its folder holds page.json; the single file of OND-08 stays readable.
+// OND-120: the folder is named by the page's stem (pageFiles.ts) — "<name>--<id>", or the id alone (the form before);
+// the paths below take the stem (an id is the stem of the old form).
 
-export const pageFolder = (id: string) => { if (!pageIdPattern.test(id)) throw new Error(`Not a valid page id: ${id}`); return `${onDemandFolder}/${id}` }
-export const pageJsonPath = (id: string) => `${pageFolder(id)}/page.json`
-export const counterPath = (id: string) => `${pageFolder(id)}/counter.json`
-export const rowsFolder = (id: string) => `${pageFolder(id)}/rows`
+export const pageFolder = (stem: string) => stemFolderPath(stem)
+export const pageJsonPath = (stem: string) => `${pageFolder(stem)}/page.json`
+export const counterPath = (stem: string) => `${pageFolder(stem)}/counter.json`
+export const rowsFolder = (stem: string) => `${pageFolder(stem)}/rows`
 // SM-106: a row key becomes a file name only when it is a key of OND-18 (capital letters, digits and two hyphens):
 // no slash, no dot, no "..", so a key read from a file or typed nowhere can never point outside the page's folder.
-export function rowFilePath(id: string, key: string) {
+export function rowFilePath(stem: string, key: string) {
   if (!rowKeyPattern.test(key)) throw new Error(`Not a valid row key: ${JSON.stringify(key).slice(0, 40)}`)
-  return `${rowsFolder(id)}/${key}.json`
+  return `${rowsFolder(stem)}/${key}.json`
 }
 // The key of a row file's name (rows/<key>.json), null for anything else (an unknown file in the folder is ignored).
 export const keyOfRowFile = (name: string) => { const match = /^([A-Z0-9-]{1,30})\.json$/.exec(name); return match && rowKeyPattern.test(match[1]) ? match[1] : null }
@@ -57,10 +60,13 @@ export function assembleRowPage(id: string, headText: string, rows: { name: stri
 }
 // OND-32: the files of a page converted from its single file — every row with its key and ID (a row from before keys or
 // IDs gets them now, as its next save would), the counter at the highest ID + 1, and the marker in place of the file.
-export function convertedFiles(page: OnDemandPage): { page: OnDemandPage; files: Record<string, string> } {
+// OND-125: a page in a named file (stem "<name>--<id>") becomes the folder of the same stem; its named file is deleted
+// and the marker goes to the old-form path on-demand/<id>.json, where an older app looks.
+export function convertedFiles(page: OnDemandPage, stem: string = page.id): { page: OnDemandPage; files: Record<string, string | null> } {
   const full: OnDemandPage = { ...withRowNumbers(withRowKeys(page)), storage: 'rows' }
-  const files: Record<string, string> = { [pageJsonPath(page.id)]: serializeHead(full), [counterPath(page.id)]: serializeCounter(full.rows.reduce((max, row) => Math.max(max, row.seq ?? 0), 0) + 1), [onDemandPath(page.id)]: movedMarker(page.id) }
-  for (const row of full.rows) files[rowFilePath(page.id, row.key!)] = serializeRow(row)
+  const files: Record<string, string | null> = { [pageJsonPath(stem)]: serializeHead(full), [counterPath(stem)]: serializeCounter(full.rows.reduce((max, row) => Math.max(max, row.seq ?? 0), 0) + 1), [onDemandPath(page.id)]: movedMarker(page.id) }
+  if (parseStem(stem)?.named) files[stemFilePath(stem)] = null
+  for (const row of full.rows) files[rowFilePath(stem, row.key!)] = serializeRow(row)
   return { page: full, files }
 }
 

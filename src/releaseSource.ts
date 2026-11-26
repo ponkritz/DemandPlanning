@@ -1,6 +1,7 @@
 import { fillClosedDates } from './closedHistory.ts'
 import { businessTimeZone } from './businessTime.ts'
 import { normalizeBulkEpics, type BulkStream } from './bulkEpics.ts'
+import { normalizeDpBulkDates, type DpBulkDates } from './dpBulkDateSettings.ts'
 import { myPatternsFor } from './myNamingPatterns.ts'
 import { normalizeNamingPatterns, patternsFor, type NamingPattern, type NamingPatterns } from './namingPatterns.ts'
 import type { AppState, AzureWorkItem } from './domain'
@@ -21,7 +22,7 @@ export interface EnteredCounts { completed?: number; supported?: number }
 // toolValidations (TVL-19, TVL-20): Tool Validations' two queries — which connection is the Signed documents query
 // (its view name or name; "@none": none) and the field whose date makes a tool Completed (default System.ChangedDate).
 export interface ToolValidationsSettings { documentsQuery?: string; completionField?: string }
-export interface ReleaseSourceSettings { approvalDateField?: string; matchThreshold?: number; namingPatterns?: NamingPatterns; featureEpics?: Record<string, number[]>; countOverrides?: Record<string, Record<string, EnteredCounts>>; bulkEpics?: Partial<Record<BulkStream, number>>; toolValidations?: ToolValidationsSettings }
+export interface ReleaseSourceSettings { approvalDateField?: string; matchThreshold?: number; namingPatterns?: NamingPatterns; featureEpics?: Record<string, number[]>; countOverrides?: Record<string, Record<string, EnteredCounts>>; bulkEpics?: Partial<Record<BulkStream, number>>; dpBulkDates?: Partial<DpBulkDates>; toolValidations?: ToolValidationsSettings }
 export const defaultReleaseSourceSettings: ReleaseSourceSettings = {}
 export interface ReleaseSourceSnapshot { organization: string; project: string; query: string; fetchedAt: string; items: AzureWorkItem[]; columns?: { ref: string; name: string }[]; orderBy?: { ref: string; desc: boolean }[] }
 export interface ReleaseEntry { key: string; group?: string; match?: { feature: AzureWorkItem; score: number }; name: string; release: string; documents: number; items: AzureWorkItem[]; tracked: boolean; trackedBy: AzureWorkItem[]; features: AzureWorkItem[]; planned: number; booked: number; hourTasks: number; approvalDate?: string; approvalMonth?: string }
@@ -50,8 +51,10 @@ export function normalizeReleaseSourceSettings(value: unknown): ReleaseSourceSet
   const featureEpics = normalizeFeatureEpics((input as Record<string, unknown>).featureEpics)
   const countOverrides = normalizeCountOverrides((input as Record<string, unknown>).countOverrides)
   const bulkEpics = normalizeBulkEpics((input as Record<string, unknown>).bulkEpics)
+  // DPF-13: the DP query's date columns that give a bulk-created Feature its Start and Target dates (defaults not stored).
+  const dpBulkDates = normalizeDpBulkDates((input as Record<string, unknown>).dpBulkDates)
   const toolValidations = normalizeToolValidationsSettings((input as Record<string, unknown>).toolValidations)
-  return { ...(approvalDateField ? { approvalDateField } : {}), ...(Number.isInteger(threshold) && threshold >= 1 && threshold <= 100 ? { matchThreshold: threshold } : {}), ...(namingPatterns ? { namingPatterns } : {}), ...(featureEpics ? { featureEpics } : {}), ...(countOverrides ? { countOverrides } : {}), ...(bulkEpics ? { bulkEpics } : {}), ...(toolValidations ? { toolValidations } : {}) }
+  return { ...(approvalDateField ? { approvalDateField } : {}), ...(Number.isInteger(threshold) && threshold >= 1 && threshold <= 100 ? { matchThreshold: threshold } : {}), ...(namingPatterns ? { namingPatterns } : {}), ...(featureEpics ? { featureEpics } : {}), ...(countOverrides ? { countOverrides } : {}), ...(bulkEpics ? { bulkEpics } : {}), ...(dpBulkDates ? { dpBulkDates } : {}), ...(toolValidations ? { toolValidations } : {}) }
 }
 // TVL-20: read from the shared settings — a field reference name (letters, digits, _ and ., up to 120) and a connection
 // name of up to 120 characters (control characters dropped); anything else is left out (the defaults apply).

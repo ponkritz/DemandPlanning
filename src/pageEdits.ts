@@ -1,7 +1,7 @@
 import { useEffect, useId, useSyncExternalStore } from 'react'
 
 // GIT-18: what the page in use holds that is not saved to Git yet (a row being edited in its drawer, the columns pop-up,
-// a kept change, a QE Mapping draft …), so that Load the newer data asks first when loading would drop it. Every
+// a kept change …), so that Load the newer data asks first when loading would drop it. Every
 // component that holds such an edit says so with useUnsavedEdit while it is mounted; only the page in use is mounted.
 const edits = new Map<string, string>()
 const listeners = new Set<() => void>()

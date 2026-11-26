@@ -19,7 +19,8 @@ export const areas = [
   { key: 'health', label: 'Backlog Health' },
   { key: 'release', label: 'Release Details (on-prem views, Windchill exports)' },
   { key: 'baselines', label: 'Baselines' },
-  { key: 'qemapping', label: 'QE Mapping' },
+  // CON-117: the QE Mapping area ('qemapping') and its action ('qemapping.edit') were removed with the page; an older
+  // access.json that lists them is still read — the unknown keys are dropped, nothing is refused.
   { key: 'snapshots', label: 'Snapshots' },
   { key: 'docs', label: 'Documentation' },
   // OND-01 (permissions 4): the On-Demand pages (CoNQ and the pages added there). A file older than permissions 4 shows
@@ -48,7 +49,6 @@ export const actions = [
   { key: 'windchill.import', group: 'Release data', label: 'Import Windchill exports', legacy: 'windchill.import' },
   { key: 'release.counts', group: 'Release data', label: 'Enter release counts (placeholders for CP, DP, IOCC)', legacy: 'settings.manage' },
   { key: 'baselines.edit', group: 'Release data', label: 'Edit baselines (rules and release scope)', legacy: 'baselines.edit' },
-  { key: 'qemapping.edit', group: 'Release data', label: 'Edit the QE Mapping', legacy: '*' },
   { key: 'data.export', group: 'Release data', label: 'Export tables (Excel, CSV)', legacy: '*' },
   { key: 'streams.manage', group: 'Streams', label: 'Change the stream mapping and its query logic: servers, projects and queries of the streams, their data sets, release naming (Tool Owner)', legacy: 'streams.manage' },
   { key: 'streams.options', group: 'Streams', label: 'Stream options: Epics to match Features in, shared bulk creation Epics', legacy: 'settings.manage' },
@@ -120,8 +120,8 @@ export function defaultPolicy(adminEmail = ''): AccessPolicy {
       'Tool Owner': { areas: [...allAreas], actions: [...allActions] },
       'Admin': { areas: [...allAreas], actions: allActions.filter((action) => action !== 'streams.manage' && action !== 'pages.manage' && action !== 'dashboards.build' && action !== 'pireview.setup') },
       // CON-94: the starting matrix; each cell can be set to Allow, Deny or Not set in Role rights.
-      'Product Owner': { areas: ['overview', 'board', 'health', 'release', 'baselines', 'qemapping', 'docs', 'ondemand'], actions: [...workActions, 'work.bulk', 'azure.createForOthers', 'baselines.edit', 'qemapping.edit', 'data.export', 'pack.text'] },
-      'People Manager': { areas: ['overview', 'insights', ...myWork, 'board', 'release', 'baselines', 'qemapping', 'snapshots', 'docs', 'ondemand'], actions: [...workActions, 'work.bulk', 'pireview.post', 'azure.createForOthers', 'baselines.edit', 'qemapping.edit', 'data.export', 'pack.text'] },
+      'Product Owner': { areas: ['overview', 'board', 'health', 'release', 'baselines', 'docs', 'ondemand'], actions: [...workActions, 'work.bulk', 'azure.createForOthers', 'baselines.edit', 'data.export', 'pack.text'] },
+      'People Manager': { areas: ['overview', 'insights', ...myWork, 'board', 'release', 'baselines', 'snapshots', 'docs', 'ondemand'], actions: [...workActions, 'work.bulk', 'pireview.post', 'azure.createForOthers', 'baselines.edit', 'data.export', 'pack.text'] },
       'Scrum Master': { areas: ['overview', ...myWork, 'board', 'health', 'release', 'docs', 'ondemand'], actions: [...workActions, 'azure.createForOthers', 'data.export', 'setup.feature', 'setup.epic', 'pireview.setup', 'lists.manage'] },
       'Team Member': { areas: ['overview', ...myWork, 'board', 'release', 'docs', 'ondemand'], actions: [...workActions, 'data.export'] },
     },
@@ -138,7 +138,8 @@ function inOrder(policy: AccessPolicy): AccessPolicy {
 
 const pick = <T extends string>(value: unknown, allowed: readonly T[]) => Array.isArray(value) ? allowed.filter((entry) => value.includes(entry)) : []
 // The permissions that did not exist before CON-94 (their presence marks a file written with the split permissions).
-const newKeys = new Set<Action>(['setup.epic', 'setup.values', 'work.edit', 'work.state', 'work.move', 'work.hours', 'work.comment', 'work.bulk', 'release.counts', 'qemapping.edit', 'data.export', 'streams.options', 'setup.feature', 'capacity.settings', 'capacity.rules', 'capacity.time', 'capacity.periods', 'capacity.history', 'people.edit', 'people.capacityRoles', 'access.viewAs', 'pack.text', 'pack.setup', 'layout.defaults', 'storage.shared', 'ondemand.setup', 'ondemand.edit', 'pages.manage', 'dashboards.build', 'pireview.post', 'pireview.setup', 'lists.manage'])
+// 'qemapping.edit' (removed, CON-117) still marks such a file.
+const newKeys = new Set<string>(['setup.epic', 'setup.values', 'work.edit', 'work.state', 'work.move', 'work.hours', 'work.comment', 'work.bulk', 'release.counts', 'qemapping.edit', 'data.export', 'streams.options', 'setup.feature', 'capacity.settings', 'capacity.rules', 'capacity.time', 'capacity.periods', 'capacity.history', 'people.edit', 'people.capacityRoles', 'access.viewAs', 'pack.text', 'pack.setup', 'layout.defaults', 'storage.shared', 'ondemand.setup', 'ondemand.edit', 'pages.manage', 'dashboards.build', 'pireview.post', 'pireview.setup', 'lists.manage'])
 
 // Reads access.json: unknown roles, areas, actions and invalid emails are dropped; a role missing from the file has no
 // rights. Throws on anything that is not an access policy, so a broken file is reported rather than ignored.

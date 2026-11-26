@@ -72,6 +72,20 @@ export function futureIterationPairs(iterations: AzureIteration[], date = new Da
   return scheduledIterationPairs(iterations, date, 'future')
 }
 
+// EPS-10: the Sprint whose start–finish dates hold a day (UTC days, both ends included), for a User Story placed by a
+// milestone date. Only a Sprint the New Feature form and bulk creation may choose counts — a current or future Sprint of
+// the whole iteration tree (any PI, currentIterationPairs / futureIterationPairs, team Sprints first) — so a story is
+// never put in a Sprint that has finished. past: the finished Sprint that holds the day, when that is why none counts.
+export function sprintOfDay(iterations: AzureIteration[], day: string, date = new Date()): { sprint?: AzureIteration; past?: AzureIteration } {
+  const holds = (item: AzureIteration) => { const start = item.attributes?.startDate?.slice(0, 10), finish = item.attributes?.finishDate?.slice(0, 10); return Boolean(start && finish && start <= day && day <= finish) }
+  const open = [...currentIterationPairs(iterations, date), ...futureIterationPairs(iterations, date)].find((pair) => holds(pair.sprint))
+  if (open) return { sprint: open.sprint }
+  const today = utcToday(date)
+  const under = (child: string, parent: string) => child.toLowerCase().startsWith(`${parent.toLowerCase()}\\`)
+  const past = iterations.find((item) => holds(item) && item.attributes!.finishDate!.slice(0, 10) < today && !iterations.some((child) => under(child.path, item.path) && child.attributes?.startDate))
+  return past ? { past } : {}
+}
+
 export interface AzureBacklogScope extends AzureConfig { itemKeys: string[]; areaPaths: string[]; fetchedAt: string; sample?: boolean }
 export interface AzureFetchResult { items: AzureWorkItem[]; areaPaths: string[]; asOf: string; scope: AzureBacklogScope }
 export interface RawItem { id: number; rev?: number; fields: Record<string, unknown>; relations?: { rel: string; url: string }[] }

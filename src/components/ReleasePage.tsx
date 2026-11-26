@@ -20,13 +20,15 @@ export function PeriodSelect({ month, value, onChange }: { month: string; value:
 // action); the details of the view (month filter rule, items fetched, milestone names, the Git copy) are behind
 // ⋯ → About this source…, a pop-up with the same source line. Warnings about the data shown (fetch failed, other
 // columns) follow as children.
-export function ReleaseSourceBar({ name, source, fetched, about, period, primary, menu, children }: { name: string; source: string; fetched?: string; about?: ReactNode; period?: ReactNode; primary?: ReactNode; menu: ViewAction[]; children?: ReactNode }) {
+// `last`: destructive items after About this source… (SET-19, CON-116: an Other view's Delete…).
+export function ReleaseSourceBar({ name, source, fetched, about, period, primary, menu, last = [], children }: { name: string; source: string; fetched?: string; about?: ReactNode; period?: ReactNode; primary?: ReactNode; menu: ViewAction[]; last?: ViewAction[]; children?: ReactNode }) {
   const [open, setOpen] = useState(false)
   const line = fetched ? `${source} · ${fetched}` : source
   const items: ViewAction[] = [
     { key: 'source', label: line, render: () => <p className="view-actions-note">{line}</p> },
     ...menu,
     ...(about ? [{ key: 'about', label: 'About this source…', onClick: () => setOpen(true) }] : []),
+    ...last,
   ]
   return <div className="release-source">
     <div className="view-source-bar"><div className="button-row">{period}<ViewActions label={name} primary={primary} items={items} /></div></div>

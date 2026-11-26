@@ -118,9 +118,12 @@ export function cutDashboard({ name, description, dashboard, pageOf, period, cho
     if (found) pages.set(id, withoutHidden(found))
   }
   const blocks = dashboard.blocks.filter((block) => pages.has(block.source.slice(5)) && block.source.startsWith('page:'))
-  const hours = dashboard.blocks.filter((block) => !block.source.startsWith('page:')).length
+  // DSH-19: a block over an Azure DevOps query is never published — its rows are read with each viewer's own PAT.
+  const azure = dashboard.blocks.filter((block) => /^az[qvm]:/.test(block.source)).length
+  const hours = dashboard.blocks.filter((block) => !block.source.startsWith('page:') && !/^az[qvm]:/.test(block.source)).length
   if (hours) notes.push(`${hours} block${hours === 1 ? '' : 's'} over the Time Writing hours ${hours === 1 ? 'is' : 'are'} not published.`)
-  const missing = dashboard.blocks.length - blocks.length - hours
+  if (azure) notes.push(`${azure} block${azure === 1 ? '' : 's'} over an Azure DevOps query ${azure === 1 ? 'is' : 'are'} not published: its rows are read with each viewer’s own PAT.`)
+  const missing = dashboard.blocks.length - blocks.length - hours - azure
   if (missing) notes.push(`${missing} block${missing === 1 ? '' : 's'} over a table page that is no longer there ${missing === 1 ? 'is' : 'are'} left out.`)
   const filters = dashboard.filters.filter((filter) => pages.has(filter.source.slice(5)) && filter.source.startsWith('page:'))
   const kept = Object.fromEntries(Object.entries(choices).filter(([id, list]) => list.length && filters.some((filter) => filter.id === id)))

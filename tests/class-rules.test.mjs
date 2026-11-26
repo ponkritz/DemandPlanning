@@ -61,13 +61,13 @@ test('DPF-11: without rules, today’s behaviour — the value named like the re
 test('DPF-11: DP and IOCC bulk rows are prefilled by the rules, the hint value kept, a pick still wins (TC-DPF-10)', () => {
   const setup = cleanSetup({ epicId: 500, epicTitle: 'Tools', featureDoD: 'Epic DoD', stories: [], classSets: { MLD: { featureDoD: 'MLD DoD', stories: [] } } })
   const row = (id, release) => ({ key: `dp/${id}`, id, title: `Dose ${release}`, workItemType: 'Release', state: 'Active', fields: { 'Custom.PsName': 'Dose Planning', 'Custom.Release': release, 'Custom.SourceProgram': 'DP' } })
-  const options = { setup, qeMapping: null, board: [], featureMatch: () => undefined, classValues: ['Release', 'MLD', 'PU'], classRules: rules }
+  const options = { setup, board: [], featureMatch: () => undefined, classValues: ['Release', 'MLD', 'PU'], classRules: rules }
   const plan = bulkPlan([row(1, '6.0'), row(2, '5.2.1'), row(3, '5.2.1.3'), row(4, 'R1')], { ...options, classes: { 3: 'Release' } })
   assert.deepEqual(plan.map((line) => [line.name, line.version, line.detected, line.classification, line.set.featureDoD]), [
     ['Dose Planning', '6.0', 'Release', 'Release', 'Epic DoD'], ['Dose Planning', '5.2.1', 'MLD', 'MLD', 'MLD DoD'], ['Dose Planning', '5.2.1.3', 'PU', 'Release', 'Epic DoD'], ['Dose Planning', 'R1', '', '', 'Epic DoD']])
   const before = bulkPlan([row(1, '6.0')], { ...options, classRules: undefined, classValues: ['Major', 'MLD'] })
   assert.equal(before[0].classification, 'Major', 'no rules: matched by name, as before')
   const release = (name, number) => ({ key: `${name} ${number}`, name, release: number, documents: 1, items: [], tracked: false, trackedBy: [], features: [] })
-  const iocc = ioccPlan([release('CT', '2.1.4'), release('CT', 'v3.0'), release('CT', 'beta')], { setup, qeMapping: null, board: [], epicId: 500, featureTitle: () => 't', featureMatch: () => undefined, classValues: ['Release', 'MLD', 'PU'], classRules: rules })
+  const iocc = ioccPlan([release('CT', '2.1.4'), release('CT', 'v3.0'), release('CT', 'beta')], { setup, board: [], epicId: 500, featureTitle: () => 't', featureMatch: () => undefined, classValues: ['Release', 'MLD', 'PU'], classRules: rules })
   assert.deepEqual(iocc.map((line) => [line.detected, line.classification, line.set.featureDoD]), [['MLD', 'MLD', 'MLD DoD'], ['Release', 'Release', 'Epic DoD'], ['', '', 'Epic DoD']])
 })

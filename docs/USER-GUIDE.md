@@ -236,6 +236,46 @@ Without a writable Git connection (not connected, a read-only token, or the synt
 
 *ADM-05*
 
+**Start and Target dates for DP bulk Features; Time Writing months to choose**
+
+DP **Create Features** now sets each Feature's **Start date** and **Target date** from the DP query: the **DRPE Date** (RPE, the Release Planning Event) and the **DDT Date** (DT, Design Transfer) unless the Tool Owner maps other date columns.
+
+To change the columns (roles with *Stream options*, Git connected):
+
+1. Open **Admin → Stream options → Bulk creation Epics**. Under **DP bulk creation dates** you see the two columns in use, with *— default* when they are the defaults.
+2. Choose **Edit dates…**, pick **Start date from** and **Target date from** — any column of the DP query whose name ends in "Date" (a prefix such as Custom.DRPEDate is fine).
+3. Choose **Save to Git**. It is saved for everyone at once.
+
+In the DP **Create Features** pop-up:
+
+1. Check the **Start date** and **Target date** columns. A release without a date is still created, without that date; its Result says so, for example *"no DDT Date — Target date left empty"*. A release whose Start date is after its Target date is **skipped**, with the reason.
+2. Leave **Create Time Writing month Tasks from the Start date to the Target date** unticked (the default) for one Task per Feature, for the current month, as before — or tick it for one Task per month from the **Start date's month** to the **Target date's month**. A month before the current one cannot get a new Task, so a release whose Start date is in an earlier month starts at the current month, and its **Time Writing Tasks** column says so, for example *"from Nov 2026 (Start Sep 2026 is before this month)"*; a release without a Start date also starts at the current month (*"no Start date"*). The total of Tasks is shown under the box; a release with more than 12 months is marked *"check the Target date"*.
+3. Choose **Create n Features**.
+
+The DP and IOCC **Create Features** pop-ups now fill the window, with a small margin and the page dimmed behind; only the list scrolls, so the title, **Cancel** and **Create** stay in view. On a phone they take the whole screen.
+
+*DPF-13…DPF-16 · UI-30*
+
+**Create Feature on one DP release, the same as Create Features**
+
+**Create Feature** on a row of Release Details → DP (the *QMS-0025 match* column) now opens New Feature filled in by the same rules as DP **Create Features**, so the same release gives the same Feature either way:
+
+- **Parent Epic** — the DP bulk creation Epic (*"The DP bulk creation Epic, as Create Features uses it."*); blank with the reason when none is set or it is not on the loaded board.
+- **Title** and **Release Classification** — Program | Service | Release (or the Epic setup's title pattern) and the value detected from the release number, with its DoD and User Stories.
+- **Assigned to** — the QE from the QE page when that person is on the loaded board; otherwise you, with the reason under the field.
+- **Start date** and **Target date** — from the DRPE Date and DDT Date (or the columns set in DP bulk creation dates). A missing date stays empty with a note, for example *"No DDT Date on this release"*.
+- **Time Writing** — the same optional tick box, **Create Time Writing month Tasks from the Start date to the Target date**, not ticked: one Task for the current month; ticked: one per month from the Start date's month to the Target date's month, with the same notes.
+
+You can change every value. If the Start date is after the Target date, the form says *"The Target date is before the Start Date."* and Save waits until you fix it. Create Feature on IOCC, CP, Content and Windchill releases is unchanged.
+
+**Sprint from: a User Story in the Sprint of a DP milestone**
+
+In **Admin → Epic & Feature setup → Setup per Epic → User Stories**, each story has **Sprint from**: **None — the Sprint chosen** (the default), **DRPE Date (RPE)**, **DRPC Date (PRD)**, **DRfH Date (SFV)**, **DDT Date (DT)** or another date column of the DP query. Save to Git as usual.
+
+When a DP release's Feature is made (Create Features or Create Feature), a story with Sprint from goes in the **current or future Sprint whose dates hold that date** of the release. Create Features shows it on each row (*"SFV → Sprint 3 · PRD → default Sprint"*), New Feature next to each story. A story whose date is missing, in a past Sprint or in no Sprint keeps the default Sprint, and the note says why, for example *"PRD 12 Mar 2026 is in a past Sprint — default Sprint"*. The Feature stays in its PI; the Time Writing story and Tasks do not change. Other streams ignore Sprint from.
+
+*DPF-17, DPF-18 · EPS-10*
+
 ### New for Windchill export pages
 
 **⋯ → Upload latest export…**
@@ -426,8 +466,8 @@ Your app roles are set in **Admin → People & roles**. Someone with several rol
 |---|---|---|
 | Tool Owner | everything | everything, including the stream mapping, Pages & menu and building On-Demand Dashboards |
 | Admin | everything, plus the Testing pages | everything except the stream mapping, Pages & menu and building dashboards |
-| Product Owner | Dashboard, I&D Board, Backlog Health, Release Details, Baselines, QE Mapping, Documentation, On-Demand | work items (also bulk create and for others), baselines, QE Mapping, export, Monthly pack text |
-| People Manager | Dashboard, team insights, My Work, I&D Board, Release Details, Baselines, QE Mapping, Snapshots, Documentation, On-Demand | the same as Product Owner |
+| Product Owner | Dashboard, I&D Board, Backlog Health, Release Details, Baselines, Documentation, On-Demand | work items (also bulk create and for others), baselines, export, Monthly pack text |
+| People Manager | Dashboard, team insights, My Work, I&D Board, Release Details, Baselines, Snapshots, Documentation, On-Demand | the same as Product Owner |
 | Scrum Master | Dashboard, My Work, I&D Board, Backlog Health, Release Details, Documentation, On-Demand | work items (also for others), export, the shared Feature setup |
 | Team Member | Dashboard, My Work, I&D Board, Release Details, Documentation, On-Demand | their own work items, export |
 
@@ -569,7 +609,10 @@ The data sources are what the app has already loaded:
 - **Releases per stream** — a row per release as Pulse Check counts it.
 - **Completed releases per stream per month** — each stream's Completed releases in each month up to this one, as Pulse Check's Month tabs count them, with **Counted in Pulse Check** (Yes / No, from your own Streams not counted). A line chart by Month, split by Stream, with **Running total** is Pulse Check's Year chart.
 - **Capacity and utilization** — Team overview's figures per person and month.
-- **The On-Demand table pages**, the **Time Writing hours**, the **QE Mapping** sheets, the **KPI tracker** values, the **historical hours** and each **Windchill export**.
+- **The On-Demand table pages**, the **Time Writing hours**, the **KPI tracker** values, the **historical hours** and each **Windchill export**.
+- **Azure DevOps queries** — each Release Details stream's query, the Tool Validations Tool List and Validation Documents queries and your own My views, with all their columns, as last fetched.
+
+QE Mapping is no longer a source: a block you made over it earlier stays, says "This block’s data source (QE Mapping) was removed." and offers **Remove block…**.
 
 A source your role may not see is offered as "(not available)", and a block over it says "Not available for your role." A source whose data is not loaded yet offers the action that loads it (for example **Load the KPI tracker**).
 
@@ -649,6 +692,9 @@ What feeds each line and KPI row is set in **Admin → Reports → Monthly pack*
 1. **Choose the PI.** The **PI** list in the table's filter bar holds the PIs of your Time Writing connection and of the fetched data, newest first. The **current PI** (its Sprint's dates cover today, in UTC) is chosen for you and marked **Current PI**. If two PIs are current at the same time nothing is chosen: pick one. If the iterations cannot be read, the latest PI with Features is shown and a warning says why. Your choice is remembered in this browser.
 2. **Look at the Features.** The table lists the Features whose Iteration is in the PI (not Removed ones, not those under the absence Epic), by ID. Tick **Also Features with User Stories in this PI** to add Features that stayed in an older PI while their stories moved on. Filter by **Epic**, **State** and **Assigned to**, search (the search looks in every column shown and the whole latest comment), **Reset filters**, and **Export** (with the Export data right).
 3. **Read a Discussion.** Click a Feature: a drawer opens with its details and its **Discussion** — every comment (up to the newest 1,000), newest first, as plain text. Formatting is not kept: a mention shows as **@Name** and an image as **[image]**. Use **↻ Read again** after new comments, ‹ › to go to the next Feature, and **Open in Azure DevOps →** to see the work item.
+
+   **Your own Features are read for you.** When the page opens, and when you choose another PI, the app reads the Discussions of the Features **assigned to you** in that PI (matched by your work email, else your name, as in My PI Review), so **Edit review…** shows on the ones you already reviewed without opening them. Meanwhile the line above the table says "Reading your 2 Features’ Discussions…". Other people's Features are not read until you open them or click Read all. Nothing is read by itself with the synthetic sample, without a PAT or in View as. A Discussion read once is not read again in this page load (only ↻ Read again does).
+
 4. **Read them all.** **↻ Read all Discussions** reads every Feature's Discussion in the background (the top bar shows "Reading Discussions · x of n"). If Azure DevOps asks the app to slow down it waits and tries again once; if it keeps asking, the job stops with "x of n read" — click again later to read the rest. The **Comments** column shows each Feature's count.
 5. **See the latest review comment in columns.** Once a Feature's Discussion is read (in the drawer or with Read all), the columns **Date and Time of Comment**, **Comment**, **Struggles**, **Learnings** and **Move to Next PI** show its **latest comment** — the newest by date and time, whoever wrote it. The date and time are in your time zone; a long text is cut in the cell, and pointing at it shows the whole text. Before the Discussion is read the cells show "—". Sort by any of them, search the comment text, filter with **Move to next PI** (Yes, No, Partly, Other text, Not given, Discussion not read) and **Review mode** (Discuss during Meeting, Offline Review, …), and **Export** them. **Review mode** shows the answer to "Advise to discuss the Feature during the Review meeting" and **Additional Remarks** the remarks. The drawer shows the same split under **Latest comment**, above the Discussion.
 
@@ -780,7 +826,18 @@ Every Release page looks the same, top to bottom:
 
 **Create Feature** on a release without a match opens the New Feature form, titled for that release. Load the QMS-0025 board first.
 
-**Create Features** (DP, IOCC and Content) ticks several releases and creates a Feature for each under the stream's **bulk creation Epic**. No Epic is built in: until one is mapped, the button is disabled and says *"No DP bulk creation Epic is set: map it in Admin → Stream options → Bulk creation Epics."* **Open Bulk creation Epics** next to it takes you there. The Tool Owner enters the Epic ID under **Shared** and saves it to Git for everyone; anyone can enter their own under **Mine**, which is kept in this browser and used for them instead.
+**Create Features** (DP, IOCC and Content) ticks several releases and creates a Feature for each under the stream's **bulk creation Epic**. The DP and IOCC pop-ups fill the window; DP also sets each Feature's Start and Target dates (DRPE Date and DDT Date by default, set in Admin → Stream options → Bulk creation Epics → DP bulk creation dates) and, with an optional tick box (not ticked by default), creates a Time Writing Task for every month from the Start date's month to the Target date's month instead of the current month only. No Epic is built in: until one is mapped, the button is disabled and says *"No DP bulk creation Epic is set: map it in Admin → Stream options → Bulk creation Epics."* **Open Bulk creation Epics** next to it takes you there. The Tool Owner enters the Epic ID under **Shared** and saves it to Git for everyone; anyone can enter their own under **Mine**, which is kept in this browser and used for them instead.
+
+**The QE of each release: the QE page** (DP and IOCC). The DP table's **QE** column and the QE pre-filled on each row of Create Features come from an **On-Demand Table page** — the team's **Resource Mapping** page, or any other. Set it once per bulk Epic (roles allowed to edit the shared Feature setup): **Admin → Epic & Feature setup → Setup per Epic → the DP or IOCC bulk Epic**, under User Stories:
+
+1. **QE from page** — the page named *Resource Mapping* is already chosen ("Default: …"); pick another page if needed.
+2. **Column with the Platform / Product** — the column that names the product (DP: the release's PsName, else its Program; IOCC: the release name).
+3. **Column with the QE** — a Text or Dropdown column; with a built-in list, the person's name as the list shows it now.
+4. **Save to Git**.
+
+The columns are remembered by their id, so renaming a column on the page keeps the setup. A row whose product is not on the page says *"no QE on the QE page for this product"*; pick the person in its drop-down and it is created. If the setup still shows *"The old QE Mapping columns (…) need choosing again on the QE page."*, it was set up for the removed QE Mapping: choose the page and its columns again.
+
+*DPF-02, EPS-09*
 
 **Release Classification from the release number** (DP and IOCC). The Releases table of DP and IOCC starts with **Release name**, **Version** and **Release Classification (detected)** — the value of the bulk Epic's Release Classification list that its rules give for the version (— without a bulk Epic or a value). The Create Features pop-up shows the same three columns first and pre-fills each row's Release Classification, with *"detected from 5.2.1"* under it; change any row before creating. To set the rules (roles allowed *Edit the Epic setup*): **Admin → Epic & Feature setup → Setup per Epic**, choose the bulk Epic, and under its **Release Classification** field tick, for each value, the part of the release number that changes for it — **x.0** (first number only: 5.0, 5.0.0), **x.y** (second number: 5.2), **x.y.z** (third: 5.2.1), **x.y.z.w** (fourth: 5.2.1.3); the deepest non-zero part decides. For example Release ← x.0 and x.y, MLD ← x.y.z, PU ← x.y.z.w. A part can belong to one value only (the screen names a part ticked twice and does not save). **Fill with the usual rules** proposes Major, Minor, MLD and Platform Update (or PU) where your values are named so. Save to Git. Until rules are saved, the value named like the release type (Major, Minor, MLD, Platform Update) is pre-filled, as before. The fields of an Epic are listed Release name, Version, Release Classification first.
 
@@ -972,14 +1029,14 @@ The **⋯** next to the page's main action holds **Rename page…**, **Hide page
 
 ### Replace a value in a column
 
-When one person hands their work over to another — a QE leaves and their releases go to a colleague — **Replace…** changes the name in every row at once. It is in the page's **⋯** menu on a Table or Table + Insights page, and in the toolbar of **QE Mapping**.
+When one person hands their work over to another — a QE leaves and their releases go to a colleague — **Replace…** changes the name in every row at once. It is in the page's **⋯** menu on a Table or Table + Insights page.
 
-1. Choose the **Column** (on QE Mapping the QE column of the Epic & Feature setup is already chosen).
+1. Choose the **Column**.
 2. Choose the value in **Find** — each value shows how many rows hold it — or **Another value (type it)…**. A cell matches only as a whole; upper and lower case and spaces around it do not matter.
 3. Type the new value in **Replace with** (the column's values are suggested). In a Dropdown or Multi-select column it must be one of the column's options.
 4. Check the preview — **"N rows will change"** and the first rows with the old and new value — and choose **Replace**.
 
-The change is saved to Git at once. On an On-Demand page each changed row gets an entry in its **History** ("Replaced “Alex Example” with “Sam Example” in QE") and the result is in **Background jobs**; hidden rows are not changed, and rows someone else is editing are skipped (the preview says how many). On QE Mapping every row of the tab is changed, also rows a search or filter hides; the commit names the change. Without the right to edit the page or QE Mapping, without Git storage that can save, with sample data, or while viewing as someone else, **Replace…** is greyed out with the reason.
+The change is saved to Git at once. On an On-Demand page each changed row gets an entry in its **History** ("Replaced “Alex Example” with “Sam Example” in QE") and the result is in **Background jobs**; hidden rows are not changed, and rows someone else is editing are skipped (the preview says how many). Without the right to edit the page or QE Mapping, without Git storage that can save, with sample data, or while viewing as someone else, **Replace…** is greyed out with the reason.
 
 ### Add and update many rows from Excel (bulk upload)
 
@@ -1003,6 +1060,14 @@ The result is in **Background jobs**, and each added or changed row's **History*
 When many people add rows at the same time, the Tool Owner converts the page to **one file per row** with **Convert to row files…** (it asks first). Afterwards several people can add rows at once and Edit uses row locks. A page past 500 rows (or 600 KB) shows a line suggesting it.
 
 Ask everyone to update before converting a page. An app version without support for row files cannot open a converted page.
+
+### Page files in Git
+
+A page you add is kept in the data repository under its name: `on-demand/Supplier issues--supplier-issues.json` (a page of row files: the folder `on-demand/Supplier issues--supplier-issues/`). The part after the two hyphens is the page's id and never changes. When you rename such a page, its file moves with it in one commit. The name is visible in the repository, its history and GitHub links, also after a rename or delete: keep confidential words out of page names.
+
+CoNQ and the pages that existed before keep their file (`on-demand/conq.json`) for good: renaming them changes only the title inside. Older app versions do not list the pages added under a name: make sure everyone (web and desktop) updates. A Dashboard page you add keeps its blocks in `dashboards/<name>--<id>.json` and moves them with the page when you rename it; existing dashboards keep `dashboards/<id>.json`.
+
+If a page (or a dashboard's blocks) has two copies in Git — for example after someone used an older app version — the page and Admin → Pages & menu say so and show the newer one. The Tool Owner chooses **Delete older copy…**: the pop-up lists exactly what is deleted and what stays (the newer copy), and **Delete older copy** removes it in one commit; its history stays in GitHub.
 
 ### Live and Sample
 
@@ -1194,6 +1259,13 @@ An **On-Demand Dashboard** is a read-only page of KPI tiles, charts and summary 
 
 Each change is saved to Git at once. Blocks over the Time Writing hours show only to people who may see Team overview.
 
+**Azure DevOps queries as data sources.** In **＋ Add block…** the Data source list also offers:
+
+- each Release Details stream's query (for example *DP (Release Details stream query)*), **Tool Validations · Tool List** and **· Validation Documents**, and your own **My views** — as the app last fetched them;
+- any saved query the dashboard's owners added: **⋯ → ＋ Add Azure query…** → pick a connection and **List the saved queries** (choose one under *Shared Queries*), or paste the query's address from Azure DevOps → give it a name → **Add data source**. Only the reference is saved in Git, never a PAT or rows. **Remove Azure query…** removes one that no block uses.
+
+Every column of the query is a field: people by display name (never an email), **Tags** as Multi-select, dates for the period. Each viewer reads a saved query with **their own PAT** when the dashboard opens; **⋯ → ↻ Refresh Azure queries** reads it again. Without a PAT for the server (My settings → Servers and PATs), without access to the query, or without Release Details for a stream's query, the block says why. A query of more than 5,000 rows or 30 columns is **Capped** — the block, its ⓘ and its exports say so.
+
 ## Sharing: PDF and interactive HTML
 
 ### Export PDF
@@ -1297,6 +1369,14 @@ The **Team tree** tab shows the reporting lines. **Capacity roles** sets which t
 
 Your own read-only views are in **My settings → My views**: they appear under **Other views** in your menu only, and never change a stream.
 
+**Delete one of your own views from its page.** Open it under **Other views** in the menu, choose **⋯** → **Delete this view…** (the last item, in red) and read the pop-up: it names the view and says what is deleted — the view and the data fetched for it on this computer — and that the shared setup, other people's views, your PAT and Azure DevOps are not touched. **Delete view** deletes it (the same as **Delete…** in My settings → My views); the app opens **Home** with "Your view “…” was deleted …". It cannot be undone: add the view again in My views. While viewing as someone else the item is greyed out.
+
+*SET-19*
+
+**Delete a Windchill export from its page.** An export listed under **Other views** in the menu has **⋯** → **Delete this export…** (the last item, in red) if your role may import Windchill exports. The pop-up names the export and lists its files in Git; **Delete export** deletes them in one commit — GitHub keeps their history — and the export here, then **Home** opens with "The Windchill export “…” was deleted …". Greyed out, with the reason, while viewing as someone else, with the sample data, without Git storage or with a read-only Git token. Other browsers that already have the export keep their copy until it is deleted there. To get it back, import the export file again.
+
+*CON-118*
+
 ### Capacity & time
 
 **Admin → Capacity & time** holds how capacity is worked out:
@@ -1320,7 +1400,23 @@ Your own read-only views are in **My settings → My views**: they appear under 
 
 A backup of the view (never a PAT) is saved to Git first. At their next start every browser and desktop app removes the view with its saved data and shows once: "The Tool Owner removed 1 shared view: …". Each person's own views (**My views**) and PATs stay. To bring it back for everyone, use **Admin → Streams → Removed connections** → **Look in Git history** → **Restore** (removed views are listed first, with who removed them). Without the Tool Owner role, while viewing as someone else, without Git storage, with a read-only Git token or with the sample data, the two items are greyed out and the line above the table says why. An app version from before this change keeps the view until it is updated.
 
+A shared view's own page (under **Other views** in the menu) has no delete item, also for the Tool Owner: remove it for everyone here.
+
+*CON-116*
+
 *CON-109…CON-112*
+
+**Delete qe-mapping.json from Git (Tool Owner, once).** QE Mapping was removed from the app, but its file `qe-mapping.json` stays in the Git data repository until someone with **Shared setup in Git** deletes it. While it is there, **Admin → Data & sharing → Shared setup in Git** shows **Data no longer used**: "qe-mapping.json is no longer used by the app — Delete it from Git".
+
+Before you delete it, set the **QE page** of each bulk Epic (see Create Features); the pop-up names any bulk Epic still on the old QE Mapping columns.
+
+1. Choose **Download a copy** — the file as it is in Git is saved as `qe-mapping-copy-<date>.json`. Keep it with the team's records.
+2. Choose **Delete it from Git…** (greyed out until you have a copy; also in View as, with the synthetic sample, with a read-only Git token and for anyone who is not the Tool Owner — the line next to it says why).
+3. Read the pop-up and choose **Delete from Git**. One commit deletes only that file; its history stays in GitHub. If someone changed the file after your copy, nothing is deleted: download a copy again.
+
+The notice is then gone. Someone still on an older app version that shows QE Mapping keeps its QE prefill until the file is deleted, then finds no file and is offered an empty mapping.
+
+*GIT-28, NAV-54, EPS-09*
 
 ### Look & feel
 

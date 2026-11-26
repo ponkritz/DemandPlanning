@@ -47,7 +47,7 @@ export const settingsIndex: SettingsEntry[] = [
   { tab: 'my', section: 'usage', page: 'My settings', label: 'My page usage', words: 'usage statistics counts visits analytics pages opened' },
   { tab: 'connections', section: 'mapping', page: 'Streams', label: 'Stream mapping', words: 'dp cp iocc content tool validations query server project data sets naming patterns tool owner' },
   { tab: 'options', section: 'epics', page: 'Stream options', label: 'Epics to match Features in', words: 'feature matching board epics dp cp iocc content' },
-  { tab: 'options', section: 'bulk', page: 'Stream options', label: 'Bulk creation Epics', words: 'create features bulk epic dp iocc content' },
+  { tab: 'options', section: 'bulk', page: 'Stream options', label: 'Bulk creation Epics', words: 'create features bulk epic dp iocc content start date target date drpe ddt' },
   { tab: 'options', section: 'counts', page: 'Stream options', label: 'Release counts', words: 'completed supported placeholders entered counts' },
   { tab: 'epics', section: 'setup', page: 'Epic & Feature setup', label: 'Feature setup', words: 'user stories dod estimate all epics inherit new feature task time writing' },
   { tab: 'epics', section: 'setup', page: 'Epic & Feature setup', label: 'Setup per Epic', words: 'list every epic all epics defaults overview' },

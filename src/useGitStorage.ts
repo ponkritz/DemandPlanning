@@ -1,10 +1,12 @@
 import { listValidationDocuments as listPackage, readValidationDocument as readPackage } from './toolValidation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { useAppStore } from './store'
-import { privateGitWrites, canWrite, deleteFile, fileCommits, fileSha, lastCommit, readTextAt, forgetGitStorage, GitConflictError, historyUrl, listFolder, loadGitConfig, loadGitToken, planningData, readBinaryFile, readPlanningFile, readRawFile, readTextFile, saveGitConfig, saveGitToken, serializePlanning, siblingConfig, validateGitConfig, writePlanningFile, writeTextFile, type GitConfig } from './gitStorage'
+import { privateGitWrites, canWrite, deleteFile, deleteFileAt, fileCommits, fileSha, lastCommit, readTextAt, forgetGitStorage, GitConflictError, historyUrl, listFolder, loadGitConfig, loadGitToken, planningData, readBinaryFile, readPlanningFile, readRawFile, readTextFile, saveGitConfig, saveGitToken, serializePlanning, siblingConfig, validateGitConfig, writePlanningFile, writeTextFile, type GitConfig } from './gitStorage'
 import { historyPath } from './history'
+import { isRetiredFile } from './retiredData'
 import { recordJob } from './backgroundJobs'
 import { clearRemovalInGit, removeViewInGit, viewDataFiles as viewDataFilesInGit } from './viewRemoval'
+import { deleteWindchillExportInGit, windchillExportFiles as windchillExportFilesInGit } from './windchillRemoval'
 import { packTemplateFile } from './pptxTemplate'
 import { applySnapshots, parseSnapshot, serializeSnapshot, snapshotDigest, snapshotFile, snapshotFileName, snapshotFolder, type SnapshotFile, type ViewSnapshot } from './gitSnapshots'
 import { formatDateTime } from './format'
@@ -20,18 +22,20 @@ import { customStreamsFile } from './customStreams'
 import { mergeToolValidationsText, toolValidationsFile } from './toolValidations'
 import { mergePiFormText, piFormFile } from './piReviewSetup'
 import { mergeSharedListsText, sharedListsFile } from './sharedLists'
-import { mergeOnDemandText, onDemandFolder, onDemandPath, pageIdOfFile, pageIdPattern, type OnDemandPage } from './onDemand'
+import { mergeOnDemandText, onDemandPath, pageIdPattern, type OnDemandPage } from './onDemand'
+import { copySets, dashboardFilePath, dashboardsFolder, gitBlobSha, markerVersion, olderThan, pageStem, parseStem, stemFilePath, stemFolderPath, updateMarker, updateMarkerPath, type CopySet, type PageLocation } from './pageFiles'
+import { bringStrays, dashboardTarget, ensureUpdateMarker, listDashboards, listPages, locate, removeOlderCopies, removePage, saveRowHead, writePageFile } from './pageFilesGit'
 import { listEntries } from './gitStorage'
 import { branchExists, ensureBranch } from './gitTrees'
-import { commitPageChange, convertPage, createRowFile, dropLock, keepLock, loadRowPage, readLocks, removeRowPage, takeLock, takeRowNumber, type HeldLock, type RowPageRead } from './rowPageGit'
-import { diffPages, mergeRowText, pageJsonPath, rowFilePath, rowMessage, rowPageQueue, rowsFolder, serializeHead, serializeRow } from './rowFiles'
+import { commitPageChange, convertPage, createRowFile, dropLock, keepLock, loadRowPage, readLocks, takeLock, takeRowNumber, type HeldLock, type RowPageRead } from './rowPageGit'
+import { diffPages, isMovedMarker, mergeRowText, pageJsonPath, rowFilePath, rowMessage, rowPageQueue, rowsFolder, serializeHead, serializeRow } from './rowFiles'
 import { lockBranch, lockSettingsFile, mergeLockSettingsText, type RowLock } from './rowLocks'
 import { menuLayoutFile, mergeMenuLayoutText } from './menuLayout'
 import { dashboardPath, mergeDashboardText } from './dashboardPages'
 import { freezeSnapshot, listSnapshots as listLteSnapshots, uploadSnapshot } from './cloudSnapshots'
 import { appBuild } from './buildInfo'
 import type { Snapshot } from './domain'
-import { mergeHistoryText, mergeKpiTrackerText, mergeViewsBackupText, mergeViewsDefaultsText, saveStamp, SaveQueue, stampMessage, type QueuedOutcome, writeQueuedBinary, writeQueuedText, type Merge, type QueueState } from './gitSaveQueue'
+import { mergeHistoryText, mergeKpiTrackerText, mergeViewsBackupText, mergeViewsDefaultsText, retryTransient, saveStamp, SaveQueue, stampMessage, type QueuedOutcome, writeQueuedBinary, writeQueuedText, type Merge, type QueueState } from './gitSaveQueue'
 import { beginSave, emptyWatch, endSave, fileLabel, newerFiles, rememberOwn, watchedFolders, watchFocusGapMs, watchIntervalMs, type FolderEntry, type RemoteChange, type WatchState } from './gitWatch'
 
 export type GitStatus = 'off' | 'loading' | 'synced' | 'empty' | 'saving' | 'error' | 'conflict'
@@ -402,15 +406,25 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
     return trackWrite(siblingConfig(config, 'epic-setup.json'), token, text, sha, commitMessage)
   }
-  // The QE Mapping table (qe-mapping.json): read and saved like the shared Feature setup.
-  const readQeMapping = useCallback(async () => {
+  // GIT-28: a shared file the app no longer uses (retiredData.ts — qe-mapping.json): whether it is there (its version
+  // id), its text for Download a copy — neither tracked, so the open-app check never watches it — and its delete at the
+  // version downloaded, as one commit (refused when it changed since: false). Only the listed names.
+  const retiredTarget = (name: string) => {
     if (!config || !token) throw new Error('Connect Git storage first.')
-    return trackRead(siblingConfig(config, 'qe-mapping.json'), token)
-  }, [config, token])
-  async function writeQeMapping(text: string, sha: string | null, commitMessage: string) {
-    if (!config || !token) throw new Error('Connect Git storage first.')
-    if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
-    return trackWrite(siblingConfig(config, 'qe-mapping.json'), token, text, sha, commitMessage)
+    if (!isRetiredFile(name)) throw new Error(`${name} is not a file the app has retired.`)
+    return { target: siblingConfig(config, name), key: token }
+  }
+  const retiredFileSha = useCallback(async (name: string) => { if (!config || !token) return null; const { target, key } = retiredTarget(name); return fileSha(target, key) },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [config, token])
+  const readRetiredFile = useCallback(async (name: string) => { const { target, key } = retiredTarget(name); return readTextFile(target, key) },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [config, token])
+  async function deleteRetiredFile(name: string, sha: string, commitMessage: string) {
+    const { target, key } = retiredTarget(name)
+    if (isSample) throw new Error('Synthetic sample data is loaded. Deleting from Git is disabled.')
+    if (readOnly) throw new Error('Your Git token is read-only: it cannot delete files.')
+    return saving(target.path, () => deleteFileAt(target, key, sha, commitMessage, privateGitWrites(target, key)))
   }
   // STR-01: the custom streams (custom-streams.json, next to the stream mapping): read by everyone with Git storage,
   // saved by the Tool Owner with a token that can write; the version read is required, so a concurrent change is refused.
@@ -472,57 +486,129 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
   // OND-08, OND-09: the On-Demand pages, one file each in on-demand/ (the menu lists the folder). Read by everyone with
   // Git storage; saved with a token that can write, queued and merged with what others saved meanwhile (GIT-17);
   // a removed page's file is deleted (its history stays in GitHub). Never with the synthetic sample.
-  // OND-31: a page is either its file on-demand/<id>.json or, converted to row files, its folder on-demand/<id>/ (the
-  // file then holds only the marker and is not read).
+  // OND-31: a page is either its file or, converted to row files, its folder (the old-form file then holds only the
+  // marker and is not read). OND-120…OND-131: the file or folder is named "<page name>--<id>" (or the id alone, the
+  // form before): where each page is comes from the folder listing (stems, by page id) and is found again when someone
+  // renamed it meanwhile; the queue of a page's saves is keyed by its id, so a rename never splits or loses it.
+  const stems = useRef<Record<string, PageLocation>>({})
+  // OND-134: the Dashboard blocks files (dashboards/), by page id, as listed.
+  const dashStems = useRef<Record<string, PageLocation>>({})
+  const updateMarkerSeen = useRef(false)
+  const [pageFilesNote, setPageFilesNote] = useState('')
+  const full = (path: string) => config ? siblingConfig(config, path).path : path
+  // The files a page was read from or saved to here, no longer watched once it is elsewhere (GIT-18).
+  function dropSeen(location: PageLocation | undefined) {
+    if (!location) return
+    const file = full(stemFilePath(location.stem)), folder = `${full(stemFolderPath(location.stem))}/`
+    for (const path of Object.keys(watch.current.seen)) if (path === file || path.startsWith(folder)) { delete watch.current.seen[path]; forget(path) }
+  }
+  const dropSeenRef = useRef(dropSeen)
+  useEffect(() => { dropSeenRef.current = dropSeen })
+  const placeRef = useRef((location: PageLocation) => { const before = stems.current[location.id]; if (before && before.stem !== location.stem) dropSeenRef.current(before); stems.current[location.id] = location })
+  const place = (id: string, stem: string, rows: boolean) => placeRef.current({ id, stem, rows, path: rows ? `${stemFolderPath(stem)}/` : stemFilePath(stem), others: stems.current[id]?.stem === stem ? stems.current[id].others : [] })
+  const stemOf = (id: string) => stems.current[id]?.stem ?? null
+  const trackReadRef = useRef(trackRead)
+  useEffect(() => { trackReadRef.current = trackRead })
   const listOnDemand = useCallback(async () => {
     if (!config || !token) throw new Error('Connect Git storage first.')
-    const entries = await listEntries(siblingConfig(config, onDemandFolder), token)
-    const folders = new Set(entries.filter((entry) => entry.type === 'dir' && pageIdPattern.test(entry.name)).map((entry) => entry.name))
-    const files = entries.flatMap((entry) => { const id = entry.type === 'file' ? pageIdOfFile(entry.name) : null; return id ? [id] : [] })
-    return [...new Set([...files, ...folders])].sort().map((id) => ({ id, rows: folders.has(id) }))
+    const listing = await listPages(config, token)
+    const next: Record<string, PageLocation> = {}
+    for (const location of listing.locations) { const before = stems.current[location.id]; if (before && before.stem !== location.stem) dropSeenRef.current(before); next[location.id] = location }
+    stems.current = next
+    updateMarkerSeen.current = Boolean(listing.update)
+    // OND-128: the update marker names the oldest app version that knows named page files; an older one says so.
+    let note = ''
+    if (listing.update && listing.update.sha !== await gitBlobSha(updateMarker(appBuild.version))) {
+      try { const required = markerVersion((await readTextFile(siblingConfig(config, updateMarkerPath), token)).text); if (required && olderThan(appBuild.version, required)) note = `This data repository needs app version ${required} or later for its On-Demand pages (this is ${appBuild.version}): update the app before editing pages.` } catch { /* checked again at the next listing */ }
+    }
+    setPageFilesNote(note)
+    try { dashStems.current = Object.fromEntries((await listDashboards(config, token)).map((location) => [location.id, location])) } catch { /* read again at the next listing */ }
+    return listing.locations.map(({ id, rows, stem, path, others }) => ({ id, rows, stem, path, others }))
   }, [config, token])
   const readOnDemand = useCallback(async (id: string) => {
     if (!config || !token) throw new Error('Connect Git storage first.')
-    return trackRead(siblingConfig(config, onDemandPath(id)), token)
+    const known = stems.current[id]
+    const read = await trackReadRef.current(siblingConfig(config, stemFilePath(known?.stem ?? id)), token)
+    // A marker where the page was (OND-121): the page moved.
+    if ((read.text != null && !isMovedMarker(read.text)) || !known) return read
+    // Renamed by someone else since the folder was listed here: found again.
+    const found = await locate(config, token, id)
+    if (!found || found.rows || found.stem === known.stem) return read
+    placeRef.current(found)
+    return trackReadRef.current(siblingConfig(config, stemFilePath(found.stem)), token)
   }, [config, token])
+  // OND-121: the first named file written (a page created from this version on) makes sure the update marker is there
+  // (once; older apps then say "update").
+  async function markNamed(stem: string) {
+    if (!config || !token || updateMarkerSeen.current || !parseStem(stem)?.named) return
+    try { await ensureUpdateMarker(config, token, appBuild.version, privateGitWrites(config, token)); updateMarkerSeen.current = true } catch { /* tried again with the next named file */ }
+  }
+  // GIT-17 with OND-124: the queue of a page is its id's (on-demand/<id>.json, whatever the file is called now); the
+  // base is the text last read or written here for the page, taken when the save is queued (KB-80); where the page is
+  // is looked up when the save runs.
   async function writeOnDemand(id: string, text: string, commitMessage: string) {
     if (!config || !token) throw new Error('Connect Git storage first.')
     if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
-    return queueText(siblingConfig(config, onDemandPath(id)), token, text, commitMessage, mergeOnDemandText, privateGitWrites(config, token))
+    const target = config, key = full(onDemandPath(id)), at = saveStamp()
+    const send = privateGitWrites(target, token)
+    queued.current.add(key)
+    const busy = full(stemFilePath(stemOf(id) ?? id))
+    const base = seenText.current[busy] ?? null
+    return saving(busy, () => queue.current.enqueue(key, at, () => saving(busy, async () => {
+      // GIT-27: one automatic retry on a network or server failure, then the failure in plain words (kept with Retry).
+      const result = await retryTransient(() => writePageFile(target, token, id, { text, base, at, message: commitMessage, merge: mergeOnDemandText }, stemOf(id), send), stemFilePath(stemOf(id) ?? id), new TextEncoder().encode(text).length)
+      const path = full(stemFilePath(result.stem))
+      if (result.fromStem && result.fromStem !== result.stem) dropSeen(stems.current[id] ?? { id, stem: result.fromStem, rows: false, path: '', others: [] })
+      place(id, result.stem, false)
+      // OND-134: the blocks file moved with the page in the same commit.
+      if (result.dashboard) { const before = full(result.dashboard.from); delete watch.current.seen[before]; forget(before); dashStems.current[id] = { id, stem: result.stem, rows: false, path: result.dashboard.to, others: [] } }
+      rememberSaved(path, result.sha, result.fromStem === result.stem ? result.replaced : undefined); seenText.current[path] = result.text
+      await markNamed(result.stem)
+      return { sha: result.sha ?? '', commitUrl: result.commitUrl || historyUrl(siblingConfig(target, stemFilePath(result.stem))), merged: result.merged, unchanged: result.unchanged, keptNewer: false, text: result.text }
+    })))
   }
+  // OND-10, PGB-20: a page deleted — every file and folder of its id (both forms, older copies, the marker), one commit.
   async function removeOnDemand(id: string, commitMessage: string) {
     if (!config || !token) throw new Error('Connect Git storage first.')
     if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
-    const target = siblingConfig(config, onDemandPath(id))
-    queued.current.add(target.path)
-    const replaced = watch.current.seen[target.path]
-    const removed = await saving(target.path, () => queue.current.enqueue(target.path, saveStamp(), () => deleteFile(target, token, commitMessage)))
-    rememberSaved(target.path, null, replaced); seenText.current[target.path] = null
+    const target = config, key = full(onDemandPath(id))
+    const send = privateGitWrites(target, token)
+    queued.current.add(key)
+    const removed = await saving(full(stemFilePath(stemOf(id) ?? id)), () => queue.current.enqueue(key, saveStamp(), () => removePage(target, token, id, commitMessage, send)))
+    dropSeen(stems.current[id]); delete stems.current[id]
     return removed
   }
   // ---- OND-31…OND-35: row-file pages ----
   // Row texts by their version (blob sha), kept for this visit: a page read again fetches only the rows that changed.
   const rowTexts = useRef(new Map<string, string>())
-  const full = (path: string) => config ? siblingConfig(config, path).path : path
   // A row-file page as read: page.json and the rows folder are watched by their versions (GIT-18), each row's text is the
   // base its next save is merged from (GIT-17). The row files themselves are not listed by the watcher.
-  function noteRowPage(id: string, read: RowPageRead) {
-    remember(full(pageJsonPath(id)), read.headSha); seenText.current[full(pageJsonPath(id))] = read.headText
-    remember(full(rowsFolder(id)), read.rowsSha)
-    for (const [name, row] of Object.entries(read.rows)) seenText.current[full(`${rowsFolder(id)}/${name}`)] = row.text
+  function noteRowPage(stem: string, read: RowPageRead) {
+    remember(full(pageJsonPath(stem)), read.headSha); seenText.current[full(pageJsonPath(stem))] = read.headText
+    remember(full(rowsFolder(stem)), read.rowsSha)
+    for (const [name, row] of Object.entries(read.rows)) seenText.current[full(`${rowsFolder(stem)}/${name}`)] = row.text
   }
   const notePage = useRef(noteRowPage)
   useEffect(() => { notePage.current = noteRowPage })
   const readRowPage = useCallback(async (id: string) => {
     if (!config || !token) throw new Error('Connect Git storage first.')
-    const read = await loadRowPage(config, token, id, rowTexts.current)
-    if (read) notePage.current(id, read)
+    const known = stems.current[id]
+    let stem = known?.stem ?? id
+    let read = await loadRowPage(config, token, { id, stem }, rowTexts.current)
+    // OND-129: the folder renamed by someone else since it was listed here: found again.
+    if (!read && known?.rows) {
+      const found = await locate(config, token, id)
+      if (found?.rows && found.stem !== stem) { placeRef.current(found); stem = found.stem; read = await loadRowPage(config, token, { id, stem }, rowTexts.current) }
+    }
+    if (read) { notePage.current(stem, read); placeRef.current({ id, stem, rows: true, path: `${stemFolderPath(stem)}/`, others: stems.current[id]?.stem === stem ? stems.current[id].others : [] }) }
     return read?.page ?? null
   }, [config, token])
-  // OND-33: one change of a row-file page, queued in the page's own queue (GIT-17) and written as what it is: a new row's
-  // file (its ID taken from counter.json), a changed row's file (merged field by field with a save made meanwhile), a
-  // removed row's file deleted, page.json (name, columns, charts; merged as OND-09), or — for a change that touches many
-  // rows at once — one commit of all its files. The page is then read again (only the changed rows) and returned.
+  // OND-33: one change of a row-file page, queued in the page's own queue (GIT-17, keyed by its id) and written as what
+  // it is: a new row's file (its ID taken from counter.json), a changed row's file (merged field by field with a save
+  // made meanwhile), a removed row's file deleted, page.json (name, columns, charts; merged as OND-09 — with the folder
+  // moved in the same commit when the name changes, OND-124), or — for a change that touches many rows at once — one
+  // commit of all its files. Where the folder is, is looked up when the save runs (OND-129); row files a save wrote to a
+  // folder renamed meanwhile are brought into the page's folder. The page is then read again (only the changed rows).
   async function saveRowPage(id: string, base: OnDemandPage, change: (page: OnDemandPage) => OnDemandPage, message: string): Promise<QueuedOutcome & { page: OnDemandPage }> {
     if (!config || !token) throw new Error('Connect Git storage first.')
     if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
@@ -533,18 +619,23 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     const next = change(base)
     const diff = diffPages(base, next)
     const rowsChanged = diff.added.length + diff.updated.length + diff.removed.length
-    const rowTarget = (row: { key?: string }) => siblingConfig(target, rowFilePath(id, row.key ?? ''))
+    const queuedStem = stemOf(id) ?? id
     // The base each file's change was made from (KB-80), taken now.
     const single = !diff.head && rowsChanged === 1 ? diff.updated[0] ?? diff.removed[0] ?? null : null
-    const singleBase = single?.key ? seenText.current[rowTarget(single).path] ?? null : null
-    const headBase = seenText.current[full(pageJsonPath(id))] ?? null
-    return saving(full(pageJsonPath(id)), () => saving(full(rowsFolder(id)), () => queue.current.enqueue(key, at, async () => {
+    const singleBase = single?.key ? seenText.current[full(rowFilePath(queuedStem, single.key))] ?? null : null
+    const headBase = seenText.current[full(pageJsonPath(queuedStem))] ?? null
+    return saving(full(pageJsonPath(queuedStem)), () => saving(full(rowsFolder(queuedStem)), () => queue.current.enqueue(key, at, async () => {
+      const where = await retryTransient(() => locate(target, token, id), pageJsonPath(queuedStem))
+      if (!where?.rows) throw new Error(`The page ${base.name} is no longer in Git as row files.`)
+      let stem = where.stem
+      if (stem !== queuedStem) placeRef.current(where)
+      const rowTarget = (row: { key?: string }) => siblingConfig(target, rowFilePath(stem, row.key ?? ''))
       let outcome: QueuedOutcome = { sha: '', commitUrl: '', merged: false, unchanged: false, keptNewer: false }
       if (!diff.head && !rowsChanged) outcome = { ...outcome, unchanged: true }
       else if (!diff.head && rowsChanged === 1 && diff.added.length === 1) {
         const atLeast = base.rows.reduce((max, row) => Math.max(max, row.seq ?? 0), 0) + 1
-        const seq = await takeRowNumber(target, token, base, atLeast, send)
-        const created = await createRowFile(target, token, base, { ...diff.added[0], seq }, (row) => rowMessage(base, row, 'add'), at, send)
+        const seq = await takeRowNumber(target, token, base, atLeast, send, 6, stem)
+        const created = await createRowFile(target, token, base, { ...diff.added[0], seq }, (row) => rowMessage(base, row, 'add'), at, send, Math.random, stem)
         seenText.current[rowTarget(created.row).path] = created.text
         outcome = { ...outcome, sha: created.sha, commitUrl: created.commitUrl }
       } else if (single && diff.updated.length === 1) {
@@ -553,41 +644,74 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
         outcome = { sha: result.sha ?? '', commitUrl: result.commitUrl || historyUrl(rowTarget(single)), merged: result.merged, unchanged: result.unchanged, keptNewer: false }
       } else if (single && diff.removed.length === 1) {
         if (single.key) await deleteFile(rowTarget(single), token, stampMessage(message, at), send)
+      } else if (diff.head && !rowsChanged && next.name !== base.name) {
+        const done = await retryTransient(() => saveRowHead(target, token, id, { text: serializeHead(next), base: headBase, at, message, merge: mergeOnDemandText }, send), pageJsonPath(stem))
+        if (done.stem !== done.fromStem) { placeRef.current({ id, stem: done.stem, rows: true, path: `${stemFolderPath(done.stem)}/`, others: [] }); await markNamed(done.stem) }
+        stem = done.stem
+        outcome = { sha: done.commit, commitUrl: done.commitUrl, merged: done.merged, unchanged: false, keptNewer: false }
       } else if (diff.head && !rowsChanged) {
-        const head = siblingConfig(target, pageJsonPath(id))
+        const head = siblingConfig(target, pageJsonPath(stem))
         const result = await writeQueuedText(head, token, { text: serializeHead(next), base: headBase, at, message, merge: mergeOnDemandText }, send)
         outcome = { sha: result.sha ?? '', commitUrl: result.commitUrl || historyUrl(head), merged: result.merged, unchanged: result.unchanged, keptNewer: false }
       } else {
-        const done = await commitPageChange(target, token, id, change, stampMessage(message, at), rowTexts.current, send)
+        const done = await commitPageChange(target, token, { id, stem }, change, stampMessage(message, at), rowTexts.current, send)
         outcome = { ...outcome, sha: done.commit, commitUrl: done.commitUrl }
       }
-      const read = await loadRowPage(target, token, id, rowTexts.current)
-      if (!read) throw new Error(`${pageJsonPath(id)} is no longer in Git.`)
-      noteRowPage(id, read)
+      let read = await loadRowPage(target, token, { id, stem }, rowTexts.current)
+      if (!read) {
+        // OND-129: renamed by someone else while this save ran: what it wrote under the old name is brought over.
+        const found = await locate(target, token, id)
+        if (!found?.rows) throw new Error(`${pageJsonPath(stem)} is no longer in Git.`)
+        await bringStrays(target, token, stem, found.stem, stampMessage(`${base.name}: bring a row saved during a rename into ${stemFolderPath(found.stem)}/`, at), send)
+        placeRef.current(found); stem = found.stem
+        read = await loadRowPage(target, token, { id, stem }, rowTexts.current)
+        if (!read) throw new Error(`${pageJsonPath(stem)} is no longer in Git.`)
+      }
+      noteRowPage(stem, read)
       return { ...outcome, page: read.page }
     })))
   }
-  // OND-32: Convert to row files (Tool Owner): one commit; the page is then read from its folder.
+  // OND-32: Convert to row files (Tool Owner): one commit; the page is then read from its folder (OND-125: of the same
+  // name as its file).
   async function convertOnDemand(id: string) {
     if (!config || !token) throw new Error('Connect Git storage first.')
     if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
-    const target = config, file = full(onDemandPath(id))
-    const done = await saving(file, () => saving(full(pageJsonPath(id)), () => saving(full(rowsFolder(id)), async () => {
-      const result = await convertPage(target, token, id, (page) => `${page.name}: convert to one file per row (${page.rows.length} row${page.rows.length === 1 ? '' : 's'})`, privateGitWrites(target, token))
-      const read = await loadRowPage(target, token, id, rowTexts.current)
-      if (read) noteRowPage(id, read)
+    const target = config, stem = stemOf(id) ?? id, file = full(stemFilePath(stem))
+    const send = privateGitWrites(target, token)
+    const done = await saving(file, () => saving(full(pageJsonPath(stem)), () => saving(full(rowsFolder(stem)), async () => {
+      const result = await convertPage(target, token, { id, stem }, (page) => `${page.name}: convert to one file per row (${page.rows.length} row${page.rows.length === 1 ? '' : 's'})`, send)
+      const read = await loadRowPage(target, token, { id, stem }, rowTexts.current)
+      if (read) noteRowPage(stem, read)
       return { ...result, page: read?.page ?? result.page }
     })))
-    // The single file now holds the marker: no longer watched.
+    // The single file is gone (or holds the marker): no longer watched.
     delete watch.current.seen[file]; forget(file); delete seenText.current[file]
+    stems.current[id] = { id, stem, rows: true, path: `${stemFolderPath(stem)}/`, others: [] }
     return done
   }
   async function removeRowPageGit(id: string, commitMessage: string) {
     if (!config || !token) throw new Error('Connect Git storage first.')
     if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
-    const target = config
-    await saving(full(pageJsonPath(id)), () => saving(full(rowsFolder(id)), () => removeRowPage(target, token, id, commitMessage, privateGitWrites(target, token))))
-    for (const path of [full(pageJsonPath(id)), full(rowsFolder(id))]) { delete watch.current.seen[path]; forget(path) }
+    const target = config, stem = stemOf(id) ?? id
+    await saving(full(pageJsonPath(stem)), () => saving(full(rowsFolder(stem)), () => removePage(target, token, id, commitMessage, privateGitWrites(target, token))))
+    dropSeen(stems.current[id]); delete stems.current[id]
+  }
+  // The path of a page in Git as shown to people: where it is, else where a page of this name is created.
+  const pagePath = (id: string, name?: string) => { const known = stems.current[id]; return known ? known.path : name != null && pageIdPattern.test(id) ? stemFilePath(pageStem(name, id)) : onDemandPath(id) }
+  const pageOthers = (id: string) => stems.current[id]?.others ?? []
+  // OND-134: where a page's Dashboard blocks file is (listed), else where it is created: named as the page's own file.
+  const dashboardPathOf = (id: string) => dashStems.current[id]?.path ?? dashboardFilePath(stems.current[id]?.stem ?? id)
+  // OND-135: the older copies of a page (its file or folder, its blocks file) and Delete older copy — refused while a
+  // save of the page is on its way here; one commit; the page is then where the reader finds it.
+  const copySetsOf = (id: string) => copySets(stems.current[id], dashStems.current[id])
+  async function removeCopies(id: string, sets: CopySet[], commitMessage: string) {
+    if (!config || !token) throw new Error('Connect Git storage first.')
+    if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
+    const busy = [full(onDemandPath(id)), full(rowPageQueue(id)), full(dashboardPath(id))].some((key) => { const state = queue.current.state(key); return state.waiting > 0 || state.failed > 0 })
+    if (busy) throw new Error('A save of this page is still on its way (or waiting for Retry): delete the older copy once it is saved.')
+    const done = await removeOlderCopies(config, token, id, sets, commitMessage, privateGitWrites(config, token))
+    for (const path of done.deleted) { const key = full(path); for (const seen of Object.keys(watch.current.seen)) if (seen === key || seen.startsWith(key.endsWith('/') ? key : `${key}/`)) { delete watch.current.seen[seen]; forget(seen) } }
+    return done
   }
   // OND-35: the locks — on the branch `locks` (made from the data branch on the first Edit), else in the folder locks/ of
   // the data branch when the repository refuses the branch (lockFallback: the page says so).
@@ -623,8 +747,6 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     return dropLock(await lockConfig(false), token, pageId, rowKey, sha, message, privateGitWrites(config, token), keepalive)
   }
   // OND-36: the inactivity timeout, a shared setting next to the planning data (Admin and Tool Owner change it).
-  const trackReadRef = useRef(trackRead)
-  useEffect(() => { trackReadRef.current = trackRead })
   const readLockSettings = useCallback(async () => {
     if (!config || !token) return { text: null, sha: null }
     return trackReadRef.current(siblingConfig(config, lockSettingsFile), token)
@@ -650,23 +772,48 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
   // Git storage; saved queued and merged by block, tab and filter (GIT-17); deleted with the page.
   const readDashboard = useCallback(async (id: string) => {
     if (!config || !token) throw new Error('Connect Git storage first.')
-    return trackRead(siblingConfig(config, dashboardPath(id)), token)
+    // OND-134: where the blocks file is (named as the page, or by id for a page from before); moved by someone else
+    // since it was listed here: found again.
+    const known = dashStems.current[id]
+    const path = known?.path ?? dashboardFilePath(stems.current[id]?.stem ?? id)
+    const read = await trackReadRef.current(siblingConfig(config, path), token)
+    if (read.text != null) return read
+    // Not where it was listed (or not listed yet here): the folder listed to find it.
+    const found = (await listDashboards(config, token)).find((location) => location.id === id)
+    if (!found || found.path === path) return read
+    dashStems.current[id] = found
+    if (known) { const before = siblingConfig(config, path).path; delete watch.current.seen[before]; forget(before) }
+    return trackReadRef.current(siblingConfig(config, found.path), token)
   }, [config, token])
+  // The queue is the page id's (dashboards/<id>.json, whatever the file is called); where the file is, is looked up
+  // when the save runs (OND-134).
   async function writeDashboard(id: string, text: string, commitMessage: string) {
     if (!config || !token) throw new Error('Connect Git storage first.')
     if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
-    return queueText(siblingConfig(config, dashboardPath(id)), token, text, commitMessage, mergeDashboardText, privateGitWrites(config, token))
+    const target = config, key = full(dashboardPath(id)), at = saveStamp()
+    const send = privateGitWrites(target, token)
+    queued.current.add(key)
+    const busy = full(dashboardPathOf(id))
+    const base = seenText.current[busy] ?? null
+    return saving(busy, () => queue.current.enqueue(key, at, () => saving(busy, async () => {
+      const path = await retryTransient(() => dashboardTarget(target, token, id, stemOf(id)), dashboardPathOf(id))
+      const file = siblingConfig(target, path)
+      const result = await writeQueuedText(file, token, { text, base, at, message: commitMessage, merge: mergeDashboardText }, send)
+      dashStems.current[id] = { id, stem: path.slice('dashboards/'.length, -'.json'.length), rows: false, path, others: dashStems.current[id]?.path === path ? dashStems.current[id].others : [] }
+      rememberSaved(file.path, result.sha, result.replaced); seenText.current[file.path] = result.text
+      return { sha: result.sha ?? '', commitUrl: result.commitUrl || historyUrl(file), merged: result.merged, unchanged: result.unchanged, keptNewer: false, text: result.text }
+    })))
   }
+  // DSH-01, OND-130: the blocks file deleted with its page — every blocks file of the page id (both forms), one commit.
   async function removeDashboard(id: string, commitMessage: string) {
     if (!config || !token) throw new Error('Connect Git storage first.')
     if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
-    const target = siblingConfig(config, dashboardPath(id))
-    const read = await trackRead(target, token)
-    if (read.text == null) return false
-    queued.current.add(target.path)
-    await saving(target.path, () => queue.current.enqueue(target.path, saveStamp(), () => deleteFile(target, token, commitMessage)))
-    rememberSaved(target.path, null, read.sha); seenText.current[target.path] = null
-    return true
+    const target = config, key = full(dashboardPath(id)), path = full(dashboardPathOf(id))
+    const send = privateGitWrites(target, token)
+    queued.current.add(key)
+    const removed = await saving(path, () => queue.current.enqueue(key, saveStamp(), () => removePage(target, token, id, commitMessage, send, dashboardsFolder)))
+    delete watch.current.seen[path]; forget(path); delete seenText.current[path]; delete dashStems.current[id]
+    return removed
   }
   // SNP-04…08: LTE / PI Review snapshots as new files in lte-snapshots/ of the Git data repository (SharePoint is in the
   // backlog). Only with a token that can write, never with the synthetic sample; nothing is kept in the browser.
@@ -888,6 +1035,18 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
       note(id, 'success', `Saved to Git (${target.path}).`)
     } catch (error) { note(id, 'error', `Not saved to Git: ${error instanceof Error ? error.message : String(error)}`) }
   }
+  // CON-118: Delete this export… — the export's files in Git (what the pop-up lists), then deleted as one commit.
+  async function windchillExportFiles(viewId: string) {
+    if (!config || !token) throw new Error('Connect Git storage first.')
+    return windchillExportFilesInGit(config, token, viewId)
+  }
+  async function deleteWindchillExport(viewId: string, name: string) {
+    if (!config || !token) throw new Error('Connect Git storage first.')
+    if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
+    const result = await deleteWindchillExportInGit(config, token, viewId, name, privateGitWrites(config, token))
+    try { const digests = JSON.parse(localStorage.getItem(digestKey) ?? '{}') as Record<string, string>; delete digests[`wc:${viewId}`]; localStorage.setItem(digestKey, JSON.stringify(digests)) } catch { /* only used to skip unchanged saves */ }
+    return result
+  }
   // One Windchill export (or view) from Git: Load from Git on its page. Null when Git has none; the results here are
   // replaced only by newer ones, and an export not set up here is added.
   // The Location analysis of an export (windchillLocationsFile) to windchill-analysis/<export>-locations.json.
@@ -930,6 +1089,6 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     setConfig(null); setToken(''); setSynced(null); setStatus('off'); setMessage('Git storage disconnected in this browser. The data stays in the app and in the repository.'); sha.current = null
   }
 
-  return { listValidationDocuments, readValidationDocument, queueState, retryQueued, saveSnapshot, listSnapshots, readPersonalViews, writePersonalViews, readViewsDefaults, writeViewsDefaults, backupViews, resetViews, readPackTemplate, writePackTemplate, packTemplateHistory: config ? historyUrl(siblingConfig(config, packTemplateFile)) : '', config, connected, readOnly, status, message, dirty, commitUrl, history: config ? historyUrl(config) : '', isSample, load: () => load(), connect, remoteChanges, save, disconnect, viewsPath: viewsConfig?.path ?? '', viewsHistory: viewsConfig ? historyUrl(viewsConfig) : '', readViews, writeViews, shareViews, removedViews, syncViews, readViewRemovals, viewDataFiles, removeViewForEveryone, clearViewRemoval, viewsRemoved, dismissViewsRemoved: () => setViewsRemoved(''), keepRemovedHere: (removal: ViewRemoval) => { if (viewsRepositoryKey) markRemovalsApplied([removal], viewsRepositoryKey) }, pushWindchillAnalysis, accessScope: accessConfig && token ? `${accessConfig.owner}/${accessConfig.repo}@${accessConfig.branch}:${accessConfig.path}` : '', accessPath: accessConfig?.path ?? '', accessHistory: accessConfig ? historyUrl(accessConfig) : '', readAccess, writeAccess, readFeatureSetup, writeFeatureSetup, readEpicSetup, writeEpicSetup, epicSetupHistory: config ? historyUrl(siblingConfig(config, 'epic-setup.json')) : '', readPersonalFeatureSetup, writePersonalFeatureSetup, featureSetupHistory: config ? historyUrl(siblingConfig(config, 'feature-setup.json')) : '', readQeMapping, writeQeMapping, readCustomStreams, writeCustomStreams, customStreamsHistory: config ? historyUrl(siblingConfig(config, customStreamsFile)) : '', readKpiTracker, writeKpiTracker, kpiTrackerHistory: config ? historyUrl(siblingConfig(config, kpiTrackerFile)) : '', readToolValidations, writeToolValidations, toolValidationsHistory: config ? historyUrl(siblingConfig(config, toolValidationsFile)) : '', readPiForm, writePiForm, piFormHistory: config ? historyUrl(siblingConfig(config, piFormFile)) : '', readSharedLists, writeSharedLists, sharedListsHistory: config ? historyUrl(siblingConfig(config, sharedListsFile)) : '', readHistory, writeHistory, removeHistory, listWorkbooks, readWorkbook, historyFileHistory: config ? historyUrl(siblingConfig(config, historyPath)) : '', readMonthlyPack, writeMonthlyPack, monthlyPackHistory: (name: string) => config ? historyUrl(siblingConfig(config, name)) : '', qeMappingHistory: config ? historyUrl(siblingConfig(config, 'qe-mapping.json')) : '', listOnDemand, readOnDemand, writeOnDemand, removeOnDemand, readRowPage, saveRowPage, convertOnDemand, removeRowPageGit, listLocks, acquireLock, renewRowLock, releaseRowLock, lockFallback, readLockSettings, writeLockSettings, watchTick, rowLocksHistory: config ? historyUrl(siblingConfig(config, lockSettingsFile)) : '', readMenuLayout, writeMenuLayout, readDashboard, writeDashboard, removeDashboard, dashboardHistory: (id: string) => config ? historyUrl(siblingConfig(config, dashboardPath(id))) : '', menuLayoutHistory: config ? historyUrl(siblingConfig(config, menuLayoutFile)) : '', onDemandHistory: (id: string) => config ? historyUrl(siblingConfig(config, onDemandPath(id))) : '', removeSnapshots, viewsSync, viewsAlert, snapshotNotes, pushSnapshot, pullSnapshot, pullSnapshots, pushWindchill, pullWindchill, pullWindchillOne, snapshotsHistory: config ? historyUrl(siblingConfig(config, snapshotFolder)) : '' }
+  return { listValidationDocuments, readValidationDocument, windchillExportFiles, deleteWindchillExport, queueState, retryQueued, saveSnapshot, listSnapshots, readPersonalViews, writePersonalViews, readViewsDefaults, writeViewsDefaults, backupViews, resetViews, readPackTemplate, writePackTemplate, packTemplateHistory: config ? historyUrl(siblingConfig(config, packTemplateFile)) : '', config, connected, readOnly, status, message, dirty, commitUrl, history: config ? historyUrl(config) : '', isSample, load: () => load(), connect, remoteChanges, save, disconnect, viewsPath: viewsConfig?.path ?? '', viewsHistory: viewsConfig ? historyUrl(viewsConfig) : '', readViews, writeViews, shareViews, removedViews, syncViews, readViewRemovals, viewDataFiles, removeViewForEveryone, clearViewRemoval, viewsRemoved, dismissViewsRemoved: () => setViewsRemoved(''), keepRemovedHere: (removal: ViewRemoval) => { if (viewsRepositoryKey) markRemovalsApplied([removal], viewsRepositoryKey) }, pushWindchillAnalysis, accessScope: accessConfig && token ? `${accessConfig.owner}/${accessConfig.repo}@${accessConfig.branch}:${accessConfig.path}` : '', accessPath: accessConfig?.path ?? '', accessHistory: accessConfig ? historyUrl(accessConfig) : '', readAccess, writeAccess, readFeatureSetup, writeFeatureSetup, readEpicSetup, writeEpicSetup, epicSetupHistory: config ? historyUrl(siblingConfig(config, 'epic-setup.json')) : '', readPersonalFeatureSetup, writePersonalFeatureSetup, featureSetupHistory: config ? historyUrl(siblingConfig(config, 'feature-setup.json')) : '', retiredFileSha, readRetiredFile, deleteRetiredFile, readCustomStreams, writeCustomStreams, customStreamsHistory: config ? historyUrl(siblingConfig(config, customStreamsFile)) : '', readKpiTracker, writeKpiTracker, kpiTrackerHistory: config ? historyUrl(siblingConfig(config, kpiTrackerFile)) : '', readToolValidations, writeToolValidations, toolValidationsHistory: config ? historyUrl(siblingConfig(config, toolValidationsFile)) : '', readPiForm, writePiForm, piFormHistory: config ? historyUrl(siblingConfig(config, piFormFile)) : '', readSharedLists, writeSharedLists, sharedListsHistory: config ? historyUrl(siblingConfig(config, sharedListsFile)) : '', readHistory, writeHistory, removeHistory, listWorkbooks, readWorkbook, historyFileHistory: config ? historyUrl(siblingConfig(config, historyPath)) : '', readMonthlyPack, writeMonthlyPack, monthlyPackHistory: (name: string) => config ? historyUrl(siblingConfig(config, name)) : '', listOnDemand, readOnDemand, writeOnDemand, removeOnDemand, readRowPage, saveRowPage, convertOnDemand, removeRowPageGit, listLocks, acquireLock, renewRowLock, releaseRowLock, lockFallback, readLockSettings, writeLockSettings, watchTick, rowLocksHistory: config ? historyUrl(siblingConfig(config, lockSettingsFile)) : '', readMenuLayout, writeMenuLayout, readDashboard, writeDashboard, removeDashboard, dashboardHistory: (id: string) => config ? historyUrl(siblingConfig(config, dashboardPathOf(id))) : '', dashboardPathOf, copySetsOf, removeCopies, menuLayoutHistory: config ? historyUrl(siblingConfig(config, menuLayoutFile)) : '', onDemandHistory: (id: string) => config ? historyUrl(siblingConfig(config, (stems.current[id]?.path ?? onDemandPath(id)).replace(/\/$/, ''))) : '', pagePath, pageOthers, pageFilesNote, removeSnapshots, viewsSync, viewsAlert, snapshotNotes, pushSnapshot, pullSnapshot, pullSnapshots, pushWindchill, pullWindchill, pullWindchillOne, snapshotsHistory: config ? historyUrl(siblingConfig(config, snapshotFolder)) : '' }
 }
 export type GitStorage = ReturnType<typeof useGitStorage>

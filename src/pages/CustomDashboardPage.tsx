@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { OlderCopies } from '../components/OlderCopies'
 import { useUnsavedEdit } from '../pageEdits'
 import { recordJob } from '../backgroundJobs'
 import { DataTable, type DataColumn } from '../components/DataTable'
@@ -23,7 +24,7 @@ import { PublishDialog } from '../components/PublishDialog'
 import { prepareDashboard, useSchedules, type PublishAuthorization } from '../publishRun'
 import { publishKey } from '../publishSchedule'
 import { formatDateTime } from '../format'
-import { cleanOptions, hasOptions, insightKindOf as kindOf, onDemandPath, renamePage, type OnDemandPage, withoutHidden } from '../onDemand'
+import { cleanOptions, hasOptions, insightKindOf as kindOf, renamePage, type OnDemandPage, withoutHidden } from '../onDemand'
 import { noneKey, noneLabel } from '../onDemandInsights'
 import { useWriteBlock } from '../useCan'
 import { changeOtherDashboard, useDashboardPage } from '../useDashboardPage'
@@ -35,6 +36,11 @@ import { PageViewForEveryone } from '../components/ViewForEveryone'
 import { PageNameDialog } from './OnDemandPage'
 import { ExportNoteContext, sampleExportNote } from '../exportNote'
 import { PdfExport, type PrintItem } from '../components/PrintView'
+import { AddAzureQueryDialog, RemoveAzureQueryDialog, type QueryConnection } from '../components/AzureQueryDialogs'
+import { maxQueryRefs, queryOfSource } from '../azureQueryRef'
+import { isConnectionSource, missingConnection } from '../azureQuerySources'
+import { useAzureQueries } from '../useAzureQueries'
+import type { AzureConnectionProfileSummary } from '../azureCredentials'
 
 // DSH-01…DSH-12 An On-Demand Dashboard page (page builder, PGB-01): read only for everyone, built by its owners from
 // blocks over the rows of table pages. Top to bottom (UI-STANDARDS §1, §7, §9): the filter row (Year /
@@ -66,7 +72,11 @@ export interface DashboardHours { items: AzureWorkItem[]; settings: CapacitySett
 // TVL-15: embedded — the dashboard shown as an owners' tab of Tool Validations (no page frame, nothing of the menu).
 // TVL-18: tools — the Tool Validations master list and expiry list offered as data sources (their datasets, built by
 // the caller with the viewer's read rights); absent: not offered.
-export function CustomDashboardPage({ git, store, pageId, menu, viewer, views, onOpen, addPageReason = '', onAddPage, hours, publisherName = '', publisher, embedded = false, tools = [] }: { git: GitStorage; store: OnDemandStore; pageId: string; menu: MenuLayoutStore; viewer: Viewer; views?: PersonalViewsStore; onOpen: (id: string) => void; addPageReason?: string; onAddPage: () => void; hours?: DashboardHours; publisherName?: string; publisher: PublishAuthorization; embedded?: boolean; tools?: Dataset[] }) {
+// DSH-17…DSH-23: azure — the Azure DevOps queries as data sources: the app's own queries (connections, built with the
+// viewer's rights for the keys wanted), the connections and servers a builder may add a saved query from, and whether
+// the viewer is viewing as someone else (no reads with their PAT then).
+export interface DashboardAzure { connections: (wanted: (key: string) => boolean) => Dataset[]; profiles: AzureConnectionProfileSummary[]; queryConnections: QueryConnection[]; servers: string[]; viewingAs: boolean }
+export function CustomDashboardPage({ git, store, pageId, menu, viewer, views, onOpen, addPageReason = '', onAddPage, hours, publisherName = '', publisher, embedded = false, tools = [], azure }: { git: GitStorage; store: OnDemandStore; pageId: string; menu: MenuLayoutStore; viewer: Viewer; views?: PersonalViewsStore; onOpen: (id: string) => void; addPageReason?: string; onAddPage: () => void; hours?: DashboardHours; publisherName?: string; publisher: PublishAuthorization; embedded?: boolean; tools?: Dataset[]; azure?: DashboardAzure }) {
   const page = store.pages.find((entry) => entry.id === pageId)
   const dash = useDashboardPage(git, pageId)
   const dashboard = dash.dashboard
@@ -90,6 +100,8 @@ export function CustomDashboardPage({ git, store, pageId, menu, viewer, views, o
   const sizes = useChartSizes()
   const [setup, setSetup] = useState(false)
   const [pageDialog, setPageDialog] = useState<'rename' | 'remove' | null>(null)
+  // DSH-18: Add Azure query… / Remove Azure query… (builders).
+  const [queryDialog, setQueryDialog] = useState<'add' | 'remove' | null>(null)
   const [error, setError] = useState('')
   // GIT-18: an open block editor, tabs and filters pop-up or rename: Load the newer data asks first.
   useUnsavedEdit(editing ? `the block you are editing on ${page?.name ?? 'this dashboard'}` : setup ? `the tabs and filters you are setting up on ${page?.name ?? 'this dashboard'}` : pageDialog === 'rename' ? `the new name of ${page?.name ?? 'this dashboard'}` : false)
@@ -124,11 +136,22 @@ export function CustomDashboardPage({ git, store, pageId, menu, viewer, views, o
   const today = utcToday(), counting = hoursAllowed && usesHours
   const lines = counting && hoursItems && hoursSettings ? hoursLinesCached(hoursItems, monthsKey ? monthsKey.split(',') : [], today, hoursSettings) : []
   const hoursDataset = hoursFor(hoursAllowed, lines)
-  const datasets = [...dataSources(store.pages, visibleStored, (id) => isDashboard(menu.layout, id), pageId), ...(hours ? [hoursDataset] : []), ...tools]
+  // DSH-17, DSH-19: the Azure DevOps queries — the app's own (from its fetched data) and the dashboard's saved queries (read
+  // with the viewer's PAT) — rows worked out and read only for those a block or a filter uses, all while a pop-up is open.
+  const usedSources = [...new Set([...dashboard.blocks.map((entry) => entry.source), ...dashboard.filters.map((filter) => filter.source)])].sort().join(',')
+  const wantAll = Boolean(editing) || setup
+  const wantSource = (key: string) => wantAll || usedSources.split(',').includes(key)
+  const connectionsOf = azure?.connections
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const connectionList = useMemo(() => connectionsOf ? connectionsOf(wantSource) : [], [connectionsOf, usedSources, wantAll])
+  const queries = dashboard.queries ?? []
+  const azureQueries = useAzureQueries(queries, wantSource, { profiles: azure?.profiles ?? [], viewingAs: azure?.viewingAs })
+  const datasets = [...dataSources(store.pages, visibleStored, (id) => isDashboard(menu.layout, id), pageId), ...(hours ? [hoursDataset] : []), ...tools, ...connectionList, ...azureQueries.datasets]
   // OND-65: the table pages read by a block or a filter that the viewer shows in Sample (their sample rows are used).
   const usedPages = new Set([...dashboard.blocks.map((entry) => pageOfSource(entry.source)), ...dashboard.filters.map((filter) => pageOfSource(filter.source))])
   const sampleSources = store.pages.filter((entry) => entry.sample && usedPages.has(entry.id)).map((entry) => entry.name)
-  const datasetOf = (source: string) => datasets.find((entry) => entry.key === source) ?? missingDataset(source, `The table page “${pageOfSource(source)}” is no longer there (removed), or you cannot see it.`)
+  const datasetOf = (source: string) => datasets.find((entry) => entry.key === source) ?? (isConnectionSource(source) ? missingConnection(source) : queryOfSource(source) ? { ...missingDataset(source, 'This Azure DevOps query is no longer a data source of this dashboard (removed with Remove Azure query…).'), name: 'Azure DevOps query' } : missingDataset(source, `The table page “${pageOfSource(source)}” is no longer there (removed), or you cannot see it.`))
+  const usesQueries = dashboard.blocks.some((entry) => queryOfSource(entry.source))
   const narrow = (dataset: Dataset, entry: DashboardBlock) => dataset.problem ? null : narrowRows(dataset, entry, months, dashboard.filters, viewed.choices)
 
   // Years offered: those in the dates the blocks filter on, this year and any chosen.
@@ -212,7 +235,7 @@ export function CustomDashboardPage({ git, store, pageId, menu, viewer, views, o
     const name = target?.name ?? targetId
     let note = ''
     try {
-      const saved = await changeOtherDashboard(git, targetId, (current) => { const copied = copyBlock(current, entry, tabs, dashId('b'), name); note = copied.note; return copied.dashboard }, `Dashboard ${name}: copy the ${blockTypeLabel(entry.type)} ${entry.title} from ${page!.name}`)
+      const saved = await changeOtherDashboard(git, targetId, (current) => { const copied = copyBlock(current, entry, tabs, dashId('b'), name, false, queries); note = copied.note; return copied.dashboard }, `Dashboard ${name}: copy the ${blockTypeLabel(entry.type)} ${entry.title} from ${page!.name}`)
       recordJob(`dashboard:${targetId}`, `${label} → ${name}`, { text: `${outcomeText(saved)} dashboards/${targetId}.json${note ? ` ${note}` : ''}${saved.commitUrl ? ` — ${saved.commitUrl}` : ''}` })
     } catch (failure) {
       recordJob(`dashboard:${targetId}`, `${label} → ${name}`, { text: failure instanceof Error ? failure.message : String(failure), failed: true })
@@ -231,6 +254,9 @@ export function CustomDashboardPage({ git, store, pageId, menu, viewer, views, o
       { key: 'arrange', label: 'Arrange blocks…', disabled: Boolean(buildReason), title: buildReason || undefined, onClick: () => setArranging(true) },
       { key: 'sizes', label: arrangingSizes ? 'Done arranging' : 'Arrange on the page', disabled: Boolean(buildReason), title: buildReason || 'Drag a block by ⠿ to move it, or its corner to size it, for everyone', onClick: () => setArrangingSizes(!arrangingSizes) },
       { key: 'setup', label: 'Tabs and filters…', disabled: Boolean(buildReason), title: buildReason || undefined, onClick: () => setSetup(true) },
+      // DSH-18: the dashboard's saved Azure queries (builders; disabled with the reason for everyone else).
+      ...(azure ? [{ key: 'add-query', label: '＋ Add Azure query…', disabled: Boolean(buildReason) || queries.length >= maxQueryRefs, title: buildReason || (queries.length >= maxQueryRefs ? `A dashboard reads at most ${maxQueryRefs} Azure queries: remove one first.` : undefined), onClick: () => setQueryDialog('add') }] : []),
+      ...(queries.length ? [{ key: 'remove-query', label: 'Remove Azure query…', disabled: Boolean(buildReason), title: buildReason || undefined, onClick: () => setQueryDialog('remove') }] : []),
       ...(embedded ? [] : [
         ...(!buildReason || gitReason || addPageReason ? [{ key: 'add-page', label: '＋ Add page…', disabled: Boolean(gitReason || addPageReason), title: gitReason || addPageReason || undefined, onClick: onAddPage }] : []),
         { key: 'rename', label: 'Rename page…', disabled: Boolean(menuReason), title: menuReason || undefined, onClick: () => setPageDialog('rename') },
@@ -240,11 +266,14 @@ export function CustomDashboardPage({ git, store, pageId, menu, viewer, views, o
       { key: 'pdf', label: 'Export PDF…', disabled: !dashboard.blocks.length, title: dashboard.blocks.length ? undefined : 'No blocks to export yet.', onClick: () => setExporting(true) },
       { key: 'publish', label: 'Publish interactive HTML…', disabled: Boolean(publishReason) || !dashboard.blocks.length, title: publishReason || (dashboard.blocks.length ? undefined : 'No blocks to publish yet.'), onClick: () => setPublishing(publishScope) },
       ...(git.connected ? [{ key: 'reload', label: '↻ Reload from Git', onClick: () => { void dash.reload(); void store.reload() } }] : []),
+      // DSH-22: the saved Azure queries read again with the viewer's PAT (they are read when the dashboard opens; no polling).
+      ...(usesQueries ? [{ key: 'refresh-queries', label: azureQueries.reading ? '↻ Reading Azure queries…' : '↻ Refresh Azure queries', disabled: azureQueries.reading, title: azureQueries.reading ? 'The Azure queries are being read.' : 'Read the dashboard’s Azure queries again from Azure DevOps with your PAT.', onClick: azureQueries.refresh }] : []),
     ]} />}>
     {gitReason && <Notice tone={git.isSample ? 'warning' : 'info'}>{gitReason}{!git.connected ? ' The dashboard last loaded in this browser is shown.' : ''}</Notice>}
     {!gitReason && <WriteBlocked reason={buildNote} />}
     {dash.error && <Notice tone="error">Dashboard: {dash.error} The dashboard last read is kept.</Notice>}
     {dash.dropped.length > 0 && <Notice tone="warning">Dashboard: {dash.path} — {dash.dropped.join(' ')}</Notice>}
+    <OlderCopies store={store} git={git} viewer={viewer} id={page.id} name={page.name} />
     {store.errors.map((entry) => <Notice key={entry} tone="error">On-Demand: {entry}</Notice>)}
     {/* OND-65: a block over a table page the viewer shows in Sample draws its sample rows; the page says so. */}
     {sampleSources.length > 0 && <Notice tone="warning" className="od-sample-banner"><strong>Sample data — nothing is saved.</strong> {sampleSources.join(', ')} {sampleSources.length === 1 ? 'is' : 'are'} set to Sample by you: the blocks over {sampleSources.length === 1 ? 'it' : 'them'} show made-up rows. Choose Live on {sampleSources.length === 1 ? 'that page' : 'those pages'} to see the real figures.</Notice>}
@@ -312,17 +341,22 @@ export function CustomDashboardPage({ git, store, pageId, menu, viewer, views, o
       onRemove={(entry) => saveDashboard(removeBlock(dashboard, entry.id), 'Remove block', `Dashboard ${page.name}: remove the ${blockTypeLabel(entry.type)} ${entry.title}`)} />}
     {setup && <SetupDialog tabs={tabs} filters={dashboard.filters} datasets={datasets} onCancel={() => setSetup(false)}
       onSave={async (nextTabs, nextFilters) => { await saveDashboard(setTabsAndFilters(dashboard, nextTabs, nextFilters), 'Tabs and filters', `Dashboard ${page.name}: tabs and filters`); setSetup(false) }} />}
+    {queryDialog === 'add' && azure && <AddAzureQueryDialog refs={queries} connections={azure.queryConnections} servers={azure.servers} profiles={azure.profiles} viewingAs={azure.viewingAs} newId={() => dashId('b').replace(/^b/, 'q')} onCancel={() => setQueryDialog(null)}
+      onSave={async (ref) => { await saveDashboard({ ...dashboard, queries: [...queries, ref] }, 'Add Azure query', `Dashboard ${page.name}: add the Azure query ${ref.name} as a data source`); setQueryDialog(null) }} />}
+    {queryDialog === 'remove' && <RemoveAzureQueryDialog refs={queries} blocks={dashboard.blocks} filters={dashboard.filters} onCancel={() => setQueryDialog(null)}
+      onRemove={async (ref) => { const rest = queries.filter((entry) => entry.id !== ref.id); const next = { ...dashboard }; if (rest.length) next.queries = rest; else delete next.queries; await saveDashboard(next, 'Remove Azure query', `Dashboard ${page.name}: remove the Azure query ${ref.name}`); setQueryDialog(null) }} />}
     {pageDialog === 'rename' && <PageNameDialog title="Rename the page" action="Save to Git" name={page.name} description={page.description} except={`ondemand:${page.id}`} onCancel={() => setPageDialog(null)} onSave={async (name, description) => {
       const stored = store.stored(page.id) ?? page
       const saved = await store.save(renamePage(stored, name, description), `Pages & menu: rename ${stored.name} to ${name.trim()}`)
-      recordJob(`pages:${page.id}`, `Rename page · ${stored.name}`, { text: `${outcomeText(saved)} ${onDemandPath(page.id)}` })
+      recordJob(`pages:${page.id}`, `Rename page · ${stored.name}`, { text: `${outcomeText(saved)} ${store.filePath(page.id)}` })
       setPageDialog(null)
     }} />}
-    {pageDialog === 'remove' && <RemoveDashboardDialog page={page} blocks={dashboard.blocks.length} path={dash.path} onCancel={() => setPageDialog(null)} onRemove={async () => {
+    {pageDialog === 'remove' && <RemoveDashboardDialog page={page} blocks={dashboard.blocks.length} path={dash.path} pageFile={store.filePath(page.id)} onCancel={() => setPageDialog(null)} onRemove={async () => {
+      const pageFile = store.filePath(page.id)
       await store.remove(page.id, `Pages & menu: remove the dashboard ${page.name} (${dashboard.blocks.length} blocks)`)
       const removed = await git.removeDashboard(page.id, `Pages & menu: remove the dashboard ${page.name} (${dashboard.blocks.length} blocks)`)
       if (menu.layout.pages[page.id]) await menu.save(removePlacement(menu.layout, page.id), `Pages & menu: remove the page ${page.name}`)
-      recordJob(`pages:${page.id}`, `Remove page · ${page.name}`, { text: `Removed ${onDemandPath(page.id)}${removed ? ` and ${dash.path}` : ''}; the history stays in GitHub. The data sources are not changed.` })
+      recordJob(`pages:${page.id}`, `Remove page · ${page.name}`, { text: `Removed ${pageFile}${removed ? ` and ${dash.path}` : ''}; the history stays in GitHub. The data sources are not changed.` })
       setPageDialog(null); const next = store.pages.find((entry) => entry.id !== page.id); if (next) onOpen(next.id)
     }} />}
   </Page></ExportNoteContext.Provider>
@@ -474,13 +508,13 @@ function RemoveBlockDialog({ block, onCancel, onRemove }: { block: DashboardBloc
 }
 
 // DSH-01: removing a Dashboard page asks first: its two files go, its data sources stay.
-function RemoveDashboardDialog({ page, blocks, path, onCancel, onRemove }: { page: OnDemandPage; blocks: number; path: string; onCancel: () => void; onRemove: () => Promise<void> }) {
+function RemoveDashboardDialog({ page, blocks, path, pageFile, onCancel, onRemove }: { page: OnDemandPage; blocks: number; path: string; pageFile: string; onCancel: () => void; onRemove: () => Promise<void> }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const remove = async () => { setBusy(true); setError(''); try { await onRemove() } catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); setBusy(false) } }
   return <Modal eyebrow={`PAGES & MENU · ${page.name.toUpperCase()}`} title="Delete the On-Demand Dashboard" onClose={() => { if (!busy) onCancel() }}>
     <form onSubmit={(event) => { event.preventDefault(); void remove() }}>
-      <p>Delete the On-Demand Dashboard <strong>{page.name}</strong> with its {blocks} block{blocks === 1 ? '' : 's'}, for everyone? Its files {onDemandPath(page.id)} and {path} are deleted from Git; their history stays in GitHub. The table pages and hours it shows are not changed.</p>
+      <p>Delete the On-Demand Dashboard <strong>{page.name}</strong> with its {blocks} block{blocks === 1 ? '' : 's'}, for everyone? Its files {pageFile} and {path} are deleted from Git; their history stays in GitHub. The table pages and hours it shows are not changed.</p>
       {error && <Notice tone="error">{error}</Notice>}
       <div className="modal-actions"><button type="button" className="ghost" disabled={busy} onClick={onCancel}>Cancel</button><button className="danger-button" disabled={busy}>{busy ? 'Deleting…' : 'Delete On-Demand Dashboard'}</button></div>
     </form>

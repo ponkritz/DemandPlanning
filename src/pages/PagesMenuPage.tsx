@@ -5,16 +5,15 @@ import { EditPageDialog, GroupDialog, type GroupEdit, type PageEdit } from '../c
 import { Modal, Notice, Page, Pill, SaveQueueStatus, SettingsSummary, Panel, TablePanel, WriteBlocked } from '../components/ui'
 import { outcomeText } from '../gitSaveQueue'
 import { addGroup, addPageReason, deleteReason, findGroup, hideReason, isHidden, setHidden, gitReasonOf, groupReason, groupsForAdding, isDashboard, isGroupOwner, isPageOwner, kindLabel, kindOf, menuGroups, moveGroup, movePage, pageMenuReason, pagesOfGroup, placePage, placementOf, removeGroup, removeGroupReason, removePlacement, renameGroup, setGroupSettings, type MenuGroup, type MenuLayout, type Viewer } from '../menuLayout'
-import { hasTable, onDemandPath, renamePage, type OnDemandPage } from '../onDemand'
-import { pageFolder } from '../rowFiles'
+import { hasTable, renamePage, type OnDemandPage } from '../onDemand'
 import { maxTimeoutMinutes, minTimeoutMinutes, timeoutError } from '../rowLocks'
-import { dashboardPath } from '../dashboardPages'
 import type { GitStorage } from '../useGitStorage'
 import type { MenuLayoutStore } from '../useMenuLayout'
 import type { OnDemandStore } from '../useOnDemand'
 import type { MenuPageName } from '../pageNames'
 import { useToolValidationsEnv } from '../useToolValidations'
 import { ConvertDialog, RemovePageDialog } from './OnDemandPage'
+import { OlderCopies } from '../components/OlderCopies'
 
 // PGB-12: Admin → Pages & menu — the menu groups (built-in and custom) and the added pages, each a list in the shared
 // table (UI-STANDARDS §5) with its row actions; add and edit in pop-ups (§3/§4). Who may change what is shown: every
@@ -124,10 +123,12 @@ export function PagesMenuPage({ git, store, menu, viewer, onOpen, onAddPage, dup
     {gitReason && <Notice tone={git.isSample ? 'warning' : 'info'}>{gitReason}</Notice>}
     {menu.error && <Notice tone="error">Pages & menu: {menu.error} The menu last read is kept.</Notice>}
     {store.errors.map((entry) => <Notice key={entry} tone="error">On-Demand: {entry}</Notice>)}
+    {store.fileWarnings.map((entry) => <Notice key={entry} tone="warning" className="pgb-file-warning">On-Demand: {entry}</Notice>)}
+    {store.pages.filter((page) => store.copies(page.id).length).map((page) => <OlderCopies key={page.id} store={store} git={git} viewer={viewer} id={page.id} name={page.name} />)}
     {error && <Notice tone="error">{error}</Notice>}
     {duplicates.length > 0 && <Notice tone="warning" className="pgb-duplicates"><p><strong>Pages with the same name:</strong> {duplicates.map((set) => `“${set[0].name}” (${set.map((entry) => entry.group).join(', ')})`).join('; ')}. Both pages are kept and the menu shows each with its group; rename one with Edit so everyone can tell them apart.</p></Notice>}
     <SaveQueueStatus state={menu.queue} onRetry={() => void menu.retry()} />
-    <Panel eyebrow="PAGES & MENU" title="Your rights here" info={<>A <strong>Tool Owner</strong> (the role right “Manage pages and menu groups”) creates, renames, reorders, configures and removes groups — built-in groups only configured — and adds, moves, hides, shows and deletes any page. A <strong>group co-owner</strong>, while the group accepts added pages, adds, renames, reorders, hides and shows the group’s pages (only a Tool Owner deletes a page), names their co-owners, sets them up and edits their rows. A <strong>page co-owner</strong> sets up that page, edits its rows and hides or shows it. A hidden page leaves the menu, Home and search for everyone; its data stays in Git and dashboards keep reading it. The role rights “Set up On-Demand pages” and “Edit On-Demand data (rows)” apply to every such page. Saved in Git as {menu.path} (the pages’ tables as {onDemandPath('<page-id>')}); two saves at the same time are merged group by group and page by page.{menu.history && <> <a href={menu.history} target="_blank" rel="noreferrer">History in GitHub</a></>}</>}>
+    <Panel eyebrow="PAGES & MENU" title="Your rights here" info={<>A <strong>Tool Owner</strong> (the role right “Manage pages and menu groups”) creates, renames, reorders, configures and removes groups — built-in groups only configured — and adds, moves, hides, shows and deletes any page. A <strong>group co-owner</strong>, while the group accepts added pages, adds, renames, reorders, hides and shows the group’s pages (only a Tool Owner deletes a page), names their co-owners, sets them up and edits their rows. A <strong>page co-owner</strong> sets up that page, edits its rows and hides or shows it. A hidden page leaves the menu, Home and search for everyone; its data stays in Git and dashboards keep reading it. The role rights “Set up On-Demand pages” and “Edit On-Demand data (rows)” apply to every such page. Saved in Git as {menu.path} (a page added from this version on as on-demand/&lt;page name&gt;--&lt;page id&gt;.json, moved with its name; a page from before keeps on-demand/&lt;page id&gt;.json for good); two saves at the same time are merged group by group and page by page.{menu.history && <> <a href={menu.history} target="_blank" rel="noreferrer">History in GitHub</a></>}</>}>
       <SettingsSummary rows={[
         ['Groups', viewer.readOnly ? 'Read only (the access roles are not loaded).' : viewer.manager ? 'You manage every group and page (Tool Owner).' : 'View only: a Tool Owner changes the groups.'],
         ['Groups you co-own', ownGroups.join(', ')],
@@ -159,10 +160,11 @@ export function PagesMenuPage({ git, store, menu, viewer, onOpen, onAddPage, dup
       } catch (failure) { recordJob('pages-menu', 'Row lock timeout', { text: failure instanceof Error ? failure.message : String(failure), failed: true }); throw failure }
       setTimeoutOpen(false)
     }} />}
-    {converting && <ConvertDialog page={store.full(converting.id) ?? converting} onCancel={() => setConverting(null)} onConvert={async () => {
+    {converting && <ConvertDialog page={store.full(converting.id) ?? converting} file={store.filePath(converting.id)} onCancel={() => setConverting(null)} onConvert={async () => {
       try {
+        const path = store.filePath(converting.id)
         const done = await store.convert(converting.id)
-        recordJob(`pages:${converting.id}`, `Convert to row files · ${converting.name}`, { text: `Converted ${onDemandPath(converting.id)} to ${pageFolder(converting.id)}/ — ${done.page.rows.length} row file${done.page.rows.length === 1 ? '' : 's'}, page.json and counter.json in one commit. — ${done.commitUrl}` })
+        recordJob(`pages:${converting.id}`, `Convert to row files · ${converting.name}`, { text: `Converted ${path} to ${store.filePath(converting.id)} — ${done.page.rows.length} row file${done.page.rows.length === 1 ? '' : 's'}, page.json and counter.json in one commit. — ${done.commitUrl}` })
       } catch (failure) { recordJob(`pages:${converting.id}`, `Convert to row files · ${converting.name}`, { text: failure instanceof Error ? failure.message : String(failure), failed: true }); throw failure }
       setConverting(null)
     }} />}
@@ -179,7 +181,7 @@ export function PagesMenuPage({ git, store, menu, viewer, onOpen, onAddPage, dup
       const stored = store.pages.find((entry) => entry.id === pageDialog.id) ?? pageDialog
       if (edit.name.trim() !== stored.name || edit.description.trim() !== stored.description) {
         const saved = await store.save(renamePage(stored, edit.name, edit.description), `Pages & menu: rename ${stored.name} to ${edit.name.trim()}`)
-        recordJob(`pages:${stored.id}`, `Rename page · ${stored.name}`, { text: `${outcomeText(saved)} ${onDemandPath(stored.id)}` })
+        recordJob(`pages:${stored.id}`, `Rename page · ${stored.name}`, { text: `${outcomeText(saved)} ${store.filePath(stored.id)}` })
       }
       const before = placementOf(layout, stored.id)
       if (!before.placed || before.type !== edit.kind || before.icon !== edit.icon || before.group !== edit.group || before.owners.join() !== edit.owners.join() || Boolean(before.hidden) !== edit.hidden) {
@@ -188,11 +190,12 @@ export function PagesMenuPage({ git, store, menu, viewer, onOpen, onAddPage, dup
       }
       setPageDialog(null)
     }} />}
-    {removing && <RemovePageDialog page={store.full(removing.id) ?? removing} inGit={store.inGit(removing.id)} onCancel={() => setRemoving(null)} onRemove={async () => {
+    {removing && <RemovePageDialog page={store.full(removing.id) ?? removing} inGit={store.inGit(removing.id)} path={store.filePath(removing.id)} onCancel={() => setRemoving(null)} onRemove={async () => {
+      const path = store.filePath(removing.id), blocks = git.dashboardPathOf(removing.id)
       await store.remove(removing.id, `Pages & menu: delete the page ${removing.name} (${removing.rows.length} rows)`)
       // DSH-01: a Dashboard page's blocks (dashboards/<page-id>.json) go with it.
       const dashboard = isDashboard(layout, removing.id) && await git.removeDashboard(removing.id, `Pages & menu: remove the dashboard ${removing.name}`)
-      recordJob(`pages:${removing.id}`, `Delete page · ${removing.name}`, { text: `Deleted ${removing.storage === 'rows' ? `${pageFolder(removing.id)}/` : onDemandPath(removing.id)}${dashboard ? ` and ${dashboardPath(removing.id)}` : ` with its ${removing.rows.length} row${removing.rows.length === 1 ? '' : 's'}`}; its history stays in GitHub.` })
+      recordJob(`pages:${removing.id}`, `Delete page · ${removing.name}`, { text: `Deleted ${path}${dashboard ? ` and ${blocks}` : ` with its ${removing.rows.length} row${removing.rows.length === 1 ? '' : 's'}`}; its history stays in GitHub.` })
       if (layout.pages[removing.id]) await saveLayout(removePlacement(layout, removing.id), `Remove page · ${removing.name}`, `Pages & menu: remove the page ${removing.name}`)
       setRemoving(null)
     }} />}

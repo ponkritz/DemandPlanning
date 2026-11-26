@@ -1,3 +1,5 @@
+import { pageIdOfPath } from './pageFiles.ts'
+
 // GIT-15: picking up what others save to Git while the app is open. Every shared file the app reads or writes is
 // remembered with the version (blob sha) it has; a check lists the folders of those files (one call per folder, no
 // file contents) and names the files whose version in Git is no longer the one remembered.
@@ -29,7 +31,6 @@ const fileNames: [RegExp, string][] = [
   [/(^|\/)feature-setup\.json$/, 'Feature setup'],
   [/(^|\/)epic-setup\.json$/, 'Epic setup'],
   [/(^|\/)feature-setup\/[^/]+\.json$/, 'Your Feature setup'],
-  [/(^|\/)qe-mapping\.json$/, 'QE Mapping'],
   [/(^|\/)azure-views\.json$/, 'Stream mapping and connections'],
   [/(^|\/)custom-streams\.json$/, 'Custom streams'],
   [/(^|\/)monthly-pack-setup\.json$/, 'Monthly pack setup'],
@@ -41,14 +42,17 @@ const fileNames: [RegExp, string][] = [
   [/(^|\/)tool-validations\.json$/, 'Tool Validations master list'],
   [/(^|\/)pi-review-form\.json$/, 'PI Review form'],
   [/(^|\/)shared-lists\.json$/, 'Built-in lists'],
-  [/(^|\/)on-demand\/([a-z0-9-]+)\.json$/, 'On-Demand page $2'],
-  [/(^|\/)on-demand\/([a-z0-9-]+)\/(?:page\.json|rows)$/, 'On-Demand page $2'],
   [/(^|\/)row-locks\.json$/, 'Row lock timeout'],
   [/(^|\/)menu-layout\.json$/, 'Pages & menu'],
-  [/(^|\/)dashboards\/([a-z0-9-]+)\.json$/, 'Dashboard $2'],
 ]
 export function fileLabel(path: string, planningPath: string) {
   if (path === planningPath) return 'Planning data (capacity, calculation profiles, resources, table defaults)'
+  // OND-122: a page's file or folder, by its id (the old form "<id>" or the named form "<name>--<id>").
+  const page = /(^|\/)on-demand\/[^/]+(?:\.json|\/page\.json|\/rows)$/.test(path) ? pageIdOfPath(path) : null
+  if (page) return `On-Demand page ${page.id}`
+  // OND-134: a Dashboard blocks file of either form.
+  const blocks = /(^|\/)dashboards\/[^/]+\.json$/.test(path) ? pageIdOfPath(path, 'dashboards') : null
+  if (blocks) return `Dashboard ${blocks.id}`
   for (const [pattern, label] of fileNames) { const match = pattern.exec(path); if (match) return label.replace('$2', match[2] ?? '') }
   return path
 }
@@ -86,7 +90,7 @@ export function newerFiles(state: WatchState, listings: Record<string, FolderEnt
 // was saved in another window of this browser.
 export interface RemoteChange { path: string; sha: string | null; by?: string; at?: string; otherWindow?: boolean }
 
-// GIT-18: the pages that show each shared file. A page key is a built-in page's id ('qemapping', 'pulse' …), an Admin
+// GIT-18: the pages that show each shared file. A page key is a built-in page's id ('baselines', 'pulse' …), an Admin
 // page 'admin:<tab>', or an added page 'ondemand:<page id>' (Table, Table + Insights and On-Demand Dashboard alike).
 // '*' is every page; 'admin:*' every Admin page. quiet: loaded without a notice when nothing of it is unsaved here — the
 // menu layout (the menu is refreshed), the default and own views, the access roles away from People & roles (GIT-23)
@@ -104,16 +108,18 @@ export function pagesOfFile(path: string, planningPath: string, dashboardsReadin
   // in the folder locks/ of the data branch) never raise a notice.
   if (/^locks\//.test(name)) return { pages: [], loader: 'none' }
   if (name === 'row-locks.json') return { pages: ['admin:pages'], loader: 'rowLocks' }
-  const onDemand = /^on-demand\/([a-z0-9-]+)(?:\.json|\/page\.json|\/rows)$/.exec(name)
-  if (onDemand) return { pages: [`ondemand:${onDemand[1]}`, ...dashboardsReading(onDemand[1]).map((id) => `ondemand:${id}`), 'admin:pages'], loader: `ondemand:${onDemand[1]}` }
-  const dashboard = /^dashboards\/([a-z0-9-]+)\.json$/.exec(name)
-  if (dashboard) return { pages: [`ondemand:${dashboard[1]}`], loader: 'remount' }
+  // OND-122: a page's file or folder in either form ("<id>" or "<name>--<id>"): the page of that id.
+  const onDemand = /^on-demand\/[^/]+(?:\.json|\/page\.json|\/rows)$/.test(name) ? pageIdOfPath(name) : null
+  if (onDemand) return { pages: [`ondemand:${onDemand.id}`, ...dashboardsReading(onDemand.id).map((id) => `ondemand:${id}`), 'admin:pages'], loader: `ondemand:${onDemand.id}` }
+  const dashboard = /^dashboards\/[^/]+\.json$/.test(name) ? pageIdOfPath(name, 'dashboards') : null
+  if (dashboard) return { pages: [`ondemand:${dashboard.id}`], loader: 'remount' }
   if (name === 'menu-layout.json') return { pages: ['admin:pages'], quiet: 'menu', loader: 'menu' }
   if (name === 'personal-views-defaults.json' || /^personal-views\/[^/]+\.json$/.test(name)) return { pages: ['admin:my', 'admin:look'], quiet: 'views', loader: 'views' }
   // GIT-23: the roles are loaded quietly on every page (rights update in place); only Admin → People & roles, where
   // someone may be editing them, shows the notice.
   if (name === 'access.json') return { pages: ['admin:resources'], quiet: 'access', loader: 'access' }
-  if (name === 'qe-mapping.json') return { pages: ['qemapping', 'board'], loader: 'qemapping' }
+  // GIT-28: qe-mapping.json is no longer read by the app (QE Mapping removed): a change to it never raises a notice.
+  if (name === 'qe-mapping.json') return { pages: [], loader: 'none' }
   if (name === 'feature-setup.json' || /^feature-setup\/[^/]+\.json$/.test(name)) return { pages: featurePages, loader: 'featureSetup' }
   if (name === 'epic-setup.json') return { pages: featurePages, loader: 'epicSetup' }
   if (name === 'custom-streams.json') return { pages: releasePages, loader: 'customStreams' }

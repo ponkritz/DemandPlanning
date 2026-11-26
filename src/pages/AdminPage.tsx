@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { dpQueryDateColumns } from '../dpQueryColumns'
 import { EpicFeatureEditor } from '../components/EpicFeatureEditor'
 import { AdminOverview } from '../components/AdminOverview'
 import { setupGaps } from '../adminOverview'
@@ -28,6 +29,9 @@ import { azureResources, capacityContext, capacityModel, type CapacityRoles, nor
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { GitStorage } from '../useGitStorage'
 import { GitStoragePanel, GitSyncBar } from '../components/GitStorage'
+import { chooseSetup } from '../featureSetup'
+import { needsQePage } from '../qePage'
+import { RetiredFilesPanel } from '../components/RetiredFiles'
 import { AzureViewsGitPanel } from '../components/AzureViewsGit'
 import { AzureConnections } from '../components/AzureConnections'
 import { AccessPanel } from '../components/AccessPanel'
@@ -54,7 +58,7 @@ const shortMonthName = (month: string) => new Intl.DateTimeFormat('en', { month:
 
 // The Windchill host and views setup is hidden (Windchill exports are imported under Release Details instead).
 // Everyone sets up their own connections and tokens here; the shared sections need the role right to manage them.
-export function AdminPage({ store, month, azure, git, access, featureSetup, epicSetup, sharedLists, setupSteps = [], onSearch = () => undefined, qeColumnNames = [], monthlyPack, history, loadEverything, onOpenBoard, tab: requested, onOpenTab, look }: PageProps & { look?: { startView: StartView; onStartView: (view: StartView) => void; onCustomizeMenu: () => void }; tab: SettingsTab; onOpenTab: (tab: SettingsTab, section?: string) => void; azure: AzureWorkspace; git: GitStorage; access: Access; featureSetup: FeatureSetup; epicSetup: EpicSetupStore; sharedLists?: SharedListsEnv; setupSteps?: SetupStep[]; onSearch?: () => void; qeColumnNames?: string[]; monthlyPack: MonthlyPackStore; history: HistoryStore; loadEverything: () => Promise<{ loaded: string[]; failed: string[] }>; onOpenBoard: () => void }) {
+export function AdminPage({ store, month, azure, git, access, featureSetup, epicSetup, sharedLists, setupSteps = [], onSearch = () => undefined, monthlyPack, history, loadEverything, onOpenBoard, tab: requested, onOpenTab, look }: PageProps & { look?: { startView: StartView; onStartView: (view: StartView) => void; onCustomizeMenu: () => void }; tab: SettingsTab; onOpenTab: (tab: SettingsTab, section?: string) => void; azure: AzureWorkspace; git: GitStorage; access: Access; featureSetup: FeatureSetup; epicSetup: EpicSetupStore; sharedLists?: SharedListsEnv; setupSteps?: SetupStep[]; onSearch?: () => void; monthlyPack: MonthlyPackStore; history: HistoryStore; loadEverything: () => Promise<{ loaded: string[]; failed: string[] }>; onOpenBoard: () => void }) {
   const [everything, setEverything] = useState<{ busy: boolean; loaded?: string[]; failed?: string[] }>({ busy: false })
   // CON-94: each shared section needs its own permission.
   const can = access.can
@@ -274,7 +278,7 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, epic
         {git.isSample && <Notice tone="warning">Synthetic sample data is loaded: loading from Git is disabled.</Notice>}
         {everything.loaded && <Notice tone={everything.failed?.length ? 'warning' : 'success'}>Loaded: {everything.loaded.join('; ') || 'nothing'}.{everything.failed?.length ? ` Not loaded — ${everything.failed.join(' · ')}` : ''}</Notice>}
       </Panel> }] : []),
-      ...(can('storage.shared') ? [{ key: 'shared', label: 'Shared setup in Git', scope: 'tool-owner' as const, node: <AzureViewsGitPanel git={git} azure={azure} /> }] : []),
+      ...(can('storage.shared') ? [{ key: 'shared', label: 'Shared setup in Git', scope: 'tool-owner' as const, node: <><RetiredFilesPanel git={git} viewingAs={Boolean(access.viewingAs)} toolOwner={access.rights.roles.includes('Tool Owner')} staleQeEpics={([['DP', dpBulk], ['IOCC', ioccBulk]] as const).flatMap(([stream, id]) => id && needsQePage(chooseSetup(featureSetup.setups, id, true).setup) ? [`Epic #${id} (${stream})`] : [])} /><AzureViewsGitPanel git={git} azure={azure} /></> }] : []),
       { key: 'views', label: 'Other views', scope: 'both', node: <AzureConnections section="views" azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={can('streams.options')} canRemoveForEveryone={access.canManageStreams} viewingAs={Boolean(access.viewingAs)} /> },
       ...((store.state.azureSources ?? []).length ? [{ key: 'sources', label: 'Read-only sources', scope: 'computer' as const, node: <AzureConnections section="sources" azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={can('streams.options')} /> }] : []),
       { key: 'sample', label: 'Synthetic sample', scope: 'computer', node: <AzureConnections section="sample" azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={can('streams.options')} /> },
@@ -352,7 +356,7 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, epic
     ].filter((section) => section.key === 'people' || section.key === 'tree' ? can('people.edit') : section.key === 'capacity-roles' ? can('people.capacityRoles') : true).map((section) => ({ ...section, scope: 'everyone' as const }))} />}
     {tab === 'audit' && <div className="scope-line"><ScopeChip scope="everyone" /></div>}
     {tab === 'epics' && <SectionTabs page="epics" sections={[
-      { key: 'setup', label: 'Setup per Epic', scope: 'both', node: <EpicFeatureEditor setup={featureSetup} epicSetup={epicSetup} git={git} items={azure.items} qeColumnNames={qeColumnNames} /> },
+      { key: 'setup', label: 'Setup per Epic', scope: 'both', node: <EpicFeatureEditor setup={featureSetup} epicSetup={epicSetup} git={git} items={azure.items} dateColumns={dpQueryDateColumns(store.state, azure.connectionProfiles).options} /> },
       // LST-03…LST-07: the Value lists and, below them, the team lists from Azure DevOps — both usable as built-in lists of
       // the On-Demand columns (LST-08).
       { key: 'lists', label: 'Value lists', scope: 'everyone', node: <><EpicSetupPanel section="lists" setup={epicSetup} git={git} items={azure.items} canEdit={can('setup.epic')} canEditLists={can('setup.values')} />{sharedLists && <SharedListsPanel env={sharedLists} />}</> },

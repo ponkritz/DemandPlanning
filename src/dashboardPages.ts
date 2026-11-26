@@ -1,6 +1,7 @@
 import { csvCell } from './csv.ts'
 import { merge3 } from './gitSaveQueue.ts'
 import { blankNarrative, cleanOptions, hasOptions, measureKeys, moneyOf, narrativeError, narrativeOut, parseColors, parseNarrative, pivotLevels, pivotLevelsOut, valuesOf, type ChartOptions, type Narrative, type Insight, type InsightFilter, type InsightMeasure, type OnDemandColumn, type OnDemandPage, type OnDemandRow, type ColorPins } from './onDemand.ts'
+import { parseQueryRefs, queryOfSource, queryRefOut, type AzureQueryRef } from './azureQueryRef.ts'
 import { bucketsOf, categoryColumns, chartData, pivotColumnFields, pivotRowFields, dateGroupLabels, filterColumns, formatValue, grainOf, insightProblems, kpiData, measureText, noneKey, numberOf, otherKey, passesFilter, secondColumns, valueColumns, withType, type ChartData } from './onDemandInsights.ts'
 
 // DSH-01…DSH-12 On-Demand Dashboard pages: a page type of the page builder (PGB-01) that is read only for everyone and
@@ -39,7 +40,8 @@ export interface DashboardTab { id: string; name: string }
 // A filter of the filter row: the viewer ticks values of a Dropdown / Multi-select column of one data source.
 export interface ViewerFilter { id: string; source: string; column: string }
 // colors (CHT-09): the dashboard's colour pins, a value's text → palette colour 1…5 or #rrggbb (CHT-41), used by every block's chart.
-export interface Dashboard { schema: 1; kind: 'dashboard'; id: string; tabs: DashboardTab[]; filters: ViewerFilter[]; blocks: DashboardBlock[]; colors?: ColorPins }
+// queries (DSH-18): the saved Azure DevOps queries the owners added as data sources — references only (azureQueryRef.ts).
+export interface Dashboard { schema: 1; kind: 'dashboard'; id: string; tabs: DashboardTab[]; filters: ViewerFilter[]; blocks: DashboardBlock[]; colors?: ColorPins; queries?: AzureQueryRef[] }
 
 export const dashboardFolder = 'dashboards'
 export const dashboardPath = (id: string) => `${dashboardFolder}/${id}.json`
@@ -62,7 +64,9 @@ const clean = (value: unknown, max: number) => typeof value === 'string' ? value
 export const pageSource = (pageId: string) => `page:${pageId}`
 export const hoursSource = 'hours:time-writing'
 export const hoursSourceName = 'Time Writing hours'
-export const sourcePattern = /^(page:[a-z0-9][a-z0-9-]{0,39}|hours:time-writing|tools:master|tools:expiry)$/
+// DSH-17, DSH-18: an Azure DevOps query the app reads ('azv:<connection id>', a My view 'azm:<connection id>') or a saved
+// query the owners added to the dashboard ('azq:<reference id>').
+export const sourcePattern = /^(page:[a-z0-9][a-z0-9-]{0,39}|hours:time-writing|tools:master|tools:expiry|azq:[A-Za-z0-9][\w-]{0,39}|azv:[A-Za-z0-9_-]{1,80}|azm:[A-Za-z0-9_-]{1,80})$/
 // TVL-26: the Tool Validations sources and their expiry status fields (Status, Days left), which a block may leave out.
 export const isToolSource = (source: string) => source === 'tools:master' || source === 'tools:expiry'
 export const toolStatusColumns = ['tv-status', 'tv-days']
@@ -71,7 +75,8 @@ export const pageOfSource = (source: string) => source.startsWith('page:') ? sou
 // A data source as the blocks see it: rows in the shape of an On-Demand page, so the On-Demand aggregation applies.
 // kind: how the block editor names it ('table page' unless given); note: the line under the editor's Data source.
 // statusDays (TVL-26): the team default window the Tool Validations sources' Status is worked out with.
-export interface Dataset { key: string; name: string; page: OnDemandPage; problem?: string; kind?: string; note?: string; statusDays?: number }
+// capped (DSH-21): why the rows are not complete (an Azure query over 5,000 rows or 30 columns); readAt: when they were read.
+export interface Dataset { key: string; name: string; page: OnDemandPage; problem?: string; kind?: string; note?: string; statusDays?: number; capped?: string; readAt?: string }
 const asPage = (id: string, name: string, columns: OnDemandColumn[], rows: OnDemandRow[]): OnDemandPage => ({ schema: 1, kind: 'on-demand-page', id, name, description: '', keyPrefix: 'DSH', columns, rows, insights: [] })
 // A table page's rows as saved in Git (the viewer's unsaved changes are not shown).
 export const pageDataset = (page: OnDemandPage): Dataset => ({ key: pageSource(page.id), name: page.name, page })
@@ -147,14 +152,17 @@ export function parseDashboard(raw: string, expectedId?: string, pattern: RegExp
   })
   if (blocks.length > maxBlocks) dropped.push(`Only the first ${maxBlocks} blocks are shown (${blocks.length} in the file).`)
   const colors = parseColors(file.colors)
-  return { dashboard: { schema: 1, kind: 'dashboard', id, tabs: keptTabs, filters: filters.slice(0, maxViewerFilters), blocks: blocks.slice(0, maxBlocks), ...(colors ? { colors } : {}) }, dropped }
+  // DSH-18: the Azure query references (only server, project, query id and name are kept).
+  const queries = parseQueryRefs(file.queries)
+  dropped.push(...queries.dropped)
+  return { dashboard: { schema: 1, kind: 'dashboard', id, tabs: keptTabs, filters: filters.slice(0, maxViewerFilters), blocks: blocks.slice(0, maxBlocks), ...(colors ? { colors } : {}), ...(queries.refs.length ? { queries: queries.refs } : {}) }, dropped }
 }
 // CHT: options and colours are written only when set, so a dashboard without them stays byte for byte as before.
 // CHT-79: a Pivot table's nested fields after the field they follow, only when set (an older app drops them, LIM-104).
 const blockOut = ({ id, title, type, source, category, second, measure, value, filters, sort, period, tab, options, narrative, hideStatus, rows2, rows3, second2 }: DashboardBlock) =>
   ({ id, title, type, source, ...(category ? { category } : {}), ...(second ? { second } : {}), ...pivotLevelsOut({ type, rows2: category ? rows2 : undefined, rows3, second2: second ? second2 : undefined }), measure, ...(value ? { value } : {}), ...(filters.length ? { filters } : {}), sort, ...(period ? { period } : {}), ...(tab ? { tab } : {}), ...(options && Object.keys(options).length ? { options } : {}), ...(type === 'narrative' ? { narrative: narrativeOut(narrative) } : {}), ...(hideStatus && isToolSource(source) ? { hideStatus: true } : {}) })
 export function serializeDashboard(dashboard: Dashboard) {
-  const out = `${JSON.stringify({ schema: 1, kind: 'dashboard', id: dashboard.id, tabs: dashboard.tabs.map(({ id, name }) => ({ id, name })), filters: dashboard.filters.map(({ id, source, column }) => ({ id, source, column })), blocks: dashboard.blocks.map(blockOut), ...(dashboard.colors && Object.keys(dashboard.colors).length ? { colors: dashboard.colors } : {}) }, null, 1)}\n`
+  const out = `${JSON.stringify({ schema: 1, kind: 'dashboard', id: dashboard.id, tabs: dashboard.tabs.map(({ id, name }) => ({ id, name })), filters: dashboard.filters.map(({ id, source, column }) => ({ id, source, column })), blocks: dashboard.blocks.map(blockOut), ...(dashboard.colors && Object.keys(dashboard.colors).length ? { colors: dashboard.colors } : {}), ...(dashboard.queries?.length ? { queries: dashboard.queries.map(queryRefOut) } : {}) }, null, 1)}\n`
   if (new TextEncoder().encode(out).length > dashboardMaxBytes) throw new Error(`The dashboard is too large to save (over ${Math.round(dashboardMaxBytes / 1000)} KB). Remove blocks or filters.`)
   return out
 }
@@ -209,7 +217,9 @@ export function mergeDashboardText(baseText: string | null, mineText: string, th
   // the other's blocks on it to the first tab; the caps apply).
   // CHT-09: the colour pins are one entry, the later save's where both changed them.
   const colors = later(base?.colors, mine.colors, theirs.colors, mineLater)
-  return serializeDashboard(parseDashboard(JSON.stringify({ schema: 1, kind: 'dashboard', id: mine.id, tabs, filters, blocks: blocks.map(blockOut), ...(colors ? { colors } : {}) }), mine.id).dashboard)
+  // DSH-18: the Azure query references merged by id, as the blocks.
+  const queries = mergeById(base?.queries ?? (base ? [] : null), mine.queries ?? [], theirs.queries ?? [], mineLater)
+  return serializeDashboard(parseDashboard(JSON.stringify({ schema: 1, kind: 'dashboard', id: mine.id, tabs, filters, blocks: blocks.map(blockOut), ...(colors ? { colors } : {}), ...(queries.length ? { queries: queries.map(queryRefOut) } : {}) }), mine.id).dashboard)
 }
 
 // ---- changing the dashboard (DSH-05, DSH-06) ----
@@ -419,14 +429,25 @@ export const cellValues = valuesOf
 // A copy of a block on another dashboard (or this one): a new id, the same settings and data source. Its tab: the
 // target's tab of the same name (case-insensitive) as the block's tab here; else the target's first tab, and the note
 // says so. Throws when the target is full (40 blocks).
-export function copyBlock(target: Dashboard, block: DashboardBlock, sourceTabs: DashboardTab[], id: string, targetName: string, same = false): { dashboard: Dashboard; block: DashboardBlock; note: string } {
+// DSH-18: a block over a saved Azure query takes the query's reference along (refs: the source dashboard's); a target with
+// the same query (server, project, id) keeps its own and the block reads that one.
+export function copyBlock(target: Dashboard, block: DashboardBlock, sourceTabs: DashboardTab[], id: string, targetName: string, same = false, refs: AzureQueryRef[] = []): { dashboard: Dashboard; block: DashboardBlock; note: string } {
   const tabName = (sourceTabs.find((tab) => tab.id === block.tab) ?? sourceTabs[0])?.name ?? ''
   const match = tabName ? target.tabs.find((tab) => tab.name.trim().toLowerCase() === tabName.trim().toLowerCase()) : undefined
   const tab = same ? block.tab : match && match.id !== target.tabs[0]?.id ? match.id : ''
   const title = same ? `${block.title} (copy)`.slice(0, maxTitle) : block.title
   const copy: DashboardBlock = { ...structuredClone(block), id, title, tab }
   const note = same || !tabName || match ? '' : target.tabs.length ? `${targetName} has no tab named “${tabName}”: the block is on its first tab, ${target.tabs[0].name}.` : `${targetName} has no tabs: the block is shown with all its blocks.`
-  return { dashboard: upsertBlock(target, copy), block: copy, note }
+  const ref = same ? undefined : refs.find((entry) => entry.id === queryOfSource(block.source))
+  if (!ref) return { dashboard: upsertBlock(target, copy), block: copy, note }
+  const own = target.queries ?? []
+  const found = own.find((entry) => entry.server.toLowerCase() === ref.server.toLowerCase() && entry.project.toLowerCase() === ref.project.toLowerCase() && entry.queryId === ref.queryId)
+  if (found) { copy.source = `azq:${found.id}`; return { dashboard: upsertBlock(target, copy), block: copy, note } }
+  if (own.length >= 10) throw new Error(`${targetName} reads 10 Azure queries already: remove one there first.`)
+  const taken = own.find((entry) => entry.id === ref.id || entry.name.toLowerCase() === ref.name.toLowerCase())
+  const added: AzureQueryRef = taken ? { ...ref, id: `${ref.id}`.slice(0, 34) + id.slice(-5), name: `${ref.name} (copy)`.slice(0, 80) } : ref
+  copy.source = `azq:${added.id}`
+  return { dashboard: upsertBlock({ ...target, queries: [...own, added] }, copy), block: copy, note: [note, `The Azure query ${added.name} was added to ${targetName} as a data source.`].filter(Boolean).join(' ') }
 }
 
 // ---- rights (DSH-09, CON-107) ----

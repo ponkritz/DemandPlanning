@@ -1,7 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
-import { buildReviewComment, editTargetOf, isOwnComment, ownReviewOf, reviewCountOf, reviewPeriodOf, updateReview } from '../src/piReviewPost.ts'
+import { buildReviewComment, discussionReadBlock, editTargetOf, isOwnComment, ownFeatures, ownReadBlock, ownReviewOf, readDiscussionInto, reviewCountOf, reviewPeriodOf, updateReview } from '../src/piReviewPost.ts'
+import { discussionOf } from '../src/piReview.ts'
 import { guardAzureWrites, readDiscussion, requestAzure } from '../src/azureDevOps.ts'
 
 // PIR-34: Edit review… in My PI Review — the comment it edits (the viewer's own review that counts for the chosen PI),
@@ -111,4 +112,58 @@ test('PIR-34: PI Review offers Edit review… by the same rule — my own newest
   // A review for another PI does not count, so no Edit; Closed and reviewed after its Closed Date counts.
   assert.equal(ownReviewOf([review(13, '2026-07-01T10:00:00Z', 'Old', 'Rita Gomez', 'rita.gomez@example.com', 'PI 26.3')], { state: 'Active' }, period, rita), undefined)
   assert.equal(ownReviewOf([review(14, '2027-01-10T10:00:00Z', 'At close', 'Rita Gomez', 'rita.gomez@example.com', 'PI 26.3')], { state: 'Closed', closedDate: '2027-01-09T16:00:00Z' }, period, rita).comment.id, 14)
+})
+
+// PIR-35: PI Review reads my own Features' Discussions when it opens — which Features are mine, when it does not read,
+// and a Discussion being read already is not requested again. Synthetic data only.
+test('PIR-35: my own Features are those assigned to me — by my work email where the Feature has one, else by my name; nobody else’s (TC-PIR-37)', () => {
+  const features = [
+    { id: 201, assignedTo: 'Rita Gomez', assignedToEmail: 'rita.gomez@example.com' },
+    { id: 202, assignedTo: 'Ben Okafor', assignedToEmail: 'ben.okafor@example.com' },
+    // Same display name, another person's email: not mine.
+    { id: 203, assignedTo: 'Rita Gomez', assignedToEmail: 'rita.gomez2@example.com' },
+    // No email on the Feature (cached data): by the name, letter case and spaces ignored.
+    { id: 204, assignedTo: ' rita gomez ' },
+    { id: 205, assignedTo: '' },
+  ]
+  assert.deepEqual(ownFeatures(features, rita).map((item) => item.id), [201, 204])
+  assert.deepEqual(ownFeatures(features, { email: 'rita.gomez@example.com' }).map((item) => item.id), [201])
+  assert.deepEqual(ownFeatures(features, { name: 'Rita Gomez' }).map((item) => item.id), [201, 203, 204])
+  assert.deepEqual(ownFeatures(features, {}), [], 'nothing known about me: none')
+  assert.deepEqual(ownFeatures(features, undefined), [])
+})
+
+test('PIR-35: the automatic read is skipped with sample data, without a PAT, in View as and when who I am is not known — not for an on-premises server (reading is allowed there) (TC-PIR-37)', () => {
+  const cloud = { organization: 'org', project: 'Quality' }, onPrem = { baseUrl: 'https://tfs.example.com/tfs/Collection', project: 'Quality' }
+  const viewer = { isSample: false, config: cloud, pat: 'p', viewingAs: '' }
+  assert.equal(ownReadBlock(viewer, rita), '')
+  assert.equal(ownReadBlock({ ...viewer, config: onPrem }, rita), '', 'on premises: read only, but reading is allowed (as My PI Review)')
+  assert.match(ownReadBlock({ ...viewer, isSample: true }, rita), /sample data/)
+  assert.match(ownReadBlock({ ...viewer, pat: '  ' }, rita), /PAT/)
+  assert.match(ownReadBlock({ ...viewer, config: null }, rita), /PAT/)
+  assert.match(ownReadBlock({ ...viewer, viewingAs: 'Ben Okafor' }, rita), /Viewing as Ben Okafor/)
+  assert.match(ownReadBlock(viewer, {}), /not known/)
+  assert.match(ownReadBlock(viewer, undefined), /not known/)
+  // My PI Review and PI Review give the same reason when the Discussions cannot be read at all.
+  assert.equal(discussionReadBlock({ isSample: true, config: cloud, pat: 'p' }), ownReadBlock({ ...viewer, isSample: true }, rita))
+})
+
+test('PIR-35: a Discussion being read is not requested again — a second read waits for the same one; a fresh read (after a post or an edit) asks again (TC-PIR-37)', async () => {
+  const sent = []
+  let release
+  const gate = new Promise((resolve) => { release = resolve })
+  const transport = async (request) => { sent.push(request.workItemId); await gate; return { comments: [{ id: 1, text: 'Learnings: x', createdBy: { displayName: 'Rita Gomez' }, createdDate: '2026-11-01T10:00:00Z' }] } }
+  const item = { key: 'example/quality/9201', id: 9201 }
+  const first = readDiscussionInto(config, 'p', item, { transport })
+  const second = readDiscussionInto(config, 'p', item, { transport })
+  assert.equal(discussionOf(item.key).state, 'loading')
+  release()
+  await Promise.all([first, second])
+  assert.deepEqual(sent, [9201], 'one request for two reads')
+  assert.equal(discussionOf(item.key).state, 'done')
+  await readDiscussionInto(config, 'p', item, { transport, fresh: true })
+  assert.deepEqual(sent, [9201, 9201], 'a fresh read asks again')
+  // Once a read has finished, the next one (↻ Read again) asks again too.
+  await readDiscussionInto(config, 'p', item, { transport })
+  assert.equal(sent.length, 3)
 })

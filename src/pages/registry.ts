@@ -1,5 +1,5 @@
 // Single source for navigation labels, header text and grouping so the sidebar and page header always agree.
-export type Page = 'home' | 'mydash' | 'activities' | 'planover' | 'capactual' | 'overview' | 'pulse' | 'pireview' | 'mywork' | 'bulk' | 'mypireview' | 'baselines' | 'board' | 'health' | 'windchill' | 'brite' | 'snapshots' | 'qemapping' | 'kpitracker' | 'ondemand' | 'admin' | 'docs'
+export type Page = 'home' | 'mydash' | 'activities' | 'planover' | 'capactual' | 'overview' | 'pulse' | 'pireview' | 'mywork' | 'bulk' | 'mypireview' | 'baselines' | 'board' | 'health' | 'windchill' | 'brite' | 'snapshots' | 'kpitracker' | 'ondemand' | 'admin' | 'docs'
 export type PageGroup = 'Home' | 'Data Insights' | 'My Work' | 'Testing' | 'I&D Board' | 'Release Details' | 'Other views' | 'On-Demand' | 'Data & governance' | 'Settings'
 
 // hidden: kept in the build but not offered in the menu.
@@ -25,7 +25,6 @@ export const pages: PageMeta[] = [
   { id: 'baselines', label: 'Baselines', icon: '⌁', group: 'Data & governance', detail: 'Release baselines from estimation rules and scope, against booked hours; plus the monthly task plan check.', usesMonth: true },
   { id: 'windchill', label: 'Import Windchill export', icon: '◇', group: 'Release Details', detail: 'A Windchill search exported to CSV and imported here: its results with the file’s columns, and its releases for the chosen month.', usesMonth: true },
   { id: 'brite', label: 'BRITE', icon: '◇', group: 'Release Details', detail: 'BRITE releases (planned): the exports and their rules are still to be defined.', usesMonth: false },
-  { id: 'qemapping', label: 'QE Mapping', icon: '⇄', group: 'Data & governance', detail: 'QE mapping (planned).', usesMonth: false },
   // OND-01: one entry for every On-Demand page (CoNQ first); the menu lists each page by its name under On-Demand.
   { id: 'ondemand', label: 'On-Demand', icon: '▦', group: 'On-Demand', detail: 'Blank tables the team sets up itself — CoNQ (Cost of Non-Quality) and the pages added there: columns of text, numbers, dates, drop-downs and multi-selects, rows added and edited here, shared through Git.', usesMonth: false },
   { id: 'snapshots', label: 'Snapshots', icon: '▣', group: 'Data & governance', detail: 'Save point-in-time app data to Git for LTE and PI Review; manage browser backups.', usesMonth: true },

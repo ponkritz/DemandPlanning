@@ -1,6 +1,5 @@
 // UI-25…UI-28 Group by and Filter by column in the shared DataTable (built once, switched on per table; first for the
-// On-Demand Table pages, OND-132). The same rules as the QE Mapping (QEM-03, QEM-06, QEM-10, QEM-11), which uses
-// groupTree too: a column filter keeps the rows whose value as shown contains the text, in any case; Group by nests up
+// On-Demand Table pages, OND-132; first written for the QE Mapping, removed with NAV-54): a column filter keeps the rows whose value as shown contains the text, in any case; Group by nests up
 // to four columns, outermost first, each group in natural order with "(blank)" last. A cell may hold several values
 // (a Multi-select): the row is in the group of each of its values, so the counts of one level can add up to more than
 // the rows; it is filtered on any of them.
@@ -11,7 +10,7 @@ export const maxGroupLevels = 4
 export type ShownValue = string | string[] | undefined
 export const shownValues = (value: ShownValue): string[] => (Array.isArray(value) ? value : [value ?? '']).map((entry) => entry.trim()).filter(Boolean)
 
-// QEM-03: contains, in any case. UI-26: a column with a pick list (Dropdown, Multi-select) matches a value of the list
+// UI-26: contains, in any case; a column with a pick list (Dropdown, Multi-select) matches a value of the list
 // exactly (any case), so "Open" does not also keep "Reopened"; any other text is still a "contains" filter.
 export function matchesColumnFilter(values: string[], filter: string, options?: string[]) {
   const wanted = filter.trim().toLowerCase()

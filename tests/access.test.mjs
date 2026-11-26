@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { defaultPolicy, parseAccess, serializeAccess, rightsFor, keepsManager, writeBlockedReason } from '../src/access.ts'
+import { actions, areas, defaultPolicy, parseAccess, serializeAccess, rightsFor, keepsManager, writeBlockedReason } from '../src/access.ts'
 import { requestAzure, guardAzureWrites, writePermissions } from '../src/azureDevOps.ts'
 import { cellOf, setCell, explainAccess } from '../src/access.ts'
 import { settingsPagesFor } from '../src/settingsTabs.ts'
@@ -42,8 +42,8 @@ test('access file: round trip, unknown entries dropped, broken files refused, ed
   // An older file (no split permissions): azure.write brings the work-item permissions it covered, and the actions the
   // app did not check before are allowed (CON-94).
   // CON-103: the On-Demand area (permissions 4) is shown to every role the older file lists.
-  assert.deepEqual(parsed.roles['Scrum Master'], { areas: ['health', 'ondemand'], actions: ['azure.write', 'work.edit', 'work.state', 'work.move', 'work.hours', 'work.comment', 'work.bulk', 'qemapping.edit', 'data.export', 'setup.feature', 'pireview.setup', 'lists.manage', 'pack.text'] })
-  assert.deepEqual(parsed.roles.Admin, { areas: [], actions: ['qemapping.edit', 'data.export', 'setup.feature', 'pack.text'] }, 'a role missing from an older file keeps only what the app did not check then')
+  assert.deepEqual(parsed.roles['Scrum Master'], { areas: ['health', 'ondemand'], actions: ['azure.write', 'work.edit', 'work.state', 'work.move', 'work.hours', 'work.comment', 'work.bulk', 'data.export', 'setup.feature', 'pireview.setup', 'lists.manage', 'pack.text'] })
+  assert.deepEqual(parsed.roles.Admin, { areas: [], actions: ['data.export', 'setup.feature', 'pack.text'] }, 'a role missing from an older file keeps only what the app did not check then')
   assert.deepEqual(parsed.members, { 'a@b.com': ['Scrum Master'] })
   assert.throws(() => parseAccess('{'), /not valid JSON/)
   assert.throws(() => parseAccess('{"schema":2,"roles":{},"members":{}}'), /not an access file/)
@@ -117,7 +117,7 @@ test('CON-94: every permission is Allow, Deny or Not set per role; a denial wins
   for (const key of ['capacity.periods', 'people.edit', 'release.counts', 'streams.options', 'layout.defaults', 'pack.setup', 'access.viewAs', 'work.state', 'work.bulk']) assert.ok(admin.actions.has(key), `Admin keeps ${key}`)
   assert.ok(!admin.actions.has('streams.manage'), 'the stream mapping stays with the Tool Owner')
   assert.ok(!member.actions.has('work.edit') && !member.actions.has('capacity.settings'), 'no Azure changes before: none now')
-  assert.ok(member.actions.has('data.export') && member.actions.has('qemapping.edit'), 'what had no check stays allowed')
+  assert.ok(member.actions.has('data.export') && member.actions.has('setup.feature'), 'what had no check stays allowed')
   // A file written with the split permissions is read as it is (no migration).
   const split = parseAccess(JSON.stringify({ schema: 1, defaultRole: 'Team Member', roles: { 'Team Member': { areas: [], actions: ['work.hours'] } }, members: {} }))
   assert.deepEqual([...rightsFor(split, '').actions], ['work.hours'])
@@ -268,4 +268,20 @@ test('CON-104: a person can hold several roles — the People section sets them 
   assert.deepEqual(one.members['ana@example.com'], ['Scrum Master'], 'unticking one keeps the other')
   assert.equal(withMemberRoles(one, 'ana@example.com', []).members['ana@example.com'], undefined, 'none: the default role applies')
   assert.deepEqual(parseAccess(serializeAccess(two)).members['ana@example.com'], ['Product Owner', 'Scrum Master'], 'saved and read back')
+})
+
+test('CON-117: an older access.json that lists the removed QE Mapping area and its action is read, not refused — the keys are dropped (TC-CON-73)', () => {
+  const text = JSON.stringify({ schema: 1, permissions: 9, defaultRole: 'Team Member', roles: {
+    'Product Owner': { areas: ['overview', 'qemapping', 'docs'], actions: ['work.edit', 'qemapping.edit', 'data.export'], deny: ['qemapping'] },
+    'Team Member': { areas: ['overview', 'qemapping'], actions: ['qemapping.edit'] },
+  }, members: { 'po@example.com': ['Product Owner'] } })
+  const policy = parseAccess(text)
+  assert.deepEqual(policy.roles['Product Owner'], { areas: ['overview', 'docs'], actions: ['work.edit', 'data.export'] }, 'the area, the action and the denial of the area are dropped; the rest is kept')
+  assert.deepEqual(policy.roles['Team Member'], { areas: ['overview'], actions: [] })
+  assert.ok(!areas.some((area) => area.key === 'qemapping') && !actions.some((action) => action.key === 'qemapping.edit'), 'Role rights no longer lists them')
+  assert.ok(!serializeAccess(policy).includes('qemapping'), 'saved again without them')
+  assert.ok(rightsFor(policy, 'po@example.com').areas.has('docs'), 'the person keeps the rest of their rights')
+  // A file whose only permission of the split (CON-94) was qemapping.edit is still read as split: azure.write alone.
+  const split = parseAccess(JSON.stringify({ schema: 1, defaultRole: 'Team Member', roles: { 'Team Member': { areas: [], actions: ['qemapping.edit', 'azure.write'] } }, members: {} }))
+  assert.deepEqual(split.roles['Team Member'].actions, ['azure.write'], 'not migrated from the old keys')
 })

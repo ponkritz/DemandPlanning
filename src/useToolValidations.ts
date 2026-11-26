@@ -12,7 +12,7 @@ import type { DataModeStore } from './useDataMode'
 import type { MenuLayoutStore } from './useMenuLayout'
 import type { OnDemandStore } from './useOnDemand'
 import type { PersonalViewsStore } from './usePersonalViews'
-import type { DashboardHours } from './pages/CustomDashboardPage'
+import type { DashboardAzure, DashboardHours } from './pages/CustomDashboardPage'
 
 // TVL-02: the Tool Validations master list from Git (tool-validations.json), read when Git storage is connected; the last
 // good file read is kept in this browser so the list is shown while Git cannot be reached. A file that cannot be read
@@ -116,7 +116,7 @@ export interface ToolValidationsEnv {
   // that may not see Release Details).
   datasets: Dataset[]
 }
-export interface CustomTabsEnv { git: GitStorage; onDemand: OnDemandStore; menu: MenuLayoutStore; viewer: Viewer; me: string; views?: PersonalViewsStore; dataMode?: DataModeStore; publisherName: string; publisher: PublishAuthorization; hours?: DashboardHours }
+export interface CustomTabsEnv { git: GitStorage; onDemand: OnDemandStore; menu: MenuLayoutStore; viewer: Viewer; me: string; views?: PersonalViewsStore; dataMode?: DataModeStore; publisherName: string; publisher: PublishAuthorization; hours?: DashboardHours; azure?: DashboardAzure }
 // The data of the sources other than the stream's query: Azure DevOps connections fetched here, imported Windchill
 // exports and the table pages of the app.
 export interface SourceData {

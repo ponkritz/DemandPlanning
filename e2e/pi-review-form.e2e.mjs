@@ -75,6 +75,8 @@ function fakeAzure(state) {
         list.unshift(comment)
         return json(comment)
       }
+      // PIR-35: each Discussion read (a GET of its comments), by Feature, to count the requests.
+      state.reads.push(id)
       return json({ comments: list, count: list.length })
     }
     return json({ value: [] })
@@ -93,7 +95,7 @@ const datedTree = () => node('', [node('PI 2027.2', [], span(dayFromToday(61), d
 const withLead = () => { const policy = JSON.parse(teamMembersSeePiReview()); policy.members['lena.berg@example.com'] = ['People Manager']; return JSON.stringify(policy) }
 // PIR-33: start — "PI Review starts from", as the last form setup read from Git kept in this browser (no Git here).
 async function open({ email = 'rita.gomez@example.com', width = 1300, height = 1000, scale, roles = teamMembersSeePiReview(), tree, team, world: items = world(), comments, start } = {}) {
-  const state = { tree, team, world: items, comments: comments ?? { 201: [{ id: 5, text: '<div>Struggles: test rig late</div><div>Learnings: book the rig early</div><div>Move to next PI: Partly - waiting for vendor</div>', createdBy: ben, createdDate: '2026-11-21T14:30:00Z' }] }, posts: [], edits: [], log: [], failNextPost: false, failNextEdit: false }
+  const state = { tree, team, world: items, comments: comments ?? { 201: [{ id: 5, text: '<div>Struggles: test rig late</div><div>Learnings: book the rig early</div><div>Move to next PI: Partly - waiting for vendor</div>', createdBy: ben, createdDate: '2026-11-21T14:30:00Z' }] }, posts: [], edits: [], reads: [], log: [], failNextPost: false, failNextEdit: false }
   const { page, context, errors } = await openPage(app, { width, height, scale, init: ([connection, mail, roles, setup]) => {
     if (setup) localStorage.setItem('demand-planning-pi-review-form-v1', setup)
     localStorage.setItem('demand-planning-access-v1', roles)
@@ -589,6 +591,45 @@ test('TC-PIR-36: PI Review offers Edit review… on my own review — in the row
   await lead.page.getByRole('button', { name: 'Edit review of Feature 202' }).waitFor()
   assert.equal(await lead.page.getByRole('button', { name: 'Edit review of Feature 205' }).count(), 0, 'no Edit on Rita’s review')
   assert.equal(await lead.page.getByRole('button', { name: 'Write review of Feature 205' }).isDisabled(), false)
+  assert.deepEqual(lead.errors, [])
+  await lead.context.close()
+})
+
+// PIR-35: PI Review reads my own Features' Discussions when it opens — Rita sees Edit review… on her reviewed Feature
+// without opening it; Ben's Feature 202 (with Lena's review) is not read until Read all Discussions; nothing is read twice.
+test('TC-PIR-37: PI Review reads my own Features’ Discussions when it opens — Edit review… shows without opening the Feature; another person’s Feature is not read by itself, and nothing is read twice', async () => {
+  const { page, context, errors, state } = await open({ comments: reviews(), ...(shots ? { width: 1440, height: 900, scale: 2 } : {}) })
+  await navigate(page, 'PI Review')
+  await page.getByRole('button', { name: 'Edit review of Feature 205' }).waitFor()
+  assert.equal(await page.getByRole('button', { name: 'Write review of Feature 205' }).count(), 0, 'one action per row')
+  // Rita's own Features (201, 205) were read, once each; Ben's 202 was not.
+  await until(async () => state.reads.includes(201) && await cell(page, 'example/project/201', 'Comments') === '0', 'my Feature 201 read')
+  assert.deepEqual([...state.reads].sort(), [201, 205])
+  assert.equal(await cell(page, 'example/project/202', 'Comments'), '—', 'another person’s Feature is not read by itself')
+  if (shots) { mkdirSync(shots, { recursive: true }); await page.emulateMedia({ colorScheme: 'light' }); await page.locator('.pir-table .data-table-scroll').evaluate((box) => { box.scrollLeft = box.scrollWidth }); await page.screenshot({ path: `${shots}/pi-review-own-read-1440-light.png` }); await page.locator('.pir-table .data-table-scroll').evaluate((box) => { box.scrollLeft = 0 }) }
+  // The drawer reuses what was read: no new request for 205.
+  await rowOf(page, 'example/project/205').locator('td').nth(1).click()
+  const drawer = page.locator('aside.drawer[role="dialog"]', { has: page.getByRole('heading', { name: 'Feature #205', exact: true }) })
+  await drawer.getByRole('button', { name: 'Edit review of Feature 205' }).waitFor()
+  await page.keyboard.press('Escape')
+  await drawer.waitFor({ state: 'detached' })
+  // Read all Discussions reads only the one not read yet.
+  await page.getByRole('button', { name: '↻ Read all Discussions' }).click()
+  await jobDone(page, 'Reading Discussions · PI 2026.4', '1 of 1 read')
+  assert.deepEqual([...state.reads].sort(), [201, 202, 205], 'each Discussion read once')
+  assert.equal(await page.getByRole('button', { name: 'Edit review of Feature 202' }).count(), 0, 'Lena’s review is not Rita’s')
+  assert.deepEqual(state.posts, [])
+  assert.deepEqual(errors, [])
+  await context.close()
+  // Lena, a lead with no Feature of her own: nothing is read by itself.
+  const lead = await open({ email: 'lena.berg@example.com', roles: withLead(), comments: reviews() })
+  await navigate(lead.page, 'PI Review')
+  await rowOf(lead.page, 'example/project/205').waitFor()
+  // Opening her own reviewed Feature 202 reads it (Edit review… in the drawer); nothing else was read.
+  await rowOf(lead.page, 'example/project/202').locator('td').nth(1).click()
+  await lead.page.locator('aside.drawer[role="dialog"]').getByRole('button', { name: 'Edit review of Feature 202' }).waitFor()
+  assert.deepEqual(lead.state.reads, [202])
+  assert.equal(await cell(lead.page, 'example/project/205', 'Comments'), '—')
   assert.deepEqual(lead.errors, [])
   await lead.context.close()
 })

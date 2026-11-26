@@ -1,4 +1,4 @@
-// DPF-06: the QE of one release in a bulk Create Features pop-up — prefilled from the QE Mapping (or the person chosen
+// DPF-06: the QE of one release in a bulk Create Features pop-up — prefilled from the QE page (DPF-02; or the person chosen
 // for all), changeable to anyone with an email on the QMS-0025 board.
 export function QePick({ label, email, mapped, people, onPick, disabled }: { label: string; email: string; mapped?: string; people: { name: string; email: string }[]; onPick: (email: string) => void; disabled?: boolean }) {
   const known = people.some((person) => person.email === email)
@@ -8,7 +8,7 @@ export function QePick({ label, email, mapped, people, onPick, disabled }: { lab
       {email && !known && <option value={email}>{mapped || email}</option>}
       {people.map((person) => <option key={person.email} value={person.email}>{person.name}</option>)}
     </select>
-    {mapped && <small className="muted">QE Mapping: {mapped}</small>}
+    {mapped && <small className="muted">QE page: {mapped}</small>}
   </span>
 }
 

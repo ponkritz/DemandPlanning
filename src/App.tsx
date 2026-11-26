@@ -30,11 +30,14 @@ import { allStreams, dataSets, defaultMatchThreshold, defaultStreams, profileFor
 import { CustomStreamsContext, useCustomStreams, useStreamsVersion } from './useCustomStreams'
 import { connectionPresets } from './connectionPresets'
 import { gitSyncedIds, markViewsSynced, removeDuplicateConnections } from './viewDefinitions'
-import { listAzureConnectionProfiles } from './azureCredentials'
+import { listAzureConnectionProfiles, listKnownServers, collectionUrlFrom, splitAzureUrl } from './azureCredentials'
+import { connectionDatasets } from './azureQuerySources'
+import type { DashboardAzure } from './pages/CustomDashboardPage'
 import { useAzureWorkspace, type FetchListener, type GitDataSource } from './useAzureWorkspace'
 import { sharedThroughGit } from './gitSnapshots'
 import { useGitStorage } from './useGitStorage'
 import { changesForPage, pagesOfFile, type FilePages } from './gitWatch'
+import { pageIdOfPath } from './pageFiles'
 import { PageGitNotice } from './components/PageGitNotice'
 import { useUnsavedEdits } from './pageEdits'
 import { cached as cachedDashboard } from './useDashboardPage'
@@ -54,10 +57,10 @@ import { OnPremContext } from './onPremValues'
 import { myPatternsVersion, subscribeMyPatterns } from './myNamingPatterns'
 import { useAccess } from './useAccess'
 import { useFeatureSetup } from './useFeatureSetup'
-import { useQeMapping } from './useQeMapping'
 import { useOnDemand } from './useOnDemand'
 import { useDataMode } from './useDataMode'
 import { createPage, useMenuLayout } from './useMenuLayout'
+import { QePagesContext } from './useQeSource'
 import { addPageReason, builtInGroupOf, findGroup, gitReasonOf, isDashboard, isHidden, kindOf, menuGroups, pagesOfGroup, placementOf, type Viewer } from './menuLayout'
 import { usePublishAuthorization, usePublishScheduler } from './publishRun'
 import { AddPageDialog } from './components/PageDialogs'
@@ -86,7 +89,7 @@ import { SetupGuide } from './components/SetupGuide'
 import { GitSyncBar } from './components/GitStorage'
 import { confirmReplace, defaultGitRepository, isRepositoryUnreadable, movedRepositoryTarget, normalizeSetupLinks, setCommitSaver, type SetupLinks } from './gitStorage'
 import { guideKey, requiredOpen, setupSteps } from './setupGuide'
-import { azureResources, capacityContext, setAccessRoles, setAzureEmails } from './capacity'
+import { capacityContext, setAccessRoles, setAzureEmails } from './capacity'
 import { hasServerPat, loadServerPat, serverKey } from './azureCredentials'
 import { ListCatalogContext, useSharedLists } from './useSharedLists'
 import { listCatalog, listsBlock, listUsage, ownsAPage, removeListBlock, serverPatKey } from './sharedLists'
@@ -111,7 +114,6 @@ const PiReviewPage = lazy(() => import('./pages/PiReviewPage').then((module) => 
 const MyPiReviewPage = lazy(() => import('./pages/MyPiReviewPage').then((module) => ({ default: module.MyPiReviewPage })))
 const BritePage = lazy(() => import('./pages/BritePage').then((module) => ({ default: module.BritePage })))
 const KpiTrackerPage = lazy(() => import('./pages/KpiTrackerPage').then((module) => ({ default: module.KpiTrackerPage })))
-const QeMappingPage = lazy(() => import('./pages/QeMappingPage').then((module) => ({ default: module.QeMappingPage })))
 const OnDemandPage = lazy(() => import('./pages/OnDemandPage').then((module) => ({ default: module.OnDemandPage })))
 const CustomDashboardPage = lazy(() => import('./pages/CustomDashboardPage').then((module) => ({ default: module.CustomDashboardPage })))
 const PiReviewSetupPage = lazy(() => import('./pages/PiReviewSetupPage').then((module) => ({ default: module.PiReviewSetupPage })))
@@ -266,7 +268,6 @@ export default function App() {
   const onPremSources = useMemo(() => [...(store.state.releaseSource ? [store.state.releaseSource] : []), ...(store.state.azureSources ?? [])], [store.state.releaseSource, store.state.azureSources])
   // QV-60: my own naming patterns changing redraws the figures.
   useSyncExternalStore(subscribeMyPatterns, myPatternsVersion)
-  const qeMapping = useQeMapping(git)
   // STR-01…06: the custom streams from Git; a change redraws the menu, Home and every stream list.
   const customStreams = useCustomStreams(git)
   useStreamsVersion()
@@ -306,6 +307,30 @@ export default function App() {
   // and every other dashboard), for the roles that see Release Details.
   const toolsReadable = access.sees('release')
   const toolDatasetList = useMemo(() => toolDatasets({ file: toolValidations.shown, connected: toolValidations.connected, loaded: toolValidations.loaded }, toolsReadable, utcToday()), [toolValidations.shown, toolValidations.connected, toolValidations.loaded, toolsReadable])
+  // DSH-17…DSH-19: the Azure DevOps queries as data sources of the dashboards — the app's own queries with the viewer's
+  // rights (the View as role; no My views while viewing as someone else), and the servers and projects of the connections
+  // from which a builder adds a saved query (each read with the viewer's own PAT).
+  const viewingAsSomeone = Boolean(access.viewingAs)
+  const releaseSees = access.sees('release')
+  const dashboardAzure = useMemo((): DashboardAzure => {
+    const profiles = azure.connectionProfiles
+    const connections = new Map<string, { server: string; project: string }>(), servers = new Map<string, string>()
+    for (const profile of profiles) {
+      let server = ''
+      try { server = profile.baseUrl ? profile.baseUrl.replace(/\/+$/, '') : (() => { const url = new URL(profile.url); return `${url.origin}/${url.pathname.split('/').filter(Boolean)[0] ?? ''}` })() } catch { server = '' }
+      const project = splitAzureUrl(profile.url, profile.baseUrl).project
+      if (!server) continue
+      servers.set(server.toLowerCase(), server)
+      if (project) connections.set(`${server.toLowerCase()}|${project.toLowerCase()}`, { server, project })
+    }
+    for (const known of listKnownServers()) { try { const server = collectionUrlFrom(known.serverUrl, known.organization); servers.set(server.toLowerCase(), server) } catch { /* not a server */ } }
+    return {
+      connections: (wanted) => connectionDatasets({ profiles, state: store.state, sees: (area) => area === 'release' ? releaseSees : access.sees(area), viewingAs: viewingAsSomeone }, wanted).map((found) => found.dataset),
+      profiles, viewingAs: viewingAsSomeone, servers: [...servers.values()],
+      queryConnections: [...connections.values()].sort((a, b) => `${a.server} ${a.project}`.localeCompare(`${b.server} ${b.project}`)),
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [azure.connectionProfiles, store.state.azureSources, store.state.releaseSource, releaseSees, viewingAsSomeone])
   // OND-73, OND-78, OND-90: who an interactive HTML file is published by; the publish schedules of this computer run while the app
   // is open, each only while the person may still publish the page (the Tool Owner or its co-owners).
   const publisherName = my.self.me.name?.trim() || azure.creatorEmail.trim()
@@ -318,7 +343,7 @@ export default function App() {
     sources: toolSources, datasets: toolDatasetList,
     pages: {
       git, onDemand, menu, viewer, me: azure.isSample ? '' : azure.creatorEmail.trim().toLowerCase() || my.self.me.name?.trim() || '',
-      views: personalViews, dataMode, publisherName, publisher,
+      views: personalViews, dataMode, publisherName, publisher, azure: dashboardAzure,
       hours: { items: reportAzure.items, settings: dashboardHoursSettings, allowed: access.sees('insights') },
     },
   }
@@ -369,9 +394,6 @@ export default function App() {
   const windchillView = windchillViews.find((entry) => entry.id === windchillId)
   // "＋ ECP" / "＋ S&S IT" (not imported yet) open the import named after that stream, so the export lands on it (CON-85).
   const [windchillFor, setWindchillFor] = useState('')
-  // QE Mapping (QEM-12): the QE Name of a new row is picked from the Resources list (Admin → People & roles → People): everyone with
-  // Time Writing Tasks, and the people with a resource profile.
-  const qeResources = useMemo(() => page !== 'qemapping' ? [] : (() => { const capacity = capacityContext(store.state); return [...new Set([...azureResources(azure.items, month, capacity).map((person) => person.name), ...Object.keys(capacity.profiles ?? {})])].filter(Boolean).sort((a, b) => a.localeCompare(b)) })(), [page, azure.items, month, store.state])
   const tableDesign = useMemo(() => normalizeTableDefaults(store.state.tableDefaults), [store.state.tableDefaults])
   const openWindchill = (id: string, stream = '') => { setWindchillId(id); setWindchillFor(id ? '' : stream); setPage('windchill') }
   // Views shown in the menu that are not the Time Writing backlog nor a default stream: listed under "Other views".
@@ -494,7 +516,6 @@ export default function App() {
     tileOf({ key: 'board', title: 'I&D Board', detail: 'Pages added to I&D Board and Other views.', tone: 'mint', links: [...addedLinks('i-d-board'), ...addedLinks('other-views')] }),
     tileOf({ key: 'release', title: 'Release Details', detail: 'The releases of each stream: DP, CP, IOCC, Content, Tool Validations and the Windchill exports.', tone: 'lemon', links: [...streamLinks, ...addedLinks('release-details')] }),
     tileOf({ key: 'planning', title: 'Planning & Baselines', detail: 'Release baselines against booked hours, and the pages being tried out.', tone: 'teal', links: [...pageLink('baselines'), ...pageLink('planover'), ...pageLink('capactual'), ...addedLinks('testing')] }),
-    tileOf({ key: 'qe', title: 'QE Mapping', detail: 'Which QE covers which platform or product.', tone: 'rose', open: firstAllowed('qemapping'), links: [] }),
     tileOf({ key: 'ondemand', title: 'On-Demand', detail: 'Tables the team sets up itself: CoNQ (Cost of Non-Quality) and more.', tone: 'peach', links: addedLinks('on-demand') }),
     // PGB-04: a tile for each group of your own, with its pages.
     ...customGroups.map((group) => tileOf({ key: `group:${group.id}`, title: group.name, detail: `Pages added to ${group.name}.`, tone: 'lilac', links: addedLinks(group.id) })),
@@ -553,8 +574,10 @@ export default function App() {
   const quietTarget = (target: FilePages) => target.quiet === 'menu' || target.quiet === 'views' || (target.quiet === 'access' && !rolesPage) || (target.quiet === 'piForm' && pageKey !== 'admin:pireview') || (target.quiet === 'lists' && pageKey !== 'admin:epics')
   // An added page's file is named by the page's name ("CoNQ"; its blocks for a dashboard).
   const pageChanges = changesForPage(git.remoteChanges, pageKey, targetOf, quietTarget).map((change) => {
-    const added = /(?:^|\/)(on-demand|dashboards)\/([a-z0-9-]+)(?:\.json|\/page\.json|\/rows)$/.exec(change.path), name = added && onDemand.pages.find((entry) => entry.id === added[2])?.name
-    return name ? { ...change, label: added[1] === 'dashboards' ? `the blocks of ${name}` : name } : change
+    // OND-122: a page's file is found by its id in either form ("<id>" or "<name>--<id>").
+    const blocks = pageIdOfPath(change.path, 'dashboards'), file = blocks ? null : pageIdOfPath(change.path)
+    const name = onDemand.pages.find((entry) => entry.id === (blocks ? blocks.id : file?.id))?.name
+    return name ? { ...change, label: blocks ? `the blocks of ${name}` : name } : change
   })
   const editsHere = useUnsavedEdits()
   const planningChanged = pageChanges.some((change) => change.planning)
@@ -569,7 +592,6 @@ export default function App() {
       if (loader === 'planning') await git.load()
       else if (loader.startsWith('ondemand:')) await onDemand.reloadPage(loader.slice('ondemand:'.length))
       else if (loader === 'access') await access.reload()
-      else if (loader === 'qemapping') await qeMapping.reload()
       else if (loader === 'featureSetup') await featureSetup.reload()
       else if (loader === 'epicSetup') await epicSetup.reload()
       else if (loader === 'customStreams') await customStreams.reload()
@@ -583,9 +605,9 @@ export default function App() {
       else if (loader === 'views') personalViews.reload()
       else if (loader === 'rowLocks') await onDemand.reloadLockSettings()
     }
-    // Pages that hold the data they show (an added page's drawer and pop-ups, a dashboard's blocks, the QE Mapping draft,
-    // the KPI tracker copy) open afresh; the others show the data just loaded and keep their open forms.
-    if (pageKey.startsWith('ondemand:') || pageKey === 'qemapping' || loaders.includes('remount')) setPageReads((count) => count + 1)
+    // Pages that hold the data they show (an added page's drawer and pop-ups, a dashboard's blocks, the KPI
+    // tracker copy) open afresh; the others show the data just loaded and keep their open forms.
+    if (pageKey.startsWith('ondemand:') || loaders.includes('remount')) setPageReads((count) => count + 1)
   }
   // The menu layout and the views: read again quietly as soon as a newer version is found.
   const quietPaths = git.remoteChanges.filter((change) => quietTarget(targetOf(change.path))).map((change) => `${change.path}@${change.sha}`).join('|')
@@ -616,13 +638,24 @@ export default function App() {
     if (/(^|\/|\|)shared-lists\.json@/.test(quietPaths)) void quietLoad.current.lists()
   }, [quietPaths])
   useEffect(() => { setAccessNote((note) => note && note.page !== pageKey ? null : note) }, [pageKey])
+  // SET-19, CON-118: after an Other view or Windchill export is deleted from its own page, the app opens the start page (Home, or the first
+  // page the viewer may open) — never a page for a view that is gone — with a confirmation line there (it goes with the
+  // page or when dismissed).
+  const [goneNote, setGoneNote] = useState<{ page: string; text: string } | null>(null)
+  useEffect(() => { setGoneNote((note) => note && note.page !== pageKey ? null : note) }, [pageKey])
+  const otherView = { other: isOther, viewingAs: Boolean(access.viewingAs), isSample: azure.isSample, canImportWindchill: access.can('windchill.import'), onGone: (text: string) => {
+    const start = startPageOf(startView), target = allowed(start) ? start : pages.find((entry) => allowed(entry.id))?.id ?? 'admin'
+    setGoneNote({ page: target, text }); setPage(target)
+  } }
   if (!store.ready) return <main className="content"><h1>I&amp;D Quality Demand Planning</h1>{store.loadError ? <Notice tone="error"><p>{store.loadError}</p><p>Do not clear browser data. If you still have an older tab open with unsaved changes, export its JSON backup first.</p><button className="primary" onClick={store.retryLoad}>Retry loading saved data</button></Notice> : <p role="status">Loading saved browser data…</p>}{buildStatus}</main>
 
   // CHT-17…CHT-20: chart sizes — each viewer's own in their personal views; a Tool Owner (Table, chart and page defaults)
   // saves a built-in chart's size for everyone with Git connected (not with the synthetic sample); View as saves nothing.
   const chartSizeEnv = { views: personalViews, viewOnly: Boolean(access.viewingAs), canSetDefault: access.can('layout.defaults') && git.connected && !git.readOnly && !git.isSample }
   // UI-12: every table follows the shared design default.
-  return <ListCatalogContext.Provider value={listCatalogEntries}><PageNamesContext.Provider value={menuNames}><OwnerPeopleContext.Provider value={ownerPeople}><TableDefaultsContext.Provider value={tableDesign}><CustomStreamsContext.Provider value={customStreams}><ReleaseSettingsContext.Provider value={store.state.releaseSourceSettings}><ReviewEnvContext.Provider value={reviewEnv}><CanContext.Provider value={access.can}><ReadOnlyContext.Provider value={access.readOnly}><EpicSetupContext.Provider value={epicSetup.file}><OnPremContext.Provider value={onPremSources}><ToolValidationsContext.Provider value={toolEnv}><HeaderSlot.Provider value={headerSlot}><ChartSizeEnvContext.Provider value={chartSizeEnv}><div className={`app-shell${navOpen ? ' nav-open' : ''}${menuMini ? ' nav-mini' : ''}`}>
+  // DPF-02, EPS-09: the On-Demand Table pages a bulk Epic's QE page can be, and a page with its built-in lists.
+  const qePages = { pages: onDemand.pages.filter((entry) => !isDashboard(menu.layout, entry.id)).map(({ id, name, columns }) => ({ id, name, columns })), page: onDemand.stored }
+  return <QePagesContext.Provider value={qePages}><ListCatalogContext.Provider value={listCatalogEntries}><PageNamesContext.Provider value={menuNames}><OwnerPeopleContext.Provider value={ownerPeople}><TableDefaultsContext.Provider value={tableDesign}><CustomStreamsContext.Provider value={customStreams}><ReleaseSettingsContext.Provider value={store.state.releaseSourceSettings}><ReviewEnvContext.Provider value={reviewEnv}><CanContext.Provider value={access.can}><ReadOnlyContext.Provider value={access.readOnly}><EpicSetupContext.Provider value={epicSetup.file}><OnPremContext.Provider value={onPremSources}><ToolValidationsContext.Provider value={toolEnv}><HeaderSlot.Provider value={headerSlot}><ChartSizeEnvContext.Provider value={chartSizeEnv}><div className={`app-shell${navOpen ? ' nav-open' : ''}${menuMini ? ' nav-mini' : ''}`}>
     {navOpen && <div className="nav-backdrop" onClick={() => setNavOpen(false)} aria-hidden="true" />}
     <aside className="sidebar" id="primary-navigation">
       <div className="brand" title="I&amp;D Quality Demand Planning"><div className="brand-mark"><BrandMark /></div><div><strong>I&amp;D Quality</strong><span>Demand Planning</span></div><button type="button" className="nav-mini-toggle" aria-pressed={menuMini} aria-label={menuMini ? 'Expand the menu' : 'Collapse the menu'} title={menuMini ? 'Show the menu with names' : 'Fold the menu to icons'} onClick={toggleMenuMini}>{menuMini ? '»' : '«'}</button></div>
@@ -684,20 +717,19 @@ export default function App() {
       {access.readOnly && <Notice tone="warning" className="access-read-only"><strong>Read-only:</strong> {access.bootstrap ? <>there are no access roles yet (no {access.path || 'access.json'} in Git storage), so no changes can be made. <button type="button" className="text-button" onClick={() => openSettings('resources', 'rights')}>Set up roles →</button></> : access.error && isRepositoryUnreadable(access.error) ? <>the data repository cannot be read, so the access roles ({access.path || 'access.json'}) cannot be loaded and no changes can be made: {access.error} Nothing in this browser was cleared. <button type="button" className="text-button" onClick={() => openSettings('storage', 'git')}>Open Git storage →</button></>: access.error ? <>the access roles ({access.path || 'access.json'}) could not be read, so no changes can be made: {access.error} <button type="button" className="text-button" onClick={() => openSettings('storage', 'git')}>Open Git storage →</button></> : git.accessScope && !access.loaded ? <>loading the access roles ({access.path || 'access.json'}) from Git storage; no changes can be made until they are loaded.</> : <>the access roles (access.json) are not loaded, so no changes can be made. <button type="button" className="text-button" onClick={() => openSettings('storage', 'git')}>Connect Git storage →</button></>}</Notice>}
       {guideOpen && <SetupGuide steps={steps} busy={azure.busy} problem={azure.fetchProblem} links={setupLinks} linkDefaults={linkDefaults} editLinks={access.can('layout.defaults') && git.connected && !git.readOnly && !azure.isSample ? { links: store.state.setupLinks ?? {}, onChange: (links) => store.update((draft) => { draft.setupLinks = links; return draft }), saveBar: <GitSyncBar git={git} /> } : undefined} inputs={{ connectGit: (token) => git.connect({ ...defaultGitRepository, ...git.config }, token, true), saveEmail: (email) => { azure.setCreatorEmail(email) }, savePat: (token) => { azure.rememberPat(token); azure.reloadConnectionProfiles() }, detectEmail: () => azure.config ? detectWorkEmail(azure.config, azure.pat) : Promise.reject(new Error('Set up the Time Writing connection first.')), gitMessage: git.status === 'error' ? git.message : undefined }} onClose={() => setGuideOpen(false)} onDismiss={dismissGuide} onOpenTab={(tab, section) => { openSettings(tab, section); setGuideOpen(false) }} onFetch={() => void azure.refresh()} />}
       {store.cache.status === 'error' && <Notice tone="error"><p>{store.cache.message}</p><div className="button-row"><button className="ghost" onClick={() => exportStateJson(store.state)}>Export JSON backup now</button><button className="primary" onClick={store.retrySave}>Retry browser save</button></div></Notice>}
-      <div className="data-notices"><PageGitNotice key={pageKey} page={pageName} changes={pageChanges} unsaved={unsavedHere} fullReload={fullReload} onLoad={loadNewer} />{git.viewsRemoved && <Notice tone="warning" className="views-removed-note">{git.viewsRemoved}{' '}<button type="button" className="text-button" onClick={git.dismissViewsRemoved}>Dismiss</button></Notice>}{accessNote?.page === pageKey && <Notice tone="info" className="access-changed-note">{accessNote.text}{' '}<button type="button" className="text-button" onClick={() => setAccessNote(null)}>Dismiss</button></Notice>}</div>
+      <div className="data-notices"><PageGitNotice key={pageKey} page={pageName} changes={pageChanges} unsaved={unsavedHere} fullReload={fullReload} onLoad={loadNewer} />{git.viewsRemoved && <Notice tone="warning" className="views-removed-note">{git.viewsRemoved}{' '}<button type="button" className="text-button" onClick={git.dismissViewsRemoved}>Dismiss</button></Notice>}{goneNote?.page === pageKey && <Notice tone="success" className="view-gone-note">{goneNote.text}{' '}<button type="button" className="text-button" onClick={() => setGoneNote(null)}>Dismiss</button></Notice>}{accessNote?.page === pageKey && <Notice tone="info" className="access-changed-note">{accessNote.text}{' '}<button type="button" className="text-button" onClick={() => setAccessNote(null)}>Dismiss</button></Notice>}</div>
       <Suspense fallback={<p className="muted page-loading" role="status">Loading the page…</p>}><Fragment key={pageReads}>
       {page === 'home' && <HomePage tiles={homeTiles} name={my.me.name} />}
       {/* MYD-15: My dashboard's blocks read what the app has loaded, each source as the viewer's areas allow; View as: read only, the default layout. */}
       {page === 'mydash' && <MyDashboardPage month={month} azure={reportAzure} store={store} my={{ ...my, ...my.self }} navigate={setPage} views={personalViews} canSetDefault={access.can('layout.defaults')} windchill={windchill}
-        sources={{ sees: access.sees, viewingAs: Boolean(access.viewingAs), git, onDemand, isDashboard: (id) => isDashboard(menu.layout, id), qe: qeMapping, history, settings: dashboardHoursSettings, items: reportAzure.items }} />}
+        sources={{ sees: access.sees, viewingAs: Boolean(access.viewingAs), git, onDemand, isDashboard: (id) => isDashboard(menu.layout, id), history, settings: dashboardHoursSettings, items: reportAzure.items }} />}
       {page === 'overview' && <DashboardPage month={month} azure={reportAzure} navigate={setPage} store={store} setMonth={setMonth} my={my} views={personalViews} canSetDefault={access.can('layout.defaults')} canLock={access.can('capacity.periods')} />}
       {page === 'pulse' && <PulseCheckPage month={month} azure={reportAzure} store={store} my={my} navigate={setPage} windchill={windchill} openWindchill={openWindchill} git={git} pack={monthlyPack} views={personalViews} canPickProfile={access.rights.roles.includes('Admin')} />}
-      {page === 'pireview' && <PiReviewPage azure={azure} store={store} />}
+      {page === 'pireview' && <PiReviewPage azure={azure} store={store} self={my.self} />}
       {page === 'brite' && <BritePage />}
       {page === 'kpitracker' && <KpiTrackerPage git={git} canManage={access.can('storage.shared')} who={my.me.name || 'Admin'} />}
-      {page === 'ondemand' && onDemandPage && kindOf(menu.layout, onDemandPage.id) === 'dashboard' && <CustomDashboardPage key={onDemandPage.id} git={git} store={onDemand} pageId={onDemandPage.id} menu={menu} viewer={viewer} views={personalViews} onOpen={openOnDemand} addPageReason={addPageReason(viewer, menu.layout, placementOf(menu.layout, onDemandPage.id).group)} onAddPage={() => setAddPageFor(placementOf(menu.layout, onDemandPage.id).group)} hours={{ items: reportAzure.items, settings: dashboardHoursSettings, allowed: access.sees('insights') }} publisherName={publisherName} publisher={publisher} tools={toolDatasetList} />}
+      {page === 'ondemand' && onDemandPage && kindOf(menu.layout, onDemandPage.id) === 'dashboard' && <CustomDashboardPage key={onDemandPage.id} git={git} store={onDemand} pageId={onDemandPage.id} menu={menu} viewer={viewer} views={personalViews} onOpen={openOnDemand} addPageReason={addPageReason(viewer, menu.layout, placementOf(menu.layout, onDemandPage.id).group)} onAddPage={() => setAddPageFor(placementOf(menu.layout, onDemandPage.id).group)} hours={{ items: reportAzure.items, settings: dashboardHoursSettings, allowed: access.sees('insights') }} publisherName={publisherName} publisher={publisher} tools={toolDatasetList} azure={dashboardAzure} />}
       {page === 'ondemand' && onDemandPage && kindOf(menu.layout, onDemandPage.id) !== 'dashboard' && <OnDemandPage key={onDemandPage.id} git={git} store={onDemand} pageId={onDemandPage.id} me={azure.isSample ? '' : azure.creatorEmail.trim().toLowerCase() || my.self.me.name?.trim() || ''} onOpen={openOnDemand} kind={kindOf(menu.layout, onDemandPage.id)} menu={menu} viewer={viewer} addPageReason={addPageReason(viewer, menu.layout, placementOf(menu.layout, onDemandPage.id).group)} onAddPage={() => setAddPageFor(placementOf(menu.layout, onDemandPage.id).group)} views={personalViews} dataMode={dataMode} publisherName={publisherName} publisher={publisher} />}
-      {page === 'qemapping' && <QeMappingPage git={git} store={qeMapping} resources={qeResources} viewOnly={Boolean(access.viewingAs)} qeColumnNames={[...new Set([featureSetup.setups?.shared, featureSetup.setups?.personal].flatMap((file) => file?.epics ?? []).flatMap((epic) => epic.qeColumns?.qeColumn ? [epic.qeColumns.qeColumn] : []))]} />}
       {page === 'mywork' && <MyWorkPage azure={azure} store={store} my={my} month={month} onOpenActivities={() => setPage('activities')} assign={assign} featureSetup={featureSetup.setups} />}
       {page === 'bulk' && <SprintCheckPage azure={azure} store={store} my={my} />}
       {page === 'mypireview' && <MyPiReviewPage azure={azure} my={my} />}
@@ -705,18 +737,18 @@ export default function App() {
       {page === 'planover' && <PlanningOverviewPage azure={reportAzure} store={store} month={month} onOpenPack={() => openSettings('pack', 'pack')} />}
       {page === 'activities' && <MyActivitiesPage azure={azure} store={store} my={my} month={month} assign={assign} featureSetup={featureSetup.setups} onOpen={setPage} />}
       {page === 'baselines' && <BaselinesPage azure={azure} month={month} store={store} git={git} onOpenSettings={() => openSettings('storage', 'git')} canEdit={access.can('baselines.edit')} />}
-      {page === 'windchill' && (windchillView ? <WindchillPage view={windchillView} windchill={windchill} git={git} gitNote={git.snapshotNotes[`wc:${windchillView.id}`]} month={month} board={{ azure, stream: windchillStreamExports(windchillViews).find((entry) => entry.view?.id === windchillView.id)?.stream.name ?? windchillView.name, threshold: normalizeReleaseSourceSettings(store.state.releaseSourceSettings).matchThreshold ?? defaultMatchThreshold, assign, featureSetup: featureSetup.setups }} /> : access.can('windchill.import') ? <WindchillExportImport key={windchillFor} stream={windchillFor} windchill={windchill} git={git} onImported={(id) => openWindchill(id)} /> : <Notice tone="info">Your role does not include importing Windchill exports. Open an export from the menu; an Admin can change this in Admin → People & roles → Role rights.</Notice>)}
+      {page === 'windchill' && (windchillView ? <WindchillPage otherView={otherView} view={windchillView} windchill={windchill} git={git} gitNote={git.snapshotNotes[`wc:${windchillView.id}`]} month={month} board={{ azure, stream: windchillStreamExports(windchillViews).find((entry) => entry.view?.id === windchillView.id)?.stream.name ?? windchillView.name, threshold: normalizeReleaseSourceSettings(store.state.releaseSourceSettings).matchThreshold ?? defaultMatchThreshold, assign, featureSetup: featureSetup.setups }} /> : access.can('windchill.import') ? <WindchillExportImport key={windchillFor} stream={windchillFor} windchill={windchill} git={git} onImported={(id) => openWindchill(id)} /> : <Notice tone="info">Your role does not include importing Windchill exports. Open an export from the menu; an Admin can change this in Admin → People & roles → Role rights.</Notice>)}
       {page === 'health' && <BacklogHealthPage azure={azure} store={store} />}
-      {page === 'board' && <BoardPage views={personalViews} canSetDefault={access.can('layout.defaults') && git.connected && !git.readOnly && !git.isSample} azure={azure} store={store} current={view} month={month} git={git} onOpenConnection={openConnection} onOpenSettings={openSettings} assign={assign} featureSetup={featureSetup.setups} qeMapping={qeMapping.file} />}
+      {page === 'board' && <BoardPage otherView={otherView} views={personalViews} canSetDefault={access.can('layout.defaults') && git.connected && !git.readOnly && !git.isSample} azure={azure} store={store} current={view} month={month} git={git} onOpenConnection={openConnection} onOpenSettings={openSettings} assign={assign} featureSetup={featureSetup.setups} />}
       {page === 'snapshots' && <SnapshotsPage {...pageProps} git={git} who={my.me.email || my.me.name || 'unknown'} />}
       {page === 'admin' && settingsTab === 'pages' && <PagesMenuPage duplicates={duplicateNames} git={git} store={onDemand} menu={menu} viewer={viewer} onOpen={openOnDemand} onAddPage={(group) => setAddPageFor(group ?? '')} />}
       {/* PIR-29: Admin → PI Review Setup, the PI Review form setup on a page of its own. */}
       {page === 'admin' && settingsTab === 'pireview' && <PiReviewSetupPage store={piForm} block={piFormBlock} by={my.self.me.name?.trim() || azure.creatorEmail.trim()} />}
-      {page === 'admin' && settingsTab !== 'pages' && settingsTab !== 'pireview' && <AdminPage look={{ startView, onStartView: switchView, onCustomizeMenu: () => setMenuEditor(true) }} key={`${settingsTab}:${settingsVisit}`} tab={settingsTab} onOpenTab={openSettings} {...pageProps} azure={azure} git={git} access={access} featureSetup={featureSetup} epicSetup={epicSetup} sharedLists={listsEnv} setupSteps={steps} onSearch={() => setSearchOpen(true)} qeColumnNames={[...new Set((qeMapping.file?.sheets ?? []).flatMap((sheet) => sheet.columns.map((column) => column.name)))]} monthlyPack={monthlyPack} history={history} loadEverything={loadEverything} onOpenBoard={() => setPage('board')} />}
+      {page === 'admin' && settingsTab !== 'pages' && settingsTab !== 'pireview' && <AdminPage look={{ startView, onStartView: switchView, onCustomizeMenu: () => setMenuEditor(true) }} key={`${settingsTab}:${settingsVisit}`} tab={settingsTab} onOpenTab={openSettings} {...pageProps} azure={azure} git={git} access={access} featureSetup={featureSetup} epicSetup={epicSetup} sharedLists={listsEnv} setupSteps={steps} onSearch={() => setSearchOpen(true)} monthlyPack={monthlyPack} history={history} loadEverything={loadEverything} onOpenBoard={() => setPage('board')} />}
       {page === 'docs' && <DocsPage key={docsVisit} git={git} onConfigure={() => openSettings('storage', 'git')} />}
       </Fragment></Suspense>
       {addPageFor != null && <AddPageDialog viewer={viewer} layout={menu.layout} group={addPageFor || undefined} onCancel={() => setAddPageFor(null)} onCreate={async (input) => { const id = await createPage(onDemand, menu, input); setAddPageFor(null); openOnDemand(id) }} />}
       <footer className="app-footer" aria-label="Version" ref={footerRef}><ZoomControl /><DesktopDownload />{buildStatus}</footer>
     </main>
-  </div></ChartSizeEnvContext.Provider></HeaderSlot.Provider></ToolValidationsContext.Provider></OnPremContext.Provider></EpicSetupContext.Provider></ReadOnlyContext.Provider></CanContext.Provider></ReviewEnvContext.Provider></ReleaseSettingsContext.Provider></CustomStreamsContext.Provider></TableDefaultsContext.Provider></OwnerPeopleContext.Provider></PageNamesContext.Provider></ListCatalogContext.Provider>
+  </div></ChartSizeEnvContext.Provider></HeaderSlot.Provider></ToolValidationsContext.Provider></OnPremContext.Provider></EpicSetupContext.Provider></ReadOnlyContext.Provider></CanContext.Provider></ReviewEnvContext.Provider></ReleaseSettingsContext.Provider></CustomStreamsContext.Provider></TableDefaultsContext.Provider></OwnerPeopleContext.Provider></PageNamesContext.Provider></ListCatalogContext.Provider></QePagesContext.Provider>
 }

@@ -2,7 +2,7 @@ import { useId, useMemo, useState, type ReactNode } from 'react'
 import { Modal, Notice } from './ui'
 import type { ReplacePlan, ValueCount } from '../replaceValues'
 
-// QEM-13, OND-100…OND-102 Replace… (UI-STANDARDS §3, §4): one value of one column replaced by another in every row that
+// OND-100…OND-102 Replace… (UI-STANDARDS §3, §4): one value of one column replaced by another in every row that
 // holds it, after a preview. Column: the table's columns (preselected when the page knows which one is meant). Find: the
 // column's values with how many rows hold each, or another value typed. Replace with: free text with the column's values
 // as suggestions. The preview says how many rows change and lists the first ten (row, old value → new value), and the

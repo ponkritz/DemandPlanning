@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { recordJob } from './backgroundJobs'
 import { outcomeText } from './gitSaveQueue'
 import { addGroup, emptyLayout, findGroup, kindLabel, menuLayoutFile, parseMenuLayout, placePage, serializeMenuLayout, type MenuLayout, type PageKind } from './menuLayout'
-import { emptyPage, onDemandPath, pageIdFor } from './onDemand'
+import { emptyPage, pageIdFor } from './onDemand'
+import { updateMarkerStem } from './pageFiles'
 import type { GitStorage } from './useGitStorage'
 import type { OnDemandStore } from './useOnDemand'
 
@@ -55,17 +56,17 @@ export type MenuLayoutStore = ReturnType<typeof useMenuLayout>
 // TVL-25: ownersFromList — the owners that come from the Tool Validations list's co-owners (a tab's page).
 export interface NewPage { kind: PageKind; name: string; description: string; icon: string; group: string; newGroup: string | null; owners: string[]; hidden?: boolean; ownersFromList?: string[] }
 
-// PGB-05: the blank page file is saved to Git at once (on-demand/<id>.json, its id made from the name), then its place in
+// PGB-05: the blank page file is saved to Git at once (on-demand/<name>--<id>.json, OND-120; its id made from the name), then its place in
 // the menu (menu-layout.json, with a new group when one was asked for) — two queued saves; then the page opens.
 export async function createPage(store: OnDemandStore, menu: MenuLayoutStore, input: NewPage): Promise<string> {
   let layout: MenuLayout = menu.layout, group = input.group
   if (input.newGroup != null) { const added = addGroup(layout, input.newGroup); layout = added.layout; group = added.id }
   const groupName = findGroup(layout, group)?.name ?? group
-  const id = pageIdFor(input.name, [...store.pages.map((page) => page.id), ...Object.keys(layout.pages)])
+  const id = pageIdFor(input.name, [...store.pages.map((page) => page.id), ...Object.keys(layout.pages), updateMarkerStem])
   const created = emptyPage(id, input.name, input.description)
   const saved = await store.save(created, `Pages & menu: add the ${kindLabel(input.kind)} page ${created.name} to ${groupName}`)
   layout = placePage(layout, id, { type: input.kind, group, icon: input.icon, owners: input.owners, ...(input.hidden ? { hidden: true } : {}), ...(input.ownersFromList?.length ? { ownersFromList: input.ownersFromList } : {}) }, store.pages.map((page) => page.id))
   const placed = await menu.save(layout, input.hidden ? `Pages & menu: place ${created.name} (a tab of Tool Validations, hidden from the menu)` : `Pages & menu: place ${created.name} in ${groupName}${input.newGroup != null ? ' (new group)' : ''}`)
-  recordJob(`pages:${id}`, `Add page · ${created.name}`, { text: `${outcomeText(saved)} ${onDemandPath(id)}; ${outcomeText(placed).toLowerCase()} ${menu.path}` })
+  recordJob(`pages:${id}`, `Add page · ${created.name}`, { text: `${outcomeText(saved)} ${store.filePath(id)}; ${outcomeText(placed).toLowerCase()} ${menu.path}` })
   return id
 }
