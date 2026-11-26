@@ -254,7 +254,8 @@ td small{color:var(--text-3)}
 .dash-grid-2>*,.dash-grid-wide>*{min-width:0}.dash-grid-2 .azure-table{margin-top:8px}
 .dash-stack{display:grid;gap:18px;margin-bottom:18px}.dash-stack>*{min-width:0}
 /* My Tasks [Board]: Features expand to their User Stories, Bugs and Tasks. */
-.work-toggle{background:none;border:0;padding:0;margin-right:6px;width:18px;color:var(--text-2);cursor:pointer;font-size:14px;line-height:1}.work-toggle-empty{display:inline-block;text-align:center;cursor:default}
+/* BKL-50: + / − in a small box (product owner: "For Expanding the Features - Give a Plus Symbol"); a row with nothing under it keeps the space, no box. */
+.work-toggle{background:var(--surface);border:1px solid var(--line);border-radius:5px;padding:0;margin-right:6px;width:20px;height:20px;color:var(--text);cursor:pointer;font-size:15px;font-weight:600;line-height:1;display:inline-grid;place-items:center}.work-toggle:hover{background:var(--surface-2)}.work-toggle.work-toggle-empty,.work-toggle.work-toggle-empty:hover{border-color:transparent;background:none;cursor:default}
 .work-open td{border-bottom-color:transparent}.work-child td{background:var(--surface-2)}.work-child .work-indent{display:inline-block;width:26px}.work-depth-2 .work-indent{width:52px}.work-child strong.inline{font-weight:500}
 /* Create Feature: the title's three parts (Program · Service · Release / Platform · Name · Release). */
 .create-release-feature .title-parts{display:grid;grid-template-columns:minmax(140px,1fr) minmax(180px,2fr) minmax(120px,1fr);gap:10px}.create-release-feature .title-parts label{display:grid;gap:4px;font-size:12px;color:var(--text-2)}.create-release-feature .add-platform{display:flex;gap:6px;align-items:center}.create-release-feature .add-platform input{flex:1;min-width:0}

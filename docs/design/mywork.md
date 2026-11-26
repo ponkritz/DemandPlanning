@@ -4,7 +4,7 @@
 
 ## Default view
 
-Shows the selected person's identity, pending work and counts for Features, stories, bugs, Tasks and missing month Tasks. The table opens on Feature with ascending work item ID and collapsed child rows. Other type chips and All are available. A non-empty search overrides the type chip and matches every token, without regard to order or casing, across the item and its Feature/Epic context. Search accepts an ID with or without a hash. Expanding a Feature shows its child work, including children assigned to other people. The missing-task notice links to Time Writing.
+Shows the selected person's identity, pending work and counts for Features, stories, bugs, Tasks and missing month Tasks. The table opens on Feature with ascending work item ID and collapsed child rows. Other type chips and All are available. A non-empty search overrides the type chip and matches every token, without regard to order or casing, across the item and its Feature/Epic context. Search accepts an ID with or without a hash. Use **+** to show child work, including children assigned to other people, and **−** to hide it. Rows without children have no toggle. The missing-task notice links to Time Writing.
 
 ## Data and rules
 

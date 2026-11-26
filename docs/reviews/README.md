@@ -59,3 +59,4 @@ One table row per finding:
 |---|---|---|
 | 2026-11-23 | UI/UX role only, all components, pages and styles (4 slices, 106 files) | [2026-11-23-ui-ux-review.md](2026-11-23-ui-ux-review.md) |
 | 2026-11-23 | Design defaults role only, all source, scripts, CI and build settings (6 slices) | [2026-11-23-design-defaults-review.md](2026-11-23-design-defaults-review.md) |
+| 2026-11-26 | Admin area: all six reviewer roles on the planned slices, some role × slice pairs not run (5 slices, 83 files; 9 reports, 259 findings merged into 157), with a clean-up proposal per Admin page | [2026-11-26-admin-independent-review.md](2026-11-26-admin-independent-review.md) |

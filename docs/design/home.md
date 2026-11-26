@@ -13,3 +13,5 @@ A short greeting and page-search field sit above a responsive tile grid. Tile ti
 3. [homeTiles.ts](../../src/homeTiles.ts) implements the search and start-view preference. [ProfileMenu.tsx](../../src/components/ProfileMenu.tsx) exposes Classic / Tile view. The preference is browser-local and defaults to Tiles if missing or inaccessible.
 
 Home reads app context for role and work indicators. Search and navigation make no data writes. Empty results display the submitted search phrase. See [Home tile tests](../../tests/home-tiles.test.mjs).
+
+The **Resource Mapping** tile opens the On-Demand page named Resource Mapping. Home uses the same allowed page link as the menu, so the tile appears only when the page exists and the viewer may open it.

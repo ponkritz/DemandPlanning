@@ -10,10 +10,12 @@ export const defaultQePageName = 'Resource Mapping'
 const normalName = (value: string) => value.normalize('NFKC').trim().toLowerCase().replace(/\s+/g, ' ')
 
 export interface QePageRef { id: string; name: string; columns: OnDemandColumn[] }
+// NAV-55: the page named Resource Mapping, if there is one (its Home tile).
+export const resourceMappingPage = <T extends { name: string }>(pages: readonly T[]): T | undefined => pages.find((entry) => normalName(entry.name) === normalName(defaultQePageName))
 // The page a setup uses: its own, else the default page (defaulted: true, no columns yet).
 export function resolveQePage(setting: QePageSetting | undefined, pages: Pick<QePageRef, 'id' | 'name'>[]): { setting?: QePageSetting; defaulted: boolean } {
   if (setting) return { setting, defaulted: false }
-  const page = pages.find((entry) => normalName(entry.name) === normalName(defaultQePageName))
+  const page = resourceMappingPage(pages)
   return page ? { setting: { pageId: page.id, matchColumn: '', qeColumn: '' }, defaulted: true } : { defaulted: false }
 }
 

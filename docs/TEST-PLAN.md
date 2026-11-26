@@ -345,6 +345,8 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-NAV-54 QE Mapping removed from the app** — Req NAV-54 — L1 `retired-data.test.mjs` ("NAV-54: QE Mapping is no longer a page — not in the menu, Data & governance or Ctrl K; a remembered visit to it is not counted (TC-NAV-54)"), `format.test.mjs` ("NAV-53: …": Data & governance is Baselines, Snapshots, Backlog Health, Documentation), `page-builder.test.mjs` ("PGB-15, PGB-16: …"); E2E `remove-qe-mapping.e2e.mjs` ("TC-NAV-54: no QE Mapping in the menu, on Home or among the pins — a pin kept from an earlier version is left out": personal views from an earlier version pin QE Mapping and Snapshots; only Snapshots is pinned; Data & governance has no QE Mapping; Home has no QE Mapping tile and its search finds nothing), `shell.e2e.mjs` ("TC-NAV-42", "TC-NAV-53", "TC-CON-63": the Home tiles and the menu without QE Mapping).
 
+**TC-NAV-55 Resource Mapping tile on Home** — Req NAV-55, NAV-43 — E2E `home-resource-mapping.e2e.mjs` ("TC-NAV-55: Home shows a Resource Mapping tile when the page exists, and it opens the page; no page, no tile"); browser check: with the Resource Mapping page in Git, Home shows its tile next to On-Demand and it opens the page. A role without access to the page sees no tile.
+
 **TC-NAV-50 Pages fill the width inside a border, with set margins** — Req NAV-50 — L1 `page-layout.test.mjs` ("NAV-50: the page margins default to 10 / 20 / 10 / 20 px with a border"; "NAV-50: each side is kept between 0 and 64 px; anything else falls back to its default"; "NAV-50: a saved layout is read back; a broken saved value gives the defaults"; "NAV-50: applying sets one CSS variable per side and turns the border off only when asked"); E2E `shell.e2e.mjs` ("TC-NAV-50: every page fills the width beside the menu inside a border, with the margins of Look & feel, also when the menu is folded"); browser check in the desktop app: fold the menu — the page widens; set Left to 40 — the gap grows at once.
 
 **TC-NAV-45 My page usage** — Req NAV-45 — L1 `usage-counts.test.mjs` ("NAV-45: page usage is off until turned on; nothing is counted or stored while off (TC-NAV-45)"; "NAV-45: on, each opening of a page counts; off deletes the counts; most used first (TC-NAV-45)"; "NAV-45: a tampered or broken entry is read safely (TC-NAV-45)"); E2E `shell.e2e.mjs` ("TC-NAV-45: My page usage is off by default; turned on, it counts the pages opened in this browser; off deletes the counts"); inspection: an exported JSON backup and a Git snapshot contain no usage counts.
@@ -815,6 +817,8 @@ Cases marked **UAT** are also run in acceptance testing.
 **TC-BKL-37 Month Tasks tick box in the Feature and Time Writing sections** — Req BKL-48, BKL-32 — E2E `backlog.e2e.mjs` ("TC-BKL-21: New Feature with a Start Date and a Target date asks for the hours of every month from the start to the target": the tick box in section 4 is ticked by default; unticked, one Task and no month table, and the same choice shows in section 1; ticked again, the months and the hours typed come back); `dp-single-create.e2e.mjs` (DP release: unticked by default, unchanged); browser check: New Feature from Backlogs with a Start and Target date three months apart, untick in section 4, Summary shows one month, Save creates one Task.
 
 **TC-BKL-38 Your own User Story starts collapsed** — Req BKL-49 — E2E `backlog.e2e.mjs` ("TC-BKL-15: New Feature offers your own User Story (title and description) under the new Feature": collapsed at first, its fields hidden; the summary opens it; with a title typed the summary names the story); browser check: New Feature → section 3 shows only the folded heading.
+
+**TC-BKL-39 My Tasks [Board] expands with + and collapses with −** — Req BKL-50 — E2E `board-expand.e2e.mjs` ("TC-BKL-39: My Tasks [Board] expands a Feature with + and collapses it with −"); browser check: rows with nothing under them show no box.
 
 **TC-BKL-14 Release number without "v" in Feature titles** — Req BKL-24 — L1 `release-source.test.mjs` ("Create Feature title from a release: \"Stream | Name | Release\" without a \"v\", mapping back to the release (BKL-24)"), `dp-board-match.test.mjs`, `cp-reporting.test.mjs`; browser check: Create Feature on a DP, CP and Windchill row pre-fills the title with the number and no "v".
 
@@ -2516,6 +2520,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | NAV-52 | TC-NAV-52 |
 | NAV-53 | TC-NAV-53 |
 | NAV-54 | TC-NAV-54 |
+| NAV-55 | TC-NAV-55 |
 | CON-01…03 | TC-CON-01 |
 | CON-04…08, CON-19 | TC-CON-02 |
 | CON-09 | TC-CON-03 |
@@ -2680,6 +2685,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | BKL-47 | TC-BKL-36 |
 | BKL-48 | TC-BKL-37 |
 | BKL-49 | TC-BKL-38 |
+| BKL-50 | TC-BKL-39 |
 | QV-01, QV-02 | TC-QV-01 |
 | QV-03, QV-05 | TC-QV-02 |
 | QV-04 | TC-FET-07 |
@@ -3407,7 +3413,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-04 | TC-TWN-01, TC-TWN-02, TC-MON-01…06, TC-MON-09, TC-MON-10, TC-ATM-19, TC-BKL-18, TC-ACT-14, TC-ACT-15, TC-ACT-16, TC-ACT-17, TC-BKL-29, TC-BKL-30, TC-BKL-31, TC-BKL-33, TC-NAV-51 |
 | UC-05 | TC-MON-07, TC-FET-11 |
 | UC-06 | TC-ATM-01…11, TC-ATM-21, TC-ATM-22, TC-ATM-23, TC-TWN-03, TC-CON-20, TC-CON-33, TC-CON-34, TC-CON-43, TC-BKL-30, TC-BKL-31, TC-BKL-32 |
-| UC-07 | TC-BKL-01…09, TC-BKL-34, TC-BKL-35, TC-BKL-36, TC-BKL-37, TC-BKL-38, TC-BKL-15, TC-BKL-16, TC-BKL-17, TC-BKL-18, TC-BKL-19, TC-BKL-20, TC-BKL-21, TC-BKL-22, TC-BKL-23, TC-BKL-24, TC-BKL-25, TC-BKL-26, TC-BKL-27, TC-BKL-28, TC-DPF-06, TC-NAV-36, TC-CON-23, TC-CON-25…27, TC-CON-29…32, TC-CON-35 |
+| UC-07 | TC-BKL-01…09, TC-BKL-34, TC-BKL-35, TC-BKL-36, TC-BKL-37, TC-BKL-38, TC-BKL-39, TC-BKL-15, TC-BKL-16, TC-BKL-17, TC-BKL-18, TC-BKL-19, TC-BKL-20, TC-BKL-21, TC-BKL-22, TC-BKL-23, TC-BKL-24, TC-BKL-25, TC-BKL-26, TC-BKL-27, TC-BKL-28, TC-DPF-06, TC-NAV-36, TC-CON-23, TC-CON-25…27, TC-CON-29…32, TC-CON-35 |
 | UC-08 | TC-QV-01…05, TC-FET-07, TC-CON-08, TC-CON-11…16, TC-QV-08, TC-QV-09, TC-QV-10, TC-QV-11, TC-QV-12, TC-QV-13, TC-QV-14, TC-QV-15, TC-QV-16, TC-CON-37, TC-CON-38, TC-CON-39, TC-CON-40, TC-CON-41, TC-QV-18, TC-QV-19, TC-QV-20, TC-QV-21, TC-QV-22, TC-CON-42, TC-QV-41, TC-QV-42, TC-CON-61, TC-NAV-51, TC-QV-43, TC-QV-44, TC-QV-45, TC-QV-46, TC-STR-01…07, TC-UI-13…16, TC-TVL-14…18, TC-CON-68, TC-CON-69, TC-UI-18, TC-UI-19 |, TC-UI-20…25, TC-CON-72, TC-CON-74 |
 | UC-09 | TC-OV-11…15, TC-CAP-01, TC-CAP-02, TC-CAP-03, TC-CAP-08, TC-CAP-10, TC-CAP-11, TC-CAP-12, TC-CAP-13, TC-CAP-14, TC-CAP-15, TC-CAP-16, TC-CAP-17, TC-CAP-18, TC-CAP-19, TC-CAP-20, TC-CAP-21, TC-CAP-22, TC-CAP-23, TC-CAP-24, TC-CAP-25, TC-CAP-26, TC-CAP-27, TC-QV-17, TC-CON-21, TC-QV-10, TC-QV-11, TC-QV-21, TC-CHT-17, TC-CHT-19 |
 | UC-10 | TC-OV-11 (Months, Streams), TC-OV-13 |
@@ -3421,7 +3427,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-18 | TC-SMP-01, TC-ATM-06, TC-GIT-04, TC-SMP-02 |
 | UC-19 | TC-INS-04, TC-CI-01, TC-CI-02, TC-CI-03, TC-CI-07, TC-CI-08, TC-DOC-03 |
 | UC-20 | TC-DOC-01, TC-DOC-02, TC-DOC-03, TC-DOC-04, TC-DOC-05, TC-DOC-06 |
-| UC-21 | TC-SCR-01, TC-NAV-53, TC-NAV-54 |
+| UC-21 | TC-SCR-01, TC-NAV-53, TC-NAV-54, TC-NAV-55 |
 | UC-22 | TC-ACC-01, TC-ACC-02, TC-CON-57, TC-CON-58, TC-CON-63, TC-CON-64, TC-CON-65, TC-CON-66, TC-PGB-06, TC-GIT-15, TC-MYD-07, TC-CON-70, TC-CON-71, TC-LST-07, TC-CON-73 |
 | UC-23 | *(Retired — QE Mapping removed, see TC-NAV-54)* TC-QEM-01…10 |
 | UC-24 | TC-PCK-01…10 |

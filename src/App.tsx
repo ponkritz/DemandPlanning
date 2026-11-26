@@ -22,6 +22,7 @@ import { JobsIndicator } from './components/JobsIndicator'
 import { navKeyOf, pages, pageGroups, pageMeta, readCollapsedNav, type Page } from './pages/registry'
 import { MyDashboardPage } from './pages/MyDashboardPage'
 import { HomePage } from './pages/HomePage'
+import { resourceMappingPage } from './qePage'
 import { loadStartView, saveStartView, startPageOf, visibleTiles, type HomeLink, type HomeTile, type StartView } from './homeTiles'
 import { lookLabel, mySettingsLabel, readSettingsTab, settingsPages, resolveSettings, saveSettingsSection, saveSettingsTab, settingsLabel, settingsPagesFor, shownSettingsTab, type SettingsTab } from './settingsTabs'
 import { normalizeReleaseSourceSettings, streamPatterns } from './releaseSource'
@@ -528,6 +529,11 @@ export default function App() {
     ...pageLink('brite'),
   ] : []
   const settingsLinks: HomeLink[] = settingsPagesFor(access.can).map((entry) => ({ key: `settings:${entry.key}`, label: entry.label, icon: pageMeta('admin').icon, open: () => openSettings(entry.key) }))
+  // NAV-55 (product owner, 26 Nov 2026: "Add Resource Mapping as a Tile"): the On-Demand page named Resource Mapping (the
+  // QE source of DP) gets a Home tile of its own, shown when the page exists and the viewer may open it.
+  const resourceMapping = resourceMappingPage(onDemand.pages)
+  // Its menu link (shown only when the viewer may open it, as in the menu) is what the tile opens.
+  const resourceMappingLink = resourceMapping ? addedLinks(placementOf(menu.layout, resourceMapping.id).group).find((link) => link.key === `ondemand:${resourceMapping.id}`) : undefined
   const homeTiles = visibleTiles([
     // NAV-53: My Work ends with the Time Writing backlog (QMS-0025), as in the menu.
     tileOf({ key: 'mywork', title: 'My Work', detail: `Time Writing, your tasks, the Sprint check, your PI reviews and the ${timeWriting.name} backlog.`, tone: 'sky', open: firstAllowed('activities', 'mywork'), links: [...pageLink('activities'), ...pageLink('mywork'), ...pageLink('bulk'), ...pageLink('mypireview'), ...(access.sees('board') ? [{ key: 'board', label: timeWriting.name, icon: pageMeta('board').icon, open: () => openView(timeWriting.id) }] : []), ...addedLinks('my-work')], ...(my.known && azure.items.length ? { badge: `${my.pending.length} open` } : {}) }),
@@ -537,6 +543,7 @@ export default function App() {
     tileOf({ key: 'board', title: 'I&D Board', detail: 'Pages added to I&D Board and Other views.', tone: 'mint', links: [...addedLinks('i-d-board'), ...addedLinks('other-views')] }),
     tileOf({ key: 'release', title: 'Release Details', detail: 'The releases of each stream: DP, CP, IOCC, Content, Tool Validations and the Windchill exports.', tone: 'lemon', links: [...streamLinks, ...addedLinks('release-details')] }),
     tileOf({ key: 'planning', title: 'Planning & Baselines', detail: 'Release baselines against booked hours, and the pages being tried out.', tone: 'teal', links: [...pageLink('baselines'), ...pageLink('planover'), ...pageLink('capactual'), ...addedLinks('testing')] }),
+    ...(resourceMappingLink ? [tileOf({ key: 'resource-mapping', title: 'Resource Mapping', detail: 'Who is the QE of each platform and product — the source of the QE in DP Create Features.', tone: 'mint', open: resourceMappingLink.open, links: [] })] : []),
     tileOf({ key: 'ondemand', title: 'On-Demand', detail: 'Tables the team sets up itself: CoNQ (Cost of Non-Quality) and more.', tone: 'peach', links: addedLinks('on-demand') }),
     // PGB-04: a tile for each group of your own, with its pages.
     ...customGroups.map((group) => tileOf({ key: `group:${group.id}`, title: group.name, detail: `Pages added to ${group.name}.`, tone: 'lilac', links: addedLinks(group.id) })),
