@@ -2,6 +2,18 @@
 
 Version history of the I&D Quality Demand Planning app, newest first. Every merged change bumps the version in `package.json` and adds its entry here, in the same pull request (CI-09; [CONFIGURATION-MANAGEMENT.md](CONFIGURATION-MANAGEMENT.md) §4): **major** for a change that breaks existing data, shared setup files or the way users work; **minor** for a new or changed feature; **patch** for a fix, a dependency update or documentation only. `pnpm test` fails when the newest version here is not the version in `package.json`. CI tags each version `vX.Y.Z` on its merge commit and publishes its GitHub release with the installers and this entry (CI-10); the build number of a version is the CI build of that merge (shown in the app under Force Update, and in `latest.json`). Open bugs and accepted limitations of every version are in [KNOWN-ISSUES.md](KNOWN-ISSUES.md); the third-party components of every version are in [SWBOM.md](SWBOM.md).
 
+## v7.1.0 — 2026-11-26
+
+**Added**
+- **Bulk PI Review** — select eligible Features in My PI Review and submit one review to all of them. The job confirms which Features receive a new comment and which replace your existing review, checks each Feature again before writing, and reports each result (PIR-36, PIR-37, UI-31).
+
+**Updated**
+- **PI Review dates** — edited reviews show their latest update time while keeping the original date for PI matching (PIR-38).
+- **Git reload** — Load everything from Git runs as a background job and shows progress and results in Background jobs. If it fails, the forced reload restores its retry and connection options (GIT-33…GIT-35).
+- **App updates** — when a deployment replaces the code for an open view, use Load the new version to return to the current build (UPD-07).
+
+Synced Test2 through commit `1fc9e4c5c9e3cc4417715ce5c89943273cf42141`.
+
 ## v7.0.0 — 2026-11-26
 
 **Changed**
