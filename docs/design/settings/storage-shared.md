@@ -4,11 +4,11 @@
 
 ## Default design
 
-Offers Save, Restore and load cached data for shared connections plus backup/cleanup tools. Restore can take an optional token for the device and asks for confirmation.
+Offers Save, Restore and load cached data for shared connections plus backup/cleanup tools. Restore can take an optional token for the device and asks for confirmation. Admins also see unassigned Other views and can assign each to a work email.
 
 ## Behavior and storage
 
-The section needs `storage.shared`; writing also needs writable Git and live mode. Save merges definitions into `azure-views.json`, preserving Git-only rows and excluding personal views, PATs and work emails. Restore keeps the device's eligible PAT or uses the supplied/server PAT; it may restore a definition without a token. Cleanup creates a dated backup and shared reset marker, clears shared definitions and on-prem cached files, and preserves per-server PATs and personal views. It is a multi-step operation and reports failures when a step fails.
+The section needs `storage.shared`; updates require live mode, a writable token, and a verified private repository. `azure-views.json` keeps the Stream mapping. Existing Other views move to `other-views/unassigned.json` before their old definitions are removed. Assignment writes the destination person’s file before removing the unassigned entry. Shared connection definitions exclude PATs, and the cleanup flow retains them on-device.
 
 ## Implementation
 

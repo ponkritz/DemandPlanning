@@ -4,11 +4,11 @@
 
 ## Default design
 
-Shows saved non-personal connections outside the mapped streams. Rows expose the name, server/project, fetch status and available fetch/edit/clone/remove actions. A connection editor includes role, server, project, team or query, display name and whether to show it in the menu.
+Shows the active work email’s Other views. Rows expose the name, server/project, fetch status and available fetch/edit/clone/remove actions. A connection editor includes role, server, project, team or query, display name and whether to show it in the menu.
 
 ## Behavior and storage
 
-Other views are identified after excluding profiles assigned to a stream or data set and excluding personal views. The editor validates server selection and connection uniqueness, persists the connection definition locally and refreshes the workspace. A selected server supplies its PAT. A cloud backlog view and on-prem read-only query can use the same shell while using their respective fetch transport. Shared publishing is available through Shared setup in Git under its own policy.
+Other views sit outside the Stream mapping and the local, read-only My views. The app saves them in the creator’s private data repository file, `other-views/<work email>.json`, and loads that file for the active work email. Starting or loading from Git syncs definitions and keeps server PATs local. A save can wait locally until the user configures an email and a writable private repository. GitHub repository permissions govern direct access to the files.
 
 ## Implementation
 

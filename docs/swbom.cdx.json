@@ -18,8 +18,8 @@
     {
       "type": "library",
       "name": "@electron-internal/extract-zip",
-      "version": "1.0.8",
-      "purl": "pkg:npm/%40electron-internal/extract-zip@1.0.8",
+      "version": "1.0.9",
+      "purl": "pkg:npm/%40electron-internal/extract-zip@1.0.9",
       "scope": "excluded",
       "licenses": [
         {
@@ -31,7 +31,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "f226a378b15bccdc0cd26dc0b106526606111168250089b21afbc5496537e0580c5bcb079737708fd40abeff5d80dee330fe7dd4415417fb0b382dc997d6088d"
+          "content": "9cd1ec43463f06860473c6cdd79a1601a4e08c3f7d72e4fbb58018cf2224f3335376adff51b42d0e65955766556ffcec10b7389e5eda62f7d3f1821e456a13ad"
         }
       ],
       "properties": [
@@ -2358,8 +2358,8 @@
     {
       "type": "library",
       "name": "@types/react",
-      "version": "19.3.0",
-      "purl": "pkg:npm/%40types/react@19.3.0",
+      "version": "19.3.1",
+      "purl": "pkg:npm/%40types/react@19.3.1",
       "scope": "excluded",
       "licenses": [
         {
@@ -2371,7 +2371,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "374ac50ae1fd628c46f7f9bad65f4c7e924a7e62ce554d1e9bb8a9233e9346049292f45e2c1f6f2fce4607ecabf01b3995eaa9be0f7a252c05e194b5b38be242"
+          "content": "1cd4e40489bcce61d7f0b5175f6bed67f38dcde86b57527769b9767d4222679ab14d84428ffcfeac3785c0e96da822e5f6545d5132964f8d4e2ed62e155fc0ae"
         }
       ],
       "properties": [
@@ -4578,8 +4578,8 @@
     {
       "type": "library",
       "name": "electron",
-      "version": "44.11.5",
-      "purl": "pkg:npm/electron@44.11.5",
+      "version": "44.11.6",
+      "purl": "pkg:npm/electron@44.11.6",
       "scope": "required",
       "licenses": [
         {
@@ -4591,7 +4591,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "160b410408164724ff9362db5c3be59c7411b5cdf9b1fa7851a5a362f92db21d875966129df03f0e760610ec505195e9729e0410b8f7ef1e73492ae1e7ce67c2"
+          "content": "9ed47dd3dc2d2b36619b19895ce3437e8102d2bcd59b52cfb42f132a1c0f82963d7616844f5792d487fb1ec783a3a00b6ddda3c96c6a809d50710ebb76164d7f"
         }
       ],
       "properties": [

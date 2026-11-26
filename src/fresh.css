@@ -1308,3 +1308,6 @@ tbody tr.tvl-hl-red td{background:var(--hl-red-bg)}tbody tr.tvl-hl-red td:first-
 .dp-story-sprints{display:block;font-size:11px}
 .efe-sprint-from{display:flex;align-items:center;gap:8px;margin:4px 0 0 32px;font-size:12px;color:var(--muted)}.efe-sprint-from select{width:auto;font-size:12px}
 .dp-bulk td.nowrap{white-space:nowrap}
+
+/* GIT-30: the forced Load everything from Git stays above every other pop-up. */
+.modal-backdrop:has(.streams-update){z-index:1001}.streams-update p{margin:0 0 10px}.streams-update ul{margin:6px 0 6px 18px;padding:0}

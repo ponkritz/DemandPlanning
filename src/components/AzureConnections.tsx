@@ -27,6 +27,8 @@ import { RemovedConnections } from './RemovedConnections'
 import { RemoveViewForEveryone } from './RemoveViewForEveryone'
 import { ViewActions } from './ViewActions'
 import { removalBlocked, type RemovalMode } from '../viewDefinitions'
+import { isOtherView, otherViewsPath } from '../otherViews'
+import { RemoveOwnOtherView, UnassignedOtherViews } from './OwnOtherViews'
 
 const roleLabel: Record<AzureConnectionRole, string> = { 'time-tracking': 'Time Writing (read & write)', 'release-source': 'Releases · DHFI (read only)', documents: 'Documents · Vault (read only)', reference: 'Reference (read only)', 'backlog-view': 'Backlog view (read only)' }
 const roleUse: Record<AzureConnectionRole, string> = {
@@ -42,7 +44,7 @@ const empty = (role: AzureConnectionRole = 'time-tracking'): ConnectionInput => 
 // Azure DevOps connection setup, shown as the first section of Settings.
 // section: the one part to show (SET-14: Servers and PATs, Stream mapping, Other views, Read-only sources, Synthetic
 // sample); without it, every part.
-export function AzureConnections({ azure, store, git, onOpenBoard, canManage = true, canManageStreams = canManage, canEnterCounts = canManage, canRemoveForEveryone = false, viewingAs = false, section }: { azure: AzureWorkspace; store: PageProps['store']; git?: GitStorage; onOpenBoard: () => void; canManage?: boolean; canManageStreams?: boolean; canEnterCounts?: boolean; canRemoveForEveryone?: boolean; viewingAs?: boolean; section?: 'email' | 'servers' | 'mapping' | 'epics' | 'bulk' | 'counts' | 'views' | 'sources' | 'sample' }) {
+export function AzureConnections({ azure, store, git, onOpenBoard, canManage = true, canManageStreams = canManage, canEnterCounts = canManage, canRemoveForEveryone = false, canAssignOtherViews = false, people = [], viewingAs = false, section }: { azure: AzureWorkspace; store: PageProps['store']; git?: GitStorage; onOpenBoard: () => void; canManage?: boolean; canManageStreams?: boolean; canEnterCounts?: boolean; canRemoveForEveryone?: boolean; canAssignOtherViews?: boolean; people?: string[]; viewingAs?: boolean; section?: 'email' | 'servers' | 'mapping' | 'epics' | 'bulk' | 'counts' | 'views' | 'sources' | 'sample' }) {
   const show = (part: string) => !section || section === part
   const threshold = normalizeReleaseSourceSettings(store.state.releaseSourceSettings).matchThreshold ?? defaultMatchThreshold
   const { connectionProfiles, connectionStatus, activeConnectionProfileId, busy } = azure
@@ -55,6 +57,8 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
   const [fetchingAll, setFetchingAll] = useState(false)
   // CON-109, CON-110: the Tool Owner's Remove / Delete for everyone of a shared view (fail closed: no right, no action).
   const [removing, setRemoving] = useState<{ view: AzureConnectionProfileSummary; mode: RemovalMode } | null>(null)
+  // CON-124: Remove one of my own Other views (here, from my file in Git, and by a removal marker on my other computers).
+  const [removingOwn, setRemovingOwn] = useState<AzureConnectionProfileSummary | null>(null)
   const removeBlocked = removalBlocked({ allowed: canRemoveForEveryone, viewingAs, git, isSample: azure.isSample })
   const [dismissed, setDismissed] = useState(loadDismissedPresets)
   const presets = pendingPresets(connectionProfiles, dismissed)
@@ -122,6 +126,16 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
     catch (failure) { if (id) markPendingShare([id], true); setCleanup({ tone: 'warning', text: `“${name}” saved here, but not to Git: ${failure instanceof Error ? failure.message : String(failure)}. Use “Save stream mapping to Git” to retry.` }) }
   }
 
+  // CON-120: an Other view added or changed here is saved to the person's own file in Git right away (other-views/<email>.json);
+  // only they see it. Without Git, a token that can save or a work email it stays here and is saved at the next start that can.
+  async function saveOwn(name: string, removed: string[] = []) {
+    if (azure.isSample || viewingAs || !git) return
+    const email = azure.creatorEmail
+    if (!git.connected || git.readOnly || !otherViewsPath(email)) { setCleanup({ tone: 'warning', text: `“${name}” saved here only: ${!git.connected ? 'connect Git storage' : git.readOnly ? 'your Git token is read-only' : 'set your work email in My settings'} to keep your Other views in Git (it is saved there at the next start that can).` }); return }
+    try { await git.saveOwnOtherViews(email, removed, `Other view of ${email}: ${name}`); setCleanup({ tone: 'success', text: `“${name}” saved to your Other views in Git (${otherViewsPath(email)}): only you see it.` }) }
+    catch (failure) { setCleanup({ tone: 'warning', text: `“${name}” saved here, but not to your Other views in Git: ${failure instanceof Error ? failure.message : String(failure)}. It is saved at the next start.` }) }
+  }
+
   const formFrom = (profile: AzureConnectionProfileSummary): ConnectionInput => {
     const parts = splitAzureUrl(profile.url, profile.baseUrl)
     const { serverUrl, organization } = splitCollectionUrl(parts.baseUrl)
@@ -165,6 +179,7 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
       if (next !== current) store.update((state) => withToolValidationsSettings(state, { documentsQuery: next }, `Tool Validations: ${viewNameOf(saved)} added as the ${toolRoleLabel[category]} query`))
     }
     if (saved && (saved.role === 'time-tracking' || streamOfProfile(saved) || dataSetOfProfile(saved))) void shareMapping(viewNameOf(saved), saved.id)
+    else if (saved && isOtherView(saved)) void saveOwn(viewNameOf(saved))
   }
   const lastFetch = (profile: AzureConnectionProfileSummary) => {
     if (profile.role === 'time-tracking') return profile.id === activeConnectionProfileId && azure.saved.length ? `${azure.saved.length} saved work items` : ''
@@ -198,7 +213,10 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
     const toGit = Boolean(git?.connected && !git.readOnly && !azure.isSample)
     const replacing = timeWriting.filter((entry) => entry.id !== profile.id).map((entry) => `“${entry.reason}”`).join(', ')
     if (!window.confirm(`Use “${profile.reason}” as the Time Writing connection${replacing ? ` and remove ${replacing}` : ''}?${toGit ? ' The connection setup in Git is updated and data saved to Git for the removed connection is deleted, so it does not come back for anyone.' : ''} Its PAT is not revoked in Azure DevOps.`)) return
+    const wasOther = isOtherView(profile)
     const replaced = azure.makeTimeWriting(profile.id)
+    // CON-120: it is no longer one of my Other views: it leaves my file (it is now in the shared Stream mapping).
+    if (wasOther) void saveOwn(viewNameOf(profile), [profile.id])
     const names = replaced.map((entry) => entry.reason).join(', ')
     let text = `“${profile.reason}” is now the Time Writing connection${names ? `; removed ${names}` : ''}.`, tone: 'success' | 'warning' = 'success'
     if (toGit && git) {
@@ -301,6 +319,7 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
       </div>)}</div>}
       {extras.length > 0 && keep && <Notice tone="warning">{timeWriting.length} Time Writing (QMS-0025) connections: only “{keep.reason}” is used; {extras.map((profile) => `“${profile.reason}”`).join(', ')} {extras.length === 1 ? 'is a duplicate' : 'are duplicates'}. <button type="button" className="text-button" onClick={() => void removeDuplicates()}>Keep “{keep.reason}”, remove the other{extras.length === 1 ? '' : 's'}</button></Notice>}
       {keep && twins.map((profile) => <Notice key={profile.id} tone="warning">“{profile.reason}” reads the same backlog as the Time Writing connection “{keep.reason}”. If “{profile.reason}” loads and “{keep.reason}” does not, <button type="button" className="text-button" onClick={() => void switchTimeWriting(profile)}>use “{profile.reason}” as Time Writing and remove “{keep.reason}”</button>.</Notice>)}
+      <Notice tone="info" className="own-views-note">These are <strong>your</strong> Other views: they are kept in Git in a file of your own ({otherViewsPath(azure.creatorEmail) || 'other-views/<your work email>.json — set your work email in My settings'}) and only you see them. The Stream mapping above is shared with everyone.</Notice>
       {cleanup && <Notice tone={cleanup.tone}>{cleanup.text}</Notice>}
       {others.length > 0 && removeBlocked && <WriteBlocked reason={`Remove / Delete for everyone: ${removeBlocked}`} />}
       {others.length ? <div className="azure-table"><table className="connection-table"><thead><tr><th>Connection</th><th>Used for</th><th>Organization / project</th><th>Query</th><th>Status</th><th /></tr></thead><tbody>{others.map((profile) => {
@@ -312,15 +331,17 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
           <td>{parts.baseUrl.replace('https://', '')}{profile.baseUrl && <Pill tone="info">On-prem</Pill>}<small>{parts.project}{parts.team ? ` · team ${parts.team}` : ''}{profile.apiVersion ? ` · API ${profile.apiVersion}` : ''}</small></td>
           <td>{profile.query ? <span className="query-chip" title={profile.query}>Custom query</span> : <small>{profile.role === 'time-tracking' || profile.role === 'backlog-view' ? 'Team Epic backlog' : 'Default'}</small>}</td>
           <td><Pill tone={tone}>{label}</Pill><small>{status?.message ?? lastFetch(profile)}</small></td>
-          <td><div className="button-row nowrap"><button type="button" className="ghost" disabled={status?.state === 'busy' || fetchingAll} onClick={() => void azure.fetchConnection(profile.id)}>Fetch</button><button type="button" className="ghost" disabled={status?.state === 'busy' || fetchingAll} onClick={() => void azure.testConnection(profile.id)}>Test</button>{profile.role === 'backlog-view' && <button type="button" className="ghost" disabled={status?.state === 'busy' || fetchingAll || busy} onClick={() => void switchTimeWriting(profile)}>Use as Time Writing</button>}<button type="button" className="ghost" onClick={() => edit(profile)}>Edit</button><button type="button" className="ghost" title="New connection with the same settings and PAT" onClick={() => clone(profile)}>Clone</button><button type="button" className="text-button" onClick={() => { if (window.confirm(`Remove “${profile.reason}” from this browser? Its PAT is not revoked in Azure DevOps.`)) azure.removeConnection(profile.id) }}>Remove</button><ViewActions label={`Shared view ${viewNameOf(profile)}`} items={[
+          <td><div className="button-row nowrap"><button type="button" className="ghost" disabled={status?.state === 'busy' || fetchingAll} onClick={() => void azure.fetchConnection(profile.id)}>Fetch</button><button type="button" className="ghost" disabled={status?.state === 'busy' || fetchingAll} onClick={() => void azure.testConnection(profile.id)}>Test</button>{profile.role === 'backlog-view' && <button type="button" className="ghost" disabled={status?.state === 'busy' || fetchingAll || busy} onClick={() => void switchTimeWriting(profile)}>Use as Time Writing</button>}<button type="button" className="ghost" onClick={() => edit(profile)}>Edit</button><button type="button" className="ghost" title="New connection with the same settings and PAT" onClick={() => clone(profile)}>Clone</button><button type="button" className="text-button" onClick={() => { if (isOtherView(profile)) { setRemovingOwn(profile); return } if (window.confirm(`Remove “${profile.reason}” from this browser? Its PAT is not revoked in Azure DevOps.`)) azure.removeConnection(profile.id) }}>Remove</button><ViewActions label={`Shared view ${viewNameOf(profile)}`} items={[
             { key: 'remove', label: 'Remove for everyone…', disabled: Boolean(removeBlocked), title: removeBlocked || 'Remove this view from the shared setup in Git for everyone (a backup is kept; Removed connections can restore it)', onClick: () => setRemoving({ view: profile, mode: 'remove' }) },
             { key: 'delete', label: 'Delete for everyone…', danger: true, disabled: Boolean(removeBlocked), title: removeBlocked || 'Remove this view for everyone and delete its data files in Git', onClick: () => setRemoving({ view: profile, mode: 'delete' }) },
           ]} /></div></td>
         </tr>
       })}</tbody></table></div>
         : otherPresets.length ? null : <EmptyState title="No other views." detail="Time Writing and the streams are in the Stream mapping above; add any other view here." />}
+      {removingOwn && <RemoveOwnOtherView view={removingOwn} git={git} azure={azure} onClose={() => setRemovingOwn(null)} onDone={(result) => { setRemovingOwn(null); setCleanup(result) }} />}
       {removing && git && <RemoveViewForEveryone view={removing.view} mode={removing.mode} git={git} azure={azure} onClose={() => setRemoving(null)} onDone={(result) => { setRemoving(null); setCleanup(result) }} />}
     </Panel>}
+    {show('views') && <UnassignedOtherViews git={git} azure={azure} admin={canAssignOtherViews} viewingAs={viewingAs} people={people} />}
     {show('sources') && sources.length > 0 && <Panel className="connection-panel" eyebrow="READ ONLY" title="Fetched read-only sources" info="Snapshots from document and reference connections, stored with the app data.">
       <div className="azure-table"><table><thead><tr><th>Connection</th><th>Project</th><th>Work items</th><th>By type</th><th>Fetched</th></tr></thead><tbody>{sources.map((source) => {
         const types = Object.entries(source.items.reduce<Record<string, number>>((counts, item) => { counts[item.workItemType] = (counts[item.workItemType] ?? 0) + 1; return counts }, {})).sort((a, b) => b[1] - a[1])

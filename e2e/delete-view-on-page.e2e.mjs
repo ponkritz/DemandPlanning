@@ -32,7 +32,9 @@ const until = async (check, what) => { for (const end = Date.now() + 60000; Date
 const columns = ['Number', 'Name', 'State', 'Last Modified']
 const exportView = { id: 'wc-supplier-docs', name: 'Supplier Docs', entitySet: '', filters: [], columns, showInMenu: true, exportFile: 'supplier-docs.csv' }
 const exportFile = JSON.stringify({ schema: 1, kind: 'windchill-view-snapshot', view: exportView, source: { viewId: exportView.id, name: exportView.name, fetchedAt: '2026-11-24T08:00:00.000Z', query: '', columns, rows: [{ Number: 'DHF-901', Name: 'Supplier Widget 1.0 Verification Report', State: 'Released', 'Last Modified': '2026-11-02' }] } })
-const repository = () => fakeGitHub({ files: { 'access.json': serializeAccess(policy), 'azure-views.json': JSON.stringify({ schema: 1, kind: 'azure-devops-views', views: [audit, supplier] }), 'azure-data/supplier-x.json': snapshot(supplier), 'windchill-data/wc-supplier-docs.json': exportFile, 'windchill-analysis/wc-supplier-docs-locations.json': '{}', 'windchill-data/wc-other.json': exportFile.replaceAll('wc-supplier-docs', 'wc-other').replaceAll('Supplier Docs', 'Other Docs') } })
+// CON-120: the Other views (not My views) of each person, in their file in Git.
+const ownFile = (email, views) => JSON.stringify({ schema: 1, kind: 'other-views', owner: email, views: views.map((entry) => ({ ...entry, createdBy: email })) })
+const repository = () => fakeGitHub({ files: { 'access.json': serializeAccess(policy), 'other-views/person@example.com.json': ownFile('person@example.com', [audit, supplier]), 'other-views/owner@example.com.json': ownFile('owner@example.com', [audit, supplier]), 'azure-data/supplier-x.json': snapshot(supplier), 'windchill-data/wc-supplier-docs.json': exportFile, 'windchill-analysis/wc-supplier-docs-locations.json': '{}', 'windchill-data/wc-other.json': exportFile.replaceAll('wc-supplier-docs', 'wc-other').replaceAll('Supplier Docs', 'Other Docs') } })
 
 // A person (work email) with Git storage connected, their Time Writing connection and a server PAT; Azure DevOps and
 // the on-prem server answer nothing, so the "Could not fetch from Azure DevOps" guide is closed whenever it appears.

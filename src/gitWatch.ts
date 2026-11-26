@@ -33,6 +33,8 @@ const fileNames: [RegExp, string][] = [
   [/(^|\/)feature-setup\/[^/]+\.json$/, 'Your Feature setup'],
   [/(^|\/)azure-views\.json$/, 'Stream mapping and connections'],
   [/(^|\/)custom-streams\.json$/, 'Custom streams'],
+  [/(^|\/)other-views\/unassigned\.json$/, 'Unassigned Other views'],
+  [/(^|\/)other-views\/[^/]+\.json$/, 'Your Other views'],
   [/(^|\/)monthly-pack-setup\.json$/, 'Monthly pack setup'],
   [/(^|\/)monthly-pack\/(\d{4}-\d{2})\.json$/, 'Monthly pack $2'],
   [/(^|\/)personal-views-defaults\.json$/, 'Default views'],
@@ -123,6 +125,8 @@ export function pagesOfFile(path: string, planningPath: string, dashboardsReadin
   if (name === 'feature-setup.json' || /^feature-setup\/[^/]+\.json$/.test(name)) return { pages: featurePages, loader: 'featureSetup' }
   if (name === 'epic-setup.json') return { pages: featurePages, loader: 'epicSetup' }
   if (name === 'custom-streams.json') return { pages: releasePages, loader: 'customStreams' }
+  // CON-120, CON-122: a person's Other views and the unassigned list are synced like the connection setup.
+  if (/^other-views\/[^/]+\.json$/.test(name)) return { pages: ['admin:connections', 'admin:options'], loader: 'connections' }
   if (name === 'azure-views.json') return { pages: ['admin:connections', 'admin:options'], loader: 'connections' }
   if (name === 'monthly-pack-setup.json' || /^monthly-pack\/\d{4}-\d{2}\.json$/.test(name)) return { pages: ['pulse', 'admin:pack'], loader: 'monthlyPack' }
   if (name === 'history-hours.json') return { pages: [...reportPages, 'admin:history', 'admin:capacity'], loader: 'history' }

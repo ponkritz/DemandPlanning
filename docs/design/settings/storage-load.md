@@ -4,11 +4,11 @@
 
 ## Default design
 
-Visible with Git configured. One action shows a busy state and then a summary listing loaded areas and errors by step. Synthetic sample disables the action.
+With Git connected, **Load everything from Git** shows progress and reports failures by step. Synthetic sample disables the action. A Stream mapping change from another device opens a blocking reload dialog.
 
 ## Behavior and storage
 
-The shell runs six independent reads in order and keeps going when a step throws: planning data, connection metadata (then reload local profiles), on-prem view snapshots, Windchill exports (then reload views), access roles, and Feature setup. The view and export snapshot readers update only when an eligible newer copy is available. Some individual hooks record errors in their own status instead of throwing; check those status panels as well.
+The load reads planning data, the Stream mapping and the active work email’s Other views, on-prem snapshots, Windchill exports, access roles, and Feature setup. On failure, the dialog shows each failed part, Git storage settings, and Retry. When every failure is a GitHub server outage or a network request with no response, **Continue without loading** is available for that session. The app asks again at the next start.
 
 ## Implementation
 

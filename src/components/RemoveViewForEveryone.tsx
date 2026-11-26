@@ -4,6 +4,7 @@ import type { RemovalMode } from '../viewDefinitions'
 import type { GitStorage } from '../useGitStorage'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import { Modal, Notice } from './ui'
+import { isOtherView, otherViewsPath } from '../otherViews'
 
 // CON-109, CON-110 (Admin → Data & sharing → Other views, ⋯ of a shared view): the Tool Owner removes — or deletes, with
 // its data files in Git — a shared view for everyone. Who it affects: everyone who uses the shared setup in this
@@ -29,6 +30,8 @@ export function RemoveViewForEveryone({ view, mode, git, azure, onClose, onDone 
     try {
       const result = await git.removeViewForEveryone(view, mode, azure.creatorEmail)
       azure.removeConnection(view.id)
+      // CON-124: one of the Tool Owner's own Other views also leaves their file in Git.
+      if (isOtherView(view) && otherViewsPath(azure.creatorEmail)) await git.saveOwnOtherViews(azure.creatorEmail, [view.id], `Remove Other view for everyone: ${name}`).catch(() => undefined)
       onDone({ tone: 'success', text: `“${name}” ${mode === 'delete' ? 'deleted' : 'removed'} for everyone: it is no longer in the shared setup in Git, and every browser and desktop app removes it at its next start. Backup: ${result.backup}.${mode === 'delete' ? ` ${result.deleted.length ? `Deleted in Git: ${result.deleted.join(', ')}.` : 'It had no data files in Git.'}` : ''} Restore it in Admin → Streams → Removed connections.` })
     } catch (failure) {
       setError(`Not ${mode === 'delete' ? 'deleted' : 'removed'} for everyone: ${failure instanceof Error ? failure.message : String(failure)} Nothing was removed here; try again.`)

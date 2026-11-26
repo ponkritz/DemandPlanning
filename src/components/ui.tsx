@@ -99,10 +99,12 @@ const focusable = 'a[href],button:not([disabled]),input:not([disabled]):not([typ
 const fieldSelector = 'input:not([disabled]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([role="combobox"]),select:not([disabled]),textarea:not([disabled])'
 // full (UI-30): nearly the whole window — a small margin with the page dimmed behind, rounded corners — for long lists and
 // bulk actions; its header and actions stay put and only the part marked .modal-scroll scrolls (the whole screen on a phone).
-export function Modal({ title, eyebrow, onClose, children, wide = false, full = false, form = true }: { title: string; eyebrow: string; onClose: () => void; children: ReactNode; wide?: boolean; full?: boolean; form?: boolean }) {
+// blocking (GIT-30, a deliberate exception to UI-19): a pop-up that must be answered — no ×, Escape and a click beside it
+// do nothing; only its own buttons close it (the forced Load everything from Git).
+export function Modal({ title, eyebrow, onClose, children, wide = false, full = false, form = true, blocking = false }: { title: string; eyebrow: string; onClose: () => void; children: ReactNode; wide?: boolean; full?: boolean; form?: boolean; blocking?: boolean }) {
   const dialog = useRef<HTMLDivElement>(null)
   const close = useRef(onClose)
-  useEffect(() => { close.current = onClose })
+  useEffect(() => { close.current = blocking ? () => undefined : onClose })
   useEffect(() => {
     const me = {}
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
@@ -135,7 +137,7 @@ export function Modal({ title, eyebrow, onClose, children, wide = false, full = 
       if (opener?.isConnected && (!document.activeElement || document.activeElement === document.body || box?.contains(document.activeElement) || !document.activeElement.isConnected)) opener.focus()
     }
   }, [])
-  return createPortal(<div className="modal-backdrop" role="presentation" onMouseDown={form ? undefined : onClose}><div ref={dialog} tabIndex={-1} className={full ? 'modal modal-full' : wide ? 'modal modal-wide' : 'modal'} role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}><div className="modal-heading"><div><p className="eyebrow">{eyebrow}</p><h2>{title}</h2></div><button type="button" className="icon-button" onClick={onClose} aria-label="Close">×</button></div>{children}</div></div>, document.body)
+  return createPortal(<div className="modal-backdrop" role="presentation" onMouseDown={form || blocking ? undefined : onClose}><div ref={dialog} tabIndex={-1} className={full ? 'modal modal-full' : wide ? 'modal modal-wide' : 'modal'} role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}><div className="modal-heading"><div><p className="eyebrow">{eyebrow}</p><h2>{title}</h2></div>{!blocking && <button type="button" className="icon-button" onClick={onClose} aria-label="Close">×</button>}</div>{children}</div></div>, document.body)
 }
 // OND-27: a drawer — one record beside the page it belongs to, sliding in from the right (about 520 px; the full width
 // on a phone). Rendered into <body> like a pop-up and sharing its keyboard rules (UI-18): the focus moves into it (the

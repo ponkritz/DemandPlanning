@@ -54,6 +54,8 @@ Live reading was confirmed by the user. No production PAT was available to the c
 
 With Git storage connected (Settings → Storage), **Settings → Views in Git → Save N connections to Git** writes the connection setup (names, view names, queries, URLs, roles — never PATs) to `azure-views.json` in the data repository. Every app that connects to the same repository takes it as its default at start: missing connections are added, unchanged ones follow Git, ones changed locally are kept; **Restore from Git** brings a connection back to Git's version. A restored connection without a PAT shows the data saved to Git (view only) until a PAT is entered.
 
+Since CON-119 `azure-views.json` (the Streams file) holds the **Stream mapping only** (Time Writing, the streams, DP's data sets). Each person's **Other views** are kept in their own file, `other-views/<work email>.json` (never a PAT), and only that person's app loads them; the Other views of an older shared setup wait in `other-views/unassigned.json` until an admin assigns them (Admin → Data & sharing → Other views → Unassigned Other views). When the Streams file changes, every app asks once to **Load everything from Git** (GIT-29).
+
 Every fresh fetch of an on-prem view is saved automatically to `azure-data/<connection>.json` (also when the data is unchanged — the fetch time is new; needs a Git token that can write). The web app loads it at start; each on-prem view has **Load from Git**, and a fetch that fails or has no PAT falls back to it.
 
 ## Saved queries as dashboard data sources

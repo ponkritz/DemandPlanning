@@ -46,7 +46,9 @@ export const rolesFile = (role = 'Tool Owner') => ({ type: 'file', encoding: 'ba
 // A fresh browser context (clean storage) with the Get started pop-up dismissed unless asked for, and page errors recorded.
 // roles: a role name (or true for Tool Owner) caches a roles file first (cachedRoles); a scenario's own init runs after.
 // scale: the device scale factor (2 for sharp screenshots); the default is the browser's (1).
-export async function openPage(app, { width = 1300, height = 1000, guide = false, roles, init, initArg, scale } = {}) {
+// loadFromGit (GIT-29): the forced "Load everything from Git" pop-up, which shows once per change of the shared Streams
+// file, is answered whenever it is in the way (Playwright's locator handler); false leaves it to the scenario.
+export async function openPage(app, { width = 1300, height = 1000, guide = false, roles, init, initArg, scale, loadFromGit = true } = {}) {
   const context = await app.browser.newContext({ viewport: { width, height }, acceptDownloads: true, ...(scale ? { deviceScaleFactor: scale } : {}) })
   const errors = []
   if (!guide) await context.addInitScript(() => { localStorage.setItem('demand-planning-setup-guide-v1', 'dismissed') })
@@ -54,6 +56,10 @@ export async function openPage(app, { width = 1300, height = 1000, guide = false
   if (init) await context.addInitScript(init, initArg)
   const page = await context.newPage()
   page.on('pageerror', (error) => errors.push(error.message))
+  if (loadFromGit) {
+    const forced = page.getByRole('dialog', { name: 'Load everything from Git' })
+    await page.addLocatorHandler(forced, async () => { await forced.getByRole('button', { name: /^(Load everything from Git|Retry)$/ }).click(); await forced.waitFor({ state: 'detached' }) })
+  }
   // CI-12: E2E_CPU_SLOWDOWN=4 runs the page on a CPU four times slower (Chromium's own throttling), as on a busy
   // laptop, so a step that only works because the app happens to be fast (a race) fails here rather than for a user.
   const slowdown = Number(process.env.E2E_CPU_SLOWDOWN ?? 1)

@@ -11,6 +11,8 @@ import './fresh.css'
 import './exports.css'
 import { useAppStore } from './store'
 import { Notice } from './components/ui'
+import { StreamsUpdatePrompt } from './components/StreamsUpdatePrompt'
+import { beginStreamsLoad, endStreamsLoad, markStreamsLoaded, streamsUpdateDue } from './streamsUpdate'
 import { MenuCustomizer } from './components/PersonalLayout'
 import { usePersonalViews } from './usePersonalViews'
 import { ThemeToggle } from './components/Clock'
@@ -163,7 +165,7 @@ export default function App() {
     pulled.current = true
     const web = !window.azureDevOps
     // The start-up fetch waits only for the connection setup (KB-38): the on-prem views' data is read from Git after it.
-    void git.syncViews().catch(() => null)
+    void git.syncViews(azure.creatorEmail).catch(() => null)
       .finally(() => { azure.reloadConnectionProfiles(); setSetupSynced(true) })
       .then(() => web ? git.pullSnapshots() : undefined).catch(() => { /* shown when loading from Settings */ })
     void git.pullWindchill().then(() => windchill.reload()).catch(() => { /* shown when loading from Git on the import page */ })
@@ -235,13 +237,35 @@ export default function App() {
     const loaded: string[] = [], failed: string[] = []
     const step = async (label: string, run: () => Promise<string>) => { try { loaded.push(await run()) } catch (failure) { failed.push(`${label}: ${failure instanceof Error ? failure.message : String(failure)}`) } }
     await step('Planning data', async () => { if (!confirmReplace(git.dirty, git.status === 'conflict')) return 'planning data skipped: your unsaved changes were kept'; await git.load(); return 'planning data (baselines, release scope, region / role mapping)' })
-    await step('Connection setup', async () => { const result = await git.syncViews(); azure.reloadConnectionProfiles(); return result ? `connection setup (${result.added.length} added, ${result.updated.length} updated, ${result.removed.length} removed, ${result.kept.length} kept as changed here)` : 'no connection setup in Git' })
+    await step('Connection setup', async () => { const result = await git.syncViews(azure.creatorEmail); azure.reloadConnectionProfiles(); return result ? `connection setup (${result.added.length} added, ${result.updated.length} updated, ${result.removed.length} removed, ${result.kept.length} kept as changed here)` : 'no connection setup in Git' })
     await step('On-prem view data', async () => { const result = await git.pullSnapshots(); return `${result.files} on-prem view data file${result.files === 1 ? '' : 's'} (${result.applied.length} newer than here)` })
     await step('Windchill exports', async () => { const result = await git.pullWindchill(); await windchill.reload(); return `${result.files} Windchill export${result.files === 1 ? '' : 's'} (${result.applied.length} newer)` })
     await step('Access roles', async () => { await access.reload(); return 'access roles' })
     await step('Feature setup', async () => { await featureSetup.reload(); return 'Feature setup' })
     return { loaded, failed }
   }
+  // GIT-29…GIT-31: the forced Load everything from Git, once per change of the shared Streams file (azure-views.json)
+  // and once for everyone after this release; never in View as, with the sample, without Git or for this computer's own
+  // save. It can never be skipped: after a failed load it shows the Git storage connection setup with Retry (GIT-31).
+  // The forced load's own state, held here: the pop-up stays open while its load runs (the load itself reloads the
+  // planning data and may save the Streams file, which would otherwise hide the pop-up and show it again), and a second
+  // click cannot start a second load.
+  const [streamsRun, setStreamsRun] = useState<{ busy: boolean; failed?: string[] }>({ busy: false })
+  // GIT-32: Continue without loading after a GitHub outage — for this session; the pop-up comes back at the next start.
+  const [streamsSkipped, setStreamsSkipped] = useState(false)
+  const runStreamsLoad = () => {
+    if (streamsRun.busy) return
+    const repository = git.streamsRepository
+    setStreamsRun({ busy: true })
+    beginStreamsLoad(repository)
+    void loadEverything().then((result) => {
+      endStreamsLoad(repository)
+      // Recorded from the load just done: the version of the Streams file it read (or this computer wrote) last.
+      if (result.failed.length) setStreamsRun({ busy: false, failed: result.failed })
+      else { markStreamsLoaded(repository, git.streamsVersionNow()); setStreamsRun({ busy: false }) }
+    }, (failure: unknown) => { endStreamsLoad(repository); setStreamsRun({ busy: false, failed: [failure instanceof Error ? failure.message : String(failure)] }) })
+  }
+  const streamsDue = streamsUpdateDue({ connected: git.connected, isSample: azure.isSample || git.isSample, viewingAs: Boolean(access.viewingAs), ready: setupSynced && git.status !== 'loading', repository: git.streamsRepository, version: git.streamsVersion, saving: git.streamsSaving })
   // MYD-06…MYD-09: each person's sections, menu and filters, in Git per person.
   const personalViews = usePersonalViews(git, viewedPerson?.email ?? azure.creatorEmail)
   // Historical hours (HIS-05): the report pages read the Azure DevOps items with the history merged in before its
@@ -598,7 +622,7 @@ export default function App() {
       else if (loader === 'toolValidations') await toolValidations.reload()
       else if (loader === 'piForm') await piForm.reload()
       else if (loader === 'sharedLists') await sharedLists.reload()
-      else if (loader === 'connections') { await git.syncViews(); azure.reloadConnectionProfiles() }
+      else if (loader === 'connections') { await git.syncViews(azure.creatorEmail); azure.reloadConnectionProfiles() }
       else if (loader === 'monthlyPack') { await monthlyPack.reloadSetup(); await monthlyPack.reloadNotes() }
       else if (loader === 'history') await history.reload()
       else if (loader === 'menu') await menu.reload()
@@ -711,6 +735,7 @@ export default function App() {
       <header className="topbar" ref={topbarRef}><button type="button" className="menu-button" aria-label={navOpen ? 'Close menu' : 'Open menu'} aria-expanded={navOpen} aria-controls="primary-navigation" onClick={() => setNavOpen((open) => !open)}>{navOpen ? '✕' : '☰'}</button><h1 title={page === 'ondemand' && onDemandPage ? onDemandPage.description || `${onDemandPage.name}, in ${groupNameOf(placementOf(menu.layout, onDemandPage.id).group)}` : meta.detail}>{page === 'board' ? view.name : page === 'windchill' && windchillView ? windchillView.name : page === 'admin' ? settingsLabel(settingsTab) : page === 'ondemand' && onDemandPage ? onDemandPage.name : meta.label}</h1><div className="topbar-slot" ref={setHeaderSlot} /><div className="topbar-actions">{openSteps > 0 && <button type="button" className="ghost setup-button" title="What to configure and how" onClick={() => setGuideOpen(true)}>Setup · {steps.filter((step) => step.required && step.state === 'done').length}/{steps.filter((step) => step.required).length}</button>}<JobsIndicator /><DataStatus azure={azure} />{(meta.usesMonth || (page === 'board' && view.readOnly)) && <label className="month-picker"><span className="sr-only">Month</span><input type="month" aria-label="Month" value={month} onChange={(event) => /^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value) && setMonth(event.target.value)} /></label>}{personPage && <label className="topbar-person">Person<PersonPicker label="Person" value={my.chosenName} people={my.people} onChange={my.setName} meLabel={azure.creatorEmail.trim() ? 'Me' : 'Choose a person…'} /></label>}<ThemeToggle /><ProfileMenu name={my.self.me.name ?? ''} email={azure.creatorEmail.trim()} actions={profileActions} /></div></header>
       {access.viewingAs && <div className="view-as-banner" role="status"><span>👁 Viewing as <strong>{viewAsLabel(access.viewingAs)}</strong>{access.viewingAs.kind === 'role' ? '' : access.rights.roles.length ? ` (${access.rights.roles.join(', ')})` : ' (default role)'} — read only: nothing is saved to Azure DevOps or Git.</span><button type="button" className="ghost" onClick={() => setViewAsOpen(true)}>Change</button><button type="button" className="primary" onClick={() => setViewAs(null)}>Exit View as</button></div>}
       {viewAsOpen && <ViewAsDialog current={access.viewingAs} people={viewAsPeople(azure.items, access.policy)} onStart={(next) => { setViewAs(next); setViewAsOpen(false); setPage(startPageOf(startView)) }} onClose={() => setViewAsOpen(false)} />}
+      {!streamsSkipped && (streamsDue || streamsRun.busy || streamsRun.failed) && <StreamsUpdatePrompt git={git} busy={streamsRun.busy} failed={streamsRun.failed} onRun={runStreamsLoad} onContinue={() => { setStreamsSkipped(true); setStreamsRun({ busy: false }) }} />}
       <DataNotices azure={azure} onOpenConnection={openConnection} />
       {/* CON-101 (fail closed): until the roles file is loaded the app is read-only; say why and what to do. */}
       {movedGit && git.config && <Notice tone="warning" className="git-moved"><strong>The team data has moved</strong> to {movedGit.owner}/{movedGit.repo}. This app is still connected to {git.config.owner}/{git.config.repo}, which is no longer updated.{' '}{git.connected ? <button type="button" className="primary" disabled={git.status === 'loading' || git.status === 'saving'} onClick={() => { if (confirmReplace(git.dirty, git.status === 'conflict')) void git.connect(movedGit, '', false) }}>Switch to {movedGit.owner}/{movedGit.repo}</button> : <button type="button" className="text-button" onClick={() => openSettings('storage', 'git')}>Open Git storage →</button>}</Notice>}

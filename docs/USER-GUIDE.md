@@ -1392,7 +1392,20 @@ Your own read-only views are in **My settings → My views**: they appear under 
 
 **Admin → Data & sharing** has **Git storage** (connect, change or disconnect; **Load latest**), **Load from Git** (**Load everything from Git**), **Shared setup in Git**, **Other views** and **Synthetic sample**.
 
-**Remove a shared view for everyone (Tool Owner).** **Remove** on a row of **Other views** takes a view out of your own browser only — the shared setup in Git brings it back at your next start. To take a shared view away from everyone:
+**Your Other views.** The views listed under **Other views** are **yours**: custom queries, backlog views and background sources you added. They are saved in Git in a file of your own (`other-views/<your work email>.json`) and **nobody else sees them**; the Stream mapping (Admin → Streams) is the part shared with everyone. Adding, editing, cloning or removing one here saves your file right away, and your other computers follow it at their next start. **Remove** on a row opens a pop-up: the view goes here, from your file in Git and from your other computers; its saved data in Git is kept.
+
+**Unassigned Other views (admins).** The Other views of the older shared setup belong to nobody yet. The first start of this version with a Git token that can save moves them to **Unassigned Other views**, shown below the Other views panel to admins only (*Shared setup in Git*). To give one to the person who uses it:
+
+1. Type their work email in **Assign to** (the people of the access roles are offered).
+2. Choose **Assign…**, check the pop-up (it names the person's file) and confirm with **Assign**.
+
+From their next start only that person sees the view under **Other views**.
+
+**When the Streams file changed: Load everything from Git.** When the shared Streams file in Git has changed since this computer last loaded it — and once for everyone after this update — a pop-up asks you to **Load everything from Git**. It cannot be closed with × or Escape: choose **Load everything from Git** and wait until it closes. It cannot be skipped. If something cannot be loaded, the pop-up names what failed (for example *Connection setup: GitHub could not read azure-views-reset.json (HTTP 500)*) and shows your **Git storage connection** right there — owner, repository, branch, data file and GitHub token, as in Admin → Data & sharing → Git storage. Correct it if needed and choose **Update & load** (the token stays in this browser or desktop app), then **Retry**. If GitHub itself is not answering (a server error or no network), the pop-up says so and also offers **Continue without loading**: you work with what this computer loaded last, and the pop-up comes back at the next start. A wrong token or repository has no skip: correct it and Retry. It never shows while viewing as someone else, with the synthetic sample, without Git storage or after your own save.
+
+*CON-119…CON-124, GIT-29…GIT-32, SET-20*
+
+**Remove a view for everyone (Tool Owner).** **Remove** on a row of **Other views** removes one of your own views (above). To take a view away from every computer that still has it, and delete its data:
 
 1. Open **Admin → Data & sharing → Other views** and choose **⋯** on the view's row.
 2. Choose **Remove for everyone…** to drop it from the shared setup, or **Delete for everyone…** to also delete its saved data in Git (the pop-up lists the files, e.g. `azure-data/<view>.json`).

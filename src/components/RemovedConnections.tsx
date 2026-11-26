@@ -5,6 +5,7 @@ import { formatDateTime } from '../format'
 import type { GitStorage } from '../useGitStorage'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import { Notice, Panel } from './ui'
+import { isOtherView, otherViewsPath } from '../otherViews'
 
 // CON-99 Settings → Streams → Removed connections: finds connections that were in an older version of the shared
 // connection setup in Git but are neither in it now nor here (e.g. dropped when another computer overwrote the file)
@@ -33,7 +34,13 @@ export function RemovedConnections({ git, azure, canShare }: { git: GitStorage; 
       const restored = restoreViews([row.view], '')
       azure.reloadConnectionProfiles()
       let text = `“${name}” is back here`
-      if (share) {
+      // CON-120: an Other view comes back as the restorer's own (their file in Git), never into the shared setup.
+      const own = isOtherView(row.view)
+      if (own && git.connected && !git.readOnly && !azure.isSample && otherViewsPath(azure.creatorEmail)) {
+        await git.saveOwnOtherViews(azure.creatorEmail, [], `Restore Other view: ${name}`)
+        text += ` and in your Other views in Git (${otherViewsPath(azure.creatorEmail)}); only you see it`
+      } else if (own) text += ' only (it goes into your Other views in Git at the next start that can save)'
+      else if (share) {
         const list = listAzureConnectionProfiles()
         await git.shareViews(list, `Restore connection: ${name}`)
         markViewsSynced(list)
