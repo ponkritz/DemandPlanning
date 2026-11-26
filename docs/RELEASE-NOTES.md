@@ -2,6 +2,17 @@
 
 Version history of the I&D Quality Demand Planning app, newest first. Every merged change bumps the version in `package.json` and adds its entry here, in the same pull request (CI-09; [CONFIGURATION-MANAGEMENT.md](CONFIGURATION-MANAGEMENT.md) §4): **major** for a change that breaks existing data, shared setup files or the way users work; **minor** for a new or changed feature; **patch** for a fix, a dependency update or documentation only. `pnpm test` fails when the newest version here is not the version in `package.json`. CI tags each version `vX.Y.Z` on its merge commit and publishes its GitHub release with the installers and this entry (CI-10); the build number of a version is the CI build of that merge (shown in the app under Force Update, and in `latest.json`). Open bugs and accepted limitations of every version are in [KNOWN-ISSUES.md](KNOWN-ISSUES.md); the third-party components of every version are in [SWBOM.md](SWBOM.md).
 
+## v7.0.0 — 2026-11-26
+
+**Changed**
+- **Other views move to per-person Git files** — the shared connection file keeps the Stream mapping. Existing Other views move to an unassigned list for admins to assign. New Other views follow the creator’s work email, with verified private storage required for saves and assignments. Existing server PATs and local My views stay on the device (CON-98, CON-119…CON-124, SET-20).
+- **Load everything from Git** — the app asks users to reload once after upgrading and when a new Stream mapping version is detected. If every failed read is a server outage or network failure, users can continue for that session and retry at the next start (GIT-29…GIT-32).
+
+**Maintenance**
+- Updated dependencies and regenerated the software bill of materials (CI-08).
+
+Synced Test2 through commit `682923743483a9b4fdde1bd9a0c5db755b8abb02`.
+
 ## v6.0.0 — 2026-11-26
 
 **Changed**
