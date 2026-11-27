@@ -12,7 +12,8 @@ import { windchillCell } from '../windchillViews'
 import { addSource, emptyMapping, categoryLabel, categoryOf, categoryProblem, feedsMasterList, setCategory, sourceCategories, type SourceCategory, azureFieldOptions, azureInputs, azureLock, completionDated, completionNote, dueFromText, isAzureKind, readsCompletion, cleanDays, daysLeftText, defaultValidityMonths, dueFromLabel, dueOf, editOf, editProblem, entryState, entryStateLabel, expiryRows, guessMapping, inputsFromRows, kindLabel, mappingFields, mappingFor, markMerged, maxExpiryDays, mergeSource, mergeSummary, nameLocked, removeSource, removeTool, saveTool, setMapping, setTeam, sourceKinds, sourceProblem, statusLabel, openToolTab, toolKey, toolTabDocuments, toolTabTools, toolTabExpiry, mapped, noField, isAzureField, toolTabMaster, toolTabSetup, toolTabs, toolValidationsFile, addTab, addTabReason, customToolTabs, hiddenPageChoices, listReason, parseToolValidations, tabOwnerCounts, tabOwnersBehind, tabOwnersLayout, maxCustomTabs, maxTabName, moveTab, removeTab, renameTab, tabNameProblem, validityOf, bandCounts, bandFor, bandLabel, bandShort, bandsOf, colourLabel, defaultHighlights, highlightColours, highlightsProblem, maxHighlightDays, maxHighlights, setHighlights, sortBands, type CustomTab, type EntryState, type ExpiryRow, type ExpiryStatus, type ToolEdit, type ToolEntry, type ToolInput, type ToolMapping, type ToolSource, type ToolSourceKind, type ToolValidationsFile, type HighlightBand, type HighlightColour } from '../toolValidations'
 import { useToolValidationsEnv, type CustomTabsEnv, type SourceData, type ToolValidationsEnv } from '../useToolValidations'
 import { DataTable, type DataColumn } from './DataTable'
-import { KindField, OwnersField, PageNameField } from './PageDialogs'
+import { OwnersField, PageNameField } from './PageDialogs'
+import { usePageTypeChoice } from '../usePageTypeChoice'
 import { ResultTabs } from './ResultTabs'
 import { EmptyState, Metric, Metrics, Modal, Notice, Panel, Pill, SaveQueueStatus, SettingsSummary, TablePanel, WriteBlocked } from './ui'
 
@@ -742,16 +743,21 @@ function TabsPanel({ env, why: listWhy, open }: { env: ToolValidationsEnv; why: 
   </Panel>
 }
 
+// PGB-22: the same Page type tick boxes as Add page (and, with Table (Query), its query picker, PGB-23).
 function AddTabDialog({ env, pages, onClose }: { env: ToolValidationsEnv; pages: CustomTabsEnv; onClose: () => void }) {
-  const [kind, setKind] = useState<PageKind>('table')
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const clash = usePageNameClash(name)
   const why = tabsReason(env) || addTabReason(env.store.file)
+  const choice = usePageTypeChoice({ connections: pages.azure?.queryConnections ?? [], servers: pages.azure?.servers ?? [], profiles: pages.azure?.profiles ?? [], viewingAs: pages.azure?.viewingAs }, () => setError(''), true)
+  const kind: PageKind = choice.kind
+  const typeReason = typeof choice.result === 'string' ? choice.result : ''
   const submit = async (event: FormEvent) => {
     event.preventDefault()
+    const chosen = choice.result
+    if (typeof chosen === 'string') { setError(chosen); return }
     const problem = tabNameProblem(env.store.file, name)
     if (problem) { setError(problem); return }
     if (clash) return
@@ -761,20 +767,20 @@ function AddTabDialog({ env, pages, onClose }: { env: ToolValidationsEnv; pages:
       // The page file, then its hidden place in the menu (createPage, PGB-05), then the tab in tool-validations.json.
       // TVL-25: the list's co-owners are the page's co-owners from the start (remembered as written from the list).
       const listOwners = env.store.file.owners
-      const id = await createPage(pages.onDemand, pages.menu, { kind, name: clean, description, icon: defaultIcon, group: onDemandGroup, newGroup: null, owners: listOwners, ownersFromList: listOwners, hidden: true })
+      const id = await createPage(pages.onDemand, pages.menu, { kind, name: clean, description, icon: defaultIcon, group: onDemandGroup, newGroup: null, owners: listOwners, ownersFromList: listOwners, hidden: true, ...(chosen.source ? { source: chosen.source } : {}) })
       await env.store.save(addTab(env.store.file, { pageId: id, name: clean, kind }), `Tool Validations: add the tab ${clean} (${pageKindLabel(kind)}, page ${id})`, `Tool Validations · add the tab ${clean}`)
       onClose()
     } catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); setBusy(false) }
   }
   return <Modal title="Add a tab" eyebrow="TOOL VALIDATIONS · TABS" onClose={() => { if (!busy) onClose() }}>
     <form onSubmit={(event) => void submit(event)} className="pgb-form">
-      <KindField value={kind} onChange={setKind} hideStreamNote />
+      {choice.field}
       <PageNameField value={name} clash={clash} onChange={(value) => { setName(value); setError('') }} />
       <small className="muted">The name of the tab and of its page, up to {maxTabName} characters.</small>
       <label>Description (optional)<input maxLength={300} value={description} onChange={(event) => setDescription(event.target.value)} /><small>Shown at the top of the tab.</small></label>
       <small className="muted">The page is created in Git at once (on-demand/page-id.json{kind === 'dashboard' ? '; its blocks in dashboards/page-id.json when the first one is added' : ''}), placed hidden in menu-layout.json — not in the menu, on Home or in search — and added to {toolValidationsFile} as the last of the added tabs, before Setup. The Tool Owner and the list's co-owners set it up and edit it — the co-owners are written as the page's co-owners; everyone else reads it.</small>
       {error && <Notice tone="error">{error}</Notice>}
-      <div className="modal-actions">{why && <WriteBlocked reason={why} />}<button type="button" className="ghost" disabled={busy} onClick={onClose}>Cancel</button><button className="primary" disabled={busy || Boolean(clash) || Boolean(why)}>{busy ? 'Saving to Git…' : 'Add tab'}</button></div>
+      <div className="modal-actions">{why && <WriteBlocked reason={why} />}{!why && typeReason && !error && <span className="muted">{typeReason}</span>}<button type="button" className="ghost" disabled={busy} onClick={onClose}>Cancel</button><button className="primary" disabled={busy || Boolean(clash) || Boolean(why) || Boolean(typeReason)}>{busy ? 'Saving to Git…' : 'Add tab'}</button></div>
     </form>
   </Modal>
 }
@@ -924,6 +930,7 @@ function RemoveTabDialog({ env, pages, tab, onClose }: { env: ToolValidationsEnv
 // for most, every change disabled with its reason. Fail closed without the roles file (CON-101).
 const OnDemandPage = lazy(() => import('../pages/OnDemandPage').then((module) => ({ default: module.OnDemandPage })))
 const CustomDashboardPage = lazy(() => import('../pages/CustomDashboardPage').then((module) => ({ default: module.CustomDashboardPage })))
+const QueryTablePage = lazy(() => import('../pages/QueryTablePage').then((module) => ({ default: module.QueryTablePage })))
 const noop = () => undefined
 // The menu layout as the tab's page sees it: the viewer counted as a co-owner of the page when they may change the list;
 // a save of the layout from the page keeps the page's own co-owners as they were.
@@ -955,6 +962,7 @@ function CustomTabView({ env, tab }: { env: ToolValidationsEnv; tab: CustomTab }
   return <Suspense fallback={<Panel><EmptyState title={`Opening ${tab.name}…`} /></Panel>}>
     {kind === 'dashboard'
       ? <CustomDashboardPage key={tab.pageId} embedded git={pages.git} store={pages.onDemand} pageId={tab.pageId} menu={menu} viewer={pages.viewer} views={pages.views} onOpen={noop} onAddPage={noop} hours={pages.hours} publisherName={pages.publisherName} publisher={pages.publisher} tools={env.datasets} azure={pages.azure} />
+      : page.source ? <QueryTablePage key={tab.pageId} embedded git={pages.git} store={pages.onDemand} pageId={tab.pageId} onOpen={noop} onAddPage={noop} kind={kind} menu={menu} viewer={pages.viewer} views={pages.views} azure={pages.azure} />
       : <OnDemandPage key={tab.pageId} embedded git={pages.git} store={pages.onDemand} pageId={tab.pageId} me={pages.me} onOpen={noop} onAddPage={noop} kind={kind} menu={menu} viewer={pages.viewer} views={pages.views} dataMode={pages.dataMode} publisherName={pages.publisherName} publisher={pages.publisher} />}
   </Suspense>
 }

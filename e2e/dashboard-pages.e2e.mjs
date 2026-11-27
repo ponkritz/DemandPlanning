@@ -95,7 +95,7 @@ test('TC-DSH-01: a Tool Owner adds a Dashboard page, builds it from a KPI tile, 
   // ＋ Add page…: type Dashboard in On-Demand.
   await page.getByRole('button', { name: '＋ Add page…' }).click()
   const add = page.getByRole('dialog', { name: 'Add a page' })
-  await add.getByRole('radio', { name: 'On-Demand Dashboard' }).check()
+  await add.getByRole('checkbox', { name: 'Table (Build your own)' }).uncheck(); await add.getByRole('checkbox', { name: 'Dashboard', exact: true }).check()
   await add.getByLabel('Page name', { exact: true }).fill('Quality dashboard')
   await add.getByLabel('Icon').selectOption('◔')
   await add.getByRole('button', { name: 'Add page' }).click()

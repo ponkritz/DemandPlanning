@@ -85,7 +85,7 @@ test('TC-OND-129: a page added is saved as on-demand/<Name>--<id>.json; renamed,
   // ＋ Add page…: the page file is named after the page (and the note for older apps is written once, OND-121).
   await owner.page.getByRole('button', { name: '＋ Add page…' }).click()
   const add = owner.page.getByRole('dialog', { name: 'Add a page' })
-  await add.getByRole('radio', { name: 'Table', exact: true }).check()
+  await add.getByRole('checkbox', { name: 'Table (Build your own)' }).check()
   await add.getByLabel('Page name', { exact: true }).fill('Supplier issues')
   await add.getByRole('button', { name: 'Add page' }).click()
   await add.waitFor({ state: 'detached' })
@@ -253,7 +253,7 @@ test('TC-OND-137: a Dashboard page added keeps its blocks in dashboards/<Name>--
   // A new Dashboard page: its first block creates dashboards/<Name>--<id>.json.
   await owner.page.getByRole('button', { name: '＋ Add page…' }).click()
   const add = owner.page.getByRole('dialog', { name: 'Add a page' })
-  await add.getByRole('radio', { name: 'On-Demand Dashboard' }).check()
+  await add.getByRole('checkbox', { name: 'Table (Build your own)' }).uncheck(); await add.getByRole('checkbox', { name: 'Dashboard', exact: true }).check()
   await add.getByLabel('Page name', { exact: true }).fill('Quality wall')
   await add.getByRole('button', { name: 'Add page' }).click()
   await add.waitFor({ state: 'detached' })

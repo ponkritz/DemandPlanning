@@ -63,7 +63,8 @@ test('PIR-42: the snapshot — each Feature reviewed or not by its latest commen
 test('PIR-41: the slides come in one fixed order — Title, Summary, Discuss during Meeting one per Feature, the other reviewed Features by Epic, the Not reviewed list, Learnings, then Struggles (TC-PIR-43)', () => {
   // PIR-51…PIR-57: the executive slides after the Summary, before Discuss during Meeting.
   const executive = ['executive', 'completion', 'pi-trend', 'repeat', 'topics', 'releases', 'hours', 'utilization', 'trends', 'long-running']
-  assert.deepEqual(slideOrder, ['title', 'summary', 'summary-epics', ...executive, 'discuss', 'reviewed', 'not-reviewed', 'learnings', 'struggles'])
+  // PIR-86…PIR-89: 'agenda' and 'team' (the team sections) are empty without presenting teams (TC-PIR-91).
+  assert.deepEqual(slideOrder, ['title', 'agenda', 'summary', 'summary-epics', ...executive, 'team', 'discuss', 'reviewed', 'not-reviewed', 'learnings', 'struggles'])
   assert.deepEqual(Object.keys(slideMakers).sort(), [...slideOrder].sort(), 'each slide type is one function')
   const slides = slidesOf(meetingOf()).filter((slide) => !executive.includes(slide.kind))
   assert.deepEqual(slides.map((slide) => `${slide.kind}: ${slide.title}`), [
