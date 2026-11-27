@@ -127,6 +127,8 @@ left-aligned; six wordings for the row count and seven schemes for cut lists.
 
 ## 6. Buttons
 
+UI previews use the same button classes, surrounding layout and stylesheets as the app. The [standalone preview instructions](../.claude/skills/ui-design-system/SKILL.md#standalone-previews) cover stylesheet order and the visual check before sharing.
+
 | Kind | Class | Use |
 |---|---|---|
 | Main action | `primary` | One per form, panel or pop-up |

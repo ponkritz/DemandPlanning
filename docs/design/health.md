@@ -12,6 +12,6 @@ Reads the Time Writing backlog for the entire team. The configured absence Epic 
 
 ## Output and failure states
 
-Each list uses shared table column, sorting, display and export controls. Export all lists produces one CSV with a list label for each row. It exports the underlying list buckets rather than the toolbar-filtered rows and honors the current open-only setting for DoD. This view reports issues without editing Azure items. Missing backlog, missing dates and iteration lookup failures have separate states.
+Each list uses shared table column, sorting, display and export controls. Export all lists produces one CSV with a list label for each row. It exports the underlying list buckets rather than the toolbar-filtered rows and honors the current open-only setting for DoD. The Feature state check reviews all loaded Features with a direct Active User Story and a state other than Active or Removed. The user reviews current states and explicitly applies the corrections. The action rechecks eligibility before writing and reports the outcome. Missing backlog, missing dates and iteration lookup failures have separate states.
 
 [Health functions and CSV](../../src/backlogHealth.ts) · [Pending-work and past-Sprint rules](../../src/myWork.ts) · [Shared table](../../src/components/DataTable.tsx) · [Unit tests](../../tests/backlog-health.test.mjs)

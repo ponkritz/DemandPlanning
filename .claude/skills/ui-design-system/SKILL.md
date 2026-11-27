@@ -1,6 +1,6 @@
 ---
 name: ui-design-system
-description: Start here for ANY change to the Demand Planning app's user interface (a page, panel, form, pop-up, drawer, table, button, tab, filter, message, KPI tile, chart, Release page, colour or default). Routes to the one skill per component type so every page looks and behaves the same, whichever model or agent builds it.
+description: Build and preview Demand Planning interfaces with the app's styles and shared components. Start here for changes to its UI, standalone mockups and screenshots, then use the matching component skills.
 ---
 
 # Demand Planning UI design system
@@ -37,6 +37,21 @@ request and fix the skill in the same change.
 | A stream's Release page | `ui-release-pages` | §10 |
 | Colours, font sizes, spacing, dark mode | `ui-tokens` | §11 |
 | What is pre-ticked, pre-filled, pre-selected, sorted | `ui-defaults` | §12 |
+
+## Standalone previews
+
+Prefer rendering the proposed view inside the app so it inherits the production stylesheet cascade and theme. For an isolated preview, bundle these entry imports from the same checkout in app order:
+
+```ts
+import '/src/index.css'
+import '/src/App.css'
+import '/src/fresh.css'
+import '/src/exports.css'
+```
+
+For a portable HTML preview, include the compiled CSS and any referenced assets. Reuse the component markup and its surrounding app classes, theme and density. Keep preview-specific layout styles scoped to the new layout so shared controls retain their app styles.
+
+Before sharing the preview or taking a screenshot, compare its buttons with the corresponding app buttons in the same browser, theme, viewport and state. Check dimensions, padding, font, colour, background, border, radius, shadow and focus ring in computed styles. Compare disabled and hover states where applicable.
 
 ## Building blocks
 

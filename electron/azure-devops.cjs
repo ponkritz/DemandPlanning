@@ -133,7 +133,9 @@ function azureWorkItemUpdateRequest(input) {
   if (state === undefined && iterationPath === undefined) throw new Error('Nothing to update.')
   if (state !== undefined && (typeof state !== 'string' || !state.trim() || state.length > 64 || !/^[\p{L}\p{N} _-]+$/u.test(state))) throw new Error('Invalid state.')
   if (iterationPath !== undefined && (typeof iterationPath !== 'string' || !iterationPath.trim() || iterationPath.length > 4096 || /\p{Cc}/u.test(iterationPath))) throw new Error('Invalid iteration path.')
+  if (input.expectedState != null && (!state || typeof input.expectedState !== 'string' || !input.expectedState.trim() || input.expectedState.length > 64)) throw new Error('Invalid expected state.')
   const patch = [
+    ...(input.expectedState == null ? [] : [{ op: 'test', path: '/fields/System.State', value: input.expectedState }]),
     ...(state === undefined ? [] : [{ op: 'add', path: '/fields/System.State', value: state }]),
     ...(iterationPath === undefined ? [] : [{ op: 'add', path: '/fields/System.IterationPath', value: iterationPath }]),
   ]

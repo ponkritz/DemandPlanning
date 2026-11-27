@@ -29,8 +29,8 @@ const worldOf = () => [
   raw(401, 'User Story', 'Lab tools - Time Writing (Ben)', 300, 'Active', other), raw(402, 'Task', `${label(-2)} | Lab tools`, 401, 'Active', other),
   raw(500, 'Feature', 'Retired reports', 100, 'Closed'), raw(501, 'User Story', 'Retired reports - Time Writing', 500, 'Active'), raw(502, 'Task', `${label(0)} | Retired reports`, 501, 'Active'),
 ]
-function fakeAzure() {
-  const world = worldOf(), patches = [], writes = []
+function fakeAzure(world = worldOf()) {
+  const patches = [], writes = []
   let reads = 0
   const route = (route) => {
     const request = route.request(), url = new URL(request.url()), path = decodeURIComponent(url.pathname)
@@ -49,9 +49,16 @@ function fakeAzure() {
     if (update && request.method() === 'PATCH') {
       const item = world.find((entry) => entry.id === Number(update[1])), body = JSON.parse(request.postData() ?? '[]')
       patches.push({ id: item.id, host: url.hostname, body })
-      for (const entry of body) if (entry.path?.startsWith('/fields/')) item.fields[entry.path.slice(8)] = entry.value
+      for (const entry of body.filter((op) => op.op === 'test')) {
+        if (entry.path.startsWith('/fields/') && item.fields[entry.path.slice(8)] !== entry.value) return json({ message: 'Stale state' }, 409)
+      }
+      for (const entry of body) if (entry.op === 'add' && entry.path?.startsWith('/fields/')) item.fields[entry.path.slice(8)] = entry.value
       item.rev += 1
       return json(item)
+    }
+    if (update && request.method() === 'GET') {
+      const item = world.find((entry) => entry.id === Number(update[1]))
+      return item ? json(item) : json({}, 404)
     }
     if (!['GET'].includes(request.method()) && !/\/_apis\/wit\/(wiql|workitemsbatch)$/.test(path)) writes.push(`${request.method()} ${path}`)
     return json({ value: [] })
@@ -59,11 +66,11 @@ function fakeAzure() {
   return { route, patches, writes, world, get reads() { return reads } }
 }
 // The State each PATCH set, as "id:State", and the fields of the other PATCHes (the hours).
-const states = (patches) => patches.flatMap((patch) => patch.body.filter((entry) => entry.path === '/fields/System.State').map((entry) => `${patch.id}:${entry.value}`))
+const states = (patches) => patches.flatMap((patch) => patch.body.filter((entry) => entry.op === 'add' && entry.path === '/fields/System.State').map((entry) => `${patch.id}:${entry.value}`))
 
-async function openApp(profile) {
-  const azure = fakeAzure()
-  const opened = await openPage(app, { width: 1440, height: 900, scale: shots ? 2 : undefined, roles: true, init: ({ list, email }) => {
+async function openApp(profile, world, roles = true) {
+  const azure = fakeAzure(world)
+  const opened = await openPage(app, { width: 1440, height: 900, scale: shots ? 2 : undefined, roles, init: ({ list, email }) => {
     localStorage.setItem('demand-planning-work-email-v1', email)
     localStorage.setItem('demand-planning-azure-connection-profiles-v1', JSON.stringify(list))
   }, initArg: { list: [profile], email: me } })
@@ -159,4 +166,76 @@ test('TC-ACT-20: with the synthetic sample, and with an on-premises Time Writing
   assert.deepEqual(writes, [])
   assert.deepEqual(errors, [])
   await context.close()
+})
+
+test('TC-SCR-04: a user previews Feature states and applies only the eligible Feature updates', async () => {
+  const world = [
+    raw(100, 'Epic', 'Synthetic backlog', undefined, 'Active'),
+    raw(200, 'Feature', 'Ready for activation', 100, 'New'),
+    raw(201, 'User Story', 'Active review', 200, 'Active'),
+    raw(202, 'User Story', 'Another active review', 200, 'Active'),
+    raw(300, 'Feature', 'Reopen for active work', 100, 'Closed'),
+    raw(301, 'User Story', 'Active review of closure', 300, 'Active'),
+    raw(400, 'Feature', 'Pending review', 100, 'New'),
+    raw(401, 'User Story', 'Pending story', 400, 'New'),
+    raw(402, 'Task', 'Active task only', 401, 'Active'),
+    raw(500, 'Feature', 'Story closed after review', 100, 'New'),
+    raw(501, 'User Story', 'Pending closure', 500, 'Active'),
+    raw(600, 'Feature', 'Feature with rejected transition', 100, 'New'),
+    raw(601, 'User Story', 'Active review work', 600, 'Active'),
+  ]
+  const { page, context, errors, azure } = await openApp(cloud, world)
+  try {
+    await navigate(page, 'Backlog Health')
+    const check = page.getByRole('button', { name: 'Check Feature states', exact: true })
+    await check.click()
+    const dialog = page.getByRole('dialog', { name: 'Check Feature states', exact: true })
+    await dialog.getByText('#300 Reopen for active work', { exact: true }).waitFor()
+    assert.equal(await dialog.getByText('#400 Pending review', { exact: true }).count(), 0)
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
+    assert.deepEqual(azure.patches, [], 'checking and cancelling sends no patches')
+    await check.click()
+    const apply = dialog.getByRole('button', { name: 'Set Features to Active', exact: true })
+    await apply.waitFor()
+    world.find((item) => item.id === 501).fields['System.State'] = 'Closed'
+    await context.route(/\/workitems\/600\?/i, (route) => route.request().method() === 'PATCH'
+      ? route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ message: 'Mock transition conflict' }) })
+      : route.fallback())
+    const updated = (id) => page.waitForResponse((response) => response.request().method() === 'PATCH' && new URL(response.url()).pathname.toLowerCase().endsWith(`/workitems/${id}`))
+    await Promise.all([updated(200), updated(300), apply.click()])
+    const result = page.getByText(/2 of 4 Features verified Active/)
+    await result.waitFor()
+    assert.match(await text(result), /#500.*skipped/)
+    assert.match(await text(result), /#600/)
+    assert.deepEqual(states(azure.patches).sort(), ['200:Active', '300:Active'])
+    for (const patch of azure.patches) assert.deepEqual(patch.body, [
+      { op: 'test', path: '/fields/System.State', value: patch.id === 200 ? 'New' : 'Closed' },
+      { op: 'add', path: '/fields/System.State', value: 'Active' },
+    ])
+    await check.click()
+    await apply.waitFor()
+    assert.equal(await dialog.getByText('#200 Ready for activation', { exact: true }).count(), 0)
+    assert.equal(await dialog.getByText('#300 Reopen for active work', { exact: true }).count(), 0)
+    assert.deepEqual(azure.writes, [])
+    assert.deepEqual(errors, [])
+  } finally {
+    await context.close()
+  }
+})
+
+test('TC-SCR-04: a user without state-change rights can review but cannot activate Features', async () => {
+  const world = [raw(100, 'Epic', 'Synthetic backlog', undefined, 'Active'), raw(200, 'Feature', 'Review locally', 100, 'New'), raw(201, 'User Story', 'First review', 200, 'Active')]
+  const { page, context, errors, azure } = await openApp(cloud, world, false)
+  try {
+    await navigate(page, 'Backlog Health')
+    await page.getByRole('button', { name: 'Check Feature states', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: 'Check Feature states', exact: true })
+    await dialog.getByText('#200 Review locally', { exact: true }).waitFor()
+    assert.equal(await dialog.getByRole('button', { name: 'Set Features to Active', exact: true }).isDisabled(), true)
+    assert.deepEqual(azure.patches, [])
+    assert.deepEqual(azure.writes, [])
+    assert.deepEqual(errors, [])
+  } finally {
+    await context.close()
+  }
 })

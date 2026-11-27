@@ -44,6 +44,7 @@ export interface AzureRequest extends AzureConfig {
   actualHours?: number
   tags?: string
   state?: string
+  expectedState?: string
   iterationPath?: string
   // edit-work-item: the fields to change and the revision they were read at (WorkItemEdit, workItemEdit.ts).
   edit?: WorkItemEdit
@@ -126,8 +127,12 @@ export function featurePatch(config: AzureConfig, feature: FeatureInput & { area
 }
 
 // Constrained write: only System.State and System.IterationPath can change through this path.
-export function workItemUpdatePatch(request: Pick<AzureRequest, 'state' | 'iterationPath'>) {
-  const patch: { op: 'add'; path: string; value: string }[] = []
+export function workItemUpdatePatch(request: Pick<AzureRequest, 'state' | 'iterationPath' | 'expectedState'>) {
+  const patch: { op: 'add' | 'test'; path: string; value: string }[] = []
+  if (request.expectedState != null) {
+    if (!request.state || typeof request.expectedState !== 'string' || !request.expectedState.trim() || request.expectedState.length > 64) throw new Error('Invalid expected state.')
+    patch.push({ op: 'test', path: '/fields/System.State', value: request.expectedState })
+  }
   if (request.state != null) patch.push({ op: 'add', path: '/fields/System.State', value: request.state })
   if (request.iterationPath != null) patch.push({ op: 'add', path: '/fields/System.IterationPath', value: request.iterationPath })
   return patch

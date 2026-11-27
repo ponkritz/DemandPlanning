@@ -1,9 +1,9 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useCan } from '../useCan'
 import { DataTable } from '../components/DataTable'
-import { EmptyState, Metric, Metrics, Notice, Page, Pill, TablePanel, type Tone } from '../components/ui'
-import { readAzureIterations, type AzureIteration } from '../azureDevOps'
-import { defaultHealthColumns, descriptionText, featuresWithoutDoD, healthColumnLabel, healthColumns, healthCsv, healthValue, hierarchyOf, normalizeHealthColumns, olderSprintItems, peopleOf, sprintEnd, unassignedItems, type HealthColumn, type HealthList } from '../backlogHealth'
+import { EmptyState, Metric, Metrics, Modal, Notice, Page, Pill, TablePanel, type Tone } from '../components/ui'
+import { collectionUrl, isCloudBase, readAzureWorkItems, updateAzureWorkItem, readAzureIterations, type AzureIteration } from '../azureDevOps'
+import { defaultHealthColumns, descriptionText, featuresWithoutDoD, featuresWithActiveStories, healthColumnLabel, healthColumns, healthCsv, healthValue, hierarchyOf, normalizeHealthColumns, olderSprintItems, peopleOf, sprintEnd, unassignedItems, type HealthColumn, type HealthList } from '../backlogHealth'
 import { PersonPicker } from '../components/PersonPicker'
 import { downloadCsv } from '../download'
 import { formatDate, todayIso } from '../format'
@@ -87,10 +87,71 @@ export function BacklogHealthPage({ azure, store }: { azure: AzureWorkspace; sto
     }
   }
   const can = useCan()
+  const [review, setReview] = useState<{ source: string; features: AzureWorkItem[]; stories: Map<number, number[]> } | null>(null)
+  const [updating, setUpdating] = useState(false)
+  const inFlight = useRef(false)
+  const [result, setResult] = useState('')
+  const source = JSON.stringify([azure.activeConnectionProfileId, config])
+  const block = !can('work.state') ? 'Your role needs permission to change work item states.'
+    : azure.isSample ? 'Sample data is read-only.'
+    : !config || !pat.trim() || azure.role !== 'time-tracking' || azure.needsScopedRefresh || !isCloudBase(collectionUrl(config))
+      ? 'Connect and fetch a writable Azure DevOps Services Time Writing backlog.' : ''
+  function checkStates() {
+    const stories = new Map<number, number[]>()
+    for (const story of azure.items) {
+      if (story.workItemType !== 'User Story' || story.state.trim().toLowerCase() !== 'active' || story.parentId == null) continue
+      const group = stories.get(story.parentId) ?? []
+      group.push(story.id)
+      stories.set(story.parentId, group)
+    }
+    setResult('')
+    setReview({ source, features: featuresWithActiveStories(azure.items), stories })
+  }
+  async function activateReviewed() {
+    if (!review || review.source !== source || block || !config || inFlight.current) return
+    inFlight.current = true
+    setUpdating(true)
+    const changed: AzureWorkItem[] = [], details: string[] = []
+    try {
+      for (const feature of review.features) {
+        try {
+          const live = await readAzureWorkItems(config, pat, [feature.id, ...(review.stories.get(feature.id) ?? [])])
+          if (!featuresWithActiveStories(live).some(item => item.id === feature.id && item.state === feature.state)) {
+            details.push(`#${feature.id} skipped because its state or child evidence changed.`)
+            continue
+          }
+          changed.push(await updateAzureWorkItem(config, pat, feature.id, { state: 'Active', expectedState: feature.state }))
+        } catch (failure) {
+          details.push(`#${feature.id}: ${failure instanceof Error ? failure.message : 'Update could not be verified.'}`)
+        }
+      }
+      azure.applyWorkItems(changed, 'Activate Features', `Set ${changed.length} reviewed Features to Active.`)
+      setResult([`${changed.length} of ${review.features.length} Features verified Active.`, ...details].join(' '))
+      setReview(null)
+    } finally {
+      inFlight.current = false
+      setUpdating(false)
+    }
+  }
   const exportAll = () => downloadCsv(lists.map((entry, index) => { const csv = healthCsv(rows[entry.key], azure.items, dated, entry.label, true); return index ? csv.split('\r\n').slice(1).join('\r\n') : csv }).filter(Boolean).join('\r\n'), `backlog-health-${todayIso()}.csv`)
 
   if (!azure.items.length) return <Page><EmptyState title="No backlog loaded yet." detail="Fetch the Time Writing (QMS-0025) connection first; this view reads its Features, User Stories and Tasks for everyone." /></Page>
   return <Page>
+    <div className="query-toolbar"><button type="button" className="ghost" onClick={checkStates}>Check Feature states</button></div>
+    {result && <Notice tone="info">{result}</Notice>}
+    {review && <Modal full eyebrow="BACKLOG HEALTH · AZURE DEVOPS" title="Check Feature states" blocking={updating} onClose={() => setReview(null)}>
+      <div className="modal-scroll">
+        <p>{review.features.length ? 'These Features have an Active child User Story. Applying the update will also reopen any Closed Features listed here.' : 'No Features in the loaded backlog need activation.'}</p>
+        {!!review.features.length && <DataTable id="health:feature-states" rows={review.features} rowKey={row => row.key} columns={[
+          { id: 'feature', label: 'Feature', value: row => `#${row.id} ${row.title}` },
+          { id: 'state', label: 'Current state', value: row => row.state },
+          { id: 'stories', label: 'Active User Stories', value: row => review.stories.get(row.id)?.map(id => `#${id}`).join(', ') ?? '' },
+        ]} />}
+        {(block || review.source !== source) && <Notice tone="warning">{block || 'The connection changed. Close and run the check again.'}</Notice>}
+      </div>
+      <div className="modal-actions"><button type="button" className="ghost" disabled={updating} onClick={() => setReview(null)}>Cancel</button>
+        <button type="button" className="primary" disabled={updating || !!block || review.source !== source || !review.features.length} onClick={activateReviewed}>{updating ? 'Updating Features…' : 'Set Features to Active'}</button></div>
+    </Modal>}
     <Metrics>
       {lists.map((entry) => <Metric key={entry.key} label={entry.label} value={entry.key === 'sprints' && !iterations ? '—' : rows[entry.key].length} hint={entry.key === 'sprints' ? 'Open Features, Stories and Tasks in Sprints that have ended' : entry.key === 'dod' ? `${openOnly ? 'Open ' : ''}Features whose Description does not mention “DoD”` : 'Open Features, Stories and Tasks without an assignee'} tone={(entry.key !== 'sprints' || iterations) && rows[entry.key].length ? 'negative' : undefined} />)}
     </Metrics>

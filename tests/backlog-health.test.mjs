@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { olderSprintItems, featuresWithoutDoD, unassignedItems, hasDoD, healthCsv, sprintEnd, hierarchyOf, columnsCsv, defaultHealthColumns, normalizeHealthColumns, descriptionText, peopleOf } from '../src/backlogHealth.ts'
+import { olderSprintItems, featuresWithoutDoD, featuresWithActiveStories, unassignedItems, hasDoD, healthCsv, sprintEnd, hierarchyOf, columnsCsv, defaultHealthColumns, normalizeHealthColumns, descriptionText, peopleOf } from '../src/backlogHealth.ts'
 import { mapAzureWorkItem } from '../src/azureDevOps.ts'
 
 const base = { organization: 'org', project: 'Q', state: 'Active', assignedTo: 'Ana', areaPath: 'Q', iterationPath: 'Q\\PI 1\\Sprint 1', tags: '', url: 'u', syncedAt: '' }
@@ -70,4 +70,25 @@ test('Backlog Health columns: chosen and ordered per list; ID always; CSV follow
   const csv = columnsCsv([tree[2]], ['epic', 'id', 'sprintEnd', 'parent', 'tags', 'description'], tree, iterations).split('\r\n')
   assert.equal(csv[0], 'Epic,ID,Sprint end,Parent,Tags,Description,URL')
   assert.equal(csv[1], '#1 Stream,4,2026-10-09,#2 Release,QE,Done when,u')
+})
+
+test('TC-SCR-04: select each non-Removed, non-Active Feature with an Active direct User Story once', () => {
+  const tree = [
+    item(1, 'Epic', { state: 'New' }),
+    item(2, 'Feature', { state: 'New', parentId: 1 }),
+    item(3, 'Feature', { state: 'Closed', parentId: 1 }),
+    item(4, 'Feature', { state: 'Removed', parentId: 1 }),
+    item(5, 'Feature', { state: 'Active', parentId: 1 }),
+    item(6, 'Feature', { state: 'New', parentId: 1 }),
+    item(7, 'Feature', { state: 'New', parentId: 1 }),
+    ...[2, 2, 3, 4, 5, 1, 999].map((parentId, i) => item(10 + i, 'User Story', { parentId })),
+    item(20, 'User Story', { parentId: 6, state: 'New' }),
+    item(21, 'Task', { parentId: 20 }),
+    item(22, 'Task', { parentId: 7 }),
+    item(23, 'User Story', { parentId: 7, state: 'Removed' }),
+  ]
+  const before = structuredClone(tree)
+  assert.deepEqual(featuresWithActiveStories(tree).map((row) => row.id).sort(), [2, 3])
+  assert.deepEqual(tree, before, 'checking the backlog is read-only')
+  assert.deepEqual(featuresWithActiveStories([]), [])
 })

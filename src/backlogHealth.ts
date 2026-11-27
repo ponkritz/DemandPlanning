@@ -9,6 +9,11 @@ import { plainAzureText } from './backlogView.ts'
 const tracked = new Set(['Feature', 'User Story', 'Task'])
 const byType = (a: AzureWorkItem, b: AzureWorkItem) => [...tracked].indexOf(a.workItemType) - [...tracked].indexOf(b.workItemType) || a.id - b.id
 
+export function featuresWithActiveStories(items: AzureWorkItem[]) {
+  const activeParents = new Set(items.filter(item => item.workItemType === 'User Story' && item.state.trim().toLowerCase() === 'active').map(item => item.parentId))
+  return items.filter(item => item.workItemType === 'Feature' && !['active', 'removed'].includes(item.state.trim().toLowerCase()) && activeParents.has(item.id))
+}
+
 function underEpic(items: AzureWorkItem[], epicId?: number) {
   const byId = new Map(items.map((item) => [item.id, item]))
   return (item: AzureWorkItem) => {

@@ -1,6 +1,6 @@
 ---
 name: ui-buttons
-description: How to build buttons in the Demand Planning app — the four kinds (primary, ghost, text-button, danger), the only allowed symbols, icon-only buttons with aria-label, the ⚙ setup button and the ⚙ "Settings for <page>" pop-up (UI-STANDARDS §6). Use for every button.
+description: Build and preview Demand Planning buttons using the app's action classes, icon labels and page settings controls (UI-STANDARDS §6).
 ---
 
 # Buttons (UI-STANDARDS §6)
@@ -21,6 +21,8 @@ description: How to build buttons in the Demand Planning app — the four kinds 
 | Destructive | `text-button danger-text` in a row; `danger-button` for a page-level irreversible action | Remove, Delete, Reset |
 
 Always `type="button"` unless the button submits its form.
+
+For mockups and screenshots, follow [Standalone previews](../ui-design-system/SKILL.md#standalone-previews). Use the matching app button class, parent container and native disabled state so toolbar, row and modal buttons inherit the correct size and appearance.
 
 ## Symbols — only these
 

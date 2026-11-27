@@ -581,14 +581,14 @@ export async function readAzureWorkItems(config: AzureConfig, pat: string, ids: 
 }
 
 // Changes a work item's state and/or iteration path, then reads it back and checks the change landed.
-export async function updateAzureWorkItem(config: AzureConfig, pat: string, workItemId: number, update: { state?: string; iterationPath?: string }, transport: AzureTransport = requestAzure): Promise<AzureWorkItem> {
+export async function updateAzureWorkItem(config: AzureConfig, pat: string, workItemId: number, update: { state?: string; iterationPath?: string; expectedState?: string }, transport: AzureTransport = requestAzure): Promise<AzureWorkItem> {
   if (!pat.trim()) throw new Error('Enter a Work Items (Read & Write) PAT.')
   if (!Number.isSafeInteger(workItemId) || workItemId < 1) throw new Error('Invalid work item.')
   const state = update.state?.trim(), iterationPath = update.iterationPath?.trim()
   if (!state && !iterationPath) throw new Error('Nothing to change.')
   if (state != null && (state.length > 64 || !/^[\p{L}\p{N} _-]+$/u.test(state))) throw new Error('Invalid state.')
   if (iterationPath != null && (iterationPath.length > 4096 || /\p{Cc}/u.test(iterationPath))) throw new Error('Invalid iteration path.')
-  await transport({ ...config, pat, operation: 'update-work-item', workItemId, ...(state ? { state } : {}), ...(iterationPath ? { iterationPath } : {}) })
+  await transport({ ...config, pat, operation: 'update-work-item', workItemId, ...(update.expectedState == null ? {} : { expectedState: update.expectedState }), ...(state ? { state } : {}), ...(iterationPath ? { iterationPath } : {}) })
   const read = await transport({ ...config, pat, operation: 'items', ids: [workItemId] }) as { value?: RawItem[] }
   const raw = read.value?.find((item) => item.id === workItemId)
   if (!raw) throw new Error(`#${workItemId} was updated but could not be read back. Check it in Azure DevOps.`)
