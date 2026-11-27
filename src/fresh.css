@@ -1243,6 +1243,11 @@ tbody tr.tvl-hl-red td{background:var(--hl-red-bg)}tbody tr.tvl-hl-red td:first-
 /* OND-105: the Upload Excel preview — narrow Line, Row ID and Result columns, error rows marked, the error line in body text. */
 .bulk-rows .bulk-col-line{width:64px}.bulk-rows .bulk-col-id{width:120px}.bulk-rows .bulk-col-result{width:100px}.bulk-rows td.num,.bulk-rows th.num{text-align:right}.bulk-rows tr.bulk-error td{color:var(--danger-text)}.bulk-preview .bulk-errors-line{font-size:13px;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .bulk-template-form>p.muted{font-size:12px;margin:0}
+/* OND-136…OND-141: the columns a file adds — in Upload Excel… one line per column not on the page (tick box, type, its
+   options or sample), in Start from a file… the type cell with its options; the inputs fill their cell. */
+.bulk-new-columns{display:grid;gap:8px;border:1px solid var(--line);border-radius:8px;padding:8px 12px}.bulk-new-columns legend{font-weight:600;padding:0 4px}
+.bulk-new-column{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,220px);gap:4px 12px;align-items:center}.bulk-new-column>small{grid-column:1/-1}
+.start-type{display:grid;gap:4px}.start-file-form td input:not([type=checkbox]),.start-file-form td select{width:100%;min-width:120px}
 /* PIR-13, PIR-18: the PI review form — the fields beside the Preview of the exact comment (one column on a phone) */
 .modal:has(.pir-review-columns){width:min(1040px,100%)}
 .pir-review-form,.close-review{display:grid;gap:12px}.pir-review-note{margin:0;font-size:12px}

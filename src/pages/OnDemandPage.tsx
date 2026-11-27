@@ -32,7 +32,9 @@ import { ReplaceDialog } from '../components/ReplaceDialog'
 import { ColumnListEditor } from '../components/ColumnListEditor'
 import { applyOnDemandReplace, distinctValues, onDemandReplaceCommit, onDemandReplacePlan, replaceError, replaceMessage, replaceableColumns } from '../replaceValues'
 import { TemplateDialog, UploadDialog } from '../components/BulkUploadDialogs'
-import { applyUpload, uploadCommit, uploadResult, type UploadDone, type UploadPlan } from '../bulkUpload'
+import { applyUpload, uploadCommit, uploadName, uploadResult, type UploadDone, type UploadPlan } from '../bulkUpload'
+import { StartFromFileDialog, type StartFile } from '../components/StartFromFileDialog'
+import { startCommit, withNewColumns, type StartDraft } from '../startFromFile'
 
 // OND-03…OND-07 One On-Demand page (CoNQ, or one added under On-Demand): a work table in the shared DataTable — one
 // column per configured column, search, sort, the row count and Export. OND-27: a click on a row (or Enter / Space on it)
@@ -54,7 +56,9 @@ import { applyUpload, uploadCommit, uploadResult, type UploadDone, type UploadPl
 // TVL-15: embedded — the page shown as an owners' tab of Tool Validations: no page frame, and nothing of the menu (＋ Add
 // page…, Rename page…, Hide page, Delete page… and the hidden-page notice): the tab is renamed, moved and removed on
 // Tool Validations → Setup → Tabs.
-export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-insights', menu, viewer, addPageReason = '', onAddPage, views, dataMode, publisherName = '', publisher, embedded = false }: { git: GitStorage; store: OnDemandStore; pageId: string; me: string; onOpen: (id: string) => void; kind?: PageKind; menu: MenuLayoutStore; viewer: Viewer; addPageReason?: string; onAddPage: () => void; views?: PersonalViewsStore; dataMode?: DataModeStore; publisherName?: string; publisher: PublishAuthorization; embedded?: boolean }) {
+// OND-136: startFile — the file chosen in Add page → Start from a file, read there: the Start from a file pop-up opens
+// with it when the new page opens (onStartFileUsed: it is handed over once).
+export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-insights', menu, viewer, addPageReason = '', onAddPage, views, dataMode, publisherName = '', publisher, embedded = false, startFile, onStartFileUsed }: { git: GitStorage; store: OnDemandStore; pageId: string; me: string; onOpen: (id: string) => void; kind?: PageKind; menu: MenuLayoutStore; viewer: Viewer; addPageReason?: string; onAddPage: () => void; views?: PersonalViewsStore; dataMode?: DataModeStore; publisherName?: string; publisher: PublishAuthorization; embedded?: boolean; startFile?: StartFile; onStartFileUsed?: () => void }) {
   // OND-39: the page with its hidden rows (listed only with Show hidden rows); the Insights get it without them.
   const listed = store.pages.find((entry) => entry.id === pageId) ?? store.pages[0]
   const page = (listed && store.full(listed.id)) || listed
@@ -78,6 +82,10 @@ export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-ins
   const [replacing, setReplacing] = useState(false)
   // OND-103…OND-108: the Download Excel template and Upload Excel pop-ups (bulk upload).
   const [bulk, setBulk] = useState<'template' | 'upload' | null>(null)
+  // OND-136: the Start from a file pop-up — with the file chosen in Add page, or to choose one here.
+  const [starting, setStarting] = useState<{ file?: StartFile } | null>(() => startFile ? { file: startFile } : null)
+  const handedOver = useRef(false)
+  useEffect(() => { if (startFile && !handedOver.current) { handedOver.current = true; onStartFileUsed?.() } }, [startFile, onStartFileUsed])
   const block = useWriteBlock()
   // OND-07: what may be changed — the rights of the viewer's roles, a Git token that can save, no synthetic sample.
   const gitReason = !git.connected ? 'Connect Git storage (Admin → Data & history) to change the On-Demand pages; they are shared through Git.' : git.readOnly ? 'View only: your Git token can read but not save.' : git.isSample ? 'Synthetic sample data is loaded. Saving to Git is disabled.' : ''
@@ -123,7 +131,7 @@ export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-ins
   const now = useNow().getTime()
   // GIT-18: what Load the newer data would drop: the columns or the name being set up (a change kept after a failed
   // save stays: it is applied on top of the page read again).
-  useUnsavedEdit(!page ? false : columnsOpen ? `the columns you are setting up on ${page.name}` : pageDialog === 'rename' ? `the new name of ${page.name}` : false)
+  useUnsavedEdit(!page ? false : columnsOpen ? `the columns you are setting up on ${page.name}` : starting ? `the columns you are starting from a file on ${page.name}` : pageDialog === 'rename' ? `the new name of ${page.name}` : false)
   if (!page) return <Page><EmptyState title="No On-Demand page yet." /></Page>
   const placement = placementOf(menu.layout, page.id)
   const groupName = findGroup(menu.layout, placement.group)?.name ?? 'On-Demand'
@@ -206,14 +214,28 @@ export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-ins
   // OND-103: the template — any viewer of a page with columns; not in Sample (made-up rows with real-looking IDs must
   // never come back as updates). OND-107: Upload Excel… — the right to edit the page's rows, failing closed as Replace….
   const templateReason = sample ? `Switch ${page.name} to Live to download its template: sample rows are made up.` : !page.columns.length ? 'The page has no columns yet.' : ''
-  const uploadReason = editRowsReason || (viewer.viewingAs ? 'Read only while viewing as someone else: nothing is saved. Exit View as to upload.' : '') || (!page.columns.length ? 'The page has no columns yet.' : '')
-  async function uploadNow(plan: UploadPlan, fileName: string) {
+  const uploadReason = editRowsReason || (viewer.viewingAs ? 'Read only while viewing as someone else: nothing is saved. Exit View as to upload.' : '') || (!page.columns.length ? 'The page has no columns yet: start it with Start from a file… or Set up columns….' : '')
+  // OND-140, OND-141, OND-142: columns of the file that the page does not have are added in the same save — ticked in the pop-up,
+  // with the right of Set up columns (the page's setup right); the new columns go after the page's own, applied to the
+  // page as it is in Git when the save runs.
+  async function uploadNow(plan: UploadPlan, fileName: string, added: StartDraft[] = []) {
     let done: Omit<UploadDone, 'page'> = { added: 0, updated: 0, locked: 0, missing: 0 }
     await inBackground(`Bulk upload · ${page.name} · ${fileName}`, async () => {
-      const saved = await store.update(page.id, (base) => { const next = applyUpload(base, plan, { by: me, fileName, locked: lockedKeys }); done = next; return next.page }, uploadCommit(page, fileName, plan))
-      return { value: saved, text: resultText(saved, uploadResult(done, plan.errors.length)) }
+      const saved = await store.update(page.id, (base) => { const next = applyUpload(withNewColumns(base, added), plan, { by: me, fileName, locked: lockedKeys }); done = next; return next.page }, uploadCommit(page, fileName, plan, added.length))
+      return { value: saved, text: resultText(saved, `${uploadResult(done, plan.errors.length)}${added.length ? `; ${added.length} column${added.length === 1 ? '' : 's'} added: ${added.map((draft) => draft.name.trim()).join(', ')}` : ''}`) }
     })
     setBulk(null)
+  }
+  // OND-136, OND-139: Start from a file… — a page without columns, the right of Set up columns (OND-07), failing closed as
+  // Upload Excel…: also while viewing as someone else and, on a page of row files, without a work email (the rows' log).
+  const startReason = setupReason || meReason || (viewer.viewingAs ? 'Read only while viewing as someone else: nothing is saved. Exit View as to start from a file.' : '')
+  async function startNow(drafts: StartDraft[], plan: UploadPlan, fileName: string) {
+    let done: Omit<UploadDone, 'page'> = { added: 0, updated: 0, locked: 0, missing: 0 }
+    await inBackground(`Start from a file · ${page.name} · ${uploadName(fileName)}`, async () => {
+      const saved = await store.update(page.id, (base) => { const next = applyUpload(withNewColumns(base, drafts), plan, { by: me, fileName }); done = next; return next.page }, startCommit(page, uploadName(fileName), drafts.length, plan.added.length))
+      return { value: saved, text: resultText(saved, `${drafts.length} column${drafts.length === 1 ? '' : 's'} added, ${uploadResult(done, plan.errors.length)}`) }
+    })
+    setStarting(null)
   }
   const canDelete = !gitReason && !sample && viewer.manager && !viewer.readOnly
   const hiddenCount = page.rows.filter(isRowHidden).length
@@ -298,7 +320,7 @@ export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-ins
     {locking.error && <Notice tone="warning">The row locks of {page.name} could not be read ({locking.error}). Who is editing a row is not shown; two edits of the same row are still merged field by field.</Notice>}
     {(() => { const table = <TablePanel className="od-panel" eyebrow={groupName.toUpperCase()} title={page.name} detail={page.description || undefined}
       info={<>Click a row (or press Enter on it) to open it on the right: its ID, key, who added it and when, every value with its column’s description, and its History; Edit there changes it, and Save to Git saves it for everyone at once. Each column has a type — Text, Long text (a paragraph), Number, Currency (an amount and its currency), Date, Dropdown (one value) or Multi-select with the options of its list — and may have a description (ⓘ on its heading) saying how or what to fill. A value that no longer fits its column (an option removed, the type changed) is kept and marked, e.g. “not in the list”, until it is changed. Every row gets a readable ID such as {page.keyPrefix}-0001 when it is saved to Git, and records who added it and when; every saved change is logged in the row’s History (who, when, what changed — the last {maxLog}). Last updated by / on can be shown with Columns. The export holds the IDs, values, Added by / on and Last updated by / on (in UTC), not the History. Every change — a row, the columns, the name, a chart — is saved to Git {rowFiles ? <>in {path} the moment it is saved: each row is its own file, so two people adding or editing rows at the same time never get in each other’s way. Edit takes the row’s lock — others see who is editing it and cannot edit that row until it is saved, cancelled or {timeoutMinutes} minutes pass without activity (the unsaved values are then kept in that browser as a draft for one day)</> : <>as {path} the moment it is saved (no separate Save to Git); two saves at the same time are merged row by row and column by column, the later one winning where both changed the same</>}.{store.history(page.id) && <> <a href={store.history(page.id)} target="_blank" rel="noreferrer">History in GitHub</a></>}{owners.length > 0 && <> Co-owners (set up the page and edit its rows): {[...new Set(owners)].join(', ')}.</>}</>}
-      action={<button type="button" className="ghost" disabled={!canSetup} title={setupReason || undefined} onClick={() => setColumnsOpen(true)}>Set up columns…</button>}>
+      action={<span className="button-row">{!page.columns.length && <button type="button" className="ghost" disabled={Boolean(startReason)} title={startReason || 'Make the columns from the header of an Excel or CSV file and add its rows, after a preview'} onClick={() => setStarting({})}>Start from a file…</button>}<button type="button" className="ghost" disabled={!canSetup} title={setupReason || undefined} onClick={() => setColumnsOpen(true)}>Set up columns…</button></span>}>
       {!gitReason && <WriteBlocked reason={block.noteFor('on this page', ...blocked)} />}
       {page.columns.length ? <DataTable id={`on-demand:${page.id}`} columns={columns} rows={rows} rowKey={(row) => row.id} exportName={page.name} groupFilter shownRef={shownRef}
         onRowOpen={(row, shown) => open(row, shown)} rowLabel={(row) => `Open row ${rowId(page, row) || row.key || rowLabel(page, row)}`}
@@ -308,7 +330,7 @@ export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-ins
         rowClassName={(row) => row.hidden ? 'od-row-hidden' : undefined}
         status={(shown) => `${shown} of ${showHidden ? page.rows.length : visibleCount} row${(showHidden ? page.rows.length : visibleCount) === 1 ? '' : 's'}${hiddenCount ? ` (${hiddenCount} hidden${showHidden ? ', shown' : ''})` : ''}`}
         empty={<EmptyState title={visibleCount || (showHidden && page.rows.length) ? 'No row matches the search.' : 'No rows yet.'} detail={page.rows.length ? undefined : canRows ? 'Add the first one with ＋ Add row.' : undefined} />} />
-        : <EmptyState title="No columns yet." detail={canSetup ? 'Add them with Set up columns…: a name and a type for each, and the options of a Dropdown or Multi-select.' : 'Someone allowed to set up On-Demand pages adds the columns.'} />}
+        : <EmptyState title="No columns yet." detail={canSetup ? 'Start from a file… makes them from the header of an Excel or CSV file and adds its rows; or add them with Set up columns…: a name and a type for each, and the options of a Dropdown or Multi-select.' : 'Someone allowed to set up On-Demand pages adds the columns.'} />}
       {saveBar}
     </TablePanel>
       // PGB-01: a Table page is the Data table alone; Table + Insights adds the Insights tab (OND-11).
@@ -337,7 +359,8 @@ export function OnDemandPage({ git, store, pageId, me, onOpen, kind = 'table-ins
       note={<p className="muted">Hidden rows are not changed. Each changed row gets an entry in its History; saved to Git at once{rowFiles ? ', every changed row file in one commit' : ''}.</p>}
       onReplace={replaceNow} onCancel={() => setReplacing(false)} />}
     {bulk === 'template' && <TemplateDialog eyebrow={eyebrowOf(page)} page={page} shown={rows} onCancel={() => setBulk(null)} />}
-    {bulk === 'upload' && <UploadDialog eyebrow={eyebrowOf(page)} page={page} locked={lockedKeys} rowFiles={rowFiles} onSave={uploadNow} onCancel={() => setBulk(null)} />}
+    {bulk === 'upload' && <UploadDialog eyebrow={eyebrowOf(page)} page={page} locked={lockedKeys} rowFiles={rowFiles} setupReason={setupReason} onSave={uploadNow} onCancel={() => setBulk(null)} />}
+    {starting && <StartFromFileDialog eyebrow={eyebrowOf(page)} page={page} file={starting.file} reason={startReason || (page.columns.length ? `${page.name} has columns already: add rows with ⋯ → Upload Excel….` : '')} rowFiles={rowFiles} onSave={startNow} onCancel={() => setStarting(null)} />}
     {/* OND-91: Publish now cuts the rows with the publisher's Insights filter row as it is now. */}
     {publishing && publishing === publishScope && !publishReason && (() => { const cut = { kind: 'table' as const, choice: viewerChoice(page.id, views) }; return <PublishDialog pageId={page.id} name={page.name} publishScope={publishing} authorization={publisher} publishedBy={publisherName || me} cut={cut} prepare={prepareTable(page, kind, cut, publisherName || me)} onClose={() => setPublishing(null)} /> })()}
     {converting && <ConvertDialog page={page} file={path} onCancel={() => setConverting(false)} onConvert={async () => {
