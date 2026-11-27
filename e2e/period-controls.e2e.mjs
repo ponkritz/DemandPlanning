@@ -1,5 +1,6 @@
 import test, { before, after } from 'node:test'
 import assert from 'node:assert/strict'
+import { expect } from 'playwright/test'
 import { openPage, openSection, startApp } from './helpers.mjs'
 
 let app
@@ -29,8 +30,8 @@ test('TC-SET-02: each selected month has independent plan and actual lock dates 
     await planCard.getByRole('button', { name: 'Lock now', exact: true }).click()
     await planCard.getByText('Locked', { exact: true }).waitFor()
     await actualCard.getByText('Open', { exact: true }).waitFor()
-    // Wait for the debounced save to commit before reloading.
-    await page.waitForFunction(() => new Promise((resolve) => {
+    // Poll the resolved IndexedDB read: a Promise itself is truthy before the transaction commits.
+    await expect.poll(() => page.evaluate(() => new Promise((resolve) => {
       const open = indexedDB.open('demand-planning-data-v1')
       open.onerror = () => resolve(false)
       open.onsuccess = () => {
@@ -44,7 +45,7 @@ test('TC-SET-02: each selected month has independent plan and actual lock dates 
         }
         transaction.onabort = () => { db.close(); resolve(false) }
       }
-    }))
+    })), { timeout: 15_000 }).toBe(true)
 
     await page.locator('input[type=month]').fill('2030-12')
     await page.getByLabel('Planning last day to update of December 2030', { exact: true }).waitFor()

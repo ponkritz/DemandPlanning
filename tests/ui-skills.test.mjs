@@ -5,7 +5,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, posix } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
@@ -13,6 +13,15 @@ const skillsDir = join(root, '.claude/skills')
 const skills = readdirSync(skillsDir).filter((name) => name.startsWith('ui-')).sort()
 // Line endings as checked out (CRLF on Windows) are read as LF.
 const read = (name) => readFileSync(join(skillsDir, name, 'SKILL.md'), 'utf8').replace(/\r\n/g, '\n')
+
+test('CI-13: standalone preview imports match the app stylesheet order (TC-CI-09)', () => {
+  const imports = (source) => [...source.matchAll(/^import\s+['"]([^'"]+\.css)['"]/gm)].map((match) => match[1])
+  const expected = ['src/main.tsx', 'src/App.tsx'].flatMap((file) =>
+    imports(readFileSync(join(root, file), 'utf8')).map((path) => posix.resolve('/', posix.dirname(file), path)))
+  const example = /## Standalone previews\n[^#]*?```ts\n([\s\S]*?)```/.exec(read('ui-design-system'))
+  assert.ok(example && expected.length, 'Preview example and application CSS imports exist')
+  assert.deepEqual(imports(example[1]), expected)
+})
 
 // `Name` — `path` pairs in the "## Building blocks" section of a skill.
 export function buildingBlocks(text) {

@@ -843,6 +843,8 @@ Admins see a **Testing** group with pages that are being tried out:
 
 ![Backlog Health](user-guide/images/backlog-health.png)
 
+To reconcile Feature states, choose **Check Feature states**. Review the Feature IDs and current states across the loaded Time Writing backlog. A Closed Feature in the list will reopen if you choose **Set Features to Active**. A direct Active User Story qualifies its parent, regardless of the story assignee. Applying the update requires work-state permission and a writable cloud connection. Review the reported outcomes and rerun the check if any updates failed.
+
 Each tab has its own **Columns**, sorting by a column heading, filters for State, Iteration Path and person, and **Export**. **Export all lists** writes all three into one file.
 
 ### KPI tracker

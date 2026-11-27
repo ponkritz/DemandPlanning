@@ -285,6 +285,8 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-SCR-03 Backlog Health columns, sorting, State and Iteration filters** — Req CON-49 — L1 `backlog-health.test.mjs` (unknown and repeated columns dropped, ID kept; default columns; CSV follows the chosen columns: Epic, Sprint end, Parent, Tags, Description as plain text, URL last); browser check with Azure DevOps mocked: Columns → untick Created By / Updated By, add Epic, move Assigned To first → Apply changes the table; Assigned To header sorts Ana, Ana, Ben… then Ben… first, a third click restores the order; State "New" leaves one row; the Iteration list holds the tab's iterations; Unassigned keeps its own columns; after a reload the chosen columns are still there. **UAT**
 
+**TC-SCR-04 User-triggered team Feature activation** — Req ATM-33 — L1 `backlog-health.test.mjs` ("TC-SCR-04: select each non-Removed, non-Active Feature with an Active direct User Story once") and E2E `month-task-states.e2e.mjs` ("TC-SCR-04: a user previews Feature states and applies only the eligible Feature updates"). UAT with synthetic Azure DevOps data: Include a New and a Closed Feature with Active direct User Stories, two such stories under one Feature, an already Active Feature, a Removed Feature, and a Feature with only an Active Task. Review the candidate IDs and current states and cancel. Verify zero writes. Apply the check and verify one state update per eligible Feature. Repeat after refresh and verify the corrected Features drop out. Check a stale candidate, a write failure, and a user without write access. **UAT**
+
 **TC-ACC-02 New work is always assigned; creating for others** — Req CON-50, CON-51 — L1 `my-work.test.mjs` (the month story and task carry the assignee; ＋ User Story / ＋ Task go under the right parent type with the chosen email and iteration; no assignee → refused in the browser transport before sending and in the Windows app request builder; people to choose: everyone with an email, a shared name shows the email), `azure-devops.test.mjs` (every item of a new Feature hierarchy is assigned), `access.test.mjs` (Scrum Master has the right, Team Member not); browser check with Azure DevOps mocked: ＋ User Story on a Feature → the picker starts on the Feature's assignee, choosing Ben creates the story assigned to ben@x.com. **UAT**
 
 **TC-OV-11 Dashboard: period, filters and six tabs** — Req OV-11 — L1 `dashboard.test.mjs` (periods: Year, Quarter and Month, see TC-OV-15; month status against today; person-month plan, actual, capacity, region, role, plan lines and blank actuals; filters incl. stream; streams and month-on-month change); browser check on sample data at 1500 px and 390 px: the tabs Summary, Insights, Months, People, Streams and Definitions open without console errors or horizontal page scroll; Months switches Recorded / Planned and hides months without entries; People groups by person, role or region; Streams shows the Epic mix and the overrun and ad-hoc Pareto for the period; each tab shows an empty state when nothing is planned or recorded. **UAT**
@@ -1698,7 +1700,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-CI-08 End-to-end on a slow machine** — Req CI-12 — L1 `e2e-slow.test.mjs` ("CI-12: the E2E scenarios also run on a 4x slower CPU, in their own read-only job (TC-CI-08)"); inspection: `E2E_CPU_SLOWDOWN=4 pnpm test:e2e` passes every scenario (locally: shell 56, backlog 11, documents-and-data 14, monthly-pack 2, about twice the time); a fixed loop in the page takes about four times as long with the throttle; the job *End-to-end tests (slow machine)* runs on every pull request and push to main and turns the run red when a scenario fails.
 
-**TC-CI-09 UI design skills match the code** — Req CI-13 — L1 `ui-skills.test.mjs` ("CI-13: there is one UI design skill per kind of component, each with its name and a description (TC-CI-09)", "CI-13: every building block a skill names exists in the code where the skill says (TC-CI-09)", "CI-13: the index skill routes to every UI skill and every section of UI-STANDARDS (TC-CI-09)", "CI-13: the checker finds a missing block and accepts each kind of definition (TC-CI-09)"); inspection: a building block renamed in `src/components/ui.tsx` without its skill fails `pnpm test`.
+**TC-CI-09 UI design skills match the code** — Req CI-13 — L1 `ui-skills.test.mjs` ("CI-13: there is one UI design skill per kind of component, each with its name and a description (TC-CI-09)", "CI-13: every building block a skill names exists in the code where the skill says (TC-CI-09)", "CI-13: the index skill routes to every UI skill and every section of UI-STANDARDS (TC-CI-09)", "CI-13: the checker finds a missing block and accepts each kind of definition (TC-CI-09)", "CI-13: standalone preview imports match the app stylesheet order (TC-CI-09)"); inspection: a building block renamed in `src/components/ui.tsx` without its skill fails `pnpm test`.
 
 ### 6.21 QE Mapping
 
@@ -2806,6 +2808,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | ATM-30 | TC-ATM-23, TC-PIR-32 |
 | ATM-31 | TC-ATM-24 |
 | ATM-32 | TC-ATM-25 |
+| ATM-33 | TC-SCR-04 |
 | BKL-01…03, BKL-12 | TC-BKL-01, TC-BKL-34 |
 | BKL-04…09, BKL-11 | TC-BKL-02 |
 | BKL-10 | TC-BKL-03, TC-ATM-11 |
@@ -3676,7 +3679,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-18 | TC-SMP-01, TC-ATM-06, TC-GIT-04, TC-SMP-02 |
 | UC-19 | TC-INS-04, TC-CI-01, TC-CI-02, TC-CI-03, TC-CI-07, TC-CI-08, TC-DOC-03 |
 | UC-20 | TC-DOC-01, TC-DOC-02, TC-DOC-03, TC-DOC-04, TC-DOC-05, TC-DOC-06 |
-| UC-21 | TC-SCR-01, TC-NAV-53, TC-NAV-54, TC-NAV-55 |
+| UC-21 | TC-SCR-01, TC-NAV-53, TC-NAV-54, TC-NAV-55, TC-SCR-04 |
 | UC-22 | TC-ACC-01, TC-ACC-02, TC-CON-57, TC-CON-58, TC-CON-63, TC-CON-64, TC-CON-65, TC-CON-66, TC-PGB-06, TC-GIT-15, TC-MYD-07, TC-CON-70, TC-CON-71, TC-LST-07, TC-CON-73, TC-CON-90, TC-CON-91, TC-CON-92, TC-CON-93, TC-CON-94, TC-CON-95 |
 | UC-23 | *(Retired — QE Mapping removed, see TC-NAV-54)* TC-QEM-01…10 |
 | UC-24 | TC-PCK-01…10 |
