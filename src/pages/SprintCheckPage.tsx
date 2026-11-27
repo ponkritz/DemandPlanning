@@ -1,12 +1,11 @@
 import { listJobs, runInBackground, subscribeJobs } from '../backgroundJobs'
-import { useState, useSyncExternalStore } from 'react'
-import { EmptyState, Notice, Page, Panel, Pill, WriteBlocked } from '../components/ui'
+import { useRef, useState, useSyncExternalStore } from 'react'
+import { EmptyState, Modal, Notice, Page, Panel, Pill, WriteBlocked } from '../components/ui'
 import { useWriteBlock } from '../useCan'
-import { currentIterationPairs, readAzureIterations, updateAzureWorkItem, type AzureIteration } from '../azureDevOps'
+import { applySprintFeatureState, collectionUrl, isCloudBase, currentIterationPairs, readAzureIterations, updateAzureWorkItem, type AzureIteration } from '../azureDevOps'
 import { capacityContext } from '../capacity'
 import { canActivateHere, isMine, moveCandidates, stateCheckChildren, nextStateFor, stateChecks, type MoveStates, type StateCheck } from '../myWork'
-import { activateFeatureOf, closeRelated } from '../closeChain'
-import { closeChosen, closeTree, storyCloseRows, type CloseRow, type closeSelection } from '../closeList'
+import { closeChosen, closeTree, type CloseRow, type closeSelection } from '../closeList'
 import { CloseItemsDialog } from '../components/CloseItemsDialog'
 type CloseSelection = ReturnType<typeof closeSelection>
 import type { AzureWorkItem } from '../domain'
@@ -61,13 +60,33 @@ export function SprintCheckPage({ azure, store, my }: { azure: AzureWorkspace; s
   // State checks over the shown person's Features and User Stories (see stateChecks).
   const checks = my.known ? stateChecks(azure.items, my.me, absenceEpicId) : []
   const checkText: Record<StateCheck['kind'], (check: StateCheck) => string> = {
-    'close-feature': (check) => `All ${check.children.length} User Stor${check.children.length === 1 ? 'y is' : 'ies are'} Closed: the Feature should be Closed too.`,
+    'close-feature': (check) => `${check.children.length === 1 ? 'The only User Story is' : `All ${check.children.length} User Stories are`} Closed.`,
     'close-story': (check) => `All ${check.children.length} Task${check.children.length === 1 ? ' is' : 's are'} Closed: the User Story should be Closed too.`,
-    'activate-feature': (check) => `${check.children.length} of its User Stor${check.children.length === 1 ? 'y is' : 'ies are'} Active: the Feature should be Active too.`,
+    'activate-feature': (check) => `${check.children.length} direct User Stor${check.children.length === 1 ? 'y is' : 'ies are'} Active.`,
     'feature-old-pi': (check) => `The Feature is in ${shortPath(check.item.iterationPath) || 'no PI'} but its Active User Stor${check.children.length === 1 ? 'y is' : 'ies are'} in ${shortPath(check.targetPi ?? '')}: move the Feature to that PI.`,
     'feature-needs-active-story': (check) => check.children.length ? `The Feature is Active but none of its ${check.children.length} User Stor${check.children.length === 1 ? 'y is' : 'ies are'} Active: set at least one to Active.` : 'The Feature is Active but has no User Story: add one and set it to Active.',
   }
-  // BKL-39: closing a Feature or User Story here opens the same pop-up as My Tasks [Board].
+  const [featureAsk, setFeatureAsk] = useState<{ check: StateCheck; target: 'Active' | 'Closed'; source: string } | null>(null)
+  const savingFeature = useRef(false)
+  const source = JSON.stringify([azure.activeConnectionProfileId, config, my.me])
+  const featureBlock = stateWhy || blocked || (azure.role !== 'time-tracking' || azure.needsScopedRefresh || !config || !isCloudBase(collectionUrl(config)) ? 'Fetch the cloud Time Writing backlog to update Feature states.' : '')
+  async function confirmFeature() {
+    if (!featureAsk || !config || featureAsk.source !== source || featureBlock || savingFeature.current) return
+    const { check, target } = featureAsk
+    savingFeature.current = true
+    setBusy(`check-${check.item.id}`)
+    try {
+      const updated = await applySprintFeatureState(config, pat, check.item, target)
+      azure.applyWorkItems([updated], 'State check', `#${updated.id} ${check.item.state} → ${updated.state}`)
+      note({ tone: 'success', text: `Feature #${updated.id} is now ${updated.state}.` })
+    } catch (failure) {
+      note({ tone: 'error', text: `#${check.item.id}: ${failure instanceof Error ? failure.message : 'Update could not be verified.'}` })
+    } finally {
+      setFeatureAsk(null)
+      setBusy('')
+      savingFeature.current = false
+    }
+  }
   const [closeAsk, setCloseAsk] = useState<{ item: AzureWorkItem; rows: CloseRow[] } | null>(null)
   async function closeSelected(item: AzureWorkItem, selection: CloseSelection) {
     setCloseAsk(null)
@@ -83,18 +102,14 @@ export function SprintCheckPage({ azure, store, my }: { azure: AzureWorkspace; s
     } finally { setBusy('') }
   }
   async function applyState(item: AzureWorkItem, state: string) {
-    if (state === 'Closed' && (item.workItemType === 'Feature' || item.workItemType === 'User Story')) {
-      const rows = item.workItemType === 'Feature' ? closeTree(azure.items, item, my.me) : storyCloseRows(azure.items, item, my.me)
+    if (state === 'Closed' && item.workItemType === 'User Story') {
+      const rows = closeTree([item], item, my.me)
       if (rows.length) { setCloseAsk({ item, rows }); return }
     }
     if (blocked || !config || !window.confirm(`Set ${item.workItemType} #${item.id} “${item.title}” to ${state} in Azure DevOps?`)) return
     setBusy(`check-${item.id}`)
     try {
       const updated = await updateAzureWorkItem(config, pat, item.id, { state }); azure.applyWorkItems([updated], 'State check', `#${item.id} ${item.state} → ${updated.state}`); note({ tone: 'success', text: `#${item.id} is now ${updated.state}.` })
-      // ATM-28: a User Story set Active makes its New Feature Active too.
-      if (state === 'Active' && updated.workItemType === 'User Story') { const feature = await activateFeatureOf(config, pat, azure.items, updated); if (feature) { azure.applyWorkItems([feature], 'State check', `#${feature.id} → ${feature.state}`); note({ tone: 'success', text: `Feature #${feature.id} is now ${feature.state} too.` }) } }
-      // Closing the last open User Story offers to close its Feature too (closeChain).
-      if (state === 'Closed') { const result = await closeRelated(config, pat, azure.items, updated, (question) => window.confirm(question)); if (result.closed.length) { azure.applyWorkItems(result.closed, 'State check', result.closed.map((entry) => `#${entry.id} → ${entry.state}`).join(', ')); note({ tone: 'success', text: `Also closed ${result.closed.map((entry) => `#${entry.id}`).join(', ')}.` }) } for (const text of [...result.skipped, ...result.failed]) note({ tone: result.failed.includes(text) ? 'error' : 'info', text }) }
       note({ tone: 'info', text: 'Refreshing data…' }); await azure.refresh()
     }
     catch (failure) { note({ tone: 'error', text: `#${item.id}: ${failure instanceof Error ? failure.message : 'update failed'}` }) }
@@ -166,13 +181,14 @@ export function SprintCheckPage({ azure, store, my }: { azure: AzureWorkspace; s
                 </>}
           </Panel>
         </div>
-        <Panel className="action-card state-checks" eyebrow="CHECK" title="State checks" info="Your Features and User Stories whose state does not match their children: all User Stories Closed → close the Feature; all Tasks Closed → close the User Story; an Active Feature needs at least one Active User Story; an Active Feature still in an older PI than its Active User Stories is moved to their PI. A Feature is closed only from Active.">
+        <Panel className="action-card state-checks" eyebrow="CHECK" title="State checks" info="Your Features and User Stories whose state does not match their children: all User Stories Closed → close the Feature; all Tasks Closed → close the User Story; an Active Feature needs at least one Active User Story; an Active Feature still in an older PI than its Active User Stories is moved to their PI. An Active User Story prompts activation or reopening of its Feature. You confirm each Feature change.">
           {checks.length > 0 && <WriteBlocked reason={write.note('work.state', 'work.move')} />}
           {checks.length ? <div className="backlog-table-scroll"><table className="backlog-table state-tree" aria-label="State checks">
             <thead><tr><th style={{ width: 70 }}>ID</th><th>Title</th><th style={{ width: 110 }}>State</th><th style={{ width: 150 }}>Assigned To</th><th>Check</th><th style={{ width: 200 }} aria-label="Action" /></tr></thead>
             <tbody>{checks.map((check) => {
               const item = check.item, expanded = open.has(item.id)
               const below = stateCheckChildren(azure.items, item)
+              const featureTarget = check.kind === 'close-feature' ? 'Closed' : check.kind === 'activate-feature' ? 'Active' : null
               const next = check.kind === 'feature-needs-active-story' || check.kind === 'feature-old-pi' ? null : nextStateFor(item, azure.items)
               const saving = busy === `check-${item.id}`
               return [<tr key={`${check.kind}-${item.id}`} className="state-tree-row">
@@ -182,6 +198,7 @@ export function SprintCheckPage({ azure, store, my }: { azure: AzureWorkspace; s
                 <td>{item.assignedTo || 'Unassigned'}</td>
                 <td><span className={`state-check-text${check.kind === 'feature-needs-active-story' ? ' warning-text' : ''}`}>{checkText[check.kind](check)}</span></td>
                 <td>{check.kind === 'feature-old-pi' && check.targetPi ? <button type="button" className="backlog-action" title={moveWhy || undefined} disabled={Boolean(blocked) || Boolean(moveWhy) || saving} onClick={() => void moveToPi(item, check.targetPi!)}>{saving ? 'Saving…' : `Move Feature to ${shortPath(check.targetPi)}`}</button>
+                  : featureTarget ? <button type="button" className="ghost" disabled={Boolean(busy)} onClick={() => setFeatureAsk({ check, target: featureTarget, source })}>{featureTarget === 'Closed' ? 'Close Feature' : 'Set Feature to Active'}</button>
                   : next ? <button type="button" className="backlog-action" disabled={(Boolean(blocked) && !(azure.isSample && next.state === 'Closed' && (item.workItemType === 'Feature' || item.workItemType === 'User Story'))) || Boolean(stateWhy) || saving} title={stateWhy || undefined} onClick={() => void applyState(item, next.state)}>{saving ? 'Saving…' : next.label}</button>
                   : check.kind === 'feature-needs-active-story' && below.length ? <button type="button" className="backlog-action" aria-expanded={expanded} onClick={() => toggle(item.id)}>{expanded ? 'Hide User Stories' : 'Choose a User Story'}</button>
                   : <a href={item.url} target="_blank" rel="noreferrer">Open in Azure DevOps</a>}</td>
@@ -201,6 +218,14 @@ export function SprintCheckPage({ azure, store, my }: { azure: AzureWorkspace; s
           </table></div> : <EmptyState title="Nothing to fix." detail="Every Feature and User Story matches the state of its children." />}
         </Panel>
       </>}
-    {closeAsk && <CloseItemsDialog title={`Close ${closeAsk.item.workItemType} #${closeAsk.item.id}`} intro={closeAsk.rows.length > 1 ? (closeAsk.item.workItemType === 'Feature' ? 'Everything still open under the Feature is listed.' : 'This is the last open User Story of its Feature: the Feature, its Time Writing story and Tasks are listed too.') + ' Tick what to close; children close first.' : 'Close this item in Azure DevOps?'} rows={closeAsk.rows} asked={closeAsk.item.id} blocked={blocked || undefined} onConfirm={(selection) => void closeSelected(closeAsk.item, selection)} onClose={() => setCloseAsk(null)} />}
+    {featureAsk?.target === 'Closed' && <CloseItemsDialog featureOnly applying={Boolean(busy)} title={`Close Feature #${featureAsk.check.item.id}?`} intro={checkText['close-feature'](featureAsk.check)} rows={[{ item: featureAsk.check.item, depth: 0, mine: true, timeWriting: false, monthTask: false }]} asked={featureAsk.check.item.id} blocked={featureBlock || (featureAsk.source !== source ? 'The selected person or connection changed. Run the check again.' : undefined)} onClose={() => setFeatureAsk(null)} onConfirm={() => void confirmFeature()} />}
+    {featureAsk?.target === 'Active' && <Modal eyebrow="SPRINT CHECK · AZURE DEVOPS" title={`Set Feature to Active #${featureAsk.check.item.id}?`} onClose={() => setFeatureAsk(null)} blocking={Boolean(busy)} form={false}>
+      <p><strong>{featureAsk.check.item.title}</strong> · {featureAsk.check.item.state} → {featureAsk.target}</p>
+      <p>{checkText[featureAsk.check.kind](featureAsk.check)} {featureAsk.target === 'Active' && featureAsk.check.item.state.toLowerCase() === 'closed' && 'This will reopen the Feature.'}</p>
+      <WriteBlocked reason={featureBlock || (featureAsk.source !== source ? 'The selected person or connection changed. Run the check again.' : '')} />
+      <div className="modal-actions"><button type="button" className="ghost" disabled={Boolean(busy)} onClick={() => setFeatureAsk(null)}>Cancel</button>
+        <button type="button" className="primary" disabled={Boolean(busy || featureBlock) || featureAsk.source !== source} onClick={confirmFeature}>{busy ? 'Saving…' : 'Set Feature to Active'}</button></div>
+    </Modal>}
+    {closeAsk && <CloseItemsDialog title={`Close User Story #${closeAsk.item.id}`} intro="Close this User Story in Azure DevOps?" rows={closeAsk.rows} asked={closeAsk.item.id} blocked={blocked || undefined} onConfirm={(selection) => void closeSelected(closeAsk.item, selection)} onClose={() => setCloseAsk(null)} />}
   </Page>
 }

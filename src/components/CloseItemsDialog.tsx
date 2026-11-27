@@ -19,10 +19,12 @@ import { usePiIterations } from '../pages/usePiChoice'
 // with several Features) the review is not asked and Close works as before.
 // PIR-25: Moves to is the next PI by the Azure DevOps iteration dates (the iterations are read when the review is asked),
 // else by the PI number, and says which.
-export function CloseItemsDialog({ title, intro, rows, asked, blocked, onConfirm, onClose }: { title: string; intro: string; rows: CloseRow[]; asked?: number; blocked?: string; onConfirm: (items: ReturnType<typeof closeSelection>) => void; onClose: () => void }) {
+export function CloseItemsDialog({ title, intro, rows, asked, blocked, featureOnly = false, applying = false, onConfirm, onClose }: { title: string; intro: string; rows: CloseRow[]; asked?: number; blocked?: string; featureOnly?: boolean; applying?: boolean; onConfirm: (items: ReturnType<typeof closeSelection>) => void; onClose: () => void }) {
   const [ticked, setTicked] = useState(() => defaultTicks(rows, asked))
   const [hoursDone, setHoursDone] = useState(false)
   const selection = closeSelection(rows, ticked)
+  // Sprint check sends the reviewed Feature directly to its proposed state.
+  if (featureOnly) selection.items = rows.filter(row => row.item.workItemType === 'Feature' && ticked.has(row.item.id)).map(row => row.item)
   // PIR-18: the review of the one Feature ticked.
   const viewer = useReviewViewer()
   const features = selection.items.filter((item) => item.workItemType === 'Feature')
@@ -56,7 +58,7 @@ export function CloseItemsDialog({ title, intro, rows, asked, blocked, onConfirm
     } finally { setBusy(false) }
   }
   const owner = (item: AzureWorkItem) => item.assignedTo?.trim() || 'Unassigned'
-  return <Modal title={title} eyebrow="AZURE DEVOPS WRITE" wide={asking} onClose={onClose}>
+  return <Modal title={title} eyebrow="AZURE DEVOPS WRITE" wide={asking} onClose={onClose} blocking={applying || busy}>
     <div className="close-items">
       <p className="muted">{intro}</p>
       <ul className="close-list" aria-label="Items to close">
@@ -83,9 +85,9 @@ export function CloseItemsDialog({ title, intro, rows, asked, blocked, onConfirm
       </section>}
       {blocked && <Notice tone="warning">{blocked}</Notice>}
       {postError && <Notice tone="error">The review was not posted: {postError} Nothing was closed. Close without the review, or Cancel and try again later.</Notice>}
-      <div className="modal-actions">{busy && <WriteBlocked reason="Posting the review…" />}<button type="button" className="ghost" disabled={busy} onClick={onClose}>Cancel</button>
-        {postError && <button type="button" className="ghost" disabled={busy} onClick={() => onConfirm(selection)}>Close without the review</button>}
-        <button type="button" className="primary" disabled={busy || Boolean(blocked) || (!selection.items.length && !selection.removals.length) || (selection.needsHours && !hoursDone)} onClick={() => void confirm()}>{`${asking ? 'Post review and close' : 'Close'} ${selection.items.length} item${selection.items.length === 1 ? '' : 's'}${selection.removals.length ? `, remove ${selection.removals.length}` : ''}`}</button></div>
+      <div className="modal-actions">{busy && <WriteBlocked reason="Posting the review…" />}<button type="button" className="ghost" disabled={busy || applying} onClick={onClose}>Cancel</button>
+        {postError && <button type="button" className="ghost" disabled={busy || applying || Boolean(blocked)} onClick={() => onConfirm(selection)}>Close without the review</button>}
+        <button type="button" className="primary" disabled={busy || applying || Boolean(blocked) || (!selection.items.length && !selection.removals.length) || (selection.needsHours && !hoursDone)} onClick={() => void confirm()}>{applying ? 'Saving…' : featureOnly ? (asking ? 'Post review and close Feature' : 'Close Feature') : `${asking ? 'Post review and close' : 'Close'} ${selection.items.length} item${selection.items.length === 1 ? '' : 's'}${selection.removals.length ? `, remove ${selection.removals.length}` : ''}`}</button></div>
     </div>
   </Modal>
 }

@@ -13,9 +13,11 @@ The date lookup uses the Time Writing connection's team/project iterations. It p
 ## State checks
 
 - Flag a Feature when all its User Stories are Closed and a story when all its Tasks are Closed, requiring at least one child of the relevant type.
-- Flag an Active Feature with no Active User Story and a New Feature with an Active User Story. The page can activate a New story owned by the selected person and can activate its New Feature.
+- Flag an Active Feature with no Active User Story. Offer activation for a non-Active, non-Removed Feature with an Active direct User Story, including a Closed Feature. A New story owned by the selected person can be activated on the page. The parent’s state change requires its own confirmation.
 - Flag an Active Feature whose Active stories sit in a later identifiable PI. The target is the latest PI among those stories by numeric comparison of PI names. A missing Feature PI is eligible when a child defines the target.
-- Removed children are ignored. The absence hierarchy is excluded. Closure uses the shared selectable Feature/story dialog. Only allowed state transitions are sent.
+- Removed children are ignored. The absence hierarchy is excluded. Sprint check confirms a Feature on its own. For closure the shared dialog lists just that Feature and collects its PI review when the user has permission (PIR-18). Closing a User Story offers only that story. Other pages retain their selectable hierarchy closure dialog under BKL-39.
+
+Before applying a proposed Feature state, read the live Feature and its complete set of direct children. Re-evaluate the story rule using all direct stories, including other assignees. Leave the Feature alone if the evidence is incomplete or the rule no longer applies.
 
 ## Sources, writes and limits
 

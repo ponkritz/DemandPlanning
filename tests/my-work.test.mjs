@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { isMine, isPending, matchesWork, mentions, myPendingWork, monthTaskCandidates, moveCandidates, assignablePeople, byFeatureNumber } from '../src/myWork.ts'
-import { guardAzureWrites, ensureMonthTask, updateAzureWorkItem, workItemUpdatePatch, addChildWorkItem, requestAzure, createUserStory } from '../src/azureDevOps.ts'
+import { guardAzureWrites, ensureMonthTask, applySprintFeatureState, updateAzureWorkItem, workItemUpdatePatch, addChildWorkItem, requestAzure, createUserStory } from '../src/azureDevOps.ts'
 // CON-101: the write guard starts closed (as before the app loads the roles); these tests check the requests, so allow them.
 guardAzureWrites(() => true)
 import { createRequire } from 'node:module'
@@ -638,4 +638,50 @@ test('BKL-52: the web transport takes a Priority (1–4) on a new Feature only, 
   } finally { delete globalThis.window; globalThis.fetch = original }
   assert.equal(sent.length, 1, 'only the valid Feature create was sent')
   assert.deepEqual(sent[0].find((entry) => entry.path === '/fields/Microsoft.VSTS.Common.Priority'), { op: 'add', path: '/fields/Microsoft.VSTS.Common.Priority', value: 3 })
+})
+
+test('TC-ATM-26: Feature prompts use only direct User Stories in scope', () => {
+  const feature = (id, state, owner = ana, parentId) => item(id, 'Feature', `Feature ${id}`, { state, parentId, ...owner })
+  const child = (id, parentId, state, type = 'User Story') => item(id, type, `${type} ${id}`, { state, parentId, ...ben })
+  const rows = [
+    feature(100, 'New'), child(101, 100, 'Closed'), child(102, 100, 'Active'), child(103, 100, 'New'),
+    feature(200, 'Active'), child(201, 200, 'Closed'), child(202, 200, 'Closed'), child(203, 200, 'Removed'),
+    feature(300, 'New'), feature(310, 'New'), child(311, 310, 'Removed'),
+    feature(400, 'New'), child(401, 400, 'New'), child(402, 401, 'Active', 'Task'),
+    feature(500, 'Active'), child(501, 500, 'Active'),
+    feature(600, 'Removed'), child(601, 600, 'Active'),
+    feature(700, 'New', ben), child(701, 700, 'Active'),
+    feature(800, 'New', ana, 90), child(801, 800, 'Active'), item(90, 'Epic', 'Absence'),
+    feature(810, 'Closed'), child(811, 810, 'Active'),
+    feature(820, 'Resolved'), child(821, 820, 'Active'),
+    feature(830, 'New'), child(831, 830, 'Closed'),
+    feature(840, 'Resolved'), child(841, 840, 'Closed'),
+    feature(850, 'Closed'), child(851, 850, 'Closed'),
+  ]
+  const prompts = stateChecks(rows, me, 90).filter((check) => ['activate-feature', 'close-feature'].includes(check.kind))
+  assert.deepEqual(prompts.map(({ kind, item, children }) => [kind, item.id, children.map((child) => child.id)]), [
+    ['activate-feature', 100, [102]], ['close-feature', 200, [201, 202]],
+    ['activate-feature', 810, [811]], ['activate-feature', 820, [821]],
+    ['close-feature', 830, [831]], ['close-feature', 840, [841]],
+  ])
+})
+
+test('TC-ATM-26: confirmation rechecks the owner and the complete set of direct children', async () => {
+  const config = { organization: 'org', project: 'Quality', team: 'T' }
+  const reviewed = item(2, 'Feature', 'Reviewed release', { ...ana })
+  const parent = raw(2, { 'System.WorkItemType': 'Feature', 'System.AssignedTo': { displayName: ana.assignedTo, uniqueName: ana.assignedToEmail } })
+  const story = (id, state) => raw(id, { 'System.WorkItemType': 'User Story', 'System.State': state, 'System.Parent': 2 })
+  const world = new Map([[2, parent], [3, story(3, 'Closed')]])
+  const { transport, calls } = fakeAzure(world)
+  const apply = () => applySprintFeatureState(config, 'test', reviewed, 'Closed', transport)
+  world.set(4, story(4, 'New'))
+  await assert.rejects(apply, /User Stories no longer support/, 'a new live story outside the preview prevents closure')
+  world.delete(4)
+  parent.fields['System.AssignedTo'] = { displayName: ben.assignedTo, uniqueName: ben.assignedToEmail }
+  await assert.rejects(apply, /assignee changed/)
+  assert.equal(calls.some((request) => request.operation === 'update-work-item'), false)
+  parent.fields['System.AssignedTo'] = { displayName: ana.assignedTo, uniqueName: ana.assignedToEmail }
+  const updated = await apply()
+  assert.equal(updated.state, 'Closed')
+  assert.deepEqual(calls.filter((request) => request.operation === 'update-work-item').map((request) => [request.workItemId, request.expectedState, request.state]), [[2, 'Active', 'Closed']])
 })
