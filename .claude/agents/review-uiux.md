@@ -26,7 +26,7 @@ pages and CSS. You may build the app (`pnpm -s build:web`) and look at it with t
   requirement, is it the same on every page that shows the same thing, does it never write, share or assign something
   the person did not choose, and is a default that matters visible (not hidden in a tooltip)? List them in a second
   table, the **UI defaults register**: `| Default | Value | Location | Standard / requirement | Verdict |`.
-- **Uniformity** (against `docs/UI-STANDARDS.md`, the one way each component type looks): for every page and component
+- **Uniformity** (against `docs/UI-STANDARDS.md`, the one way each component type looks, and the checklists of the UI design skills in `.claude/skills/ui-*/SKILL.md`): for every page and component
   of the slice, check each element against its standard — page layout and headings, panels, forms and pop-ups (field
   layout, help text, button row, labels), tables (shared `DataTable` or not, headers, alignment, empty text, row
   actions, counts), buttons (classes, where the main action sits, destructive styling), tabs and filters, messages

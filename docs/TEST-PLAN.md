@@ -1698,6 +1698,8 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-CI-08 End-to-end on a slow machine** — Req CI-12 — L1 `e2e-slow.test.mjs` ("CI-12: the E2E scenarios also run on a 4x slower CPU, in their own read-only job (TC-CI-08)"); inspection: `E2E_CPU_SLOWDOWN=4 pnpm test:e2e` passes every scenario (locally: shell 56, backlog 11, documents-and-data 14, monthly-pack 2, about twice the time); a fixed loop in the page takes about four times as long with the throttle; the job *End-to-end tests (slow machine)* runs on every pull request and push to main and turns the run red when a scenario fails.
 
+**TC-CI-09 UI design skills match the code** — Req CI-13 — L1 `ui-skills.test.mjs` ("CI-13: there is one UI design skill per kind of component, each with its name and a description (TC-CI-09)", "CI-13: every building block a skill names exists in the code where the skill says (TC-CI-09)", "CI-13: the index skill routes to every UI skill and every section of UI-STANDARDS (TC-CI-09)", "CI-13: the checker finds a missing block and accepts each kind of definition (TC-CI-09)"); inspection: a building block renamed in `src/components/ui.tsx` without its skill fails `pnpm test`.
+
 ### 6.21 QE Mapping
 
 *Retired with the QE Mapping page (NAV-54): its removal is tested by TC-NAV-54, TC-CON-73, TC-MYD-15 and TC-GIT-23; the QE page that replaces it by TC-DPF-02 and TC-EPS-07.*
@@ -3056,6 +3058,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CI-10 | TC-CI-06 |
 | CI-11 | TC-CI-07 |
 | CI-12 | TC-CI-08 |
+| CI-13 | TC-CI-09 |
 | QEM-01 | TC-QEM-03, TC-QEM-04 |
 | QEM-02 | TC-QEM-01, TC-QEM-04 |
 | QEM-03…QEM-06 | TC-QEM-02, TC-QEM-04 |

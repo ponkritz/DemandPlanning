@@ -79,6 +79,8 @@ Every change — feature, fix, dependency update, document correction — follow
 | `dfmea` | 2 (design risk) | DFMEA.md |
 | `security` | 2 (threats), review | SECURITY-ASSESSMENT.md |
 
+**UI design skills.** UI work by any agent or model is built with the skills in `.claude/skills/` (CI-13): `ui-design-system` routes to one skill per kind of component of [UI-STANDARDS.md](UI-STANDARDS.md) — page layout, panels, forms, pop-ups, drawers, tables, buttons, tabs and filters, messages, KPI tiles and charts, Release pages, colours and type, UI defaults — each naming the shared building blocks, a copy-ready pattern, what not to do and a checklist, so that two agents given the same request write the same markup. The standard stays the rule book: a skill only says how to apply it, and a change to a rule goes to the standard first. `tests/ui-skills.test.mjs` fails when a skill names a building block that does not exist, so a renamed component and its skill change together.
+
 Other coding agents (e.g. Codex) follow the same rules through `AGENTS.md`, which points to CLAUDE.md, reads these roles as checklists, and keeps one agent per branch and pull request.
 
 The lead starts every change: it writes the requirement rows and a hand-off brief naming the specialists and what each must do, and lists open questions for the user instead of assuming. The main session runs the specialists from the brief (an agent does not start another agent): Settings / Export (or the main session for other code), then Test Protocol and Automation Testing, then DFMEA and Security, and the lead again for the checklist before the pull request. The agents follow CLAUDE.md and the constraints in it; they do not replace the human review of the pull request.

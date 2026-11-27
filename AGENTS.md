@@ -24,6 +24,12 @@ points to it and repeats what must never be missed. Where the two differ, `CLAUD
   pnpm test:e2e   # after build:web, when the UI changed
   ```
 
+## UI changes
+
+- Read `.claude/skills/ui-design-system/SKILL.md`, then the `.claude/skills/ui-*/SKILL.md` of every component type you
+  touch, and follow them literally (building blocks, pattern, checklist). They apply to every agent, not only Claude
+  Code, so the app looks the same whoever builds it. `docs/UI-STANDARDS.md` wins where they differ.
+
 ## Constraints (never break these)
 
 - PATs stay in browser / desktop local storage; never in Git, backups or SharePoint. One PAT per server.
