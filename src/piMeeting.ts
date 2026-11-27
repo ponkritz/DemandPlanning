@@ -25,7 +25,7 @@ import { displayName, lines, plural, text } from './piMeetingText.ts'
 import { cellOf, clampClass, columnGap, columns, columnWidth, contentWidth, fixed, flowSlides, gap, headLine, maxClamp, padBottom, padTop, padX, paragraph, pointList, pointsOf, rowLine, section, sectionOf, slideHeight, slideWidth, table, tileHeight, tiles, titleAttr, titleCut, titleFont, titleLineHeight, titleLines, widthStyle, wrapLines, type Block } from './piMeetingLayout.ts'
 import { epicRank, ownerOfEpic, showsOwners } from './piMeetingData.ts'
 import { isAdhocTask } from './workItemEdit.ts'
-import { defaultMeetingSettings, fillPlaceholders, type MeetingSettings } from './piMeetingSettings.ts'
+import { defaultMeetingSettings, fillPlaceholders, teamLabel, type MeetingSettings, type PresentingTeam } from './piMeetingSettings.ts'
 import { accentOf, completionSlides, execStyle, executiveSlides, hoursSlides, longRunningSlides, piTrendSlides, releaseSlides, repeatSlides, topicSlides, trendSlides, utilizationSlides } from './piMeetingExec.ts'
 import type { MeetingExec } from './piMeetingData.ts'
 export { displayName, scrub, text } from './piMeetingText.ts'
@@ -80,12 +80,15 @@ export function meetingFeatures(rows: readonly { item: AzureWorkItem; epic?: Azu
 }
 
 // ---- the slides ----
-export type SlideKind = 'title' | 'summary' | 'summary-epics' | 'executive' | 'completion' | 'pi-trend' | 'repeat' | 'topics' | 'releases' | 'hours' | 'utilization' | 'trends' | 'long-running' | 'discuss' | 'reviewed' | 'not-reviewed' | 'learnings' | 'struggles'
+export type SlideKind = 'title' | 'agenda' | 'summary' | 'summary-epics' | 'executive' | 'completion' | 'pi-trend' | 'repeat' | 'topics' | 'releases' | 'hours' | 'utilization' | 'trends' | 'long-running' | 'team' | 'discuss' | 'reviewed' | 'not-reviewed' | 'learnings' | 'struggles'
 export interface Slide { kind: SlideKind; eyebrow: string; title: string; body: string }
 // PIR-41: the order of the slides — one list (product owner, 25 Nov 2026: Summary first, then the Features to discuss in
 // the meeting, then all other Features, then the Themes). PIR-51…PIR-57 (product owner, 26 Nov 2026): the executive slides
-// after the Summary and before Discuss during Meeting.
-export const slideOrder: readonly SlideKind[] = ['title', 'summary', 'summary-epics', 'executive', 'completion', 'pi-trend', 'repeat', 'topics', 'releases', 'hours', 'utilization', 'trends', 'long-running', 'discuss', 'reviewed', 'not-reviewed', 'learnings', 'struggles']
+// after the Summary and before Discuss during Meeting. PIR-86…PIR-89 (product owner, 27 Nov 2026): with presenting teams,
+// the Agenda after the Title, and the team sections ('team': each team's divider, then its Discuss during Meeting and
+// reviewed Features; then Other Features) after the executive slides, in place of the PI-wide Discuss and reviewed
+// slides. Without teams both are empty: the deck as before.
+export const slideOrder: readonly SlideKind[] = ['title', 'agenda', 'summary', 'summary-epics', 'executive', 'completion', 'pi-trend', 'repeat', 'topics', 'releases', 'hours', 'utilization', 'trends', 'long-running', 'team', 'discuss', 'reviewed', 'not-reviewed', 'learnings', 'struggles']
 const isDiscuss = (feature: MeetingFeature) => feature.review?.reviewMode === 'Discuss during Meeting'
 const reviewed = (meeting: Meeting) => meeting.features.filter((feature) => feature.status === 'reviewed')
 const notReviewed = (meeting: Meeting) => meeting.features.filter((feature) => feature.status !== 'reviewed')
@@ -176,11 +179,11 @@ function featureBlocks(feature: MeetingFeature, owner = ''): Block[] {
   ]
 }
 const featureSlides = (kind: SlideKind, eyebrow: string, owner = '') => (feature: MeetingFeature): Slide[] => flowSlides(kind, eyebrow, `#${feature.id} ${feature.title}`, featureBlocks(feature, owner))
-const discussSlides = (meeting: Meeting): Slide[] => {
+const discussOf = (meeting: Meeting): Slide[] => {
   const features = reviewed(meeting).filter(isDiscuss).sort(epicOrderOf(meeting))
   return features.flatMap((feature, at) => featureSlides('discuss', `DISCUSS DURING MEETING · ${at + 1} OF ${features.length}`, ownerOfEpic(meeting, feature.epicId))(feature))
 }
-const reviewedSlides = (meeting: Meeting): Slide[] => {
+const reviewedOf = (meeting: Meeting): Slide[] => {
   const features = reviewed(meeting).filter((feature) => !isDiscuss(feature)).sort(epicOrderOf(meeting))
   const perEpic = new Map<string, number>()
   for (const feature of features) perEpic.set(epicName(feature), (perEpic.get(epicName(feature)) ?? 0) + 1)
@@ -188,6 +191,54 @@ const reviewedSlides = (meeting: Meeting): Slide[] => {
   // PIR-68: the Epic heading (the eyebrow) names the Epic's Product Owner too.
   return features.flatMap((feature) => { const epic = epicName(feature), at = (seen.get(epic) ?? 0) + 1, owner = ownerOfEpic(meeting, feature.epicId); seen.set(epic, at); return featureSlides('reviewed', `REVIEWED · ${epic.toUpperCase()}${owner ? ` · PO ${owner.toUpperCase()}` : ''} · ${at} OF ${perEpic.get(epic)}`, owner)(feature) })
 }
+// ---- PIR-86…PIR-89: the presenting teams ----
+// A team section: a presenting team (none: Other Features) and its Features of the PI.
+export interface TeamSection { team?: PresentingTeam; features: MeetingFeature[] }
+// PIR-86, PIR-88: the sections in the teams' order — a Feature belongs to the team of its Epic (an Epic is in one team
+// only); the Features of no team's Epic (and those without an Epic) in a last "Other Features" section, only if any. No
+// teams: no sections.
+export function teamSections(meeting: Meeting): TeamSection[] {
+  const teams = settingsOf(meeting).teams
+  if (!teams.length) return []
+  const teamOf = new Map<number, number>()
+  teams.forEach((team, at) => { for (const epic of team.epics) if (!teamOf.has(epic)) teamOf.set(epic, at) })
+  const sections: TeamSection[] = teams.map((team) => ({ team, features: [] })), other: MeetingFeature[] = []
+  for (const feature of meeting.features) { const at = feature.epicId != null ? teamOf.get(feature.epicId) : undefined; if (at === undefined) other.push(feature); else sections[at].features.push(feature) }
+  return other.length ? [...sections, { features: other }] : sections
+}
+// PIR-87: the Agenda slide — the sentence of the template (placeholders filled, then escaped) and the presenting teams as a
+// bulleted list in their order, "Name (SHORT)" with a short name. Many teams run on to "Agenda (n of N)".
+const agendaSlides = (meeting: Meeting): Slide[] => {
+  const settings = settingsOf(meeting)
+  if (!settings.teams.length) return []
+  const sentence = fillPlaceholders(settings.agenda, meetingValues(meeting))
+  return flowSlides('agenda', 'AGENDA', 'Agenda', [...(sentence ? [paragraph('big', sentence, { font: 20, lineHeight: 28, max: 3 })] : []), pointList(pointsOf(settings.teams.map((team) => ({ text: teamLabel(team) })), contentWidth - 28), 'agenda')])
+}
+// An Epic as the divider names it: its title from the PI's Features ("Tools (#100)"), else "Epic #100".
+const epicLabel = (meeting: Meeting, id: number) => { const title = meeting.features.find((feature) => feature.epicId === id)?.epic; return title ? `${title} (#${id})` : `Epic #${id}` }
+// PIR-88: a team's divider — its name, short name, the number of its Features in the PI (reviewed, to discuss, offline)
+// and its Epics; then its Features with their reviews by the slide functions of the whole PI (Discuss during Meeting,
+// then the reviewed Features by Epic) given only the team's Features, the eyebrow naming the team. Its Features not
+// reviewed stay in the one "Features not reviewed" list (PIR-60 links to it).
+function sectionSlides(meeting: Meeting, section: TeamSection, at: number, teams: number): Slide[] {
+  const { team, features } = section, counts = meetingCounts(features)
+  const notReviewed = counts.none + counts.unread
+  const divider = flowSlides('team', team ? `PRESENTING TEAM · ${at + 1} OF ${teams}` : 'OTHER FEATURES', team ? team.name : 'Other Features', [
+    ...(team?.short ? [paragraph('big', team.short, { font: 20, lineHeight: 28, max: 1 })] : []),
+    tiles([
+      { label: 'Features in the PI', value: String(counts.features) },
+      { label: 'Reviewed', value: String(counts.reviewed), detail: notReviewed ? `${notReviewed} not reviewed — in “Features not reviewed”` : features.length ? 'every Feature' : '' },
+      { label: 'Discuss during Meeting', value: String(counts.discuss), detail: counts.discuss ? 'one slide each, next' : '' },
+      { label: 'Offline Review', value: String(counts.offline), detail: counts.noMode ? `${counts.noMode} not given` : '' },
+    ]),
+    team ? paragraph('muted', `Epics: ${team.epics.map((id) => epicLabel(meeting, id)).join(', ')}`, { max: 3 }) : paragraph('muted', 'The Features of the PI whose Epic belongs to no presenting team, and those without an Epic.'),
+    ...(features.length ? [] : [paragraph('muted', 'No Feature of the PI is under these Epics.')]),
+  ])
+  const scoped: Meeting = { ...meeting, features }, prefix = (team ? team.short || team.name : 'Other Features').toUpperCase()
+  return [...divider, ...[...discussOf(scoped), ...reviewedOf(scoped)].map((slide) => ({ ...slide, eyebrow: `${prefix} · ${slide.eyebrow}` }))]
+}
+const teamSlides = (meeting: Meeting): Slide[] => { const sections = teamSections(meeting), teams = settingsOf(meeting).teams.length; return sections.flatMap((section, at) => sectionSlides(meeting, section, at, teams)) }
+const withoutTeams = (make: (meeting: Meeting) => Slide[]) => (meeting: Meeting): Slide[] => settingsOf(meeting).teams.length ? [] : make(meeting)
 const why = (feature: MeetingFeature, start: string) => feature.status === 'none' ? `No review headed for this PI since ${formatDate(start)}` : feature.status === 'error' ? 'The Discussion could not be read' : 'The Discussion was not read'
 const notReviewedSlides = (meeting: Meeting): Slide[] => {
   const features = notReviewed(meeting).sort(epicOrderOf(meeting)), po = showsOwners(meeting)
@@ -207,10 +258,11 @@ const themeSlides = (which: 'learnings' | 'struggles', label: string) => (meetin
   return flowSlides(which, `THEMES · ${plural(items.length, label.slice(0, -1).toUpperCase(), label.toUpperCase())}`, label, [pointList(pointsOf(items.map((item) => ({ text: item.text, prefix: `<span class="fid">#${item.id}</span>`, ...(item.suggested ? { suffix: '<small class="muted">(suggested)</small>', suffixText: '(suggested)' } : {}) })), contentWidth - 72))])
 }
 export const slideMakers: Record<SlideKind, (meeting: Meeting) => Slide[]> = {
-  title: titleSlide, summary: summarySlide, 'summary-epics': epicSlides,
+  title: titleSlide, agenda: agendaSlides, summary: summarySlide, 'summary-epics': epicSlides,
   executive: executiveSlides, completion: completionSlides, 'pi-trend': piTrendSlides, repeat: repeatSlides, topics: topicSlides,
   releases: releaseSlides, hours: hoursSlides, utilization: utilizationSlides, trends: trendSlides, 'long-running': longRunningSlides,
-  discuss: discussSlides, reviewed: reviewedSlides,
+  // PIR-88: with presenting teams, Discuss during Meeting and the reviewed Features are shown in the team sections.
+  team: teamSlides, discuss: withoutTeams(discussOf), reviewed: withoutTeams(reviewedOf),
   'not-reviewed': notReviewedSlides, learnings: themeSlides('learnings', 'Learnings'), struggles: themeSlides('struggles', 'Struggles'),
 }
 export const meetingSlides = (meeting: Meeting): Slide[] => slideOrder.flatMap((kind) => slideMakers[kind](meeting))
@@ -350,6 +402,10 @@ ${widthStyle()}
 .themes{margin:0;padding:0;list-style:none}
 .themes li{padding:5px 0;border-bottom:1px solid #e3e7ec}
 .fid{display:inline-block;min-width:64px;font-weight:700;color:#0b5394}
+.big{font-size:20px;--lh:28px}
+.agenda{margin:0;padding:0 0 0 28px;list-style:disc}
+.agenda li{padding:5px 0;font-size:15px}
+.agenda li.more{list-style:none}
 .controls{display:none}
 .js .controls{display:flex;position:fixed;right:12px;bottom:12px;z-index:2;gap:6px;align-items:center;padding:4px;border:1px solid #d5dbe3;border-radius:8px;background:rgba(255,255,255,.94);box-shadow:0 2px 8px rgba(0,0,0,.18)}
 .controls button,#overview button{font:inherit;padding:6px 12px;border:1px solid #c4ccd6;border-radius:6px;background:#fff;color:#1b2430;cursor:pointer}

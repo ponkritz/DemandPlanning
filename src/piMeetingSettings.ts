@@ -11,7 +11,12 @@
 // - the title slide (Title, Subtitle) and the footer text, with the placeholders {PI} {date} {time} {builtBy} {team};
 // - the accent colour (#rrggbb, refused when its contrast with white is below WCAG AA 4.5:1) and a light or dark title
 //   slide (dark: the accent fills the title slide with white text — the same contrast check);
-// - the order of the Epics on every per-Epic slide: Epic ID (ascending, the default) or Number of Features (most first).
+// - the order of the Epics on every per-Epic slide: Epic ID (ascending, the default) or Number of Features (most first);
+// - PIR-86…PIR-90 the presenting teams (meeting.teams: [{ name, short?, epics: [Epic IDs] }], in the order they present)
+//   and the Agenda sentence (meeting.agenda, with the placeholders): a Feature belongs to the team of its Epic, an Epic to
+//   at most one team. None (the default): no Agenda slide and no team sections — the deck as before. Read tolerantly: a
+//   malformed team (or Agenda sentence) is left out with a note (teamNotes, never written), never refused; the next save
+//   writes only the good ones. Still schema 2 (an older app ignores the new keys).
 // Pure: nothing here touches the DOM, Git or the network.
 
 export type EpicOrder = 'id' | 'features'
@@ -30,17 +35,30 @@ export interface MeetingSettings {
   titleTheme: TitleTheme
   // PIR-85: the file still held the PI-based long-running limits of PIR-57 (not used; set the months again). Never written.
   oldPiLimits?: boolean
+  // PIR-86: the presenting teams in the order they present (none: no Agenda slide, no team sections).
+  teams: PresentingTeam[]
+  // PIR-87: the sentence of the Agenda slide, with the placeholders.
+  agenda: string
+  // PIR-90: the teams (or the Agenda sentence) of the file that were left out, and why. Never written.
+  teamNotes?: string[]
 }
+// PIR-86: a presenting team — its name, an optional short name ("PLS") and its Epics (IDs; each Epic in one team only).
+export interface PresentingTeam { name: string; short: string; epics: number[] }
 export const meetingPlaceholders = ['{PI}', '{date}', '{time}', '{builtBy}', '{team}'] as const
 export const defaultLongRunning = 6
 export const maxLongRunning = 120
 export const defaultAccent = '#0b5394'
 export const maxTitle = 120, maxSubtitle = 200, maxFooter = 160, maxTeam = 60, maxStreams = 40, maxLongRunningEpics = 200
+// PIR-86, PIR-87: the presenting teams' limits and the default Agenda sentence (product owner, 27 Nov 2026).
+export const maxTeams = 20, maxTeamName = 60, maxShortName = 12, maxTeamEpics = 50, maxAgenda = 200
+export const defaultAgenda = 'The following teams will present the Features they have been working on during PI {PI}'
 export const defaultMeetingSettings = (): MeetingSettings => ({
   streams: [], longRunningMonthsDefault: defaultLongRunning, longRunningMonths: {}, epicOrder: 'id',
   title: 'PI Review Meeting — PI {PI}', subtitle: 'Built {date}, {time} by {builtBy}', footer: 'PI Review Meeting — PI {PI} · built {date}, {time}', team: '',
-  accent: defaultAccent, titleTheme: 'light',
+  accent: defaultAccent, titleTheme: 'light', teams: [], agenda: defaultAgenda,
 })
+// PIR-86: how a team is named on the Agenda slide and its divider: "Name (SHORT)" with a short name, else the name.
+export const teamLabel = (team: Pick<PresentingTeam, 'name' | 'short'>) => team.short ? `${team.name} (${team.short})` : team.name
 export const epicOrderLabel: Record<EpicOrder, string> = { id: 'Epic ID (ascending)', features: 'Number of Features (most first)' }
 
 // ---- WCAG AA contrast ----
@@ -96,8 +114,65 @@ export function meetingSettingsProblems(settings: MeetingSettings): string[] {
     if (!/^\d{1,9}$/.test(epic)) problems.push(`Long-running after (months): “${epic}” is not an Epic ID.`)
     else if (!isCount(count)) problems.push(`Long-running after (months), Epic #${epic}: a whole number from 1 to ${maxLongRunning}.`)
   }
+  line('Agenda sentence', settings.agenda, maxAgenda)
+  problems.push(...presentingTeamsProblems(settings.teams))
   return problems
 }
+// PIR-86: what is wrong with one team ('' when it is fine) — taken: the Epic IDs of the teams before it (an Epic belongs
+// to one team only); names: their names in lower case (each name once).
+export function teamProblem(team: PresentingTeam, taken: ReadonlySet<number> = new Set(), names: ReadonlySet<string> = new Set()): string {
+  const name = team.name.trim()
+  if (!name) return 'Team name: enter a name.'
+  if (name.length > maxTeamName || /[\r\n{}]/.test(name)) return `Team name “${name.slice(0, maxTeamName)}”: one line of at most ${maxTeamName} characters, without { }.`
+  if (names.has(name.toLowerCase())) return `Team name “${name}” is used twice.`
+  if (team.short.length > maxShortName || /[\r\n{}()]/.test(team.short)) return `${name}: the short name is one line of at most ${maxShortName} characters, without { } ( ).`
+  if (!team.epics.length) return `${name}: choose at least one Epic.`
+  if (team.epics.length > maxTeamEpics) return `${name}: at most ${maxTeamEpics} Epics.`
+  const bad = team.epics.find((epic) => !Number.isInteger(epic) || epic < 1 || epic > 999999999)
+  if (bad !== undefined) return `${name}: “${bad}” is not an Epic ID.`
+  if (new Set(team.epics).size !== team.epics.length) return `${name}: an Epic is listed twice.`
+  const used = team.epics.find((epic) => taken.has(epic))
+  if (used !== undefined) return `${name}: Epic #${used} already belongs to another team (an Epic belongs to one team only).`
+  return ''
+}
+export function presentingTeamsProblems(teams: readonly PresentingTeam[]): string[] {
+  const problems: string[] = [], taken = new Set<number>(), names = new Set<string>()
+  if (teams.length > maxTeams) problems.push(`At most ${maxTeams} presenting teams.`)
+  for (const team of teams) {
+    const problem = teamProblem(team, taken, names)
+    if (problem) problems.push(problem)
+    for (const epic of team.epics) taken.add(epic)
+    names.add(team.name.trim().toLowerCase())
+  }
+  return problems
+}
+// PIR-90: the tolerant reader of meeting.teams — every team that can be used, in the file's order, and a note for each
+// entry left out (not an object, no name, a bad short name, no or bad Epics, an Epic of an earlier team, a name used
+// twice, more than the limit). Never throws.
+export function readPresentingTeams(value: unknown): { teams: PresentingTeam[]; notes: string[] } {
+  if (value === undefined) return { teams: [], notes: [] }
+  if (!Array.isArray(value)) return { teams: [], notes: ['Presenting teams: not a list — left out.'] }
+  const teams: PresentingTeam[] = [], notes: string[] = [], taken = new Set<number>(), names = new Set<string>()
+  value.forEach((entry: unknown, at) => {
+    const where = `Presenting team ${at + 1}`
+    const input = record(entry)
+    if (!input) { notes.push(`${where}: not a team — left out.`); return }
+    if (typeof input.name !== 'string' || !input.name.trim()) { notes.push(`${where}: no name — left out.`); return }
+    const called = `${where} (${input.name.trim().slice(0, maxTeamName)})`
+    if (input.short !== undefined && typeof input.short !== 'string') { notes.push(`${called}: the short name is not a text — left out.`); return }
+    if (!Array.isArray(input.epics)) { notes.push(`${called}: no list of Epics — left out.`); return }
+    if (teams.length >= maxTeams) { notes.push(`${called}: more than ${maxTeams} teams — left out.`); return }
+    const team: PresentingTeam = { name: input.name.trim(), short: typeof input.short === 'string' ? input.short.trim() : '', epics: (input.epics as unknown[]).map((epic) => typeof epic === 'number' ? epic : NaN) }
+    const problem = teamProblem(team, taken, names)
+    if (problem) { notes.push(`${where}: ${problem.replace(/\.$/, '')} — left out.`); return }
+    teams.push(team)
+    for (const epic of team.epics) taken.add(epic)
+    names.add(team.name.toLowerCase())
+  })
+  return { teams, notes }
+}
+// PIR-90: the one line while entries of the file were left out (shown in the panel and the pop-up until saved again).
+export const teamNotesNote = (notes: readonly string[]) => `Not all of the presenting teams saved in Git can be used — the meeting leaves out: ${notes.join(' ')} Save the presenting teams to write only the ones shown.`
 const record = (value: unknown): Record<string, unknown> | null => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
 // The strict reader of the `meeting` part (missing parts take the defaults; anything malformed is refused with the reason).
 export function parseMeetingSettings(value: unknown, file = 'pi-review-form.json'): MeetingSettings {
@@ -112,6 +187,14 @@ export function parseMeetingSettings(value: unknown, file = 'pi-review-form.json
   if (!longRunning) throw new Error(`${file}: meeting.longRunningMonths is not a map of Epic IDs to months.`)
   // PIR-85: the PI-based limits of PIR-57 are not read (a number of PIs is not a number of months): the defaults apply.
   const oldPiLimits = input.longRunningDefault !== undefined || input.longRunning !== undefined
+  // PIR-90: the presenting teams and the Agenda sentence are read tolerantly — what cannot be used is left out with a note.
+  const { teams, notes } = readPresentingTeams(input.teams)
+  let agenda = base.agenda
+  if (typeof input.agenda === 'string') {
+    const problems = meetingSettingsProblems({ ...base, agenda: input.agenda.trim() })
+    if (problems.length) notes.push(`The Agenda sentence: ${problems.join(' ').replace(/\.$/, '')} — the default is used.`)
+    else agenda = input.agenda.trim()
+  } else if (input.agenda !== undefined) notes.push('The Agenda sentence is not a text — the default is used.')
   const settings: MeetingSettings = {
     streams: [...new Set((streams as string[]).map((entry) => entry.trim()).filter(Boolean))],
     longRunningMonthsDefault: input.longRunningMonthsDefault === undefined ? base.longRunningMonthsDefault : input.longRunningMonthsDefault as number,
@@ -119,7 +202,9 @@ export function parseMeetingSettings(value: unknown, file = 'pi-review-form.json
     epicOrder: (input.epicOrder ?? base.epicOrder) as EpicOrder,
     title: text('title'), subtitle: text('subtitle'), footer: text('footer'), team: text('team'),
     accent: text('accent').toLowerCase(), titleTheme: (input.titleTheme ?? base.titleTheme) as TitleTheme,
+    teams, agenda,
     ...(oldPiLimits ? { oldPiLimits: true } : {}),
+    ...(notes.length ? { teamNotes: notes } : {}),
   }
   const problems = meetingSettingsProblems(settings)
   if (problems.length) throw new Error(`${file}: the Meeting presentation settings cannot be used: ${problems.join(' ')}`)
@@ -132,9 +217,12 @@ export function serializeMeetingSettings(settings: MeetingSettings): Record<stri
   if (settings.longRunningMonthsDefault !== base.longRunningMonthsDefault) out.longRunningMonthsDefault = settings.longRunningMonthsDefault
   if (Object.keys(settings.longRunningMonths).length) out.longRunningMonths = Object.fromEntries(Object.entries(settings.longRunningMonths).sort((a, b) => Number(a[0]) - Number(b[0])))
   for (const key of ['epicOrder', 'title', 'subtitle', 'footer', 'team', 'accent', 'titleTheme'] as const) if (settings[key] !== base[key]) out[key] = settings[key]
+  // PIR-86, PIR-87: the teams in their order ("short" only when set); the Agenda sentence when it is not the default.
+  if (settings.teams.length) out.teams = settings.teams.map((team) => ({ name: team.name, ...(team.short ? { short: team.short } : {}), epics: [...team.epics] }))
+  if (settings.agenda !== base.agenda) out.agenda = settings.agenda
   return Object.keys(out).length ? out : undefined
 }
-export const sameMeetingSettings = (a: MeetingSettings | undefined, b: MeetingSettings | undefined) => Boolean(a?.oldPiLimits) === Boolean(b?.oldPiLimits) && JSON.stringify(serializeMeetingSettings(a ?? defaultMeetingSettings()) ?? null) === JSON.stringify(serializeMeetingSettings(b ?? defaultMeetingSettings()) ?? null)
+export const sameMeetingSettings = (a: MeetingSettings | undefined, b: MeetingSettings | undefined) => Boolean(a?.oldPiLimits) === Boolean(b?.oldPiLimits) && Boolean(a?.teamNotes?.length) === Boolean(b?.teamNotes?.length) &&JSON.stringify(serializeMeetingSettings(a ?? defaultMeetingSettings()) ?? null) === JSON.stringify(serializeMeetingSettings(b ?? defaultMeetingSettings()) ?? null)
 // N months of an Epic: its own value, else the default.
 export const longRunningOf = (settings: Pick<MeetingSettings, 'longRunningMonths' | 'longRunningMonthsDefault'>, epicId: number | undefined) => (epicId != null ? settings.longRunningMonths[String(epicId)] : undefined) ?? settings.longRunningMonthsDefault
 // PIR-85: the date N calendar months after a day (YYYY-MM-DD; the month's last day when it is shorter: 31 Aug + 6 → 28 Feb).
@@ -158,5 +246,6 @@ export function meetingSettingsChanges(before: MeetingSettings, after: MeetingSe
   if (before.title !== after.title || before.subtitle !== after.subtitle || before.team !== after.team) changes.push('title slide')
   if (before.footer !== after.footer) changes.push('footer')
   if (before.accent !== after.accent || before.titleTheme !== after.titleTheme) changes.push('colours')
+  if (JSON.stringify(before.teams) !== JSON.stringify(after.teams) || before.agenda !== after.agenda || Boolean(before.teamNotes?.length) !== Boolean(after.teamNotes?.length)) changes.push('presenting teams')
   return changes
 }

@@ -2204,6 +2204,14 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-PGB-16 Co-owners from the Azure DevOps team at start** — Req PGB-21, PGB-18, CAP-30 — L1 `page-builder.test.mjs` ("PGB-21: the Time Writing team is read once per session and its members are offered as co-owners; a refused read offers the others, silently (TC-PGB-16)"); E2E `page-builder.e2e.mjs` ("TC-PGB-16: the co-owner list offers the Azure DevOps team members read at start — without opening People & roles, once per session"); browser check: after a fresh start (without opening Admin → People & access) Edit a page → Page co-owners lists a team member who has no fetched work, by name with the work email; groups are not listed; with a PAT that may not read the team the list has the other people and no message.
 
+**TC-PGB-17 Page type tick boxes: only valid combinations, the others disabled with the reason** — Req PGB-22, PGB-01, PGB-05 — L1 `page-type.test.mjs` ("PGB-22: the four tick boxes in order, Table (Build your own) ticked by default", "PGB-22: every one of the 16 combinations of the four ticks is a page type or says why not (TC-PGB-17)", "PGB-22: a tick that would make a combination that is not a type is disabled with its reason; unticking is free (TC-PGB-17)", "PGB-22, PGB-23: what Add page creates — a Table (Query) needs its reference; no other combination is created (TC-PGB-17, TC-PGB-18)"); E2E `query-table-pages.e2e.mjs` ("TC-PGB-18, TC-PGB-17, TC-PGB-19: …"), `page-builder.e2e.mjs`, `dashboard-pages.e2e.mjs`, `tool-validations.e2e.mjs` (the tick boxes in Add page and ＋ Add tab…); browser check: ＋ Add page… shows the four boxes in order with Table (Build your own) ticked and "This page: Table · rows the team adds itself"; Table (Query) and Dashboard are disabled with their reason under them; unticking everything shows "Choose a page type." beside the disabled Add page; Insights alone says it needs a table source; Tool Validations → Setup → Tabs → ＋ Add tab… shows the same boxes.
+
+**TC-PGB-18 A Table (Query) page from a saved query — only its reference in Git, rows read live with each viewer's PAT, read only, Insights over the same rows** — Req PGB-23, PGB-24, PGB-25, DSH-18, DSH-19 — **UAT** — L1 `page-type.test.mjs` ("PGB-23, PGB-27: page files — without a source unchanged; a query page keeps only its reference and insights, never rows (TC-PGB-18, TC-PGB-20)", "PGB-24: a Table (Query) page is not offered as a dashboard data source (it holds no rows in Git) (TC-PGB-18)"); E2E `query-table-pages.e2e.mjs` ("TC-PGB-18, TC-PGB-17, TC-PGB-19: a Tool Owner adds a Table (Query) + Insights page from a saved query — only its reference in Git; the rows read live, read only, searched and charted; Edit keeps the source; a viewer without a PAT sees the reason"); UAT: as a Tool Owner with your PAT, ＋ Add page… → tick Table (Query) and Insights (Table (Build your own) unticked first), list the saved queries of a connection, pick one under Shared Queries, name the page, Add page — the page opens with the query's rows and columns; search, sort, Columns, Export and Group by work; there is no ＋ Add row, Edit or Set up columns…; ↻ Refresh reads the query again; add a bar chart on the Insights tab; check in Git that the page file holds only `source` with the reference and the chart (no rows, no PAT); a second person without a PAT for that server opens the page and sees "The rows cannot be shown." with the reason.
+
+**TC-PGB-19 Edit page: the table's source is fixed, Insights switches** — Req PGB-26, PGB-07, DSH-01 — L1 `page-type.test.mjs` ("PGB-26: Edit page — the family and the table source are fixed, only Insights switches (TC-PGB-19)"); E2E `query-table-pages.e2e.mjs` ("TC-PGB-18, TC-PGB-17, TC-PGB-19: …"); browser check: Edit a Table (Query) page in Admin → Pages & reports → Menu groups & pages — Table (Build your own) disabled with "The table's rows come from a saved Azure DevOps query; add a new page for the other source.", Dashboard disabled with the reason of DSH-01; untick Insights and Save to Git — the Insights tab is hidden, its charts kept; on a Build your own page Table (Query) is disabled with the reason.
+
+**TC-PGB-20 The table source validated when read; older page files unchanged** — Req PGB-27, PGB-23 — L1 `page-type.test.mjs` ("PGB-27: the table source is validated when read — absent is Build your own, a bad one is kept read only with its reason (TC-PGB-20)", "PGB-23, PGB-27: page files — without a source unchanged; a query page keeps only its reference and insights, never rows (TC-PGB-18, TC-PGB-20)"); browser check: hand-edit a Table (Query) page's file in Git with a query id that is not a GUID — the page opens read only with the warning "The table's query reference is not valid — …" and "The rows cannot be read.", nothing is read from Azure DevOps; a page file without `source` (CoNQ) works as before.
+
 ### 6.31 On-Demand Dashboard pages
 
 **TC-DSH-01 A Tool Owner adds an On-Demand Dashboard, builds it and filters it by period** — Req DSH-01, DSH-02, DSH-03, DSH-05, DSH-06, DSH-07, DSH-08, DSH-10, DSH-11, DSH-12 — **UAT** — L1 `dashboard-pages.test.mjs` ("DSH-07: the period keeps the rows whose month is in it; rows without a date are counted apart; the filter row narrows its source (TC-DSH-05)"); E2E `dashboard-pages.e2e.mjs` ("TC-DSH-01: a Tool Owner adds a Dashboard page, builds it from a KPI tile, a bar chart and a summary table over a table page’s rows and filters it by period — saved in Git"); UAT: with your work email set, Git storage that can save and the Tool Owner role, and a table page with a Dropdown, a Currency and a Date column and rows of this year and last year: ＋ Add page… → Page type **On-Demand Dashboard**, name "Quality dashboard" — the page opens with "No blocks yet."; ＋ Add block… → KPI tile "Issues" over the table page (Period filter on: the Date column), Add block — the tile shows this year's rows; add a **Bar chart** by the Dropdown column and a **Summary table** with Sum of the Currency column — largest first, the first 10 rows with Show all, Export (CSV) opens in Excel with the values as text where they look like formulas; Background jobs names `dashboards/quality-dashboard.json`; tick last year in **Year** — the tile, chart and table follow and the line names the period; a month without rows shows "No data for this selection."; Reset filters goes back to this year; reload — your period comes back; Tabs and filters… → tabs Overview and Cost and a filter on the Dropdown column: tiles open their tab; a colleague without the right sees the dashboard read only with the reason; on a phone and in dark mode the tiles, charts and the pop-up are readable.
@@ -2612,6 +2620,18 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 **TC-PIR-85 Long-running by months: the boundary and per Epic** — Req PIR-85, PIR-57 — L1 `pi-meeting-exec.test.mjs` ("PIR-85: the month boundary — created + N calendar months before the build day; exactly N months is not long-running, one day more is (TC-PIR-85)": 20 May + 6 = 20 Nov; 31 Aug + 6 = 28 Feb, a leap year 29 Feb; exactly 6 months not long-running, one day more is; through the meeting's figures the default 6, Audits' own 3 and per Epic Tools 1 / Audits 12) ; E2E `pi-meeting-executive.e2e.mjs` (TC-PIR-61: Tools' 12 months, 400 days listed with "12 months", 300 days not) ; browser check: Conduct PI Meeting, the Long-running Features slide says "created more than N months ago" and shows each Feature's Limit.
 
 **TC-PIR-86 Long-running settings in months; an older file with PI values** — Req PIR-85, PIR-58 — L1 `pi-meeting-exec.test.mjs` ("PIR-85: settings — default 6 months, months written under their own keys, an older file with PI values loads with the defaults and the note (TC-PIR-86)": the default 6, written as `longRunningMonths` / `longRunningMonthsDefault` only and still schema 2, 121 months refused, a schema 2 file with `longRunning` / `longRunningDefault` loads with the default 6 and the note — not converted, even a value the new rules would refuse — the next save writes the new keys only and clears the note, clearing is a change of its own) ; browser check: Admin → Feature & PI setup → PI Review form → Meeting presentation with an older file shows the one-line note in the panel and the pop-up; Save to Git removes it.
+
+**TC-PIR-87 A Feature in the team of its Epic; the sections in order, Other Features last** — Req PIR-86, PIR-88 — L1 `pi-meeting-teams.test.mjs` ("PIR-86, PIR-88: a Feature belongs to the team of its Epic — the sections in the teams’ order, Other Features last and only if any (TC-PIR-87)": Platform Services (PLS, Audits) and Quality Tools (QTL, Tools), Plans and a Feature without Epic in Other Features; another order followed; no Other Features when every Feature is in a team; a team without Features still has its section; the slide list — Agenda after the Title, the executive slides before the sections, each section a divider, its Discuss during Meeting and its reviewed Features, the eyebrows "PLS · DISCUSS DURING MEETING · 1 OF 1", the divider's tiles and Epics, one Features not reviewed list after the sections) ; E2E `pi-meeting-executive.e2e.mjs` (TC-PIR-92).
+
+**TC-PIR-88 The Agenda slide and its placeholders** — Req PIR-87 — L1 `pi-meeting-teams.test.mjs` ("PIR-87: the Agenda slide — the sentence with its placeholders, then the teams in order as \"Name (SHORT)\" (TC-PIR-88)": the default sentence with {PI} = 26.4, every placeholder, "Name (SHORT)" and a name alone, a hostile team name and sentence escaped, an empty sentence, an unknown placeholder refused, 20 teams over "Agenda (n of N)") ; E2E `pi-meeting-executive.e2e.mjs` (TC-PIR-92: the Agenda slide 2 with the sentence for PI 2026.4 and the two teams in order).
+
+**TC-PIR-89 The presenting teams setting, read tolerantly** — Req PIR-86, PIR-90 — L1 `pi-meeting-teams.test.mjs` ("PIR-86, PIR-90: the setting — written with the PI form setup (schema 2), read tolerantly: a malformed team is left out with a note, never refused (TC-PIR-89)": written in order with "short" only when set, the default Agenda sentence not written, no teams stays schema 1; eleven malformed entries each left out with why, a non-list, more than 20; a file with a malformed team and Agenda sentence loads with the note, the next save writes only the good teams; clearing the note is a change; the editor's checks of one team and of the list; the other settings still strict) ; E2E `pi-meeting-executive.e2e.mjs` (TC-PIR-92: the malformed team of Git named in the panel's note, gone after Save to Git).
+
+**TC-PIR-90 Edit presenting teams… in the Meeting presentation panel** — Req PIR-89, PIR-86 — E2E `pi-meeting-executive.e2e.mjs` (TC-PIR-92: Edit presenting teams…, ＋ Add team… twice, the Audits Epic disabled for the second team "in Platform Services (PLS) (an Epic belongs to one team only)", ↑ moves a team, Save to Git as schema 2 in `meeting.teams`, the summary "1. Quality Tools (QTL) (1 Epic) · 2. Platform Services (PLS) (1 Epic)") ; browser check (1440 px, light and dark): the pop-up and the one-team pop-up; a person without "PI Review: set up the review form" (and View as) sees Edit presenting teams… disabled with the reason.
+
+**TC-PIR-91 Without presenting teams the deck is unchanged** — Req PIR-86, PIR-88 — L1 `pi-meeting-teams.test.mjs` ("PIR-86, PIR-88: without presenting teams the deck is exactly as before — the same slides, no Agenda, no sections (TC-PIR-91)": no Agenda or team slide, an older file and a changed Agenda sentence build the same slides, no settings at all the same; with teams every Feature slide once, plus the Agenda and the dividers); `pi-meeting.test.mjs` (TC-PIR-43: the slide order); `pi-meeting-exec.test.mjs` (TC-PIR-60: the kinds of a deck without teams) ; E2E `pi-meeting-executive.e2e.mjs` (TC-PIR-61: the executive deck without teams, Discuss during Meeting right after Long-running Features).
+
+**TC-PIR-92 The Scrum Master sets up the presenting teams and conducts the meeting** — Req PIR-86, PIR-87, PIR-88, PIR-89, PIR-90 — **UAT** — E2E `pi-meeting-executive.e2e.mjs` ("TC-PIR-92: the Scrum Master sets up the presenting teams (an Epic of another team cannot be ticked, the order changed, Save to Git) and conducts the meeting — the Agenda after the title, one section per team in order, Other Features last": Git holds a team without Epics — named in a note and left out; Quality Tools (QTL, Tools #100) and Platform Services (PLS, Audits #110) added, Audits disabled for the second, Quality Tools moved first, saved; Conduct PI Meeting: Title, Agenda, Summary …, the executive slides, Quality Tools with #201 (Discuss) and #202, Platform Services with #212, Other Features (Plans), Features not reviewed, Learnings, Struggles; the divider "PRESENTING TEAM · 2 OF 2" with 3 Features, 1 reviewed, 2 not reviewed and Epics: Audits (#110); no request leaves the file; also at 4× slower CPU) ; browser check (1440 px, light): the Agenda and a divider slide, printed one a page.
 
 **TC-CON-71 "PI Review: set up the review form"** — Req CON-114, PIR-31, CON-94, CON-101 — L1 `pi-review-setup.test.mjs` ("CON-114, PIR-31: who may change the form setup, and why not (TC-CON-71)": Scrum Master and Tool Owner in the starting matrix, not Admin; permissions 8; an older file gets it as the starting matrix does; Not set stays after saving; none without a roles file); `access.test.mjs` (an older file's Scrum Master gets it).
 
@@ -3348,13 +3368,13 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | CON-112 | TC-CON-68 |
 | CON-113 | TC-CON-70, TC-PIR-16, TC-PIR-26, TC-PIR-38 |
 | CON-114 | TC-CON-71, TC-PIR-23, TC-PIR-24, TC-PIR-31 |
-| PGB-01 | TC-PGB-01, TC-PGB-07 |
+| PGB-01 | TC-PGB-01, TC-PGB-07, TC-PGB-17 |
 | PGB-02 | TC-PGB-01, TC-PGB-03, TC-PGB-04 |
 | PGB-03 | TC-PGB-01, TC-PGB-02, TC-PGB-08 |
 | PGB-04 | TC-PGB-01, TC-PGB-03, TC-PGB-11 |
-| PGB-05 | TC-PGB-01, TC-PGB-09 |
+| PGB-05 | TC-PGB-01, TC-PGB-09, TC-PGB-17 |
 | PGB-06 | TC-PGB-01, TC-PGB-04, TC-PGB-11 |
-| PGB-07 | TC-PGB-11 |
+| PGB-07 | TC-PGB-11, TC-PGB-19 |
 | PGB-08 | TC-PGB-01, TC-PGB-05, TC-PGB-06 |
 | PGB-09 | TC-PGB-05, TC-PGB-09 |
 | PGB-10 | TC-PGB-05 |
@@ -3368,6 +3388,12 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | PGB-19 | TC-PGB-15 |
 | PGB-20 | TC-PGB-15 |
 | PGB-21 | TC-PGB-16 |
+| PGB-22 | TC-PGB-17 |
+| PGB-23 | TC-PGB-18, TC-PGB-20 |
+| PGB-24 | TC-PGB-18 |
+| PGB-25 | TC-PGB-18 |
+| PGB-26 | TC-PGB-19 |
+| PGB-27 | TC-PGB-20 |
 | DSH-01 | TC-DSH-01, TC-DSH-02, TC-DSH-10 |
 | DSH-02 | TC-DSH-01, TC-DSH-09 |
 | DSH-03 | TC-DSH-01, TC-DSH-08, TC-DSH-11, TC-DSH-16, TC-TVL-12, TC-DSH-17 |
@@ -3583,6 +3609,11 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | PIR-83 | TC-PIR-83, TC-PIR-84 |
 | PIR-84 | TC-PIR-84 |
 | PIR-85 | TC-PIR-58, TC-PIR-61, TC-PIR-85, TC-PIR-86 |
+| PIR-86 | TC-PIR-87, TC-PIR-89, TC-PIR-90, TC-PIR-91, TC-PIR-92 |
+| PIR-87 | TC-PIR-88, TC-PIR-92 |
+| PIR-88 | TC-PIR-87, TC-PIR-91, TC-PIR-92 |
+| PIR-89 | TC-PIR-90, TC-PIR-92 |
+| PIR-90 | TC-PIR-89, TC-PIR-92 |
 | CON-115 | TC-LST-07, TC-LST-10 |
 | CON-116 | TC-CON-72 |
 | CON-117 | TC-CON-73 |
@@ -3696,9 +3727,9 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-35 | TC-ADM-01, TC-ADM-02, TC-ADM-03 |
 | UC-36 | TC-STT-01, TC-STT-02, TC-STT-03, TC-STT-04, TC-STT-05, TC-STT-06 |
 | UC-37 | TC-OND-01…34, TC-OND-40…65, TC-OND-90…103, TC-OND-120…126, TC-OND-128, TC-OND-129, TC-OND-131…137, TC-CHT-01…42, TC-CHT-50…72, TC-UI-20, TC-UI-25 |
-| UC-38 | TC-PGB-01…16, TC-OND-129, TC-OND-131, TC-OND-133, TC-OND-135…137, TC-DSH-01…23, TC-CHT-02, TC-CHT-11, TC-CHT-13…27, TC-CHT-29…37, TC-CHT-39, TC-CHT-40, TC-CHT-42, TC-CHT-50…57, TC-CHT-59, TC-CHT-60…69, TC-CHT-71, TC-CHT-72, TC-TVL-12, TC-TVL-23 |
+| UC-38 | TC-PGB-01…20, TC-OND-129, TC-OND-131, TC-OND-133, TC-OND-135…137, TC-DSH-01…23, TC-CHT-02, TC-CHT-11, TC-CHT-13…27, TC-CHT-29…37, TC-CHT-39, TC-CHT-40, TC-CHT-42, TC-CHT-50…57, TC-CHT-59, TC-CHT-60…69, TC-CHT-71, TC-CHT-72, TC-TVL-12, TC-TVL-23 |
 | UC-39 | TC-TVL-01…33 |
-| UC-40 | TC-PIR-01…61, TC-PIR-64…68, TC-PIR-75…79, TC-PIR-81…86, TC-EPS-10, TC-UI-27 |
+| UC-40 | TC-PIR-01…61, TC-PIR-64…68, TC-PIR-75…79, TC-PIR-81…92, TC-EPS-10, TC-UI-27 |
 | UC-41 | TC-LST-01…11, TC-OND-98, TC-OND-99 |
 
 ## 8. Result record

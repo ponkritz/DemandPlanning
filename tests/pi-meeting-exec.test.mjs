@@ -272,7 +272,7 @@ test('PIR-58, PIR-59: the settings — defaults, strict reading, old files load,
 })
 
 test('PIR-58, PIR-60, PIR-62: the file — the executive slides in order, the template escaped, the footer with n / N, sortable tables, no request (TC-PIR-60)', async () => {
-  assert.deepEqual(slideOrder.slice(3, 13), ['executive', 'completion', 'pi-trend', 'repeat', 'topics', 'releases', 'hours', 'utilization', 'trends', 'long-running'])
+  assert.deepEqual(slideOrder.slice(4, 14), ['executive', 'completion', 'pi-trend', 'repeat', 'topics', 'releases', 'hours', 'utilization', 'trends', 'long-running'])
   const hostile = { ...settings, title: '<script>alert(1)</script> {PI}', subtitle: '"</p><img src=x onerror=alert(2)> {builtBy}', footer: 'Confidential · {team} · PI {PI}', team: '<b>Q&A</b>', accent: '#1b5e20', titleTheme: 'dark' }
   const meeting = meetingOf({ settings: hostile })
   const html = await buildMeetingHtml(meeting)

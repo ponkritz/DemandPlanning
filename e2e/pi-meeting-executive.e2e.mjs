@@ -63,7 +63,7 @@ function fakeAzure(state) {
     const request = route.request(), url = new URL(request.url()), path = decodeURIComponent(url.pathname)
     const json = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
     if (path.endsWith('/_apis/work/teamsettings/teamfieldvalues')) return json({ field: { referenceName: 'System.AreaPath' }, values: [{ value: 'Project\\Quality', includeChildren: true }] })
-    if (path.endsWith('/_apis/work/backlogs/Microsoft.EpicCategory/workItems')) return json({ workItems: [{ target: { id: 100 } }, { target: { id: 110 } }] })
+    if (path.endsWith('/_apis/work/backlogs/Microsoft.EpicCategory/workItems')) return json({ workItems: state.world.filter((item) => item.fields['System.WorkItemType'] === 'Epic').map((item) => ({ target: { id: item.id } })) })
     if (path.endsWith('/_apis/wit/workitemsbatch')) { const ids = JSON.parse(request.postData() ?? '{}').ids ?? []; return json({ value: state.world.filter((item) => ids.includes(item.id)) }) }
     if (path.endsWith('/_apis/wit/wiql')) {
       const query = JSON.parse(request.postData() ?? '{}').query ?? ''
@@ -79,8 +79,8 @@ function fakeAzure(state) {
   }
 }
 const policy = () => { const value = defaultPolicy(); value.defaultRole = 'Team Member'; if (!value.roles['Scrum Master'].areas.includes('insights')) value.roles['Scrum Master'].areas.push('insights'); value.members = { 'rita.gomez@example.com': ['Scrum Master'] }; return serializeAccess(value) }
-async function open(gh) {
-  const state = { world: world(), comments: comments() }
+async function open(gh, more = []) {
+  const state = { world: [...world(), ...more], comments: comments() }
   const profile = { id: 'tw-exec', url: 'https://dev.azure.com/example/Project/_backlogs/backlog/Team%20A/Features', reason: 'Time Writing', token: 'x'.repeat(52), role: 'time-tracking', creatorEmail: 'rita.gomez@example.com' }
   const { page, context, errors } = await openPage(app, { width: 1440, height: 900, scale: shots ? 2 : undefined, init: ({ connection }) => {
     localStorage.setItem('demand-planning-azure-connection-profiles-v1', JSON.stringify([connection]))
@@ -232,6 +232,104 @@ test('TC-PIR-61: the Scrum Master sets up the meeting presentation (a low-contra
   assert.match(await text(current(file)), /220 Platform 3\.0 qualification Tools Active .* 12 months /)
   assert.doesNotMatch(await text(current(file)), /Legacy rig retirement/)
   await shot(file, 'pi-exec-7-long-running')
+  assert.deepEqual(requests, [], 'no request leaves the file')
+  assert.deepEqual(problems, [])
+  await close()
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
+// PIR-86…PIR-90 (TC-PIR-92 UAT): the presenting teams. Synthetic teams "Quality Tools (QTL)" (Tools #100) and "Platform
+// Services (PLS)" (Audits #110); Plans #120 with Feature 231 belongs to no team (Other Features). Git starts with a
+// malformed team (no Epics): it is left out with a visible note, and the save writes only the teams shown.
+test('TC-PIR-92: the Scrum Master sets up the presenting teams (an Epic of another team cannot be ticked, the order changed, Save to Git) and conducts the meeting — the Agenda after the title, one section per team in order, Other Features last', async () => {
+  const form = { ...JSON.parse(serializePiFormSetup({ ...builtInFormSetup(), reviewStart: start })), schema: 2, meeting: { teams: [{ name: 'Lab Systems', epics: [] }] } }
+  const gh = fakeGitHub({ files: { 'access.json': policy(), 'pi-review-form.json': `${JSON.stringify(form, null, 2)}\n` } })
+  const { page, context, errors } = await open(gh, [raw(120, 'Epic', 'Plans', 'Project'), raw(231, 'Feature', 'Capacity plan', pi, 120)])
+  await navigate(page, 'PI Review')
+  await page.locator('.pir-table tr[data-row-key="example/project/231"]').waitFor()
+
+  // Admin → Feature & PI setup → PI Review form → Meeting presentation: the malformed team is named in a note.
+  await navigate(page, 'Feature & PI setup')
+  const tab = page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'PI Review form' })
+  if (await tab.count()) await tab.click()
+  const panel = page.locator('article.pir-meeting-setup')
+  await panel.locator('.notice', { hasText: 'Presenting team 1: Lab Systems: choose at least one Epic — left out.' }).waitFor()
+  await panel.getByText('None (no Agenda slide; the Features by Epic, as before)').waitFor()
+  await panel.getByRole('button', { name: 'Edit presenting teams…' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Edit the presenting teams' })
+  assert.equal(await dialog.getByLabel('Agenda sentence', { exact: true }).inputValue(), 'The following teams will present the Features they have been working on during PI {PI}')
+  await dialog.getByText('No presenting teams: the meeting has no Agenda slide').waitFor()
+  // ＋ Add team… twice; the second team's picker refuses Audits (in Platform Services) with the reason.
+  const addTeam = async (name, short, epic, refused) => {
+    await dialog.getByRole('button', { name: '＋ Add team…' }).click()
+    const one = page.getByRole('dialog', { name: 'Add a presenting team' })
+    await one.getByLabel('Name', { exact: true }).fill(name)
+    await one.getByLabel('Short name', { exact: true }).fill(short)
+    await one.getByRole('button', { name: 'Epics: None' }).click()
+    if (refused) {
+      const taken = one.getByRole('checkbox', { name: new RegExp(`^${refused.epic.replace(/[()#]/g, '\\$&')}`) })
+      assert.equal(await taken.isDisabled(), true)
+      await one.locator('.multi-option-disabled', { hasText: refused.why }).waitFor()
+    }
+    await one.getByRole('checkbox', { name: epic }).check()
+    await one.getByRole('button', { name: new RegExp(`^Epics: ${epic.replace(/[()#]/g, '\\$&')}`) }).click()
+    await one.getByRole('button', { name: 'Add team', exact: true }).click()
+    await one.waitFor({ state: 'hidden' })
+  }
+  await addTeam('Platform Services', 'PLS', 'Audits (#110)')
+  await addTeam('Quality Tools', 'QTL', 'Tools (#100)', { epic: 'Audits (#110)', why: 'in Platform Services (PLS) (an Epic belongs to one team only)' })
+  const table = dialog.getByRole('table', { name: 'Presenting teams' })
+  const names = () => table.locator('tbody tr td:nth-child(2)').allInnerTexts()
+  assert.deepEqual(await names(), ['Platform Services', 'Quality Tools'])
+  // ↑ moves Quality Tools first.
+  await table.getByRole('button', { name: 'Move Quality Tools up' }).click()
+  await until(async () => (await names()).join('|') === 'Quality Tools|Platform Services', 'the new order')
+  await shot(dialog, 'pi-teams-1-editor')
+  await dialog.getByRole('button', { name: 'Save to Git' }).click()
+  await dialog.waitFor({ state: 'hidden' })
+  await until(() => /Quality Tools/.test(gh.read('pi-review-form.json') ?? ''), 'the teams in Git')
+  const saved = JSON.parse(gh.read('pi-review-form.json'))
+  assert.equal(saved.schema, 2)
+  assert.deepEqual(saved.meeting.teams, [{ name: 'Quality Tools', short: 'QTL', epics: [100] }, { name: 'Platform Services', short: 'PLS', epics: [110] }], 'the malformed team is gone')
+  await panel.getByText('1. Quality Tools (QTL) (1 Epic) · 2. Platform Services (PLS) (1 Epic)').waitFor()
+  assert.equal(await panel.locator('.notice', { hasText: 'Presenting team 1' }).count(), 0)
+  await shot(panel, 'pi-teams-2-panel')
+
+  // Conduct the meeting.
+  await navigate(page, 'PI Review')
+  await page.locator('.pir-table tr[data-row-key="example/project/231"]').waitFor()
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Conduct PI Meeting', exact: true }).click()])
+  const html = readFileSync(await download.path(), 'utf8')
+  const { file, requests, problems, close } = await openFile(html, download.suggestedFilename())
+  const total = await file.locator('.slide').count()
+  const titles = []
+  for (let at = 0; at < total; at += 1) titles.push(await text(file.locator('.slide').nth(at).locator('h1, h2').first()))
+  assert.deepEqual(titles.slice(0, 3), ['PI Review Meeting — PI 2026.4', 'Agenda', 'Summary'])
+  const from = titles.indexOf('Long-running Features')
+  assert.ok(from > 2, 'the executive slides before the team sections')
+  assert.deepEqual(titles.slice(from + 1), [
+    'Quality Tools', '#201 Lab rig upgrade', '#202 Fixture library refresh',
+    'Platform Services', '#212 Calibration plan',
+    'Other Features',
+    'Features not reviewed', 'Learnings', 'Struggles',
+  ])
+  // The Agenda: the sentence for this PI and the teams in their order, "Name (SHORT)".
+  await file.keyboard.press('ArrowRight')
+  await file.locator('#counter', { hasText: `2 / ${total}` }).waitFor()
+  assert.equal(await text(current(file).locator('p.big')), 'The following teams will present the Features they have been working on during PI 2026.4')
+  assert.deepEqual(await current(file).locator('ul.agenda li').allInnerTexts(), ['Quality Tools (QTL)', 'Platform Services (PLS)'])
+  await shot(file, 'pi-teams-3-agenda')
+  // A divider: the team, its short name, its Features in the PI; the team's slides name it in the eyebrow.
+  const go = async (title) => { const at = titles.indexOf(title); await file.keyboard.press('Home'); await file.locator('#counter', { hasText: `1 / ${total}` }).waitFor(); for (let step = 0; step < at; step += 1) await file.keyboard.press('ArrowRight'); await file.locator('#counter', { hasText: `${at + 1} / ${total}` }).waitFor() }
+  await go('Platform Services')
+  assert.equal(await text(current(file).locator('.eyebrow')), 'PRESENTING TEAM · 2 OF 2')
+  assert.match(await text(current(file)), /PLS.*Features in the PI 3 Reviewed 1 2 not reviewed — in “Features not reviewed”.*Epics: Audits \(#110\)/)
+  await shot(file, 'pi-teams-4-divider')
+  await go('#201 Lab rig upgrade')
+  assert.equal(await text(current(file).locator('.eyebrow')), 'QTL · DISCUSS DURING MEETING · 1 OF 1')
+  await go('Other Features')
+  assert.match(await text(current(file)), /Features in the PI 1 Reviewed 0 1 not reviewed/)
   assert.deepEqual(requests, [], 'no request leaves the file')
   assert.deepEqual(problems, [])
   await close()

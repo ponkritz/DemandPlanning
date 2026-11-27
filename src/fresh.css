@@ -1057,6 +1057,7 @@ body:has(.drawer-backdrop){overflow:hidden}
 @media(max-width:1000px){.sidebar nav button.nav-group-more{display:none}}
 .pgb-form{display:grid;gap:10px}.pgb-kinds{display:grid;gap:6px;border:1px solid var(--line);border-radius:8px;padding:8px 12px}.pgb-kinds legend{font-weight:600;padding:0 4px}
 .pgb-kind{display:grid;gap:0}.pgb-kind small{color:var(--text-2);padding-left:24px}
+.pgb-type-result{margin:4px 0 0}
 /* GIT-18: the page notice of newer data in Git; PGB-16: a page name that clashes, shown at its field. */
 .page-git-notice p{margin:0 0 8px;overflow-wrap:anywhere}.page-git-notice .button-row{flex-wrap:wrap}
 .field-with-error{display:grid;gap:4px}.field-error{color:var(--danger-text);font-weight:600;font-size:12px}label input[aria-invalid=true]{border-color:var(--danger-line);outline-color:var(--danger-line)}
@@ -1284,6 +1285,9 @@ tbody tr.tvl-hl-red td{background:var(--hl-red-bg)}tbody tr.tvl-hl-red td:first-
 .pir-preview-subtitle{font-size:13px;color:#1b2430}.pir-meeting-preview.dark .pir-preview-subtitle{color:#fff}
 .pir-preview-footer{display:flex;justify-content:space-between;gap:8px;margin-top:auto;padding-top:6px;border-top:1px solid #e3e7ec;font-size:11px;color:#6b778a}.pir-meeting-preview.dark .pir-preview-footer{color:#fff;border-top-color:rgba(255,255,255,.4)}
 @media(max-width:760px){.pir-meeting-editor,.pir-meeting-editor .form-row{grid-template-columns:1fr}}
+/* PIR-86…PIR-89: the presenting teams pop-up and its one-team pop-up. */
+.pir-teams-editor{display:grid;gap:10px;min-width:0}.pir-teams-editor label{display:grid;gap:3px}.pir-teams-editor small{font-size:11px;color:var(--muted)}
+.pir-teams-editor .pir-teams{margin-top:0}.pir-teams-editor .pir-teams table{min-width:0;width:100%}.pir-teams-editor .pir-teams td{vertical-align:top;font-size:12px}.pir-teams-editor .pir-teams td.nowrap{white-space:nowrap}
 /* UI-24: a wide table's sticky horizontal scroll bar — fixed at the bottom of the screen above the sticky footer (its
    place and width set by StickyScrollbar.tsx from the table's box and the footer's real top edge), in the theme's
    colours; the native scroll bar follows color-scheme (dark theme) and the system colours (high contrast). */

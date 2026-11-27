@@ -83,8 +83,9 @@ export const pageDataset = (page: OnDemandPage): Dataset => ({ key: pageSource(p
 export const missingDataset = (source: string, problem: string): Dataset => ({ key: source, name: source === hoursSource ? hoursSourceName : pageOfSource(source), page: asPage('missing', '', [], []), problem, ...(source === hoursSource ? { kind: 'as in Team overview' } : {}) })
 export const datasetPage = asPage
 // DSH-03: the data sources offered — every table page as saved in Git, except dashboards and the page itself, by name.
+// PGB-24 (LIM-253): a Table (Query) page holds no rows in Git — its query is added to a dashboard with ＋ Add Azure query….
 export function dataSources(pages: OnDemandPage[], saved: (id: string) => OnDemandPage | null, isDashboard: (id: string) => boolean, self: string): Dataset[] {
-  return pages.filter((page) => page.id !== self && !isDashboard(page.id)).flatMap((page) => { const stored = saved(page.id); return stored ? [pageDataset(stored)] : [] })
+  return pages.filter((page) => page.id !== self && !isDashboard(page.id) && !page.source).flatMap((page) => { const stored = saved(page.id); return stored ? [pageDataset(stored)] : [] })
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }))
 }
 

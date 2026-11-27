@@ -2,6 +2,7 @@ import { kindOf, parseGridBox, type GridBox, type GridKind } from './chartSize.t
 import { csvCell } from './csv.ts'
 import type { Merge } from './gitSaveQueue.ts'
 import { cleanElements, type ChartElements } from './chartElements.ts'
+import { pageSourceOut, parsePageSource, type PageSource } from './pageType.ts'
 
 // OND-01…OND-10 On-Demand pages: blank tables the team sets up itself — CoNQ (Cost of Non-Quality) first, more pages
 // added, renamed and removed by the roles allowed "Set up On-Demand pages". Each page is one JSON file in the Git data
@@ -54,7 +55,10 @@ export interface OnDemandRow { id: string; key?: string; link?: string; seq?: nu
 // OND-31: storage 'rows' — the page is kept as one file per row (on-demand/<id>/page.json, rows/<key>.json, counter.json,
 // src/rowFiles.ts); absent — the single page file on-demand/<id>.json (OND-08).
 // OND-63, OND-66: sample — the page as shown in Sample (src/sampleRows.ts): its rows are made up; it is never written.
-export interface OnDemandPage { schema: 1; kind: 'on-demand-page'; id: string; name: string; description: string; keyPrefix: string; columns: OnDemandColumn[]; rows: OnDemandRow[]; insights: Insight[]; colors?: ColorPins; storage?: 'rows'; lastSeq?: number; insightFilters?: InsightFilterSetup; sample?: true }
+// PGB-23, PGB-27: source — where the table's rows come from: absent, the team's own rows (Build your own, every page
+// from before); a saved Azure DevOps query's reference (Table (Query): its rows are read live, never written here);
+// or a source this build cannot use (shown read only with the reason). src/pageType.ts.
+export interface OnDemandPage { schema: 1; kind: 'on-demand-page'; id: string; name: string; description: string; keyPrefix: string; columns: OnDemandColumn[]; rows: OnDemandRow[]; insights: Insight[]; colors?: ColorPins; storage?: 'rows'; lastSeq?: number; insightFilters?: InsightFilterSetup; sample?: true; source?: PageSource }
 
 // OND-11…OND-17 Insights: charts and summary tables built from the page's rows, kept in the same file (an `insights`
 // list, written only when the page has one) so they travel with the page and are merged with it. Columns are referred
@@ -288,7 +292,7 @@ export const pageIdOfFile = (name: string) => { const match = /^([a-z0-9][a-z0-9
 // OND-02: CoNQ is there from the start — shown (not yet in Git) while the folder has no page; the first save creates it.
 export const conqId = 'conq'
 export const conqPage = (): OnDemandPage => ({ schema: 1, kind: 'on-demand-page', id: conqId, name: 'CoNQ', description: 'Cost of Non-Quality', keyPrefix: 'CONQ', columns: [], rows: [], insights: [] })
-export const emptyPage = (id: string, name: string, description = ''): OnDemandPage => ({ schema: 1, kind: 'on-demand-page', id, name: cleanName(name, 80), description: description.trim().slice(0, 300), keyPrefix: prefixFor(name), columns: [], rows: [], insights: [] })
+export const emptyPage = (id: string, name: string, description = '', source?: PageSource): OnDemandPage => ({ schema: 1, kind: 'on-demand-page', id, name: cleanName(name, 80), description: description.trim().slice(0, 300), keyPrefix: prefixFor(name), columns: [], rows: [], insights: [], ...(source ? { source } : {}) })
 
 // OND-18: every row has a key the moment it is added — the page's prefix, the date (UTC, yymmdd) and 4 random
 // characters, e.g. CONQ-261123-K7Q2. It is made without asking Git, so two people adding rows at the same time (each
@@ -680,6 +684,9 @@ export function parseOnDemandPage(raw: string, expectedId?: string): OnDemandPag
   const name = cleanName(text(file.name, 80)) || id
   const keyPrefix = typeof file.keyPrefix === 'string' && keyPrefixPattern.test(file.keyPrefix) ? file.keyPrefix : prefixFor(name)
   const colors = parseColors(file.colors)
+  // PGB-27: the table's source, validated; a query page never holds columns or rows of its own (they are read live).
+  const source = parsePageSource((file as { source?: unknown }).source)
+  if (source) return { schema: 1, kind: 'on-demand-page', id, name, description: text(file.description, 300).trim(), keyPrefix, columns: [], rows: [], insights: parseInsights(file.insights), ...(colors ? { colors } : {}), ...insightFiltersPart(parseInsightFilterSetup(file.insightFilters)), source }
   return { schema: 1, kind: 'on-demand-page', id, name, description: text(file.description, 300).trim(), keyPrefix, columns, rows, insights: parseInsights(file.insights), ...(colors ? { colors } : {}), ...(file.storage === 'rows' ? { storage: 'rows' as const } : {}), ...(typeof file.lastSeq === 'number' && Number.isInteger(file.lastSeq) && file.lastSeq >= 1 && file.lastSeq <= maxSeq ? { lastSeq: file.lastSeq } : {}), ...insightFiltersPart(parseInsightFilterSetup(file.insightFilters)) }
 }
 // LST-09: a row's keys as read — only for a built-in list column of the page and one per value (else that column's keys
@@ -754,8 +761,13 @@ export function serializeOnDemandPage(input: OnDemandPage, { fill = true }: { fi
   // OND-66: a page shown with sample rows is never written to Git (nor kept as the page last read).
   if (input.sample) throw new Error(`Sample data is shown for ${input.name}: nothing is saved to Git. Switch to Live to change it.`)
   // OND-18, OND-19: a saved file has a key and a sequential number on every row.
+  // PGB-23: a query page writes its reference and its insights — never columns or rows (the query's rows stay in memory).
+  if (input.source) return sized(`${JSON.stringify({ schema: 1, kind: 'on-demand-page', id: input.id, name: input.name, description: input.description, keyPrefix: input.keyPrefix, columns: [], rows: [], ...pageSourceOut(input.source), ...(input.insights.length ? { insights: input.insights.map(insightOut) } : {}), ...(input.colors && Object.keys(input.colors).length ? { colors: input.colors } : {}), ...insightFiltersPart(input.insightFilters) }, null, 1)}\n`)
   const page = fill ? withRowNumbers(withRowKeys(input)) : input
   const out = `${JSON.stringify({ schema: 1, kind: 'on-demand-page', id: page.id, name: page.name, description: page.description, keyPrefix: page.keyPrefix, columns: page.columns.map(({ id, name, type, options, required, description, currency, list }) => ({ id, name, type, ...(hasOptions(type) ? { options } : {}), ...(required ? { required } : {}), ...(description ? { description } : {}), ...(type === 'currency' ? { currency: currency ?? defaultCurrency } : {}), ...(list && hasOptions(type) ? { list } : {}) })), rows: page.rows.map(({ id, key, seq, addedBy, addedAt, log, hidden, refs, cells }) => ({ id, ...(key ? { key } : {}), ...(seq ? { seq } : {}), ...(addedBy ? { addedBy } : {}), ...(addedAt ? { addedAt } : {}), ...(log?.length ? { log: log.map(logOut) } : {}), ...(hidden ? { hidden } : {}), ...(refs && Object.keys(refs).length ? { refs } : {}), cells })), ...(page.insights.length ? { insights: page.insights.map(insightOut) } : {}), ...(page.colors && Object.keys(page.colors).length ? { colors: page.colors } : {}), ...(page.storage === 'rows' ? { storage: 'rows' } : {}), ...(page.lastSeq ? { lastSeq: page.lastSeq } : {}), ...insightFiltersPart(page.insightFilters) }, null, 1)}\n`
+  return sized(out)
+}
+function sized(out: string) {
   if (new TextEncoder().encode(out).length > onDemandMaxBytes) throw new Error(`The page is too large to save to Git (over ${Math.round(onDemandMaxBytes / 1000)} KB). Remove rows, or split it into two pages.`)
   return out
 }
@@ -828,8 +840,10 @@ export const mergeOnDemandText: Merge = (baseText, mineText, theirsText, mineLat
   const colors = later(base?.colors, mine.colors, theirs.colors, mineLater)
   // OND-52: the Insights filter row's setup is one entry, the later save's where both changed it.
   const insightFilters = later(base?.insightFilters, mine.insightFilters, theirs.insightFilters, mineLater)
+  // PGB-26: the table's source is set when the page is added and never changed by the app: the later save's where both differ.
+  const source = later(base ? pageSourceOut(base.source) : undefined, pageSourceOut(mine.source), pageSourceOut(theirs.source), mineLater) ?? pageSourceOut(mine.source)
   // Read back through the parser: values of columns that are gone are dropped, every rule of the file applies.
-  return serializeOnDemandPage(parseOnDemandPage(JSON.stringify({ schema: 1, kind: 'on-demand-page', id: mine.id, ...head, columns: ordered, rows, insights: orderedInsights.map(insightOut), ...(colors ? { colors } : {}), ...(mine.storage === 'rows' || theirs.storage === 'rows' ? { storage: 'rows' } : {}), ...(Math.max(mine.lastSeq ?? 0, theirs.lastSeq ?? 0) ? { lastSeq: Math.max(mine.lastSeq ?? 0, theirs.lastSeq ?? 0) } : {}), ...insightFiltersPart(insightFilters) }), mine.id))
+  return serializeOnDemandPage(parseOnDemandPage(JSON.stringify({ schema: 1, kind: 'on-demand-page', id: mine.id, ...head, columns: ordered, rows, insights: orderedInsights.map(insightOut), ...(colors ? { colors } : {}), ...(mine.storage === 'rows' || theirs.storage === 'rows' ? { storage: 'rows' } : {}), ...(Math.max(mine.lastSeq ?? 0, theirs.lastSeq ?? 0) ? { lastSeq: Math.max(mine.lastSeq ?? 0, theirs.lastSeq ?? 0) } : {}), ...insightFiltersPart(insightFilters), ...source }), mine.id))
 }
 
 // ---- the Insights filter row (OND-50…OND-56) ----
