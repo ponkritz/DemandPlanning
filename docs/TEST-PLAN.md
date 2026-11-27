@@ -2114,6 +2114,18 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 
 **TC-OND-102 Upload rights and limits** — Req OND-107 — L1 `bulk-upload.test.mjs` ("OND-107: the limits — 10 MB and .xlsx / .csv only before reading, 5,000 rows read, 2,000 added or updated, a page of at most 5,000 rows (TC-OND-102)"); browser check: a file of 11 MB is refused before it is read with the reason; an .xls file is refused ("Old .xls files cannot be read…"); a template with 2,001 new rows is refused whole ("2,001 rows would be added or updated; one upload changes at most 2,000…") and Save to Git stays disabled; in Sample, with View as, a read-only token, without Git storage or without "Edit On-Demand data", **Upload Excel…** is greyed out with the reason as its tooltip.
 
+**TC-OND-138 The columns of a file** — Req OND-136 — L1 `start-from-file.test.mjs` ("OND-136: the file’s columns — header the first row with values, unnamed and repeated headers, Row ID left out, at most 60 (TC-OND-138)"); browser check: in ＋ Add page… with Table (Build your own) ticked, **Start from a file (optional)** shows; it goes with Table (Query) or Dashboard ticked. A file whose header starts on row 3, has an empty header over values ("Column C") and "Category" twice reads as such; a file of 61 columns is refused at the field and Add page is disabled with "Choose a file the app can read, or clear Start from a file."; an .xls file and a file over 10 MB are refused with the reasons of Upload Excel….
+
+**TC-OND-139 The suggested type of each column** — Req OND-137 — L1 `start-from-file.test.mjs` ("OND-137: the suggested type — Number, Date, Currency, Long text, Dropdown, Text; empty cells ignored (TC-OND-139)", "OND-137: mixed values, leading zeros and the Dropdown threshold (dropdownMaxValues) (TC-OND-139)", "OND-137: Excel dates of an .xlsx file are suggested as Date (TC-OND-139)", "OND-137: the drafts — suggested type, not required, a sample; another type takes options or a currency from the values; checked as Set up columns (TC-OND-139)"); browser check: a file with a number column, an Excel date column, "1200.50 EUR" amounts, a paragraph column, a column of two repeating values and a column of names shows Number, Date, Currency (default EUR), Long text, Dropdown with "2 options from the values: …" and Text, each with Required unticked and a sample value; a Number made Dropdown takes its options from the values; two columns given the same name show the error above the buttons and Save to Git is disabled with it.
+
+**TC-OND-140 Save the columns and the valid rows** — Req OND-138, OND-142, OND-21 — L1 `start-from-file.test.mjs` ("OND-138: a new page — the rows planned for the columns as chosen, errors counted and left out, formula text neutralised, the limits of an upload (TC-OND-140)", "OND-138: Save to Git — the columns and the valid rows as one change, renamed columns, History “Bulk upload from {file}”, the commit (TC-OND-140)", "OND-138: a CSV file and a file with only a header (columns only) (TC-OND-140)"); browser check: after Save to Git the page has the columns in file order and the valid rows with their IDs; each row's History shows "Bulk upload from {file}"; Background jobs shows "Start from a file · {page} · {file}"; the data repository has one commit "{page}: start from {file} (…)"; Set up columns… shows the columns, their types and options, and changing a type there keeps the values. A file of only a header row makes the columns and no rows.
+
+**TC-OND-141 Add a column of an upload that the page does not have** — Req OND-140, OND-141, OND-142, OND-105 — L1 `start-from-file.test.mjs` ("OND-140: the columns of an upload that the page does not have — listed with a suggested type; ticked ones added with their values, unticked ones ignored (TC-OND-141)", "OND-140: on a page of row files the new columns and every changed row file are written in one commit (TC-OND-141)"); E2E `bulk-upload.e2e.mjs` ("TC-OND-141: Upload Excel… lists a column the page does not have, unticked; ticked with its type it is added with its values in the same save"); browser check (also on a 4x slower CPU): a filled template with an extra column "Priority" (High / Low) — ⋯ → **Upload Excel…** lists "Add “Priority” as a new column" unticked with the type Dropdown (one value); unticked the preview says it is ignored; ticked the rows that get a value become updates and "Only the {n} valid rows are saved to Git, with the 1 new column"; after Save to Git the page has the column Priority with its options and values, in one commit. As a person with "Edit On-Demand data" but not "Set up On-Demand pages" the tick boxes are greyed out with the reason shown above them and the column stays ignored.
+
+**TC-OND-142 Start a Table (Build your own) page from a file** — Req OND-136, OND-137, OND-138, OND-108 — **UAT** — E2E `bulk-upload.e2e.mjs` ("TC-OND-142: ＋ Add page… with Table (Build your own) and Start from a file — the suggested types checked and one changed, the rows previewed; Save to Git creates the columns and the valid rows in one commit"); browser check (also on a 4x slower CPU): ＋ Add page…, Table (Build your own), **Start from a file (optional)** an Excel file of 6 columns and 6 rows ("6 columns and 6 rows read"), name the page and **Add page**: the page opens with **Start from a file**; check the suggested types, make a column with "n/a" in it a Number (that row becomes an error and is left out), tick Required on the first column, rename a column; **Save to Git** — the columns and the 5 valid rows are on the page with their IDs, a formula-like text stored with an apostrophe, and every choice can be changed in Set up columns….
+
+**TC-OND-143 Start from a file… on an empty page and its rights** — Req OND-136, OND-139, OND-107 — E2E `bulk-upload.e2e.mjs` ("TC-OND-143: an empty Build-your-own page offers Start from a file… next to Set up columns…; a file with many columns opens full size"); browser check: an empty Build-your-own page shows **Start from a file…** next to **Set up columns…** and the empty message names both; a Table (Query) page and a Dashboard never show it; a page with columns does not show it (Upload Excel… instead). In View as, in Sample, with a read-only token, without Git storage, without "Set up On-Demand pages" and on a page of row files without a work email, Start from a file… is greyed out with the reason as its tooltip (and the page's reason line for a missing permission); a file of 14 columns opens the pop-up full size.
+
 **TC-OND-103 Grouped and filtered On-Demand rows: drawer, search and Export** — Req OND-132, UI-25, UI-26 — E2E `table-group-filter.e2e.mjs` ("TC-OND-103: on a grouped and filtered On-Demand table a row opens in the drawer with Previous / Next in the order shown, a text filter works with the search, and Export writes the filtered rows in the order of the groups"); browser check: group an On-Demand page by a Multi-select column and filter a text column; a row opens in the drawer with "n of m" over the rows shown; Edit and Hide in the row and a row locked by someone else (TC-OND-30) behave as without grouping; Export (Excel and CSV) holds the filtered rows shown once each, in the order of the groups (rows in closed groups left out, TC-UI-25), with a hidden grouped-by column included; the sticky scroll bar (TC-UI-18) follows the table when groups open and close.
 
 ### 6.28a Page file names
@@ -3330,10 +3342,10 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | OND-102 | TC-OND-98 |
 | OND-103 | TC-OND-99 |
 | OND-104 | TC-OND-99 |
-| OND-105 | TC-OND-100 |
+| OND-105 | TC-OND-100, TC-OND-141 |
 | OND-106 | TC-OND-100 |
-| OND-107 | TC-OND-102 |
-| OND-108 | TC-OND-101 |
+| OND-107 | TC-OND-102, TC-OND-143 |
+| OND-108 | TC-OND-101, TC-OND-142 |
 | OND-132 | TC-UI-20, TC-OND-103, TC-UI-25 |
 | OND-120 | TC-OND-120, TC-OND-123, TC-OND-129 |
 | OND-121 | TC-OND-121, TC-OND-128, TC-OND-129 |
@@ -3349,6 +3361,13 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | OND-133 | TC-OND-132, TC-OND-133, TC-OND-137 |
 | OND-134 | TC-OND-135, TC-OND-137 |
 | OND-135 | TC-OND-134, TC-OND-136 |
+| OND-136 | TC-OND-138, TC-OND-142, TC-OND-143 |
+| OND-137 | TC-OND-139, TC-OND-142 |
+| OND-138 | TC-OND-140, TC-OND-142 |
+| OND-139 | TC-OND-143 |
+| OND-140 | TC-OND-141 |
+| OND-141 | TC-OND-141 |
+| OND-142 | TC-OND-140, TC-OND-141 |
 | CON-103 | TC-OND-06, TC-OND-07, TC-OND-13 |
 | CON-104 | TC-CON-65 |
 | CON-105 | TC-CON-66 |
@@ -3726,7 +3745,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-34 | TC-EPS-01, TC-EPS-02, TC-EPS-03, TC-EPS-04, TC-EPS-05, TC-EPS-06, TC-EPS-07, TC-EPS-08, TC-EPS-09, TC-EPS-10 |
 | UC-35 | TC-ADM-01, TC-ADM-02, TC-ADM-03 |
 | UC-36 | TC-STT-01, TC-STT-02, TC-STT-03, TC-STT-04, TC-STT-05, TC-STT-06 |
-| UC-37 | TC-OND-01…34, TC-OND-40…65, TC-OND-90…103, TC-OND-120…126, TC-OND-128, TC-OND-129, TC-OND-131…137, TC-CHT-01…42, TC-CHT-50…72, TC-UI-20, TC-UI-25 |
+| UC-37 | TC-OND-01…34, TC-OND-40…65, TC-OND-90…103, TC-OND-120…126, TC-OND-128, TC-OND-129, TC-OND-131…143, TC-CHT-01…42, TC-CHT-50…72, TC-UI-20, TC-UI-25 |
 | UC-38 | TC-PGB-01…20, TC-OND-129, TC-OND-131, TC-OND-133, TC-OND-135…137, TC-DSH-01…23, TC-CHT-02, TC-CHT-11, TC-CHT-13…27, TC-CHT-29…37, TC-CHT-39, TC-CHT-40, TC-CHT-42, TC-CHT-50…57, TC-CHT-59, TC-CHT-60…69, TC-CHT-71, TC-CHT-72, TC-TVL-12, TC-TVL-23 |
 | UC-39 | TC-TVL-01…33 |
 | UC-40 | TC-PIR-01…61, TC-PIR-64…68, TC-PIR-75…79, TC-PIR-81…92, TC-EPS-10, TC-UI-27 |

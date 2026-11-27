@@ -10,6 +10,9 @@ import { usePageTypeChoice } from '../usePageTypeChoice'
 import { PageTypeField } from './PageTypeField'
 import type { NewPage } from '../useMenuLayout'
 import { Modal, Notice } from './ui'
+import { readSheets, uploadAccept, uploadName } from '../bulkUpload'
+import { fileColumns } from '../startFromFile'
+import type { StartFile } from './StartFromFileDialog'
 
 // PGB-05…PGB-08: the pop-ups of the page builder (UI-STANDARDS §3/§4), shared by Admin → Pages & reports → Menu groups & pages, the ⋯ of a menu
 // group and ＋ Add page… on a page: add a page, edit a page's place in the menu, add or edit a group.
@@ -35,9 +38,33 @@ function IconField({ value, onChange }: { value: string; onChange: (icon: string
   return <label>Icon<select aria-label="Icon" value={value} onChange={(event) => onChange(event.target.value)}>{pageIcons.map((entry) => <option key={entry.icon} value={entry.icon}>{entry.icon} {entry.label}</option>)}</select><small>Shown next to the page’s name in the menu and on Home.</small></label>
 }
 
+// OND-136: Start from a file (optional) in Add page, offered only with Table (Build your own): the file is read here when
+// it is chosen (nothing is sent anywhere; refused with the reason as Upload Excel… refuses it, OND-107) and handed to the
+// new page, which opens Start from a file with it — the columns and rows are saved only there, after their preview.
+function StartFileField({ value, onChange }: { value: { file: StartFile | null; reading: string; problem: string }; onChange: (value: { file: StartFile | null; reading: string; problem: string }) => void }) {
+  async function choose(chosen: File | undefined) {
+    if (!chosen) { onChange({ file: null, reading: '', problem: '' }); return }
+    onChange({ file: null, reading: chosen.name, problem: '' })
+    try {
+      const sheets = await readSheets(chosen)
+      // One sheet: its columns checked now (too many, none); several: the sheet is picked on the new page.
+      const refused = sheets.length === 1 ? fileColumns(sheets[0]).refused : ''
+      onChange(refused ? { file: null, reading: '', problem: refused } : { file: { name: chosen.name, sheets }, reading: '', problem: '' })
+    } catch (failure) { onChange({ file: null, reading: '', problem: failure instanceof Error ? failure.message : String(failure) }) }
+  }
+  const read = value.file ? fileColumns(value.file.sheets[0]) : null
+  return <div className="field-with-error"><label>Start from a file (optional)<input type="file" accept={uploadAccept} aria-label="Start from a file (optional)" aria-invalid={value.problem ? true : undefined} aria-describedby={value.problem ? 'start-file-problem' : undefined} onChange={(event) => void choose(event.target.files?.[0])} />
+    <small>An Excel (.xlsx) or CSV file: its first row names the columns. After Add page you check each column’s suggested type and the rows, then Save to Git. Without a file the page starts empty.</small></label>
+    {value.reading && <small className="muted" role="status">Reading {value.reading}…</small>}
+    {value.file && read && !read.refused && <small className="muted" role="status">{uploadName(value.file.name)}: {read.columns.length} column{read.columns.length === 1 ? '' : 's'} and {read.rows.toLocaleString('en-US')} row{read.rows === 1 ? '' : 's'} read{value.file.sheets.length > 1 ? ` from “${value.file.sheets[0].name}”` : ''}.</small>}
+    {value.problem && <small id="start-file-problem" className="field-error" role="alert">{value.problem}</small>}
+  </div>
+}
+
 // PGB-05: ＋ Add page — type, name, description, icon, menu group (one that accepts added pages and that the viewer may
-// add to, or ＋ New group… for a Tool Owner) and the page's co-owners.
-export function AddPageDialog({ viewer, layout, group: preset, azure, onCancel, onCreate }: { viewer: Viewer; layout: MenuLayout; group?: string; azure: QueryPickerOptions; onCancel: () => void; onCreate: (input: NewPage) => Promise<void> }) {
+// add to, or ＋ New group… for a Tool Owner) and the page's co-owners. OND-136: with Table (Build your own) ticked, Start
+// from a file (optional); onCreate gets the file read, to open the new page's Start from a file with it.
+export function AddPageDialog({ viewer, layout, group: preset, azure, onCancel, onCreate }: { viewer: Viewer; layout: MenuLayout; group?: string; azure: QueryPickerOptions; onCancel: () => void; onCreate: (input: NewPage, start?: StartFile) => Promise<void> }) {
   const groups = groupsForAdding(viewer, layout)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -50,7 +77,10 @@ export function AddPageDialog({ viewer, layout, group: preset, azure, onCancel, 
   const clash = usePageNameClash(name)
   const choice = usePageTypeChoice(azure, () => setError(''))
   const kind = choice.kind
-  const typeReason = typeof choice.result === 'string' ? choice.result : ''
+  const [start, setStart] = useState<{ file: StartFile | null; reading: string; problem: string }>({ file: null, reading: '', problem: '' })
+  const ownTable = typeof choice.result !== 'string' && choice.result.kind !== 'dashboard' && !choice.result.source
+  const startReason = !ownTable ? '' : start.reading ? 'Reading the file…' : start.problem ? 'Choose a file the app can read, or clear Start from a file.' : ''
+  const typeReason = typeof choice.result === 'string' ? choice.result : startReason
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
     const chosen = choice.result
@@ -61,13 +91,15 @@ export function AddPageDialog({ viewer, layout, group: preset, azure, onCancel, 
     if (isNew) { const problem = groupNameError(layout, groupName); if (problem) { setError(problem); return } }
     else if (!groups.some((entry) => entry.id === group)) { setError('Choose a menu group.'); return }
     setBusy(true); setError('')
-    try { await onCreate({ kind: chosen.kind, name, description, icon, group: isNew ? '' : group, newGroup: isNew ? groupName : null, owners, ...(chosen.source ? { source: chosen.source } : {}) }) }
+    if (startReason) return
+    try { await onCreate({ kind: chosen.kind, name, description, icon, group: isNew ? '' : group, newGroup: isNew ? groupName : null, owners, ...(chosen.source ? { source: chosen.source } : {}) }, ownTable && start.file ? start.file : undefined) }
     catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); setBusy(false) }
   }
   const presetName = preset ? findGroup(layout, preset)?.name : undefined
   return <Modal eyebrow="PAGES & MENU" title={presetName ? `Add a page to ${presetName}` : 'Add a page'} onClose={() => { if (!busy) onCancel() }}>
     <form onSubmit={(event) => void submit(event)} className="pgb-form">
       {choice.field}
+      {ownTable && <StartFileField value={start} onChange={setStart} />}
       <PageNameField value={name} clash={clash} onChange={(value) => { setName(value); setError('') }} />
       <label>Description (optional)<input maxLength={300} value={description} onChange={(event) => setDescription(event.target.value)} /><small>Shown under the page name and as the title’s tooltip.</small></label>
       <IconField value={icon} onChange={setIcon} />

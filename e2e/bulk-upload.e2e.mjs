@@ -157,3 +157,152 @@ test('TC-OND-100: ⋯ → Upload Excel… — 2 rows added, 1 updated, 1 unchang
   assert.deepEqual(errors, [])
   await context.close()
 })
+
+// OND-136…OND-142 Start from a file (TC-OND-142, UAT; TC-OND-141): a Table (Build your own) page started from an .xlsx
+// file in ＋ Add page… — the columns with their suggested types, one changed, the rows previewed — an empty page's Start
+// from a file…, and a column the page does not have added from Upload Excel…. Synthetic data only.
+const xlsxFile = (name, rows) => ({ name, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from(writeXlsx([{ name: name.replace(/\.xlsx$/, ''), rows }])) })
+const day = (d) => ({ date: new Date(2026, 10, d), time: false })
+const typeOf = (dialog, letter) => dialog.getByRole('combobox', { name: `Type of column ${letter}`, exact: true })
+
+test('TC-OND-142: ＋ Add page… with Table (Build your own) and Start from a file — the suggested types checked and one changed, the rows previewed; Save to Git creates the columns and the valid rows in one commit', async () => {
+  const gh = repository()
+  const { page, context, errors } = await openPage(gh)
+  await page.getByRole('button', { name: '＋ Add page…' }).first().click()
+  const add = page.getByRole('dialog', { name: /^Add a page/ })
+  await add.waitFor()
+  const own = add.getByRole('checkbox', { name: 'Table (Build your own)', exact: true })
+  assert.equal(await own.isChecked(), true)
+  const field = add.getByLabel('Start from a file (optional)')
+  await field.waitFor()
+  // Only with Table (Build your own): gone with a Dashboard.
+  await own.uncheck()
+  await add.getByRole('checkbox', { name: 'Dashboard', exact: true }).check()
+  await field.waitFor({ state: 'detached' })
+  await add.getByRole('checkbox', { name: 'Dashboard', exact: true }).uncheck()
+  await own.check()
+  await field.setInputFiles(xlsxFile('Audit findings.xlsx', [
+    ['Finding', 'Area', 'Severity', 'Found on', 'Cost', 'Note'],
+    ['Label missing', 'Line 1', 'High', day(2), 120, '=SUM(A1)'],
+    ['Torque too low', 'Line 2', 'Low', day(3), 80, ''],
+    ['Scratch on cover', 'Line 1', 'High', day(5), 'n/a', ''],
+    ['Wrong part number', 'Line 2', 'Low', day(9), 45.5, 'Checked twice'],
+    ['Loose cable', 'Line 1', 'High', day(12), 10, ''],
+    ['Missing washer', 'Line 2', 'Low', day(20), 15, ''],
+  ]))
+  await add.getByText('Audit findings.xlsx: 6 columns and 6 rows read.').waitFor()
+  await add.getByLabel('Page name', { exact: true }).fill('Audit findings')
+  await add.getByRole('button', { name: 'Add page', exact: true }).click()
+  await add.waitFor({ state: 'detached' })
+
+  // The new page opens with the Start from a file pop-up: each column with its suggested type.
+  const dialog = page.getByRole('dialog', { name: 'Start from a file' })
+  await dialog.waitFor()
+  assert.equal(await text(dialog.locator('.eyebrow')), 'ON-DEMAND · AUDIT FINDINGS')
+  assert.deepEqual(await Promise.all(['A', 'B', 'C', 'D', 'E', 'F'].map((letter) => typeOf(dialog, letter).inputValue())), ['text', 'dropdown', 'dropdown', 'date', 'text', 'text'])
+  assert.match(await text(dialog), /2 options from the values: Line 1, Line 2/)
+  assert.equal(await dialog.getByRole('checkbox', { name: 'Column A is required' }).isChecked(), false, 'Required starts unticked')
+  const preview = dialog.getByRole('status', { name: 'Preview' })
+  await preview.getByText('6 added · 0 updated · 0 unchanged · 0 with errors').waitFor()
+  // Cost holds "n/a": suggested Text; made a Number, that row has an error and is left out.
+  await typeOf(dialog, 'E').selectOption('number')
+  await dialog.getByRole('checkbox', { name: 'Column A is required' }).check()
+  await dialog.getByLabel('Name of column E').fill('Cost (EUR)')
+  await preview.getByText('5 added · 0 updated · 0 unchanged · 1 with errors').waitFor()
+  assert.match(await text(preview), /4 new Error “Cost \(EUR\)” is not a number: “n\/a”/)
+  assert.match(await text(preview), /1 text value starting with =, \+, - or @ is stored with an apostrophe first/)
+  assert.match(await text(dialog), /Save to Git adds the 6 columns to Audit findings and saves the 5 valid rows as one change; the 1 row with errors is left out/)
+  await shoot(page, 'start-from-file-preview')
+  await dialog.getByRole('button', { name: 'Save to Git', exact: true }).click()
+  await dialog.waitFor({ state: 'detached' })
+  const pageFile = () => Object.keys(gh.files('main') ?? {}).find((path) => /^on-demand\/Audit findings--audit-findings\.json$/.test(path))
+  await until(() => pageFile() && (gh.read(pageFile()) ?? '').includes('Missing washer'), 'the columns and rows saved to Git')
+  const saved = JSON.parse(gh.read(pageFile()))
+  assert.deepEqual(saved.columns.map((column) => [column.name, column.type, column.required === true]), [['Finding', 'text', true], ['Area', 'dropdown', false], ['Severity', 'dropdown', false], ['Found on', 'date', false], ['Cost (EUR)', 'number', false], ['Note', 'text', false]])
+  assert.deepEqual(saved.columns[2].options, ['High', 'Low'])
+  assert.equal(saved.rows.length, 5)
+  assert.equal(saved.rows[0].cells[saved.columns[5].id], "'=SUM(A1)")
+  assert.equal(saved.rows[0].log[0].comment, 'Bulk upload from Audit findings.xlsx')
+  assert.ok(gh.writes.some((entry) => entry.message.startsWith('Audit findings: start from Audit findings.xlsx (6 columns, 5 rows added)')), gh.writes.map((entry) => entry.message).join(' | '))
+  await page.locator('.od-panel table tbody tr', { hasText: 'Missing washer' }).waitFor()
+  // Everything stays editable in Set up columns….
+  await page.getByRole('button', { name: 'Set up columns…' }).click()
+  const setup = page.getByRole('dialog', { name: 'Set up columns' })
+  await setup.waitFor()
+  assert.ok((await setup.locator('input').evaluateAll((inputs) => inputs.map((input) => input.value))).includes('Cost (EUR)'))
+  await setup.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await page.locator('.jobs-button').click()
+  const jobs = page.getByRole('dialog', { name: 'Background jobs' })
+  await jobs.getByText('Start from a file · Audit findings · Audit findings.xlsx').waitFor()
+  assert.match(await text(jobs), /6 columns added, 5 rows added, 0 rows updated; 1 row with errors not saved/)
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
+test('TC-OND-141: Upload Excel… lists a column the page does not have, unticked; ticked with its type it is added with its values in the same save', async () => {
+  const gh = repository()
+  const { page, context, errors } = await openPage(gh)
+  const menu = await menuOf(page, 'page Supplier issues')
+  await menu.getByRole('menuitem', { name: 'Upload Excel…' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Upload Excel' })
+  await dialog.waitFor()
+  await dialog.getByLabel('Excel or CSV file').setInputFiles(xlsxFile('Supplier issues - priority.xlsx', [
+    ['Row ID', 'Category', 'Priority', 'Comment'],
+    ['SUP-0001', 'Scrap', 'High', 'first'],
+    ['SUP-0002', 'Rework', 'Low', ''],
+    ['SUP-0003', 'Warranty', 'High', ''],
+    ['', 'Scrap', 'Low', 'new'],
+  ]))
+  const columns = dialog.getByRole('group', { name: 'Columns not on Supplier issues' })
+  await columns.waitFor()
+  const priority = columns.getByRole('checkbox', { name: 'Add “Priority” as a new column' })
+  assert.equal(await priority.isChecked(), false, 'unticked by default')
+  assert.equal(await columns.getByRole('combobox', { name: 'Type of Priority' }).inputValue(), 'dropdown')
+  const preview = dialog.getByRole('status', { name: 'Preview' })
+  await preview.getByText('1 added · 0 updated · 3 unchanged · 0 with errors').waitFor()
+  assert.match(await text(preview), /Ignored columns \(not a column of Supplier issues\): “Priority”, “Comment”/)
+  await priority.check()
+  await preview.getByText('1 added · 3 updated · 0 unchanged · 0 with errors').waitFor()
+  assert.match(await text(preview), /Ignored column \(not a column of Supplier issues\): “Comment”/)
+  assert.match(await text(dialog), /Only the 4 valid rows are saved to Git, with the 1 new column/)
+  await shoot(page, 'upload-new-column')
+  await dialog.getByRole('button', { name: 'Save to Git', exact: true }).click()
+  await dialog.waitFor({ state: 'detached' })
+  await until(() => (gh.read('on-demand/supplier-issues.json') ?? '').includes('"Priority"'), 'the new column saved to Git')
+  const saved = JSON.parse(gh.read('on-demand/supplier-issues.json'))
+  const added = saved.columns.at(-1)
+  assert.deepEqual([added.name, added.type, added.options, added.required === true], ['Priority', 'dropdown', ['High', 'Low'], false])
+  assert.deepEqual(saved.rows.map((row) => row.cells[added.id]), ['High', 'Low', 'High', 'Low'])
+  assert.ok(gh.writes.some((entry) => entry.message.includes('(1 row added, 3 rows updated; 1 column added)')))
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
+test('TC-OND-143: an empty Build-your-own page offers Start from a file… next to Set up columns…; a file with many columns opens full size', async () => {
+  const gh = fakeGitHub({ files: {
+    'access.json': policy(),
+    'menu-layout.json': JSON.stringify({ schema: 1, kind: 'menu-layout', groups: {}, pages: { 'empty-list': { type: 'table', group: 'on-demand', order: 1, icon: '▦', owners: [] } } }),
+    'on-demand/empty-list.json': JSON.stringify({ schema: 1, kind: 'on-demand-page', id: 'empty-list', name: 'Empty list', description: '', keyPrefix: 'EMP', columns: [], rows: [], insights: [] }),
+  } })
+  const { page, context, errors } = await open(gh)
+  await navigate(page, 'Empty list')
+  await page.getByText('No columns yet.').waitFor()
+  const actions = page.locator('.od-panel .button-row').first()
+  assert.deepEqual((await actions.getByRole('button').allInnerTexts()).map((label) => label.trim()), ['Start from a file…', 'Set up columns…'])
+  await actions.getByRole('button', { name: 'Start from a file…' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Start from a file' })
+  await dialog.waitFor()
+  assert.equal(await dialog.getByRole('button', { name: 'Save to Git', exact: true }).isDisabled(), true)
+  assert.match(await text(dialog.locator('.modal-actions')), /Choose an Excel \(\.xlsx\) or CSV file\./)
+  const header = Array.from({ length: 14 }, (_, i) => `Field ${i + 1}`)
+  const csv = [header.join(','), header.map((_, i) => String(i)).join(','), header.map((_, i) => String(i * 2)).join(',')].join('\r\n')
+  await dialog.getByLabel('Excel or CSV file').setInputFiles({ name: 'fields.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) })
+  await dialog.getByRole('status', { name: 'Preview' }).getByText('2 added · 0 updated · 0 unchanged · 0 with errors').waitFor()
+  assert.equal(await page.locator('.modal.modal-full').count(), 1, 'more than 12 columns: full size')
+  await dialog.getByRole('button', { name: 'Save to Git', exact: true }).click()
+  await dialog.waitFor({ state: 'detached' })
+  await until(() => (gh.read('on-demand/empty-list.json') ?? '').includes('Field 14'), 'the columns saved')
+  assert.equal(JSON.parse(gh.read('on-demand/empty-list.json')).rows.length, 2)
+  assert.deepEqual(errors, [])
+  await context.close()
+})

@@ -5,7 +5,7 @@ import { BrandMark } from './components/BrandMark'
 import { TableDefaultsContext } from './components/tableDesign'
 import { ReleaseSettingsContext } from './useStreamEpics'
 import { normalizeTableDefaults } from './tableDefaults'
-import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore, lazy, Suspense } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, lazy, Suspense } from 'react'
 import { recordVisit } from './usageCounts'
 import './App.css'
 import './fresh.css'
@@ -70,6 +70,7 @@ import { QePagesContext } from './useQeSource'
 import { addPageReason, builtInGroupOf, findGroup, gitReasonOf, isDashboard, isHidden, kindOf, menuGroups, pagesOfGroup, placementOf, type Viewer } from './menuLayout'
 import { usePublishAuthorization, usePublishScheduler } from './publishRun'
 import { AddPageDialog } from './components/PageDialogs'
+import type { StartFile } from './components/StartFromFileDialog'
 import { OwnerPeopleContext, PageNamesContext } from './usePageNames'
 import { knownPeople, teamPeopleOnce, type KnownPerson } from './ownerPeople'
 import { duplicatePageNames, menuLabel, type MenuPageName } from './pageNames'
@@ -353,6 +354,9 @@ export default function App() {
   const viewedEmail = access.viewingAs?.kind === 'person' ? (access.viewingAs.email ?? '').trim().toLowerCase() : access.viewingAs ? '' : access.email
   const viewer: Viewer = { email: viewedEmail, can: access.can, readOnly: access.readOnly, manager: canManagePages(access.policy, access.rights), viewingAs: Boolean(access.viewingAs) }
   const [addPageFor, setAddPageFor] = useState<string | null>(null)
+  // OND-136: the file chosen in Add page → Start from a file, handed to the new page once.
+  const [startFile, setStartFile] = useState<{ pageId: string; file: StartFile } | null>(null)
+  const startFileUsed = useCallback(() => setStartFile(null), [])
   // TVL-01…TVL-12: the Tool Validations master list (tool-validations.json in Git), its sources and who may change it —
   // the Tool Owner and the list's co-owners, never while viewing as someone else, with the sample or without a token that
   // can write. The Tool Validations query's tools are appended whenever its data is fetched (TVL-04).
@@ -825,7 +829,7 @@ export default function App() {
       {page === 'ondemand' && onDemandPage && kindOf(menu.layout, onDemandPage.id) === 'dashboard' && <CustomDashboardPage key={onDemandPage.id} git={git} store={onDemand} pageId={onDemandPage.id} menu={menu} viewer={viewer} views={personalViews} onOpen={openOnDemand} addPageReason={addPageReason(viewer, menu.layout, placementOf(menu.layout, onDemandPage.id).group)} onAddPage={() => setAddPageFor(placementOf(menu.layout, onDemandPage.id).group)} hours={{ items: reportAzure.items, settings: dashboardHoursSettings, allowed: access.sees('insights') }} publisherName={publisherName} publisher={publisher} tools={toolDatasetList} azure={dashboardAzure} />}
       {/* PGB-24: a Table (Query) page — its rows read from a saved Azure DevOps query with the viewer's own PAT, read only. */}
       {page === 'ondemand' && onDemandPage && kindOf(menu.layout, onDemandPage.id) !== 'dashboard' && onDemandPage.source && <QueryTablePage key={onDemandPage.id} git={git} store={onDemand} pageId={onDemandPage.id} onOpen={openOnDemand} kind={kindOf(menu.layout, onDemandPage.id)} menu={menu} viewer={viewer} addPageReason={addPageReason(viewer, menu.layout, placementOf(menu.layout, onDemandPage.id).group)} onAddPage={() => setAddPageFor(placementOf(menu.layout, onDemandPage.id).group)} views={personalViews} azure={dashboardAzure} />}
-      {page === 'ondemand' && onDemandPage && kindOf(menu.layout, onDemandPage.id) !== 'dashboard' && !onDemandPage.source && <OnDemandPage key={onDemandPage.id} git={git} store={onDemand} pageId={onDemandPage.id} me={azure.isSample ? '' : azure.creatorEmail.trim().toLowerCase() || my.self.me.name?.trim() || ''} onOpen={openOnDemand} kind={kindOf(menu.layout, onDemandPage.id)} menu={menu} viewer={viewer} addPageReason={addPageReason(viewer, menu.layout, placementOf(menu.layout, onDemandPage.id).group)} onAddPage={() => setAddPageFor(placementOf(menu.layout, onDemandPage.id).group)} views={personalViews} dataMode={dataMode} publisherName={publisherName} publisher={publisher} />}
+      {page === 'ondemand' && onDemandPage && kindOf(menu.layout, onDemandPage.id) !== 'dashboard' && !onDemandPage.source && <OnDemandPage key={onDemandPage.id} git={git} store={onDemand} pageId={onDemandPage.id} me={azure.isSample ? '' : azure.creatorEmail.trim().toLowerCase() || my.self.me.name?.trim() || ''} onOpen={openOnDemand} kind={kindOf(menu.layout, onDemandPage.id)} menu={menu} viewer={viewer} addPageReason={addPageReason(viewer, menu.layout, placementOf(menu.layout, onDemandPage.id).group)} onAddPage={() => setAddPageFor(placementOf(menu.layout, onDemandPage.id).group)} views={personalViews} dataMode={dataMode} publisherName={publisherName} publisher={publisher} startFile={startFile?.pageId === onDemandPage.id ? startFile.file : undefined} onStartFileUsed={startFileUsed} />}
       {page === 'mywork' && <MyWorkPage azure={azure} store={store} my={my} month={month} onOpenActivities={() => setPage('activities')} assign={assign} featureSetup={featureSetup.setups} />}
       {page === 'bulk' && <SprintCheckPage azure={azure} store={store} my={my} />}
       {page === 'mypireview' && <MyPiReviewPage azure={azure} my={my} />}
@@ -847,7 +851,7 @@ export default function App() {
         <AdminPage tab="home" onOpenTab={openSettings} {...pageProps} azure={azure} git={git} access={access} featureSetup={featureSetup} epicSetup={epicSetup} sharedLists={listsEnv} monthlyPack={monthlyPack} history={history} loadEverything={() => startJob('everything')} onOpenBoard={() => setPage('board')}
           only={{ sections: pageSettings, stream: releaseStream, onOpenAdmin: (tab, section) => { setPageSettingsAt(null); openSettings(tab, section) } }} />
       </PageSettingsDialog>}
-      {addPageFor != null && <AddPageDialog viewer={viewer} layout={menu.layout} group={addPageFor || undefined} azure={{ connections: dashboardAzure.queryConnections, servers: dashboardAzure.servers, profiles: dashboardAzure.profiles, viewingAs: dashboardAzure.viewingAs }} onCancel={() => setAddPageFor(null)} onCreate={async (input) => { const id = await createPage(onDemand, menu, input); setAddPageFor(null); openOnDemand(id) }} />}
+      {addPageFor != null && <AddPageDialog viewer={viewer} layout={menu.layout} group={addPageFor || undefined} azure={{ connections: dashboardAzure.queryConnections, servers: dashboardAzure.servers, profiles: dashboardAzure.profiles, viewingAs: dashboardAzure.viewingAs }} onCancel={() => setAddPageFor(null)} onCreate={async (input, start) => { const id = await createPage(onDemand, menu, input); if (start) setStartFile({ pageId: id, file: start }); setAddPageFor(null); openOnDemand(id) }} />}
       <footer className="app-footer" aria-label="Version" ref={footerRef}><ZoomControl /><DesktopDownload />{buildStatus}</footer>
     </main>
   </div></ChartSizeEnvContext.Provider></HeaderSlot.Provider></ToolValidationsContext.Provider></OnPremContext.Provider></EpicSetupContext.Provider></ReadOnlyContext.Provider></CanContext.Provider></ReviewEnvContext.Provider></ReleaseSettingsContext.Provider></CustomStreamsContext.Provider></TableDefaultsContext.Provider></OwnerPeopleContext.Provider></PageNamesContext.Provider></ListCatalogContext.Provider></QePagesContext.Provider>

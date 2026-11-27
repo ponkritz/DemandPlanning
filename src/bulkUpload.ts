@@ -1,6 +1,6 @@
 import { csvCell, csvSafe } from './csv.ts'
 import { capLog, cellText, hasOptions, isEmpty, maxLongValue, maxRows, maxValue, moneyOf, newId, rowError, rowId, upsertRow, valuesOf, type OnDemandColumn, type OnDemandPage, type OnDemandRow, type OnDemandValue } from './onDemand.ts'
-import { columnLetter, inlineList, sheetName, sheetRef, type WorkbookSheet, type XlsxCell, type XlsxSheet, type XlsxValidation } from './xlsx.ts'
+import { columnLetter, inlineList, readCsv, readXlsx, sheetName, sheetRef, type WorkbookSheet, type XlsxCell, type XlsxSheet, type XlsxValidation } from './xlsx.ts'
 
 // OND-103…OND-108 Bulk upload on the On-Demand table pages (CoNQ, every Table and Table + Insights page): an Excel
 // template of the page with data validation for its columns, filled in Excel and uploaded in one go — rows with a Row ID
@@ -105,6 +105,16 @@ export function fileError(file: { name: string; size: number }): string {
   if (file.size > maxUploadBytes) return `The file is ${(file.size / 1024 / 1024).toFixed(1)} MB; an upload takes at most ${maxUploadBytes / 1024 / 1024} MB. Keep only the rows to add or change and upload it again.`
   return ''
 }
+// OND-105, OND-136: a chosen file read in the browser (nothing is sent anywhere): refused before it is read when it is not
+// .xlsx or .csv or too large (OND-107), a CSV as one sheet named after the file. Throws with the reason.
+export async function readSheets(file: File): Promise<WorkbookSheet[]> {
+  const refused = fileError(file)
+  if (refused) throw new Error(refused)
+  const sheets = file.name.toLowerCase().endsWith('.csv') ? [{ name: file.name.replace(/\.csv$/i, ''), rows: readCsv(await file.text()) }] : await readXlsx(new Uint8Array(await file.arrayBuffer()))
+  if (!sheets.length) throw new Error('No sheets were found in this file.')
+  return sheets
+}
+export const uploadAccept = '.xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv'
 // The file's name as it is written in History and the commit: its base name, without control characters, at most 120.
 export const uploadName = (name: string) => printable(name.split(/[\\/]/).pop() ?? '').trim().slice(0, 120) || 'upload'
 
@@ -310,7 +320,8 @@ export function applyUpload(page: OnDemandPage, plan: Pick<UploadPlan, 'added' |
   done.page = current
   return done
 }
-export const uploadCommit = (page: Pick<OnDemandPage, 'name'>, fileName: string, plan: Pick<UploadPlan, 'added' | 'updated'>) => `${page.name}: bulk upload from ${uploadName(fileName)} (${plural(plan.added.length, 'row')} added, ${plural(plan.updated.length, 'row')} updated)`
+// OND-141: columns — the new columns added in the same save ("; 2 columns added").
+export const uploadCommit = (page: Pick<OnDemandPage, 'name'>, fileName: string, plan: Pick<UploadPlan, 'added' | 'updated'>, columns = 0) => `${page.name}: bulk upload from ${uploadName(fileName)} (${plural(plan.added.length, 'row')} added, ${plural(plan.updated.length, 'row')} updated${columns ? `; ${plural(columns, 'column')} added` : ''})`
 export const uploadResult = (done: Omit<UploadDone, 'page'>, errors: number) => [
   `${plural(done.added, 'row')} added, ${plural(done.updated, 'row')} updated`,
   done.locked ? `${plural(done.locked, 'row')} being edited by someone else skipped` : '',
