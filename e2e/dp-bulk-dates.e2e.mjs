@@ -6,7 +6,7 @@ import { fakeGitHub } from './fakeGitHub.mjs'
 
 // DP bulk creation dates (DPF-13…DPF-16; TC-DPF-16, UAT) and the full-size bulk pop-up (UI-30; TC-UI-26), against a
 // mocked GitHub, a mocked on-prem DP query (azure.example.com, read only) and a mocked dev.azure.com that records
-// every create. A Tool Owner sets Admin → Stream options → Bulk creation Epics → DP bulk creation dates (saved to Git
+// every create. A Tool Owner sets Admin → Streams → Bulk creation → DP bulk creation dates (saved to Git
 // at once); then DP Create Features on two releases sends Start date = DRPE Date and Target date = DDT Date in the
 // Feature's create body, with one Time Writing Task per Feature (Current month only, the default) or one per month
 // from Start to Target (Every month …). The dates are set from today, so the months hold whenever the test runs.
@@ -154,8 +154,8 @@ test('TC-DPF-16: the Tool Owner maps the DP dates (saved to Git); DP Create Feat
   const first = await openApp(gh, { scale: shots ? 2 : undefined })
   let page = first.page
   // (1) The mapping: defaults shown; Start from DRPC Date saved to Git, then back to DRPE Date (the default is not stored).
-  await navigate(page, /Stream options$/)
-  await page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'Bulk creation Epics' }).click()
+  await navigate(page, /Streams$/)
+  await page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'Bulk creation' }).click()
   const panel = page.locator('.dp-bulk-dates')
   await panel.waitFor()
   assert.match(await text(panel.locator('.settings-summary')), /Start date from DRPE Date \(RPE\) — default Target date from DDT Date \(DT\) — default/i)
@@ -173,8 +173,8 @@ test('TC-DPF-16: the Tool Owner maps the DP dates (saved to Git); DP Create Feat
   assert.match(await text(panel.locator('.settings-summary')), /Start date from DRPC Date \(PRD\) Target date from DDT Date \(DT\) — default/i)
   await page.reload()
   await page.locator('.sidebar nav').waitFor()
-  await navigate(page, /Stream options$/)
-  await page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'Bulk creation Epics' }).click()
+  await navigate(page, /Streams$/)
+  await page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'Bulk creation' }).click()
   await panel.waitFor()
   await edit('DRPEDate')
   await panel.locator('.settings-summary', { hasText: 'DRPE Date (RPE) — default' }).waitFor()

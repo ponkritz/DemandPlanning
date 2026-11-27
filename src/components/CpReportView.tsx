@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { DataTable } from './DataTable'
 import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { FeatureSetups } from '../featureSetup'
+import type { AzureWorkItem } from '../domain'
 import type { CpMonthReport, CpReleaseRow } from '../cpReporting'
 import { boardMatch, boardMatchText, dpBoardCandidates } from '../dpBoardMatch'
 import { releaseOnlyTitle, timeWritingHours } from '../releaseSource'
@@ -23,7 +24,8 @@ import { Notice, Pill, TablePanel } from './ui'
 // Completed), the matched Feature's Time Writing Feature, Planned (h) and Booked (h) (QV-65) and the QMS-0025 match last.
 const statusText: Record<string, string> = { candidate_from_title: 'name from title, to review', name_unavailable: 'no name', conflicting_names: 'conflicting names', version_unavailable: 'no version', enrichment_not_supplied: 'no CP Releases data' }
 
-export function CpReportView({ report, azure, assign, featureSetup, threshold, enrichment }: { report: CpMonthReport; azure: AzureWorkspace; assign?: { me: string; canChoose: boolean }; featureSetup?: FeatureSetups | null; threshold: number; enrichment?: string }) {
+// PIR-69: keep — the Product Owner filter of the page: whether a release row is kept, by its QMS-0025 Feature.
+export function CpReportView({ report, azure, assign, featureSetup, threshold, enrichment, keep }: { report: CpMonthReport; azure: AzureWorkspace; assign?: { me: string; canChoose: boolean }; featureSetup?: FeatureSetups | null; threshold: number; enrichment?: string; keep?: (features: (AzureWorkItem | undefined)[]) => boolean }) {
   const can = useCan()
   const [open, setOpen] = useState('')
   const epics = useStreamEpics('CP')
@@ -31,6 +33,7 @@ export function CpReportView({ report, azure, assign, featureSetup, threshold, e
   const titleOf = (row: CpReleaseRow) => row.name.name && row.name.rawVersion ? releaseOnlyTitle(row.name.name, row.name.rawVersion) : row.container.title
   const matches = useMemo(() => new Map(report.rows.map((row) => [row.container.id, boardMatch({ names: [row.name.name ?? '', row.container.title], versions: [row.name.rawVersion ?? ''], created: titleOf(row) }, candidates, threshold)])), [report.rows, candidates, threshold])
   const allMonths = report.month === 'all'
+  const rows = keep ? report.rows.filter((row) => keep([matches.get(row.container.id)?.feature?.item])) : report.rows
   const month = allMonths ? 'all months' : monthName(report.month)
   const hoursOf = useMemo(() => timeWritingHours(azure.items), [azure.items])
   const [openShared, setOpenShared] = useState('')
@@ -42,7 +45,7 @@ export function CpReportView({ report, azure, assign, featureSetup, threshold, e
       info={<><p>A release is a <strong>Release container</strong> of the CP release-folder tree query; every document counts for its nearest Release above it, so twelve asset folders are still one release. <strong>Supported</strong>: at least one Artifact or Document under it has a QA/QE signature dated in the month (approver slot with a name, a role on the QA/QE list — QAQE for Software, Quality Engineer, QA, QE, QA/QE, QE Software — and a date; the document's State and Author Approval Date do not matter). <strong>Completed</strong>: its main Release Notes (Release → Reports folder → Release Notes) has that signature in the month; an asset's Release Notes does not complete the release. This is a reporting convention, not a check that every controlled document is complete.</p><p>Names come from {enrichment && report.names ? `“${enrichment}” (Content per Release version: ${report.names.records} records, ${report.names.withContent} with Content, ${report.names.versions} versions with a name${report.names.unreadable ? `, ${report.names.unreadable} with an unreadable Release` : ''})` : 'the release title only — add a second CP connection (e.g. “CP Releases”) whose query returns Release and Content, and fetch it, for the codenames'}; they never change the counts. Completion history across months is not kept yet: a Release Notes signed again later counts as completed again.</p></>}
       action={can('data.export') ? <button type="button" className="ghost" disabled={!report.rows.length && !report.shared.length} onClick={() => downloadCsv(evidenceCsv(), `CP-release-evidence-${report.month}.csv`)}>Export evidence CSV</button> : undefined}
       empty={report.rows.length ? undefined : allMonths ? 'No QA/QE signature in any month. Refresh the CP connection.' : `No QA/QE signature in ${month}. Pick another month in the header, choose All months, or refresh the CP connection.`}>
-      {report.rows.length > 0 && <DataTable id={`cp-report`} rows={report.rows} rowKey={(row) => String(row.container.id)} exportName={`CP releases ${report.month}`}
+      {report.rows.length > 0 && <DataTable id={`cp-report`} rows={rows} rowKey={(row) => String(row.container.id)} exportName={`CP releases ${report.month}`}
         expand={(row) => open === String(row.container.id) ? <>{row.completionReview && <p className="negative">{row.completionReview}</p>}{evidence(row)}</> : null}
         columns={[
           { id: 'release', label: 'Release name', value: (row) => row.name.displayLabel, render: (row) => <><button type="button" className="text-button" aria-expanded={open === String(row.container.id)} onClick={() => setOpen(open === String(row.container.id) ? '' : String(row.container.id))}>{open === String(row.container.id) ? '▾' : '▸'} {row.name.displayLabel}</button>{statusText[row.name.nameStatus] && <Pill tone="warning">{statusText[row.name.nameStatus]}</Pill>}{row.name.warnings.length > 0 && <small className="muted">{row.name.warnings.join(' ')}</small>}</> },

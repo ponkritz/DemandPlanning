@@ -1,7 +1,7 @@
 import { defaultCapacityRoles, resourceRoles, type CapacityRoles, type CapacitySettings } from '../capacity'
 import { Panel } from './ui'
 
-// CAP-57: Admin → People & roles → Capacity roles. Which team roles count for capacity; a person whose team Role is
+// CAP-57: Admin → Capacity & time → Capacity. Which team roles count for capacity; a person whose team Role is
 // left out is not counted (their hours are listed apart). App access roles and the People manager tick never decide
 // it. Built-in: Lead and Manager are left out. Changed by roles that manage shared settings; saved in Git, audited.
 export function CapacityRolesPanel({ settings, canEdit, onSave }: { settings: CapacitySettings; canEdit: boolean; onSave: (roles: CapacityRoles, detail: string) => void }) {

@@ -6,12 +6,13 @@ import { capacityContext, capacityGap, capacityModel } from '../capacity'
 import { closeChosen, closeTree, type CloseRow, type closeSelection } from '../closeList'
 import { CloseItemsDialog } from '../components/CloseItemsDialog'
 import { activateAfterHours } from '../closeChain'
+import { featuresWorkingOn } from '../monthTaskStates'
 type CloseSelection = ReturnType<typeof closeSelection>
 import { FeatureEditor } from '../components/FeatureEditor'
 import { SearchSelect } from '../components/SearchSelect'
 import { EmptyState, Metric, Metrics, Modal, Page, WriteBlocked } from '../components/ui'
 import { useWriteBlock } from '../useCan'
-import { personMonths, totals } from '../dashboard'
+import { absenceRuleText, capacityParts, capacityText, personMonths, totals } from '../dashboard'
 import type { AzureWorkItem } from '../domain'
 import { setupHours, type FeatureSetups } from '../featureSetup'
 import { formatDate, formatHours, monthName } from '../format'
@@ -22,6 +23,7 @@ import type { AzureWorkspace } from '../useAzureWorkspace'
 import type { MyWork } from '../useMyWork'
 import { useNow } from '../useNow'
 import type { PageProps } from './types'
+import { usePageSettingsGear } from '../usePageSettingsGear'
 
 // Time Writing (ACT-02…ACT-07): one page for a person's month — this month's activities with their planned and actual
 // hours (the ones still to add ticked, like copying last month's), a new activity under a stream and Feature, and the
@@ -46,6 +48,8 @@ const closedTask = (row: { task?: AzureWorkItem }) => Boolean(row.task && !isPen
 const adhocTask = (task: AzureWorkItem) => task.tags.split(';').some((tag) => tag.trim().toLowerCase() === 'ad-hoc')
 
 export function MyActivitiesPage({ azure, store, my, month, assign, featureSetup, onOpen }: { azure: AzureWorkspace; store: PageProps['store']; my: MyWork; month: string; assign?: { me: string; canChoose: boolean }; featureSetup?: FeatureSetups | null; onOpen: (page: 'mywork' | 'bulk') => void }) {
+  // SET-32: ⚙ Settings for this page (page actions, last), for the people who may change one of its settings.
+  const settingsGear = usePageSettingsGear()
   const now = useNow(60000)
   const [ticked, setTicked] = useState<Record<string, boolean>>({})
   const [hours, setHours] = useState<Record<string, Hours>>({})
@@ -136,7 +140,8 @@ export function MyActivitiesPage({ azure, store, my, month, assign, featureSetup
   // KPI cards (ACT-11): the figures of Monthly Time Writing for the person (their month Tasks), their capacity as on
   // My dashboard, and the monthly update.
   const kpiItems = my.known ? azure.items.filter((item) => item.workItemType !== 'Task' || isMine(item, my.me)) : []
-  const kpi = azureInsights(kpiItems, month, utcToday(), absenceEpicId)
+  // CAP-64: Planned and Actual leave out leave and holidays (taken off the capacity instead).
+  const kpi = azureInsights(kpiItems, month, utcToday(), locks)
   // CAP-56: found by every name the person goes by (their work email's Assigned To names too); when they are not in
   // the month's capacity, the tile says why instead of 0h.
   const names = my.known ? myNames(azure.items, my.me) : []
@@ -356,17 +361,17 @@ export function MyActivitiesPage({ azure, store, my, month, assign, featureSetup
   const idLink = (item?: AzureWorkItem) => item && item.id > 0 ? <a className="act-id" href={item.url} target="_blank" rel="noreferrer" title={`Open #${item.id} in Azure DevOps`}>#{item.id}</a> : null
   const chosenEpic = epics.find((epic) => epic.id === Number(stream))
 
-  return <Page className="activities-page">
+  return <Page className="activities-page" actions={!my.known ? settingsGear ?? undefined : undefined}>
     {!self && my.known && <div className="act-message act-info" role="status">Showing {my.me.name}'s activities. {assignee ? `What you save here is written for ${my.me.name} (assigned to them).` : 'Saving is not available for another person here.'} Choose “Me” to go back.</div>}
     {message && <div className={`act-message act-${message.tone}`} role="status">{message.text}<button type="button" className="icon-button" aria-label="Dismiss" onClick={() => setMessage(null)}>×</button></div>}
     {!my.known ? <EmptyState title="Who are you in Azure DevOps?" detail="Set your work email in Admin → Streams, or choose your name with Person at the top right, to see your activities." /> : <>
     {/* One row of equal tiles (ACT-11, ACT-05): the hours, the tasks, the monthly update and the last day. */}
     <div className="act-top act-sticky">
     <Metrics>
-      <Metric label="Capacity" value={capacity == null ? '—' : `${formatHours(capacity)}h`} hint={capacity != null ? 'Working days less absence' : capacityWhy ?? 'Your name is not known yet'} />
-      <Metric label="Planned hours" value={<>{formatHours(kpi.plan.value)}{pctOf(kpi.plan.value, capacity)}</>} hint="Original Estimate · % of capacity" />
-      <Metric label="Actual hours" value={<>{formatHours(kpi.actual.value)}{pctOf(kpi.actual.value, capacity)}</>} hint={`Completed Work${kpi.plan.value ? ` · ${Math.round((kpi.actual.value ?? 0) / kpi.plan.value * 100)}% of plan` : ''}`} />
-      <Metric label="Tasks" value={kpi.monthlyTasks.length} hint={`Your ${label} Time Writing Tasks`} />
+      <Metric label="Capacity" value={capacity == null ? '—' : `${formatHours(capacity)}h`} hint={capacity != null ? `${capacityText(capacityParts(ownRows), formatHours)} · ${absenceRuleText}` : capacityWhy ?? 'Your name is not known yet'} />
+      <Metric label="Planned hours" value={<>{formatHours(kpi.plan.value)}{pctOf(kpi.plan.value, capacity)}</>} hint="Original Estimate without leave and holidays · % of capacity" />
+      <Metric label="Actual hours" value={<>{formatHours(kpi.actual.value)}{pctOf(kpi.actual.value, capacity)}</>} hint={`Completed Work without leave and holidays${kpi.plan.value ? ` · ${Math.round((kpi.actual.value ?? 0) / kpi.plan.value * 100)}% of plan` : ''}`} />
+      <Metric label="Features Working on" value={featuresWorkingOn(azure.items, kpi.monthlyTasks)} hint={`Features with your ${label} Time Writing Task`} />
       <article className="act-summary act-tile-update" aria-labelledby="act-progress">
         <span id="act-progress">Monthly update</span>
         <div className="act-ring-row">
@@ -375,7 +380,8 @@ export function MyActivitiesPage({ azure, store, my, month, assign, featureSetup
         </div>
       </article>
       <article className={`act-tile-deadline${daysLeft <= 3 ? ' act-urgent' : ''}`}>
-        <span>{planLocked ? 'Actuals' : 'Plan'}: last day</span>
+        {/* SET-36: the ⚙ of the Month locks sits with the last day it sets. */}
+        <span className="act-deadline-head">{planLocked ? 'Actuals' : 'Plan'}: last day{settingsGear}</span>
         <strong>{formatDate(deadline)}</strong>
         <small>{daysLeft > 1 ? `${daysLeft} days left` : daysLeft === 1 ? 'Last day tomorrow' : daysLeft === 0 ? 'Today is the last day' : 'Locked'}{!planLocked ? ` · actuals until ${formatDate(actualsDay)}` : ''}</small>
       </article>

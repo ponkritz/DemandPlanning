@@ -118,7 +118,7 @@ export const unassignedVisible = (views: AzureConnectionProfileSummary[], { admi
 export function assignBlocked({ admin, viewingAs, git, isSample }: { admin: boolean; viewingAs: boolean; git?: { connected: boolean; readOnly: boolean; isSample?: boolean }; isSample: boolean }) {
   if (viewingAs) return 'Not while viewing as someone else: View as is read-only.'
   if (!admin) return 'Only admins (“Shared setup in Git”) can assign Other views.'
-  if (!git?.connected) return 'Connect Git storage (Admin → Data & sharing) first: the Other views are in Git.'
+  if (!git?.connected) return 'Connect Git storage (Admin → Data & history) first: the Other views are in Git.'
   if (git.readOnly) return 'Your Git token is read-only, so nothing can be assigned.'
   if (isSample || git.isSample) return 'Not while the synthetic sample data is loaded.'
   return ''
@@ -160,7 +160,7 @@ export function syncOwnOtherViews(own: OtherView[], notMine: Set<string>, reposi
     if (here && synced[view.id] && synced[view.id] !== fingerprint(here)) { result.save.push(here); continue }
     follow.push(cleanView(view))
   }
-  const restored = restoreViews(follow, '', storage)
+  const restored = restoreViews(follow, null, storage)
   for (const view of follow) {
     const name = view.viewName || view.reason
     if (restored.added.includes(name)) result.added.push(name)

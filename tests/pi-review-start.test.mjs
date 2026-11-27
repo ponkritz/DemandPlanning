@@ -16,7 +16,7 @@ const tree = [
   it('Q\\PI 27.1'),
 ]
 const options = ['Q\\PI 27.1', 'Q\\PI 26.4', 'Q\\PI 26.3', 'Q\\PI 26.2']
-const comment = (id, date, text = 'Learnings of PI 26.4:\n- book the rig early\nStruggles of PI 26.4:\n- vendor late\nWhether the feature needs to be shifted to PI 27.1 : No', author = 'Rita Gomez') => ({ id, date, text, author })
+const comment = (id, date, text = 'Feature Review for PI 26.4\nLearnings of PI 26.4:\n- book the rig early\nStruggles of PI 26.4:\n- vendor late\nWhether the feature needs to be shifted to PI 27.1 : No', author = 'Rita Gomez') => ({ id, date, text, author })
 
 test('PIR-33: the start date is part of the PI Review form setup — 21 Sep 2026 by default, older files without it stay valid, a bad date is refused, saved and merged (TC-PIR-34)', () => {
   assert.equal(defaultReviewStart, '2026-09-21')
@@ -89,12 +89,12 @@ test('PIR-33: comments before the date are ignored — the latest review, the Re
   // The latest review: the newest of those kept.
   assert.equal(latestComment(kept.comments).id, 5)
   // Only an old review (June, PI 26.3): none is found — the Feature is Not reviewed and the form starts empty.
-  const old = commentsFrom([comment(7, '2026-06-30T10:00:00Z', 'Learnings of PI 26.4:\n- old\nStruggles of PI 26.4:\n- old')], '2026-09-21')
+  const old = commentsFrom([comment(7, '2026-06-30T10:00:00Z', 'Feature Review for PI 26.4\nLearnings of PI 26.4:\n- old\nStruggles of PI 26.4:\n- old')], '2026-09-21')
   assert.equal(myReviewOf(old.comments, 'Rita Gomez'), undefined)
-  // A review on or after the date counts for PI 26.4 (its heading names it).
+  // A review on or after the date counts for PI 26.4 (its heading names it) — PIR-49: the start date still applies.
   const mine = myReviewOf(kept.comments, 'Rita Gomez')
   assert.equal(mine.comment.id, 3)
-  assert.equal(reviewCountOf({ date: mine.comment.date, reviewedPi: mine.split.reviewedPi }, { state: 'Active' }, reviewPeriodOf('Q\\PI 26.4', tree)).counts, true)
+  assert.equal(reviewCountOf({ reviewedPi: mine.split.reviewedPi }, reviewPeriodOf('Q\\PI 26.4')).counts, true)
 })
 
 test('PIR-33: the Discussions are kept with the date they were read for; a new date forgets them so they are read again (TC-PIR-34)', () => {

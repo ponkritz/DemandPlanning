@@ -22,9 +22,10 @@ export function ReleaseCountsPanel({ state, profiles, month }: { state: PageProp
 
 // QV-58: Admin → Streams → Stream mapping → Release counts. An Admin enters Completed / Supported per stream and
 // month; they are used only while the stream has no data for that month. Shared in planning-data.json, audited.
-export function ReleaseCountsAdmin({ store, canManage, month }: { store: PageProps['store']; canManage: boolean; month: string }) {
+export function ReleaseCountsAdmin({ store, canManage, month, initialStream }: { store: PageProps['store']; canManage: boolean; month: string; initialStream?: string }) {
   const saved = normalizeReleaseSourceSettings(store.state.releaseSourceSettings).countOverrides ?? {}
-  const [stream, setStream] = useState<string>(countStreams[0])
+  // SET-34: a Release Details page's ⚙ settings open on its own stream.
+  const [stream, setStream] = useState<string>(() => initialStream && (countStreams as readonly string[]).includes(initialStream) ? initialStream : countStreams[0])
   const [at, setAt] = useState(month)
   const current = saved[stream]?.[at]
   const [draft, setDraft] = useState<{ key: string; completed: string; supported: string } | null>(null)

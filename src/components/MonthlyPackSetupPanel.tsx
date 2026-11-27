@@ -7,7 +7,7 @@ import { allStreams } from '../streams'
 import { Notice, Panel, SaveQueueStatus } from './ui'
 import { checkTemplate, maxTemplateBytes, packTemplateFile } from '../pptxTemplate'
 
-// Admin → Reports → Monthly pack: which streams and Epics feed each slide line, and which Epic (with which metric) each KPI
+// Admin → Pages & reports → Monthly pack: which streams and Epics feed each slide line, and which Epic (with which metric) each KPI
 // row reads. Shared in Git as monthly-pack-setup.json. Also the department name of the exported title and the team's
 // PowerPoint template (PCK-08), kept only in Storage as monthly-pack-template.pptx — never in the app's source.
 const newId = (prefix: string, taken: string[]) => { let index = taken.length + 1; while (taken.includes(`${prefix}-${index}`)) index += 1; return `${prefix}-${index}` }

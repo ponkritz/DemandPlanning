@@ -266,7 +266,7 @@ export function ownsAPage(layout: MenuLayout | null | undefined, email: string) 
 }
 function stateBlock(git: ListsGit, state: { loaded: boolean; error: string }) {
   if (git.isSample) return 'Synthetic sample data is loaded: the built-in lists are not saved to Git. Fetch your data first.'
-  if (!git.connected) return 'Connect Git storage (Admin → Data & sharing) to change the built-in lists; they are shared through Git.'
+  if (!git.connected) return 'Connect Git storage (Admin → Data & history) to change the built-in lists; they are shared through Git.'
   if (git.readOnly) return 'View only: your Git token can read but not save.'
   if (state.error) return `${sharedListsFile} could not be read from Git, so the lists cannot be changed here: ${state.error}`
   if (!state.loaded) return 'The built-in lists are still being read from Git.'

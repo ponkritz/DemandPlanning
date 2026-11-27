@@ -82,8 +82,8 @@ const qualityFiles = () => ({
 test('TC-PGB-01: a Tool Owner adds the group Quality with the Table page “Supplier issues”, names a group co-owner, sets the page up and adds a row — the page is under Quality in the menu, saved in Git', async () => {
   const files = { 'on-demand/conq.json': JSON.stringify(conq) }
   const { page, context, errors, writes } = await open('tool.owner@example.com', files, 'Tool Owner')
-  await navigate(page, 'Pages & menu')
-  assert.equal(await text(page.locator('header.topbar h1')), 'Pages & menu')
+  await navigate(page, 'Pages & reports')
+  assert.equal(await text(page.locator('header.topbar h1')), 'Pages & reports')
   // CoNQ (no placement yet) is a Table + Insights page in On-Demand.
   const pages = page.locator('.pgb-pages')
   await pages.locator('tbody tr', { hasText: 'CoNQ' }).waitFor()
@@ -113,8 +113,8 @@ test('TC-PGB-01: a Tool Owner adds the group Quality with the Table page “Supp
   assert.deepEqual(layout.pages['supplier-issues'], { type: 'table', group: 'g-quality', order: 1, icon: '⚑', owners: [] })
   assert.match(lastWrite(writes, 'menu-layout.json').message, /\[saved \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\]( \[by [^\]]+\])?$/, 'a queued save (GIT-17)')
 
-  // Admin → Pages & menu: Edit the group Quality — a co-owner.
-  await navigate(page, 'Pages & menu')
+  // Admin → Pages & reports → Menu groups & pages: Edit the group Quality — a co-owner.
+  await navigate(page, 'Pages & reports')
   const groups = page.locator('.pgb-groups')
   await groups.getByRole('button', { name: 'Edit group Quality' }).click()
   const edit = page.getByRole('dialog', { name: 'Edit the group Quality' })
@@ -166,9 +166,9 @@ test('TC-PGB-09: a group co-owner adds a Table + Insights page to Quality and se
   const { page, context, errors, writes } = await open(lead, files, 'Team Member')
   const quality = menuGroup(page, 'Quality')
   await quality.getByRole('button', { name: /Supplier issues/ }).waitFor()
-  await navigate(page, 'Pages & menu')
+  await navigate(page, 'Pages & reports')
   // The groups are the Tool Owner's: New group…, Edit, ↑ ↓ and Remove disabled with the reason.
-  const reason = 'Only a Tool Owner (“Manage pages and menu groups”) can create, rename, reorder, configure or remove menu groups. An Admin can change this in Admin → People & roles → Role rights.'
+  const reason = 'Only a Tool Owner (“Manage pages and menu groups”) can create, rename, reorder, configure or remove menu groups. An Admin can change this in Admin → People & access → Role rights.'
   assert.equal(await page.getByRole('button', { name: '＋ New group…' }).isDisabled(), true)
   assert.equal(await page.getByRole('button', { name: '＋ New group…' }).getAttribute('title'), reason)
   const groups = page.locator('.pgb-groups')
@@ -211,7 +211,7 @@ test('TC-PGB-10: a person with no ownership and no rights sees Pages & menu and 
   const quality = menuGroup(page, 'Quality')
   await quality.getByRole('button', { name: /Supplier issues/ }).waitFor()
   assert.equal(await quality.getByRole('button', { name: 'Add a page to Quality' }).count(), 0, 'no ⋯ on a group they may not add to')
-  await navigate(page, 'Pages & menu')
+  await navigate(page, 'Pages & reports')
   const add = page.getByRole('button', { name: '＋ Add page…' })
   assert.equal(await add.isDisabled(), true)
   assert.equal(await add.getAttribute('title'), 'You co-own no group that accepts added pages. A Tool Owner adds pages anywhere and names the co-owners of each group.')
@@ -227,7 +227,7 @@ test('TC-PGB-10: a person with no ownership and no rights sees Pages & menu and 
   await page.locator('.od-panel table tbody tr').first().waitFor()
   assert.match(await text(page.locator('.od-panel table tbody tr').first()), /Late delivery/)
   for (const name of ['＋ Add row', 'Set up columns…']) assert.equal(await page.getByRole('button', { name }).isDisabled(), true, `${name} is disabled`)
-  assert.equal(await text(page.locator('.od-panel .write-blocked')), 'Your role does not allow “Edit On-Demand data (rows)”, “Set up On-Demand pages (pages, columns, options)”. An Admin can change this in Admin → People & roles → Role rights.')
+  assert.equal(await text(page.locator('.od-panel .write-blocked')), 'Your role does not allow “Edit On-Demand data (rows)”, “Set up On-Demand pages (pages, columns, options)”. An Admin can change this in Admin → People & access → Role rights.')
   // OND-61: the page's actions in its ⋯ menu, each disabled with its reason as its tooltip.
   const pageMenu = await menuOf(page, 'page Supplier issues')
   for (const name of ['＋ Add page…', 'Rename page…', 'Hide page', 'Delete page…']) assert.equal(await pageMenu.getByRole('menuitem', { name }).isDisabled(), true, `${name} is disabled`)
@@ -241,7 +241,7 @@ test('TC-PGB-10: a person with no ownership and no rights sees Pages & menu and 
 test('TC-PGB-12: a page name already in the menu — another case, extra spaces, full-width letters, a built-in page — shows the error at the name field and Save stays disabled (Add page, Edit, Rename page)', async () => {
   const files = qualityFiles()
   const { page, context, errors, writes } = await open('tool.owner@example.com', files, 'Tool Owner')
-  await navigate(page, 'Pages & menu')
+  await navigate(page, 'Pages & reports')
   await page.locator('.pgb-pages tbody tr', { hasText: 'Supplier issues' }).waitFor()
   await page.getByRole('button', { name: '＋ Add page…' }).click()
   const add = page.getByRole('dialog', { name: 'Add a page' })
@@ -292,7 +292,7 @@ test('TC-PGB-13: two pages with the same name in Git (saved at the same time) ar
   const { page, context, errors, writes } = await open('tool.owner@example.com', files, 'Tool Owner')
   await menuGroup(page, 'Quality').getByRole('button', { name: 'conq (Quality)' }).waitFor()
   assert.equal(await menuGroup(page, 'On-Demand').getByRole('button', { name: 'CoNQ (On-Demand)' }).count(), 1, 'both kept, each with its group')
-  await navigate(page, 'Pages & menu')
+  await navigate(page, 'Pages & reports')
   const warning = page.locator('.pgb-duplicates')
   await warning.waitFor()
   assert.equal(await text(warning), 'Pages with the same name: “CoNQ” (On-Demand, Quality). Both pages are kept and the menu shows each with its group; rename one with Edit so everyone can tell them apart.')
@@ -322,11 +322,12 @@ test('TC-PGB-16: the co-owner list offers the Azure DevOps team members read at 
   await mockGitHub(context, qualityFiles(), 'Tool Owner')
   // Azure DevOps: the team's members (one is a group); the start fetch finds no work, so nobody is Assigned To.
   // Counted for the reloaded page only: the first load's own start fetch can still reach the route on a slow runner.
-  let counting = false, teamReads = 0, teamRead = () => undefined
+  let counting = false, teamReads = 0, teamRead = () => undefined, firstLoadRead = () => undefined
   const read = new Promise((resolve) => { teamRead = resolve })
+  const firstRead = new Promise((resolve) => { firstLoadRead = resolve })
   await context.route('https://dev.azure.com/**', (route) => {
     const url = route.request().url(), json = (body) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
-    if (/\/teams\/[^/]+\/members/.test(url)) { if (counting) { teamReads += 1; teamRead() } return json({ value: [{ identity: { displayName: 'Rita Gomez', uniqueName: 'Rita.Gomez@Example.com' } }, { identity: { displayName: 'Omar Haddad', uniqueName: 'omar.haddad@example.com' } }, { identity: { displayName: 'QA Group', uniqueName: 'group', isContainer: true } }] }) }
+    if (/\/teams\/[^/]+\/members/.test(url)) { if (counting) { teamReads += 1; teamRead() } else firstLoadRead(); return json({ value: [{ identity: { displayName: 'Rita Gomez', uniqueName: 'Rita.Gomez@Example.com' } }, { identity: { displayName: 'Omar Haddad', uniqueName: 'omar.haddad@example.com' } }, { identity: { displayName: 'QA Group', uniqueName: 'group', isContainer: true } }] }) }
     if (/\/_apis\/wit\/wiql/.test(url)) return json({ workItems: [] })
     return json({ value: [] })
   })
@@ -334,12 +335,15 @@ test('TC-PGB-16: the co-owner list offers the Azure DevOps team members read at 
   // runner): close it whenever it appears, instead of checking once.
   const guide = page.getByRole('dialog').filter({ hasText: 'Could not fetch from Azure DevOps' })
   await page.addLocatorHandler(guide, async () => { await guide.getByRole('button', { name: 'Close', exact: true }).last().click() })
-  // From the moment the reload commits the old page can send nothing more; every team read after it is the new page's.
+  // The first load reads the team once too (its start fetch): wait until that read has reached the route, so it can never
+  // arrive late and be counted as the reloaded page's (on a slow CI runner it did, giving 2). From the moment the
+  // reload commits the old page can send nothing more; every team read after it is the new page's.
+  await firstRead
   await page.reload({ waitUntil: 'commit' })
   counting = true
   await page.locator('.sidebar nav').waitFor()
   await read
-  await navigate(page, 'Pages & menu')
+  await navigate(page, 'Pages & reports')
   const pick = async () => {
     await page.locator('.pgb-pages').getByRole('button', { name: 'Edit page Supplier issues', exact: true }).click()
     const edit = page.getByRole('dialog', { name: 'Edit the page' })
@@ -355,7 +359,7 @@ test('TC-PGB-16: the co-owner list offers the Azure DevOps team members read at 
   await edit.getByRole('button', { name: 'Cancel' }).click()
   await edit.waitFor({ state: 'detached' })
   await navigate(page, 'Home')
-  await navigate(page, 'Pages & menu')
+  await navigate(page, 'Pages & reports')
   const again = await pick()
   await again.getByRole('listbox', { name: 'Page co-owners (optional)' }).getByRole('checkbox', { name: 'Rita Gomez (rita.gomez@example.com)' }).waitFor()
   assert.equal(teamReads, 1, 'read once for the session')

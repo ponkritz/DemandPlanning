@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { clearFinishedJobs, isRunning, listJobs, resetJobs, runInBackground, runningCount, subscribeJobs } from '../src/backgroundJobs.ts'
+import { clearFinishedJobs, isRunning, listJobs, resetJobs, runInBackground, runJobAction, runningCount, subscribeJobs } from '../src/backgroundJobs.ts'
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
 
@@ -60,5 +60,19 @@ test('QV-63: an instant result is a finished entry — done or to check — with
   await settle()
   for (let index = 0; index < 25; index += 1) recordJob(`k${index}`, `Entry ${index}`, { text: 'ok' })
   assert.equal(listJobs().length, 20, 'the list keeps the 20 newest entries')
+  resetJobs()
+})
+
+test('PIR-84: a finished job offers its follow-up (Retry failed) once — taken off the entry when it runs (TC-PIR-84)', async () => {
+  resetJobs()
+  let runs = 0
+  runInBackground('pireview:bulk', 'PI review for 3 Features', async () => ({ text: 'Posted 2 · Replaced 0 · Failed 1 (#203).', failed: true, action: { label: 'Retry failed (1)', run: () => { runs += 1 } } }))
+  await settle()
+  const job = listJobs()[0]
+  assert.deepEqual([job.state, job.action?.label], ['error', 'Retry failed (1)'])
+  runJobAction(job.id)
+  runJobAction(job.id)
+  assert.equal(runs, 1, 'once, however often it is pressed')
+  assert.equal(listJobs()[0].action, undefined)
   resetJobs()
 })

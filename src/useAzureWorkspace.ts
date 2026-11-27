@@ -5,7 +5,7 @@ import { activateAfterHours } from './closeChain'
 import { dependencyFields, fetchAzureWorkItems, guardSampleWrites, isCloudBase, mapAzureWorkItem, mergeAzureWorkItems, parseAzureProjectUrl, readFieldNames, savedBacklogItems, sameAzureScope, updateAzureTimeWritingEffort, type AzureFetchResult, type AzureConfig } from './azureDevOps'
 import type { PageProps } from './pages/types'
 import type { AppState, AzureWorkItem } from './domain'
-import { loadAzurePat, saveAzurePat, forgetAzurePat, listAzureConnectionProfiles, loadAzureConnectionProfile, saveAzureConnectionProfile, forgetAzureConnectionProfile, composeAzureUrl, collectionUrlFrom, type AzureConnectionProfile, type AzureConnectionProfileSummary, type AzureConnectionRole, loadServerPat, serverKey } from './azureCredentials'
+import { loadAzurePat, saveAzurePat, forgetAzurePat, listAzureConnectionProfiles, loadAzureConnectionProfile, saveAzureConnectionProfile, forgetAzureConnectionProfile, composeAzureUrl, collectionUrlFrom, type AzureConnectionProfile, type AzureConnectionProfileSummary, type AzureConnectionRole, loadServerPat, serverKey, tokenOnServer } from './azureCredentials'
 import { approvalDateFrom, checkWorkItemQuery, defaultReleaseQuery, fetchReleaseSource, normalizeReleaseSourceSettings, projectQuery, runWorkItemQuery, withAncestors } from './releaseSource'
 import { sampleDataset, sampleProfiles, sampleReleaseScopes } from './sampleData'
 import { utcMonthKey } from './businessTime'
@@ -204,7 +204,7 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
     const updated = await updateAzureTimeWritingEffort(config, pat, workItemId, planHours, actualHours, markAdhoc)
     // BKL-36: a month Task saved: its Feature's Time Writing titles follow the Feature name (silently).
     const titles = await syncTitlesAfterSave(config, pat, items, updated)
-    // BKL-41: hours make the Task and its Time Writing story Active (a Closed one is reopened; the person is told).
+    // ACT-24, ACT-25: hours make the Task, its Time Writing story and a New Feature Active (only from New; never reopened).
     const hours = await activateAfterHours(config, pat, items, updated)
     const saved = hours.activated.find((entry) => entry.id === updated.id) ?? updated
     const changed = [saved, ...hours.activated.filter((entry) => entry.id !== updated.id), ...titles.renamed]
@@ -227,10 +227,12 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
     if (apiVersion && !/^\d{1,2}\.\d(-preview(\.\d)?)?$/.test(apiVersion)) throw new Error('API version looks like 7.1, 6.0 or 5.0.')
     const existing = input.id ? loadAzureConnectionProfile(input.id) : input.cloneOf ? loadAzureConnectionProfile(input.cloneOf) : null
     // One PAT per server: a new PAT here becomes the server's PAT; without one, the server's saved PAT is used.
-    const serverPat = loadServerPat(serverKey({ url, ...(isCloudBase(base) ? {} : { baseUrl: base }) }))
+    const key = serverKey({ url, ...(isCloudBase(base) ? {} : { baseUrl: base }) })
+    const serverPat = loadServerPat(key)
     // Stored on the connection only when typed here (it then also becomes the server's PAT) or when the server has none.
-    const token = input.pat.trim() || (serverPat ? '' : existing?.token ?? '')
-    if (!token && !serverPat) throw new Error('Enter the PAT for this server (it is then used by every connection on it).')
+    // AR-006: the edited or cloned connection's PAT only while the server stays the same; another server asks for its own.
+    const token = input.pat.trim() || (serverPat ? '' : tokenOnServer(existing, key))
+    if (!token && !serverPat) throw new Error(existing?.token && !tokenOnServer(existing, key) ? 'The server changed: enter the PAT for this server. The PAT of the other server is never used here.' : 'Enter the PAT for this server (it is then used by every connection on it).')
     const query = input.query.trim()
     if (query) checkWorkItemQuery(query)
     if (input.role === 'time-tracking' && !input.team.trim() && !query) throw new Error('A Time Writing connection needs a team (its Epic backlog is read) or a query.')
@@ -369,7 +371,7 @@ export function useAzureWorkspace(store: PageProps['store'], onFetched?: { curre
   // Load from Git: the view's data saved to Git by the desktop app. Also the fallback when a fetch cannot run.
   async function loadFromGit(id: string, reason = '') {
     const source = gitData?.current
-    if (!source?.available(id)) { statusFor(id, { state: 'error', message: 'Load from Git needs Git storage connected (Admin → Data & sharing) and an on-prem view.' }); return false }
+    if (!source?.available(id)) { statusFor(id, { state: 'error', message: 'Load from Git needs Git storage connected (Admin → Data & history) and an on-prem view.' }); return false }
     statusFor(id, { state: 'busy', message: 'Loading from Git…' })
     try {
       const done = await source.load(id)

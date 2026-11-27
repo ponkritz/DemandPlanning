@@ -136,7 +136,7 @@ test('TC-UI-16: the Tool Owner saves the CoNQ table’s view for everyone; anoth
 test('TC-UI-17: the People list and its filters saved for everyone by the Tool Owner; an Admin (who holds the right) sees both first and can save too', async () => {
   const gh = fakeGitHub({ files: { 'access.json': serializeAccess(policy) } })
   const owner = await open(gh, 'owner@example.com')
-  await navigate(owner.page, 'People & roles')
+  await navigate(owner.page, 'People & access')
   let people = table(owner.page, 'people-table')
   await people.locator('tr[data-row-key="Rita Gomez"]').waitFor()
   // The list: Email shown, Region hidden, sorted by Person descending; the filters: Status also "Not part of the team".
@@ -157,7 +157,7 @@ test('TC-UI-17: the People list and its filters saved for everyone by the Tool O
   await owner.context.close()
 
   const admin = await open(gh, 'admin@example.com')
-  await navigate(admin.page, 'People & roles')
+  await navigate(admin.page, 'People & access')
   people = table(admin.page, 'people-table')
   await people.locator('tr[data-row-key="Rita Gomez"]').waitFor()
   await until(async () => JSON.stringify(await headers(people)) === JSON.stringify(ownerView), 'the People list as saved for everyone')

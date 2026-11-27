@@ -21,8 +21,9 @@ export function bulkEpicFor(stream: BulkStream, shared: Partial<Record<BulkStrea
   return { source: 'none' }
 }
 // QV-59: why a stream's Create Features is disabled while it has no bulk creation Epic, and where to map it.
-export const bulkEpicsPlace = 'Admin → Stream options → Bulk creation Epics'
-export const bulkEpicMissing = (stream: BulkStream) => `No ${stream} bulk creation Epic is set: map it in ${bulkEpicsPlace}.`
+// SET-29: the shared Epics are in Admin → Streams → Bulk creation, each person's own in My settings → My bulk creation Epics.
+export const bulkEpicsPlace = 'Admin → Streams → Bulk creation'
+export const bulkEpicMissing = (stream: BulkStream) => `No ${stream} bulk creation Epic is set: map it in ${bulkEpicsPlace}, or your own in My settings → My bulk creation Epics.`
 const mineKey = 'demand-planning-bulk-epics-v1'
 export function loadMyBulkEpics(storage: Pick<Storage, 'getItem'> = localStorage) { try { return normalizeBulkEpics(JSON.parse(storage.getItem(mineKey) ?? 'null')) ?? {} } catch { return {} } }
 export function saveMyBulkEpics(value: Partial<Record<BulkStream, number>>, storage: Pick<Storage, 'setItem' | 'removeItem'> = localStorage) {

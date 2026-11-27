@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import { accessFile, canManageStreams, parseAccess, rightsFor, serializeAccess, type AccessPolicy, type Action, type Area } from './access'
+import { canManageStreams, parseAccess, rightsFor, serializeAccess, type AccessPolicy, type Action, type Area } from './access'
+import { saveAccessChecked, setStreamsGuard, type AccessBase } from './accessSave'
 import { guardAzureWrites } from './azureDevOps'
-import { GitConflictError } from './gitStorage'
 import type { GitStorage } from './useGitStorage'
 import type { AzureWorkspace } from './useAzureWorkspace'
 import { canViewAs, setViewAsGuard, viewAsLabel, viewAsRights, type ViewAs } from './viewAs'
@@ -52,31 +52,31 @@ export function useAccess(git: GitStorage, azure: AzureWorkspace, viewAs: ViewAs
   const active = viewAs && canViewAs(ownRights) ? viewAs : null
   const rights = active ? viewAsRights(current.policy, active) : ownRights
   const readOnly = !current.policy
-  useEffect(() => { guardAzureWrites((permission) => rights.actions.has(permission), readOnly ? 'The app is read-only until the access roles (access.json) are loaded: connect Git storage in Admin → Data & sharing. Nothing was changed.' : undefined, active ? '' : email) })
+  useEffect(() => { guardAzureWrites((permission) => rights.actions.has(permission), readOnly ? 'The app is read-only until the access roles (access.json) are loaded: connect Git storage in Admin → Data & history. Nothing was changed.' : undefined, active ? '' : email) })
   useEffect(() => { setViewAsGuard(active ? viewAsLabel(active) : ''); return () => setViewAsGuard('') }, [active])
+  // CON-133: Git storage writes the shared stream mapping only for those who may change it (CON-93).
+  const streamsAllowed = canManageStreams(current.policy, rights)
+  useEffect(() => { setStreamsGuard(streamsAllowed) }, [streamsAllowed])
 
-  async function save(policy: AccessPolicy, message: string) {
-    try {
-      const result = await git.writeAccess(serializeAccess(policy), current.sha, message || `Update ${accessFile}`)
-      cachePolicy(serializeAccess(policy))
-      setState({ scope, policy: parseAccess(serializeAccess(policy)), sha: result.sha, error: '', loaded: true })
-      return result
-    } catch (failure) {
-      if (failure instanceof GitConflictError) throw new Error(`${accessFile} was changed in Git since it was loaded. Reload it and make your change again.`)
-      throw failure
-    }
+  // CON-131, CON-132: every save of access.json passes the same rule and is written over the version it was made from
+  // (base: the policy and sha a draft started from; by default the policy loaded now), so a newer file is never lost.
+  async function save(policy: AccessPolicy, message: string, base: AccessBase = { policy: current.policy, sha: current.sha }) {
+    const result = await saveAccessChecked(git.writeAccess, base, policy, email, message)
+    cachePolicy(serializeAccess(policy))
+    setState({ scope, policy: parseAccess(serializeAccess(policy)), sha: result.sha, error: '', loaded: true })
+    return result
   }
 
   return {
     email,
-    policy: current.policy, loaded: current.loaded, error: current.error, path: git.accessPath, history: git.accessHistory,
+    policy: current.policy, sha: current.sha, loaded: current.loaded, error: current.error, path: git.accessPath, history: git.accessHistory,
     // CON-101: no roles file loaded, so the app is read-only; bootstrap: none exists yet, so the viewer may set one up.
     readOnly, bootstrap,
     rights, ownRights, canViewAs: canViewAs(ownRights), viewingAs: active,
     sees: (area: Area) => rights.areas.has(area),
     can: (action: Action) => rights.actions.has(action),
     // CON-93: the stream mapping and its query logic: Tool Owners (or, while none exists, those who manage access).
-    canManageStreams: canManageStreams(current.policy, rights),
+    canManageStreams: streamsAllowed,
     reload: load, save,
   }
 }

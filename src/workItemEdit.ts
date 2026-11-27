@@ -117,8 +117,10 @@ export function editLocks(item: { workItemType: string; title: string }) {
   return { monthTask, timeWritingStory, iterationLocked: Boolean(monthTask) || timeWritingStory }
 }
 const hasTag = (tags: string, tag: string) => tags.split(';').some((entry) => entry.trim().toLowerCase() === tag)
-export const isAdhocTask = (tags: string) => hasTag(tags, 'ad-hoc')
-export const withAdhocTag = (tags: string) => [...tags.split(';').map((tag) => tag.trim()).filter(Boolean), 'ad-hoc'].join('; ')
+// The ad-hoc tag the app writes (a Task created after the planning lock) and reads (PIR-51: an ad-hoc Feature).
+export const adhocTag = 'ad-hoc'
+export const isAdhocTask = (tags: string) => hasTag(tags, adhocTag)
+export const withAdhocTag = (tags: string) => [...tags.split(';').map((tag) => tag.trim()).filter(Boolean), adhocTag].join('; ')
 
 // BKL-44: who Save assigns the item to — '' means Assigned to is not sent (it stays as it is). Assigned to starts blank:
 // only a person picked in the form (with the right to assign others), or "Assign to me" on an unassigned item (without

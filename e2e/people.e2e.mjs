@@ -1,10 +1,10 @@
 import test, { after, before } from 'node:test'
 import assert from 'node:assert/strict'
-import { loadSample, menuOf, navigate, openPage, openPerson, startApp, text, toggleFilter } from './helpers.mjs'
+import { loadSample, menuOf, navigate, openPage, openPerson, openSection, startApp, text, toggleFilter } from './helpers.mjs'
 import { fakeGitHub } from './fakeGitHub.mjs'
 import { defaultPolicy, serializeAccess } from '../src/access.ts'
 
-// Admin → People & roles → People (CAP-58…CAP-62; TC-CAP-30…TC-CAP-34, TC-CAP-31 UAT): a read-only list with filters,
+// Admin → People & access → People (CAP-58…CAP-62; TC-CAP-30…TC-CAP-34, TC-CAP-31 UAT): a read-only list with filters,
 // a drawer to edit a person (profile with the planning data, app access roles in access.json), the bulk edit, the
 // warnings in one line, Default Time tracking started in the ⋯ menu, the Team tree tab, and the month's capacity on
 // Capacity & time. Every step waits for what it needs, never for a time.
@@ -18,7 +18,7 @@ const jobs = async (page) => { await page.locator('.jobs-button').click(); const
 test('TC-CAP-30: the People list is read-only, filtered by Region, Role, Access role and Status (Active and Left by default), with search and Reset filters', async () => {
   const { page, context, errors } = await openPage(app, { roles: true })
   await loadSample(page)
-  await navigate(page, 'People & roles')
+  await navigate(page, 'People & access')
   const table = page.locator('.people-table')
   await table.waitFor()
   assert.equal(await table.locator('tbody').locator('select, input:not([type=checkbox]), textarea').count(), 0, 'no field in the rows: the list is read-only')
@@ -73,7 +73,7 @@ test('TC-CAP-31: a person is edited in the drawer — region and app access role
   const guide = page.getByRole('dialog').filter({ hasText: 'Could not fetch from Azure DevOps' })
   await page.addLocatorHandler(guide, () => guide.getByRole('button', { name: 'Close', exact: true }).last().click())
   await page.reload()
-  await navigate(page, 'People & roles')
+  await navigate(page, 'People & access')
   await page.locator('.people-table tr[data-row-key="Rita Gomez"]').waitFor()
   // View first: the person's facts and sections; Edit turns them into fields.
   const drawer = await openPerson(page, 'Rita Gomez')
@@ -127,7 +127,7 @@ test('TC-CAP-31: a person is edited in the drawer — region and app access role
 test('TC-CAP-32: bulk edit — tick two people, Set region… saves both in one change; Set access role… is disabled with the reason without Git storage', async () => {
   const { page, context, errors } = await openPage(app, { roles: true })
   await loadSample(page)
-  await navigate(page, 'People & roles')
+  await navigate(page, 'People & access')
   await page.locator('.people-table').waitFor()
   for (const name of ['Chen Wei', 'Diya Sharma']) await page.getByRole('checkbox', { name: `Select ${name}` }).check()
   const bar = page.getByRole('region', { name: 'Selected people' })
@@ -150,7 +150,7 @@ test('TC-CAP-32: bulk edit — tick two people, Set region… saves both in one 
   await page.getByRole('checkbox', { name: 'Select every row shown' }).check()
   assert.match(await text(page.getByRole('region', { name: 'Selected people' })), new RegExp(`^${(await rowNames(page)).length} selected`))
   // One History entry for the bulk change.
-  await navigate(page, 'History')
+  await openSection(page, 'Data & history', 'Changes')
   assert.equal(await page.locator('.audit-row', { hasText: /2 people \(Chen Wei, Diya Sharma\): region = US/ }).count(), 1)
   assert.deepEqual(errors, [])
   await context.close()
@@ -159,7 +159,7 @@ test('TC-CAP-32: bulk edit — tick two people, Set region… saves both in one 
 test('TC-CAP-33 / TC-CAP-34: fewer boxes — one warning line, Default Time tracking started in the ⋯ menu, the month\'s capacity on Capacity & time, the Team tree tab', async () => {
   const { page, context, errors } = await openPage(app, { roles: true })
   await loadSample(page)
-  await navigate(page, 'People & roles')
+  await navigate(page, 'People & access')
   const panel = page.locator('.people-panel')
   await panel.waitFor()
   assert.equal(await panel.locator('.notice', { hasText: /^Capacity in / }).count(), 0, 'the capacity of the month is not on People')
@@ -182,11 +182,130 @@ test('TC-CAP-33 / TC-CAP-34: fewer boxes — one warning line, Default Time trac
   await tree.waitFor()
   assert.match(await text(tree.locator(':scope > ul > li').first()), /\S/, 'the reporting lines')
   assert.equal(await page.locator('.people-table').count(), 0, 'the tree is its own tab')
-  // CAP-61: the capacity of the month and the regional holidays are on Capacity & time → Capacity and absence.
+  // CAP-61: the capacity of the month and the regional holidays are on Capacity & time → Capacity.
   await navigate(page, 'Capacity & time')
-  await page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'Capacity and absence' }).click()
+  await page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'Capacity', exact: true }).click()
   assert.match(await text(page.locator('.notice', { hasText: /^Capacity in / })), /^Capacity in .+: \d+ (?:people|person), .*h available = .*h contractual − .*h absence/)
   assert.match(await text(page.locator('.notice', { hasText: /Regional holidays in|No regional holidays in/ })), /egional holidays in /)
   assert.deepEqual(errors, [])
+  await context.close()
+})
+
+// CON-131…CON-135 (TC-CON-91, TC-CON-94, TC-CON-95): the Admin access fixes. Lea Lead (lead@example.com) is an Admin,
+// not the Tool Owner (owner@example.com); left@example.com is an Admin no one in Azure DevOps has (a leaver).
+async function adminScenario() {
+  const policy = defaultPolicy()
+  policy.defaultRole = 'Team Member'
+  policy.members = { 'lead@example.com': ['Admin'], 'owner@example.com': ['Tool Owner'], 'omar.haddad@example.com': ['Scrum Master'], 'rita.gomez@example.com': ['Product Owner'], 'left@example.com': ['Admin'] }
+  const gh = fakeGitHub({ files: { 'access.json': serializeAccess(policy) } })
+  const profile = { id: 'tw-people', url: 'https://dev.azure.com/example/Project/_backlogs/backlog/Team%20A/Features', reason: 'Time Writing', token: 'x'.repeat(52), role: 'time-tracking', creatorEmail: 'lead@example.com' }
+  const { page, context, errors } = await openPage(app, { init: (connection) => {
+    localStorage.setItem('demand-planning-azure-connection-profiles-v1', JSON.stringify([connection]))
+    localStorage.setItem('demand-planning-git-storage-v1', JSON.stringify({ owner: 'example', repo: 'storage', branch: 'main', path: 'planning-data.json' }))
+    localStorage.setItem('demand-planning-git-token-v1', 'test-token')
+    localStorage.setItem('demand-planning-work-email-v1', 'lead@example.com')
+  }, initArg: profile })
+  await context.route('https://api.github.com/**', gh.route)
+  await context.route('https://dev.azure.com/**', (route) => /\/teams\/[^/]+\/members/.test(route.request().url())
+    ? route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ value: [{ identity: { displayName: 'Rita Gomez', uniqueName: 'rita.gomez@example.com' } }, { identity: { displayName: 'Omar Haddad', uniqueName: 'omar.haddad@example.com' } }, { identity: { displayName: 'Lea Lead', uniqueName: 'lead@example.com' } }, { identity: { displayName: 'Olli Owner', uniqueName: 'owner@example.com' } }] }) })
+    : route.fulfill({ status: 401, contentType: 'application/json', body: '{}' }))
+  const guide = page.getByRole('dialog').filter({ hasText: 'Could not fetch from Azure DevOps' })
+  await page.addLocatorHandler(guide, () => guide.getByRole('button', { name: 'Close', exact: true }).last().click())
+  await page.reload()
+  await navigate(page, 'People & access')
+  await page.locator('.people-table tr[data-row-key="Lea Lead"]').waitFor()
+  return { page, context, errors, members: () => JSON.parse(gh.read('access.json')).members }
+}
+const rowOf = (page, name) => page.locator(`.people-table tr[data-row-key="${name}"]`)
+
+test('TC-CON-95: the bulk Set region… / Set role… / Set access role… pop-ups open with nothing chosen; Save waits for a value; clearing asks first', async () => {
+  const { page, context, errors, members } = await adminScenario()
+  for (const name of ['Rita Gomez', 'Omar Haddad']) await page.getByRole('checkbox', { name: `Select ${name}` }).check()
+  const bar = page.getByRole('region', { name: 'Selected people' })
+  // Set region…: nothing chosen, Save disabled with the reason; (none) — clear asks before it clears.
+  await bar.getByRole('button', { name: 'Set region…' }).click()
+  const region = page.getByRole('form', { name: 'Set region for 2 people' })
+  assert.equal(await region.getByLabel('Region', { exact: true }).inputValue(), '')
+  assert.equal(await region.getByRole('button', { name: 'Save', exact: true }).isDisabled(), true)
+  assert.match(await text(region.locator('.write-blocked')), /Choose a region, or \(none\) — clear\./)
+  await region.getByLabel('Region', { exact: true }).selectOption('India')
+  await region.getByRole('button', { name: 'Save', exact: true }).click()
+  await region.waitFor({ state: 'detached' })
+  await rowOf(page, 'Omar Haddad').filter({ hasText: ' India ' }).waitFor()
+  await bar.getByRole('button', { name: 'Set region…' }).click()
+  await region.getByLabel('Region', { exact: true }).selectOption({ label: '(none) — clear' })
+  await region.getByRole('button', { name: 'Clear region for 2 people' }).click()
+  assert.match(await text(region.locator('.notice.warning')), /^This clears the region of 2 people: /)
+  assert.match(await text(rowOf(page, 'Omar Haddad')), / India /, 'nothing cleared before the second click')
+  await region.getByRole('button', { name: 'Clear region for 2 people' }).click()
+  await region.waitFor({ state: 'detached' })
+  await rowOf(page, 'Omar Haddad').filter({ hasNotText: ' India ' }).waitFor()
+  // Set role…: the same start.
+  await bar.getByRole('button', { name: 'Set role…' }).click()
+  const role = page.getByRole('form', { name: 'Set role for 2 people' })
+  assert.equal(await role.getByLabel('Role', { exact: true }).inputValue(), '')
+  assert.equal(await role.getByRole('button', { name: 'Save', exact: true }).isDisabled(), true)
+  await role.getByRole('button', { name: 'Cancel' }).click()
+  await role.waitFor({ state: 'detached' })
+  // Set access role…: no role chosen, Save disabled; removing the roles is its own choice and asks first.
+  await bar.getByRole('button', { name: 'Set access role…' }).click()
+  const access = page.getByRole('form', { name: 'Set access role for 2 people' })
+  assert.equal(await access.getByRole('button', { name: 'Save', exact: true }).isDisabled(), true)
+  await access.getByRole('checkbox', { name: /\(none\) — remove their app access roles/ }).check()
+  await access.getByRole('button', { name: 'Remove app access roles for 2 people' }).click()
+  await access.locator('.notice.warning').waitFor()
+  assert.deepEqual([members()['rita.gomez@example.com'], members()['omar.haddad@example.com']], [['Product Owner'], ['Scrum Master']], 'nothing saved before the second click')
+  await access.getByRole('button', { name: 'Remove app access roles for 2 people' }).click()
+  await access.waitFor({ state: 'detached' })
+  assert.deepEqual([members()['rita.gomez@example.com'], members()['omar.haddad@example.com']], [undefined, undefined])
+  assert.deepEqual(errors.filter((entry) => !/401|Unauthorized|Failed to load resource/.test(entry)), [])
+  await context.close()
+})
+
+test('TC-CON-91 / TC-CON-94: an Admin (not the Tool Owner) is refused making themselves Tool Owner in People; a leaver\'s access is removed under Role rights', async () => {
+  const { page, context, errors, members } = await adminScenario()
+  const before = JSON.stringify(members())
+  // The drawer: Tool Owner for herself → refused, access.json unchanged.
+  const drawer = await openPerson(page, 'Lea Lead')
+  await drawer.getByRole('button', { name: 'Edit', exact: true }).click()
+  await drawer.getByRole('button', { name: /^App access roles: / }).click()
+  const list = page.getByRole('listbox', { name: 'App access roles' })
+  await list.getByRole('checkbox', { name: 'Tool Owner', exact: true }).check()
+  await page.keyboard.press('Escape')
+  await list.waitFor({ state: 'detached' })
+  await drawer.getByRole('button', { name: 'Save', exact: true }).click()
+  assert.match(await text(drawer.locator('.drawer-error')), /App access roles not saved: Not saved: Only a Tool Owner can change who holds the stream mapping/)
+  assert.equal(JSON.stringify(members()), before, 'access.json unchanged')
+  await drawer.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await drawer.getByRole('button', { name: 'Edit', exact: true }).waitFor()
+  await page.keyboard.press('Escape')
+  await drawer.waitFor({ state: 'detached' })
+  // The bulk Set access role… goes through the same rule.
+  await page.getByRole('checkbox', { name: 'Select Lea Lead' }).check()
+  await page.getByRole('region', { name: 'Selected people' }).getByRole('button', { name: 'Set access role…' }).click()
+  const bulk = page.getByRole('form', { name: 'Set access role for 1 person' })
+  await bulk.getByRole('button', { name: /^App access roles: / }).click()
+  const roles = page.getByRole('listbox', { name: 'App access roles' })
+  await roles.getByRole('checkbox', { name: 'Tool Owner', exact: true }).check()
+  await page.keyboard.press('Escape')
+  await roles.waitFor({ state: 'detached' })
+  await bulk.getByRole('button', { name: 'Save', exact: true }).click()
+  assert.match(await text(bulk.locator('.notice.error')), /Not saved: Only a Tool Owner/)
+  assert.equal(JSON.stringify(members()), before)
+  await bulk.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await bulk.waitFor({ state: 'detached' })
+  // Role rights → Access for emails not in Azure DevOps: the leaver's Admin is removed after the confirmation.
+  await page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'Role rights' }).click()
+  const row = page.locator('.access-only-table tr', { hasText: 'left@example.com' })
+  assert.match(await text(row), /left@example\.com\s*Admin/)
+  await row.getByRole('button', { name: 'Remove access of left@example.com' }).click()
+  const confirm = page.getByRole('form', { name: 'Remove access of left@example.com' })
+  assert.match(await text(confirm), /loses the app access roles Admin/)
+  await confirm.getByRole('button', { name: 'Remove access' }).click()
+  await confirm.waitFor({ state: 'detached' })
+  await row.waitFor({ state: 'detached' })
+  assert.equal('left@example.com' in members(), false)
+  assert.deepEqual(members()['owner@example.com'], ['Tool Owner'], 'the rest is kept')
+  assert.deepEqual(errors.filter((entry) => !/401|Unauthorized|Failed to load resource/.test(entry)), [])
   await context.close()
 })

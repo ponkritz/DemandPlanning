@@ -8,15 +8,15 @@ import type { PageProps } from '../pages/types'
 import type { GitStorage } from '../useGitStorage'
 import { Modal, Notice, Panel, SettingsSummary, WriteBlocked } from './ui'
 
-// DPF-13: Admin → Stream options → Bulk creation Epics → DP bulk creation dates. Which date column of the DP query gives
+// DPF-13: Admin → Streams → Bulk creation → DP bulk creation dates. Which date column of the DP query gives
 // a Feature made by DP bulk creation its Start date (default DRPE Date, RPE) and its Target date (default DDT Date, DT).
 // Shared with the bulk creation Epics (releaseSourceSettings.dpBulkDates in the planning data), changed by the same right
-// (Stream options) and committed to Git straight away like a shared bulk Epic (QV-59); a default is not stored, so
+// (Admin → Streams → Bulk creation) and committed to Git straight away like a shared bulk Epic (QV-59); a default is not stored, so
 // files without the setting use the defaults. Shown as a summary with Edit… (UI-STANDARDS §3).
 export function DpBulkDatesPanel({ store, profiles, canManage, git }: { store: PageProps['store']; profiles: AzureConnectionProfileSummary[]; canManage: boolean; git?: GitStorage }) {
   const saved = normalizeReleaseSourceSettings(store.state.releaseSourceSettings).dpBulkDates
   const used = dpBulkDatesOf(saved)
-  const blocked = canManage ? bulkSharedBlocked(git) : 'Set by the roles with “Stream options” (shared); read only for you.'
+  const blocked = canManage ? bulkSharedBlocked(git) : 'Set by the roles allowed “Streams: Epics to match Features in, shared bulk creation Epics” (shared); read only for you.'
   // The DP query's columns: the fetched data's, else the query's SELECT.
   const { options, fetched } = dpQueryDateColumns(store.state, profiles)
   const [editing, setEditing] = useState(false)

@@ -1,6 +1,6 @@
 import test, { before, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { navigate, openPage, startApp } from './helpers.mjs'
+import { openPage, openSection, startApp } from './helpers.mjs'
 
 let app
 before(async () => { app = await startApp() })
@@ -8,9 +8,8 @@ after(async () => { await app.stop() })
 
 async function controls(page, month) {
   page.setDefaultTimeout(15_000)
-  await navigate(page, 'Capacity & time')
+  await openSection(page, 'Capacity & time', 'Month locks')
   await page.locator('input[type=month]').fill(month)
-  await page.getByRole('tab', { name: 'Period control', exact: true }).click()
   const monthLabel = new Intl.DateTimeFormat('en', { month: 'long', year: 'numeric' }).format(new Date(`${month}-01T00:00:00`))
   await page.getByLabel(`Planning last day to update of ${monthLabel}`, { exact: true }).waitFor()
 }
@@ -25,10 +24,27 @@ test('TC-SET-02: each selected month has independent plan and actual lock dates 
     assert.equal(await actual.inputValue(), '2030-12-04')
     await plan.fill('2030-11-09')
     await actual.fill('2030-12-08')
-    await page.getByRole('button', { name: 'Lock now', exact: true }).first().click()
-    await page.getByText('Locked', { exact: true }).first().waitFor()
-    // Browser persistence is deliberately debounced to avoid an IndexedDB write for every keystroke.
-    await page.waitForTimeout(750)
+    const planCard = page.locator('.control-card').filter({ has: plan })
+    const actualCard = page.locator('.control-card').filter({ has: actual })
+    await planCard.getByRole('button', { name: 'Lock now', exact: true }).click()
+    await planCard.getByText('Locked', { exact: true }).waitFor()
+    await actualCard.getByText('Open', { exact: true }).waitFor()
+    // Wait for the debounced save to commit before reloading.
+    await page.waitForFunction(() => new Promise((resolve) => {
+      const open = indexedDB.open('demand-planning-data-v1')
+      open.onerror = () => resolve(false)
+      open.onsuccess = () => {
+        const db = open.result
+        const transaction = db.transaction('snapshots')
+        const read = transaction.objectStore('snapshots').get('current')
+        transaction.oncomplete = () => {
+          db.close()
+          const lock = read.result?.capacitySettings?.monthLocks?.['2030-11']
+          resolve(lock?.planOn === '2030-11-09' && lock?.actualsOn === '2030-12-08' && lock?.planLocked === true)
+        }
+        transaction.onabort = () => { db.close(); resolve(false) }
+      }
+    }))
 
     await page.locator('input[type=month]').fill('2030-12')
     await page.getByLabel('Planning last day to update of December 2030', { exact: true }).waitFor()
@@ -39,7 +55,8 @@ test('TC-SET-02: each selected month has independent plan and actual lock dates 
     await controls(page, '2030-11')
     assert.equal(await plan.inputValue(), '2030-11-09')
     assert.equal(await actual.inputValue(), '2030-12-08')
-    await page.getByRole('button', { name: 'Undo early lock', exact: true }).first().waitFor()
+    await planCard.getByRole('button', { name: 'Undo early lock', exact: true }).click()
+    await planCard.getByText('Open', { exact: true }).waitFor()
     assert.deepEqual(errors, [])
   } finally { await context.close() }
 })
@@ -52,9 +69,10 @@ test('TC-SET-02: month locks can be returned independently to their configured d
     const actual = page.getByLabel('Actuals last day to update of November 2030', { exact: true })
     await plan.fill('2030-11-11')
     await actual.fill('2030-12-12')
-    await page.getByRole('button', { name: 'Use default', exact: true }).first().click()
+    await page.locator('.control-card').filter({ has: plan }).getByRole('button', { name: 'Use default', exact: true }).click()
     assert.equal(await plan.inputValue(), '2030-11-05')
-    await page.getByRole('button', { name: 'Use default', exact: true }).click()
+    assert.equal(await actual.inputValue(), '2030-12-12')
+    await page.locator('.control-card').filter({ has: actual }).getByRole('button', { name: 'Use default', exact: true }).click()
     assert.equal(await actual.inputValue(), '2030-12-04')
     assert.deepEqual(errors, [])
   } finally { await context.close() }

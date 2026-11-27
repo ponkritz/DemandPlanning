@@ -58,6 +58,9 @@ export function serverKey(view: Pick<AzureConnectionProfileSummary, 'url' | 'bas
   try { const url = new URL(view.url); return `${url.origin}/${url.pathname.split('/').filter(Boolean)[0] ?? ''}`.toLowerCase() } catch { return '' }
 }
 const readServerPats = (storage: Pick<Storage, 'getItem'>): Record<string, string> => { try { const raw = JSON.parse(storage.getItem(serverPatsKey) ?? '{}'); return raw && typeof raw === 'object' && !Array.isArray(raw) ? Object.fromEntries(Object.entries(raw).filter((entry): entry is [string, string] => typeof entry[1] === 'string' && Boolean(entry[1].trim()))) : {} } catch { return {} } }
+// AR-006 (CON-142): the PAT of a connection being edited or cloned, only while it stays on the same server; a PAT is
+// never carried to another server.
+export const tokenOnServer = (profile: Pick<AzureConnectionProfile, 'url' | 'baseUrl' | 'token'> | null | undefined, key: string) => profile && key && serverKey(profile).toLowerCase() === key.toLowerCase() ? profile.token : ''
 export function loadServerPat(key: string, storage: Pick<Storage, 'getItem'> = localStorage) { return readServerPats(storage)[key.toLowerCase()] ?? '' }
 export function saveServerPat(key: string, token: string, storage: Pick<Storage, 'getItem' | 'setItem'> = localStorage) {
   if (!key) return

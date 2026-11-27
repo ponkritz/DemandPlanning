@@ -70,8 +70,9 @@ export const absenceKindsOf = (profile: Pick<CalculationProfile, 'absenceKinds'>
 export const npraPartsOf = (profile: Pick<CalculationProfile, 'npraIncludes'>): NpraPart[] => profile.npraIncludes ?? [...npraParts]
 
 // The hours of one bucket for one person: the plan in each source, the recorded hours, the hours that come off the
-// capacity when the bucket is deducted (as recorded today: Completed Work; imported and shared holidays and activities:
-// Original Estimate when nothing is recorded) and the number of the person's own Tasks in it.
+// capacity when the bucket is deducted (CAP-60: leave and holidays by their actual if recorded, else planned —
+// Completed Work, else Original Estimate; other buckets: Completed Work; shared activities: their plan) and the number
+// of the person's own Tasks in it.
 export interface BucketHours { estimate: number; completed: number; estimateElseCompleted: number; deducted: number; tasks: number }
 export interface CalcInputs { own: Record<BucketKey, BucketHours>; shared: Partial<Record<SharedTimeScope, Partial<Record<BucketKey, BucketHours>>>>; absenceByKind: Partial<Record<AbsenceKind, BucketHours>> }
 export const emptyBucket = (): BucketHours => ({ estimate: 0, completed: 0, estimateElseCompleted: 0, deducted: 0, tasks: 0 })

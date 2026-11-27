@@ -153,7 +153,7 @@ test('CON-94: every permission is Allow, Deny or Not set per role; a denial wins
   // Settings pages and View as follow their own permissions.
   const pages = (rights) => settingsPagesFor((key) => rights.actions.has(key)).map((page) => page.key)
   const smOnly = defaultPolicy('lead@example.com'); smOnly.members['sm@example.com'] = ['Scrum Master']
-  assert.deepEqual(pages(rightsFor(smOnly, 'sm@example.com')), ['home', 'connections', 'options', 'epics', 'pireview', 'resources', 'storage', 'pages'], 'PIR-29: the Scrum Master holds “PI Review: set up the review form”')
+  assert.deepEqual(pages(rightsFor(smOnly, 'sm@example.com')), ['home', 'connections', 'epics', 'resources', 'pages', 'storage'], 'SET-26: the seven pages in order; the Scrum Master’s PI Review form is a section of Feature & PI setup (PIR-29)')
   setCell(smOnly.roles['Scrum Master'], 'capacity.periods', 'allow')
   assert.ok(pages(rightsFor(smOnly, 'sm@example.com')).includes('capacity'), 'one capacity permission opens the page')
   assert.ok(canViewAs(rightsFor(smOnly, 'lead@example.com')) && !canViewAs(rightsFor(smOnly, 'sm@example.com')))
@@ -210,7 +210,7 @@ test('CON-101: until a roles file is loaded the app is read-only (every menu are
   const none = rightsFor(null, 'lead@example.com')
   assert.equal(none.areas.size, areas.length, 'every menu area stays visible')
   for (const { key } of actions) assert.equal(none.actions.has(key), false, `${key} is denied without a policy`)
-  assert.deepEqual(settingsPagesFor((key) => none.actions.has(key)).map((page) => page.key), ['home', 'connections', 'options', 'epics', 'resources', 'storage', 'pages'], 'Data & sharing (to connect Git storage), People & roles and Pages & menu (PGB-12: read only, with the reasons) stay open')
+  assert.deepEqual(settingsPagesFor((key) => none.actions.has(key)).map((page) => page.key), ['home', 'connections', 'epics', 'resources', 'pages', 'storage'], 'Data & history (to connect Git storage), People & access, Pages & reports (PGB-12) and Feature & PI setup (Lists and templates, SET-31) stay open, read only with the reasons')
   assert.equal(canViewAs(none), false)
   // Bootstrap: Git storage read that no access.json exists — Manage access only, nothing else.
   const first = rightsFor(null, 'lead@example.com', true)
@@ -248,7 +248,7 @@ test('CON-102: why a button that writes to Azure DevOps is disabled — read-onl
   assert.equal(writeBlockedReason(true, []), '', 'nothing missing: no reason, the button stays enabled')
   assert.equal(writeBlockedReason(false, []), '')
   assert.equal(writeBlockedReason(true, ['azure.write', 'work.edit']), 'Read only: the access roles are not loaded yet, so nothing can be changed in Azure DevOps.')
-  assert.equal(writeBlockedReason(false, ['work.edit']), 'Your role does not allow “Edit the fields of a work item”. An Admin can change this in Admin → People & roles → Role rights.')
+  assert.equal(writeBlockedReason(false, ['work.edit']), 'Your role does not allow “Edit the fields of a work item”. An Admin can change this in Admin → People & access → Role rights.')
   assert.match(writeBlockedReason(false, ['azure.write', 'work.state', 'azure.write']), /^Your role does not allow “Create Features, User Stories and Tasks”, “Change the state \(Active, Closed\), Close Features”\. /, 'each missing permission named once')
   // What the reason is shown for: no roles file gives no action (CON-101), so every write button is disabled.
   const none = rightsFor(null, 'anyone@example.com')

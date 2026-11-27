@@ -109,7 +109,7 @@ test('TC-SET-09: a person deletes a view of their own from its page — the pop-
   await person.context.close()
 })
 
-test('TC-CON-72: the Tool Owner has no delete item on a shared view’s page; Admin → Data & sharing keeps Remove / Delete for everyone', async () => {
+test('TC-CON-72: the Tool Owner has no delete item on a shared view’s page; Admin → Data & history keeps Remove / Delete for everyone', async () => {
   const gh = repository()
   const owner = await open(gh, 'owner@example.com')
   const { page } = owner
@@ -120,8 +120,8 @@ test('TC-CON-72: the Tool Owner has no delete item on a shared view’s page; Ad
   assert.ok(!items.some((label) => /for everyone|Delete/.test(label)), `no delete item on the page: ${items.join(' | ')}`)
   await shot(page, 'shared-view-menu-tool-owner-1440-light.png')
   await page.keyboard.press('Escape')
-  // CON-109…CON-112 are unchanged in Admin → Data & sharing → Other views.
-  await navigate(page, 'Data & sharing')
+  // CON-109…CON-112 are unchanged in Admin → Data & history → Other views.
+  await navigate(page, 'Data & history')
   await page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'Other views' }).click()
   await page.locator('table.connection-table tbody tr', { hasText: 'Supplier X' }).getByRole('button', { name: 'More actions: Shared view Supplier X' }).click()
   assert.equal(await page.getByRole('menuitem', { name: 'Delete for everyone…' }).isDisabled(), false)

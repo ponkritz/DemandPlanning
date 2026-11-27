@@ -4,7 +4,7 @@ Route ID `admin`. This design covers the Settings host, Admin menu and separate 
 
 ## Default design
 
-- The Admin area has one page per shared configuration area. Home tiles and the sidebar open Admin pages, while the profile menu opens My settings.
+- Seven Admin pages group shared settings. Home tiles and the sidebar open Admin pages, while the profile menu opens My settings. The gear on a supported work page opens only that page’s relevant shared settings.
 - The ordinary fallback is Streams (`connections`) when a saved Settings destination is invalid or unavailable. The Admin tile’s landing is Overview.
 - Where several sections are available, the host shows a tab strip and one active section. It omits tabs when only one section remains. Scope chips say whether settings apply to the individual, device, whole team, or Tool Owner governance.
 - Opening a destination via a deep link or setting search records the section before remounting the Settings host. The last chosen page and section stay in local storage. If a saved section is no longer available, the first available section is shown.
@@ -16,20 +16,18 @@ Route ID `admin`. This design covers the Settings host, Admin menu and separate 
 | --- | --- | --- |
 | `home` | Overview | [Overview](settings/home.md) |
 | `my` | My settings | [Your work email](settings/my-email.md), [Servers and PATs](settings/my-servers.md), [My views](settings/my-myviews.md), [My naming patterns](settings/my-patterns.md), [My page usage](settings/my-usage.md) |
-| `connections` | Streams | [Stream mapping](settings/connections-mapping.md) |
-| `options` | Stream options | [Epics to match Features in](settings/options-epics.md), [Bulk creation Epics](settings/options-bulk.md), [Release counts](settings/options-counts.md) |
-| `epics` | Epic & Feature setup | [Setup per Epic](settings/epics-setup.md), [Value lists](settings/epics-lists.md), [User Story templates](settings/epics-templates.md) |
-| `resources` | People & roles | [People](settings/resources-people.md), [Capacity roles](settings/resources-capacity-roles.md), [Role rights](settings/resources-rights.md) |
-| `capacity` | Capacity & time | [Capacity and absence](settings/capacity-capacity.md), [Calculation profiles](settings/capacity-profiles.md), [Bucket rules](settings/capacity-rules.md), [Insight thresholds](settings/capacity-insights.md), [Holidays and common activities](settings/capacity-time.md), [Period control](settings/capacity-period.md), [Historical hours](settings/capacity-history.md) |
-| `pack` | Reports | [Monthly pack](settings/pack-pack.md), [Table and chart defaults](settings/pack-tables.md) |
-| `storage` | Data & sharing | [Git storage](settings/storage-git.md), [Load from Git](settings/storage-load.md), [Shared setup in Git](settings/storage-shared.md), [SharePoint](settings/storage-sharepoint.md), [Other views](settings/storage-views.md), [Read-only sources](settings/storage-sources.md), [Synthetic sample](settings/storage-sample.md) |
-| `audit` | History | [History](settings/audit.md) |
+| `connections` | Streams | [Stream mapping](settings/connections-mapping.md), [Release counts](settings/options-counts.md), [Bulk creation](settings/options-bulk.md) |
+| `epics` | Feature & PI setup | [Setup per Epic](settings/epics-setup.md), [Lists](settings/epics-lists.md), [User Story templates](settings/epics-templates.md), [PI Review form](pireview.md) |
+| `resources` | People & access | [People and Team tree](settings/resources-people.md), [Role rights](settings/resources-rights.md) |
+| `capacity` | Capacity & time | [Capacity](settings/capacity-capacity.md), [Calculation profiles](settings/capacity-profiles.md), [Hour classification](settings/capacity-rules.md), [Thresholds](settings/capacity-insights.md), [Month locks](settings/capacity-period.md) |
+| `pages` | Pages & reports | Menu groups & pages, [Monthly pack](settings/pack-pack.md), [Table & chart defaults](settings/pack-tables.md) |
+| `storage` | Data & history | [Git storage](settings/storage-git.md), [Load everything from Git](settings/storage-load.md), [Other views](settings/storage-views.md), [Connections in Git](settings/storage-shared.md), [Historical hours](settings/capacity-history.md), [Changes](settings/audit.md), [Demo data](settings/storage-sample.md) |
 
-Legacy keys are translated before rendering. `access` maps to People & roles, `masters` and `features` to Setup per Epic, `tables` to Reports, and the legacy `history` key to Historical hours. The current audit page uses the separate key `audit`.
+Legacy keys are translated before rendering. For example, former Stream options open the relevant section on Streams, and former PI Review Setup opens the PI Review form under Feature & PI setup. The resolver in `settingsTabs.ts` also maps saved sections and older deep links.
 
 ## Behavior and storage
 
-The registry hides Capacity & time without any of its five permissions, Reports without report or layout permissions, and audit History without `storage.shared`. Capacity & time, Reports, People & roles, and Data & sharing also apply section or connection-state checks. My settings is personal. Use the section design for the exact edit guard, target file and whether a local edit requires a subsequent shared save. Azure work-item rights, the Git token’s access, and SharePoint access still govern their respective writes.
+The registry shows each page when the viewer can open at least one of its sections. Each section applies its own permission and connection checks. My settings is personal. Use the section design for the edit guard, target file and save behavior. Azure work-item rights, Git repository access, and SharePoint permissions govern their respective writes.
 
 ## Implementation
 

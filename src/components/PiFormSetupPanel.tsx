@@ -4,14 +4,14 @@ import { formatDate, formatDateTime } from '../format'
 import { reviewStartOf } from '../piReviewStart'
 import { emptyReviewForm, formSetupProblems, reviewBlocks, withFieldValue, type ReviewForm } from '../piReviewPost'
 import { ReviewPreview } from '../pages/PiReviewForm'
-import { headingText, piPlaceholder, reviewedPiPlaceholder } from '../piReview'
+import { headingText, piPlaceholder, reviewHeadingOf, reviewedPiPlaceholder } from '../piReview'
 import { defaultReviewStart, isReviewStartDay, builtInFields, fieldDrafts, fieldsOf, isBuiltInField, isChoice, maxFormFields, newFieldId, piFieldTypes, piFormFile, setupChanges, setupGearLabel, showsSetupGear, type PiFormField, type PiFormSetup } from '../piReviewSetup'
 import { typeLabel, type ColumnDraft } from '../onDemand'
 import { ColumnListEditor } from './ColumnListEditor'
 import type { PiFormStore } from '../usePiFormSetup'
 import { useReviewViewer } from '../piReviewWriter'
 
-// PIR-19…PIR-22, PIR-29, PIR-31: the panel of Admin → PI Review Setup (PiReviewSetupPage), shown to the holders of "PI Review: set
+// PIR-19…PIR-22, PIR-29, PIR-31: the panel of Admin → Feature & PI setup → PI Review form (PiReviewSetupPage), shown to the holders of "PI Review: set
 // up the review form" (Scrum Master and Tool Owner by default, CON-114). It shows the fields of the form in use — the
 // order, labels, the headings written in the comment, types, options, required and defaults — as a summary
 // (UI-STANDARDS §3); **Edit form…** opens the editor in a pop-up, disabled with the reason in View as, with the sample,
@@ -49,7 +49,7 @@ export function PiFormSetupPanel({ store, block, by }: { store: PiFormStore; blo
   </Panel>
 }
 
-// PIR-30: ⚙ in the page header of My PI Review and PI Review — opens Admin → PI Review Setup; shown when that page is in
+// PIR-30: ⚙ in the page header of My PI Review and PI Review — opens Admin → Feature & PI setup → PI Review form; shown when that page is in
 // the viewer's menu, i.e. to the holders of "PI Review: set up the review form" (showsSetupGear; in View as those of the
 // viewed role). The icon of "open the setup of this page" (UI-STANDARDS §6): aria-label and title name the page.
 export function PiSetupGear() {
@@ -110,7 +110,7 @@ function PiFormEditor({ setup, by, blocked, onSave, onClose }: { setup: PiFormSe
       </section>
       <section className="pir-review-preview" aria-label="Comment preview">
         <h3>Comment preview</h3>
-        <ReviewPreview blocks={sampleComment(draft)} />
+        <ReviewPreview heading={reviewHeadingOf('PI 26.4')} blocks={sampleComment(draft)} />
         <small className="muted">A review written with this form, as it is posted to the Feature’s Discussion. Reviews written before keep their columns: PI Review reads the built-in headings too.</small>
       </section>
     </div>

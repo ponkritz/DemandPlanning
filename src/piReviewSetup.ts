@@ -8,6 +8,7 @@ import { mergeKeyed, merge3, type Merge } from './gitSaveQueue.ts'
 import { builtInSectionOf, piPlaceholder, reviewedPiPlaceholder } from './piReview.ts'
 import { writeBlockedReason } from './access.ts'
 import { columnsError, typeLabel, type ColumnDraft, type OnDemandType } from './onDemand.ts'
+import { meetingSettingsProblems, parseMeetingSettings, sameMeetingSettings, serializeMeetingSettings, type MeetingSettings } from './piMeetingSettings.ts'
 
 export const piFormFile = 'pi-review-form.json'
 export const piFormKind = 'pi-review-form'
@@ -22,7 +23,9 @@ export const isBuiltInField = (id: string): id is BuiltInFieldId => (builtInFiel
 export interface PiFormField { id: string; label: string; heading: string; type: PiFieldType; options: string[]; required: boolean; defaultValue: string; help: string }
 // PIR-33: reviewStart — "PI Review starts from" (YYYY-MM-DD): PIs that ended before it are not offered and comments
 // before it are ignored; missing in older files (and without the file), then defaultReviewStart applies.
-export interface PiFormSetup { schema: 1; kind: typeof piFormKind; fields: PiFormField[]; reviewStart?: string; changedAt?: string; changedBy?: string }
+// PIR-58: meeting — the Meeting presentation settings (piMeetingSettings.ts); a file holding them is schema 2, one without
+// them stays schema 1 (so an older app still reads it), and a schema 1 file loads with the default settings.
+export interface PiFormSetup { schema: 1 | 2; kind: typeof piFormKind; fields: PiFormField[]; reviewStart?: string; meeting?: MeetingSettings; changedAt?: string; changedBy?: string }
 // PIR-33: the default start (21 Sep 2026), defined with the Discussions it filters.
 export { defaultReviewStart } from './piReview.ts'
 // PIR-33: a calendar day written YYYY-MM-DD (a real day of 2000…2099).
@@ -75,6 +78,7 @@ export function setupProblems(setup: PiFormSetup): string[] {
   if (!fields.length) problems.push('The form needs at least Move to next PI.')
   if (fields.length > maxFormFields) problems.push(`The form has ${fields.length} fields; at most ${maxFormFields}.`)
   if (setup.reviewStart !== undefined && !isReviewStartDay(setup.reviewStart)) problems.push(`PI Review starts from: “${setup.reviewStart}” is not a date (YYYY-MM-DD).`)
+  if (setup.meeting) problems.push(...meetingSettingsProblems(setup.meeting))
   if (!fields.some((field) => field.id === 'move')) problems.push('Move to next PI cannot be removed: it is the PI decision PI Review filters by.')
   const ids = new Set<string>(), headings = new Map<string, string>()
   for (const [index, field] of fields.entries()) {
@@ -136,7 +140,8 @@ export function parsePiFormSetup(source: string): PiFormSetup {
   let raw: unknown
   try { raw = JSON.parse(source) } catch { throw new Error(`${piFormFile} is not valid JSON.`) }
   const input = record(raw)
-  if (!input || input.schema !== 1 || input.kind !== piFormKind || !Array.isArray(input.fields)) throw new Error(`${piFormFile} is not a PI Review form setup (schema 1, kind “${piFormKind}”, fields).`)
+  if (!input || (input.schema !== 1 && input.schema !== 2) || input.kind !== piFormKind || !Array.isArray(input.fields)) throw new Error(`${piFormFile} is not a PI Review form setup (schema 1 or 2, kind “${piFormKind}”, fields).`)
+  if (input.schema === 1 && input.meeting !== undefined) throw new Error(`${piFormFile}: a schema 1 file has no meeting settings (they need schema 2).`)
   const fields = input.fields.map((entry, index): PiFormField => {
     const field = record(entry)
     if (!field) throw new Error(`${piFormFile}: field ${index + 1} is not an object.`)
@@ -145,14 +150,17 @@ export function parsePiFormSetup(source: string): PiFormSetup {
     return { id: field.id, label: text(field.label).trim(), heading: text(field.heading).trim(), type: field.type, options: ((field.options as string[] | undefined) ?? []).map((option) => option.trim()), required: field.required === true, defaultValue: text(field.defaultValue).trim(), help: text(field.help).trim() }
   })
   if (input.reviewStart !== undefined && !isReviewStartDay(input.reviewStart)) throw new Error(`${piFormFile}: reviewStart (PI Review starts from) is not a date written YYYY-MM-DD.`)
-  const setup: PiFormSetup = { schema: 1, kind: piFormKind, fields, ...(typeof input.reviewStart === 'string' ? { reviewStart: input.reviewStart } : {}), ...(typeof input.changedAt === 'string' && input.changedAt ? { changedAt: input.changedAt } : {}), ...(typeof input.changedBy === 'string' && input.changedBy.trim() ? { changedBy: input.changedBy.trim().slice(0, 200) } : {}) }
+  const meeting = input.meeting === undefined ? undefined : parseMeetingSettings(input.meeting, piFormFile)
+  const setup: PiFormSetup = { schema: meeting ? 2 : 1, kind: piFormKind, fields, ...(typeof input.reviewStart === 'string' ? { reviewStart: input.reviewStart } : {}), ...(meeting ? { meeting } : {}), ...(typeof input.changedAt === 'string' && input.changedAt ? { changedAt: input.changedAt } : {}), ...(typeof input.changedBy === 'string' && input.changedBy.trim() ? { changedBy: input.changedBy.trim().slice(0, 200) } : {}) }
   const problems = setupProblems(setup)
   if (problems.length) throw new Error(`${piFormFile} cannot be used: ${problems.join(' ')}`)
   return setup
 }
 export function serializePiFormSetup(setup: PiFormSetup): string {
   const fields = setup.fields.map((field) => ({ id: field.id, label: field.label.trim(), heading: field.heading.trim(), type: field.type, ...(field.type === 'dropdown' ? { options: field.options.map((option) => option.trim()) } : {}), required: field.required, ...(field.defaultValue ? { defaultValue: field.defaultValue } : {}), ...(field.help.trim() ? { help: field.help.trim() } : {}) }))
-  return `${JSON.stringify({ schema: 1, kind: piFormKind, fields, ...(setup.reviewStart ? { reviewStart: setup.reviewStart } : {}), ...(setup.changedAt ? { changedAt: setup.changedAt } : {}), ...(setup.changedBy ? { changedBy: setup.changedBy } : {}) }, null, 2)}\n`
+  // PIR-58: schema 2 only when the meeting settings differ from the defaults.
+  const meeting = setup.meeting ? serializeMeetingSettings(setup.meeting) : undefined
+  return `${JSON.stringify({ schema: meeting ? 2 : 1, kind: piFormKind, fields, ...(setup.reviewStart ? { reviewStart: setup.reviewStart } : {}), ...(meeting ? { meeting } : {}), ...(setup.changedAt ? { changedAt: setup.changedAt } : {}), ...(setup.changedBy ? { changedBy: setup.changedBy } : {}) }, null, 2)}\n`
 }
 const safeParse = (source: string | null) => { if (!source) return null; try { return parsePiFormSetup(source) } catch { return null } }
 // GIT-17: two saves of the form setup meanwhile — the fields by id (both sides' changes kept; where both changed one
@@ -168,7 +176,9 @@ export const mergePiFormText: Merge = (baseText, mineText, theirsText, mineLater
   const later = mineLater ? mine : theirs
   // PIR-33: the start date of the side that changed it (the later save when both did).
   const reviewStart = mine.reviewStart === theirs.reviewStart ? mine.reviewStart : mine.reviewStart === base?.reviewStart ? theirs.reviewStart : theirs.reviewStart === base?.reviewStart ? mine.reviewStart : later.reviewStart
-  const merged: PiFormSetup = { schema: 1, kind: piFormKind, fields: ordered.map((id) => fields[id]), ...(reviewStart ? { reviewStart } : {}), ...(later.changedAt ? { changedAt: later.changedAt } : {}), ...(later.changedBy ? { changedBy: later.changedBy } : {}) }
+  // PIR-58: the meeting settings of the side that changed them (the later save when both did).
+  const meeting = sameMeetingSettings(mine.meeting, theirs.meeting) ? mine.meeting : sameMeetingSettings(mine.meeting, base?.meeting) ? theirs.meeting : sameMeetingSettings(theirs.meeting, base?.meeting) ? mine.meeting : later.meeting
+  const merged: PiFormSetup = { schema: meeting ? 2 : 1, kind: piFormKind, fields: ordered.map((id) => fields[id]), ...(reviewStart ? { reviewStart } : {}), ...(meeting ? { meeting } : {}), ...(later.changedAt ? { changedAt: later.changedAt } : {}), ...(later.changedBy ? { changedBy: later.changedBy } : {}) }
   try { return serializePiFormSetup(parsePiFormSetup(serializePiFormSetup(merged))) } catch { return mineLater ? mineText : theirsText }
 }
 
@@ -182,15 +192,15 @@ export function formSetupBlock(viewer: FormSetupViewer, git: FormSetupGit, state
   if (viewer.readOnly) return writeBlockedReason(true, ['pireview.setup'], 'in the PI Review form')
   if (!viewer.can('pireview.setup')) return `${writeBlockedReason(false, ['pireview.setup'])} Scrum Masters and Tool Owners set up the form.`
   if (git.isSample) return 'Synthetic sample data is loaded: the PI Review form is not saved to Git. Fetch your data first.'
-  if (!git.connected) return 'Connect Git storage (Admin → Data & sharing) to change the PI Review form; it is shared through Git.'
+  if (!git.connected) return 'Connect Git storage (Admin → Data & history) to change the PI Review form; it is shared through Git.'
   if (git.readOnly) return 'View only: your Git token can read but not save.'
   if (state.error) return `${piFormFile} could not be read from Git, so the form cannot be changed here: ${state.error}`
   if (!state.loaded) return 'The PI Review form is still being read from Git.'
   return ''
 }
 
-// PIR-30: the ⚙ PI Review Setup button in the headers of My PI Review and PI Review — shown exactly when Admin → PI
-// Review Setup is in the viewer's menu (PIR-29): to a holder of "PI Review: set up the review form" (decided by the
+// PIR-30: the ⚙ PI Review Setup button in the headers of My PI Review and PI Review — shown exactly when Admin → Feature & PI setup → PI
+// Review form is among the viewer's sections (PIR-29, SET-27): to a holder of "PI Review: set up the review form" (decided by the
 // permission, so Role rights changes count; Scrum Master and Tool Owner by default). In View as it follows the viewed
 // role, as the menu does, and with the synthetic sample it stays, as the menu entries do; the page then opens read only
 // with the reason (PIR-31). Nobody without the right, and nobody before the roles file is loaded (CON-101), sees it.

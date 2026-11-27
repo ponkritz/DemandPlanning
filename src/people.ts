@@ -1,7 +1,7 @@
 import { normalizeProfiles, type Region, type ResourceProfile, type ResourceRole } from './capacity.ts'
 import { normalEmail, roles as accessRoles, withMemberRoles, type AccessPolicy, type Role } from './access.ts'
 
-// Admin → People & roles → People (CAP-58…CAP-62): the read-only list of people, its Status and filters, and the
+// Admin → People & access → People (CAP-58…CAP-62): the read-only list of people, its Status and filters, and the
 // changes the drawer and the bulk edit make — profiles (planning data) and app access roles (access.json) — worked out
 // here so that every save is one change of each file.
 

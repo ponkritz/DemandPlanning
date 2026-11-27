@@ -257,7 +257,7 @@ export async function readFieldNames(config: AzureConfig, pat: string, transport
   } catch { return {} }
 }
 
-// The members of the connection's team (CAP-30): read only, for Admin → People & roles → People. Needs a PAT that may read the
+// The members of the connection's team (CAP-30): read only, for Admin → People & access → People. Needs a PAT that may read the
 // project's teams (Project and Team, Read); names and emails only.
 export async function fetchTeamMembers(config: AzureConfig, pat: string, transport: AzureTransport = requestAzure) {
   const members = (await readTeamIdentities(config, pat, transport)).map(({ name, email }) => ({ name, ...(email ? { email } : {}) }))

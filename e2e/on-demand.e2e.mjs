@@ -140,7 +140,7 @@ test('TC-OND-07: a viewer without the On-Demand rights sees the page read only �
   await page.keyboard.press('Escape')
   assert.equal(await first.getByRole('button', { name: /^Edit row/ }).isDisabled(), true)
   assert.equal(await first.getByRole('button', { name: /^Hide row/ }).isDisabled(), true)
-  assert.equal(await text(page.locator('.od-panel .write-blocked')), 'Your role does not allow “Edit On-Demand data (rows)”, “Set up On-Demand pages (pages, columns, options)”. An Admin can change this in Admin → People & roles → Role rights.')
+  assert.equal(await text(page.locator('.od-panel .write-blocked')), 'Your role does not allow “Edit On-Demand data (rows)”, “Set up On-Demand pages (pages, columns, options)”. An Admin can change this in Admin → People & access → Role rights.')
   assert.match(await first.getByRole('button', { name: /^Edit row/ }).getAttribute('title'), /Your role does not allow “Edit On-Demand data \(rows\)”/)
   assert.equal(writes.length, 0, 'nothing is written')
   assert.deepEqual(errors.filter((entry) => !/401|Unauthorized/.test(entry)), [])
@@ -267,7 +267,7 @@ test('TC-OND-13: a viewer without the setup right sees the Insights read only �
   // OND-61: Move up / down, Edit…, Size… and Remove… are in each chart's ⋯ menu, shown only to those who may set charts up.
   assert.equal(await page.getByRole('button', { name: 'More actions: Cost per month' }).count(), 0, 'no chart menu for a viewer')
   assert.equal(await line.getByRole('button', { name: /^(Edit|Remove|Move)/ }).count(), 0, 'no chart buttons for a viewer')
-  assert.equal(await text(page.locator('.od-insights-head .write-blocked')), 'Your role does not allow “Set up On-Demand pages (pages, columns, options)”. An Admin can change this in Admin → People & roles → Role rights.')
+  assert.equal(await text(page.locator('.od-insights-head .write-blocked')), 'Your role does not allow “Set up On-Demand pages (pages, columns, options)”. An Admin can change this in Admin → People & access → Role rights.')
   assert.match(await page.getByRole('button', { name: '＋ Add chart / table' }).getAttribute('title'), /Your role does not allow “Set up On-Demand pages/)
   // The Data tab is unchanged.
   await page.getByRole('tab', { name: 'Data' }).click()

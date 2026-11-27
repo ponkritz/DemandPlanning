@@ -6,7 +6,7 @@ import type { AzureWorkspace } from '../useAzureWorkspace'
 import { Modal, Notice } from './ui'
 import { isOtherView, otherViewsPath } from '../otherViews'
 
-// CON-109, CON-110 (Admin → Data & sharing → Other views, ⋯ of a shared view): the Tool Owner removes — or deletes, with
+// CON-109, CON-110 (Admin → Data & history → Other views, ⋯ of a shared view): the Tool Owner removes — or deletes, with
 // its data files in Git — a shared view for everyone. Who it affects: everyone who uses the shared setup in this
 // repository; the app cannot know how many people that is (anyone with Git storage connected to it), so it says so.
 // The view's definition is backed up in Git first (never a PAT), so Removed connections can restore it (CON-112).

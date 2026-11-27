@@ -11,18 +11,59 @@ export const defaultNamingPatterns: NamingPatterns = {
 }
 export const maxPatterns = 10, maxPatternLength = 200
 
-const escape = (text: string) => text.replace(/[.+?^${}()|[\]\\]/g, '\\$&')
-const literal = (text: string, lazy: boolean) => text.split('*').map((part) => escape(part).replace(/\s+/g, '\\s+')).join(lazy ? '.*?' : '.*')
-// The pattern as a regular expression, or the reason it cannot be used.
-export function compilePattern(pattern: string): { regex: RegExp } | { error: string } {
+// AR-007 (KB-130, CON-140): a pattern is matched by a wildcard matcher whose time grows with the Title times the pattern,
+// never by a regular expression (one `.*` per * backtracked catastrophically on a Title that does not fit). It gives the
+// results of the former regex `^P(I)S$` (case ignored; spaces in the pattern match the one space between words of the
+// Title): the release name starts as early as possible and, from there, ends as early as possible.
+export const maxStars = 20
+export interface CompiledPattern { prefix: string[]; inside: string[]; suffix: string[] }
+// One UTF-16 unit as the former case-insensitive regex compared it (its upper case when that is one unit, not ASCII
+// made from a non-ASCII letter).
+const fold = (char: string) => { const upper = char.toUpperCase(); return upper.length === 1 && !(char.charCodeAt(0) >= 128 && upper.charCodeAt(0) < 128) ? upper : char }
+const foldText = (text: string) => { let out = ''; for (let at = 0; at < text.length; at++) out += fold(text[at]); return out }
+const fitsAt = (text: string, part: string, from: number) => from >= 0 && text.startsWith(part, from)
+// The ends e where the wildcard pattern `parts` (the text between its *) matches text[start..e): every segment but the
+// last at its earliest place; the last one ends anywhere it fits after them.
+function endsFrom(text: string, parts: string[], start: number): number[] {
+  if (!fitsAt(text, parts[0], start)) return []
+  if (parts.length === 1) return [start + parts[0].length]
+  let from = start + parts[0].length
+  for (let index = 1; index < parts.length - 1; index++) { const found = text.indexOf(parts[index], from); if (found < 0) return []; from = found + parts[index].length }
+  const last = parts[parts.length - 1], ends: number[] = []
+  for (let begin = from; begin + last.length <= text.length; begin++) if (fitsAt(text, last, begin)) ends.push(begin + last.length)
+  return ends
+}
+// For each start q, whether `parts` matches text[q..end): every segment but the first at its latest place.
+function startsTo(text: string, parts: string[], end: number): boolean[] {
+  const fits = new Array<boolean>(text.length + 1).fill(false)
+  const first = parts[0]
+  if (parts.length === 1) { if (fitsAt(text, first, end - first.length)) fits[end - first.length] = true; return fits }
+  const last = parts[parts.length - 1]
+  if (!fitsAt(text, last, end - last.length)) return fits
+  let to = end - last.length
+  for (let index = parts.length - 2; index >= 1; index--) { const part = parts[index]; if (to - part.length < 0) return fits; const found = text.lastIndexOf(part, to - part.length); if (found < 0) return fits; to = found }
+  for (let begin = 0; begin + first.length <= to; begin++) if (fitsAt(text, first, begin)) fits[begin] = true
+  return fits
+}
+// Where the release name is in a Title (its whitespace already one space, trimmed), or undefined when it does not fit.
+export function matchCompiled(compiled: CompiledPattern, title: string): { start: number; end: number } | undefined {
+  const text = foldText(title)
+  const suffixFrom = startsTo(text, compiled.suffix, text.length)
+  for (const start of endsFrom(text, compiled.prefix, 0)) for (const end of endsFrom(text, compiled.inside, start)) if (suffixFrom[end]) return { start, end }
+  return undefined
+}
+// The pattern ready to match, or the reason it cannot be used.
+export function compilePattern(pattern: string): { compiled: CompiledPattern } | { error: string } {
   const text = pattern.trim()
   if (!text) return { error: 'Type a pattern, e.g. {*_RELEASE}* or *Test Tools {*}.' }
   if (text.length > maxPatternLength) return { error: `A pattern is at most ${maxPatternLength} characters.` }
+  if (text.split('*').length - 1 > maxStars) return { error: `A pattern has at most ${maxStars} *.` }
   const open = text.indexOf('{'), close = text.indexOf('}')
   if (open < 0 || close < open || text.indexOf('{', open + 1) >= 0 || text.indexOf('}', close + 1) >= 0) return { error: 'Mark the release name once with { and }, e.g. {*_RELEASE}* or *Test Tools {*}.' }
   const inside = text.slice(open + 1, close)
   if (!inside.trim()) return { error: 'Put * or text inside { } for the release name.' }
-  return { regex: new RegExp(`^\\s*${literal(text.slice(0, open), true)}(${literal(inside, true)})${literal(text.slice(close + 1), false)}\\s*$`, 'i') }
+  const parts = (part: string) => part.split('*').map((segment) => foldText(segment.replace(/\s+/g, ' ')))
+  return { compiled: { prefix: parts(text.slice(0, open)), inside: parts(inside), suffix: parts(text.slice(close + 1)) } }
 }
 
 export interface PatternMatch { group: string; name: string; document: string }
@@ -31,19 +72,21 @@ export function matchPatterns(title: string, patterns: NamingPattern[]): Pattern
   const text = title.replace(/\s+/g, ' ').trim()
   for (const entry of patterns) {
     const compiled = compilePattern(entry.pattern)
-    if (!('regex' in compiled)) continue
-    const found = compiled.regex.exec(text)
-    const name = found?.[1]?.replace(/^[\s|:–-]+|[\s|:–-]+$/g, '').trim() ?? ''
+    if ('error' in compiled) continue
+    const found = matchCompiled(compiled.compiled, text)
+    const release = found ? text.slice(found.start, found.end) : ''
+    const name = release.replace(/^[\s|:–-]+|[\s|:–-]+$/g, '').trim()
     if (!found || !/[\p{L}\p{N}]/u.test(name)) continue
-    const at = (found.index ?? 0) + found[0].indexOf(found[1])
-    const document = `${text.slice(0, at)}${text.slice(at + found[1].length)}`.replace(/^[\s|:_–-]+|[\s|:_–-]+$/g, '').trim()
+    // As before: the document is the Title without the name's text where it first occurs.
+    const at = text.indexOf(release)
+    const document = `${text.slice(0, at)}${text.slice(at + release.length)}`.replace(/^[\s|:_–-]+|[\s|:_–-]+$/g, '').trim()
     return { group: entry.label.trim(), name, document }
   }
   return undefined
 }
 
 // Read from the shared settings: per stream (name up to 60 characters), at most 10 patterns with a label up to 60 and a
-// pattern that compiles; an empty list is kept (it turns the stream's patterns off).
+// pattern that compiles (at most 200 characters and 20 *); an empty list is kept (it turns the stream's patterns off).
 export function normalizeNamingPatterns(value: unknown): NamingPatterns | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
   const result: NamingPatterns = {}
@@ -53,7 +96,7 @@ export function normalizeNamingPatterns(value: unknown): NamingPatterns | undefi
     result[name] = list.slice(0, maxPatterns).flatMap((raw: unknown) => {
       const entry = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
       const pattern = typeof entry.pattern === 'string' ? entry.pattern.trim() : ''
-      return pattern && 'regex' in compilePattern(pattern) ? [{ label: typeof entry.label === 'string' ? entry.label.trim().slice(0, 60) : '', pattern }] : []
+      return pattern && !('error' in compilePattern(pattern)) ? [{ label: typeof entry.label === 'string' ? entry.label.trim().slice(0, 60) : '', pattern }] : []
     })
   }
   return Object.keys(result).length ? result : undefined

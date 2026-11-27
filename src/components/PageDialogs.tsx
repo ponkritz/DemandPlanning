@@ -7,7 +7,7 @@ import { defaultIcon, findGroup, groupNameError, hideReason, groupsForAdding, me
 import type { NewPage } from '../useMenuLayout'
 import { Modal, Notice } from './ui'
 
-// PGB-05…PGB-08: the pop-ups of the page builder (UI-STANDARDS §3/§4), shared by Admin → Pages & menu, the ⋯ of a menu
+// PGB-05…PGB-08: the pop-ups of the page builder (UI-STANDARDS §3/§4), shared by Admin → Pages & reports → Menu groups & pages, the ⋯ of a menu
 // group and ＋ Add page… on a page: add a page, edit a page's place in the menu, add or edit a group.
 
 const newGroupKey = '@new'
@@ -16,10 +16,10 @@ const newGroupKey = '@new'
 export function PageNameField({ value, onChange, clash }: { value: string; onChange: (value: string) => void; clash: string }) {
   return <div className="field-with-error"><label>Page name<input autoFocus required maxLength={80} aria-invalid={clash ? true : undefined} aria-describedby={clash ? 'page-name-clash' : undefined} value={value} onChange={(event) => onChange(event.target.value)} /></label>{clash && <small id="page-name-clash" className="field-error" role="alert">{clash}</small>}</div>
 }
-// PGB-18: co-owners picked from the people the app knows (Admin → People & roles → People), type to filter; the name is
+// PGB-18: co-owners picked from the people the app knows (Admin → People & access → People), type to filter; the name is
 // shown, the work email kept. Co-owners not in that list stay chosen ("not in Azure DevOps"); people without a work
 // email are listed disabled with the reason; at most 50.
-const ownersHelp = 'Pick people from Admin → People & roles → People (Azure DevOps team members and assignees); their work email is kept.'
+const ownersHelp = 'Pick people from Admin → People & access → People (Azure DevOps team members and assignees); their work email is kept.'
 // TVL-11: also the co-owners of the Tool Validations master list (disabled with its reason for anyone but a Tool Owner).
 export function OwnersField({ label, value, onChange, help, disabled = '' }: { label: string; value: string[]; onChange: (value: string[]) => void; help: string; disabled?: string }) {
   const options = ownerOptions(useContext(OwnerPeopleContext), value)

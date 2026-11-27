@@ -61,8 +61,9 @@ export interface AzureRequest extends AzureConfig {
   // comments (DSK-11, PIR-05): the next page of the Discussion, as Azure DevOps returned it (at most 2,048 characters).
   continuationToken?: string
 }
-export interface FeatureInput { parentId: number; title: string; description: string; acceptanceCriteria: string; areaPath?: string; iterationPath?: string; assignedTo?: string; startDate?: string; targetDate?: string; assignToCreator?: boolean; storyIterationPath?: string; taskOriginalEstimate?: number; taskCompletedWork?: number }
+export interface FeatureInput { parentId: number; title: string; description: string; acceptanceCriteria: string; areaPath?: string; iterationPath?: string; assignedTo?: string; startDate?: string; targetDate?: string; assignToCreator?: boolean; storyIterationPath?: string; taskOriginalEstimate?: number; taskCompletedWork?: number; priority?: number }
 
+export const featureAcceptanceMessage = 'A new Feature keeps its Acceptance Criteria (Feature DoD) in the Description: the Acceptance Criteria field is not written. Nothing was created.'
 export const validStoryPoints = (value: number) => Number.isFinite(value) && value >= 0 && value <= 1000
 // The Azure DevOps User Story fields under Planning and Classification (Agile process): Story Points, Priority 1–4
 // (Azure's default 2), Risk and Value area (default Business). Only these values can be written.
@@ -70,6 +71,14 @@ export const storyPriorities = [1, 2, 3, 4] as const
 export const storyRisks = ['1 - High', '2 - Medium', '3 - Low'] as const
 export const storyValueAreas = ['Business', 'Architectural'] as const
 export interface StoryFields { storyPoints?: number; priority?: number; risk?: string; valueArea?: string }
+// BKL-52: a new Feature (create-feature) may carry its Priority only (Microsoft.VSTS.Common.Priority, 1–4; the New
+// Feature form's default 2, as Azure's); Story Points, Risk and Value area stay User Story fields.
+export function featureFieldsProblem(fields: StoryFields | undefined) {
+  if (!fields) return ''
+  const { priority, ...rest } = fields
+  if (priority != null && !(storyPriorities as readonly number[]).includes(priority)) return 'Priority must be 1, 2, 3 or 4.'
+  return storyFieldsProblem(rest, false)
+}
 // '' when the fields are valid for a new User Story, else why not; any of them on another create is refused.
 export function storyFieldsProblem(fields: StoryFields | undefined, isNewStory: boolean) {
   if (!fields) return ''
@@ -192,12 +201,17 @@ let writesAllowed: (permission: AzureWritePermission) => boolean = () => false
 let refusedBecause = 'The access roles are not loaded yet, so the app is read-only. Nothing was changed.'
 // CON-113: the writer's work email (the Time Writing connection's), for a PI Review post on their own Feature.
 let writerEmail = ''
-export function guardAzureWrites(check: (permission: AzureWritePermission) => boolean, refused = 'Your role does not allow this change in Azure DevOps. An Admin can change this in Admin → People & roles → Role rights.', email = '') { writesAllowed = check; refusedBecause = refused; writerEmail = email.trim().toLowerCase() }
+export function guardAzureWrites(check: (permission: AzureWritePermission) => boolean, refused = 'Your role does not allow this change in Azure DevOps. An Admin can change this in Admin → People & access → Role rights.', email = '') { writesAllowed = check; refusedBecause = refused; writerEmail = email.trim().toLowerCase() }
+// PIR-70: the work email of the Product Owner of the Epic a work item is under ('' for none), set by the app from the
+// fetched items and the shared Epic setup in Git (EPS-11) — never taken from the request.
+let epicOwnerEmail: (workItemId: number) => string = () => ''
+export function guardEpicOwners(lookup: (workItemId: number) => string) { epicOwnerEmail = lookup }
 // CON-113, PIR-13: a PI Review post is allowed with "PI Review: post the review of a Feature" (the leads), or with "Add a
-// comment" for the Feature's own assignee (the writer's work email is the Feature's Assigned To email).
-export function reviewPostAllowed(reviewOf: string, allowed: (permission: AzureWritePermission) => boolean = writesAllowed, email = writerEmail) {
-  const assignee = reviewOf.trim().toLowerCase()
-  return allowed('pireview.post') || (allowed('work.comment') && Boolean(assignee) && assignee === email.trim().toLowerCase())
+// comment" for the Feature's own assignee (the writer's work email is the Feature's Assigned To email). PIR-70: or with
+// "Add a comment" for the Product Owner of the Feature's Epic (the writer's work email is the Epic's Product Owner's).
+export function reviewPostAllowed(reviewOf: string, allowed: (permission: AzureWritePermission) => boolean = writesAllowed, email = writerEmail, owner = '') {
+  const assignee = reviewOf.trim().toLowerCase(), me = email.trim().toLowerCase(), po = owner.trim().toLowerCase()
+  return allowed('pireview.post') || (allowed('work.comment') && Boolean(me) && ((Boolean(assignee) && assignee === me) || (Boolean(po) && po === me)))
 }
 // OI-10: with the synthetic sample loaded nothing is written to Azure DevOps, from any page (set by the workspace).
 let sampleLoaded = () => false
@@ -228,10 +242,13 @@ export async function requestAzure(request: AzureRequest): Promise<unknown> {
   // PIR-34: an update is only ever a PI review edited from My PI Review: the review's rights, its HTML check, its comment id.
   if (request.operation === 'update-comment' && (request.reviewOf == null || request.htmlComment !== true || !Number.isSafeInteger(request.commentId) || request.commentId! < 1)) throw new Error('Only a PI review can be edited. Nothing was changed.')
   if (request.commentId != null && request.operation !== 'update-comment') throw new Error('Invalid comment.')
-  if (changesAzure(request.operation) && !(review && request.reviewOf != null ? reviewPostAllowed(request.reviewOf) : writePermissions(request).every((permission) => writesAllowed(permission)))) throw new Error(request.reviewOf != null && writesAllowed('work.comment') ? 'Only the Feature’s assignee or a lead with “PI Review: post the review of a Feature” can post its review. Nothing was posted.' : refusedBecause)
+  if (changesAzure(request.operation) && !(review && request.reviewOf != null ? reviewPostAllowed(request.reviewOf, writesAllowed, writerEmail, Number.isSafeInteger(request.workItemId) ? epicOwnerEmail(request.workItemId!) : '') : writePermissions(request).every((permission) => writesAllowed(permission)))) throw new Error(request.reviewOf != null && writesAllowed('work.comment') ? 'Only the Feature’s assignee, the Product Owner of its Epic or a lead with “PI Review: post the review of a Feature” can post its review. Nothing was posted.' : refusedBecause)
   assertWritableBase(request, request.operation)
   if ((request.operation === 'create-feature' || request.operation === 'create-child') && !isAssignee(request.feature?.assignedTo)) throw new Error('A new work item must be assigned to someone (an email). Nothing was created.')
-  const storyProblem = storyFieldsProblem(request.feature, request.operation === 'create-child' && request.workItemType === 'User Story')
+  // BKL-53 (SM-295): a new Feature has one acceptance field, the Acceptance Criteria (Feature DoD) at the top of its
+  // Description; the Azure DevOps Acceptance Criteria field is never written on a Feature create (User Stories keep it).
+  if (request.operation === 'create-feature' && request.feature?.acceptanceCriteria?.trim()) throw new Error(featureAcceptanceMessage)
+  const storyProblem = request.operation === 'create-feature' ? featureFieldsProblem(request.feature) : storyFieldsProblem(request.feature, request.operation === 'create-child' && request.workItemType === 'User Story')
   if (storyProblem) throw new Error(`${storyProblem} Nothing was created.`)
   if (request.feature?.adhoc != null && (request.feature.adhoc !== true || request.operation !== 'create-child' || request.workItemType !== 'Task')) throw new Error('Only a new Task can be tagged ad-hoc. Nothing was created.')
   if (request.operation === 'edit-work-item') { const problem = !Number.isSafeInteger(request.workItemId) || request.workItemId! < 1 || !Number.isSafeInteger(request.rev) || request.rev! < 1 ? 'Invalid work item or revision.' : editProblem(request.edit ?? {}); if (problem) throw new Error(`${problem} Nothing was changed.`) }

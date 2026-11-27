@@ -17,8 +17,8 @@ test('CAP-49: a person\'s work email is kept with their profile (checked, lower 
   assert.deepEqual(profiles.Ana, { region: 'India', email: 'ana.b@example.com' })
   assert.equal('Ben' in profiles, false, 'nothing valid left for Ben')
   assert.equal(settingsPages.some((page) => page.key === 'access'), false, 'Access is part of People & access')
-  assert.equal(settingsLabel('resources'), 'People & roles')
-  assert.equal(settingsLabel('access'), 'People & roles', 'an old link to Access opens People & roles')
+  assert.equal(settingsLabel('resources'), 'People & access')
+  assert.equal(settingsLabel('access'), 'People & access', 'an old link to Access opens People & access')
 })
 
 test('CAP-57: only the team Role decides capacity — Lead and Manager are not counted by default; app access roles and the People manager tick never count (TC-CAP-29)', () => {

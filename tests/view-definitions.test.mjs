@@ -27,12 +27,12 @@ test('restore: keeps the PAT here, else the entered PAT, else one for the same s
   const views = [dp, { ...dp, id: 'iocc', reason: 'IOCC', viewName: 'IOCC' }, { id: 'cloud', url: 'https://dev.azure.com/other/X', reason: 'Cloud X' }]
   const fresh = memory()
   saveAzureConnectionProfile({ id: 'qms', url: 'https://ads.corp.example/tfs/Coll/QMS', baseUrl: 'https://ads.corp.example/tfs', reason: 'QMS', token: 'onprem-pat' }, fresh)
-  const first = restoreViews(views, '', fresh)
+  const first = restoreViews(views, null, fresh)
   assert.deepEqual(first, { added: ['Digital Platform', 'IOCC', 'Cloud X'], updated: [], skipped: [], noPat: ['Cloud X'] })
   assert.equal(loadAzureConnectionProfile('cloud', fresh).token, '', 'restored without a PAT: view only')
   assert.equal(loadAzureConnectionProfile('dp', fresh).token, 'onprem-pat', 'PAT of a connection to the same server')
   saveAzureConnectionProfile({ ...loadAzureConnectionProfile('dp', fresh), token: 'own-pat' }, fresh)
-  const second = restoreViews(views, 'entered-pat', fresh)
+  const second = restoreViews(views, { pat: 'entered-pat', server: 'https://dev.azure.com/other' }, fresh)
   assert.deepEqual(second, { added: [], updated: ['Digital Platform', 'IOCC', 'Cloud X'], skipped: [], noPat: [] })
   assert.equal(loadAzureConnectionProfile('dp', fresh).token, 'own-pat', 'an existing connection keeps its PAT')
   assert.equal(loadAzureConnectionProfile('cloud', fresh).token, 'entered-pat', 'a view-only connection gets the entered PAT')
@@ -83,7 +83,7 @@ test('Git connection setup is the default: added and followed; the stream mappin
   saveAzureConnectionProfile({ ...loadAzureConnectionProfile('cp', storage), query: 'SELECT 3' }, storage)
   markViewsSynced([dp, { ...cp, query: 'SELECT 3' }], storage)
   // After Restore from Git (or saving to Git) the connection follows Git again.
-  restoreViews([{ ...cp, query: 'SELECT 3' }], '', storage); markViewsSynced([{ ...cp, query: 'SELECT 3' }], storage)
+  restoreViews([{ ...cp, query: 'SELECT 3' }], null, storage); markViewsSynced([{ ...cp, query: 'SELECT 3' }], storage)
   assert.deepEqual(syncViewsFromGit([dp, { ...cp, query: 'SELECT 4' }], storage).updated, ['CP'])
   // Set up here before (never synced) and different from Git: a stream connection (DP) follows Git; any other view
   // is kept; one not in Git is untouched.
@@ -173,12 +173,12 @@ test('restore: a view moved to another host in Git never carries the old server 
   const storage = memory()
   saveAzureConnectionProfile({ ...dp, token: 'onprem-pat' }, storage)
   const moved = { ...dp, url: 'https://evil.example/tfs/Coll/DHFI', baseUrl: 'https://evil.example/tfs' }
-  const result = restoreViews([moved], '', storage)
+  const result = restoreViews([moved], null, storage)
   assert.deepEqual(result, { added: [], updated: ['Digital Platform'], skipped: [], noPat: ['Digital Platform'] })
   assert.equal(loadAzureConnectionProfile('dp', storage).token, '', 'the moved connection has no PAT')
   assert.equal(loadServerPat('https://evil.example/tfs', storage), '', 'the new host got no PAT')
   assert.equal(loadServerPat(serverKey(dp), storage), 'onprem-pat', 'the old server keeps its PAT')
-  restoreViews([moved], 'typed-for-new-host', storage)
+  restoreViews([moved], { pat: 'typed-for-new-host', server: 'https://evil.example/tfs' }, storage)
   assert.equal(loadServerPat('https://evil.example/tfs', storage), 'typed-for-new-host', 'a PAT entered for the restore applies to the new host')
 })
 
@@ -332,4 +332,36 @@ test('GIT-26: the start sync checks for a repository change before any clean-up 
   assert.ok(sync.indexOf('repositoryChanged(repository)') > 0 && sync.indexOf('repositoryChanged(repository)') < sync.indexOf('applyViewsReset('), 'the change is checked before the clean-up')
   assert.match(sync, /compareViewsWithGit\(views\)/)
   assert.match(hook, /The connections were not synced from Git: .* The connections and PATs here are kept\./)
+})
+
+test('AR-005: a PAT typed for a restore is used and saved only for the one server it was entered for (TC-CON-100)', async () => {
+  const { viewServers } = await import('../src/viewDefinitions.ts')
+  const storage = memory()
+  const a = { id: 'a', url: 'https://alpha.example/tfs/Coll/A', baseUrl: 'https://alpha.example/tfs', reason: 'A', role: 'reference' }
+  const b = { id: 'b', url: 'https://beta.example/tfs/Coll/B', baseUrl: 'https://beta.example/tfs', reason: 'B', role: 'reference' }
+  assert.deepEqual(viewServers([b, a, { ...a, id: 'a2' }]), ['https://alpha.example/tfs', 'https://beta.example/tfs'], 'the servers of the file, once each')
+  const result = restoreViews([a, b], { pat: 'alpha-pat', server: 'https://alpha.example/tfs' }, storage)
+  assert.deepEqual(result.noPat, ['B'], 'the view on the other server says it has no PAT')
+  assert.equal(loadServerPat('https://alpha.example/tfs', storage), 'alpha-pat', 'saved as the chosen server\'s PAT')
+  assert.equal(loadServerPat('https://beta.example/tfs', storage), '', 'never stored for the other server')
+  assert.equal(loadAzureConnectionProfile('b', storage).token, '', 'and never sent with its connection')
+  assert.equal(JSON.parse(storage.getItem('demand-planning-azure-connection-profiles-v1')).find((profile) => profile.id === 'b').token, '', 'no copy on the other server\'s connection')
+  // No server chosen: the typed PAT goes nowhere.
+  const none = memory()
+  assert.deepEqual(restoreViews([a, b], { pat: 'alpha-pat', server: '' }, none).noPat, ['A', 'B'])
+  assert.equal(loadServerPat('https://alpha.example/tfs', none) + loadServerPat('https://beta.example/tfs', none), '')
+})
+
+test('AR-006: an edited or cloned connection keeps its PAT only on the same server (TC-CON-101)', async () => {
+  const { tokenOnServer } = await import('../src/azureCredentials.ts')
+  const old = { url: 'https://alpha.example/tfs/Coll/A', baseUrl: 'https://alpha.example/tfs', token: 'alpha-pat' }
+  assert.equal(tokenOnServer(old, 'https://alpha.example/tfs'), 'alpha-pat', 'same server: the PAT stays')
+  assert.equal(tokenOnServer(old, 'HTTPS://ALPHA.example/tfs'), 'alpha-pat', 'case is ignored')
+  assert.equal(tokenOnServer(old, 'https://beta.example/tfs'), '', 'another server: no PAT')
+  assert.equal(tokenOnServer({ url: 'https://dev.azure.com/orga/P', token: 'cloud-pat' }, 'https://dev.azure.com/orgb'), '', 'another cloud organisation: no PAT')
+  assert.equal(tokenOnServer(null, 'https://alpha.example/tfs'), '')
+  assert.equal(tokenOnServer(old, ''), '', 'no server: no PAT')
+  const source = await import('node:fs').then((fs) => fs.readFileSync(new URL('../src/useAzureWorkspace.ts', import.meta.url), 'utf8'))
+  assert.match(source, /const token = input\.pat\.trim\(\) \|\| \(serverPat \? '' : tokenOnServer\(existing, key\)\)/, 'saveConnection takes the old PAT only through tokenOnServer')
+  assert.doesNotMatch(source, /existing\?\.token \?\? ''/, 'never the old connection\'s PAT as it is')
 })

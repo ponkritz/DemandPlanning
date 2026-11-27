@@ -7,7 +7,7 @@ import { allStreams, profileForStream, streamArea, windchillOptionsForView, wind
 import { viewSource } from '../viewSources'
 import type { WindchillWorkspace } from '../useWindchill'
 import { capacityContext, capacityGap, capacityModel, itemsForPerson, problemBreakdown, type CapacitySettings } from '../capacity'
-import { monthRange, narrowPeriod, offeredMonths, offeredQuarters, periodMonths, periodOf, periodQuarters, periodYears, personMonths, streamTotals, totals, type Period } from '../dashboard'
+import { absenceRuleText, capacityParts, capacityText, monthRange, narrowPeriod, offeredMonths, offeredQuarters, periodMonths, periodOf, periodQuarters, periodYears, personMonths, streamTotals, totals, type Period } from '../dashboard'
 import { isMine, isPending, myNames, stateChecks } from '../myWork'
 import { formatDate, formatHours, formatPercent, monthName } from '../format'
 import { utcToday } from '../businessTime'
@@ -36,6 +36,7 @@ import { arrangeMyItems, isSection, maxMyBlocks, myBlankBlock, myDashboardKey, m
 import { cleanOptions, insightKindOf as kindOf, withoutHidden } from '../onDemand'
 import { parseTracker, type KpiTracker } from '../kpiTracker'
 import { runInBackground } from '../backgroundJobs'
+import { usePageSettingsGear } from '../usePageSettingsGear'
 
 // What My dashboard's blocks read (MYD-15): the data the app has loaded, the viewer's areas and the loads they may start.
 export interface MyDashboardSources {
@@ -60,6 +61,8 @@ const emptyPeriod = (): Period => ({ years: [], quarters: [], months: [] })
 // moves and resizes blocks of their own over every data source of the registry, kept with their personal views. Each
 // count opens the page with the detail.
 export function MyDashboardPage({ month, azure, store, my, navigate, views, canSetDefault = false, windchill, sources }: { month: string; azure: AzureWorkspace; store: PageProps['store']; my: MyWork; navigate: (page: PageId) => void; views: PersonalViewsStore; canSetDefault?: boolean; windchill?: Pick<WindchillWorkspace, 'views' | 'sources'>; sources?: MyDashboardSources }) {
+  // SET-32: ⚙ Settings for this page (page actions, last), for the people who may change one of its settings.
+  const settingsGear = usePageSettingsGear()
   const [editing, setEditing] = useState(false)
   const [blockEdit, setBlockEdit] = useState<{ block: DashboardBlock; isNew: boolean } | null>(null)
   const [removing, setRemoving] = useState<DashboardBlock | null>(null)
@@ -176,7 +179,7 @@ export function MyDashboardPage({ month, azure, store, my, navigate, views, canS
   }).filter((entry, index, all) => all.findIndex((other) => other.stream === entry.stream) === index) : []
   const open = (page: PageId, text: string) => <button type="button" className="text-button" onClick={() => navigate(page)}>{text} →</button>
   const sectionNode: Record<string, ReactNode> = {
-    hours: <TablePanel title={`My hours · ${label}`} info={<ul><li>Planned = Original Estimate and recorded = Completed Work of your month Time Writing Tasks; capacity = your working days less absence, as on the Dashboard.</li><li>Overrun = hours recorded above the estimate; ad-hoc = hours on Tasks tagged ad-hoc.</li></ul>} action={open('activities', 'Time Writing')}>
+    hours: <TablePanel title={`My hours · ${label}`} info={<ul><li>Planned = Original Estimate and recorded = Completed Work of your month Time Writing Tasks, without leave and holidays (they come off the capacity instead); capacity = your working days less absence, as on the Dashboard and Time Writing.</li>{rows.some((row) => row.month === month) && <li>Capacity {label}: {capacityText(capacityParts(rows.filter((row) => row.month === month)), formatHours)} = {formatHours(now.capacity)}h ({absenceRuleText}).</li>}<li>Overrun = hours recorded above the estimate; ad-hoc = hours on Tasks tagged ad-hoc.</li></ul>} action={open('activities', 'Time Writing')}>
       {notCounted && <Notice tone="info">Not counted in {label}: {notCounted}.</Notice>}
       <Metrics>
         <Metric label="Planned" value={`${formatHours(now.plan)}h`} hint={`Capacity ${formatHours(now.capacity)}h`} />
@@ -228,9 +231,10 @@ export function MyDashboardPage({ month, azure, store, my, navigate, views, canS
   const filtered = JSON.stringify(period) !== JSON.stringify(emptyPeriod())
 
   // UI-STANDARDS §1: who and which month as the intro, ＋ Add block… and Customize as the page actions.
-  return <Page intro={`${name || my.me.email} · ${label}${arranged.hidden.length ? ` · ${arranged.hidden.length} hidden` : ''}`} actions={readOnly ? undefined : <>
+  return <Page intro={`${name || my.me.email} · ${label}${arranged.hidden.length ? ` · ${arranged.hidden.length} hidden` : ''}`} actions={readOnly ? settingsGear ?? undefined : <>
     <button type="button" className="primary" disabled={Boolean(addReason)} title={addReason || undefined} onClick={addBlock}>＋ Add block…</button>
     <button type="button" className="ghost" aria-expanded={editing} onClick={() => setEditing(!editing)}>{editing ? 'Done' : 'Customize'}</button>
+    {settingsGear}
   </>}>
     {readOnly && <Notice tone="info">View as shows the default My dashboard of the viewed role. A person’s own blocks and layout are private: nobody else sees them.</Notice>}
     {parsed.dropped.length > 0 && <Notice tone="warning">{parsed.dropped.join(' ')}</Notice>}

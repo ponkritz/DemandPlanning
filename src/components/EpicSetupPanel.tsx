@@ -6,7 +6,7 @@ import type { EpicSetupStore } from '../useEpicSetup'
 import type { GitStorage } from '../useGitStorage'
 import { EmptyState, Notice, Panel, Pill } from './ui'
 
-// EPS-01…05 Admin → Epic & Feature setup: per Epic, the extra fields of a new Feature (Program, Platform…), where each goes
+// EPS-01…05 Admin → Feature & PI setup: per Epic, the extra fields of a new Feature (Program, Platform…), where each goes
 // (Description, Title or both), what an empty one does (Optional, Warn, Block), the title pattern, and the shared value
 // lists of the drop-downs. One draft for the whole file, saved to Git in one commit.
 export function EpicSetupPanel({ setup, git, items, canEdit, canEditLists, section, initialEpicId = 0 }: { setup: EpicSetupStore; git: GitStorage; items: AzureWorkItem[]; canEdit: boolean; canEditLists: boolean; section: 'fields' | 'lists'; initialEpicId?: number }) {
@@ -50,7 +50,7 @@ export function EpicSetupPanel({ setup, git, items, canEdit, canEditLists, secti
     <button className="primary" disabled={busy}>{busy ? 'Saving…' : 'Save to Git'}</button>
   </form>
   const notices = <>
-    {!git.connected && <Notice tone="info">Connect Git storage (Admin → Data & sharing) to load and save the Epic setup{setup.file ? '; the one last loaded here still applies' : ''}.</Notice>}
+    {!git.connected && <Notice tone="info">Connect Git storage (Admin → Data & history) to load and save the Epic setup{setup.file ? '; the one last loaded here still applies' : ''}.</Notice>}
     {git.connected && git.readOnly && <Notice tone="info">View only: your Git token can read but not save.</Notice>}
     {setup.error && <Notice tone="error">{setup.error}</Notice>}
   </>

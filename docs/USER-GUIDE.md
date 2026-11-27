@@ -178,7 +178,7 @@ The rights are the same as for **＋ Add tab…**.
 
 **The list's co-owners edit the tab pages**
 
-The co-owners of the list (**Setup → Team settings**) are now written as co-owners of each tab's page. They can set up and edit the page also when it is opened from **Admin → Pages & menu**. Co-owners added to a page by hand stay. Nothing to do: it happens when a tab is added and whenever the list's co-owners are saved. If a page is out of line, **Setup → Tabs** says so with **Write the co-owners to the tab pages**; choose it to fix it.
+The co-owners of the list (**Setup → Team settings**) are now written as co-owners of each tab's page. They can set up and edit the page also when it is opened from **Admin → Pages & reports → Menu groups & pages**. Co-owners added to a page by hand stay. Nothing to do: it happens when a tab is added and whenever the list's co-owners are saved. If a page is out of line, **Setup → Tabs** says so with **Write the co-owners to the tab pages**; choose it to fix it.
 
 *TVL-25*
 
@@ -222,7 +222,7 @@ Point at **Selected month** to see which month it is. Tool Validations no longer
 
 **Save to Git** on a shared Epic now commits it to Git at once; there is no separate save step.
 
-1. Open **Admin → Stream options → Bulk creation Epics**.
+1. Open **Admin → Streams → Bulk creation**.
 2. In the **Shared** column of the stream (DP, IOCC or Content), enter the Epic ID, for example 1234.
 3. Choose **Save to Git**. A message below the table says it is saved, or why it failed.
 
@@ -240,9 +240,9 @@ Without a writable Git connection (not connected, a read-only token, or the synt
 
 DP **Create Features** now sets each Feature's **Start date** and **Target date** from the DP query: the **DRPE Date** (RPE, the Release Planning Event) and the **DDT Date** (DT, Design Transfer) unless the Tool Owner maps other date columns.
 
-To change the columns (roles with *Stream options*, Git connected):
+To change the columns (roles with *Streams: Epics to match Features in, shared bulk creation Epics*, Git connected):
 
-1. Open **Admin → Stream options → Bulk creation Epics**. Under **DP bulk creation dates** you see the two columns in use, with *— default* when they are the defaults.
+1. Open **Admin → Streams → Bulk creation**. Under **DP bulk creation dates** you see the two columns in use, with *— default* when they are the defaults.
 2. Choose **Edit dates…**, pick **Start date from** and **Target date from** — any column of the DP query whose name ends in "Date" (a prefix such as Custom.DRPEDate is fine).
 3. Choose **Save to Git**. It is saved for everyone at once.
 
@@ -270,7 +270,7 @@ You can change every value. If the Start date is after the Target date, the form
 
 **Sprint from: a User Story in the Sprint of a DP milestone**
 
-In **Admin → Epic & Feature setup → Setup per Epic → User Stories**, each story has **Sprint from**: **None — the Sprint chosen** (the default), **DRPE Date (RPE)**, **DRPC Date (PRD)**, **DRfH Date (SFV)**, **DDT Date (DT)** or another date column of the DP query. Save to Git as usual.
+In **Admin → Feature & PI setup → Setup per Epic → User Stories**, each story has **Sprint from**: **None — the Sprint chosen** (the default), **DRPE Date (RPE)**, **DRPC Date (PRD)**, **DRfH Date (SFV)**, **DDT Date (DT)** or another date column of the DP query. Save to Git as usual.
 
 When a DP release's Feature is made (Create Features or Create Feature), a story with Sprint from goes in the **current or future Sprint whose dates hold that date** of the release. Create Features shows it on each row (*"SFV → Sprint 3 · PRD → default Sprint"*), New Feature next to each story. A story whose date is missing, in a past Sprint or in no Sprint keeps the default Sprint, and the note says why, for example *"PRD 12 Mar 2026 is in a past Sprint — default Sprint"*. The Feature stays in its PI; the Time Writing story and Tasks do not change. Other streams ignore Sprint from.
 
@@ -366,16 +366,16 @@ Your Azure DevOps personal access token (PAT) is entered once per **server** and
 
 What the team shares lives in a private GitHub repository: the planning data, the connection setup, roles, On-Demand pages, dashboards and the menu.
 
-1. Open **Admin → Data & sharing → Git storage** (or use step 1 of Get started).
+1. Open **Admin → Data & history → Git storage** (or use step 1 of Get started).
 2. The form starts with the team's repository and branch. Add your **GitHub token** and connect.
 
-![Admin → Data & sharing → Git storage](user-guide/images/git-storage.png)
+![Admin → Data & history → Git storage](user-guide/images/git-storage.png)
 
 - Use a **fine-grained GitHub token** for that one repository: **Contents: Read-only** if you only read, **Read and write** if you save (for example rows, charts, baselines or people).
 - With a read-only token the app shows the shared data, but saving buttons are greyed out with the reason.
 - The token stays in your browser, like the PAT.
 - **The team's data moved** to `philips-internal/InD_DemandPlanningStorage`. If you connected before the move, a notice at the top of every page says so: press **Switch to philips-internal/InD_DemandPlanningStorage**. Your token must be allowed on the new repository; if it is not, ask for a new fine-grained token for it.
-- **"… was not found, or the token cannot access it."** means your token cannot read the repository (or the branch is wrong). The app then keeps everything you had — your streams, connections and PATs — and changes nothing until the token works; ask for access to the repository. After you change the repository, your connections are kept: the first start only adds the new repository's connections and Admin → Data & sharing (Git storage, and Shared setup in Git) tells you what differs.
+- **"… was not found, or the token cannot access it."** means your token cannot read the repository (or the branch is wrong). The app then keeps everything you had — your streams, connections and PATs — and changes nothing until the token works; ask for access to the repository. After you change the repository, your connections are kept: the first start only adds the new repository's connections and Admin → Data & history (Git storage, and Shared setup in Git) tells you what differs.
 
 ### Your work email
 
@@ -390,7 +390,7 @@ The email stays on your computer: it is not part of the shared setup, so updates
 
 You can look around before anything is connected.
 
-1. Press **Load synthetic sample** (on a page with no data, or in **Admin → Data & sharing → Synthetic sample**).
+1. Press **Load synthetic sample** (on a page with no data, or in **Admin → Data & history → Demo data**).
 2. The banner "Showing a synthetic sample dataset, not Azure DevOps data" stays on every page while the sample is loaded.
 
 - Nothing is written to Azure DevOps while the sample is loaded: every write is refused with "Synthetic sample data is loaded: nothing is written to Azure DevOps. Fetch your data first."
@@ -460,18 +460,18 @@ When someone else saves data that the page you are on uses, a notice appears on 
 
 ### What each role can do
 
-Your app roles are set in **Admin → People & roles**. Someone with several roles gets everything any of them allows — unless one of their roles **denies** it: a denial always wins. Everyone without a role gets the **Everyone else** role.
+Your app roles are set in **Admin → People & access**. Someone with several roles gets everything any of them allows — unless one of their roles **denies** it: a denial always wins. Everyone without a role gets the **Everyone else** role.
 
 | Role | Sees | May |
 |---|---|---|
-| Tool Owner | everything | everything, including the stream mapping, Pages & menu and building On-Demand Dashboards |
-| Admin | everything, plus the Testing pages | everything except the stream mapping, Pages & menu and building dashboards |
+| Tool Owner | everything | everything, including the stream mapping, the menu groups (Pages & reports) and building On-Demand Dashboards |
+| Admin | everything, plus the Testing pages | everything except the stream mapping, the menu groups and building dashboards |
 | Product Owner | Dashboard, I&D Board, Backlog Health, Release Details, Baselines, Documentation, On-Demand | work items (also bulk create and for others), baselines, export, Monthly pack text |
 | People Manager | Dashboard, team insights, My Work, I&D Board, Release Details, Baselines, Snapshots, Documentation, On-Demand | the same as Product Owner |
 | Scrum Master | Dashboard, My Work, I&D Board, Backlog Health, Release Details, Documentation, On-Demand | work items (also for others), export, the shared Feature setup |
 | Team Member | Dashboard, My Work, I&D Board, Release Details, Documentation, On-Demand | their own work items, export |
 
-These are the starting rights. Your team may have changed them in **Role rights** (see [People & roles](#people--roles)).
+These are the starting rights. Your team may have changed them in **Role rights** (see [People & access](#people--access)).
 
 The roles decide what the app shows and does. What you can actually read or change is still decided by your own Azure DevOps PAT and GitHub token.
 
@@ -523,9 +523,11 @@ View as is read only: nothing is saved to Azure DevOps or Git while it is on. Re
 4. Press **Save**. The save runs in the background; the top bar shows its result.
 
 - **＋ Add a new activity** adds your month Task under a Feature (choose an Active Epic, then one of its Features), a **User Story**, a work **Task**, or opens **New Feature**.
-- The cards at the top show your Capacity, Planned and Actual hours with their share of capacity, your Tasks, and the **last day** to update the month. When you are not counted for capacity, the Capacity card says why.
+- The cards at the top show your Capacity, Planned and Actual hours with their share of capacity, **Features Working on** (the Features you have a Task under this month), and the **last day** to update the month. When you are not counted for capacity, the Capacity card says why.
+- **How your Capacity is worked out** (CAP-63, ACT-28): your working days in the month × the hours per day (contractual), less your **leave** (PTO, sick, unplanned and other leave) and the **public holidays** of your region. Each leave or holiday Task counts its **actual if recorded, else planned**: the Completed Work once you book it, the Original Estimate until then — so leave you plan ahead lowers your capacity straight away. The Capacity card spells it out, e.g. "168h contractual − 88h leave − 16h holiday". **Planned hours** and **Actual hours** do **not** include leave and holidays (they are already taken off the capacity); trainings, other NPRA and common activities such as PI Planning do count. Leave you no longer take: set its Original Estimate to 0. Example (November 2026, 21 working days): 88 h of leave planned, a 16 h regional holiday and 40 h of work planned → Capacity 64 h, Planned 40 h = 63 % of capacity.
 - **Close Features** and **Close Tasks** (next to Save) let you tick items and close your own open work after one confirmation.
 - Each month has a last day for the plan and one for the actuals (by default the 5th of the month and the 4th of the next month). After the plan's last day the Planned hours are greyed out and only Actual can be changed; after the actuals' last day the month is locked.
+- **Month Task states are kept for you.** Saving hours on a New Task sets it, its Time Writing story and a New Feature to Active (a Closed item is never reopened). After each fetch, the background job **Month Task states** (Jobs done) closes your own Tasks of a month whose actuals are locked, or whose Feature is finished, and your Time Writing story once all its Tasks are Closed. Other people's Tasks are never changed.
 
 ### My Tasks [Board]
 
@@ -548,13 +550,23 @@ View as is read only: nothing is saved to Azure DevOps or Git while it is on. Re
 - **Source details** lists every fetched work item with its fields.
 - On a row: **Edit**, **Close**, **＋ Feature**, **＋ User Story**, **＋ Task** and **＋ Time Writing Task**, as your role allows.
 
+### Your own User Story templates
+
+For User Stories you write often, keep templates of your own — any role can, also one that may only read the team's shared templates.
+
+1. Open **Admin → Feature & PI setup → User Story templates**. The team's shared templates are at the top (read only unless your role may edit them); **My templates** is under them.
+2. **＋ New template…**: a title (placeholders such as {feature} allowed), a description (optional) and, if you like, the Epics and Release Classification values it is for. **Save**. **Edit…** changes one; **Remove…** asks first.
+3. In **New User Story** (＋ User Story on a Feature) or **Your own User Story** on New Feature, choose **Start from a template**: the shared templates come first, yours under **Mine**. The title ({feature} becomes the Feature's title) and description are filled in; change them as you need, then Save.
+
+Your templates are kept in **this browser** under your work email (My settings): only you see them, they are not in Git, a backup or SharePoint, and another browser or computer does not have them. A PAT or token typed into a template is refused. While viewing as someone else no personal templates are shown.
+
 ### Create a Feature
 
 Every page creates a Feature with the same **New Feature** form: QMS-0025, My Tasks [Board], Time Writing and Create Feature on a Release page.
 
 1. Press **＋ New Feature**.
-2. **1 Feature** — choose the **Parent Epic** first, then fill in the title (or the title fields of that Epic), Assigned to, PI → Sprint, Start date and Target date.
-3. **2 Definition of Done** — the Feature DoD is required. Check it and press **Continue**.
+2. **1 Feature** — choose the **Parent Epic** first, then fill in the title (or the title fields of that Epic), Assigned to, PI → Sprint, Start date, Target date and **Priority** (1–4, default 2; Azure DevOps Priority field).
+3. **2 Acceptance Criteria (Feature DoD)** — the Acceptance Criteria (Feature DoD) is required (it is saved at the top of the Description as “Feature DoD: …”) and is the Feature's only acceptance field; **Description (optional)** below it adds more text under the DoD. Check it and press **Continue**.
 4. **3 User Stories** — tick the stories to create, add your own, and press **Continue**.
 5. **4 Estimates for the month** — the hours of each month's Time Writing Task.
 6. Press **Save**. The Feature and its children are created in the background.
@@ -683,24 +695,25 @@ The Tool Owner (and the Admin) can **Save view for everyone** beside the filter:
 3. Press **Save to Git** so the team sees the same text. Nothing is saved until you do.
 4. **Copy** a box or a slide into the PowerPoint template, or **Download .pptx** (both slides, 16:9).
 
-What feeds each line and KPI row is set in **Admin → Reports → Monthly pack**.
+What feeds each line and KPI row is set in **Admin → Pages & reports → Monthly pack**.
 
 ### PI Review
 
 **Data Insights → PI Review** shows the Features of a PI and what was discussed on them in Azure DevOps — the starting point for the PI Review meeting. It writes nothing to Git; the only thing it writes to Azure DevOps is a review you post with **Review…** (below), as a new comment.
 
 1. **Choose the PI.** The **PI** list in the table's filter bar holds the PIs of your Time Writing connection and of the fetched data, newest first. The **current PI** (its Sprint's dates cover today, in UTC) is chosen for you and marked **Current PI**. If two PIs are current at the same time nothing is chosen: pick one. If the iterations cannot be read, the latest PI with Features is shown and a warning says why. Your choice is remembered in this browser.
-2. **Look at the Features.** The table lists the Features whose Iteration is in the PI (not Removed ones, not those under the absence Epic), by ID. Tick **Also Features with User Stories in this PI** to add Features that stayed in an older PI while their stories moved on. Filter by **Epic**, **State** and **Assigned to**, search (the search looks in every column shown and the whole latest comment), **Reset filters**, and **Export** (with the Export data right).
+2. **Look at the Features.** The table lists the Features whose Iteration is in the PI (not Removed ones, not those under the absence Epic), by ID. Tick **Also Features with User Stories in this PI** to add Features that stayed in an older PI while their stories moved on. Filter by **Epic**, **State** and **Assigned to**, search (the search looks in every column shown and the whole latest review), **Reset filters**, and **Export** (with the Export data right).
 3. **Read a Discussion.** Click a Feature: a drawer opens with its details and its **Discussion** — every comment (up to the newest 1,000), newest first, as plain text. Formatting is not kept: a mention shows as **@Name** and an image as **[image]**. Use **↻ Read again** after new comments, ‹ › to go to the next Feature, and **Open in Azure DevOps →** to see the work item.
 
    **Your own Features are read for you.** When the page opens, and when you choose another PI, the app reads the Discussions of the Features **assigned to you** in that PI (matched by your work email, else your name, as in My PI Review), so **Edit review…** shows on the ones you already reviewed without opening them. Meanwhile the line above the table says "Reading your 2 Features’ Discussions…". Other people's Features are not read until you open them or click Read all. Nothing is read by itself with the synthetic sample, without a PAT or in View as. A Discussion read once is not read again in this page load (only ↻ Read again does).
 
 4. **Read them all.** **↻ Read all Discussions** reads every Feature's Discussion in the background (the top bar shows "Reading Discussions · x of n"). If Azure DevOps asks the app to slow down it waits and tries again once; if it keeps asking, the job stops with "x of n read" — click again later to read the rest. The **Comments** column shows each Feature's count.
-5. **See the latest review comment in columns.** Once a Feature's Discussion is read (in the drawer or with Read all), the columns **Date and Time of Comment**, **Comment**, **Struggles**, **Learnings** and **Move to Next PI** show its **latest comment** — the newest by date and time, whoever wrote it. The date and time are in your time zone; a long text is cut in the cell, and pointing at it shows the whole text. Before the Discussion is read the cells show "—". Sort by any of them, search the comment text, filter with **Move to next PI** (Yes, No, Partly, Other text, Not given, Discussion not read) and **Review mode** (Discuss during Meeting, Offline Review, …), and **Export** them. **Review mode** shows the answer to "Advise to discuss the Feature during the Review meeting" and **Additional Remarks** the remarks. The drawer shows the same split under **Latest comment**, above the Discussion.
+5. **See the latest review in columns.** Once a Feature's Discussion is read (in the drawer or with Read all), the columns **Date and Time of Comment**, **Comment**, **Struggles**, **Learnings** and **Move to Next PI** show its **latest review for the chosen PI** — the newest comment that starts with the heading **"Feature Review for PI 26.4"** (for PI 26.4), whoever wrote it. A Feature without such a comment shows **Not reviewed** in Date and Time of Comment (point at it to see why) — also when its Discussion holds older reviews without the heading: **only comments headed “Feature Review for PI …” count**, for the PI they name only. The date and time are in your time zone; a long text is cut in the cell, and pointing at it shows the whole text. Before the Discussion is read the cells show "—". Sort by any of them, search the comment text, filter with **Move to next PI** (Yes, No, Partly, Other text, Not given, Discussion not read) and **Review mode** (Discuss during Meeting, Offline Review, …), and **Export** them. **Review mode** shows the answer to "Advise to discuss the Feature during the Review meeting" and **Additional Remarks** the remarks. The drawer shows the same split under **Latest review**, above the Discussion (or "Not reviewed for PI 26.4" and why).
 
-**How to write the review comment so it is split.** Write the three headings, each followed by a colon — on their own lines or in one line — as the **newest** comment of the Feature (a later reply, even "Thanks!", becomes the latest comment):
+**How to write the review comment by hand so it counts and is split.** The easiest way is **Review…** (below): the app writes it for you. Writing it in Azure DevOps yourself, start with the line **Feature Review for PI 26.4** (the PI you review — without it the comment is no PI review, and for another PI it counts for that PI only), then the three headings, each followed by a colon — on their own lines or in one line. A later reply, even "Thanks!", does not replace it: only headed comments count.
 
 ```
+Feature Review for PI 26.4
 Struggles: the test rig arrived two Sprints late
 Learnings: book the rig at PI planning
 - share the lab calendar with the team
@@ -730,18 +743,19 @@ The Feature then shows **Struggles** "the test rig arrived two Sprints late", **
   The answer may follow on the next line, after a colon, a dash (also "Feature- Nil") or a "?", or after a space when it starts with Yes / No / Partly. The PI may be written "PI 26.4", "PI26.4", "PI-26.4" or "PI.26.4". "Nil" (or N/A) alone reads as none, like "None". The short form "Learning-good exposure, Struggle-long list CRs" counts when both are there. The PI named in the question is read from the comment (any number, so it works for every PI review) and shown after the answer, e.g. "Yes — two stories left · to PI 26.4".
 - A heading counts at the **start of a line** (a bullet, number, # or bold before it is fine) followed by a colon, a dash (- – —) and a space, or nothing; **inside a line** when a colon follows it ("… Lesson: share the calendar"), and for *Struggle*, *Learning* and *Lesson* also a dash and a space ("… a learning – book the rig early"). "We had struggles with the rig" or "there were issues" is not a heading.
 - Start the Move text with **Yes**, **No** or **Partly** (or Y / N) to use the filter; anything else (e.g. "N/A", "to be decided") is shown as written under Other text.
-- **No heading at all? Suggested values.** When the newest comment has none of the headings, the app looks for **keywords** sentence by sentence (a sentence ends at a line break or after ". ", "! ", "? "): *blocked, blocker, delay(ed), issue, problem, risk, escalated, dependency, waiting, rework, missed, slipped, could not, unable, late, impediment, struggle, challenge* go to **Struggles**; *learned, learnt, lesson, next time, improve, went well, worked well, better to, recommend, should have, takeaway, learning* to **Learnings**; *carry over, next PI, spill over, move to, moving to, continue in* to **Move to Next PI**. A sentence with words of two columns goes to both; "no blockers", "not blocked" or "wasn't late" are not taken. These texts are only a guess: the cell shows **(suggested)** before them in italics (pointing at it says "Suggested from keywords, not headings"), the drawer's Latest comment says **Suggested from keywords**, and Export has a column **Split from** (Headings, Keywords or None). A suggested Move gets Yes / No / Partly only when the sentence says so right after the phrase, e.g. "Carry over to next PI — partly, the docs" → "Partly — the docs". Write the headings to be sure.
-- A comment with neither headings nor keywords shows only its date and the whole comment. The whole comment is always shown next to the split, so check it when a section looks wrong.
+- **No field heading? Suggested values.** When the latest review has the "Feature Review for PI …" line but none of the field headings, the app looks for **keywords** sentence by sentence (a sentence ends at a line break or after ". ", "! ", "? "): *blocked, blocker, delay(ed), issue, problem, risk, escalated, dependency, waiting, rework, missed, slipped, could not, unable, late, impediment, struggle, challenge* go to **Struggles**; *learned, learnt, lesson, next time, improve, went well, worked well, better to, recommend, should have, takeaway, learning* to **Learnings**; *carry over, next PI, spill over, move to, moving to, continue in* to **Move to Next PI**. A sentence with words of two columns goes to both; "no blockers", "not blocked" or "wasn't late" are not taken. These texts are only a guess: the cell shows **(suggested)** before them in italics (pointing at it says "Suggested from keywords, not headings"), the drawer's Latest review says **Suggested from keywords**, and Export has a column **Split from** (Headings, Keywords or None). A suggested Move gets Yes / No / Partly only when the sentence says so right after the phrase, e.g. "Carry over to next PI — partly, the docs" → "Partly — the docs". Write the headings to be sure.
+- A review with neither field headings nor keywords shows only its date and the whole comment.
+- **The "Feature Review for PI …" line** must be the comment's **first** line (a bullet, "#", bold or Azure DevOps formatting before it are fine, and a colon after it). Letter case and spaces do not matter, and "PI26.4", "PI-26.4" or "PI 2026.4" are read too (PI 26.4 and PI 2026.4 are the same PI). "Feature Review" without a PI, "Feature Review for PI Planning", or the line further down the comment do not count. The whole comment is always shown next to the split, so check it when a section looks wrong.
 
 The Discussions are read with your own PAT (Work Items, Read) and kept only until you reload the page. Tagging struggles and learnings in the app, saving them to Git and recording the Move to next PI decision come in later releases.
 
-**PI Review starts from 21 September 2026.** PI Review and My PI Review offer only the PIs that had not ended by that date (PI 26.4 is the first), and they ignore comments written before it: the Discussion drawer shows only the later comments and says how many older ones were left out, and the columns, **Reviewed** in My PI Review and the review form's prefill use only the later ones. If a PI you chose before is older, the page opens on the current PI. The Scrum Master or the Tool Owner can move the date on **Admin → PI Review Setup** (see below).
+**PI Review starts from 21 September 2026.** PI Review and My PI Review offer only the PIs that had not ended by that date (PI 26.4 is the first), and they ignore comments written before it: the Discussion drawer shows only the later comments and says how many older ones were left out, and the columns, **Reviewed** in My PI Review and the review form's prefill use only the later ones. If a PI you chose before is older, the page opens on the current PI. The Scrum Master or the Tool Owner can move the date on **Admin → Feature & PI setup → PI Review form** (see below).
 
 #### Write the PI review in the app (from PI 26.4)
 
 Instead of typing the headings yourself, fill in the review form; the app writes the comment in the standard format for you.
 
-1. **Open the form.** Click **Review…** in the Feature's drawer (bottom right) or in the **Actions** column of its row — or open **My Work → My PI Review**, which lists only your Features of the PI with **My review** (Reviewed / Not reviewed) and its date. **Reviewed** means your review counts **for the PI chosen in the PI filter**: its headings name that PI ("Learnings of PI 26.4:"), or — for an older review without a PI in its headings — it is dated within that PI's dates in Azure DevOps (the PI's own dates, else its Sprints'; compared in UTC), or the Feature is **Closed** and your review is dated on or after its Closed Date (the review you answer when closing it; shown "At close"). A review written for another PI shows **Not reviewed** with "Last review 12 June 2026 (PI 2026.3)" under it, so you see why — write the review for this PI. Choosing another PI in the filter recomputes the column. When the chosen PI has no dates in Azure DevOps (or they cannot be read, e.g. without the PAT), every review counts as before and a line above the table says so. Its filter row has **PI** (the current PI first) and **Person** (**Me** first) and **Reset filters** (back to Me and the current PI). A lead with "PI Review: post the review of a Feature" can choose another person in Person: the page then shows only that person's Features (their Assigned To, by work email where known) with **Their review** and its date, and Review… still follows the posting rights below. For everyone else Person is greyed out and the line under it says why.
+1. **Open the form.** Click **Review…** in the Feature's drawer (bottom right) or in the **Actions** column of its row — or open **My Work → My PI Review**, which lists only your Features of the PI with **My review** (Reviewed / Not reviewed) and its date. **Reviewed** means your review counts **for the PI chosen in the PI filter**: it starts with **"Feature Review for"** that PI ("Feature Review for PI 26.4" counts for PI 26.4 only, whatever its date). A review headed for another PI shows **Not reviewed** with "Last review 12 June 2026 (PI 2026.3)" under it, so you see why — write the review for this PI. **An older review without the heading no longer counts** (the product owner's decision, also for reviews posted since 21 September 2026): the Feature shows **Not reviewed** until you review it again — the ⓘ of the review column says so. Choosing another PI in the filter recomputes the column. Its filter row has **PI** (the current PI first) and **Person** (**Me** first) and **Reset filters** (back to Me and the current PI). A lead with "PI Review: post the review of a Feature" can choose another person in Person: the page then shows only that person's Features (their Assigned To, by work email where known) with **Their review** and its date, and Review… still follows the posting rights below. For everyone else Person is greyed out and the line under it says why.
 2. **Who can post.** The Feature's **assignee** (your work email on the Time Writing connection is the Feature's Assigned To) and the **leads** (Tool Owner, Admin, People Manager — the right "PI Review: post the review of a Feature"). For anyone else the button is greyed out and says why; it is also greyed out with sample data, in View as, without the PAT, or on an on-premises connection (reviews go to dev.azure.com only).
 3. **Fill in the paragraphs.** The form keeps its help behind **ⓘ How to fill in** (above the fields: what posting does, which answer is pre-selected and each field's help) and the **ⓘ** next to Preview; point at it or tab to it to read it. One point per line — each line becomes a bullet under its heading; a leading **-**, ***** or **•** is dropped, and numbered lines (**1.**, **2)**) become a numbered list.
    - **Learnings** and **Struggles** — required (write "None" if there are none). **No learnings or struggles** (above them, not ticked) writes "None" in both and greys them out; untick it to get back what you typed. If the form setup has only one of the two, the tick box sets that one and its label says so; with neither there is no tick box.
@@ -750,6 +764,8 @@ Instead of typing the headings yourself, fill in the review form; the app writes
    - **Additional Remarks** — optional.
    If the Feature already has a review, the form starts from it, so a correction only changes what is wrong. When that review was written for another PI, the line at the top says so ("written for PI 2026.3: check it before posting").
 4. **Check the Preview.** It shows the comment as it will look in Azure DevOps — a bulleted list — for example:
+
+   **Feature Review for PI 26.4**
 
    - Learnings of PI 26.4:
      - Book the rig early
@@ -764,20 +780,40 @@ Instead of typing the headings yourself, fill in the review form; the app writes
 
    — posted from Demand Planning (PI Review)
 
-   The headings name the **reviewed PI** — the PI chosen on the page (in the Close pop-up, the Feature's own PI) — so the reviews of a PI can be collected; PI Review shows it in its **Reviewed PI** column. Without a known PI the headings are just "Learnings:" and "Struggles:". The last line marks it as posted from the app; PI Review ignores it (the ⓘ next to Preview says so too). What you type is sent as text (a "<b>" stays "<b>"), never as formatting. If a line of yours looks like a heading (e.g. "Issues: …" inside Learnings), the form asks you to reword it, so the columns stay right.
-5. **Post.** **Post to Azure DevOps** asks you to confirm, then posts the comment as you (your PAT). The result is under **Background jobs** ("Post review · #id"); the Discussion is read again and the columns show the new values. A posted comment cannot be deleted from the app: to correct it, write the review again — the newest comment counts.
+   The first line, **"Feature Review for PI 26.4"**, and the headings name the **reviewed PI** — the PI chosen on the page (in the Close pop-up, the Feature's own PI); only a comment with that first line counts as the review of that PI, and PI Review shows the PI in its **Reviewed PI** column. Without a known PI ("PI" and a number) the form does not post; only the Close pop-up of a Feature in no PI posts without the first line — that comment then counts for no PI. The last line marks it as posted from the app; PI Review ignores it (the ⓘ next to Preview says so too). What you type is sent as text (a "<b>" stays "<b>"), never as formatting. If a line of yours looks like a heading (e.g. "Issues: …" inside Learnings), the form asks you to reword it, so the columns stay right.
+5. **Post.** **Post to Azure DevOps** asks you to confirm, then posts the comment as you (your PAT). The result is under **Background jobs** ("Post review · #id"); the Discussion is read again and the columns show the new values. A posted comment cannot be deleted from the app: to correct it, write the review again (or use Edit review…) — the newest comment headed for the PI counts.
 
-**Edit your review (My PI Review, PI Review).** When your newest review of a Feature counts for the chosen PI, its row in **My Work → My PI Review** and on **PI Review** (and the Feature's drawer there, once its Discussion is read) has **Edit review…** in place of Review…. It opens the same form, filled in from that review ("Editing your review comment of …"). Change what you need and click **Save to Azure DevOps**, then confirm: the app **replaces that same comment** in the Discussion — Azure DevOps marks it edited and keeps its date, so it still counts for the same PI. The result is under **Background jobs** ("Edit review · #id") and the table shows the new values. Only your own review can be edited (Azure DevOps allows only the author); a lead looking at another person's Features uses Review…. If the edit fails, the form opens again with your text, the reason and **Post as a new review instead**.
+**Edit your review (My PI Review, PI Review).** When you have a review of a Feature headed for the chosen PI (your newest one for that PI), its row in **My Work → My PI Review** and on **PI Review** (and the Feature's drawer there, once its Discussion is read) has **Edit review…** in place of Review…. It opens the same form, filled in from that review ("Editing your review comment of …"). Change what you need and click **Save to Azure DevOps**, then confirm: the app **replaces that same comment** in the Discussion — Azure DevOps marks it edited; it keeps its "Feature Review for PI …" line, so it still counts for the same PI. An older review of yours without that line offers no Edit review…: use Review… to post a new one. The result is under **Background jobs** ("Edit review · #id") and the table shows the new values. Only your own review can be edited (Azure DevOps allows only the author); a lead looking at another person's Features uses Review…. If the edit fails, the form opens again with your text, the reason and **Post as a new review instead**.
 
-**Write one review for several Features (My PI Review).** Tick the Features in **My Work → My PI Review** (the tick box in the heading ticks every row shown) and a bar appears: "3 selected · **Update review for 3…** · **Clear selection**". A greyed-out tick box cannot be ticked — point at it to see why (you may not post that Feature's review, the page is read only — View as, the sample, an on-premises server —, or its Discussion is still being read or could not be read). **Update review for 3…** opens one pop-up: the Features it posts to, each marked **New comment** or **Replaces your review of {date}** — the Features that already have **your** review of the chosen PI get that review replaced, as Edit review… does — and the usual form with its Preview, which you fill in **once**. **Post to 3 Features**, then confirm: it runs as **one** entry under **Background jobs**, "PI review for 3 Features", writing one Feature after another and showing which one it is on. Before each write the Feature's Discussion is read again: if your review there changed in the meantime (or you posted one elsewhere), that Feature is skipped with the reason instead of being overwritten or reviewed twice. A failure on one Feature does not stop the others; at the end the job says, for example, "Posted 2 (#201, #206) · Replaced 1 (#205) · Failed 0." and names the reason of each failure. The table then shows the new reviews.
+**Convert a review written in the old format (temporary).** If you wrote your review as **Struggles / Learnings / Moving to next PI** without the heading "Feature Review for PI …", it does not count: the Feature shows **Not reviewed** with the flag **Old format — convert**. In **My Work → My PI Review**, press **Old format (n)** in the filter row to see those Features, then **Convert…** on the row: the review form opens filled in from your old comment (anything that fits no field is in Additional Remarks). Check the **Reviewed PI** (the page's PI is chosen), choose the Review meeting advice, look at the Preview and press **Save to Azure DevOps**: your old comment is replaced by the review in the new format, and the Feature shows **Reviewed**. Only the person who wrote the comment can convert it; for anyone else Convert… is disabled with "Only <author> can convert their comment". Leads see on **PI Review** who still has to convert: the **Old format** column and filter (after ↻ Read all Discussions), the old comments in the Feature's drawer, and **Search Discussions…** to search the comments read, e.g. for "Struggles".
 
-**When you close a Feature** (Close in My Tasks [Board], Sprint check or Time Writing), the Close pop-up asks the same questions for that Feature (Learnings and Struggles optional, **Move to next PI = No** pre-selected — Moves to and Reason appear with Yes — the Review meeting advice required, the explanations behind ⓘ How to fill in) and **posts the review first, then closes**. If the review cannot be posted nothing is closed: choose **Close without the review** or **Cancel**. When several Features are closed at once, write their reviews in PI Review or My PI Review.
+**Write one review for several Features (My PI Review).** Tick the Features in **My Work → My PI Review** (the tick box in the heading ticks every row shown) and a bar appears: "3 selected · **Update review for 3…** · **Clear selection**". A greyed-out tick box cannot be ticked — point at it to see why (you may not post that Feature's review, the page is read only — View as, the sample, an on-premises server —, or its Discussion is still being read or could not be read). **Update review for 3…** opens one pop-up. At the top, **For all Features**: Learnings, Struggles and Additional Remarks, written once. When a Feature already has a review, each field offers **Keep each Feature’s own** (the default: that Feature keeps its text, yours goes to the others — the line under the field says how many) or **Use the shared text** (yours goes to every Feature). Below, the grid **Features to review** has one row per Feature, already filled from **that Feature’s review** (Starts from: your review, someone else’s review of the PI, your old-format comment, or the form defaults): change its **Move to next PI**, **Moves to**, **Reason** (needed with Yes) and **Review meeting** per row. The grey row **All Features** sets a column for every row (**Apply to all**) or copies the value of the row you last clicked to the rows below it (**Fill down**); **Ctrl+D** in a cell copies the value of the row above. The **Result** column shows what saving does to each Feature: **Post** (a new comment — an old-format comment of yours stays, use Convert… to replace it), **Replace** (your review of {date}), **Unchanged** (exactly your review: not written) or **Blocked** (with the reason); click a row to see its comment in the **Preview**. **Post to 3 Features** (the Features written), then confirm: it runs as **one** entry under **Background jobs**, "PI review for 3 Features", writing **3 Features at a time** ("1 of 3 done · posting the review of #206…"). Before each write the Feature's Discussion is read again: if your review there changed in the meantime (or you posted one elsewhere), that Feature is skipped with the reason instead of being overwritten or reviewed twice. A failure on one Feature does not stop the others; at the end the job says, for example, "Posted 2 (#206, #209) · Replaced 1 (#205) · Unchanged 1 (#201) not written · Failed 1 (#207)." and names the reason of each failure; **Retry failed (1)** under the entry writes only the failed Features again, with the same comments. The table then shows the new reviews.
+
+**Review the Features of your Epics (Product Owner).** When you are the Product Owner of an Epic (set by the Tool Owner, an Admin or a Scrum Master in **Admin → Feature & PI setup → Setup per Epic → Product Owner**, by your work email), **My Work → My PI Review** shows **Show: Features assigned to me | My Epics (as Product Owner)**. **My Epics** lists the chosen PI's Features of your Epics, also those assigned to others, with their Epic and Assigned to: **Review…**, **Edit review…** and **Update review for N…** work there as for your own Features, without the lead right. Your work email on the Time Writing connection must be the one saved for you. On **PI Review**, the **Release Details** pages and **Team overview**, the **Product Owner** filter keeps the Features (releases, streams) of the chosen Product Owners' Epics; the PI Review Meeting names each Epic's Product Owner.
+
+**When you close a Feature** (Close in My Tasks [Board], Sprint check or Time Writing), the Close pop-up asks the same questions for that Feature (Learnings and Struggles optional, **Move to next PI = No** pre-selected — Moves to and Reason appear with Yes — the Review meeting advice required, the explanations behind ⓘ How to fill in) and **posts the review first, then closes** — headed "Feature Review for" the Feature's PI. If the review cannot be posted nothing is closed: choose **Close without the review** or **Cancel**. When several Features are closed at once, write their reviews in PI Review or My PI Review.
+
+#### Conduct the PI Review meeting (PI Review leads, Scrum Master, Tool Owner)
+
+**Conduct PI Meeting** at the top right of **PI Review** builds the presentation for the PI Review meeting from the reviews of the chosen PI. You see it if you may post the review of any Feature or set up the review form.
+
+1. **Choose the PI** and press **Conduct PI Meeting**. The build runs under **Background jobs** ("PI Review Meeting · PI 26.4"): it reads the Discussions not read yet, builds the slides and downloads the file **PI-Review-Meeting-PI-26.4-<date>-<time>.html**.
+2. **A copy is kept in Git** — in the data repository, `pi-review/meetings/PI-26.4/`. In View as, with the synthetic sample, without Git storage or with a read-only Git token the copy is not saved: the **PI Review Meetings** panel says why before you build, and the file is still downloaded. If saving fails, the panel says so; your download is not affected.
+3. **Present it.** Open the downloaded file in any browser (no app, login or network needed). → or Space for the next slide, ← back, Home / End for the first and last, **O** (or **Overview**) for 16:9 thumbnails of all slides — click one to go there, Escape to close. Every slide is a **16:9 page** that scales to the window (black bars at the sides or top on a window of another shape); a long table, list or review runs on to the next slides, “(2 of 3)”, and a text cut with “…” shows in full when you point at it. **Print** (or Ctrl+P, “Save as PDF”) gives one 16:9 page a slide, in colour.
+
+The slides, in this order: the **title** (the PI, when it was built and by whom), the **Summary** (Features in the PI, reviewed and not, Move to next PI Yes — with the next PI — and No, Discuss during Meeting and Offline Review; then the same per Epic), one slide per Feature marked **Discuss during Meeting**, every **other reviewed Feature** grouped by Epic, one list of the Features **not reviewed** (and why), then the **Themes**: all Learnings, then all Struggles, each with its Feature ID. Each Feature slide shows its Epic, Assigned to, State, Learnings, Struggles, Move to next PI with the reason, the Review meeting advice, Additional Remarks, the fields added in PI Review Setup and who wrote the review when.
+
+**The executive slides** follow the Summary, before the Features to discuss: **Executive summary** (per Epic: Features in the PI, Closed in the PI — Closed or Done with the Closed Date inside the PI's dates —, Carried forward — Move to next PI = Yes in the review headed for the PI —, ad-hoc Features; a bar per Epic), **Review completion per Epic** (click a Not reviewed number to jump to the list), **PI-over-PI trend** (against the previous PI, ▲ / ▼), **Repeat carry-overs** (carried forward two or more PIs in a row), **Topics for discussion** (each point raised in a Discuss during Meeting review, with who raised it and when), **Releases in the PI** (the streams ticked in the settings, with their Release Classification counts), **Hours per Epic** with the Allocation % and **Utilization** (the Dashboard's numbers for the PI's months), **Trends, peaks and spikes** (the rule is on the slide: a spike is a point above 1.5 × the PI's average) and **Long-running Features** (open Features of the ticked streams created more than their Epic's number of months ago — calendar months: created 20 May with 6 months is long-running from 21 Nov — with each Feature's limit). A value the app cannot work out — no PI dates, no Time Writing, no Release Details — shows **—** with the reason. While presenting, click a column header of a table (or Tab to it and press Enter) to re-sort it; press again for the other direction.
+
+**Set up the presentation** (Scrum Master, Tool Owner): **Admin → Feature & PI setup → PI Review form → Meeting presentation → Edit meeting presentation…**. Set the title slide's **Title** and **Subtitle** and the **Footer text** shown on every slide next to the slide number (placeholders {PI} {date} {time} {builtBy} {team}; the preview shows the result), the **Team name**, the **Accent colour** (a colour too light to read on white is refused with its contrast ratio) and a **light or dark title slide**, **Order Epics by** (Epic ID or Number of Features), the **release-based streams** and **Long-running after (months)** — a table with the default row (6 months) and a row per Epic of those streams (empty: the default). A file saved by a version that counted PIs shows a one-line note: the old PI values are not used (not converted to months); set the months again if they were set, and Save to Git. **Save to Git**: every meeting built afterwards uses it. Everyone else sees the settings read only.
+
+The file is a **snapshot**: reviews written after you built it are not in it — build it again just before the meeting. Only comments headed “Feature Review for” the PI and written from the PI Review start date on count. The **PI Review Meetings** panel lists the saved meetings of the PI, newest first: **Download** saves one to your computer; **Open** shows it in a new tab with every slide one after another (to read or print — to present, Download it).
 
 #### Change the review form (Scrum Master, Tool Owner)
 
 The fields of the review form are a shared setup: when the review changes, the Scrum Master or the Tool Owner changes the form in the app, and everyone's next review uses it.
 
-1. **Open it.** **Admin → PI Review Setup** in the menu, or the **⚙** button (PI Review Setup) at the top right of **My PI Review** or **PI Review**. Both are shown only to people with the right "PI Review: set up the review form" (Scrum Master and Tool Owner by default; an Admin can change who has it in Role rights); everyone else's reviews simply follow the form. You see the form in use: each field with the heading it writes in the comment, its type, options, whether it is required and its default. Without a setup in Git it says *The built-in form*.
+1. **Open it.** **Admin → Feature & PI setup → PI Review form** in the menu, or the **⚙** button (PI Review Setup) at the top right of **My PI Review** or **PI Review**. Both are shown only to people with the right "PI Review: set up the review form" (Scrum Master and Tool Owner by default; an Admin can change who has it in Role rights); everyone else's reviews simply follow the form. You see the form in use: each field with the heading it writes in the comment, its type, options, whether it is required and its default. Without a setup in Git it says *The built-in form*.
 2. **Edit form…** opens the editor — the same column editor as **Set up columns…** on the On-Demand pages. For each field: **Name** (the label in the form), **Type** (**Long text** for a paragraph, **Dropdown (one value)** for a choice), **Required**, ↑ ↓ to reorder, ✕ to remove, the **Heading in the comment**, the **Default** of a Dropdown, a **Help text**, and the **options** of a Dropdown. **＋ Add field** adds one (at most 15); **Use the built-in form** starts again from the built-in fields. The **Comment preview** shows what a review written with the form looks like.
 3. **Move to next PI** keeps its behaviour — Yes / No, the PI it moves to and the reason — so its name, type, options and Required are locked and it cannot be removed; its heading (with **{PI}** where the next PI is written), its default (No unless you change it) and its help can be changed. The other built-in fields keep their type. **{REVIEWED PI}** in any heading (at most once) is where the reviewed PI is written — the built-in Learnings and Struggles headings are "Learnings of {REVIEWED PI}" and "Struggles of {REVIEWED PI}"; a form saved before keeps its headings as saved.
 4. **Save to Git.** The form is checked first: a heading that is empty, used twice, or already read as another field (for example "Issues" or "What went wrong" is read as Struggles, so older reviews would land in the wrong column) is refused, and a review written with every field must read back exactly. The result is in **Background jobs** ("PI Review form · Save to Git").
@@ -828,9 +864,9 @@ Every Release page looks the same, top to bottom:
 
 **Create Feature** on a release without a match opens the New Feature form, titled for that release. Load the QMS-0025 board first.
 
-**Create Features** (DP, IOCC and Content) ticks several releases and creates a Feature for each under the stream's **bulk creation Epic**. The DP and IOCC pop-ups fill the window; DP also sets each Feature's Start and Target dates (DRPE Date and DDT Date by default, set in Admin → Stream options → Bulk creation Epics → DP bulk creation dates) and, with an optional tick box (not ticked by default), creates a Time Writing Task for every month from the Start date's month to the Target date's month instead of the current month only. No Epic is built in: until one is mapped, the button is disabled and says *"No DP bulk creation Epic is set: map it in Admin → Stream options → Bulk creation Epics."* **Open Bulk creation Epics** next to it takes you there. The Tool Owner enters the Epic ID under **Shared** and saves it to Git for everyone; anyone can enter their own under **Mine**, which is kept in this browser and used for them instead.
+**Create Features** (DP, IOCC and Content) ticks several releases and creates a Feature for each under the stream's **bulk creation Epic**. The DP and IOCC pop-ups fill the window; DP also sets each Feature's Start and Target dates (DRPE Date and DDT Date by default, set in Admin → Streams → Bulk creation → DP bulk creation dates) and, with an optional tick box (not ticked by default), creates a Time Writing Task for every month from the Start date's month to the Target date's month instead of the current month only. No Epic is built in: until one is mapped, the button is disabled and says *"No DP bulk creation Epic is set: map it in Admin → Streams → Bulk creation."* **Open Bulk creation Epics** next to it takes you there. The Tool Owner enters the Epic ID under **Shared** and saves it to Git for everyone; anyone can enter their own under **Mine**, which is kept in this browser and used for them instead.
 
-**The QE of each release: the QE page** (DP and IOCC). The DP table's **QE** column and the QE pre-filled on each row of Create Features come from an **On-Demand Table page** — the team's **Resource Mapping** page, or any other. Set it once per bulk Epic (roles allowed to edit the shared Feature setup): **Admin → Epic & Feature setup → Setup per Epic → the DP or IOCC bulk Epic**, under User Stories:
+**The QE of each release: the QE page** (DP and IOCC). The DP table's **QE** column and the QE pre-filled on each row of Create Features come from an **On-Demand Table page** — the team's **Resource Mapping** page, or any other. Set it once per bulk Epic (roles allowed to edit the shared Feature setup): **Admin → Feature & PI setup → Setup per Epic → the DP or IOCC bulk Epic**, under User Stories:
 
 1. **QE from page** — the page named *Resource Mapping* is already chosen ("Default: …"); pick another page if needed.
 2. **Column with the Platform / Product** — the column that names the product (DP: the release's PsName, else its Program; IOCC: the release name).
@@ -841,7 +877,7 @@ The columns are remembered by their id, so renaming a column on the page keeps t
 
 *DPF-02, EPS-09*
 
-**Release Classification from the release number** (DP and IOCC). The Releases table of DP and IOCC starts with **Release name**, **Version** and **Release Classification (detected)** — the value of the bulk Epic's Release Classification list that its rules give for the version (— without a bulk Epic or a value). The Create Features pop-up shows the same three columns first and pre-fills each row's Release Classification, with *"detected from 5.2.1"* under it; change any row before creating. To set the rules (roles allowed *Edit the Epic setup*): **Admin → Epic & Feature setup → Setup per Epic**, choose the bulk Epic, and under its **Release Classification** field tick, for each value, the part of the release number that changes for it — **x.0** (first number only: 5.0, 5.0.0), **x.y** (second number: 5.2), **x.y.z** (third: 5.2.1), **x.y.z.w** (fourth: 5.2.1.3); the deepest non-zero part decides. For example Release ← x.0 and x.y, MLD ← x.y.z, PU ← x.y.z.w. A part can belong to one value only (the screen names a part ticked twice and does not save). **Fill with the usual rules** proposes Major, Minor, MLD and Platform Update (or PU) where your values are named so. Save to Git. Until rules are saved, the value named like the release type (Major, Minor, MLD, Platform Update) is pre-filled, as before. The fields of an Epic are listed Release name, Version, Release Classification first.
+**Release Classification from the release number** (DP and IOCC). The Releases table of DP and IOCC starts with **Release name**, **Version** and **Release Classification (detected)** — the value of the bulk Epic's Release Classification list that its rules give for the version (— without a bulk Epic or a value). The Create Features pop-up shows the same three columns first and pre-fills each row's Release Classification, with *"detected from 5.2.1"* under it; change any row before creating. To set the rules (roles allowed *Edit the Epic setup*): **Admin → Feature & PI setup → Setup per Epic**, choose the bulk Epic, and under its **Release Classification** field tick, for each value, the part of the release number that changes for it — **x.0** (first number only: 5.0, 5.0.0), **x.y** (second number: 5.2), **x.y.z** (third: 5.2.1), **x.y.z.w** (fourth: 5.2.1.3); the deepest non-zero part decides. For example Release ← x.0 and x.y, MLD ← x.y.z, PU ← x.y.z.w. A part can belong to one value only (the screen names a part ticked twice and does not save). **Fill with the usual rules** proposes Major, Minor, MLD and Platform Update (or PU) where your values are named so. Save to Git. Until rules are saved, the value named like the release type (Major, Minor, MLD, Platform Update) is pre-filled, as before. The fields of an Epic are listed Release name, Version, Release Classification first.
 
 ### Windchill exports
 
@@ -908,11 +944,11 @@ The **Master list** and the **Expiry list** tint each tool's row by how soon it 
 4. Under **Setup → Tabs**, **←** and **→** move a tab, **Rename…** renames it, and **Remove…** asks first: the page is **kept in Git, hidden** — or, for a Tool Owner, **deleted with its data**.
 5. To bring back a page that is hidden — one kept when its tab was removed, or one left behind when an older app version dropped the tabs — choose **＋ Add existing page as tab…** under **Setup → Tabs**, pick the page, keep or change its name and choose **Add tab**. Its rows or blocks are there again.
 
-**Who may edit the tab pages.** The list's co-owners (Setup → Team settings) are written as **co-owners of each tab's page**, so they can set up and edit the page also when it is opened from Admin → Pages & menu. Co-owners someone added to a page by hand stay; the ones that came from the list are taken off again when they leave the list or when the tab is removed. The **Tabs** panel shows per tab how many co-owners came from the list and how many were added by hand; if a page is not in line with the list, it says so with **Write the co-owners to the tab pages**.
+**Who may edit the tab pages.** The list's co-owners (Setup → Team settings) are written as **co-owners of each tab's page**, so they can set up and edit the page also when it is opened from Admin → Pages & reports → Menu groups & pages. Co-owners someone added to a page by hand stay; the ones that came from the list are taken off again when they leave the list or when the tab is removed. The **Tabs** panel shows per tab how many co-owners came from the list and how many were added by hand; if a page is not in line with the list, it says so with **Write the co-owners to the tab pages**.
 
 **Status on a dashboard.** Status (Overdue, Due soon, No due date, OK) and Days left on a dashboard use the **team default window**, the same for everyone. To leave them out of a block, untick **Show expiry status** in the block's pop-up (under the data source); the block then counts the same tools without them.
 
-These tabs are pages of their own in Git, but they are not in the menu, on Home or in search: they live on the Tool Validations page only (Admin → Pages & menu lists them as hidden, **Tab of Tool Validations**). Everyone else reads them.
+These tabs are pages of their own in Git, but they are not in the menu, on Home or in search: they live on the Tool Validations page only (Admin → Pages & reports → Menu groups & pages lists them as hidden, **Tab of Tool Validations**). Everyone else reads them.
 
 Everyone else sees every tab read only; the buttons say why they are greyed out. The month's cards on the Master list tab, Pulse Check (its Tool Validations quadrant lists the tools with ID and status), the Monthly pack and the cumulative chart count the master list's tools by their Current Month Status. **ID**, **Used by**, **Validated** and **Type** are read with the source's field mapping: check them in **Setup → Edit mapping…** of the Tool Validations query (the app guesses System.Id and the columns named Source, State and Type; choose None to leave one out).
 
@@ -929,7 +965,7 @@ Pulse Check, the Monthly pack and the cumulative chart show the same numbers, co
 
 ## On-Demand pages
 
-On-Demand pages are tables the team sets up itself, without a new release of the app. **CoNQ** (Cost of Non-Quality) is there from the start; the Tool Owner and the pages' co-owners add more (see [Pages & menu](#pages--menu)). Each page has a **Data** tab (the table) and, for *Table + Insights* pages, an **Insights** tab (charts).
+On-Demand pages are tables the team sets up itself, without a new release of the app. **CoNQ** (Cost of Non-Quality) is there from the start; the Tool Owner and the pages' co-owners add more (see [Pages & reports](#pages--reports)). Each page has a **Data** tab (the table) and, for *Table + Insights* pages, an **Insights** tab (charts).
 
 ![CoNQ with made-up rows](user-guide/images/conq-table.png)
 
@@ -978,7 +1014,7 @@ A column can pick from a list the team shares instead of options of its own — 
 
 ![Set up columns with a built-in list](user-guide/images/builtin-list-column-editor.png)
 
-1. In **Admin → Epic & Feature setup → Value lists**, under the Value lists, the panel **Team lists from Azure DevOps** lists the team lists. **＋ New list…**: give the list a name (e.g. *QE team*), check the server and project (your Time Writing connection's to start with), type the team and press **↻ Read the team**. The members are listed (with their emails as a hint); **Save to Git** saves the list for everyone — names and Azure DevOps ids only, no emails.
+1. In **Admin → Feature & PI setup → Lists**, under the Value lists, the panel **Team lists from Azure DevOps** lists the team lists. **＋ New list…**: give the list a name (e.g. *QE team*), check the server and project (your Time Writing connection's to start with), type the team and press **↻ Read the team**. The members are listed (with their emails as a hint); **Save to Git** saves the list for everyone — names and Azure DevOps ids only, no emails.
 2. In **Set up columns…** choose the type **Dropdown (built-in list)** (one person) or **Multi-select (built-in list)** (several), then the list in **Built-in list**. The Epic setup's Value lists can be chosen here too.
 3. The row form offers the list's names. The row keeps the name and, for a person, their Azure DevOps id. Two people with the same name are offered as, for example, *Sam Lee (#3f2a)* and *Sam Lee (#9c1b)* — the name and the start of their id.
 4. When people join or leave the team, open the list and press **↻ Refresh…**. You see who is **added**, **removed** and **renamed** (the same person in Azure DevOps, a new name), and how many rows use a removed person, before you **Save to Git**. **Log** shows every change of the list.
@@ -1069,7 +1105,7 @@ A page you add is kept in the data repository under its name: `on-demand/Supplie
 
 CoNQ and the pages that existed before keep their file (`on-demand/conq.json`) for good: renaming them changes only the title inside. Older app versions do not list the pages added under a name: make sure everyone (web and desktop) updates. A Dashboard page you add keeps its blocks in `dashboards/<name>--<id>.json` and moves them with the page when you rename it; existing dashboards keep `dashboards/<id>.json`.
 
-If a page (or a dashboard's blocks) has two copies in Git — for example after someone used an older app version — the page and Admin → Pages & menu say so and show the newer one. The Tool Owner chooses **Delete older copy…**: the pop-up lists exactly what is deleted and what stays (the newer copy), and **Delete older copy** removes it in one commit; its history stays in GitHub.
+If a page (or a dashboard's blocks) has two copies in Git — for example after someone used an older app version — the page and Admin → Pages & reports → Menu groups & pages say so and show the newer one. The Tool Owner chooses **Delete older copy…**: the pop-up lists exactly what is deleted and what stays (the newer copy), and **Delete older copy** removes it in one commit; its history stays in GitHub.
 
 ### Live and Sample
 
@@ -1300,19 +1336,32 @@ Every column of the query is a field: people by display name (never an email), *
 
 ## Admin
 
-The **Admin** group holds the shared setup, one page per area. You see the pages your roles may change; each section has a chip saying whom a change affects: *Only you · This computer*, *Everyone · Shared in Git*, *Everyone · Tool Owner only* and so on.
+The **Admin** group holds the shared setup in seven pages, in this order: **Overview**, **Streams**, **Feature & PI setup**, **People & access**, **Capacity & time**, **Pages & reports** and **Data & history**. You see a page when your roles hold a right for at least one of its sections, and only those sections; each section has a chip saying whom a change affects: *Only you · This computer*, *Everyone · Shared in Git*, *Everyone · Tool Owner only* and so on. Admin opens on the Overview.
+
+**Where the former pages went.** Stream options is part of **Streams** (Epics to match is a column of the Stream mapping; your own bulk creation Epics are in **My settings → My bulk creation Epics**); Epic & Feature setup and PI Review Setup are **Feature & PI setup**; People & roles is **People & access** (its Capacity roles are under **Capacity & time → Capacity**); Reports and Pages & menu are **Pages & reports** (with **Table & chart defaults**, formerly in Look & feel); Data & sharing and History are **Data & history**. Search settings finds a setting by its former name too, and a page or section you had open before opens in its new place. *SET-26…SET-29*
+
+**Settings on the page.** Several pages have a **⚙** at the top right, named *Settings for <page>*, when your role may change at least one of their settings. It opens that page's settings in a pop-up, as tabs — the same panels as in Admin, saved the same way (Save to Git, the same rights) — and each tab has **Open in Admin →** to go to the full Admin section. Escape, × or Close closes it.
+
+| Page | Settings in its ⚙ |
+|---|---|
+| Time Writing, My Tasks [Board] | Month locks, Hour classification, Capacity, Setup per Epic, User Story templates (the shared ones; My templates stay in Admin) |
+| Team overview, My dashboard | Capacity, Thresholds, Calculation profiles, Table & chart defaults |
+| Pulse Check | Monthly pack, Table & chart defaults |
+| A Release Details page (DP, CP, IOCC, Content, …) | That stream's row of Stream mapping, its Release counts (CP, DP, IOCC) and its Release Classification — Setup per Epic of the stream's bulk creation Epic (DP, IOCC, Content), where the Release Classification field and its rules are under Fields & title |
+
+You see only the tabs you may change; a Team Member sees no ⚙. In View as the ⚙ follows the viewed person's or role's rights and the settings are read only.
 
 ### Overview and Search settings
 
-**Admin → Overview** lists what is left to set up (with a link to each setting), the shared changes not yet saved to Git (with **Save to Git**) and the latest changes. **Search settings** (**Ctrl K**) finds any setting by name.
+**Admin → Overview** lists what is left to set up (with a link to each setting), the shared changes not yet saved to Git (with **Save to Git**) and, for those allowed *Shared setup in Git*, the latest changes. **Search settings** (**Ctrl K**) finds any setting by name.
 
 ![Admin → Overview](user-guide/images/admin-overview.png)
 
-### Pages & menu
+### Pages & reports
 
-**Admin → Pages & menu** (Tool Owner) lists every menu group and every added page.
+**Admin → Pages & reports → Menu groups & pages** (Tool Owner) lists every menu group and every added page.
 
-![Admin → Pages & menu](user-guide/images/pages-menu.png)
+![Admin → Pages & reports → Menu groups & pages](user-guide/images/pages-menu.png)
 
 - **＋ Add page…** — choose the type (**Table**, **Table + Insights** or **On-Demand Dashboard**), a name, an optional description, an icon, the **menu group** (or **＋ New group…**) and optional **co-owners**. The page is created in Git at once and opens.
 - **Menu groups** — the built-in groups keep their place; set whether a group **accepts added pages** and its **co-owners**. Your own groups can be renamed, reordered and removed once empty.
@@ -1322,9 +1371,9 @@ The **Admin** group holds the shared setup, one page per area. You see the pages
 
 ![＋ Add page…](user-guide/images/add-page.png)
 
-### People & roles
+### People & access
 
-**Admin → People & roles → People** lists the people from Azure DevOps: the Time Writing team and everyone assigned to work. To add someone, add them to the team in Azure DevOps and refresh.
+**Admin → People & access → People** lists the people from Azure DevOps: the Time Writing team and everyone assigned to work. To add someone, add them to the team in Azure DevOps and refresh.
 
 ![People](user-guide/images/people.png)
 
@@ -1352,7 +1401,7 @@ The **Team tree** tab shows the reporting lines. **Capacity roles** sets which t
 
 ### Role rights
 
-**People & roles → Role rights** is a matrix: every menu area and action is a row, and each role's cell is **Allow**, **Deny** or **Not set**.
+**People & access → Role rights** is a matrix: every menu area and action is a row, and each role's cell is **Allow**, **Deny** or **Not set**.
 
 ![Role rights](user-guide/images/role-rights.png)
 
@@ -1367,7 +1416,7 @@ The **Team tree** tab shows the reporting lines. **Capacity roles** sets which t
 
 ![Admin → Streams (here read only, with server names replaced by made-up ones)](user-guide/images/streams.png)
 
-**＋ Add stream…** adds a **custom stream** with its own Release page. **Stream options** sets the Epics Features are matched in, the bulk creation Epics (the Epic each of DP, IOCC and Content creates its Features under — none built in, so map each one the team uses; **Save to Git** on a shared one commits it straight to Git, and Admin → Overview shows a stream without one under Attention) and the release counts.
+**＋ Add stream…** adds a **custom stream** with its own Release page. **Stream mapping** shows each stream's **Epics to match** (Features are matched in them; **Choose…** on the row), **Bulk creation** the shared bulk creation Epics (the Epic each of DP, IOCC and Content creates its Features under — none built in, so map each one the team uses; **Save to Git** commits it straight to Git, and Admin → Overview shows a stream without one under Attention; your own choice is in **My settings → My bulk creation Epics**) and **Release counts** the release counts.
 
 Your own read-only views are in **My settings → My views**: they appear under **Other views** in your menu only, and never change a stream.
 
@@ -1383,16 +1432,22 @@ Your own read-only views are in **My settings → My views**: they appear under 
 
 **Admin → Capacity & time** holds how capacity is worked out:
 
-- **Capacity and absence** — who counts in the month's capacity, and why not.
+- **Capacity** — Capacity and absence (who counts in the month's capacity, and why not) and the **Capacity roles** (which team roles count).
 - **Calculation profiles** — what counts as utilized and what comes off the capacity, as a sentence you change by ticking terms.
-- **Bucket rules** — the words and tags that make an hour Absence, Training or Other NPRA.
-- **Insight thresholds**, **Holidays and common activities**, **Period control** (the last day to update each month, and locking a month early) and **Historical hours** (hours from before Time Writing, from Excel).
+- **Hour classification** — the **Bucket rules** (the words and tags that make an hour Absence, Training or Other NPRA) and the **Holidays and common activities**.
+- **Thresholds** (the Insight thresholds) and **Month locks** (formerly Period control: the last day to update each month, and locking a month early).
+
+The **Historical hours** (hours from before Time Writing, from Excel) are in **Admin → Data & history**.
 
 ![Admin → Capacity & time](user-guide/images/capacity-time.png)
 
-### Data & sharing
+### Data & history
 
-**Admin → Data & sharing** has **Git storage** (connect, change or disconnect; **Load latest**), **Load from Git** (**Load everything from Git**), **Shared setup in Git**, **Other views** and **Synthetic sample**.
+**Admin → Data & history** has **Git storage** (connect, change or disconnect; **Load latest**; and **Load everything from Git** below it), **Other views** (each read-only view's work items *By type* in its row), **Connections in Git** (formerly Shared setup in Git), **Historical hours**, **Changes** (formerly History) and **Demo data** (Load synthetic sample dataset, and Reset synthetic MVP data for those allowed *Shared setup in Git*).
+
+**Starter views for your role.** Your admin can set up views that everyone with your access role starts with. At your next start they are copied into **My settings → My views**, marked *Starter view for your role*, and listed under **Other views** in the menu; Background jobs names them once. They are yours: delete one with **Delete…** and it does not come back; add your own with **Add my view** as before. A change your admin makes later does not change your copy. You need your work email set (My settings → Your work email); the panel says so otherwise.
+
+**Starter views per role (admins).** In **Admin → Data & history → Other views → Starter views per role** choose **＋ Add starter view**, enter a name, choose a server, enter the project and a WIQL query, tick the access roles and choose **Save to Git**. **Edit** changes it for people who get it for the first time; **Remove…** stops it reaching anyone new (copies already made stay). *SET-21…SET-25*
 
 **Your Other views.** The views listed under **Other views** are **yours**: custom queries, backlog views and background sources you added. They are saved in Git in a file of your own (`other-views/<your work email>.json`) and **nobody else sees them**; the Stream mapping (Admin → Streams) is the part shared with everyone. Adding, editing, cloning or removing one here saves your file right away, and your other computers follow it at their next start. **Remove** on a row opens a pop-up: the view goes here, from your file in Git and from your other computers; its saved data in Git is kept.
 
@@ -1403,15 +1458,15 @@ Your own read-only views are in **My settings → My views**: they appear under 
 
 From their next start only that person sees the view under **Other views**.
 
-**When the Streams file changed: Load everything from Git.** When the shared Streams file in Git has changed since this computer last loaded it — and once for everyone after this update — a pop-up asks you to **Load everything from Git**. It cannot be closed with × or Escape: choose **Load everything from Git** and wait until it closes. It cannot be skipped. If something cannot be loaded, the pop-up names what failed (for example *Connection setup: GitHub could not read azure-views-reset.json (HTTP 500)*) and shows your **Git storage connection** right there — owner, repository, branch, data file and GitHub token, as in Admin → Data & sharing → Git storage. Correct it if needed and choose **Update & load** (the token stays in this browser or desktop app), then **Retry**. If GitHub itself is not answering (a server error or no network), the pop-up says so and also offers **Continue without loading**: you work with what this computer loaded last, and the pop-up comes back at the next start. A wrong token or repository has no skip: correct it and Retry. It never shows while viewing as someone else, with the synthetic sample, without Git storage or after your own save.
+**When the Stream mapping changed: Load latest Release Details.** When the shared Stream mapping in Git has changed since this computer last loaded it, a pop-up asks you to **Load latest Release Details**. It loads only the Stream mapping (the streams, their queries, the custom streams and your own Other views); the Release Details pages then fetch their data as usual. It cannot be closed with × or Escape: choose **Load latest Release Details**. It cannot be skipped. If something cannot be loaded, the pop-up names what failed (for example *Connection setup: GitHub could not read azure-views-reset.json (HTTP 500)*) and shows your **Git storage connection** right there — owner, repository, branch, data file and GitHub token, as in Admin → Data & history → Git storage. Correct it if needed and choose **Update & load** (the token stays in this browser or desktop app), then **Retry**. If GitHub itself is not answering (a server error or no network), the pop-up says so and also offers **Continue without loading**: you work with what this computer loaded last, and the pop-up comes back at the next start. A wrong token or repository has no skip: correct it and Retry. It never shows while viewing as someone else, with the synthetic sample, without Git storage or after your own save.
 
-**The load runs in the background.** When you press **Load everything from Git** (or **Retry**) the pop-up closes at once and the load runs as a background job: the top bar shows **1 running**, and **Background jobs** lists **Load everything from Git** with the part being loaded. You can go on working. When it ends the job says **Done** with what was loaded; if a part failed it says **Needs a look**, names the part, and the pop-up comes back with the Git storage setup and **Retry**. Only one load runs at a time: while it runs, **Admin → Data & sharing → Load from Git** shows *Loading in the background…*; afterwards its **Load everything from Git** button starts the same job and shows the result in the panel. *GIT-33…GIT-35*
+**The load runs in the background.** When you press **Load latest Release Details** (or **Retry**) the pop-up closes at once and the load runs as a background job: the top bar shows **1 running**, and **Background jobs** lists **Load latest Release Details** with the part being loaded. You can go on working. When it ends the job says **Done** with what was loaded; if a part failed it says **Needs a look**, names the part, and the pop-up comes back with the Git storage setup and **Retry**. Only one load runs at a time: while it runs, **Load everything from Git** on **Admin → Data & history → Git storage** shows *Loading in the background…*. That button loads everything shared in Git (planning data, connections, on-prem view data, Windchill exports, roles, Feature setup) as its own background job and shows the result in the panel. *GIT-33…GIT-38*
 
 *CON-119…CON-124, GIT-29…GIT-32, SET-20*
 
 **Remove a view for everyone (Tool Owner).** **Remove** on a row of **Other views** removes one of your own views (above). To take a view away from every computer that still has it, and delete its data:
 
-1. Open **Admin → Data & sharing → Other views** and choose **⋯** on the view's row.
+1. Open **Admin → Data & history → Other views** and choose **⋯** on the view's row.
 2. Choose **Remove for everyone…** to drop it from the shared setup, or **Delete for everyone…** to also delete its saved data in Git (the pop-up lists the files, e.g. `azure-data/<view>.json`).
 3. Read the pop-up — it affects everyone who uses the shared setup in Git; the app cannot tell how many people that is — and confirm.
 
@@ -1423,7 +1478,7 @@ A shared view's own page (under **Other views** in the menu) has no delete item,
 
 *CON-109…CON-112*
 
-**Delete qe-mapping.json from Git (Tool Owner, once).** QE Mapping was removed from the app, but its file `qe-mapping.json` stays in the Git data repository until someone with **Shared setup in Git** deletes it. While it is there, **Admin → Data & sharing → Shared setup in Git** shows **Data no longer used**: "qe-mapping.json is no longer used by the app — Delete it from Git".
+**Delete qe-mapping.json from Git (Tool Owner, once).** QE Mapping was removed from the app, but its file `qe-mapping.json` stays in the Git data repository until someone with **Shared setup in Git** deletes it. While it is there, **Admin → Data & history → Connections in Git** shows **Data no longer used**: "qe-mapping.json is no longer used by the app — Delete it from Git".
 
 Before you delete it, set the **QE page** of each bulk Epic (see Create Features); the pop-up names any bulk Epic still on the old QE Mapping columns.
 
@@ -1437,15 +1492,15 @@ The notice is then gone. Someone still on an older app version that shows QE Map
 
 ### Look & feel
 
-**Look & feel** (profile menu) has a tab each for **Page layout** (margins and border), **Theme and zoom**, **Start view and menu** and **Table and chart defaults** (the shared table and chart design, for the roles allowed to change it). The first three are yours, on this computer.
+**Look & feel** (profile menu) has a tab each for **Page layout** (margins and border), **Theme and zoom** and **Start view and menu** — all yours, on this computer. The shared table and chart design is in **Admin → Pages & reports → Table & chart defaults**.
 
 ![Look & feel](user-guide/images/look-and-feel.png)
 
-### History
+### Changes
 
-**Admin → History** lists the changes to the shared setup; filter by area and text.
+**Admin → Data & history → Changes** lists the changes to the shared setup; filter by area and text.
 
-![Admin → History](user-guide/images/history.png)
+![Admin → Data & history → Changes](user-guide/images/history.png)
 
 ### Save view for everyone (tables)
 
@@ -1455,7 +1510,7 @@ Tool Owners and Admins set how tables and page filters look the first time for e
 
 **"Could not fetch from Azure DevOps" or a 401 / 403 error.** Your PAT is missing, wrong, expired or lacks a scope. Get started opens by itself with the reason: paste a new PAT for that server in **My settings → Servers and PATs** and press **Fetch now**. The Time Writing PAT needs Work Items (Read & Write) and Project and Team (Read).
 
-**Every button is greyed out and a notice says the app is read only.** The roles have not been loaded. Connect Git storage (**Admin → Data & sharing**) with your GitHub token. If the repository has no roles yet, **Set up roles**.
+**Every button is greyed out and a notice says the app is read only.** The roles have not been loaded. Connect Git storage (**Admin → Data & history**) with your GitHub token. If the repository has no roles yet, **Set up roles**.
 
 **A button is greyed out.** Read the line next to it: it names the missing right, the missing Git storage, a read-only token or the sample data. Ask an Admin to change your role if needed.
 

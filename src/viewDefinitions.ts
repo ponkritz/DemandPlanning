@@ -6,8 +6,8 @@ export { clean as cleanView }
 
 // The Azure DevOps connections (views and their queries) kept in the Git data repository for safe keeping and to set
 // up another computer: one JSON file next to the planning data. PATs are never written; on restore, a connection
-// keeps the PAT it already has here, else uses the PAT entered for the restore, else one saved here for the same
-// organisation or server.
+// keeps the PAT it already has here, else uses the PAT entered for the restore when it is on the one server that PAT
+// was entered for (AR-005, CON-141), else one saved here for the same organisation or server.
 export interface ViewsFile { schema: 1; kind: 'azure-devops-views'; views: AzureConnectionProfileSummary[] }
 const kind = 'azure-devops-views'
 // The work email (creatorEmail) is personal — it names who "me" is (access role, My Work, the creator of new Features) —
@@ -33,7 +33,11 @@ export function parseViews(text: string): AzureConnectionProfileSummary[] {
 }
 
 export interface RestoreResult { added: string[]; updated: string[]; skipped: string[]; noPat: string[] }
-export function restoreViews(views: AzureConnectionProfileSummary[], pat: string, storage: Pick<Storage, 'getItem' | 'setItem'> = localStorage): RestoreResult {
+// A PAT typed for a restore, with the one server (serverKey) it was entered for.
+export interface EnteredPat { pat: string; server: string }
+// The servers of the views in a file (for the server a PAT typed for a restore is entered for).
+export const viewServers = (views: AzureConnectionProfileSummary[]) => [...new Set(views.map((view) => serverKey(view).toLowerCase()).filter(Boolean))].sort()
+export function restoreViews(views: AzureConnectionProfileSummary[], entered: EnteredPat | null, storage: Pick<Storage, 'getItem' | 'setItem'> = localStorage): RestoreResult {
   const result: RestoreResult = { added: [], updated: [], skipped: [], noPat: [] }
   const local = listAzureConnectionProfiles(storage)
   const tokenFor = (view: AzureConnectionProfileSummary) => {
@@ -42,7 +46,8 @@ export function restoreViews(views: AzureConnectionProfileSummary[], pat: string
     const current = loadAzureConnectionProfile(view.id, storage)
     const existing = current && serverKey(current).toLowerCase() === serverKey(view).toLowerCase() ? current.token : ''
     if (existing) return existing
-    if (pat.trim()) return pat.trim()
+    // AR-005: the typed PAT only for views on the server it was entered for; views on other servers stay without it.
+    if (entered?.pat.trim() && entered.server && serverKey(view).toLowerCase() === entered.server.toLowerCase()) return entered.pat.trim()
     const same = local.find((profile) => serverKey(profile) === serverKey(view))
     return same ? loadAzureConnectionProfile(same.id, storage)?.token ?? '' : ''
   }
@@ -147,7 +152,7 @@ export function compareViewsWithGit(views: AzureConnectionProfileSummary[], stor
   }
   const keys = new Set(views.filter((view) => view.role !== 'time-tracking').map(connectionKey))
   result.onlyHere = here.filter((profile) => !views.some((view) => view.id === profile.id) && !(profile.role !== 'time-tracking' && keys.has(connectionKey(profile)))).map((profile) => profile.viewName || profile.reason)
-  const restored = restoreViews(add, '', storage)
+  const restored = restoreViews(add, null, storage)
   for (const view of add) {
     const name = view.viewName || view.reason
     if (restored.added.includes(name)) { result.added.push(name); same.push(view) }
@@ -182,7 +187,7 @@ export function syncViewsFromGit(views: AzureConnectionProfileSummary[], storage
     }
     follow.push(view)
   }
-  const restored = restoreViews(follow, '', storage)
+  const restored = restoreViews(follow, null, storage)
   for (const view of follow) {
     const name = view.viewName || view.reason
     if (restored.added.includes(name)) result.added.push(name)
@@ -409,7 +414,7 @@ export function applyViewRemovals(removals: ViewRemoval[], repository: string, s
 export function removalBlocked({ allowed, viewingAs, git, isSample }: { allowed: boolean; viewingAs: boolean; git?: { connected: boolean; readOnly: boolean; isSample?: boolean }; isSample: boolean }) {
   if (viewingAs) return 'Not while viewing as someone else: View as is read-only.'
   if (!allowed) return 'Only the Tool Owner (“Change the stream mapping”) can remove a shared view for everyone.'
-  if (!git?.connected) return 'Connect Git storage (Admin → Data & sharing) first: the shared setup is in Git.'
+  if (!git?.connected) return 'Connect Git storage (Admin → Data & history) first: the shared setup is in Git.'
   if (git.readOnly) return 'Your Git token is read-only, so the shared setup in Git cannot be changed.'
   if (isSample || git.isSample) return 'Not while the synthetic sample data is loaded.'
   return ''

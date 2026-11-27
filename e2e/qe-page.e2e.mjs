@@ -68,7 +68,7 @@ test('TC-DPF-02: the Tool Owner sets the DP bulk Epic’s QE page (Resource Mapp
 
   // (1) Setup per Epic → the DP bulk Epic: QE from page, defaulted to Resource Mapping; its columns chosen and saved.
   await page.locator('.sidebar nav button', { hasText: 'Resource Mapping' }).first().waitFor()
-  await navigate(page, 'Epic & Feature setup')
+  await navigate(page, 'Feature & PI setup')
   await page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'Setup per Epic' }).click()
   await page.locator('.efe-epics button', { hasText: `#${epicId}` }).click()
   const fields = page.getByRole('group', { name: 'QE page' })

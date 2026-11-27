@@ -26,7 +26,7 @@ test('PIR-14: the comment as a nested bullet list — a paragraph’s lines as n
   assert.deepEqual(paragraphItems('  a  \n\n• b\n+ c\n– d\n*  e'), { items: ['a', 'b', 'c', 'd', 'e'], numbered: false })
   assert.deepEqual(paragraphItems('1. a\n2) b\n- c'), { items: ['a', 'b', 'c'], numbered: true })
   // PIR-28: the reviewed PI in the Learnings and Struggles headings, no space before their colon.
-  assert.match(buildReviewComment({ ...form, reviewedPi: 'PI 26.4' }), /^<ul><li>Learnings of PI 26\.4:<ol>.*<li>Struggles of PI 26\.4:<ul>/)
+  assert.match(buildReviewComment({ ...form, reviewedPi: 'PI 26.4' }), /^<p>Feature Review for PI 26\.4<\/p><ul><li>Learnings of PI 26\.4:<ol>.*<li>Struggles of PI 26\.4:<ul>/)
   // Optional parts left out: no remarks, no reason; empty texts (the Close flow) leave their heading out.
   const short = buildReviewComment({ ...emptyReviewForm('PI 26.5'), mode: 'Offline Review' })
   assert.equal(short, `<ul><li>Whether the feature needs to be shifted to PI 26.5 : No</li><li>Advise to discuss the Feature during the Review meeting : Offline Review</li></ul><p>${reviewFooter}</p>`)
@@ -57,7 +57,7 @@ test('PIR-14: round trip — the HTML built → commentText (as the read path) �
     review: 'Discuss during Meeting', reviewMode: 'Discuss during Meeting', remarks: 'Thanks <b>team</b>',
   })
   assert.deepEqual(readBackReview(buildReviewComment(form)).from, 'Headings')
-  assert.deepEqual(reviewFormProblems(form), [])
+  assert.deepEqual(reviewFormProblems({ ...form, reviewedPi: 'PI 26.4' }), [])
   assert.deepEqual(reviewFormProblems({ ...form, reviewedPi: 'PI 2026.4' }), [])
   const no = readBackReview(buildReviewComment({ ...form, move: 'No', moveReason: '', mode: 'Offline Review', remarks: '' }))
   assert.deepEqual([no.moveValue, no.moveRest, no.reviewMode, no.remarks], ['No', '', 'Offline Review', undefined])
@@ -84,17 +84,21 @@ test('PIR-14, PIR-28: a review written by hand in Azure DevOps in the product ow
 })
 
 test('PIR-13: the form checks — required fields, the PI, and a line PI Review would read back differently (TC-PIR-14)', () => {
-  assert.deepEqual(reviewFormProblems({ ...emptyReviewForm('PI 26.5') }).length, 3, 'Learnings, Struggles and the Review meeting advice')
+  assert.deepEqual(reviewFormProblems({ ...emptyReviewForm('PI 26.5'), reviewedPi: 'PI 26.4' }).length, 3, 'Learnings, Struggles and the Review meeting advice')
+  // PIR-48: the reviewed PI must be known — the heading names it; the Close flow may post without it (no heading).
+  assert.match(reviewFormProblems({ ...emptyReviewForm('PI 26.5') }).join(' '), /reviewed PI is not known/)
+  assert.match(reviewFormProblems({ ...form, reviewedPi: 'PI Planning' }).join(' '), /reviewed PI is not known/)
   assert.equal(emptyReviewForm().move, 'No', 'Move to next PI pre-selected No (UI-STANDARDS §12 exception)')
-  assert.match(reviewFormProblems({ ...form, move: '' }).join(' '), /Yes or No/)
-  assert.match(reviewFormProblems({ ...form, move: 'Partly' }).join(' '), /Yes or No/, 'Partly is never offered')
-  assert.match(reviewFormProblems({ ...form, movePi: '26.5' }).join(' '), /PI 26\.5/)
-  assert.match(reviewFormProblems({ ...form, mode: '' }).join(' '), /Review meeting/)
-  assert.match(reviewFormProblems({ ...form, learnings: 'No issues: all fine' }).join(' '), /read Learnings, Struggles back differently/)
-  assert.match(reviewFormProblems({ ...form, remarks: 'Next PI: maybe' }).join(' '), /back differently/)
+  assert.match(reviewFormProblems({ ...form, reviewedPi: 'PI 26.4', move: '' }).join(' '), /Yes or No/)
+  assert.match(reviewFormProblems({ ...form, reviewedPi: 'PI 26.4', move: 'Partly' }).join(' '), /Yes or No/, 'Partly is never offered')
+  assert.match(reviewFormProblems({ ...form, reviewedPi: 'PI 26.4', movePi: '26.5' }).join(' '), /PI 26\.5/)
+  assert.match(reviewFormProblems({ ...form, reviewedPi: 'PI 26.4', mode: '' }).join(' '), /Review meeting/)
+  assert.match(reviewFormProblems({ ...form, reviewedPi: 'PI 26.4', learnings: 'No issues: all fine' }).join(' '), /read Learnings, Struggles back differently/)
+  assert.match(reviewFormProblems({ ...form, reviewedPi: 'PI 26.4', remarks: 'Next PI: maybe' }).join(' '), /back differently/)
   // PIR-18: in the Close flow the texts are optional; Move and the advice are not.
-  assert.deepEqual(reviewFormProblems({ ...emptyReviewForm('PI 26.5'), mode: 'Offline Review' }, { optionalTexts: true }), [])
-  assert.equal(reviewFormProblems({ ...emptyReviewForm('PI 26.5') }, { optionalTexts: true }).length, 1)
+  assert.deepEqual(reviewFormProblems({ ...emptyReviewForm('PI 26.5'), mode: 'Offline Review', reviewedPi: 'PI 26.4' }, { optionalTexts: true }), [])
+  assert.deepEqual(reviewFormProblems({ ...emptyReviewForm('PI 26.5'), mode: 'Offline Review' }, { optionalTexts: true, needsPi: false }), [])
+  assert.equal(reviewFormProblems({ ...emptyReviewForm('PI 26.5'), reviewedPi: 'PI 26.4' }, { optionalTexts: true }).length, 1)
 })
 
 test('PIR-13: the next PI after the reviewed one — the next later PI in the list, else by the number with the year rollover (TC-PIR-13)', () => {
@@ -184,7 +188,7 @@ const feature = (email) => ({ id: 7, key: 'org/quality/7', assignedTo: email ? '
 test('CON-113: who may post — the assignee (with Add a comment), a lead (PI Review: post), nobody else; the page reasons (TC-CON-70)', async () => {
   assert.equal(reviewPostBlock(viewer(['work.comment']), feature('ana@example.com')), '', 'the assignee')
   assert.equal(reviewPostBlock(viewer(['pireview.post']), feature('ben@example.com')), '', 'a lead, on any Feature')
-  assert.match(reviewPostBlock(viewer(['work.comment']), feature('ben@example.com')), /Only the Feature’s assignee \(Ana\) or a lead/)
+  assert.match(reviewPostBlock(viewer(['work.comment']), feature('ben@example.com')), /Only the Feature’s assignee \(Ana\), the Product Owner of its Epic or a lead/)
   assert.match(reviewPostBlock(viewer([]), feature('ana@example.com')), /does not allow “Add a comment”/)
   assert.match(reviewPostBlock(viewer(['work.comment'], { email: '' }), feature('ana@example.com')), /enter your work email/)
   assert.match(reviewPageBlock(viewer(['pireview.post'], { readOnly: true })), /access roles are not loaded/)
@@ -203,7 +207,7 @@ test('CON-113: who may post — the assignee (with Add a comment), a lead (PI Re
   try {
     globalThis.fetch = async (url, init) => { sent.push({ url, body: init.body }); return new Response('{"id":91}', { status: 200, headers: { 'content-type': 'application/json' } }) }
     guardAzureWrites(can(['work.comment']), undefined, 'ana@example.com')
-    await assert.rejects(postReview(config, 'p', { id: 7, assignedToEmail: 'ben@example.com' }, buildReviewComment(form)), /Only the Feature’s assignee or a lead/)
+    await assert.rejects(postReview(config, 'p', { id: 7, assignedToEmail: 'ben@example.com' }, buildReviewComment(form)), /Only the Feature’s assignee, the Product Owner of its Epic or a lead/)
     assert.equal(sent.length, 0, 'nothing sent')
     assert.equal(await postReview(config, 'p', { id: 7, assignedToEmail: 'ana@example.com' }, buildReviewComment(form)), 91)
     assert.equal(sent[0].url, 'https://dev.azure.com/org/Quality/_apis/wit/workItems/7/comments?api-version=7.1-preview.4')
@@ -239,13 +243,16 @@ test('CON-113: “PI Review: post the review of a Feature” (permissions 7) —
   assert.equal(rightsFor(null, 'x@example.com').actions.has('pireview.post'), false)
 })
 
-test('PIR-17: my latest review — the newest comment I wrote with the review headings (TC-PIR-17)', () => {
+test('PIR-17: my latest review — the newest comment I wrote headed “Feature Review for PI …” (TC-PIR-17)', () => {
   const comments = [
-    { id: 3, author: 'Ben Okafor', text: 'Learnings: theirs', date: '2026-11-23T10:00:00Z' },
+    { id: 4, author: 'Ana Costa', text: 'Learnings: no heading, so no review (PIR-49)', date: '2026-11-24T10:00:00Z' },
+    { id: 3, author: 'Ben Okafor', text: 'Feature Review for PI 26.4\nLearnings: theirs', date: '2026-11-23T10:00:00Z' },
     { id: 2, author: 'ana costa', text: 'Thanks all', date: '2026-11-22T10:00:00Z' },
-    { id: 1, author: 'Ana Costa', text: commentText(buildReviewComment(form)), date: '2026-11-21T10:00:00Z' },
+    { id: 1, author: 'Ana Costa', text: commentText(buildReviewComment({ ...form, reviewedPi: 'PI 26.4' })), date: '2026-11-21T10:00:00Z' },
   ]
   assert.equal(myReviewOf(comments, 'Ana Costa')?.comment.id, 1)
+  assert.equal(myReviewOf(comments, 'Ana Costa', undefined, 'Q\\PI 26.4')?.comment.id, 1, 'for the chosen PI')
+  assert.equal(myReviewOf(comments, 'Ana Costa', undefined, 'Q\\PI 26.5'), undefined, 'none headed for PI 26.5')
   assert.equal(myReviewOf(comments, 'Ana Costa')?.split.moveValue, 'Yes')
   assert.equal(myReviewOf(comments, 'Cleo'), undefined)
   assert.equal(myReviewOf(comments, undefined), undefined)
@@ -354,76 +361,29 @@ test('PIR-24: who may show another person — a lead with “PI Review: post the
   assert.deepEqual(personOf(items, 'Ada Lin'), { name: 'Ada Lin' }, 'by name when no email is known')
 })
 
-// PIR-26, PIR-28: when a review counts as Reviewed for the PI chosen in the PI filter (synthetic iterations and dates).
-const piTree = [it('Q'), it('Q\\PI 26.3', '2026-04-06', '2026-07-05'), it('Q\\PI 26.4'), it('Q\\PI 26.4\\Sprint 1', '2026-07-06', '2026-08-16'), it('Q\\PI 26.4\\Sprint 2', '2026-08-17', '2026-10-04'), it('Q\\PI 27.1', '2026-10-05', '2027-01-03')]
-const active = { state: 'Active' }
-test('PIR-26: a review counts when it is dated within the chosen PI’s dates (its own, else its Sprints’), in UTC; a review from another PI does not, named by that PI (TC-PIR-27)', () => {
-  const p264 = reviewPeriodOf('Q\\PI 26.4', piTree)
-  assert.deepEqual([p264.start, p264.finish, p264.note], ['2026-07-06', '2026-10-04', ''], 'PI 26.4 dated by its Sprints only')
-  // Inside the chosen PI (first and last day included).
-  for (const date of ['2026-07-06T00:00:00Z', '2026-09-01T12:00:00Z', '2026-10-04T23:59:59Z']) assert.deepEqual(reviewCountOf({ date }, active, p264), { counts: true, why: 'pi' }, date)
-  // Before it: Not reviewed, named by the PI whose dates cover it; after it likewise; outside every PI: another PI.
-  assert.deepEqual(reviewCountOf({ date: '2026-06-12T10:00:00Z' }, active, p264), { counts: false, why: 'other', otherPi: 'PI 26.3' })
-  assert.deepEqual(reviewCountOf({ date: '2026-11-20T10:00:00Z' }, active, p264), { counts: false, why: 'other', otherPi: 'PI 27.1' })
-  assert.deepEqual(reviewCountOf({ date: '2025-01-10T10:00:00Z' }, active, p264), { counts: false, why: 'other', otherPi: '' })
-  assert.equal(otherPiHint('2026-06-12T10:00:00Z', reviewCountOf({ date: '2026-06-12T10:00:00Z' }, active, p264)), `Last review ${formatDate('2026-06-12T10:00:00Z')} (PI 26.3)`)
-  assert.match(otherPiHint('2025-01-10T10:00:00Z', reviewCountOf({ date: '2025-01-10T10:00:00Z' }, active, p264)), /\(another PI\)$/)
-  // UTC: 23:30 on 5 July at UTC−2 is 6 July in UTC — inside PI 26.4.
-  assert.equal(reviewCountOf({ date: '2026-07-05T23:30:00-02:00' }, active, p264).counts, true)
-  assert.equal(reviewCountOf({ date: '2026-07-06T00:30:00+02:00' }, active, p264).counts, false, '5 July 22:30 UTC')
-  // Choosing another PI recomputes: the same review counts for PI 26.3, not for PI 26.4.
-  assert.equal(reviewCountOf({ date: '2026-06-12T10:00:00Z' }, active, reviewPeriodOf('Q\\PI 26.3', piTree)).counts, true)
-  // An unreadable date never counts against dates.
-  assert.equal(reviewCountOf({ date: 'yesterday' }, active, p264).counts, false)
-})
-
-test('PIR-26: a Closed Feature — a review on or after its Closed Date counts, also from an earlier PI; one before it does not (TC-PIR-27)', () => {
-  const p271 = reviewPeriodOf('q\\pi 27.1', piTree)
-  const closed = { state: 'Closed', closedDate: '2026-09-20T15:02:11Z' }
-  // The review of the Close pop-up is posted seconds before the Feature closes: the same UTC day counts.
-  assert.deepEqual(reviewCountOf({ date: '2026-09-20T15:02:05Z' }, closed, p271), { counts: true, why: 'closed' })
-  assert.deepEqual(reviewCountOf({ date: '2026-09-25T08:00:00Z' }, closed, p271), { counts: true, why: 'closed' })
-  assert.deepEqual(reviewCountOf({ date: '2026-09-19T23:59:00Z' }, closed, p271), { counts: false, why: 'other', otherPi: 'PI 26.4' })
-  // Not Closed now (reopened, Resolved): the Closed Date does not help.
-  assert.equal(reviewCountOf({ date: '2026-09-25T08:00:00Z' }, { ...closed, state: 'Active' }, p271).counts, false)
-  assert.equal(reviewCountOf({ date: '2026-09-25T08:00:00Z' }, { ...closed, state: 'Resolved' }, p271).counts, false)
-  assert.equal(reviewCountOf({ date: '2026-09-25T08:00:00Z' }, { state: 'Closed' }, p271).counts, false, 'no Closed Date')
-})
-
-test('PIR-26: no dates — the chosen PI without dates, or the iterations not read: every review counts, and the note says so (TC-PIR-27)', () => {
-  const undated = reviewPeriodOf('Q\\PI 26.5', [...piTree, it('Q\\PI 26.5')])
-  assert.equal(undated.start, undefined)
-  assert.match(undated.note, /^PI 26\.5 has no dates in Azure DevOps .*every review comment counts as Reviewed, whatever its date\.$/)
-  assert.deepEqual(reviewCountOf({ date: '2020-01-01T00:00:00Z' }, active, undated), { counts: true, why: 'any' })
-  assert.match(reviewPeriodOf('Q\\PI 26.4', null, { problem: 'the Time Writing connection has no PAT here' }).note, /could not be read from Azure DevOps \(the Time Writing connection has no PAT here\): every review/)
-  assert.equal(reviewPeriodOf('Q\\PI 26.4', null, { reading: true }).note, '', 'still reading: nothing said yet')
-  assert.equal(reviewCountOf({ date: '2020-01-01T00:00:00Z' }, active, reviewPeriodOf('Q\\PI 26.4', null)).counts, true)
-})
-
-test('PIR-28: a review whose headings name a PI counts for that PI whatever its date, not for another one (unless the closed rule applies); without one, the dates decide (TC-PIR-29)', () => {
-  const p264 = reviewPeriodOf('Q\\PI 26.4', piTree)
-  // Written late, after PI 26.4 ended, but its headings say PI 26.4.
-  assert.deepEqual(reviewCountOf({ date: '2026-11-20T10:00:00Z', reviewedPi: 'PI 26.4' }, active, p264), { counts: true, why: 'heading' })
-  // Dated inside PI 26.4 but written for PI 26.3.
-  assert.deepEqual(reviewCountOf({ date: '2026-07-10T10:00:00Z', reviewedPi: 'PI 26.3' }, active, p264), { counts: false, why: 'other', otherPi: 'PI 26.3' })
-  assert.equal(reviewCountOf({ date: '2026-09-25T08:00:00Z', reviewedPi: 'PI 26.3' }, { state: 'Closed', closedDate: '2026-09-20T00:00:00Z' }, p264).why, 'closed')
-  // Also when the chosen PI has no dates.
-  assert.equal(reviewCountOf({ date: '2020-01-01T00:00:00Z', reviewedPi: 'PI 26.3' }, active, reviewPeriodOf('Q\\PI 26.5', [])).counts, false)
-  assert.equal(reviewCountOf({ date: '2020-01-01T00:00:00Z', reviewedPi: 'pi 26.5' }, active, reviewPeriodOf('Q\\PI 26.5', [])).counts, true)
-  // Read from the comment as posted.
+// PIR-49 (product owner, 26 Nov 2026), retiring PIR-26's dates: a review counts for the PI its heading names only —
+// "Feature Review for PI 26.4" counts for PI 26.4, not for PI 26.5 — whatever its date or the Feature's Closed Date.
+test('PIR-49: a review counts for the PI its heading names only — never by its date, never for another PI (TC-PIR-50)', () => {
+  const p264 = reviewPeriodOf('Q\\PI 26.4')
+  assert.deepEqual(reviewCountOf({ reviewedPi: 'PI 26.4' }, p264), { counts: true, why: 'heading' })
+  assert.deepEqual(reviewCountOf({ reviewedPi: 'pi 2026.4' }, p264), { counts: true, why: 'heading' }, 'PI 26.4 and PI 2026.4 are the same PI')
+  assert.deepEqual(reviewCountOf({ reviewedPi: 'PI 26.4' }, reviewPeriodOf('Q\\PI 26.5')), { counts: false, why: 'other', otherPi: 'PI 26.4' }, 'wrong PI ignored')
+  assert.deepEqual(reviewCountOf({}, p264), { counts: false, why: 'other', otherPi: '' }, 'no heading: no PI')
+  assert.equal(otherPiHint('2026-06-12T10:00:00Z', reviewCountOf({ reviewedPi: 'PI 26.3' }, p264)), `Last review ${formatDate('2026-06-12T10:00:00Z')} (PI 26.3)`)
+  assert.match(otherPiHint('2025-01-10T10:00:00Z', reviewCountOf({}, p264)), /\(another PI\)$/)
+  // Read from the comment as posted: its heading names the reviewed PI.
   const split = readBackReview(buildReviewComment({ ...form, reviewedPi: 'PI 26.4' }))
-  assert.equal(reviewCountOf({ date: '2026-11-20T10:00:00Z', reviewedPi: split.reviewedPi }, active, p264).counts, true)
+  assert.equal(split.reviewedPi, 'PI 26.4')
+  assert.equal(reviewCountOf(split, p264).counts, true)
+  assert.equal(reviewCountOf(split, reviewPeriodOf('Q\\PI 26.5')).counts, false)
 })
 
-test('PIR-26: Write review… keeps the latest review as the prefill and says when it was written for another PI (TC-PIR-27)', () => {
-  const comment = { date: '2026-06-12T10:00:00Z' }
-  assert.equal(prefilledOtherPi(comment, {}, active, 'Q\\PI 26.4', { list: piTree }), 'PI 26.3')
-  assert.equal(prefilledOtherPi(comment, {}, active, 'Q\\PI 26.3', { list: piTree }), '', 'in the reviewed PI: no label')
-  assert.equal(prefilledOtherPi(comment, { reviewedPi: 'PI 26.4' }, active, 'Q\\PI 26.4', { list: piTree }), '', 'its headings name the reviewed PI')
-  assert.equal(prefilledOtherPi({ date: '2025-01-01T00:00:00Z' }, {}, active, 'Q\\PI 26.4', { list: piTree }), 'another PI')
-  assert.equal(prefilledOtherPi(comment, {}, active, 'Q\\PI 26.4', { list: null, reading: true }), '', 'while the iterations are read')
+test('PIR-26, PIR-49: Review… keeps the latest review as the prefill and says when its heading names another PI (TC-PIR-27)', () => {
+  assert.equal(prefilledOtherPi({ reviewedPi: 'PI 26.3' }, 'Q\\PI 26.4'), 'PI 26.3')
+  assert.equal(prefilledOtherPi({ reviewedPi: 'PI 26.4' }, 'Q\\PI 26.4'), '', 'its heading names the reviewed PI')
+  assert.equal(prefilledOtherPi({}, 'Q\\PI 26.4'), 'another PI')
   // The prefill itself is unchanged: the latest review split by headings.
-  assert.equal(reviewFormFrom(reviewSplit(commentText(buildReviewComment(form))), 'PI 26.5').struggles, 'Vendor late')
+  assert.equal(reviewFormFrom(reviewSplit(commentText(buildReviewComment({ ...form, reviewedPi: 'PI 26.4' }))), 'PI 26.5').struggles, 'Vendor late')
 })
 
 // PIR-27: "No learnings or struggles".
@@ -433,7 +393,7 @@ test('PIR-27: “No learnings or struggles” sets both to None (written under b
   const typed = { ...form, learnings: 'half a thought', struggles: '', reviewedPi: 'PI 27.1' }
   const ticked = withNoTexts(typed, builtIn, true)
   assert.deepEqual([ticked.learnings, ticked.struggles], ['None', 'None'])
-  assert.match(buildReviewComment(ticked), /^<ul><li>Learnings of PI 27\.1:<ul><li>None<\/li><\/ul><\/li><li>Struggles of PI 27\.1:<ul><li>None<\/li><\/ul><\/li>/, 'the “◦ None” nested bullets')
+  assert.match(buildReviewComment(ticked), /^<p>Feature Review for PI 27\.1<\/p><ul><li>Learnings of PI 27\.1:<ul><li>None<\/li><\/ul><\/li><li>Struggles of PI 27\.1:<ul><li>None<\/li><\/ul><\/li>/, 'the “◦ None” nested bullets')
   const back = readBackReview(buildReviewComment(ticked))
   assert.deepEqual([back.learnings, back.struggles], ['None', 'None'], 'read back as None, shown as None')
   assert.deepEqual(reviewFormProblems(ticked), [], 'passes the form checks and the read-back check')

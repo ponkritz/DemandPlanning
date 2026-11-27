@@ -288,7 +288,7 @@ test('CON-115, LST-12: who may change the lists — the right (Tool Owner, Admin
 test('LST-02: newer lists in Git are loaded quietly; Search settings finds the team lists (TC-LST-08)', () => {
   assert.deepEqual(pagesOfFile('data/shared-lists.json', 'data/planning-data.json'), { pages: ['admin:epics'], quiet: 'lists', loader: 'sharedLists' })
   assert.equal(fileLabel(`data/${sharedListsFile}`), 'Built-in lists')
-  assert.ok(searchSettings('qe list').some((entry) => entry.label === 'Team lists from Azure DevOps'))
+  assert.ok(searchSettings('qe list').some((entry) => entry.label === 'Lists'), 'SET-26: the Value lists and Team lists are one tab, Lists')
 })
 
 test('LST-04, LST-15: keys from Azure DevOps — identity ids, no email in Git; two people with one display name stay two, told apart in the picker (TC-LST-11)', async () => {

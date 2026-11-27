@@ -178,8 +178,8 @@ test('TC-GIT-14: the notice names the app user who saved, not the GitHub account
   await checkUntil(c.page, notice)
   assert.match(await text(notice), /^Newer data in Git for CoNQ: CoNQ — saved by tool\.owner@example\.com on .+\. Load the newer data$/)
 
-  // An Admin gives Team Members "Edit On-Demand data (rows)" in another app; the Tool Owner is on People & roles.
-  await navigate(owner.page, 'People & roles')
+  // An Admin gives Team Members "Edit On-Demand data (rows)" in another app; the Tool Owner is on People & access.
+  await navigate(owner.page, 'People & access')
   gh.put('access.json', policy(true), 'main', 'Update access.json [saved 2026-11-23T10:15:00Z] [by Rita Gomez <rita.gomez@example.com>]')
   // Cleo, on CoNQ: no Access notice; her rights change in place and the info line says who changed what.
   const note = c.page.locator('.access-changed-note')
@@ -191,10 +191,10 @@ test('TC-GIT-14: the notice names the app user who saved, not the GitHub account
   // Once: gone on the next page.
   await navigate(c.page, 'Home')
   assert.equal(await note.count(), 0)
-  // The Tool Owner on People & roles (where roles may be being edited): the notice, naming Rita Gomez.
+  // The Tool Owner on People & access (where roles may be being edited): the notice, naming Rita Gomez.
   const roles = owner.page.locator('.page-git-notice')
   await checkUntil(owner.page, roles)
-  assert.match(await text(roles), /^Newer data in Git for People & roles: Access — saved by Rita Gomez on .+\. Load the newer data$/)
+  assert.match(await text(roles), /^Newer data in Git for People & access: Access — saved by Rita Gomez on .+\. Load the newer data$/)
   for (const { errors } of [owner, c]) assert.deepEqual(errors.filter((entry) => !/401|Unauthorized/.test(entry)), [])
   await owner.context.close(); await c.context.close()
 })

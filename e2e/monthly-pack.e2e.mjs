@@ -1,7 +1,7 @@
 import test, { after, before } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { loadSample, navigate, openPage, rolesFile, startApp, text } from './helpers.mjs'
+import { loadSample, navigate, openPage, openSection, rolesFile, startApp, text } from './helpers.mjs'
 
 // Monthly pack scenarios of the UAT (TC-PCK-04), automated against the built web app with the synthetic sample.
 let app
@@ -39,9 +39,9 @@ test('TC-PCK-04: Pulse Check → Monthly pack shows both slides for the month be
   const content = bytes.toString('latin1')
   for (const part of ['ppt/presentation.xml', 'ppt/slides/slide1.xml', 'ppt/slides/slide2.xml', 'ppt/slideMasters/slideMaster1.xml']) assert.ok(content.includes(part), part)
   assert.ok(bytes.toString('utf8').includes('<a:t>Actions/Deliverables Realized</a:t>') && bytes.toString('utf8').includes('<a:t>KPI Pulse</a:t>'), 'the boxes are in the slides')
-  // Admin → Reports → Monthly pack lists the default slide lines and KPI rows (read-only with the sample).
-  await page.locator('.sidebar nav button', { hasText: /^.Reports$/ }).first().click()
-  // Reports holds only the Monthly pack since Table and chart defaults moved to Look & feel (SET-18): no section row.
+  // Admin → Pages & reports → Monthly pack lists the default slide lines and KPI rows (read-only with the sample).
+  // SET-26: a section of Pages & reports, with Menu groups & pages and Table & chart defaults.
+  await openSection(page, 'Pages & reports', 'Monthly pack')
   await page.locator('.admin-section', { hasText: 'Monthly pack setup' }).waitFor()
   const setup = await text(page.locator('.admin-section', { hasText: 'Monthly pack setup' }))
   for (const line of ['Serviceability', 'Digital Platform', 'Clinical Platform', 'IOCC', 'PPU', 'Content', 'Tool validation', 'Utilization (YTD)', 'Overall CAPA Health']) assert.ok(setup.includes(line) || await page.locator(`input[value="${line}"]`).count() === 1, line)

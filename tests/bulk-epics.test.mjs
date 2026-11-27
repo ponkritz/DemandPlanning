@@ -26,7 +26,7 @@ test('QV-59: the bulk creation Epic per stream — mine over shared; none built 
 })
 
 test('QV-59: without a mapped bulk creation Epic, Create Features says why and where to map it (TC-QV-40)', () => {
-  assert.equal(bulkEpicMissing('DP'), 'No DP bulk creation Epic is set: map it in Admin → Stream options → Bulk creation Epics.')
+  assert.equal(bulkEpicMissing('DP'), 'No DP bulk creation Epic is set: map it in Admin → Streams → Bulk creation, or your own in My settings → My bulk creation Epics.')
   assert.match(bulkEpicMissing('Content'), /^No Content bulk creation Epic is set/)
   assert.match(bulkEpicMissing('IOCC'), /^No IOCC bulk creation Epic is set/)
 })
@@ -57,7 +57,7 @@ test('QV-61: IOCC bulk creation uses the IOCC Epic\'s own Feature setup (DoD and
   assert.deepEqual(plan.map((line) => [line.type, line.set.featureDoD, line.set.stories.map((story) => story.title)]), [['Major', 'IOCC DoD', ['IOCC review']], ['Platform Update', 'IOCC DoD', ['IOCC review']]])
   // DPF-09: no built-in Release / PU sets — without a setup a release is skipped and says why.
   const bare = ioccPlan([release('2.0.0.0')], { setup: undefined, qe, board, epicId: 21000, featureTitle: () => 't', featureMatch: () => undefined })
-  assert.deepEqual([bare[0].set, bare[0].baseSkip], [undefined, 'the IOCC bulk Epic has no Feature setup (Admin → Epic & Feature setup)'])
+  assert.deepEqual([bare[0].set, bare[0].baseSkip], [undefined, 'the IOCC bulk Epic has no Feature setup (Admin → Feature & PI setup)'])
 })
 
 test('QV-59: a shared bulk creation Epic is saved straight to Git — only with a writable Git connection, else the reason (TC-QV-40)', () => {

@@ -35,7 +35,7 @@ export function CloseItemsDialog({ title, intro, rows, asked, blocked, onConfirm
   // PIR-25: the iterations for the next PI by its dates; until they are read (or when they cannot be), the PI number.
   const iterations = usePiIterations({ config: viewer.env?.config ?? null, pat: viewer.env?.pat ?? '', isSample: viewer.env?.isSample ?? false }, asking)
   const start = reviewed && viewer.env ? forms[reviewed.id] ?? (() => { const writing = startForm(reviewed, '', viewer.env!.items, setup, { list: iterations.list, reading: !iterations.done }); return { form: writing.initial, pi: writing.pi, partly: writing.partly, moveNote: writing.moveNote, moveShort: writing.moveShort, moveWarn: writing.moveWarn, prefilledOther: writing.prefilledOther } })() : undefined
-  const problems = asking && start ? reviewFormProblems(start.form, { optionalTexts: true, setup }) : []
+  const problems = asking && start ? reviewFormProblems(start.form, { optionalTexts: true, setup, needsPi: false }) : []
   const [tried, setTried] = useState(false)
   const [busy, setBusy] = useState(false)
   const [postError, setPostError] = useState('')
@@ -78,7 +78,7 @@ export function CloseItemsDialog({ title, intro, rows, asked, blocked, onConfirm
       {asking && reviewed && start && <section className="close-review" aria-label="PI review">
         <h3>PI review of Feature #{reviewed.id}{start.pi ? ` · ${piLabel(start.pi)}` : ''}</h3>
         {start.prefilledOther && <p className="muted">Prefilled from the latest review comment, written for {start.prefilledOther}: check it before posting.</p>}
-        <ReviewFields form={start.form} onChange={(form) => setForms({ ...forms, [reviewed.id]: { ...start, form } })} pi={start.pi} partly={start.partly} optionalTexts idPrefix="close-review" setup={setup} moveNote={start.moveNote} moveShort={start.moveShort} moveWarn={start.moveWarn} about="Posted as a new comment in the Feature’s Discussion before the items close." />
+        <ReviewFields form={start.form} onChange={(form) => setForms({ ...forms, [reviewed.id]: { ...start, form } })} pi={start.pi} partly={start.partly} optionalTexts idPrefix="close-review" setup={setup} moveNote={start.moveNote} moveShort={start.moveShort} moveWarn={start.moveWarn} about={start.form.reviewedPi ? `Posted as a new comment in the Feature’s Discussion before the items close, headed “Feature Review for ${start.form.reviewedPi}” (it counts for that PI only).` : 'Posted as a new comment in the Feature’s Discussion before the items close. The Feature is in no PI with a number, so the comment has no “Feature Review for PI …” heading and counts as no PI review.'} />
         {tried && problems.length > 0 && <Notice tone="error">{problems.join(' ')}</Notice>}
       </section>}
       {blocked && <Notice tone="warning">{blocked}</Notice>}

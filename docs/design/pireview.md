@@ -8,9 +8,15 @@ PI Review lists Features for the selected PI using the Time Writing backlog and 
 
 ## Writing reviews
 
-The review form follows the shared PI Review Setup. A Feature’s assignee or a viewer with the required posting permission can submit a review through the cloud Azure DevOps connection. In My PI Review, select eligible Features and use **Update review for N…** to apply one form to all. The background job rereads each Discussion and adds or replaces the viewer’s review only when it still matches the confirmed plan. It reports each result and continues after individual failures.
+The review form follows **Admin → Feature & PI setup → PI Review form**. A Feature’s assignee, its Epic’s designated Product Owner when eligible, or a viewer with the required posting permission can submit a review through the cloud Azure DevOps connection. A comment counts for a PI when it begins with the corresponding Feature Review heading. An eligible older comment can be converted.
 
-Review dates display the latest edit time. PI matching continues to use the original creation date.
+In My PI Review, select eligible Features and use **Update review for N…** to edit an individual row for each Feature. Existing reviews prefill their rows. The background job rereads each Discussion and writes only when the result still matches the confirmed plan. It reports each result and lets users retry failed rows.
+
+Review dates display the latest edit time. The heading determines which PI a review counts for. The review start cutoff still uses the original creation date.
+
+## Meeting presentation
+
+Authorized users can build a PI Review Meeting as an offline HTML presentation. The selected scope supplies the Features, review details, time-writing metrics and long-running counts. Meeting presentation settings control the layout and month limits. Saving a meeting to Git requires verified private storage.
 
 ## Code
 

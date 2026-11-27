@@ -6,13 +6,15 @@ import { commentText, editLocks, editProblem, editableText, isAdhocTask, withAdh
 
 export * from './azureClient.ts'
 export * from './azureRead.ts'
-import { conflictMessage, isAssignee, requestAzure, storyFieldsProblem, validHours, type AzureConfig, type AzureRequest, type AzureTransport, type FeatureInput, type StoryFields } from './azureClient.ts'
+import { conflictMessage, featureFieldsProblem, isAssignee, requestAzure, storyFieldsProblem, validHours, type AzureConfig, type AzureRequest, type AzureTransport, type FeatureInput, type StoryFields } from './azureClient.ts'
 import { currentIterationPairs, futureIterationPairs, identityName, literal, mapAzureWorkItem, readAzureIterations, type RawItem } from './azureRead.ts'
 // The Feature DoD (Definition of Done) is mandatory. It opens the Feature's Description as "Feature DoD: …", where
 // Backlog Health looks for it; these are the defaults per release classification.
 export { featureDoD }
 export const featureDescription = (kind: 'PU' | 'Release') => `Feature DoD: ${featureDoD(kind)}`
-export const missingDoDMessage = 'Enter the Feature DoD (Definition of Done): a Feature is not created without it.'
+// BKL-51: the field is labelled "Acceptance Criteria (Feature DoD)"; the Description keeps "Feature DoD: …" (read back by
+// splitDoD, hasFeatureDoD and Backlog Health), so Features written before and after the rename read the same.
+export const missingDoDMessage = 'Enter the Acceptance Criteria (Feature DoD): a Feature is not created without it.'
 // The Description sent for a new Feature: the DoD first ("Feature DoD: " added unless typed), then any other text.
 export const releaseClassifications = ['Major', 'Minor', 'MLD', 'Platform Update', 'Service Pack'] as const
 // The New Feature form passes the optional Release Classification ('' when left blank): the line is always written
@@ -33,6 +35,8 @@ export async function createAzureFeature(config: AzureConfig, pat: string, featu
   if (!feature.assignedTo?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(feature.assignedTo.trim())) throw new Error('A valid Feature creator email is required for Assigned To.')
   if (!hasFeatureDoD(feature.description)) throw new Error(missingDoDMessage)
   if (feature.startDate && !/^\d{4}-\d{2}-\d{2}$/.test(feature.startDate)) throw new Error('Invalid start date.')
+  const fieldsProblem = featureFieldsProblem(feature)
+  if (fieldsProblem) throw new Error(`${fieldsProblem} Nothing was created.`)
   const parentResponse = await transport({ ...config, pat, operation: 'items', ids: [feature.parentId] }) as { value: RawItem[] }
   const parent = parentResponse.value?.find((item) => item.id === feature.parentId)
   if (!parent || parent.fields['System.WorkItemType'] !== 'Epic') throw new Error('The selected parent is not an accessible Epic. Refresh and select an Epic.')
@@ -62,9 +66,11 @@ export async function createAzureFeature(config: AzureConfig, pat: string, featu
     const mapped = mapAzureWorkItem(item, config)
     if (mapped.parentId !== feature.parentId || mapped.workItemType !== 'Feature') throw new Error('Parent/type verification failed.')
     if (mapped.areaPath.toLowerCase() !== areaPath.toLowerCase() || (iterationPath && mapped.iterationPath.toLowerCase() !== iterationPath.toLowerCase())) throw new Error('Area/iteration verification failed.')
+    // BKL-52: the Priority chosen in the New Feature form is read back as it was sent.
+    if (feature.priority != null && item.fields['Microsoft.VSTS.Common.Priority'] !== feature.priority) throw new Error('Priority verification failed.')
     return mapped
   } catch {
-    throw new Error(`Feature #${created.id} was created, but its parent, area, iteration or assignee could not be verified. Check it in Azure DevOps before creating another.`)
+    throw new Error(`Feature #${created.id} was created, but its parent, area, iteration, assignee or priority could not be verified. Check it in Azure DevOps before creating another.`)
   }
 }
 
@@ -561,6 +567,17 @@ export async function createFeatureWithMonthTasks(config: AzureConfig, pat: stri
     const made = failure instanceof HierarchyCreationError ? failure.createdItems : []
     throw new HierarchyCreationError(`Feature #${bundle.feature.id} and its ${first} Task exist. ${failure instanceof Error ? failure.message : 'A later month Task failed.'} Add the missing months with ＋ Time Writing Task.`, mergeAzureWorkItems(bundle.items, made))
   }
+}
+
+// ACT-26: the current version of some work items (in batches of 200), e.g. to check their State again before writing.
+export async function readAzureWorkItems(config: AzureConfig, pat: string, ids: number[], transport: AzureTransport = requestAzure): Promise<AzureWorkItem[]> {
+  const items: AzureWorkItem[] = []
+  const wanted = [...new Set(ids)].filter((id) => Number.isSafeInteger(id) && id > 0)
+  for (let index = 0; index < wanted.length; index += 200) {
+    const batch = await transport({ ...config, pat, operation: 'items', ids: wanted.slice(index, index + 200) }) as { value?: RawItem[] }
+    items.push(...(batch.value ?? []).map((item) => mapAzureWorkItem(item, config)))
+  }
+  return items
 }
 
 // Changes a work item's state and/or iteration path, then reads it back and checks the change landed.

@@ -51,7 +51,7 @@ export const actions = [
   { key: 'baselines.edit', group: 'Release data', label: 'Edit baselines (rules and release scope)', legacy: 'baselines.edit' },
   { key: 'data.export', group: 'Release data', label: 'Export tables (Excel, CSV)', legacy: '*' },
   { key: 'streams.manage', group: 'Streams', label: 'Change the stream mapping and its query logic: servers, projects and queries of the streams, their data sets, release naming (Tool Owner)', legacy: 'streams.manage' },
-  { key: 'streams.options', group: 'Streams', label: 'Stream options: Epics to match Features in, shared bulk creation Epics', legacy: 'settings.manage' },
+  { key: 'streams.options', group: 'Streams', label: 'Streams: Epics to match Features in, shared bulk creation Epics', legacy: 'settings.manage' },
   { key: 'setup.feature', group: 'Setup', label: 'Edit the shared Feature setup', legacy: '*' },
   // EPS-04 (permissions 3): the Epic setup's fields and its value lists.
   { key: 'setup.epic', group: 'Setup', label: 'Edit the Epic setup (Feature fields per Epic, title pattern, Copy to Epics)', legacy: 'settings.manage', since: 3 },
@@ -68,7 +68,7 @@ export const actions = [
   { key: 'capacity.settings', group: 'Capacity and time', label: 'Capacity and absence, calculation profiles', legacy: 'settings.manage' },
   { key: 'capacity.rules', group: 'Capacity and time', label: 'Bucket rules and insight thresholds', legacy: 'settings.manage' },
   { key: 'capacity.time', group: 'Capacity and time', label: 'Holidays and common activities', legacy: 'settings.manage' },
-  { key: 'capacity.periods', group: 'Capacity and time', label: 'Period control and locking a month’s figures', legacy: 'settings.manage' },
+  { key: 'capacity.periods', group: 'Capacity and time', label: 'Month locks and locking a month’s figures', legacy: 'settings.manage' },
   { key: 'capacity.history', group: 'Capacity and time', label: 'Import historical hours', legacy: 'settings.manage' },
   { key: 'people.edit', group: 'People and access', label: 'Edit people (region, team role, reports to, dates), remove and restore', legacy: 'settings.manage' },
   { key: 'people.capacityRoles', group: 'People and access', label: 'Capacity roles', legacy: 'settings.manage' },
@@ -110,7 +110,7 @@ export const accessFile = 'access.json'
 export const isEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
 export const normalEmail = (value: string) => value.trim().toLowerCase()
 
-// The starting matrix (editable in Admin → People & roles → Role rights): Backlog Health only for Scrum Masters, Product Owners and Admins.
+// The starting matrix (editable in Admin → People & access → Role rights): Backlog Health only for Scrum Masters, Product Owners and Admins.
 const workActions: Action[] = ['azure.write', 'work.edit', 'work.state', 'work.move', 'work.hours', 'work.comment']
 export function defaultPolicy(adminEmail = ''): AccessPolicy {
   return inOrder({
@@ -233,7 +233,7 @@ export function writeBlockedReason(readOnly: boolean, missing: Action[], where =
   if (!missing.length) return ''
   if (readOnly) return where === 'in Azure DevOps' ? readOnlyReason : `Read only: the access roles are not loaded yet, so nothing can be changed ${where}.`
   const labels = [...new Set(missing)].map((key) => `“${actions.find((entry) => entry.key === key)?.label ?? key}”`)
-  return `Your role does not allow ${labels.join(', ')}. An Admin can change this in Admin → People & roles → Role rights.`
+  return `Your role does not allow ${labels.join(', ')}. An Admin can change this in Admin → People & access → Role rights.`
 }
 
 // CON-94: one cell of the matrix — Allow, Deny or Not set — and changing it (an allow and a deny never coexist).
@@ -277,10 +277,13 @@ export function keepsManager(policy: AccessPolicy, email: string) {
 
 // CON-93: whether anyone holds the stream mapping (a listed member, or everyone through the default role, with
 // streams.manage). Until someone does, the people who manage access may change it, so nobody is locked out.
+// CON-130 (AR-004): a holder is worked out from each person's effective rights (rightsFor: a Deny wins), never from a
+// role's allows alone.
+const holdsStreams = (policy: AccessPolicy, email: string) => rightsFor(policy, email).actions.has('streams.manage')
+const defaultHoldsStreams = (policy: AccessPolicy) => Boolean(policy.defaultRole) && rightsFor({ ...policy, members: {} }, '').actions.has('streams.manage')
 export function toolOwnerExists(policy: AccessPolicy | null) {
   if (!policy) return false
-  const holds = (role: Role) => policy.roles[role]?.actions.includes('streams.manage')
-  return Object.values(policy.members).some((assigned) => assigned.some(holds)) || Boolean(policy.defaultRole && holds(policy.defaultRole))
+  return Object.keys(policy.members).some((email) => holdsStreams(policy, email)) || defaultHoldsStreams(policy)
 }
 // CON-106: pages and menu groups (PGB-08): the holders of "Manage pages and menu groups" — or, while no Tool Owner
 // exists (CON-93), the people who manage access, so nobody is locked out. Without a policy nobody (CON-101).
@@ -296,10 +299,20 @@ export function canManageStreams(policy: AccessPolicy | null, rights: Pick<Right
 // CON-93: who holds the stream mapping (members with streams.manage, and the default role's) and whether a change to
 // the policy touches it — only someone who may change the stream mapping may change who holds it, and a policy that
 // had a holder must keep one.
-const streamHolders = (policy: AccessPolicy) => JSON.stringify({ members: Object.entries(policy.members).filter(([, assigned]) => assigned.some((role) => policy.roles[role]?.actions.includes('streams.manage'))).map(([email]) => email).sort(), roles: roles.filter((role) => policy.roles[role]?.actions.includes('streams.manage')), defaultRole: policy.defaultRole && policy.roles[policy.defaultRole]?.actions.includes('streams.manage') ? policy.defaultRole : null })
+const streamHolders = (policy: AccessPolicy) => JSON.stringify({ members: Object.keys(policy.members).filter((email) => holdsStreams(policy, email)).sort(), roles: roles.filter((role) => policy.roles[role]?.actions.includes('streams.manage') && !policy.roles[role]?.deny?.includes('streams.manage')), defaultRole: defaultHoldsStreams(policy) ? policy.defaultRole : null })
 export function toolOwnerChange(before: AccessPolicy | null, after: AccessPolicy, email: string): string {
   if (before && streamHolders(before) === streamHolders(after)) return ''
   if (before && !canManageStreams(before, rightsFor(before, email))) return 'Only a Tool Owner can change who holds the stream mapping (the Tool Owner role and “Change the stream mapping”).'
   if (toolOwnerExists(before) && !toolOwnerExists(after)) return 'Keep at least one Tool Owner: the stream mapping would have no owner.'
+  return ''
+}
+
+// CON-131 (AR-003): the one rule every save of access.json passes (useAccess.save → saveAccessChecked): CON-93 (only a
+// Tool Owner changes who holds the stream mapping, and one must remain) and "a policy may not lock its editor out".
+// '' when the change may be saved, else why not ("Not saved: …").
+export function accessChangeProblem(before: AccessPolicy | null, after: AccessPolicy, email: string): string {
+  const owner = toolOwnerChange(before, after, email)
+  if (owner) return `Not saved: ${owner}`
+  if (!keepsManager(after, email)) return email ? `Not saved: ${email} would lose “Manage access”. Keep a role with it for yourself (e.g. Admin).` : 'Not saved: no email is set on your Time Writing connection, so the app cannot check that you keep “Manage access”.'
   return ''
 }

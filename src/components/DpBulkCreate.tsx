@@ -20,7 +20,7 @@ import { dpDateLabel, manyMonthTasks } from '../dpBulkDates'
 // the QE page, in the PI / Sprint chosen. One after another as a background job; releases that cannot be created
 // are listed with the reason and skipped.
 // DPF-13…DPF-16: each Feature gets its Start date and Target date from the DP query's date columns mapped in Admin →
-// Stream options → Bulk creation Epics (DRPE Date and DDT Date by default), shown per row; a missing date is left
+// Admin → Streams → Bulk creation (DRPE Date and DDT Date by default), shown per row; a missing date is left
 // empty with a note, a Start date after the Target date skips the row with the reason. The Time Writing Tasks are the
 // current month's only (as before), or — with the optional tick box — every month from the Start date's month to the
 // Target date's month (never before the current month, New Feature's rule; the row says when it starts later).
@@ -90,7 +90,7 @@ export function DpBulkCreate({ rows, azure, featureSetup, featureMatch, onClose 
   const startLabel = dpDateLabel(dateColumns.start), targetLabel = dpDateLabel(dateColumns.target)
   return <Modal eyebrow="DP RELEASES" full title={`Create Features for ${rows.length} DP release${rows.length === 1 ? '' : 's'}`} onClose={onClose}>
     <div className="dp-bulk">
-      <p className="muted">Under Epic #{dpEpicId}{epic ? ` “${epic.title}”` : ''}: each Feature gets the DoD and User Stories of the {classes.label} chosen on its row (Admin → Epic &amp; Feature setup → Epic {dpEpicId}; a value without its own set uses the Epic’s default), its Time Writing story and month Task, all assigned to the QE from the QE page (or the person chosen on its row). <strong>Start date</strong> from the {startLabel}, <strong>Target date</strong> from the {targetLabel} (Admin → Stream options → Bulk creation Epics → DP bulk creation dates).</p>
+      <p className="muted">Under Epic #{dpEpicId}{epic ? ` “${epic.title}”` : ''}: each Feature gets the DoD and User Stories of the {classes.label} chosen on its row (Admin → Feature &amp; PI setup → Epic {dpEpicId}; a value without its own set uses the Epic’s default), its Time Writing story and month Task, all assigned to the QE from the QE page (or the person chosen on its row). <strong>Start date</strong> from the {startLabel}, <strong>Target date</strong> from the {targetLabel} (Admin → Streams → Bulk creation → DP bulk creation dates).</p>
       <div className="dp-bulk-months">
         <label className="check"><input type="checkbox" checked={fromStart} onChange={(event) => setFromStart(event.target.checked)} aria-describedby="dp-bulk-months-help" />Create Time Writing month Tasks from the Start date to the Target date</label>
         <small id="dp-bulk-months-help" className="muted">{fromStart ? 'One Task per month from the Start date’s month to the Target date’s month; a month before this one cannot get a new Task, so such a row starts in the current month (see its Time Writing Tasks).' : `Not ticked: one Time Writing Task per Feature, for ${currentMonth}, as before.`} {ready.length > 0 && <strong>{taskTotal} Time Writing Task{taskTotal === 1 ? '' : 's'} in all.</strong>}</small>

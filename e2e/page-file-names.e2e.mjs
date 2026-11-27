@@ -79,7 +79,7 @@ const owned = (errors) => errors.filter((entry) => !/401|Unauthorized/.test(entr
 test('TC-OND-129: a page added is saved as on-demand/<Name>--<id>.json; renamed, its file moves in one commit; a page of row files kept under its name renamed moves its folder', async () => {
   const gh = fakeGitHub({ files: { 'access.json': policy(), 'menu-layout.json': layout([['log', 'table']]), ...rowPage('Log--log', 'log', 'Log', 'LOG', [row('LOG-261120-K7Q2', 1, 'Scrap', 10), row('LOG-261121-M3P4', 2, 'Rework', 20)]) } })
   const owner = await person(gh, tool)
-  await navigate(owner.page, 'Pages & menu')
+  await navigate(owner.page, 'Pages & reports')
   await pagesTable(owner.page).locator('tbody tr', { hasText: 'Log' }).waitFor()
 
   // ＋ Add page…: the page file is named after the page (and the note for older apps is written once, OND-121).
@@ -101,7 +101,7 @@ test('TC-OND-129: a page added is saved as on-demand/<Name>--<id>.json; renamed,
   await owner.page.keyboard.press('Escape')
 
   // Renamed (Pages & menu → Edit): the file moves in the same commit — the old one deleted, the new one created.
-  await navigate(owner.page, 'Pages & menu')
+  await navigate(owner.page, 'Pages & reports')
   await renameInPagesMenu(owner.page, 'Supplier issues', 'Supplier quality')
   await until(() => gh.read('on-demand/Supplier quality--supplier-issues.json') != null, 'the file moved')
   assert.equal(gh.read('on-demand/Supplier issues--supplier-issues.json'), null)
@@ -136,7 +136,7 @@ test('TC-OND-133: CoNQ and the other pages of the form before keep their files �
     ...rowPage('log', 'log', 'Log', 'LOG', [row('LOG-261120-K7Q2', 1, 'Rework', 20)]),
   } })
   const owner = await person(gh, tool)
-  await navigate(owner.page, 'Pages & menu')
+  await navigate(owner.page, 'Pages & reports')
   await pagesTable(owner.page).locator('tbody tr', { hasText: 'Log' }).waitFor()
   assert.equal(await owner.page.getByRole('button', { name: 'Rename page files…' }).count(), 0, 'no one-time move')
   const before = pagePaths(gh)
@@ -179,7 +179,7 @@ test('TC-OND-131: a second browser with a page of row files open — editing a r
 
   // Meanwhile the Tool Owner renames CoNQ: the folder moves.
   const owner = await person(gh, tool)
-  await navigate(owner.page, 'Pages & menu')
+  await navigate(owner.page, 'Pages & reports')
   await renameInPagesMenu(owner.page, 'CoNQ', 'Cost of quality')
   await until(() => gh.read('on-demand/Cost of quality--conq/page.json') != null, 'the folder moved')
   assert.equal(gh.read('on-demand/CoNQ--conq/page.json'), null)
@@ -208,7 +208,7 @@ test('TC-OND-136: a page with two copies in Git — the notice names them; Delet
   gh.put('on-demand/conq.json', table('conq', 'CoNQ', 'CONQ', [row('CONQ-261120-K7Q2', 1, 'Scrap', 300), row('CONQ-261121-M3P4', 2, 'Rework', 1200)]), 'main', 'written by an older app')
   // Someone without the role: the notice, the button disabled with the reason.
   const b = await person(gh, ben)
-  await navigate(b.page, 'Pages & menu')
+  await navigate(b.page, 'Pages & reports')
   const bNotice = b.page.locator('.od-file-copies')
   await bNotice.waitFor()
   assert.equal(await bNotice.getByRole('button', { name: 'Delete older copy…' }).isDisabled(), true)
@@ -216,7 +216,7 @@ test('TC-OND-136: a page with two copies in Git — the notice names them; Delet
   await b.context.close()
 
   const owner = await person(gh, tool)
-  await navigate(owner.page, 'Pages & menu')
+  await navigate(owner.page, 'Pages & reports')
   const notice = owner.page.locator('.od-file-copies')
   await notice.waitFor()
   assert.match(await text(notice), /CoNQ has 2 copies of its file in Git: on-demand\/conq\.json \(newer, read and saved to\) and on-demand\/CoNQ--conq\.json/)
@@ -248,7 +248,7 @@ test('TC-OND-137: a Dashboard page added keeps its blocks in dashboards/<Name>--
     'on-demand/board.json': JSON.stringify({ schema: 1, kind: 'on-demand-page', id: 'board', name: 'Board', description: '', keyPrefix: 'BOARD', columns: [], rows: [], insights: [] }), 'dashboards/board.json': blocks('board'),
   } })
   const owner = await person(gh, tool)
-  await navigate(owner.page, 'Pages & menu')
+  await navigate(owner.page, 'Pages & reports')
   await pagesTable(owner.page).locator('tbody tr', { hasText: 'Issues' }).waitFor()
   // A new Dashboard page: its first block creates dashboards/<Name>--<id>.json.
   await owner.page.getByRole('button', { name: '＋ Add page…' }).click()
@@ -269,7 +269,7 @@ test('TC-OND-137: a Dashboard page added keeps its blocks in dashboards/<Name>--
   assert.ok(gh.read('on-demand/Quality wall--quality-wall.json'))
   assert.equal(gh.read('dashboards/quality-wall.json'), null)
   // Renamed: the page file and the blocks file move in the same commit.
-  await navigate(owner.page, 'Pages & menu')
+  await navigate(owner.page, 'Pages & reports')
   await renameInPagesMenu(owner.page, 'Quality wall', 'Quality board')
   await until(() => gh.read('dashboards/Quality board--quality-wall.json') != null, 'the blocks moved')
   assert.ok(commitOf(gh, 'on-demand/Quality wall--quality-wall.json', 'on-demand/Quality board--quality-wall.json', 'dashboards/Quality wall--quality-wall.json', 'dashboards/Quality board--quality-wall.json'), 'one commit')
@@ -282,7 +282,7 @@ test('TC-OND-137: a Dashboard page added keeps its blocks in dashboards/<Name>--
   // Both open with their blocks.
   await pagesTable(owner.page).getByRole('button', { name: 'Open Quality board' }).click()
   await owner.page.locator('.metric-grid article', { hasText: 'Issues' }).first().waitFor()
-  await navigate(owner.page, 'Pages & menu')
+  await navigate(owner.page, 'Pages & reports')
   await pagesTable(owner.page).getByRole('button', { name: 'Open Team board' }).click()
   await owner.page.locator('.metric-grid article', { hasText: 'Issues' }).first().waitFor()
   assert.deepEqual(owned(owner.errors), [])

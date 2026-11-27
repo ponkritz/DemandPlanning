@@ -132,7 +132,8 @@ test('TC-PIR-34: PI Review starts from a date — the PI picker starts at PI 202
   await dialog.getByRole('button', { name: 'Cancel' }).click()
   await dialog.waitFor({ state: 'detached' })
   // PI Review Setup: the date is shown; the Scrum Master moves it back before PI 2026.3 and saves it to Git.
-  await navigate(page, 'PI Review Setup')
+  await navigate(page, 'Feature & PI setup')
+  await page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'PI Review form' }).click()
   const panel = page.locator('article.pir-start')
   await panel.waitFor()
   await until(async () => !/\(the default\)/.test(await text(panel)), 'the date from Git')

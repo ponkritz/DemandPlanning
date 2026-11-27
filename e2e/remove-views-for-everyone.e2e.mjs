@@ -53,7 +53,7 @@ async function open(gh, email, extra = []) {
 }
 const ids = (page) => page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? '[]').map((entry) => entry.id).sort(), profilesKey)
 async function otherViews(page) {
-  await navigate(page, 'Data & sharing')
+  await navigate(page, 'Data & history')
   await page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'Other views' }).click()
   return page.locator('table.connection-table')
 }
@@ -117,7 +117,7 @@ test('TC-CON-68: the Tool Owner removes an Other view for everyone — the next 
   await second.page.reload()
   await second.page.locator('.sidebar nav').waitFor()
   await until(async () => (await ids(second.page)).includes('audit-y'), 'the start sync')
-  await navigate(second.page, 'Data & sharing')
+  await navigate(second.page, 'Data & history')
   assert.equal(await second.page.locator('.views-removed-note').count(), 0)
 
   // Restore in Removed connections takes the marker away: the view is back in his Other views in Git.

@@ -30,7 +30,7 @@ export function CustomStreamsPanel({ git, canManageStreams, isSample }: { git?: 
   const why = !canManageStreams ? writeBlockedReason(readOnly, ['streams.manage'], 'in the shared stream mapping')
     : !store ? 'The custom streams are not available here.'
       : isSample ? 'Synthetic sample data is loaded: custom streams are not saved to Git.'
-        : !git?.connected ? 'Connect Git storage (Data & sharing → Git storage): custom streams are kept in the shared setup in Git.'
+        : !git?.connected ? 'Connect Git storage (Data & history → Git storage): custom streams are kept in the shared setup in Git.'
           : git.readOnly ? 'Your Git token is read-only: custom streams are saved to the shared setup in Git.'
             : !store.loaded ? (store.error ? `${customStreamsFile} could not be read: ${store.error}` : `Reading ${customStreamsFile} from Git…`) : ''
   const open = (entry?: CustomStreamEntry) => { setError(''); setEditing(entry ? { name: entry.name, draft: draftOf(entry) } : { draft: blank }) }

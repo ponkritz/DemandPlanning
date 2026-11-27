@@ -1,8 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
-import { buildReviewComment, discussionReadBlock, editTargetOf, isOwnComment, ownFeatures, ownReadBlock, ownReviewOf, readDiscussionInto, reviewCountOf, reviewPeriodOf, updateReview } from '../src/piReviewPost.ts'
-import { discussionOf } from '../src/piReview.ts'
+import { buildReviewComment, discussionReading, discussionReadBlock, editTargetOf, isOwnComment, ownFeatures, ownReadBlock, ownReviewOf, readDiscussionInto, reviewCountOf, reviewPeriodOf, updateReview } from '../src/piReviewPost.ts'
+import { discussionOf, discussionStuck, discussionStuckAfterMs, discussionsFrom, setDiscussionsFrom } from '../src/piReview.ts'
 import { guardAzureWrites, readDiscussion, requestAzure, shownDateOf } from '../src/azureDevOps.ts'
 
 // PIR-34: Edit review… in My PI Review — the comment it edits (the viewer's own review that counts for the chosen PI),
@@ -11,9 +11,8 @@ const require = createRequire(import.meta.url)
 const config = { organization: 'org', project: 'Quality', team: 'T' }
 const form = (learnings, reviewedPi = 'PI 26.4') => ({ learnings, struggles: 'None', move: 'No', moveReason: '', movePi: 'PI 27.1', mode: 'Offline Review', remarks: '', reviewedPi })
 const review = (id, date, learnings, author = 'Rita Gomez', authorEmail = 'rita.gomez@example.com', reviewedPi) => ({ id, date, text: buildReviewComment(form(learnings, reviewedPi)).replace(/<[^>]+>/g, '\n'), author, ...(authorEmail ? { authorEmail } : {}) })
-const it = (path, start, finish) => ({ name: path.split('\\').at(-1), path, attributes: { startDate: `${start}T00:00:00Z`, finishDate: `${finish}T00:00:00Z` } })
-const tree = [it('Q\\PI 26.3', '2026-06-22', '2026-09-20'), it('Q\\PI 26.4', '2026-09-21', '2026-12-20')]
-const counts = (feature = { state: 'Active' }) => (entry) => reviewCountOf(entry, feature, reviewPeriodOf('Q\\PI 26.4', tree)).counts
+// PIR-49: a review counts for the PI its heading ("Feature Review for PI 26.4") names.
+const counts = () => (entry) => reviewCountOf(entry, reviewPeriodOf('Q\\PI 26.4')).counts
 const rita = { email: 'rita.gomez@example.com', name: 'Rita Gomez' }
 
 test('PIR-34: a comment is the viewer’s own by the author’s email when Azure DevOps gives it, else by the display name (TC-PIR-35)', () => {
@@ -37,11 +36,15 @@ test('PIR-34: Edit review… edits only my newest review comment, and only when 
   // Only Ben's review: nothing to edit for me (a lead viewing Ben gets no Edit either: the page never asks for him).
   assert.equal(editTargetOf([bens], rita, counts()), undefined)
   assert.equal(editTargetOf([bens], { email: 'ben.okafor@example.com', name: 'Ben Okafor' }, counts()).comment.id, 12)
-  // My newest review is for PI 26.3 (its heading names it): not editable for PI 26.4 — Write review… posts a new one;
-  // an older review of mine for PI 26.4 is not picked either (the newest review is the one the page shows).
+  // PIR-49: my newest review is for PI 26.3 (its heading names it): not editable for PI 26.4; my older review headed for
+  // PI 26.4 is the one the page shows for PI 26.4, so it is the one edited. Without one for PI 26.4: none (Review…).
   const older = review(9, '2026-09-25T10:00:00Z', 'Old')
   const other = review(10, '2026-10-10T10:00:00Z', 'For the last PI', 'Rita Gomez', 'rita.gomez@example.com', 'PI 26.3')
-  assert.equal(editTargetOf([other, older], rita, counts()), undefined)
+  assert.equal(editTargetOf([other, older], rita, counts()).comment.id, 9)
+  assert.equal(editTargetOf([other], rita, counts()), undefined)
+  // A comment of mine without the heading — an older review — is no review: nothing to edit.
+  const unheaded = { ...older, id: 8, text: older.text.replace('Feature Review for PI 26.4', '') }
+  assert.equal(editTargetOf([unheaded], rita, counts()), undefined)
   // Two comments of mine at the same time: the higher ID.
   assert.equal(editTargetOf([review(20, '2026-10-05T10:00:00Z', 'A'), review(21, '2026-10-05T10:00:00Z', 'B')], rita, counts()).comment.id, 21)
 })
@@ -60,7 +63,7 @@ test('PIR-34: the edit is sent as update-comment — PATCH …/comments/{id} wit
     assert.deepEqual(JSON.parse(sent[0].body), { text: html })
     // Someone else's Feature without the lead right; markup the app does not build; an update without a comment id or
     // outside a PI review; a comment id on another operation — all refused before anything is sent.
-    await assert.rejects(updateReview(config, 'p', { id: 7, assignedToEmail: 'ben.okafor@example.com' }, 11, html), /Only the Feature’s assignee or a lead/)
+    await assert.rejects(updateReview(config, 'p', { id: 7, assignedToEmail: 'ben.okafor@example.com' }, 11, html), /Only the Feature’s assignee, the Product Owner of its Epic or a lead/)
     await assert.rejects(updateReview(config, 'p', { id: 7, assignedToEmail: 'rita.gomez@example.com' }, 11, '<ul><li onclick="x">A</li></ul>'), /markup the app does not send/)
     await assert.rejects(updateReview(config, 'p', { id: 7, assignedToEmail: 'rita.gomez@example.com' }, 0, html), /Only a PI review can be edited/)
     await assert.rejects(requestAzure({ ...config, pat: 'p', operation: 'update-comment', workItemId: 7, commentId: 11, comment: 'plain' }), /Only a PI review can be edited/)
@@ -97,21 +100,21 @@ test('PIR-34: an edited comment keeps its createdDate — it stays in its place 
   assert.deepEqual(comments.map((entry) => [entry.id, entry.date, entry.authorEmail, entry.edited]), [[12, '2026-11-01T10:00:00Z', undefined, undefined], [11, '2026-10-05T10:00:00Z', 'rita.gomez@example.com', true]])
 })
 
-test('PIR-34: PI Review offers Edit review… by the same rule — my own newest review that counts for the chosen PI, never a lead’s Edit on another person’s review, none while the PI dates are read (TC-PIR-36)', () => {
-  const period = reviewPeriodOf('Q\\PI 26.4', tree)
+test('PIR-34: PI Review offers Edit review… by the same rule — my own newest review that counts for the chosen PI, never a lead’s Edit on another person’s review, none before the Discussion is read (TC-PIR-36)', () => {
+  const period = reviewPeriodOf('Q\\PI 26.4')
   const ritas = review(11, '2026-10-05T10:00:00Z', 'Calibrate first')
   const lenas = review(12, '2026-11-01T10:00:00Z', 'Lead’s view', 'Lena Berg', 'lena.berg@example.com')
   const lena = { email: 'lena.berg@example.com', name: 'Lena Berg' }
   // Rita's Feature with Rita's review and a newer one by Lena (a lead): Rita edits hers, Lena edits only hers.
-  assert.equal(ownReviewOf([lenas, ritas], { state: 'Active' }, period, rita).comment.id, 11)
-  assert.equal(ownReviewOf([lenas, ritas], { state: 'Active' }, period, lena).comment.id, 12)
-  assert.equal(ownReviewOf([ritas], { state: 'Active' }, period, lena), undefined, 'a lead gets no Edit on Rita’s review')
-  // Not read yet, or the PI dates still being read: no Edit (Write review… is offered).
-  assert.equal(ownReviewOf(undefined, { state: 'Active' }, period, rita), undefined)
-  assert.equal(ownReviewOf([ritas], { state: 'Active' }, null, rita), undefined)
-  // A review for another PI does not count, so no Edit; Closed and reviewed after its Closed Date counts.
-  assert.equal(ownReviewOf([review(13, '2026-07-01T10:00:00Z', 'Old', 'Rita Gomez', 'rita.gomez@example.com', 'PI 26.3')], { state: 'Active' }, period, rita), undefined)
-  assert.equal(ownReviewOf([review(14, '2027-01-10T10:00:00Z', 'At close', 'Rita Gomez', 'rita.gomez@example.com', 'PI 26.3')], { state: 'Closed', closedDate: '2027-01-09T16:00:00Z' }, period, rita).comment.id, 14)
+  assert.equal(ownReviewOf([lenas, ritas], period, rita).comment.id, 11)
+  assert.equal(ownReviewOf([lenas, ritas], period, lena).comment.id, 12)
+  assert.equal(ownReviewOf([ritas], period, lena), undefined, 'a lead gets no Edit on Rita’s review')
+  // Not read yet: no Edit (Review… is offered).
+  assert.equal(ownReviewOf(undefined, period, rita), undefined)
+  assert.equal(ownReviewOf([ritas], null, rita), undefined)
+  // PIR-49: a review headed for another PI does not count, so no Edit — also at close (the Closed Date no longer decides).
+  assert.equal(ownReviewOf([review(13, '2026-07-01T10:00:00Z', 'Old', 'Rita Gomez', 'rita.gomez@example.com', 'PI 26.3')], period, rita), undefined)
+  assert.equal(ownReviewOf([review(14, '2027-01-10T10:00:00Z', 'At close', 'Rita Gomez', 'rita.gomez@example.com', 'PI 26.3')], period, rita), undefined)
 })
 
 // PIR-35: PI Review reads my own Features' Discussions when it opens — which Features are mine, when it does not read,
@@ -166,6 +169,52 @@ test('PIR-35: a Discussion being read is not requested again — a second read w
   // Once a read has finished, the next one (↻ Read again) asks again too.
   await readDiscussionInto(config, 'p', item, { transport })
   assert.equal(sent.length, 3)
+})
+
+test('KB-140: a read started with an older "PI Review starts from" that answers last does not overwrite the read with the date in use, nor does a read a fresh one replaced (TC-PIR-62)', async () => {
+  const start = discussionsFrom()
+  const gates = []
+  const comment = (id, date) => ({ id, text: 'Feature Review for PI 26.4', createdBy: { displayName: 'Rita Gomez' }, createdDate: `${date}T10:00:00Z` })
+  const transport = () => new Promise((resolve) => gates.push(resolve))
+  const item = { key: 'example/quality/9301', id: 9301 }
+  try {
+    setDiscussionsFrom('2026-09-21')
+    const old = readDiscussionInto(config, 'p', item, { transport })
+    assert.equal(discussionOf(item.key).state, 'loading')
+    assert.ok(Number.isFinite(discussionOf(item.key).since), 'the start of the read is kept')
+    assert.equal(discussionReading(item), true)
+    // The date comes from Git: the Discussions are forgotten and read again with it.
+    setDiscussionsFrom('2026-05-01')
+    assert.equal(discussionOf(item.key), undefined)
+    assert.equal(discussionReading(item), false, 'no read with the date in use yet')
+    const now = readDiscussionInto(config, 'p', item, { transport })
+    gates[1]({ comments: [comment(1, '2026-08-01')] })
+    await now
+    assert.equal(discussionOf(item.key).comments.length, 1)
+    // The older read answers last: its answer (read with 21 Sep) is not kept.
+    gates[0]({ comments: [comment(1, '2026-08-01')] })
+    await old
+    assert.equal(discussionOf(item.key).from, '2026-05-01')
+    assert.equal(discussionOf(item.key).comments.length, 1, 'the review of 1 Aug still counts')
+    // A read a fresh one replaced (Retry, a post) answers last: not kept either.
+    const stale = readDiscussionInto(config, 'p', item, { transport })
+    const fresh = readDiscussionInto(config, 'p', item, { transport, fresh: true })
+    gates[3]({ comments: [comment(1, '2026-08-01'), comment(2, '2026-11-01')] })
+    await fresh
+    gates[2]({ comments: [] })
+    await stale
+    assert.equal(discussionOf(item.key).comments.length, 2)
+    assert.equal(discussionReading(item), false)
+  } finally { setDiscussionsFrom(start) }
+})
+
+test('KB-140: a read that has not answered after 90 s is shown as not read (discussionStuck, TC-PIR-63)', () => {
+  assert.equal(discussionStuckAfterMs, 90_000)
+  assert.equal(discussionStuck({ state: 'loading', since: 1_000 }, 1_000 + 89_999), false)
+  assert.equal(discussionStuck({ state: 'loading', since: 1_000 }, 1_000 + 90_000), true)
+  assert.equal(discussionStuck({ state: 'loading' }, 1e12), false, 'no start known')
+  assert.equal(discussionStuck({ state: 'error', error: 'x' }, 1e12), false)
+  assert.equal(discussionStuck(undefined), false)
 })
 
 test('PIR-38: a review shows when it was updated — the modifiedDate of an edited comment, else when it was written; which PI it counts for still goes by the written date (TC-PIR-40)', async () => {

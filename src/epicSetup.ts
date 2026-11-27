@@ -23,7 +23,10 @@ export const releaseParts: { key: ReleasePart; label: string; detail: string }[]
   { key: 'x.y.z.w', label: 'x.y.z.w — fourth number', detail: 'x.y.z.w' },
 ]
 export const maxClassRules = 50
-export interface EpicFields { epicId: number; epicTitle: string; fields: EpicField[]; titlePattern?: string }
+// EPS-11: productOwner — the Epic's Product Owner (a person, not the app role), by work email (lower case) with the
+// display name shown; one per Epic, none when not set (a file saved before it loads unchanged).
+export interface ProductOwner { email: string; name: string }
+export interface EpicFields { epicId: number; epicTitle: string; fields: EpicField[]; titlePattern?: string; productOwner?: ProductOwner }
 export interface ValueList { id: string; name: string; values: string[] }
 // STT-01: a User Story template — its title (placeholders allowed) and description — tagged with the Epics and Release
 // Classification values it is offered for (none = any). Stories of the Feature setup link to it by id (STT-02).
@@ -89,11 +92,21 @@ export function cleanFields(input: unknown, lists: ValueList[]): EpicField[] {
     return { label, type: type === 'list' && !known ? 'text' as const : type, ...(known ? { list } : {}), ifEmpty: oneOf(field?.ifEmpty, ['optional', 'warn', 'block'] as const, 'optional'), into: oneOf(field?.into, ['description', 'title', 'both'] as const, 'description'), ...(source ? { source } : {}), ...(classRules ? { classRules } : {}) }
   }).filter((field) => { const key = fieldKey(field.label); if (!key || seen.has(key)) return false; seen.add(key); return true }).slice(0, maxEpicFields)
 }
+// EPS-11: a Product Owner reads strictly — a work email (one @, no spaces, at most 254, kept in lower case) and a display
+// name (text, 255; the email's name part when none is given); anything else is no Product Owner.
+export function cleanProductOwner(input: unknown): ProductOwner | undefined {
+  const value = input as Partial<Record<keyof ProductOwner, unknown>> | null | undefined
+  const email = text(value?.email, 254).toLowerCase()
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return undefined
+  const name = text(value?.name, 255).replace(/\s+/g, ' ')
+  return { email, name: name || email.slice(0, email.indexOf('@')) }
+}
 export function cleanEpicFields(input: Partial<Record<keyof EpicFields, unknown>> | undefined, lists: ValueList[]): EpicFields | null {
   const epicId = Number(input?.epicId)
   if (!Number.isSafeInteger(epicId) || epicId < 1) return null
   const titlePattern = text(input?.titlePattern, 255)
-  return { epicId, epicTitle: text(input?.epicTitle, 255), fields: cleanFields(input?.fields, lists), ...(titlePattern ? { titlePattern } : {}) }
+  const productOwner = cleanProductOwner(input?.productOwner)
+  return { epicId, epicTitle: text(input?.epicTitle, 255), fields: cleanFields(input?.fields, lists), ...(titlePattern ? { titlePattern } : {}), ...(productOwner ? { productOwner } : {}) }
 }
 export function parseEpicSetup(raw: string): EpicSetupFile {
   let value: unknown
@@ -130,13 +143,35 @@ export function offList(entry: EpicFields, values: string[], file: EpicSetupFile
   return entry.fields.flatMap((field, index) => { const list = field.type === 'list' ? listOf(file, field.list) : undefined; const value = (values[index] ?? '').trim(); return list && value && !list.values.includes(value) ? [field.label] : [] })
 }
 
-// Copy to Epics: one Epic's fields and title pattern to others (e.g. the six ECP Epics), replacing theirs.
+// Copy to Epics: one Epic's fields and title pattern to others (e.g. the six ECP Epics), replacing theirs. EPS-11: each
+// target keeps its own Product Owner (the source's is not copied).
 export function copyEpicFields(file: EpicSetupFile, fromEpicId: number, to: { id: number; title: string }[]): EpicSetupFile {
   const source = file.epics.find((entry) => entry.epicId === fromEpicId)
   if (!source) return file
   const targets = to.filter((epic) => epic.id !== fromEpicId)
-  return { ...file, epics: [...file.epics.filter((entry) => !targets.some((epic) => epic.id === entry.epicId)), ...targets.map((epic) => ({ ...structuredClone(source), epicId: epic.id, epicTitle: epic.title }))] }
+  const copied = structuredClone(source)
+  delete copied.productOwner
+  const ownerOf = (id: number) => file.epics.find((entry) => entry.epicId === id)?.productOwner
+  return { ...file, epics: [...file.epics.filter((entry) => !targets.some((epic) => epic.id === entry.epicId)), ...targets.map((epic) => { const owner = ownerOf(epic.id); return { ...structuredClone(copied), epicId: epic.id, epicTitle: epic.title, ...(owner ? { productOwner: { ...owner } } : {}) } })] }
 }
+// EPS-11: the Epic setup with an Epic's Product Owner set (undefined: none). An entry left with no fields, no title
+// pattern and no Product Owner is removed.
+export function withProductOwner(file: EpicSetupFile, epicId: number, epicTitle: string, owner: ProductOwner | undefined): EpicSetupFile {
+  const known = file.epics.find((entry) => entry.epicId === epicId)
+  const clean = owner ? cleanProductOwner(owner) : undefined
+  const next: EpicFields = { ...(known ? structuredClone(known) : { epicId, epicTitle, fields: [] }) }
+  if (!next.epicTitle) next.epicTitle = epicTitle
+  if (clean) next.productOwner = clean; else delete next.productOwner
+  const rest = file.epics.filter((entry) => entry.epicId !== epicId)
+  return { ...file, epics: next.fields.length || next.titlePattern || next.productOwner ? [...rest, next] : rest }
+}
+// EPS-11: an Epic's Feature fields and title pattern removed, its Product Owner kept.
+export function withoutEpicFields(file: EpicSetupFile, epicId: number): EpicSetupFile {
+  const known = file.epics.find((entry) => entry.epicId === epicId)
+  const rest = file.epics.filter((entry) => entry.epicId !== epicId)
+  return { ...file, epics: known?.productOwner ? [...rest, { epicId, epicTitle: known.epicTitle, fields: [], productOwner: { ...known.productOwner } }] : rest }
+}
+export const productOwnerOf = (file: EpicSetupFile | null | undefined, epicId: number | undefined): ProductOwner | undefined => epicId == null ? undefined : file?.epics.find((entry) => entry.epicId === epicId)?.productOwner
 export function upsertEpicFields(file: EpicSetupFile, entry: EpicFields): EpicSetupFile {
   return { ...file, epics: [...file.epics.filter((item) => item.epicId !== entry.epicId), entry] }
 }

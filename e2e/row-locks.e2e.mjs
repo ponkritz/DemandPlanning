@@ -83,9 +83,9 @@ async function shoot(page, name, locator = null) {
 
 test('TC-OND-33: two people on a page of row files — convert as Tool Owner, a row lock with "Being edited by", rows added at the same moment with distinct IDs, the timeout keeping a draft that is restored, and a page co-owner releasing a stuck lock', async () => {
   const gh = repository()
-  // The Tool Owner: the timeout to 1 minute (Admin → Pages & menu), then CoNQ converted to row files.
+  // The Tool Owner: the timeout to 1 minute (Admin → Pages & reports → Menu groups & pages), then CoNQ converted to row files.
   const owner = await person(gh, tool)
-  await navigate(owner.page, 'Pages & menu')
+  await navigate(owner.page, 'Pages & reports')
   await owner.page.locator('.pgb-row-locks').getByRole('button', { name: 'Change…' }).click()
   const timeoutDialog = owner.page.getByRole('dialog', { name: 'Row lock timeout' })
   await timeoutDialog.getByLabel('Inactivity timeout (minutes)').fill('1')

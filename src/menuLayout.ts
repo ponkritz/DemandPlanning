@@ -238,7 +238,7 @@ export function removePlacement(layout: MenuLayout, pageId: string): MenuLayout 
 
 // Where a Git change of the menu cannot be made (the same reasons as on the pages, OND-07), PGB-12.
 export function gitReasonOf(git: { connected: boolean; readOnly: boolean; isSample: boolean }) {
-  return !git.connected ? 'Connect Git storage (Admin → Data & sharing) to change the pages and the menu; they are shared through Git.' : git.readOnly ? 'View only: your Git token can read but not save.' : git.isSample ? 'Synthetic sample data is loaded. Saving to Git is disabled.' : ''
+  return !git.connected ? 'Connect Git storage (Admin → Data & history) to change the pages and the menu; they are shared through Git.' : git.readOnly ? 'View only: your Git token can read but not save.' : git.isSample ? 'Synthetic sample data is loaded. Saving to Git is disabled.' : ''
 }
 
 // ---- rights (PGB-08…PGB-11) ----
@@ -247,7 +247,7 @@ export function gitReasonOf(git: { connected: boolean; readOnly: boolean; isSamp
 // viewingAs (OND-102): View as is on — read only, nothing is saved.
 export interface Viewer { email: string; can: (action: Action) => boolean; readOnly: boolean; manager: boolean; viewingAs?: boolean }
 export const readOnlyMenuReason = 'Read only: the access roles are not loaded yet, so nothing can be changed in the menu.'
-export const managerOnlyReason = 'Only a Tool Owner (“Manage pages and menu groups”) can create, rename, reorder, configure or remove menu groups. An Admin can change this in Admin → People & roles → Role rights.'
+export const managerOnlyReason = 'Only a Tool Owner (“Manage pages and menu groups”) can create, rename, reorder, configure or remove menu groups. An Admin can change this in Admin → People & access → Role rights.'
 // A group co-owner holds their group only while it accepts added pages.
 export function isGroupOwner(layout: MenuLayout, groupId: string, email: string) {
   const group = findGroup(layout, groupId)
@@ -261,7 +261,7 @@ export function addPageReason(viewer: Viewer, layout: MenuLayout, groupId: strin
   if (viewer.readOnly) return readOnlyMenuReason
   const group = findGroup(layout, groupId)
   if (!group) return 'That group is no longer in the menu.'
-  if (!group.acceptsPages) return `“${group.name}” does not accept added pages. A Tool Owner can turn this on in Admin → Pages & menu.`
+  if (!group.acceptsPages) return `“${group.name}” does not accept added pages. A Tool Owner can turn this on in Admin → Pages & reports → Menu groups & pages.`
   return viewer.manager || isGroupOwner(layout, groupId, viewer.email) || setupInOnDemand(viewer, groupId) ? '' : `Only a Tool Owner or a co-owner of the group “${group.name}”${groupId === onDemandGroup ? ' (or a role allowed “Set up On-Demand pages”)' : ''} can add pages to it.`
 }
 // CON-103 kept: a role allowed "Set up On-Demand pages" adds, renames, reorders and removes the pages of the On-Demand

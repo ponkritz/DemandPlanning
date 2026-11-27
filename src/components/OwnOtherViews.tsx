@@ -50,7 +50,7 @@ export function RemoveOwnOtherView({ view, git, azure, onClose, onDone }: { view
   </Modal>
 }
 
-// CON-122, CON-123: Admin → Data & sharing → Other views — the unassigned list, for admins only (Shared setup in Git).
+// CON-122, CON-123: Admin → Data & history → Other views — the unassigned list, for admins only (Shared setup in Git).
 // Each view is assigned to a person by their work email: it moves into their file and only they see it from then on.
 export function UnassignedOtherViews({ git, azure, admin, viewingAs, people }: { git?: GitStorage; azure: AzureWorkspace; admin: boolean; viewingAs: boolean; people: string[] }) {
   const [list, setList] = useState<{ views: AzureConnectionProfileSummary[]; error: string; loaded: boolean }>({ views: [], error: '', loaded: false })

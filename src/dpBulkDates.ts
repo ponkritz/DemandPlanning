@@ -3,7 +3,7 @@ import { fieldOf } from './dpReleases.ts'
 import { featureMonths, monthKeyOfDate, monthKeyOfLabel, monthLabelOfKey } from './featureMonths.ts'
 
 // DPF-13…DPF-16: the Start date and Target date of a Feature made by DP bulk creation, read from the DP query's own
-// date columns. Which columns is set in Admin → Stream options → Bulk creation Epics → DP bulk creation dates (shared,
+// date columns. Which columns is set in Admin → Streams → Bulk creation → DP bulk creation dates (shared,
 // in the planning data with the bulk creation Epics); without a setting the DRPE Date (RPE, the Release Planning Event)
 // gives the Start date and the DDT Date (DT, Design Transfer) the Target date. A column is named by its field name, matched
 // by its last part so a prefix is allowed (Custom.DRPEDate), as the DP milestones are (QV-24, QV-26).

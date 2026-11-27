@@ -1,6 +1,6 @@
 // GIT-28: shared files in the Git data repository that the app no longer uses, because the page that kept them was
 // removed (QE Mapping, NAV-54). The code of this app cannot reach anyone's data repository by itself, so the Tool Owner
-// deletes each one once, in Admin → Data & sharing → Shared setup in Git: a notice while the file exists, Download a copy first,
+// deletes each one once, in Admin → Data & history → Connections in Git: a notice while the file exists, Download a copy first,
 // then a confirmation pop-up and one commit that deletes the file at the version downloaded. Its history stays in GitHub.
 // Only the names listed here can be read or deleted this way (useGitStorage refuses any other).
 export interface RetiredFile { name: string; label: string }

@@ -1,4 +1,5 @@
 import { listValidationDocuments as listPackage, readValidationDocument as readPackage } from './toolValidation'
+import { assertCanManageStreams } from './accessSave'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { useAppStore } from './store'
 import { privateGitWrites, canWrite, deleteFile, deleteFileAt, fileCommits, fileSha, lastCommit, readTextAt, forgetGitStorage, GitConflictError, historyUrl, listFolder, loadGitConfig, loadGitToken, planningData, readBinaryFile, readPlanningFile, readRawFile, readTextFile, saveGitConfig, saveGitToken, serializePlanning, siblingConfig, validateGitConfig, writePlanningFile, writeTextFile, type GitConfig } from './gitStorage'
@@ -17,6 +18,7 @@ import { loadAzureConnectionProfile, saveAzureConnectionProfile, type AzureConne
 import { applyViewsReset, compareViewsWithGit, markResetApplied, markViewsRepository, repositoryChanged, repositoryChangeNote, resetPending, parseViews, parseViewsReset, serializeViews, serializeViewsReset, sharedEmails, syncViewsFromGit, connectionKey, viewsBackupFolder, viewsFile, viewsResetPath, mergeViews, removedFromGit, type GitVersion, applyViewRemovals, markRemovalsApplied, notRemoved, parseViewRemovals, removalNotice, viewsRemovedPath, type RemovalMode, type ViewRemoval } from './viewDefinitions'
 import { personalSetupPath } from './featureSetup'
 import { personalViewsPath, viewsDefaultsPath } from './personalViews'
+import { roleStartersPath } from './roleStarters'
 import { forgetOtherViewsInBaseline, isOtherView, markOwnSynced, ownSyncNote, splitSetup, syncOwnOtherViews, unassignedOtherViewsPath, type OtherView, type OwnSyncResult } from './otherViews'
 import { assignOtherViewInGit, migrateOtherViewsInGit, readOwnOtherViews, readUnassigned, saveOwnOtherViewsInGit } from './otherViewsGit'
 import { markOwnStreamsWrite } from './streamsUpdate'
@@ -26,6 +28,7 @@ import { kpiTrackerFile } from './kpiTracker'
 import { customStreamsFile } from './customStreams'
 import { mergeToolValidationsText, toolValidationsFile } from './toolValidations'
 import { mergePiFormText, piFormFile } from './piReviewSetup'
+import { isMeetingPath } from './piMeetingFile'
 import { mergeSharedListsText, sharedListsFile } from './sharedLists'
 import { mergeOnDemandText, onDemandPath, pageIdPattern, type OnDemandPage } from './onDemand'
 import { copySets, dashboardFilePath, dashboardsFolder, gitBlobSha, markerVersion, olderThan, pageStem, parseStem, stemFilePath, stemFolderPath, updateMarker, updateMarkerPath, type CopySet, type PageLocation } from './pageFiles'
@@ -361,6 +364,8 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
   // view still in Git is left for the move to the unassigned list (never dropped here).
   async function shareViews(here: AzureConnectionProfileSummary[], commitMessage: string, removed: string[] = []) {
     if (!viewsConfig || !token) throw new Error('Connect Git storage first.')
+    // CON-133: CON-93 here too, not only in the page (every caller, also one that forgot the check).
+    assertCanManageStreams()
     const current = await trackRead(viewsConfig, token)
     const inGit = current.text ? parseViews(current.text) : []
     // CON-110: a view the Tool Owner removed for everyone never goes back into the setup from a computer that still has it.
@@ -492,7 +497,8 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
   async function writeEpicSetup(text: string, sha: string | null, commitMessage: string) {
     if (!config || !token) throw new Error('Connect Git storage first.')
     if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
-    return trackWrite(siblingConfig(config, 'epic-setup.json'), token, text, sha, commitMessage)
+    const target = siblingConfig(config, 'epic-setup.json')
+    return trackWrite(target, token, text, sha, commitMessage, privateGitWrites(target, token))
   }
   // GIT-28: a shared file the app no longer uses (retiredData.ts — qe-mapping.json): whether it is there (its version
   // id), its text for Download a copy — neither tracked, so the open-app check never watches it — and its delete at the
@@ -906,7 +912,7 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
   // SNP-04…08: LTE / PI Review snapshots as new files in lte-snapshots/ of the Git data repository (SharePoint is in the
   // backlog). Only with a token that can write, never with the synthetic sample; nothing is kept in the browser.
   async function saveSnapshot(type: Snapshot['type'], month: string, createdBy: string) {
-    if (!config || !token) throw new Error('Connect Git storage first (Admin → Data & sharing → Git storage). Snapshots are not kept in the browser.')
+    if (!config || !token) throw new Error('Connect Git storage first (Admin → Data & history → Git storage). Snapshots are not kept in the browser.')
     if (isSample) throw new Error('Synthetic sample data is loaded. Snapshots are not saved to Git.')
     if ((await writeCheck.current) === false) throw new Error('Your Git token can read but not save, so the snapshot was not saved.')
     return uploadSnapshot(config, token, freezeSnapshot(store.state, type, month, createdBy, appBuild))
@@ -959,8 +965,30 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
     return trackWrite(siblingConfig(config, packPath(name)), token, text, sha, commitMessage)
   }
+  // PIR-47: the PI Review Meetings (pi-review/meetings/PI-<pi>/…html, next to the planning data): listed per PI, read raw
+  // (a file can be above 1 MB), and a new one written once (never replacing another). Only meeting paths (isMeetingPath);
+  // never with the synthetic sample or a read-only token, never in View as (writeTextFile refuses).
+  async function listMeetings(folder: string) {
+    if (!config || !token) throw new Error('Connect Git storage first.')
+    return (await listFolder(siblingConfig(config, folder), token)).map((entry) => `${folder}/${entry.name}`).filter(isMeetingPath)
+  }
+  async function readMeeting(path: string) {
+    if (!config || !token) throw new Error('Connect Git storage first.')
+    if (!isMeetingPath(path)) throw new Error('Not a PI Review Meeting file.')
+    const html = await readRawFile(siblingConfig(config, path), token)
+    if (html == null) throw new Error(`${path} is no longer in the data repository.`)
+    return html
+  }
+  async function writeMeeting(path: string, html: string, commitMessage: string) {
+    if (!config || !token) throw new Error('Connect Git storage first.')
+    if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
+    if (readOnly) throw new Error('Your Git token is read-only: it cannot save files.')
+    if (!isMeetingPath(path)) throw new Error('Not a PI Review Meeting file.')
+    const target = siblingConfig(config, path)
+    return writeTextFile(target, token, html, null, commitMessage, privateGitWrites(target, token))
+  }
   // The Monthly pack's PowerPoint template (monthly-pack-template.pptx): kept only in this private data repository,
-  // never in the app's source; read when the pack is exported, replaced or removed from Admin → Reports → Monthly pack.
+  // never in the app's source; read when the pack is exported, replaced or removed from Admin → Pages & reports → Monthly pack.
   const readPackTemplate = useCallback(async () => {
     if (!config || !token) throw new Error('Connect Git storage first.')
     return readBinaryFile(siblingConfig(config, packTemplateFile), token)
@@ -981,6 +1009,19 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     return trackRead(siblingConfig(config, path), token)
   }, [config, token])
   // Personal views (MYD-06…MYD-09): personal-views/<email>.json per person, personal-views-defaults.json for everyone.
+  // SET-21…SET-25: the starter views per access role (other-views/role-starters.json): read by everyone with Git storage,
+  // saved by an admin with a token that can write; the version read is required, so a concurrent change is refused.
+  const readRoleStarters = useCallback(async () => {
+    if (!config || !token) throw new Error('Connect Git storage first.')
+    return trackRead(siblingConfig(config, roleStartersPath), token)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config, token])
+  async function writeRoleStarters(text: string, sha: string | null, commitMessage: string) {
+    if (!config || !token) throw new Error('Connect Git storage first.')
+    if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
+    const target = siblingConfig(config, roleStartersPath)
+    return trackWrite(target, token, text, sha, commitMessage, privateGitWrites(target, token))
+  }
   const readPersonalViews = useCallback(async (email: string) => {
     if (!config || !token) throw new Error('Connect Git storage first.')
     const path = personalViewsPath(email)
@@ -1020,6 +1061,8 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
   async function removeSnapshots(ids: string[], commitMessage: string) {
     if (!config || !token) throw new Error('Connect Git storage first.')
     if (isSample) throw new Error('Synthetic sample data is loaded. Saving to Git is disabled.')
+    // CON-133: the data of the stream mapping's connections goes only with a change of the stream mapping (CON-93).
+    assertCanManageStreams()
     let removed = 0
     for (const id of ids) if (await deleteFile(siblingConfig(config, `${snapshotFolder}/${snapshotFileName(id)}`), token, commitMessage)) removed += 1
     return removed
@@ -1140,7 +1183,7 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
   // replaced only by newer ones, and an export not set up here is added.
   // The Location analysis of an export (windchillLocationsFile) to windchill-analysis/<export>-locations.json.
   async function pushWindchillAnalysis(viewId: string, text: string, message: string): Promise<string> {
-    if (!config || !token) throw new Error('Connect Git storage (Admin → Data & sharing) first.')
+    if (!config || !token) throw new Error('Connect Git storage (Admin → Data & history) first.')
     if (isSample) throw new Error('Not saved while the sample data is shown.')
     const target = siblingConfig(config, `${windchillAnalysisFolder}/${viewId}-locations.json`)
     const sha = await fileSha(target, token)
@@ -1178,6 +1221,6 @@ export function useGitStorage(store: ReturnType<typeof useAppStore>, isSample: b
     setConfig(null); setToken(''); setSynced(null); setStatus('off'); setMessage('Git storage disconnected in this browser. The data stays in the app and in the repository.'); sha.current = null
   }
 
-  return { listValidationDocuments, readValidationDocument, windchillExportFiles, deleteWindchillExport, queueState, retryQueued, saveSnapshot, listSnapshots, readPersonalViews, writePersonalViews, readViewsDefaults, writeViewsDefaults, backupViews, resetViews, readPackTemplate, writePackTemplate, packTemplateHistory: config ? historyUrl(siblingConfig(config, packTemplateFile)) : '', config, connected, readOnly, status, message, dirty, commitUrl, history: config ? historyUrl(config) : '', isSample, load: () => load(), connect, remoteChanges, save, disconnect, viewsPath: viewsConfig?.path ?? '', streamsRepository: viewsRepositoryKey, streamsVersionNow: () => streamsShaRef.current, streamsVersion: (viewsConfig && remote[viewsConfig.path]?.sha) || streamsSha, streamsSaving: Boolean(viewsConfig && watch.current.busy[viewsConfig.path]), saveOwnOtherViews, readUnassignedViews, assignOtherView, otherViewsHistory: config ? historyUrl(siblingConfig(config, 'other-views')) : '', viewsHistory: viewsConfig ? historyUrl(viewsConfig) : '', readViews, writeViews, shareViews, removedViews, syncViews, readViewRemovals, viewDataFiles, removeViewForEveryone, clearViewRemoval, viewsRemoved, dismissViewsRemoved: () => setViewsRemoved(''), keepRemovedHere: (removal: ViewRemoval) => { if (viewsRepositoryKey) markRemovalsApplied([removal], viewsRepositoryKey) }, pushWindchillAnalysis, accessScope: accessConfig && token ? `${accessConfig.owner}/${accessConfig.repo}@${accessConfig.branch}:${accessConfig.path}` : '', accessPath: accessConfig?.path ?? '', accessHistory: accessConfig ? historyUrl(accessConfig) : '', readAccess, writeAccess, readFeatureSetup, writeFeatureSetup, readEpicSetup, writeEpicSetup, epicSetupHistory: config ? historyUrl(siblingConfig(config, 'epic-setup.json')) : '', readPersonalFeatureSetup, writePersonalFeatureSetup, featureSetupHistory: config ? historyUrl(siblingConfig(config, 'feature-setup.json')) : '', retiredFileSha, readRetiredFile, deleteRetiredFile, readCustomStreams, writeCustomStreams, customStreamsHistory: config ? historyUrl(siblingConfig(config, customStreamsFile)) : '', readKpiTracker, writeKpiTracker, kpiTrackerHistory: config ? historyUrl(siblingConfig(config, kpiTrackerFile)) : '', readToolValidations, writeToolValidations, toolValidationsHistory: config ? historyUrl(siblingConfig(config, toolValidationsFile)) : '', readPiForm, writePiForm, piFormHistory: config ? historyUrl(siblingConfig(config, piFormFile)) : '', readSharedLists, writeSharedLists, sharedListsHistory: config ? historyUrl(siblingConfig(config, sharedListsFile)) : '', readHistory, writeHistory, removeHistory, listWorkbooks, readWorkbook, historyFileHistory: config ? historyUrl(siblingConfig(config, historyPath)) : '', readMonthlyPack, writeMonthlyPack, monthlyPackHistory: (name: string) => config ? historyUrl(siblingConfig(config, name)) : '', listOnDemand, readOnDemand, writeOnDemand, removeOnDemand, readRowPage, saveRowPage, convertOnDemand, removeRowPageGit, listLocks, acquireLock, renewRowLock, releaseRowLock, lockFallback, readLockSettings, writeLockSettings, watchTick, rowLocksHistory: config ? historyUrl(siblingConfig(config, lockSettingsFile)) : '', readMenuLayout, writeMenuLayout, readDashboard, writeDashboard, removeDashboard, dashboardHistory: (id: string) => config ? historyUrl(siblingConfig(config, dashboardPathOf(id))) : '', dashboardPathOf, copySetsOf, removeCopies, menuLayoutHistory: config ? historyUrl(siblingConfig(config, menuLayoutFile)) : '', onDemandHistory: (id: string) => config ? historyUrl(siblingConfig(config, (stems.current[id]?.path ?? onDemandPath(id)).replace(/\/$/, ''))) : '', pagePath, pageOthers, pageFilesNote, removeSnapshots, viewsSync, viewsAlert, snapshotNotes, pushSnapshot, pullSnapshot, pullSnapshots, pushWindchill, pullWindchill, pullWindchillOne, snapshotsHistory: config ? historyUrl(siblingConfig(config, snapshotFolder)) : '' }
+  return { listValidationDocuments, readValidationDocument, windchillExportFiles, deleteWindchillExport, queueState, retryQueued, saveSnapshot, listSnapshots, readPersonalViews, writePersonalViews, readViewsDefaults, writeViewsDefaults, backupViews, resetViews, readPackTemplate, writePackTemplate, packTemplateHistory: config ? historyUrl(siblingConfig(config, packTemplateFile)) : '', config, connected, readOnly, status, message, dirty, commitUrl, history: config ? historyUrl(config) : '', isSample, load: () => load(), connect, remoteChanges, save, disconnect, viewsPath: viewsConfig?.path ?? '', streamsRepository: viewsRepositoryKey, streamsVersionNow: () => streamsShaRef.current, streamsVersion: (viewsConfig && remote[viewsConfig.path]?.sha) || streamsSha, streamsSaving: Boolean(viewsConfig && watch.current.busy[viewsConfig.path]), saveOwnOtherViews, readUnassignedViews, assignOtherView, readRoleStarters, writeRoleStarters, otherViewsHistory: config ? historyUrl(siblingConfig(config, 'other-views')) : '', viewsHistory: viewsConfig ? historyUrl(viewsConfig) : '', readViews, writeViews, shareViews, removedViews, syncViews, readViewRemovals, viewDataFiles, removeViewForEveryone, clearViewRemoval, viewsRemoved, dismissViewsRemoved: () => setViewsRemoved(''), keepRemovedHere: (removal: ViewRemoval) => { if (viewsRepositoryKey) markRemovalsApplied([removal], viewsRepositoryKey) }, pushWindchillAnalysis, accessScope: accessConfig && token ? `${accessConfig.owner}/${accessConfig.repo}@${accessConfig.branch}:${accessConfig.path}` : '', accessPath: accessConfig?.path ?? '', accessHistory: accessConfig ? historyUrl(accessConfig) : '', readAccess, writeAccess, readFeatureSetup, writeFeatureSetup, readEpicSetup, writeEpicSetup, epicSetupHistory: config ? historyUrl(siblingConfig(config, 'epic-setup.json')) : '', readPersonalFeatureSetup, writePersonalFeatureSetup, featureSetupHistory: config ? historyUrl(siblingConfig(config, 'feature-setup.json')) : '', retiredFileSha, readRetiredFile, deleteRetiredFile, readCustomStreams, writeCustomStreams, customStreamsHistory: config ? historyUrl(siblingConfig(config, customStreamsFile)) : '', readKpiTracker, writeKpiTracker, kpiTrackerHistory: config ? historyUrl(siblingConfig(config, kpiTrackerFile)) : '', readToolValidations, writeToolValidations, toolValidationsHistory: config ? historyUrl(siblingConfig(config, toolValidationsFile)) : '', readPiForm, writePiForm, piFormHistory: config ? historyUrl(siblingConfig(config, piFormFile)) : '', readSharedLists, writeSharedLists, sharedListsHistory: config ? historyUrl(siblingConfig(config, sharedListsFile)) : '', readHistory, writeHistory, removeHistory, listWorkbooks, readWorkbook, historyFileHistory: config ? historyUrl(siblingConfig(config, historyPath)) : '', readMonthlyPack, writeMonthlyPack, listMeetings, readMeeting, writeMeeting, meetingsHistory: (folder: string) => config ? historyUrl(siblingConfig(config, folder)) : '', monthlyPackHistory: (name: string) => config ? historyUrl(siblingConfig(config, name)) : '', listOnDemand, readOnDemand, writeOnDemand, removeOnDemand, readRowPage, saveRowPage, convertOnDemand, removeRowPageGit, listLocks, acquireLock, renewRowLock, releaseRowLock, lockFallback, readLockSettings, writeLockSettings, watchTick, rowLocksHistory: config ? historyUrl(siblingConfig(config, lockSettingsFile)) : '', readMenuLayout, writeMenuLayout, readDashboard, writeDashboard, removeDashboard, dashboardHistory: (id: string) => config ? historyUrl(siblingConfig(config, dashboardPathOf(id))) : '', dashboardPathOf, copySetsOf, removeCopies, menuLayoutHistory: config ? historyUrl(siblingConfig(config, menuLayoutFile)) : '', onDemandHistory: (id: string) => config ? historyUrl(siblingConfig(config, (stems.current[id]?.path ?? onDemandPath(id)).replace(/\/$/, ''))) : '', pagePath, pageOthers, pageFilesNote, removeSnapshots, viewsSync, viewsAlert, snapshotNotes, pushSnapshot, pullSnapshot, pullSnapshots, pushWindchill, pullWindchill, pullWindchillOne, snapshotsHistory: config ? historyUrl(siblingConfig(config, snapshotFolder)) : '' }
 }
 export type GitStorage = ReturnType<typeof useGitStorage>

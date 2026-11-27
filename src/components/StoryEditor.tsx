@@ -5,6 +5,9 @@ import { Modal } from './ui'
 import { PersonPicker } from './PersonPicker'
 import { assignablePeople } from '../myWork'
 import { runInBackground } from '../backgroundJobs'
+import { useEpicSetupFile } from '../useEpicSetup'
+import { useMyStoryTemplates } from '../useMyStoryTemplates'
+import { StoryTemplatePick } from './StoryTemplatePick'
 
 // ＋ User Story under a Feature (Backlogs and My Tasks [Board]), kept minimal: the title, the Feature it goes under (can
 // be changed), one row with Assigned to, Sprint, Story Points and Priority, then Description and Acceptance criteria;
@@ -19,6 +22,9 @@ export function StoryEditor({ feature: initial, items, config, savedPat = '', me
     return (list.some((item) => item.key === initial.key) ? list : [initial, ...list]).sort((a, b) => a.id - b.id)
   }, [items, config.organization, config.project, initial])
   const [feature, setFeature] = useState(initial)
+  // STT-07: a shared template or one of my own (after them, "Mine") can fill the title and description.
+  const epicFile = useEpicSetupFile()
+  const mine = useMyStoryTemplates(me)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [acceptance, setAcceptance] = useState('')
@@ -88,6 +94,7 @@ export function StoryEditor({ feature: initial, items, config, savedPat = '', me
   }
 
   return <Modal title="New User Story" eyebrow="AZURE DEVOPS WRITE" onClose={onClose}><form onSubmit={save} className="nf-form story-form">
+    <StoryTemplatePick shared={epicFile} mine={mine.templates} epicId={feature.parentId} featureTitle={feature.title} onPick={(story) => { setTitle(story.title); setDescription(story.description) }} />
     <input className="nf-title" aria-label="User Story title" required maxLength={255} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="User Story title" autoFocus />
     <label className="story-parent">Under Feature<select value={feature.key} onChange={(event) => setFeature(features.find((item) => item.key === event.target.value) ?? feature)}>{features.map((item) => <option value={item.key} key={item.key}>#{item.id} · {item.title}</option>)}</select></label>
     <div className="story-row">

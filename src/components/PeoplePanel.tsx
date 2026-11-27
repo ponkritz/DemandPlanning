@@ -15,7 +15,7 @@ import { roles as accessRoles, type Role } from '../access'
 import { emptyFilters, filterPeople, peopleFiltersKey, readPeopleFilters, filtersChanged, formError, formOf, missingOf, patchText, profilePatch, sameRoles, statusOptions, statusText, type PeopleFilters, type PersonEntry, type PersonForm } from '../people'
 import type { GitStorage } from '../useGitStorage'
 
-// Admin → People & roles → People (CAP-58…CAP-61, UI-STANDARDS §4a, §5, §7, §8). A read-only list in the shared
+// Admin → People & access → People (CAP-58…CAP-61, UI-STANDARDS §4a, §5, §7, §8). A read-only list in the shared
 // DataTable (search, sort, columns, Export) with Region, Role, Access role and Status filters; a click on a row (or
 // Enter) opens the person in a drawer — view first, Edit turns the values into fields, Save saves the profile with the
 // planning data and the app access roles to access.json (two saves, each a Background jobs entry); tick rows for the
@@ -86,7 +86,7 @@ export function PeoplePanel({ entries, names, outside, defaultRole, defaultJoine
     ...(teamError ? [{ key: 'team', summary: 'the team was not read', detail: <>The team was not read: {teamError}. The PAT needs Project and Team (Read); the people Assigned To in the fetched work are listed.</> }] : []),
     ...(noRegion.length ? [{ key: 'region', summary: `no region for ${plural(noRegion.length, 'person', 'people')}`, detail: <>No region yet for {noRegion.join(', ')}; regional holidays are not applied to them.</> }] : []),
     ...(incomplete.length ? [{ key: 'mapping', summary: `mapping incomplete for ${plural(incomplete.length, 'person', 'people')}`, detail: <>Mapping incomplete: <ul className="people-incomplete">{incomplete.map(([name, missing]) => <li key={name}><strong>{name}</strong>: {missing.join(', ')}</li>)}</ul></> }] : []),
-    ...(accessOnly.length ? [{ key: 'access', summary: `access for ${plural(accessOnly.length, 'email')} not in Azure DevOps`, detail: <>App access for an email no one in Azure DevOps has (add the person to the team in Azure DevOps, or remove the access under Role rights): {accessOnly.map(([email, assigned]) => <span key={email} className="access-only"> {email} ({assigned.join(', ') || 'no role'}) </span>)}</> }] : []),
+    ...(accessOnly.length ? [{ key: 'access', summary: `access for ${plural(accessOnly.length, 'email')} not in Azure DevOps`, detail: <>App access for an email no one in Azure DevOps has (add the person to the team in Azure DevOps, or remove the access in People & roles → Role rights → Access for emails not in Azure DevOps): {accessOnly.map(([email, assigned]) => <span key={email} className="access-only"> {email} ({assigned.join(', ') || 'no role'}) </span>)}</> }] : []),
   ]
 
   const current = open ? byName.get(open.name) : undefined
@@ -117,7 +117,7 @@ export function PeoplePanel({ entries, names, outside, defaultRole, defaultJoine
   </span>
 
   return <Panel className="admin-section people-panel" eyebrow="PEOPLE & ACCESS" title="People"
-    info="Everyone whose region, role and dates can be set: the people with Time Writing Tasks (with their figures), everyone else Assigned To fetched work, the Azure DevOps team members, and people with settings who are not in Azure DevOps (Status filter). Click a person to see or change them. Region, role and reporting line are saved with the planning data in Git; the app access roles in access.json. Region decides which regional holidays apply. Time tracking started / Left on (both days worked) limit a person's funded hours to the working days they are employed: a month they join or leave in is prorated, and in a month before joining or after leaving they have no capacity and are not counted. The capacity of the month and the regional holidays are on Capacity & time → Capacity and absence."
+    info="Everyone whose region, role and dates can be set: the people with Time Writing Tasks (with their figures), everyone else Assigned To fetched work, the Azure DevOps team members, and people with settings who are not in Azure DevOps (Status filter). Click a person to see or change them. Region, role and reporting line are saved with the planning data in Git; the app access roles in access.json. Region decides which regional holidays apply. Time tracking started / Left on (both days worked) limit a person's funded hours to the working days they are employed: a month they join or leave in is prorated, and in a month before joining or after leaving they have no capacity and are not counted. The capacity of the month and the regional holidays are on Capacity & time → Capacity."
     action={<div className="button-row"><Pill tone={entries.length ? 'open' : 'neutral'}>{plural(entries.length, 'person', 'people')}</Pill><ViewActions label="People" items={[{ key: 'default-joined', label: 'Default Time tracking started…', onClick: () => setDefaultOpen(true) }]} /></div>}>
     {entries.length > 0 && <GitSyncBar git={git} />}
     <p className="people-source muted">Names and work emails come from Azure DevOps. <Info iconOnly label="Where the people come from">{source}</Info>{readTeam && <button type="button" className="ghost" disabled={readTeam.disabled} onClick={readTeam.onClick}>↻ Read the team again</button>}</p>
@@ -282,32 +282,46 @@ function RemoveDialog({ kind, entry, accessReason, onClose, onConfirm }: { kind:
 }
 
 // CAP-60: one value for every selected person, saved in one go (one planning save, or one save of access.json).
+// CON-135 (AR-010): nothing is chosen when the pop-up opens and Save stays disabled until a value is picked; clearing
+// is its own choice ("(none) — clear …") and asks to confirm in the pop-up before anything is saved.
+const clearValue = '__clear'
 function BulkDialog({ kind, people, defaultText, onClose, onProfiles, onRoles }: { kind: 'region' | 'role' | 'access'; people: PersonEntry[]; defaultText: string; onClose: () => void; onProfiles: (patch: Partial<ResourceProfile>, label: string) => void; onRoles: (chosen: Role[], label: string) => Promise<void> }) {
-  const [region, setRegion] = useState('')
-  const [role, setRole] = useState('')
+  const [value, setValue] = useState('')
   const [chosen, setChosen] = useState<Role[]>([])
+  const [clearRoles, setClearRoles] = useState(false)
+  const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const count = plural(people.length, 'person', 'people')
   const noEmail = people.filter((entry) => !entry.email).map((entry) => entry.name)
   const title = kind === 'region' ? `Set region for ${count}` : kind === 'role' ? `Set role for ${count}` : `Set access role for ${count}`
+  const what = kind === 'region' ? 'region' : kind === 'role' ? 'role' : 'app access roles'
+  const clearing = kind === 'access' ? clearRoles : value === clearValue
+  const missing = kind === 'access' ? (!clearRoles && !chosen.length ? 'Choose the app access roles, or (none) — remove their app access roles.' : '') : !value ? `Choose a ${what}, or (none) — clear.` : ''
+  const clearLabel = kind === 'access' ? `Remove app access roles for ${count}` : `Clear ${what} for ${count}`
   async function submit() {
-    if (kind === 'region') { onProfiles({ region: (region || undefined) as Region | undefined }, `Set region · ${count}`); onClose(); return }
-    if (kind === 'role') { onProfiles({ role: (role || undefined) as ResourceRole | undefined }, `Set role · ${count}`); onClose(); return }
+    if (missing) return
+    if (clearing && !confirming) { setConfirming(true); return }
+    const picked = clearing ? undefined : value
+    if (kind === 'region') { onProfiles({ region: picked as Region | undefined }, `${clearing ? 'Clear' : 'Set'} region · ${count}`); onClose(); return }
+    if (kind === 'role') { onProfiles({ role: picked as ResourceRole | undefined }, `${clearing ? 'Clear' : 'Set'} role · ${count}`); onClose(); return }
     setBusy(true); setError('')
-    try { await onRoles(chosen, `Set access role · ${count}`); onClose() } catch (failure) { setError(failureText(failure)) } finally { setBusy(false) }
+    try { await onRoles(clearing ? [] : chosen, `${clearing ? 'Remove access roles' : 'Set access role'} · ${count}`); onClose() } catch (failure) { setError(failureText(failure)) } finally { setBusy(false) }
   }
+  const options = kind === 'region' ? regions : resourceRoles
   return <Modal eyebrow="PEOPLE & ROLES · BULK EDIT" title={title} onClose={onClose}>
     <form aria-label={title} onSubmit={(event) => { event.preventDefault(); void submit() }}>
       <p className="muted">{people.map((entry) => entry.name).join(', ')}</p>
-      {kind === 'region' && <label>Region<select aria-label="Region" value={region} onChange={(event) => setRegion(event.target.value)}><option value="">Not set</option>{regions.map((value) => <option key={value}>{value}</option>)}</select><small>Saved with the planning data for everyone selected.</small></label>}
-      {kind === 'role' && <label>Role<select aria-label="Role" value={role} onChange={(event) => setRole(event.target.value)}><option value="">Not set</option>{resourceRoles.map((value) => <option key={value}>{value}</option>)}</select><small>Saved with the planning data for everyone selected.</small></label>}
+      {kind !== 'access' && <label>{kind === 'region' ? 'Region' : 'Role'}<select aria-label={kind === 'region' ? 'Region' : 'Role'} required value={value} disabled={confirming} onChange={(event) => { setValue(event.target.value); setConfirming(false) }}><option value="" disabled>Choose…</option>{options.map((entry) => <option key={entry}>{entry}</option>)}<option value={clearValue}>(none) — clear</option></select><small>Saved with the planning data for everyone selected.</small></label>}
       {kind === 'access' && <>
-        <MultiSelect label="App access roles" emptyLabel={defaultText} options={accessOptions} value={chosen} selectAll={false} onChange={(value) => setChosen(value as Role[])} />
-        <small className="muted">Everyone selected gets exactly these roles (none: the default role), in one save of access.json.{noEmail.length ? ` Not changed — no email in Azure DevOps: ${noEmail.join(', ')}.` : ''}</small>
+        <MultiSelect label="App access roles" emptyLabel="Choose roles" options={accessOptions} value={chosen} selectAll={false} disabled={clearRoles || confirming} onChange={(next) => setChosen(next as Role[])} />
+        <label className="checkbox-label"><input type="checkbox" checked={clearRoles} disabled={confirming} onChange={(event) => { setClearRoles(event.target.checked); setConfirming(false) }} />(none) — remove their app access roles ({defaultText} then applies)</label>
+        <small className="muted">Everyone selected gets exactly these roles, in one save of access.json.{noEmail.length ? ` Not changed — no email in Azure DevOps: ${noEmail.join(', ')}.` : ''}</small>
       </>}
+      {confirming && <Notice tone="warning">This clears the {what} of {count}: {people.map((entry) => entry.name).join(', ')}. Choose {clearLabel} again to go ahead, or Cancel.</Notice>}
       {error && <Notice tone="error">{error}</Notice>}
-      <div className="modal-actions"><button type="button" className="ghost" onClick={onClose}>Cancel</button><button className="primary" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button></div>
+      <WriteBlocked reason={missing} />
+      <div className="modal-actions"><button type="button" className="ghost" onClick={onClose}>Cancel</button><button className="primary" disabled={busy || Boolean(missing)}>{busy ? 'Saving…' : clearing ? clearLabel : 'Save'}</button></div>
     </form>
   </Modal>
 }

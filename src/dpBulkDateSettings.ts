@@ -1,5 +1,5 @@
 // DPF-13: which date columns of the DP query give a Feature made by DP bulk creation its Start date and Target date —
-// the shared setting (Admin → Stream options → Bulk creation Epics → DP bulk creation dates, kept in the planning data
+// the shared setting (Admin → Streams → Bulk creation → DP bulk creation dates, kept in the planning data
 // with the bulk creation Epics) and its defaults: the DRPE Date (RPE, Release Planning Event) for the Start date and the
 // DDT Date (DT, Design Transfer) for the Target date. Kept apart from dpBulkDates.ts so the release settings can read
 // it without importing the DP rows' code.

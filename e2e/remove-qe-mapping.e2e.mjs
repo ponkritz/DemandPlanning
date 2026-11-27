@@ -101,8 +101,8 @@ test('TC-MYD-15: a My dashboard block of the removed QE Mapping says its data so
 test('TC-GIT-23: the Tool Owner downloads a copy of qe-mapping.json, then deletes it from Git in one commit; the notice is gone', async () => {
   const gh = repository()
   const { page, context, errors } = await open(gh)
-  await navigate(page, 'Data & sharing')
-  await page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'Shared setup in Git' }).click()
+  await navigate(page, 'Data & history')
+  await page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'Connections in Git' }).click()
   const notice = page.locator('.retired-file[data-file="qe-mapping.json"]')
   await notice.waitFor()
   assert.match(await text(notice), /qe-mapping\.json is no longer used by the app — Delete it from Git/)
@@ -136,8 +136,8 @@ test('TC-GIT-23: the Tool Owner downloads a copy of qe-mapping.json, then delete
   const read = page.waitForResponse((response) => new URL(response.url()).pathname === '/repos/example/storage/contents/qe-mapping.json' && response.status() === 404)
   await page.reload()
   await page.locator('.sidebar nav').waitFor()
-  await navigate(page, 'Data & sharing')
-  await page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'Shared setup in Git' }).click()
+  await navigate(page, 'Data & history')
+  await page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'Connections in Git' }).click()
   await page.locator('.panel', { has: page.locator('h2', { hasText: /^Views in Git/ }) }).waitFor()
   await read
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))

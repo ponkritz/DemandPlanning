@@ -182,15 +182,28 @@ export async function assertReadable(config: GitConfig, token: string, fetchImpl
 // A 404 from a read: the file is missing (the repository is readable), else the repository error is thrown.
 async function missing<T>(value: T, config: GitConfig, token: string, fetchImpl: Fetch): Promise<T> { await assertReadable(config, token, fetchImpl); return value }
 
+// AR-008 (KB-133, GIT-40): the text of a contents-API answer. Above 1 MB GitHub sends `encoding: "none"` and no content;
+// such a file is then read raw as the blob of the version id it named, so text and sha are of the same version.
+type ContentsBody = { content?: string; encoding?: string; sha?: string; type?: string }
+async function contentText(body: ContentsBody, config: GitConfig, token: string, fetchImpl: Fetch): Promise<string | null> {
+  if (body.type !== 'file') return null
+  if (body.encoding === 'base64' && typeof body.content === 'string') return decodeBase64(body.content)
+  if (body.encoding !== 'none' || typeof body.sha !== 'string' || !/^[0-9a-f]{40}$/.test(body.sha)) return null
+  const response = await fetchImpl(`${api}/repos/${encodeURIComponent(config.owner)}/${encodeURIComponent(config.repo)}/git/blobs/${body.sha}`, { headers: { ...headers(token), Accept: 'application/vnd.github.raw+json' }, cache: 'no-store' })
+  if (!response.ok) throw await failure(response, config, `read ${config.path}`)
+  return response.text()
+}
+
 // Reads the data file. A missing file (with an accessible repository) returns data null so it can be created.
 export async function readPlanningFile(config: GitConfig, token: string, fetchImpl: Fetch = fetch): Promise<{ data: PlanningData | null; sha: string | null }> {
   const response = await fetchImpl(`${fileUrl(config)}?ref=${encodeURIComponent(config.branch)}`, { headers: headers(token), cache: 'no-store' })
   if (response.status === 404) { await assertReadable(config, token, fetchImpl); return { data: null, sha: null } }
   if (!response.ok) throw await failure(response, config, 'read the data file')
   markReadable(config, token)
-  const body = (await response.json()) as { content?: string; encoding?: string; sha?: string; type?: string }
-  if (body.type !== 'file' || body.encoding !== 'base64' || typeof body.content !== 'string' || typeof body.sha !== 'string') throw new Error(`${config.path} is not a readable file in ${config.owner}/${config.repo}.`)
-  return { data: parsePlanning(decodeBase64(body.content)), sha: body.sha }
+  const body = (await response.json()) as ContentsBody
+  const text = typeof body.sha === 'string' ? await contentText(body, config, token, fetchImpl) : null
+  if (text == null || typeof body.sha !== 'string') throw new Error(`${config.path} is not a readable file in ${config.owner}/${config.repo}.`)
+  return { data: parsePlanning(text), sha: body.sha }
 }
 
 // Another JSON file in the same repository and folder as the planning data (e.g. the Azure DevOps views).
@@ -257,9 +270,7 @@ export async function readTextAt(config: GitConfig, token: string, ref: string, 
   const response = await fetchImpl(`${fileUrl(config)}?ref=${ref}`, { headers: headers(token), cache: 'no-store' })
   if (response.status === 404) return missing(null, { ...config, branch: ref }, token, fetchImpl)
   if (!response.ok) throw await failure(response, config, `read ${config.path}`)
-  const body = (await response.json()) as { content?: string; encoding?: string; type?: string }
-  if (body.type !== 'file' || body.encoding !== 'base64' || typeof body.content !== 'string') return null
-  return decodeBase64(body.content)
+  return contentText((await response.json()) as ContentsBody, config, token, fetchImpl)
 }
 
 // Plain text read / commit of a file, with the same errors and conflict check as the planning data file.
@@ -267,10 +278,11 @@ export async function readTextFile(config: GitConfig, token: string, fetchImpl: 
   const response = await fetchImpl(`${fileUrl(config)}?ref=${encodeURIComponent(config.branch)}`, { headers: headers(token), cache: 'no-store' })
   if (response.status === 404) return missing({ text: null, sha: null }, config, token, fetchImpl)
   if (!response.ok) throw await failure(response, config, `read ${config.path}`)
-  const body = (await response.json()) as { content?: string; encoding?: string; sha?: string; type?: string }
-  if (body.type !== 'file' || body.encoding !== 'base64' || typeof body.content !== 'string' || typeof body.sha !== 'string') throw new Error(`${config.path} is not a readable file in ${config.owner}/${config.repo}.`)
+  const body = (await response.json()) as ContentsBody
+  const text = typeof body.sha === 'string' ? await contentText(body, config, token, fetchImpl) : null
+  if (text == null || typeof body.sha !== 'string') throw new Error(`${config.path} is not a readable file in ${config.owner}/${config.repo}.`)
   markReadable(config, token)
-  return { text: decodeBase64(body.content), sha: body.sha }
+  return { text, sha: body.sha }
 }
 export async function writeTextFile(config: GitConfig, token: string, text: string, sha: string | null, message: string, fetchImpl: Fetch = fetch): Promise<{ sha: string; commitUrl: string }> {
   assertNotViewingAs()

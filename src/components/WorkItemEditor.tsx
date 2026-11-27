@@ -111,7 +111,7 @@ export function WorkItemEditor({ item: opened, items, config, savedPat = '', me,
     if (type === 'Feature' && edit.state?.trim().toLowerCase() === 'active' && !hasActiveStory(items, opened.id)) return 'A Feature becomes Active only when one of its User Stories is Active: set a User Story to Active first.'
     if (iterationPath !== item.iterationPath) edit.iterationPath = iterationPath
     const parts = type === 'Feature' ? splitDoD(loaded.description) : { dod: '', rest: loaded.description }
-    if (type === 'Feature' && (dod.trim() !== parts.dod || description.trim() !== parts.rest)) { if (!dod.trim()) return 'Enter the Feature DoD (Definition of Done): a Feature keeps it.'; edit.description = joinDoD(dod, description) }
+    if (type === 'Feature' && (dod.trim() !== parts.dod || description.trim() !== parts.rest)) { if (!dod.trim()) return 'Enter the Acceptance Criteria (Feature DoD): a Feature keeps it.'; edit.description = joinDoD(dod, description) }
     if (type !== 'Feature' && description.trim() !== parts.rest) edit.description = description.trim()
     if (acceptance.trim() !== loaded.acceptanceCriteria) edit.acceptanceCriteria = acceptance.trim()
     if (type === 'Feature' && targetDate !== (item.targetDate?.slice(0, 10) ?? '')) edit.targetDate = targetDate
@@ -156,7 +156,7 @@ export function WorkItemEditor({ item: opened, items, config, savedPat = '', me,
         // ATM-28: a User Story set to Active makes its New Feature Active.
         let activated: AzureWorkItem | null = null
         if (edit.state) { try { activated = await activateFeatureOf(config, token, items, updated) } catch (failure) { failed.push(`Feature not set to Active: ${failure instanceof Error ? failure.message : 'failed'}`) } }
-        // BKL-41: hours typed on a month Task make it and its Time Writing story Active (a Closed one is reopened and named),
+        // ACT-24, ACT-25: hours typed on a month Task make it, its Time Writing story and a New Feature Active — only from New;
         // unless the State was chosen in this form.
         const hours = !edit.state && (edit.originalEstimate != null || edit.completedWork != null) ? await activateAfterHours(config, token, items, updated) : { activated: [], notes: [], failed: [] }
         failed.push(...hours.failed)
@@ -214,7 +214,7 @@ export function WorkItemEditor({ item: opened, items, config, savedPat = '', me,
         <select aria-label="Sprint for the User Stories" value={storySprint} disabled={!moveStories} onChange={(event) => setStorySprint(event.target.value)}><option value="">Select a Sprint</option>{sprintsOfPi.map((pair) => <option key={pair.sprint.path} value={pair.sprint.path}>{pair.sprint.name}</option>)}</select>
         {!write.can('work.move') && <WriteBlocked reason={write.why('work.move')} />}
       </div>}
-      {type === 'Feature' && <label>Feature DoD (Definition of Done) — required<textarea required maxLength={100000} rows={2} value={dod} onChange={(event) => setDod(event.target.value)} /></label>}
+      {type === 'Feature' && <label>Acceptance Criteria (Feature DoD) — required<textarea required maxLength={100000} rows={2} value={dod} onChange={(event) => setDod(event.target.value)} /></label>}
       <label>Description<textarea maxLength={100000} rows={3} value={description} onChange={(event) => setDescription(event.target.value)} /></label>
       <label>Acceptance criteria<textarea maxLength={100000} rows={2} value={acceptance} onChange={(event) => setAcceptance(event.target.value)} /></label>
       {type === 'User Story' && <details className="nf-more"><summary>More fields (Risk {risk || 'not set'} · Value area {valueArea || 'not set'})</summary>

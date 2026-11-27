@@ -7,6 +7,7 @@ import { laterPi, piName, piPathOf } from './myWork.ts'
 import type { AzureWorkItem } from './domain'
 import type { WorkItemComment } from './azureDevOps.ts'
 import type { PiFormSetup } from './piReviewSetup.ts'
+import { commentText } from './workItemEdit.ts'
 
 const lower = (value: string) => value.toLowerCase()
 const isRemoved = (item: Pick<AzureWorkItem, 'state'>) => item.state.trim().toLowerCase() === 'removed'
@@ -73,7 +74,8 @@ export function commentsFrom(comments: readonly WorkItemComment[], start: string
 
 // The Discussions read so far, by work item key, for this page load only (PIR-05, PIR-06): never stored.
 // PIR-33: comments — only those on or after the start date in use when they were read (from); ignored — how many before it.
-export type Discussion = { state: 'loading' } | { state: 'done'; comments: WorkItemComment[]; capped: boolean; readAt: string; from?: string; ignored?: number } | { state: 'error'; error: string }
+// KB-140: since — when the read started (ms), so a read that never answers shows Not read with Retry (discussionStuck).
+export type Discussion = { state: 'loading'; since?: number } | { state: 'done'; comments: WorkItemComment[]; capped: boolean; readAt: string; from?: string; ignored?: number } | { state: 'error'; error: string }
 const discussions = new Map<string, Discussion>()
 const listeners = new Set<() => void>()
 let version = 0
@@ -89,6 +91,9 @@ export const discussionsVersion = () => version
 export function subscribeDiscussions(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener) } }
 export function setDiscussion(key: string, value: Discussion | undefined) { if (value) discussions.set(key, value); else discussions.delete(key); version += 1; for (const listener of listeners) listener() }
 export function clearDiscussions() { discussions.clear(); version += 1; for (const listener of listeners) listener() }
+// KB-140 (PIR-17): a read still 'loading' after this long (two request timeouts of 45 s) is shown as Not read with Retry.
+export const discussionStuckAfterMs = 90_000
+export const discussionStuck = (entry: Discussion | undefined, now: number = Date.now()) => entry?.state === 'loading' && entry.since != null && now - entry.since >= discussionStuckAfterMs
 
 // PIR-06: read the Discussions of several Features, `concurrency` (3) at a time. When Azure DevOps asks to slow down
 // (429, rateWait gives the Retry-After seconds) the read waits (at most 60 s) and tries that Feature once more; a second
@@ -121,6 +126,56 @@ export async function readDiscussions<T>(ids: number[], read: (id: number) => Pr
   await Promise.all(Array.from({ length: Math.max(1, Math.min(concurrency, ids.length)) }, worker))
   return { read: done - failed, failed, unread: [...unread, ...queue].sort((a, b) => a - b), stopped }
 }
+
+// PIR-48 (product owner, 26 Nov 2026): every PI review comment the app posts starts with the heading "Feature Review for
+// PI 26.4" — the reviewed PI written as the field headings write it ("Learnings of PI 26.4:"). PIR-49: a Discussion
+// comment is a PI review ONLY when it starts with that heading, and it counts for the PI the heading names only. The
+// heading is matched tolerantly: the first non-empty line of the comment (as plain text: Azure DevOps' <div>, <p>, <b>,
+// <br> and entities taken out), letter case and spaces ignored, an optional bullet, "#" or bold (** __) before it, the
+// PI written "PI 26.4", "PI26.4", "PI-26.4" or "PI 2026.4", an optional colon after it (text after the colon belongs to
+// the review). The words and a PI number are required: "Feature Review" alone, or "Feature Review for PI 26.4 was
+// postponed", is no heading. PIR-50: a comment without it does not count, whatever its date (old reviews included).
+export const reviewHeadingWords = 'Feature Review for'
+// PIR-50: the sentence where "Not reviewed" and the review columns are explained (the pages' Info and column hints).
+export const reviewHeadingNote = 'Only comments headed “Feature Review for PI …” count as a PI review: a comment without that heading — older reviews included, whatever their date — does not, so its Feature shows as Not reviewed until it is reviewed again.'
+export const reviewHeadingOf = (pi: string) => pi.trim() ? `${reviewHeadingWords} ${pi.trim()}` : ''
+const reviewHeadingLine = /^[ \t]*(?:[-*•+]|#{1,6})?[ \t]*(?:\*\*|__)?[ \t]*feature[ \t]+review[ \t]+for[ \t]+(?:the[ \t]+)?pi[ \t]*[._:-]?[ \t]*(\d+(?:\.\d+)*)(?![\p{L}\p{N}]|\.\d)[ \t]*(?:\*\*|__)?[ \t]*(?::[ \t]*(?:\*\*|__)?(.*))?$/iu
+// The comment as lines: Azure DevOps HTML (a block tag: div, p, br, li …) read as plain text first (commentText); the
+// first line is matched without inline tags (b, strong, span …), entities for spaces and Unicode spaces / zero-width marks,
+// its runs of spaces collapsed and trimmed (so the pattern never backtracks over a long run of spaces, SM-305).
+const looksHtml = (text: string) => /<\/?(?:div|p|br|li|ul|ol|h[1-6]|table|tr|td)\b[^>]*>/i.test(text)
+const headingLineOf = (line: string) => line.replace(/<\/?(?:b|strong|i|em|u|span|font)\b[^>]*>/gi, '').replace(/&nbsp;|&#160;|&#xa0;/gi, ' ').normalize('NFKC').replace(/[\u200B-\u200D\u2060\uFEFF\u00AD]/g, '').replace(/[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g, ' ').replace(/[ \t]+/g, ' ').trim()
+export type ReviewHeading = { pi: string; body: string }
+const headingCache = new Map<string, ReviewHeading | null>()
+// PIR-49: the review heading of a comment — the PI it names ("PI 26.4") and the comment's text after it (plain text) —
+// or undefined when the comment does not start with one.
+export function reviewHeadingIn(text: string | undefined): ReviewHeading | undefined {
+  if (!text) return undefined
+  const known = headingCache.get(text)
+  if (known !== undefined) return known ?? undefined
+  const lines = (looksHtml(text) ? commentText(text) : text).split(/\r?\n/), first = lines.findIndex((line) => headingLineOf(line).trim())
+  const match = first < 0 ? null : reviewHeadingLine.exec(headingLineOf(lines[first]))
+  const found = match ? { pi: `PI ${match[1]}`, body: [match[2] ?? '', ...lines.slice(first + 1)].join('\n').replace(/^\s*\n/, '') } : null
+  if (headingCache.size > 2000) headingCache.clear()
+  headingCache.set(text, found)
+  return found ?? undefined
+}
+// PIR-49: two PIs are the same by their numbers ("PI 26.4", "Q\\PI 2026.4", "pi-26.4": a two-digit year read as 20xx).
+const piNumbers = (pi: string) => { const match = /(?:^|[^\p{L}\p{N}])pi[ \t]*[._:-]?[ \t]*(\d+(?:\.\d+)*)/iu.exec(piName(pi).normalize('NFKC')); if (!match) return null; const parts = match[1].split('.').map(Number); return parts.length >= 2 && parts[0] < 100 ? [parts[0] + 2000, ...parts.slice(1)] : parts }
+export function samePiNumber(a: string | undefined, b: string | undefined): boolean {
+  const x = a ? piNumbers(a) : null, y = b ? piNumbers(b) : null
+  return Boolean(x && y && x.length === y.length && x.every((part, index) => part === y[index]))
+}
+// PIR-49: whether a comment is a PI review for the PI (a path, "PI 26.4"): its heading names that PI.
+export function isReviewFor(comment: Pick<WorkItemComment, 'text'>, pi: string): boolean {
+  const heading = reviewHeadingIn(comment.text)
+  return Boolean(heading && pi && samePiNumber(heading.pi, pi))
+}
+// PIR-49: the review comments of a Discussion (with the heading, any PI), and those for one PI.
+export const reviewComments = <T extends Pick<WorkItemComment, 'text'>>(comments: readonly T[]) => comments.filter((comment) => reviewHeadingIn(comment.text))
+export const reviewsFor = <T extends Pick<WorkItemComment, 'text'>>(comments: readonly T[], pi: string) => comments.filter((comment) => isReviewFor(comment, pi))
+// PIR-49: the latest review of a Discussion for the PI — the newest comment headed "Feature Review for <that PI>".
+export const latestReviewFor = (comments: WorkItemComment[], pi: string) => latestComment(reviewsFor(comments, pi))
 
 // PIR-07: the latest comment of a Discussion — the newest by its date and time (an unreadable date counts as oldest; at
 // the same time the higher comment ID), whoever wrote it.
@@ -280,7 +335,9 @@ export const withoutFooter = (text: string) => text.replace(footerLine, '')
 // PIR-14: a section's lines as the split gives them back (trimmed, a leading bullet or number dropped, no empty lines).
 export const tidyReviewText = (text: string) => tidy(text)
 function byHeadings(text: string, setup?: PiFormSetup): { split: ReviewSplit; found: boolean } {
-  text = withoutFooter(text)
+  // PIR-49: the review heading ("Feature Review for PI 26.4") names the reviewed PI; the split reads the text below it.
+  const heading = reviewHeadingIn(text)
+  text = withoutFooter(heading ? heading.body : text)
   const patterns = patternsFor(setup)
   const sectionOf = (name: string): Section => patterns.tests.find((entry) => entry.test.test(name))?.section ?? 'struggles'
   const found = new Map<number, { section: Section; start: number; end: number; pi?: string; tight?: boolean }>()
@@ -318,6 +375,7 @@ function byHeadings(text: string, setup?: PiFormSetup): { split: ReviewSplit; fo
   }
   const mode = reviewModeOf(split.review)
   if (mode) split.reviewMode = mode
+  if (heading) split.reviewedPi = heading.pi
   return { split, found: headings.length > 0 }
 }
 // setup (PIR-19): the PI Review form setup in use — its headings are read besides the built-in ones.
@@ -381,7 +439,9 @@ export function reviewSplit(text: string | undefined, setup?: PiFormSetup): Revi
   if (!text) return { from: 'None' }
   const headings = byHeadings(text, setup)
   if (headings.found) return { ...headings.split, from: 'Headings' }
-  const suggested = splitByKeywords(text)
+  const heading = reviewHeadingIn(text)
+  const suggested = splitByKeywords(heading ? withoutFooter(heading.body) : text)
+  if (heading) suggested.reviewedPi = heading.pi
   return { ...suggested, from: suggested.struggles || suggested.learnings || suggested.move ? 'Keywords' : 'None' }
 }
 // PIR-08: Move to next PI as shown — "Yes — waiting for vendor" with a value, otherwise the text as written.

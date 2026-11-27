@@ -6,11 +6,12 @@ import type { PageProps } from '../pages/types'
 import type { GitStorage } from '../useGitStorage'
 import { Notice, Panel, WriteBlocked } from './ui'
 
-// QV-59: Admin → Stream options → Bulk creation Epics. Per stream (DP, IOCC, Content), the Epic its
-// Create Features works under: a shared default (managers; saved to Git with the planning data) and each person's own
-// choice (this browser), which wins. The Feature setup of that Epic gives the DoD, sets, stories and QE columns.
-// No Epic is built in — a stream with neither is "not set" and its Create Features is disabled.
-export function BulkEpicsPanel({ store, items, canManage, git }: { store: PageProps['store']; items: AzureWorkItem[]; canManage: boolean; git?: GitStorage }) {
+// QV-59: Per stream (DP, IOCC, Content), the Epic its Create Features works under: a shared default (managers; saved to
+// Git with the planning data) and each person's own choice (this browser), which wins. The Feature setup of that Epic
+// gives the DoD, sets, stories and QE columns. No Epic is built in — a stream with neither is "not set" and its Create
+// Features is disabled. SET-29, AR-114: mode "shared" is Admin → Streams → Bulk creation (the shared Epics); mode "mine"
+// is My settings → My bulk creation Epics (each person's own); both show the Epic used.
+export function BulkEpicsPanel({ store, items, canManage, git, mode }: { store: PageProps['store']; items: AzureWorkItem[]; canManage: boolean; git?: GitStorage; mode: 'shared' | 'mine' }) {
   const shared = normalizeReleaseSourceSettings(store.state.releaseSourceSettings).bulkEpics ?? {}
   const blocked = bulkSharedBlocked(git)
   // The change lands in the store on the next render; commit once it is there (git.save reads the current state).
@@ -38,19 +39,20 @@ export function BulkEpicsPanel({ store, items, canManage, git }: { store: PagePr
     return state
   })
   const saveMine = (stream: BulkStream, text: string) => { const next = { ...mine }; if (text.trim()) next[stream] = Number(text); else delete next[stream]; saveMyBulkEpics(next); setMine(next) }
-  return <Panel className="connection-panel bulk-epics" eyebrow="BULK CREATION" title="Bulk creation Epics" info={<ul><li>The Epic under which Create Features (DP, IOCC, Content release tables) creates the Features; that Epic's Feature setup gives the DoD, release type sets, User Stories and the QE page (DPF-02).</li><li>Shared: the default for everyone; Save commits it to Git straight away (with any other unsaved planning changes). Mine: your own choice in this browser, used instead of the shared one.</li><li>No Epic is built in: a stream with neither is not set, and its Create Features stays disabled until one is mapped here.</li></ul>}>
-    <div className="azure-table"><table aria-label="Bulk creation Epics"><thead><tr><th>Stream</th><th>Shared</th><th>Mine</th><th>Used</th></tr></thead><tbody>
+  const showShared = mode === 'shared', showMine = mode === 'mine'
+  return <Panel className="connection-panel bulk-epics" eyebrow="BULK CREATION" title={showMine ? 'My bulk creation Epics' : 'Bulk creation Epics'} info={<ul><li>The Epic under which Create Features (DP, IOCC, Content release tables) creates the Features; that Epic's Feature setup gives the DoD, release type sets, User Stories and the QE page (DPF-02).</li><li>Shared (Admin → Streams → Bulk creation): the default for everyone; Save commits it to Git straight away (with any other unsaved planning changes). Mine (My settings → My bulk creation Epics): your own choice in this browser, used instead of the shared one.</li><li>No Epic is built in: a stream with neither is not set, and its Create Features stays disabled until one is mapped.</li></ul>}>
+    <div className="azure-table"><table aria-label={showMine ? 'My bulk creation Epics' : 'Bulk creation Epics'}><thead><tr><th>Stream</th>{showShared && <th>Shared</th>}{showMine && <th>Mine</th>}<th>Used</th></tr></thead><tbody>
       {bulkStreams.map((stream) => {
         const used = bulkEpicFor(stream, shared, mine)
         const sharedKey = `shared:${stream}`, mineKey = `mine:${stream}`
         const sharedText = draftOf(sharedKey, shared[stream]), mineText = draftOf(mineKey, mine[stream])
         return <tr key={stream}><td><strong>{stream}</strong></td>
-          <td><input aria-label={`${stream} shared bulk Epic`} inputMode="numeric" placeholder="Epic ID" disabled={!canManage || !!blocked} value={sharedText} onChange={(event) => setDrafts({ ...drafts, [sharedKey]: event.target.value })} />{canManage && !blocked && drafts[sharedKey] != null && <button type="button" className="ghost" disabled={!valid(sharedText) || git?.status === 'saving'} onClick={() => { saveShared(stream, sharedText); setPending({ stream, id: sharedText.trim() ? Number(sharedText) : undefined }); setDrafts(({ [sharedKey]: _drop, ...rest }) => rest) }}>Save to Git</button>}</td>
-          <td><input aria-label={`${stream} my bulk Epic`} inputMode="numeric" placeholder="Epic ID" value={mineText} onChange={(event) => setDrafts({ ...drafts, [mineKey]: event.target.value })} />{drafts[mineKey] != null && <button type="button" className="ghost" disabled={!valid(mineText)} onClick={() => { saveMine(stream, mineText); setDrafts(({ [mineKey]: _drop, ...rest }) => rest) }}>Save</button>}</td>
+          {showShared && <td><input aria-label={`${stream} shared bulk Epic`} inputMode="numeric" placeholder="Epic ID" disabled={!canManage || !!blocked} value={sharedText} onChange={(event) => setDrafts({ ...drafts, [sharedKey]: event.target.value })} />{canManage && !blocked && drafts[sharedKey] != null && <button type="button" className="ghost" disabled={!valid(sharedText) || git?.status === 'saving'} onClick={() => { saveShared(stream, sharedText); setPending({ stream, id: sharedText.trim() ? Number(sharedText) : undefined }); setDrafts(({ [sharedKey]: _drop, ...rest }) => rest) }}>Save to Git</button>}</td>}
+          {showMine && <td><input aria-label={`${stream} my bulk Epic`} inputMode="numeric" placeholder="Epic ID" value={mineText} onChange={(event) => setDrafts({ ...drafts, [mineKey]: event.target.value })} />{drafts[mineKey] != null && <button type="button" className="ghost" disabled={!valid(mineText)} onClick={() => { saveMine(stream, mineText); setDrafts(({ [mineKey]: _drop, ...rest }) => rest) }}>Save</button>}</td>}
           <td>{title(used.epicId)}<small className="muted"> · {used.source === 'mine' ? 'mine' : used.source === 'shared' ? 'shared' : 'not set'}</small></td></tr>
       })}
     </tbody></table></div>
-    {canManage && blocked && <WriteBlocked reason={blocked} />}
+    {showShared && canManage && blocked && <WriteBlocked reason={blocked} />}
     {pending && !blocked && git && ['saving', 'synced', 'error', 'conflict'].includes(git.status) && git.message && <Notice tone={git.status === 'error' || git.status === 'conflict' ? 'error' : git.status === 'synced' ? 'success' : 'info'}>{git.message}</Notice>}
   </Panel>
 }

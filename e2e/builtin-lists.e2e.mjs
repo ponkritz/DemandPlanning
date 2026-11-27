@@ -8,7 +8,7 @@ import { unzip } from '../src/xlsx.ts'
 
 // Built-in lists (LST-01…LST-14, CON-115; TC-LST-09 UAT, TC-LST-10): against a mocked GitHub (access.json, menu-layout.json,
 // the Table page "Audits", the shared shared-lists.json) and a fake dev.azure.com whose team "QE Team" lists its members
-// (names, Azure DevOps identity ids and work emails; only names and ids are saved). The Tool Owner creates the list "QE team" from the team in Admin → Epic & Feature setup →
+// (names, Azure DevOps identity ids and work emails; only names and ids are saved). The Tool Owner creates the list "QE team" from the team in Admin → Feature & PI setup →
 // Value lists, uses it in a column "Auditor" (Dropdown (built-in list)) of the On-Demand page, picks people in rows,
 // refreshes the list — one person added, one removed, one renamed (the same identity id), and a second Ana Silva joins (told apart by her id), — and sees the removed person kept and
 // marked and the renamed one under the new name; Replace hands the removed person's row over; the Excel template's data
@@ -72,8 +72,8 @@ async function open(gh, email, state) {
 }
 const until = async (check, what) => { for (let i = 0; i < 600; i++) { if (await check()) return; await new Promise((resolve) => setTimeout(resolve, 50)) } throw new Error(`Timed out waiting for ${what}`) }
 async function openLists(page) {
-  await navigate(page, 'Epic & Feature setup')
-  await page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'Value lists' }).click()
+  await navigate(page, 'Feature & PI setup')
+  await page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'Lists' }).click()
   const panel = page.locator('article.panel.shared-lists')
   await panel.waitFor()
   return panel
@@ -223,7 +223,7 @@ test('TC-LST-10: without “Manage built-in lists” the lists are read only wit
   const list = { id: 'qe-team', name: 'QE team', source: { kind: 'azure-team', server: 'https://dev.azure.com/example', project: 'Project', team: 'QE Team' }, items: [{ name: 'Ana Silva', id: 'a1a1a1a1-0000-4000-8000-00000000000a' }], createdBy: 'Tom Owner', createdAt: '2026-11-20T08:00:00.000Z', refreshedAt: '2026-11-20T08:00:00.000Z', refreshedBy: 'Tom Owner', log: [] }
   const gh = repository({ 'shared-lists.json': `${JSON.stringify({ schema: 1, kind: 'shared-lists', lists: [list] }, null, 1)}\n` })
   const state = { members: [ana, ben], reads: [], writes: [] }
-  // A Team Member: everything shown, nothing allowed, each with the reason.
+  // A Team Member: everything shown, nothing allowed, each with the reason (SET-31: read only, not hidden).
   let { page, context, errors } = await open(gh, member, state)
   let panel = await openLists(page)
   await panel.locator('tbody tr', { hasText: 'QE team' }).waitFor()

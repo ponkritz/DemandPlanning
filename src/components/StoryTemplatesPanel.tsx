@@ -8,7 +8,7 @@ import type { GitStorage } from '../useGitStorage'
 import { DataTable, type DataColumn } from './DataTable'
 import { EmptyState, Modal, Notice, Panel } from './ui'
 
-// STT-01 Admin → Epic & Feature setup → User Story templates: the shared library of User Stories (title and description)
+// STT-01 Admin → Feature & PI setup → User Story templates: the shared library of User Stories (title and description)
 // tagged with the Epics and Release Classification values they are offered for. Setup per Epic picks them; a picked
 // story stays linked (STT-02), so editing a template here changes every Epic that uses it. Saved with the Epic setup.
 export function StoryTemplatesPanel({ setup, featureSetup, git, items, canEdit }: { setup: EpicSetupStore; featureSetup: FeatureSetup; git: GitStorage; items: AzureWorkItem[]; canEdit: boolean }) {
@@ -56,7 +56,7 @@ export function StoryTemplatesPanel({ setup, featureSetup, git, items, canEdit }
   }
 
   return <Panel className="admin-section story-templates" eyebrow="EPIC SETUP" title="User Story templates" info="User Stories to reuse: a title (placeholders such as {service} {version} or {feature} allowed) and a description, tagged with the Epics and Release Classification values they are offered for (no tag = any). In Setup per Epic, “＋ Add from templates” picks them; a picked story stays linked, so a change here applies to every Epic that uses it. New Feature ticks them by default.">
-    {!git.connected && <Notice tone="info">Connect Git storage (Admin → Data &amp; sharing) to change the templates; the ones last loaded here are shown.</Notice>}
+    {!git.connected && <Notice tone="info">Connect Git storage (Admin → Data &amp; history) to change the templates; the ones last loaded here are shown.</Notice>}
     {git.connected && !editable && <Notice tone="info">{git.readOnly ? 'View only: your Git token can read but not save.' : 'View only: your role is not allowed “Edit Epic setup value lists and User Story templates”.'}</Notice>}
     {(file.storyTemplates ?? []).length ? <DataTable id="story-templates" columns={columns} rows={templates} rowKey={(item) => item.id} exportName="User Story templates" defaultSort={{ id: 'title' }}
       toolbar={<><input className="search" type="search" aria-label="Search templates" placeholder="Search templates" value={find} onChange={(event) => setFind(event.target.value)} />{editable && <button type="button" className="ghost" onClick={() => setEditing({ id: newStoryTemplateId(file, 'story'), title: '', description: '', epics: [], classes: [] })}>＋ New template</button>}</>}
@@ -75,15 +75,18 @@ export function StoryTemplatesPanel({ setup, featureSetup, git, items, canEdit }
 }
 
 // STT-03: one template in a pop-up — title (required), description and its tags; Save puts it in the unsaved changes.
-function TemplateEditor({ item, epics, epicName, knownValues, onCancel, onSave }: { item: StoryTemplateItem; epics: AzureWorkItem[]; epicName: (id: number) => string; knownValues: string[]; onCancel: () => void; onSave: (item: StoryTemplateItem) => void }) {
+// STT-05: the same pop-up for a template of your own (its eyebrow says so); a save that is refused shows why and stays open.
+export function TemplateEditor({ item, epics, epicName, knownValues, onCancel, onSave, eyebrow = 'EPIC SETUP · USER STORY TEMPLATE', maxDescription = 100000 }: { item: StoryTemplateItem; epics: AzureWorkItem[]; epicName: (id: number) => string; knownValues: string[]; onCancel: () => void; onSave: (item: StoryTemplateItem) => string | void; eyebrow?: string; maxDescription?: number }) {
   const [draft, setDraft] = useState(item)
-  return <Modal eyebrow="EPIC SETUP · USER STORY TEMPLATE" title={item.title ? 'Edit template' : 'New template'} onClose={onCancel}>
-    <form onSubmit={(event) => { event.preventDefault(); if (draft.title.trim()) onSave({ ...draft, title: draft.title.trim() }) }}>
+  const [error, setError] = useState('')
+  return <Modal eyebrow={eyebrow} title={item.title ? 'Edit template' : 'New template'} onClose={onCancel}>
+    <form onSubmit={(event) => { event.preventDefault(); if (draft.title.trim()) setError(onSave({ ...draft, title: draft.title.trim() }) || '') }}>
       <label>Title<input aria-label="Template title" value={draft.title} maxLength={255} required placeholder="e.g. SFV : Review of Deliverables ({service} {version})" onChange={(event) => setDraft({ ...draft, title: event.target.value })} /></label>
-      <label>Description (optional)<textarea aria-label="Template description" rows={3} value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} /></label>
+      <label>Description (optional)<textarea aria-label="Template description" rows={3} maxLength={maxDescription} value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} /></label>
       <TagPicker label="Epics" empty="Any Epic" tags={draft.epics.map((id) => ({ key: String(id), text: `#${id} ${epicName(id)}`.trim() }))} options={epics.filter((epic) => !draft.epics.includes(epic.id)).map((epic) => ({ key: String(epic.id), text: `#${epic.id} ${epic.title}` }))} disabled={false} onAdd={(key) => setDraft({ ...draft, epics: [...draft.epics, Number(key)] })} onRemove={(key) => setDraft({ ...draft, epics: draft.epics.filter((id) => String(id) !== key) })} />
       <TagPicker label="Release Classification" empty="Any value" tags={draft.classes.map((value) => ({ key: value, text: value }))} options={knownValues.filter((value) => !draft.classes.some((tag) => tag.toLowerCase() === value.toLowerCase())).map((value) => ({ key: value, text: value }))} disabled={false} onAdd={(key) => setDraft({ ...draft, classes: [...draft.classes, key] })} onRemove={(key) => setDraft({ ...draft, classes: draft.classes.filter((value) => value !== key) })} />
       {!draft.title.trim() && <small className="muted">A template needs a title before it can be saved.</small>}
+      {error && <Notice tone="error">{error}</Notice>}
       <div className="modal-actions"><button type="button" className="ghost" onClick={onCancel}>Cancel</button><button className="primary" disabled={!draft.title.trim()}>Save</button></div>
     </form>
   </Modal>

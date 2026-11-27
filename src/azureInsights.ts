@@ -1,7 +1,8 @@
 import { isFinishedState } from './workStates.ts'
 import { utcMonthKey } from './businessTime.ts'
 import type { AzureWorkItem } from './domain'
-import { defaultCapacitySettings } from './capacity.ts'
+import { defaultCapacitySettings, sharedTimeOf, type CapacitySettings } from './capacity.ts'
+import { isTrainingWorkBy, rulesOf } from './bucketRules.ts'
 
 const months = ['January','February','March','April','May','June','July','August','September','October','November','December']
 const monthName = 'jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?'
@@ -90,7 +91,13 @@ function total(items: AzureWorkItem[], field: 'originalEstimate'|'completedWork'
 }
 function utilization(fundedHours: number, actualHoursLessAbsence: number | null) { return actualHoursLessAbsence != null && actualHoursLessAbsence > 0 && fundedHours > 0 ? Math.round(fundedHours / actualHoursLessAbsence * 1000000) / 10000 : null }
 // CAP-03 (glossary "Absence Epic"): absenceEpicId is the Absence Epic of the capacity settings (Admin → Capacity & time), not a fixed ID.
-export function azureInsights(source: AzureWorkItem[], month: string, today: string, absenceEpicId = defaultCapacitySettings.absenceEpicId) {
+// The fourth argument is that ID or the whole capacity settings (then mapped holidays and the bucket rules apply too).
+// CAP-64: plan and actual (and each person's) leave out absence — leave under the absence Epic (not training) and
+// holidays (mapped or "Public Holidays - <Region>") — since it is taken off the capacity (CAP-63); allPlan / allActual
+// are every month Task (Baselines' data check).
+export function azureInsights(source: AzureWorkItem[], month: string, today: string, capacitySettings: number | CapacitySettings = defaultCapacitySettings.absenceEpicId) {
+  const settings: CapacitySettings = typeof capacitySettings === 'number' ? { ...defaultCapacitySettings, absenceEpicId: capacitySettings } : capacitySettings
+  const absenceEpicId = settings.absenceEpicId
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error('Choose a valid dashboard month.')
   const items = [...new Map(source.filter(item => item.state.trim().toLowerCase() !== 'removed').map(item => [item.key, item])).values()]
   const features = items.filter(item => item.workItemType === 'Feature'), tasks = items.filter(item => item.workItemType === 'Task')
@@ -100,7 +107,7 @@ export function azureInsights(source: AzureWorkItem[], month: string, today: str
   const monthlyTasks = timeWritingTasks.filter(item => timeWritingMonth(item.title) === month)
   // Parents of the month's Tasks: usually a story, sometimes the Feature itself.
   const storiesForMonth = items.filter(item => monthlyTasks.some(task => task.parentId === item.id))
-  const plan = total(monthlyTasks, 'originalEstimate'), actual = total(monthlyTasks, 'completedWork')
+  const allPlan = total(monthlyTasks, 'originalEstimate'), allActual = total(monthlyTasks, 'completedWork')
   const paired = monthlyTasks.filter(item => item.originalEstimate != null && item.completedWork != null)
   const variance = paired.length ? paired.reduce((sum, item) => sum + item.completedWork! - item.originalEstimate!, 0) : null
   const closed = (item: AzureWorkItem) => isFinishedState(item.state) // owner decision 10: Resolved counts too
@@ -119,15 +126,25 @@ export function azureInsights(source: AzureWorkItem[], month: string, today: str
   const npraFeatures = monthlyFeatures.filter(item => hasTag(item, 'NPRA Hours'))
   const npra = total(npraFeatures, 'originalEstimate')
   const dayCount = workingDays(month), dayCapacity = dayCount * 8
-  const absenceTasks = monthlyTasks.filter(item => epicOf(item)?.id === absenceEpicId)
+  const chainOf = (item: AzureWorkItem) => {
+    const chain: AzureWorkItem[] = [], seen = new Set<number>([item.id]); let current = item.parentId == null ? undefined : byId.get(item.parentId)
+    while (current && !seen.has(current.id)) { chain.push(current); seen.add(current.id); current = current.parentId == null ? undefined : byId.get(current.parentId) }
+    return chain
+  }
+  // Absence (CAP-63, CAP-64): leave under the absence Epic that is not training, and holidays.
+  const rules = rulesOf(settings)
+  const isAbsence = (item: AzureWorkItem) => { const chain = chainOf(item), shared = sharedTimeOf(item, chain, settings); return shared ? shared.kind === 'holiday' : epicOf(item)?.id === absenceEpicId && !isTrainingWorkBy(rules, item, chain) }
+  const absenceTasks = monthlyTasks.filter(isAbsence)
   const absence = total(absenceTasks, 'completedWork')
-  const actualLessAbsence = actual.value == null ? null : actual.value - (absence.value ?? 0)
+  const counted = monthlyTasks.filter(item => !absenceTasks.includes(item))
+  const plan = total(counted, 'originalEstimate'), actual = total(counted, 'completedWork')
+  const actualLessAbsence = actual.value
   const resourceNames = [...new Set(monthlyTasks.map(item => item.assignedTo).filter(Boolean))].sort()
   const resources = resourceNames.map(name => {
-    const owned = monthlyTasks.filter(item => item.assignedTo === name), absenceOwned = absenceTasks.filter(item => item.assignedTo === name)
+    const owned = counted.filter(item => item.assignedTo === name), absenceOwned = absenceTasks.filter(item => item.assignedTo === name)
     const actualOwned = total(owned, 'completedWork'), absenceHours = total(absenceOwned, 'completedWork')
-    const denominator = actualOwned.value == null ? null : actualOwned.value - (absenceHours.value ?? 0)
-    return { name, plan: total(owned, 'originalEstimate'), actual: actualOwned, count: owned.length, npra: total([], 'originalEstimate'), absence: absenceHours, capacity: dayCapacity, available: denominator, utilization: utilization(dayCapacity, denominator) }
+    const denominator = actualOwned.value
+    return { name, plan: total(owned, 'originalEstimate'), actual: actualOwned, count: owned.length + absenceOwned.length, npra: total([], 'originalEstimate'), absence: absenceHours, capacity: dayCapacity, available: denominator, utilization: utilization(dayCapacity, denominator) }
   })
   const trend = Array.from({ length: 6 }, (_, index) => {
     const date = new Date(`${month}-01T00:00:00Z`); date.setUTCMonth(date.getUTCMonth() - 5 + index)
@@ -138,7 +155,7 @@ export function azureInsights(source: AzureWorkItem[], month: string, today: str
   for (const story of storiesForMonth) { const epic = epicOf(story); const key = epic?.key ?? 'unmapped'; const group = epicGroups.get(key) ?? { epic, stories: [] }; group.stories.push(story); epicGroups.set(key, group) }
   const epicBreakdown = [...epicGroups.values()].map(group => { const groupFeatures = [...new Map(group.stories.map(featureOf).filter((item): item is AzureWorkItem => Boolean(item)).map(item => [item.key, item])).values()]; const groupTasks = monthlyTasks.filter(task => group.stories.some(story => story.id === task.parentId)); return { ...group, plan: total(groupTasks, 'originalEstimate'), actual: total(groupTasks, 'completedWork'), npra: total(groupFeatures.filter(item => hasTag(item, 'NPRA Hours')), 'originalEstimate'), tasks: groupTasks.length } }).sort((a,b) => (b.actual.value ?? -1) - (a.actual.value ?? -1))
   const capacity = dayCapacity
-  return { items, features, tasks, timeWritingStories, storiesForMonth, timeWritingTasks, monthlyTasks, plan, actual, variance, paired, overdue, flags, closures, priorClosures, resources, trend, epicBreakdown, npraFeatures, npra, absenceTasks, absence, workingDays: dayCount, dayCapacity, capacity, available: actualLessAbsence, utilization: utilization(dayCapacity, actualLessAbsence), unassignedNpRA: npraFeatures.filter(item => !item.assignedTo), unmappedTasks: timeWritingTasks.filter(item => !timeWritingMonth(item.title)).length }
+  return { items, features, tasks, timeWritingStories, storiesForMonth, timeWritingTasks, monthlyTasks, plan, actual, allPlan, allActual, variance, paired, overdue, flags, closures, priorClosures, resources, trend, epicBreakdown, npraFeatures, npra, absenceTasks, absence, workingDays: dayCount, dayCapacity, capacity, available: actualLessAbsence, utilization: utilization(dayCapacity, actualLessAbsence), unassignedNpRA: npraFeatures.filter(item => !item.assignedTo), unmappedTasks: timeWritingTasks.filter(item => !timeWritingMonth(item.title)).length }
 }
 
 // What needs attention for a month: open Time Writing stories without that month's Task, Tasks under a Time Writing

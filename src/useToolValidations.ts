@@ -82,7 +82,7 @@ export function useToolValidations(git: GitStorage, stream: StreamData, writer: 
   const tried = useRef('')
   const { by } = writer
   // TVL-11: why the viewer cannot change the list ('' when they can) — fail closed while it is not read.
-  const reason = writer.blocked || (!scope ? 'Connect Git storage (Admin → Data & sharing) to change the master list; it is shared through Git.' : state.error && fresh ? `${toolValidationsFile} could not be read from Git, so it cannot be changed here: ${state.error}` : !loaded ? 'The master list is still being read from Git.' : listReason(writer.viewer, state.file))
+  const reason = writer.blocked || (!scope ? 'Connect Git storage (Admin → Data & history) to change the master list; it is shared through Git.' : state.error && fresh ? `${toolValidationsFile} could not be read from Git, so it cannot be changed here: ${state.error}` : !loaded ? 'The master list is still being read from Git.' : listReason(writer.viewer, state.file))
   const allowed = !reason
   useEffect(() => {
     if (!pending || !allowed || !loaded) return

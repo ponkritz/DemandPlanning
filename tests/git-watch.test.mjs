@@ -66,7 +66,7 @@ test('GIT-18: each shared file is shown on the pages that use it; the menu and t
   assert.deepEqual(pagesOfFile('data/access.json', plan), { pages: ['admin:resources'], quiet: 'access', loader: 'access' }, 'GIT-23: the roles quietly, the notice on People & roles only')
   assert.deepEqual(pagesOfFile(plan, plan), { pages: ['baselines', 'admin:*'], quiet: 'planning', loader: 'planning' })
   assert.ok(pagesOfFile('data/custom-streams.json', plan).pages.includes('admin:connections'))
-  assert.deepEqual(pagesOfFile('data/monthly-pack/2026-10.json', plan).pages, ['pulse', 'admin:pack'])
+  assert.deepEqual(pagesOfFile('data/monthly-pack/2026-10.json', plan).pages, ['pulse', 'admin:pages'])
   assert.equal(pagesOfFile('data/kpi-tracker.json', plan).loader, 'remount')
   assert.deepEqual(pagesOfFile('data/unknown.json', plan), { pages: ['*'], loader: 'reload' }, 'a file not mapped: every page, full reload')
   assert.ok(pageMatches(['admin:*'], 'admin:capacity') && pageMatches(['*'], 'home') && !pageMatches(['ondemand:conq'], 'home'))

@@ -288,7 +288,7 @@ export function toolDatasets(tools: ToolSourceInput | undefined, allowed: boolea
   ]
   return pairs.map(([key, name, expiryOnly, note]) => {
     if (!allowed) return blocked(key, name, toolKind, notAvailable)
-    if (!tools?.connected) return blocked(key, name, toolKind, 'Connect Git storage (Admin → Data & sharing) to see the Tool Validations master list.')
+    if (!tools?.connected) return blocked(key, name, toolKind, 'Connect Git storage (Admin → Data & history) to see the Tool Validations master list.')
     const file = tools.file
     // TVL-26: the window Status is worked out with, for the block pop-up's "Show expiry status" ⓘ.
     return { ...fieldsDataset(key, name, toolKind, `${note}; the team default window is ${file.defaultDays} days`, toolFields, wanted(key) ? toolRows(file, today, expiryOnly) : []), statusDays: file.defaultDays }

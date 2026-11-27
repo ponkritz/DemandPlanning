@@ -1,6 +1,6 @@
-import { Fragment, useState } from 'react'
+import { Fragment, useContext, useState } from 'react'
 import type { AzureWorkItem } from '../domain'
-import { classificationOf, classRuleProblems, releaseParts, toggleClassRule, usualClassRules, type ClassRule, copyEpicFields, emptyEpicSetup, newStoryTemplateId, templatesFor, upsertStoryTemplate, type StoryTemplateItem, featureFromFields, fieldTypes, ifEmptyOptions, intoOptions, maxEpicFields, serializeEpicSetup, upsertEpicFields, type EpicField, type EpicFields, type EpicSetupFile } from '../epicSetup'
+import { classificationOf, classRuleProblems, releaseParts, toggleClassRule, usualClassRules, type ClassRule, copyEpicFields, emptyEpicSetup, newStoryTemplateId, templatesFor, upsertStoryTemplate, type StoryTemplateItem, featureFromFields, fieldTypes, ifEmptyOptions, intoOptions, maxEpicFields, serializeEpicSetup, upsertEpicFields, type EpicField, type EpicFields, type EpicSetupFile, withoutEpicFields, withProductOwner, productOwnerOf } from '../epicSetup'
 import { chooseSetup, classSetKey, emptySetup, fieldKey, inheritFields, serializeFeatureSetup, setForClass, setupFor, type EpicSetup, type FeatureSetupFile, type InheritField, type SetupDefaults, type StoryTemplate } from '../featureSetup'
 import { useCan } from '../useCan'
 import type { EpicSetupStore } from '../useEpicSetup'
@@ -10,8 +10,12 @@ import { QePageFields } from './QePageFields'
 import { useBulkEpic } from '../useStreamEpics'
 import { dpDateColumns, dpDateLabel } from '../dpBulkDates'
 import { Notice } from './ui'
+import { useMyStoryTemplates } from '../useMyStoryTemplates'
+import { OwnerPeopleContext } from '../usePageNames'
+import { SearchSelect } from './SearchSelect'
+import { ownerName } from '../epicOwners'
 
-// CON-97 Admin → Epic & Feature setup → Setup per Epic: one screen per Epic. The Epic list (All Epics first) on the
+// CON-97 Admin → Feature & PI setup → Setup per Epic: one screen per Epic. The Epic list (All Epics first) on the
 // left; on the right a preview of a new Feature and four sections in the order it is built — Fields & title, Definition
 // of Done, User Stories, Month Task — each with one "Customize for this Epic" switch (off: All Epics applies). "Use my
 // own version" edits the person's own copy; one Save writes the Epic setup and the Feature setup together.
@@ -60,7 +64,7 @@ export function EpicFeatureEditor({ setup, epicSetup, git, items, initialEpicId 
     const own = entry ? inheritFields.filter((field) => !(entry.inherits ?? []).includes(field)).length : 0
     return own + (epicFile.epics.some((item) => item.epicId === id && item.fields.length) ? 1 : 0)
   }
-  const epics = [...known.entries()].map(([id, title]) => ({ id, title, count: customizedCount(id), mineToo: Boolean(setupFor(personalFile, id)) }))
+  const epics = [...known.entries()].map(([id, title]) => ({ id, title, count: customizedCount(id), mineToo: Boolean(setupFor(personalFile, id)), owner: ownerName(productOwnerOf(epicFile, id)) }))
     .filter((epic) => !find.trim() || `#${epic.id} ${epic.title}`.toLowerCase().includes(find.trim().toLowerCase()))
     .sort((a, b) => b.count - a.count || a.title.localeCompare(b.title))
   const title = isAll ? 'All Epics — defaults' : `${known.get(epicId) || 'Epic'} #${epicId}`
@@ -108,7 +112,7 @@ export function EpicFeatureEditor({ setup, epicSetup, git, items, initialEpicId 
   function toggle(section: Section, on: boolean) {
     if (section === 'fields') {
       if (on) changeFields((value) => { if (!value.fields.length) value.fields.push({ label: 'Program', type: 'text', ifEmpty: 'optional', into: 'title' }) })
-      else if (window.confirm(`Remove the Feature fields of ${title}? New Features under it then ask only for the title.`)) epicSetup.setDraft({ ...epicFile, epics: epicFile.epics.filter((item) => item.epicId !== epicId) })
+      else if (window.confirm(`Remove the Feature fields of ${title}? New Features under it then ask only for the title.`)) epicSetup.setDraft(withoutEpicFields(epicFile, epicId))
       return
     }
     const field = sectionField[section]
@@ -133,6 +137,9 @@ export function EpicFeatureEditor({ setup, epicSetup, git, items, initialEpicId 
   const allTemplates = epicFile.storyTemplates ?? []
   const offered = isAll ? allTemplates.filter((item) => !item.epics.length && !item.classes.length) : templatesFor(epicFile, epicId, value)
   const canTemplates = writable && can('setup.values')
+  // STT-07: in my own version, my own templates too ("Mine"), added as a copy: they are on this browser only, so a
+  // link to one would not hold on another computer.
+  const myTemplates = useMyStoryTemplates(setup.email ?? '')
   const saveAsTemplate = (index: number) => {
     const story = stories[index], id = newStoryTemplateId(epicFile, story.title)
     epicSetup.setDraft(upsertStoryTemplate(epicFile, { id, title: story.title.trim(), description: story.description, epics: isAll ? [] : [epicId], classes: value ? [value] : [] }))
@@ -150,7 +157,7 @@ export function EpicFeatureEditor({ setup, epicSetup, git, items, initialEpicId 
     const ruleProblems = dirtyEpic ? (epicSetup.draft?.epics ?? []).flatMap((item) => item.fields.flatMap((field) => classRuleProblems(field.classRules).map((problem) => `Epic #${item.epicId} ${field.label}: ${problem}`))) : []
     if (ruleProblems.length) { setResult({ tone: 'error', text: `Not saved: ${ruleProblems.join(' ')}` }); return }
     const missingDoD = [...(dirtyShared ? sharedFile.epics : []), ...(dirtyPersonal ? personalFile.epics : [])].filter((item) => !(item.inherits ?? []).includes('featureDoD') && !item.featureDoD.trim())
-    if (missingDoD.length) { setResult({ tone: 'error', text: `Not saved: give Epic ${missingDoD.map((item) => `#${item.epicId}`).join(', ')} a Definition of Done, or switch off “Customize for this Epic”.` }); return }
+    if (missingDoD.length) { setResult({ tone: 'error', text: `Not saved: give Epic ${missingDoD.map((item) => `#${item.epicId}`).join(', ')} Acceptance Criteria (Feature DoD), or switch off “Customize for this Epic”.` }); return }
     setBusy(true)
     try {
       if (dirtyEpic) await epicSetup.save(epicSetup.draft!, `Update the Epic setup (${title})`)
@@ -182,7 +189,7 @@ export function EpicFeatureEditor({ setup, epicSetup, git, items, initialEpicId 
       <label>Search Epics<input type="search" value={find} placeholder="Epic or number" onChange={(event) => setFind(event.target.value)} /></label>
       <button type="button" aria-current={isAll} className="efe-epic" onClick={() => pick(0)}><span><strong>All Epics</strong><small>Defaults for every Epic</small></span><span className="efe-badge efe-badge-all">Defaults</span></button>
       {epics.map((epic) => <button key={epic.id} type="button" aria-current={epic.id === epicId} className="efe-epic" onClick={() => pick(epic.id)}>
-        <span><strong>{epic.title || `Epic #${epic.id}`}</strong><small>#{epic.id}{epic.mineToo ? ' · my version' : ''}</small></span>
+        <span><strong>{epic.title || `Epic #${epic.id}`}</strong><small>#{epic.id}{epic.mineToo ? ' · my version' : ''}{epic.owner ? ` · PO ${epic.owner}` : ''}</small></span>
         <span className={`efe-badge${epic.count ? ' efe-badge-custom' : ''}`}>{epic.count ? `${epic.count} of 4 customized` : 'Uses defaults'}</span>
       </button>)}
       {!epics.length && <p className="muted">Load the QMS-0025 board to list its Epics.</p>}
@@ -193,9 +200,11 @@ export function EpicFeatureEditor({ setup, epicSetup, git, items, initialEpicId 
         <h2>{title}</h2>
         {!isAll && <button type="button" role="switch" aria-checked={useMine} className="efe-switch" disabled={!setup.email} title={setup.email ? undefined : 'Set your work email (My settings) to keep your own version'} onClick={() => setMine(!mine)}><span className="efe-track" data-on={useMine}><span /></span>Use my own version (only me)</button>}
       </div>
-      {!git.connected && <Notice tone="info">Connect Git storage (Admin → Data &amp; sharing) to change the setup; the one last loaded here is shown.</Notice>}
+      {!git.connected && <Notice tone="info">Connect Git storage (Admin → Data &amp; history) to change the setup; the one last loaded here is shown.</Notice>}
       {git.connected && !editable && <Notice tone="info">{git.readOnly ? 'View only: your Git token can read but not save.' : useMine ? 'Set your work email to keep your own version.' : 'View only: your role is not allowed “Edit the shared Feature setup”.'}</Notice>}
       {useMine && <Notice tone="warning">Your own version of {title}: only you see it when you create Features. What you don’t customize comes from the shared setup.</Notice>}
+
+      {!isAll && <ProductOwnerField owner={productOwnerOf(epicFile, epicId)} disabled={!canFields || useMine} why={!git.connected ? 'Connect Git storage to set the Product Owner.' : git.readOnly ? 'View only: your Git token can read but not save.' : !can('setup.epic') ? 'View only: your role is not allowed “Edit the Epic setup”.' : useMine ? 'The Product Owner is shared by everyone; switch off “Use my own version” to change it.' : ''} onChange={(owner) => { epicSetup.setDraft(withProductOwner(epicFile, epicId, known.get(epicId) ?? '', owner)); setResult(null) }} />}
 
       <section className="efe-preview" aria-label="Preview">
         <small>A NEW FEATURE HERE LOOKS LIKE</small>
@@ -222,18 +231,18 @@ export function EpicFeatureEditor({ setup, epicSetup, git, items, initialEpicId 
           {!own && <small className="muted">Now: the Epic’s default.</small>}</div>}
       </section>}
 
-      <section className="efe-section" aria-label="Definition of Done">
-        <header><span className="efe-n">{isAll ? 1 : 2}</span><div><h3>Definition of Done{value && ` — ${value}`}</h3><small>Written at the top of the Feature’s Description</small></div>{!value && switchView('dod', 'Definition of Done')}</header>
-        {value ? own ? <label className="efe-field">Definition of Done for {value}<textarea rows={2} value={own.featureDoD} disabled={!editable} placeholder={`Empty: the Epic’s DoD (${resolved?.featureDoD || 'none'})`} onChange={(event) => changeEntry((item) => { item.classSets![ownKey!].featureDoD = event.target.value })} /></label>
+      <section className="efe-section" aria-label="Acceptance Criteria (Feature DoD)">
+        <header><span className="efe-n">{isAll ? 1 : 2}</span><div><h3>Acceptance Criteria (Feature DoD){value && ` — ${value}`}</h3><small>Written at the top of the Feature’s Description as “Feature DoD: …”</small></div>{!value && switchView('dod', 'Acceptance Criteria (Feature DoD)')}</header>
+        {value ? own ? <label className="efe-field">Acceptance Criteria (Feature DoD) for {value}<textarea rows={2} value={own.featureDoD} disabled={!editable} placeholder={`Empty: the Epic’s DoD (${resolved?.featureDoD || 'none'})`} onChange={(event) => changeEntry((item) => { item.classSets![ownKey!].featureDoD = event.target.value })} /></label>
           : <div className="efe-inherited"><small>FROM THE EPIC’S DEFAULT</small><span>{dod || '—'}</span></div>
-        : !isAll && !custom.dod ? fromDefaults(defaults.featureDoD || 'None set: typed in New Feature') : <label className="efe-field">Definition of Done{!isAll && ' (required)'}<textarea rows={2} value={isAll ? defaults.featureDoD ?? '' : entry?.featureDoD ?? ''} disabled={!editable} onChange={(event) => isAll ? changeDefaults((value) => { if (event.target.value.trim()) value.featureDoD = event.target.value; else delete value.featureDoD }) : changeEntry((value) => { value.featureDoD = event.target.value })} placeholder={isAll ? 'Empty: typed in New Feature' : ''} /></label>}
+        : !isAll && !custom.dod ? fromDefaults(defaults.featureDoD || 'None set: typed in New Feature') : <label className="efe-field">Acceptance Criteria (Feature DoD){!isAll && ' — required'}<textarea rows={2} value={isAll ? defaults.featureDoD ?? '' : entry?.featureDoD ?? ''} disabled={!editable} onChange={(event) => isAll ? changeDefaults((value) => { if (event.target.value.trim()) value.featureDoD = event.target.value; else delete value.featureDoD }) : changeEntry((value) => { value.featureDoD = event.target.value })} placeholder={isAll ? 'Empty: typed in New Feature' : ''} /></label>}
       </section>
 
       <section className="efe-section" aria-label="User Stories">
         <header><span className="efe-n">{isAll ? 2 : 3}</span><div><h3>User Stories{value && ` — ${value}`}</h3><small>Created under the Feature, ticked by default</small></div>{!value && switchView('stories', 'User Stories')}</header>
         {value && !own ? <div className="efe-inherited"><small>FROM THE EPIC’S DEFAULT</small><span>{stories.map((story) => story.title).join('\n') || 'None'}</span></div>
         : !value && !isAll && !custom.stories ? fromDefaults((defaults.stories ?? []).map((story) => story.title).join('\n') || 'None set: only the Review of Deliverables story and your own') : <>
-          <StoriesEditor stories={stories} disabled={!editable} onChange={setStories} dateColumns={dateColumns} templates={allTemplates} offered={offered} canSaveTemplate={canTemplates} onSaveTemplate={saveAsTemplate} />
+          <StoriesEditor stories={stories} disabled={!editable} onChange={setStories} dateColumns={dateColumns} templates={allTemplates} offered={offered} mine={useMine ? myTemplates.templates : []} canSaveTemplate={canTemplates} onSaveTemplate={saveAsTemplate} />
         </>}
         {hasSets && !value && <QePageFields entry={entry} disabled={!editable} onChange={(next) => changeEntry((item) => { item.qePage = next })} />}
       </section>
@@ -259,11 +268,29 @@ export function EpicFeatureEditor({ setup, epicSetup, git, items, initialEpicId 
   </div>
 }
 
-function StoriesEditor({ stories, disabled, onChange, templates, offered, canSaveTemplate, onSaveTemplate, dateColumns }: { stories: StoryTemplate[]; disabled: boolean; dateColumns: { field: string; label: string }[]; onChange: (next: StoryTemplate[]) => void; templates: StoryTemplateItem[]; offered: StoryTemplateItem[]; canSaveTemplate: boolean; onSaveTemplate: (index: number) => void }) {
+// EPS-11: the Epic's Product Owner — one person picked from the people the app knows (Admin → People & access → People:
+// the Azure DevOps team members and assignees, with their work email), or none; saved with the Epic setup.
+function ProductOwnerField({ owner, disabled, why, onChange }: { owner: { email: string; name: string } | undefined; disabled: boolean; why: string; onChange: (owner: { email: string; name: string } | undefined) => void }) {
+  const people = useContext(OwnerPeopleContext).filter((person) => person.email)
+  const options = [{ value: '', label: 'No Product Owner' }, ...people.map((person) => ({ value: person.email!, label: person.name, hint: person.email })), ...(owner && !people.some((person) => person.email === owner.email) ? [{ value: owner.email, label: owner.name, hint: `${owner.email} — not in Azure DevOps` }] : [])]
+  return <section className="efe-section efe-owner" aria-label="Product Owner">
+    <header><span className="efe-n">PO</span><div><h3>Product Owner</h3><small>One person per Epic: shown in the PI Review Meeting, filtered by on PI Review, Release Details and Team overview; may write the PI reviews of this Epic’s Features</small></div></header>
+    {disabled ? <div className="efe-inherited"><small>PRODUCT OWNER</small><span>{owner ? `${ownerName(owner)} (${owner.email})` : 'None set'}</span></div>
+      : <label className="efe-field efe-inline">Product Owner<SearchSelect label="Product Owner" value={owner?.email ?? ''} options={options} placeholder="No Product Owner" empty="No one matches" onChange={(email) => { const person = options.find((option) => option.value === email); onChange(email ? { email, name: person?.label ?? email } : undefined) }} /></label>}
+    {disabled && why && <small className="muted">{why}</small>}
+    {!disabled && <small className="muted">Picked from Admin → People &amp; access → People (Azure DevOps team members and assignees); the work email is kept. Save to Git to keep it.</small>}
+  </section>
+}
+
+function StoriesEditor({ stories, disabled, onChange, templates, offered, mine = [], canSaveTemplate, onSaveTemplate, dateColumns }: { stories: StoryTemplate[]; disabled: boolean; dateColumns: { field: string; label: string }[]; onChange: (next: StoryTemplate[]) => void; templates: StoryTemplateItem[]; offered: StoryTemplateItem[]; mine?: StoryTemplateItem[]; canSaveTemplate: boolean; onSaveTemplate: (index: number) => void }) {
   const set = (index: number, update: Partial<StoryTemplate>) => onChange(stories.map((story, at) => at === index ? { ...story, ...update } : story))
   const used = new Set(stories.map((story) => story.templateId).filter(Boolean))
   const others = templates.filter((item) => !offered.some((entry) => entry.id === item.id) && !used.has(item.id))
-  const add = (id: string) => { const item = templates.find((entry) => entry.id === id); if (item) onChange([...stories, { title: item.title, description: item.description, templateId: item.id }]) }
+  const add = (id: string) => {
+    const own = id.startsWith('mine:') ? mine.find((entry) => `mine:${entry.id}` === id) : undefined
+    if (own) { onChange([...stories, { title: own.title, description: own.description }]); return }
+    const item = templates.find((entry) => entry.id === id); if (item) onChange([...stories, { title: item.title, description: item.description, templateId: item.id }])
+  }
   return <div className="efe-list">
     {stories.map((story, index) => {
       const linked = story.templateId ? templates.find((item) => item.id === story.templateId) : undefined
@@ -285,9 +312,10 @@ function StoriesEditor({ stories, disabled, onChange, templates, offered, canSav
     })}
     {!stories.length && <p className="muted">No User Stories: only the Time Writing story and Task are created.</p>}
     {!disabled && <div className="button-row"><button type="button" className="ghost efe-add" onClick={() => onChange([...stories, { title: '', description: '' }])}>＋ Add User Story</button>
-      {(offered.length > 0 || others.length > 0) && <select aria-label="Add from templates" className="efe-add" value="" onChange={(event) => { if (event.target.value) add(event.target.value) }}><option value="">＋ Add from templates…</option>
+      {(offered.length > 0 || others.length > 0 || mine.length > 0) && <select aria-label="Add from templates" className="efe-add" value="" onChange={(event) => { if (event.target.value) add(event.target.value) }}><option value="">＋ Add from templates…</option>
         {offered.filter((item) => !used.has(item.id)).length > 0 && <optgroup label="For this Epic and value">{offered.filter((item) => !used.has(item.id)).map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</optgroup>}
         {others.length > 0 && <optgroup label="Other templates">{others.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</optgroup>}
+        {mine.length > 0 && <optgroup label="Mine (added as a copy)">{[...mine].sort((a, b) => a.title.localeCompare(b.title)).map((item) => <option key={item.id} value={`mine:${item.id}`}>{item.title}</option>)}</optgroup>}
       </select>}</div>}
   </div>
 }

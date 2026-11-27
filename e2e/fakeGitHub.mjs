@@ -2,13 +2,14 @@
 // E2E scenarios (as a Playwright route): one repository with branches of text files, the contents API (read, list with
 // folders, create — refused when the file exists — update with the version id, delete), the Git Data API (refs, commits,
 // trees with folders by their real git object ids, blobs, a commit of many files, a branch made from another), GraphQL
-// blob batches and the commit list of a file. Nothing leaves the process.
+// blob batches and the commit list of a file. Nothing leaves the process. As GitHub, a file above `largeAbove` bytes (1 MB)
+// is answered in the JSON form with `encoding: "none"` and no content; the raw media type and the blob API give its text.
 import { createHash } from 'node:crypto'
 
 const sha1 = (text) => createHash('sha1').update(text).digest('hex')
 const json = (status, body) => ({ status, body })
 
-export function fakeGitHub({ owner = 'example', repo = 'storage', files = {}, branch = 'main', refuseBranches = false, graphql = true, delay = 0 } = {}) {
+export function fakeGitHub({ owner = 'example', repo = 'storage', files = {}, branch = 'main', refuseBranches = false, graphql = true, delay = 0, largeAbove = 1024 * 1024 } = {}) {
   const blobShas = new Map()
   const blobs = new Map()
   const blobSha = (text) => {
@@ -91,7 +92,8 @@ export function fakeGitHub({ owner = 'example', repo = 'storage', files = {}, br
         const map = mapOf(target.searchParams.get('ref') ?? branch)
         if (!map) return json(404, { message: 'No commit found for the ref' })
         if (map[file] != null && /raw/.test(accept)) return { status: 200, body: map[file], raw: true }
-        if (map[file] != null) return json(200, { type: 'file', name: file.split('/').pop(), path: file, encoding: 'base64', content: Buffer.from(map[file]).toString('base64'), sha: blobSha(map[file]) })
+        if (map[file] != null && Buffer.byteLength(map[file]) > largeAbove) return json(200, { type: 'file', name: file.split('/').pop(), path: file, size: Buffer.byteLength(map[file]), encoding: 'none', content: '', sha: blobSha(map[file]) })
+        if (map[file] != null) return json(200, { type: 'file', name: file.split('/').pop(), path: file, size: Buffer.byteLength(map[file]), encoding: 'base64', content: Buffer.from(map[file]).toString('base64'), sha: blobSha(map[file]) })
         const sha = treeOf(map, file)
         if (!sha) return json(404, { message: 'Not Found' })
         return json(200, trees.get(sha).entries.map((entry) => ({ type: entry.type === 'tree' ? 'dir' : 'file', name: entry.path, path: file ? `${file}/${entry.path}` : entry.path, sha: entry.sha })))
@@ -152,6 +154,7 @@ export function fakeGitHub({ owner = 'example', repo = 'storage', files = {}, br
       return json(201, { sha, html_url: `https://github.com/${owner}/${repo}/commit/${sha}` })
     }
     const blobRead = /^\/git\/blobs\/([0-9a-f]{40})$/.exec(rest)
+    if (blobRead && method === 'GET' && /raw/.test(accept)) return blobs.has(blobRead[1]) ? { status: 200, body: blobs.get(blobRead[1]), raw: true } : json(404, { message: 'Not Found' })
     if (blobRead && method === 'GET') return blobs.has(blobRead[1]) ? json(200, { sha: blobRead[1], encoding: 'base64', content: Buffer.from(blobs.get(blobRead[1])).toString('base64') }) : json(404, { message: 'Not Found' })
     return json(404, { message: 'Not Found' })
   }

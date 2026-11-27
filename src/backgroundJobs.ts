@@ -4,9 +4,12 @@
 // of the same list — long work as a job, an instant result as a finished entry (recordJob) — not notices on the page.
 // Jobs live for this page load only (nothing is stored); while one runs, leaving the page asks first.
 export type JobState = 'running' | 'done' | 'error'
-export interface Job { id: number; key: string; label: string; state: JobState; detail: string; started: number; finished?: number }
-// What the work reports: the result line, and whether it is a failure (partly done counts as a failure).
-export interface JobResult { text: string; failed?: boolean }
+// PIR-84: action — a follow-up the finished job offers in the list (Retry failed), used once.
+export interface JobAction { label: string; run: () => void }
+export interface Job { id: number; key: string; label: string; state: JobState; detail: string; started: number; finished?: number; action?: JobAction }
+// What the work reports: the result line, and whether it is a failure (partly done counts as a failure); action: a
+// follow-up offered with the result (PIR-84: Retry failed).
+export interface JobResult { text: string; failed?: boolean; action?: JobAction }
 
 let jobs: Job[] = []
 let nextId = 1
@@ -30,7 +33,7 @@ export function runInBackground(key: string, label: string, work: (progress: (te
   void (async () => {
     try {
       const result = await work((text) => update(id, { detail: text }))
-      update(id, { state: result.failed ? 'error' : 'done', detail: result.text, finished: now() })
+      update(id, { state: result.failed ? 'error' : 'done', detail: result.text, finished: now(), ...(result.action ? { action: result.action } : {}) })
     } catch (failure) {
       update(id, { state: 'error', detail: failure instanceof Error ? failure.message : 'The job failed.', finished: now() })
     }
@@ -44,6 +47,13 @@ export function recordJob(key: string, label: string, result: JobResult, now = D
   jobs = [job, ...jobs].slice(0, 20)
   emit()
   return id
+}
+// PIR-84: run a finished job's follow-up once — it is taken off the entry first, so a second press does nothing.
+export function runJobAction(id: number) {
+  const action = jobs.find((job) => job.id === id)?.action
+  if (!action) return
+  update(id, { action: undefined })
+  action.run()
 }
 export function clearFinishedJobs() { jobs = jobs.filter((job) => job.state === 'running'); emit() }
 // For tests: start from an empty list.

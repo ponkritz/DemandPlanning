@@ -172,7 +172,7 @@ test('TC-OND-23: a viewer without the right to edit rows opens a row in the draw
   const drawer = drawerOf(page)
   await page.getByRole('dialog', { name: 'CONQ-0002' }).waitFor()
   assert.match(await text(drawer.locator('.od-row-values')), /Category What kind of non-quality cost it is\. Rework/)
-  const reason = 'Your role does not allow “Edit On-Demand data (rows)”. An Admin can change this in Admin → People & roles → Role rights.'
+  const reason = 'Your role does not allow “Edit On-Demand data (rows)”. An Admin can change this in Admin → People & access → Role rights.'
   assert.equal(await drawer.getByRole('button', { name: 'Edit', exact: true }).isDisabled(), true)
   assert.equal(await drawer.getByRole('button', { name: 'Edit', exact: true }).getAttribute('title'), reason)
   assert.equal(await drawer.getByRole('button', { name: 'Hide row' }).isDisabled(), true)

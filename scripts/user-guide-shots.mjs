@@ -115,7 +115,7 @@ const windchillCsv = ['Search Results', 'Number,Name,State,Last Modified,Locatio
 // The app ships with the team's preset server and repository names; on screen they become made-up ones.
 const scrubs = [['https?://[\\w.-]*philips\\.com(/tfs)?', 'https://tfs.example.com/tfs'], ['tfsapac04[\\w.]*', 'tfs.example.com'], ['philips-internal/InD_DemandPlanningStorage', 'example-team/planning-data'], ['philips-internal', 'example-team'], ['InD_DemandPlanningStorage', 'planning-data'], ['philips', 'example'], ['ALMP-ORG-MSTP01', 'example-org'],
   ['DHPCollection', 'ExampleCollection'], ['ponkritz/DemandPlanningStorage', 'example-team/planning-data'], ['ponkritz', 'example-team'], ['DemandPlanningStorage', 'planning-data'],
-  ['neurolooom-eng/Test2', 'example-team/demand-planning'], ['neurolooom-eng', 'example-team'], ['Patient Safety and Quality', 'Quality Project']]
+  ['neurolooom-eng/Test2', 'example-team/demand-planning'], ['ponkritz/Test', 'example-team/demand-planning'], ['neurolooom-eng', 'example-team'], ['ponkritz', 'example-team'], ['Patient Safety and Quality', 'Quality Project']]
 const forbidden = /philips|tfsapac|ALMP-ORG|MSTP01|ponkritz|neurolooom|DemandPlanningStorage|Patient Safety and Quality|DHPCollection|ghp_|github_pat_|e2e-secret/i
 function scrubber(list) {
   const patterns = list.map(([source, to]) => [new RegExp(source, 'gi'), to])

@@ -14,23 +14,24 @@ const remember = (text: string | null) => rememberCustomStreams(text)
 // At start, before any render: the streams of the last visit.
 if (typeof localStorage !== 'undefined') setCustomStreams(customStreamDefs(cached()))
 
-export interface CustomStreamsStore { entries: CustomStreamEntry[]; refused: { name: string; reason: string }[]; error: string; loaded: boolean; save: (entries: CustomStreamEntry[], message: string) => Promise<{ commitUrl?: string }>; reload: () => Promise<void>; history: string }
+export interface CustomStreamsStore { entries: CustomStreamEntry[]; refused: { name: string; reason: string }[]; error: string; loaded: boolean; save: (entries: CustomStreamEntry[], message: string) => Promise<{ commitUrl?: string }>; reload: (strict?: boolean) => Promise<void>; history: string }
 export function useCustomStreams(git: GitStorage): CustomStreamsStore {
   const scope = git.accessScope
   const { readCustomStreams } = git
   const [state, setState] = useState<{ scope: string; entries: CustomStreamEntry[]; refused: { name: string; reason: string }[]; sha: string | null; error: string; loaded: boolean }>(() => ({ scope: '', entries: cached(), refused: [], sha: null, error: '', loaded: false }))
   const apply = (entries: CustomStreamEntry[]) => setCustomStreams(customStreamDefs(entries))
-  const load = useCallback(async () => {
+  // strict (GIT-36): the error is also thrown, so Load latest Release Details names it as a failed part.
+  const load = useCallback(async (strict = false) => {
     if (!scope) return
     try {
       // STR-05: a file that cannot be read as a whole keeps the streams in use; refused entries are listed with why.
       const parsed = await readCustomStreamsInto(readCustomStreams)
       apply(parsed.streams)
       setState({ scope, entries: parsed.streams, refused: parsed.refused, sha: parsed.sha, error: '', loaded: true })
-    } catch (failure) { setState((current) => ({ ...current, scope, loaded: true, error: failure instanceof Error ? failure.message : String(failure) })) }
+    } catch (failure) { setState((current) => ({ ...current, scope, loaded: true, error: failure instanceof Error ? failure.message : String(failure) })); if (strict) throw failure }
   }, [scope, readCustomStreams])
   const gitLoading = git.status === 'loading'
-  useEffect(() => { if (scope && !gitLoading) void Promise.resolve().then(load) }, [scope, gitLoading, load])
+  useEffect(() => { if (scope && !gitLoading) void Promise.resolve().then(() => load()) }, [scope, gitLoading, load])
   const fresh = state.scope === scope
   async function save(entries: CustomStreamEntry[], message: string) {
     const text = serializeCustomStreams(entries)

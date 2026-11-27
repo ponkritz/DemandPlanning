@@ -65,7 +65,7 @@ const lastWrite = (writes, path) => writes.filter((write) => write.path === path
 const tile = (page, title) => page.locator('.metric-grid article', { has: page.locator('span', { hasText: title }) })
 const panel = (page, title) => page.locator('.dsh-block', { has: page.locator('h2', { hasText: title }) })
 // CON-107: the reason a builder action is disabled for a role without “Build On-Demand Dashboards”.
-const buildReason = 'Your role does not allow “Build On-Demand Dashboards (blocks, tabs, filters — every dashboard)”. An Admin can change this in Admin → People & roles → Role rights.'
+const buildReason = 'Your role does not allow “Build On-Demand Dashboards (blocks, tabs, filters — every dashboard)”. An Admin can change this in Admin → People & access → Role rights.'
 const openDashboard = async (page, name) => { await page.locator('.sidebar nav button', { hasText: name }).click(); await page.locator('header.topbar h1', { hasText: name }).waitFor() }
 const openJobs = async (page) => { const jobs = page.locator('.jobs-button'); await jobs.waitFor(); await jobs.click(); const list = page.getByRole('dialog', { name: 'Background jobs' }); await list.waitFor(); return list }
 // Ticks values in a filter-row multi-select (its list closes with Escape).
@@ -90,7 +90,7 @@ const dashboardFiles = () => ({
 test('TC-DSH-01: a Tool Owner adds a Dashboard page, builds it from a KPI tile, a bar chart and a summary table over a table page’s rows and filters it by period — saved in Git', async () => {
   const files = { 'on-demand/supplier-issues.json': JSON.stringify(issues), 'menu-layout.json': JSON.stringify({ schema: 1, kind: 'menu-layout', groups: {}, pages: { 'supplier-issues': { type: 'table', group: 'on-demand', order: 1, icon: '⚑', owners: [] } } }) }
   const { page, context, errors, writes } = await open('tool.owner@example.com', files, 'Tool Owner')
-  await navigate(page, 'Pages & menu')
+  await navigate(page, 'Pages & reports')
   await page.locator('.pgb-pages tbody tr', { hasText: 'Supplier issues' }).waitFor()
   // ＋ Add page…: type Dashboard in On-Demand.
   await page.getByRole('button', { name: '＋ Add page…' }).click()

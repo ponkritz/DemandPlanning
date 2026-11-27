@@ -1,5 +1,5 @@
 // CAP-46 Bucket rules: which month Time Writing Tasks are absence (and of which kind), training or other NPRA. Set in
-// Admin → Capacity & time → Bucket rules by roles that manage shared settings and shared in Git; without them the
+// Admin → Capacity & time → Hour classification by roles that manage shared settings and shared in Git; without them the
 // built-in words below apply (the same as before v5.2.0). Title words match whole words; a tag matches when it starts
 // with the word. Letter case is ignored everywhere.
 export interface BucketRules {

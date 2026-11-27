@@ -15,7 +15,8 @@ import { useToolValidationsEnv } from '../useToolValidations'
 import { ConvertDialog, RemovePageDialog } from './OnDemandPage'
 import { OlderCopies } from '../components/OlderCopies'
 
-// PGB-12: Admin → Pages & menu — the menu groups (built-in and custom) and the added pages, each a list in the shared
+// PGB-12, SET-26: Admin → Pages & reports → Menu groups & pages (formerly the page Pages & menu; shown inside the page's
+// SectionTabs, embedded) — the menu groups (built-in and custom) and the added pages, each a list in the shared
 // table (UI-STANDARDS §5) with its row actions; add and edit in pop-ups (§3/§4). Who may change what is shown: every
 // button the viewer may not use is disabled with the reason (CON-102), one line above each table and as the tooltip.
 // PGB-17: duplicates — page names two or more pages share (saved at the same time, or older files in Git): both pages
@@ -114,7 +115,7 @@ export function PagesMenuPage({ git, store, menu, viewer, onOpen, onAddPage, dup
   const ownPages = store.pages.filter((page) => isPageOwner(layout, page.id, viewer.email)).map((page) => page.name)
   const pageRowsReason = gitReason || (rows.some((row) => !pageMenuReason(viewer, layout, row.page.id)) ? '' : rows.length ? pageMenuReason(viewer, layout, rows[0].page.id) : '')
 
-  return <Page className="pages-menu-page" intro="The menu groups and the pages added to them without a release of the tool — shared with everyone through Git."
+  return <Page embedded className="pages-menu-page" intro="The menu groups and the pages added to them without a release of the tool — shared with everyone through Git."
     actions={<>
       <button type="button" className="ghost" disabled={Boolean(addReason)} title={addReason || undefined} onClick={() => onAddPage()}>＋ Add page…</button>
       <button type="button" className="ghost" disabled={Boolean(groupsReason)} title={groupsReason || undefined} onClick={() => setGroupDialog('new')}>＋ New group…</button>

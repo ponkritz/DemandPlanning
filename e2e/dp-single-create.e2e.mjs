@@ -145,7 +145,7 @@ test('TC-DPF-18: Create Feature on a DP release row starts like DP Create Featur
   let page = first.page
 
   // (1) Setup per Epic: story 2 gets "Sprint from" PRD, saved to Git; story 1 keeps SFV.
-  await navigate(page, 'Epic & Feature setup')
+  await navigate(page, 'Feature & PI setup')
   await page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'Setup per Epic' }).click()
   await page.locator('.efe-epics button', { hasText: '#100' }).click()
   const sfvPick = page.getByLabel('User Story 1 Sprint from')
@@ -211,6 +211,16 @@ test('TC-DPF-18: Create Feature on a DP release row starts like DP Create Featur
   await form.getByLabel('PI / Sprint schedule').and(form.locator(':enabled')).waitFor()
   await form.locator('select[aria-label="PI / Sprint schedule"] option:checked', { hasText: 'Sprint 2' }).waitFor({ state: 'attached' })
   await shot(page, 'dp-single-prefilled', page)
+  // TC-BKL-41 (BKL-52): the Priority starts at 2, as in Azure DevOps; 1 is chosen and sent with the Feature.
+  const priority = form.getByLabel('Priority', { exact: true })
+  assert.equal(await priority.inputValue(), '2', 'Priority 2 by default')
+  assert.deepEqual(await priority.locator('option').allTextContents(), ['1', '2', '3', '4'])
+  await priority.selectOption('1')
+  // TC-BKL-40 (BKL-51): the DoD field is labelled Acceptance Criteria (Feature DoD), filled from the Epic's setup.
+  assert.equal(await form.getByLabel(/^Acceptance Criteria \(Feature DoD\)/).inputValue(), 'DT is finished.')
+  // TC-BKL-42 (BKL-53): the DP form has that one acceptance field too; the fold holds the optional Description only.
+  assert.equal(await form.getByRole('textbox', { name: /^Acceptance criteria$/i }).count(), 0, 'no optional Acceptance criteria field')
+  assert.equal((await form.getByRole('region', { name: 'Section 2: Acceptance Criteria (Feature DoD)' }).locator('details.nf-more summary').textContent()).trim(), 'Description (optional)')
   // DoD, then the stories with their Sprints.
   await form.getByRole('button', { name: 'Continue' }).click()
   const storySection = form.getByRole('region', { name: 'Section 3: User Stories' })
@@ -221,6 +231,17 @@ test('TC-DPF-18: Create Feature on a DP release row starts like DP Create Featur
   await form.getByRole('button', { name: 'Save' }).and(form.locator(':enabled')).click()
   await finished(page, /Hierarchy complete/)
   const bySingle = made(second.azure.creates)
+  // TC-BKL-41: the create request of the Feature carries Microsoft.VSTS.Common.Priority = 1 (bulk sends none); its
+  // Description still starts "Feature DoD: …" (BKL-51: only the label changed).
+  const singleFeature = second.azure.creates.find((entry) => entry.type === 'Feature').fields
+  assert.equal(singleFeature['Microsoft.VSTS.Common.Priority'], 1, 'the Priority chosen in New Feature')
+  assert.match(singleFeature['System.Description'], /^Feature DoD: DT is finished\./)
+  // TC-BKL-42 (BKL-53): the Feature create body has no Acceptance Criteria field; the DoD is in the Description.
+  assert.equal(Object.keys(singleFeature).some((field) => /AcceptanceCriteria/.test(field)), false, 'New Feature: no Acceptance Criteria field')
+  assert.ok(singleFeature['System.Description'].startsWith('Feature DoD: '))
+  assert.equal(Object.keys(first.azure.creates.find((entry) => entry.type === 'Feature').fields).some((field) => /AcceptanceCriteria/.test(field)), false, 'DP Create Features: none either')
+  assert.equal('Microsoft.VSTS.Common.Priority' in first.azure.creates.find((entry) => entry.type === 'Feature').fields, false, 'DP Create Features: no Priority, Azure DevOps keeps its default')
+  assert.ok(second.azure.creates.filter((entry) => entry.type !== 'Feature').every((entry) => !('Microsoft.VSTS.Common.Priority' in entry.fields)), 'the children carry no Priority')
   assert.deepEqual(second.dpWrites, [])
   assert.deepEqual(second.errors, [])
   await second.context.close()

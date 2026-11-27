@@ -101,7 +101,7 @@ export interface RemoteChange { path: string; sha: string | null; by?: string; a
 export interface FilePages { pages: string[]; quiet?: 'menu' | 'views' | 'planning' | 'access' | 'piForm' | 'lists'; loader: string }
 const reportPages = ['mydash', 'overview', 'pulse', 'capactual', 'planover']
 const featurePages = ['board', 'windchill', 'mywork', 'activities', 'admin:epics']
-const releasePages = ['board', 'windchill', 'home', 'admin:connections', 'admin:options']
+const releasePages = ['board', 'windchill', 'home', 'admin:connections']
 export function pagesOfFile(path: string, planningPath: string, dashboardsReading: (pageId: string) => string[] = () => []): FilePages {
   const folder = folderOf(planningPath)
   const name = folder && path.startsWith(`${folder}/`) ? path.slice(folder.length + 1) : path
@@ -117,7 +117,7 @@ export function pagesOfFile(path: string, planningPath: string, dashboardsReadin
   if (dashboard) return { pages: [`ondemand:${dashboard.id}`], loader: 'remount' }
   if (name === 'menu-layout.json') return { pages: ['admin:pages'], quiet: 'menu', loader: 'menu' }
   if (name === 'personal-views-defaults.json' || /^personal-views\/[^/]+\.json$/.test(name)) return { pages: ['admin:my', 'admin:look'], quiet: 'views', loader: 'views' }
-  // GIT-23: the roles are loaded quietly on every page (rights update in place); only Admin → People & roles, where
+  // GIT-23: the roles are loaded quietly on every page (rights update in place); only Admin → People & access, where
   // someone may be editing them, shows the notice.
   if (name === 'access.json') return { pages: ['admin:resources'], quiet: 'access', loader: 'access' }
   // GIT-28: qe-mapping.json is no longer read by the app (QE Mapping removed): a change to it never raises a notice.
@@ -126,17 +126,17 @@ export function pagesOfFile(path: string, planningPath: string, dashboardsReadin
   if (name === 'epic-setup.json') return { pages: featurePages, loader: 'epicSetup' }
   if (name === 'custom-streams.json') return { pages: releasePages, loader: 'customStreams' }
   // CON-120, CON-122: a person's Other views and the unassigned list are synced like the connection setup.
-  if (/^other-views\/[^/]+\.json$/.test(name)) return { pages: ['admin:connections', 'admin:options'], loader: 'connections' }
-  if (name === 'azure-views.json') return { pages: ['admin:connections', 'admin:options'], loader: 'connections' }
-  if (name === 'monthly-pack-setup.json' || /^monthly-pack\/\d{4}-\d{2}\.json$/.test(name)) return { pages: ['pulse', 'admin:pack'], loader: 'monthlyPack' }
-  if (name === 'history-hours.json') return { pages: [...reportPages, 'admin:history', 'admin:capacity'], loader: 'history' }
+  if (/^other-views\/[^/]+\.json$/.test(name)) return { pages: ['admin:connections', 'admin:storage'], loader: 'connections' }
+  if (name === 'azure-views.json') return { pages: ['admin:connections', 'admin:storage'], loader: 'connections' }
+  if (name === 'monthly-pack-setup.json' || /^monthly-pack\/\d{4}-\d{2}\.json$/.test(name)) return { pages: ['pulse', 'admin:pages'], loader: 'monthlyPack' }
+  if (name === 'history-hours.json') return { pages: [...reportPages, 'admin:storage'], loader: 'history' }
   if (name === 'kpi-tracker.json') return { pages: ['kpitracker'], loader: 'remount' }
   // TVL-02: the Tool Validations master list is shown on its Release page (a read-only view of the board page).
   if (name === 'tool-validations.json') return { pages: ['board'], loader: 'toolValidations' }
   // PIR-19: the PI Review form setup is loaded quietly on every page (the form, the comment and the split follow it);
-  // only Admin → PI Review Setup (PIR-29), where someone may be editing it, shows the notice.
-  if (name === 'pi-review-form.json') return { pages: ['admin:pireview'], quiet: 'piForm', loader: 'piForm' }
-  // LST-02: the built-in lists are loaded quietly on every page (the columns follow them); only Admin → Epic & Feature
+  // only Admin → Feature & PI setup (PIR-29, SET-26: the PI Review form), where someone may be editing it, shows the notice.
+  if (name === 'pi-review-form.json') return { pages: ['admin:epics'], quiet: 'piForm', loader: 'piForm' }
+  // LST-02: the built-in lists are loaded quietly on every page (the columns follow them); only Admin → Feature & PI
   // setup, where someone may be refreshing one, shows the notice.
   if (name === 'shared-lists.json') return { pages: ['admin:epics'], quiet: 'lists', loader: 'sharedLists' }
   // A file this build does not map: every page, and only a full reload loads it.

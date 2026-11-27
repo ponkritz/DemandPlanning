@@ -55,7 +55,7 @@ export function BaselinesPage({ azure, month, store, git, onOpenSettings, canEdi
   }
 
   return <Page>
-    {canEdit ? <GitSyncBar git={git} onOpenSettings={onOpenSettings} /> : <Notice tone="info" className="git-bar">View only: your role does not include editing baselines. An Admin can change this in Admin → People & roles → Role rights.</Notice>}
+    {canEdit ? <GitSyncBar git={git} onOpenSettings={onOpenSettings} /> : <Notice tone="info" className="git-bar">View only: your role does not include editing baselines. An Admin can change this in Admin → People & access → Role rights.</Notice>}
     <Metrics>
       <Metric label="Releases with a baseline" value={`${scoped.length} / ${releases.length}`} hint={`Features under ${rules.length} stream${rules.length === 1 ? '' : 's'} with estimation rules`} />
       <Metric label="Baseline" value={`${formatHours(totals.baseline)}h`} hint="Current scope × estimation rules" />
@@ -81,8 +81,8 @@ export function BaselinesPage({ azure, month, store, git, onOpenSettings, canEdi
     <h2 className="baseline-subhead">Task plan check · this month</h2>
     <Metrics>
         <Metric label="Month tasks" value={data.monthlyTasks.length} hint={`${data.paired.length} with both fields populated`} />
-        <Metric label="Original Estimate" value={formatHours(data.plan.value)} hint={`${data.plan.count}/${data.plan.total} tasks populated`} />
-        <Metric label="Completed Work" value={formatHours(data.actual.value)} hint={`${data.actual.count}/${data.actual.total} tasks populated`} />
+        <Metric label="Original Estimate" value={formatHours(data.allPlan.value)} hint={`${data.allPlan.count}/${data.allPlan.total} tasks populated`} />
+        <Metric label="Completed Work" value={formatHours(data.allActual.value)} hint={`${data.allActual.count}/${data.allActual.total} tasks populated`} />
         <Metric label="Variance" value={formatHours(data.variance)} hint={`${data.flags.length} task(s) above +25%`} tone={data.flags.length ? 'negative' : undefined} />
     </Metrics>
     <TablePanel title="Time Writing Tasks this month" info="Completed Work minus Original Estimate on the same Task." count={`${rows.length} tasks`} empty={rows.length ? undefined : 'No selected-month Time Writing Tasks.'}>

@@ -31,7 +31,7 @@ Every document of the package lives in `docs/`, is versioned with the code, is b
 | 11a | [UI-STANDARDS.md](UI-STANDARDS.md) | UIS-DPH-001 | One way for each component type (pages, panels, forms, pop-ups, tables, buttons, tabs, messages, KPI tiles and charts, Release pages, colours and type) and the UI defaults; checked by the UI/UX reviewer | Design control (usability, consistency) |
 | 12 | [azure-devops-connection.md](azure-devops-connection.md) | — | Set-up guide for the Azure DevOps connections | User documentation |
 | 12a | [USER-GUIDE.md](USER-GUIDE.md) | UG-DPH-001 | The user guide: tasks with steps for every area, with screenshots and short clips made from synthetic data by `scripts/user-guide-shots.mjs`; the first document on the Documentation page | User documentation |
-| 13 | [README.md](https://github.com/neurolooom-eng/Test2/blob/main/README.md) (repository root) | — | User-facing description of every feature, storage model and roles | User documentation |
+| 13 | [README.md](https://github.com/ponkritz/DemandPlanning/blob/main/README.md) (repository root) | — | User-facing description of every feature, storage model and roles | User documentation |
 
 ## 2. How the package is kept valid
 

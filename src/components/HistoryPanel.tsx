@@ -10,7 +10,7 @@ import { outcomeText } from '../gitSaveQueue'
 
 interface Draft { source: string; sheet: string; rows: HistoryRow[]; skipped: SkippedRow[]; unreadable: UnreadableId[]; cutoff: string; people: Record<string, string>; streamEpics: Record<string, number> }
 
-// Admin → Capacity & time → Historical hours (HIS-01…HIS-09): upload the Excel planning workbook, check who each name is and which Epic
+// Admin → Data & history → Historical hours (HIS-01…HIS-09): upload the Excel planning workbook, check who each name is and which Epic
 // each stream without an Epic No belongs to, then save it to Git for everyone. The file is read in this browser only;
 // its rows are kept in the Git data repository, never in the app's source.
 export function HistoryPanel({ history, git, items, profileNames, editable, importedBy }: { history: HistoryStore; git: GitStorage; items: AzureWorkItem[]; profileNames: string[]; editable: boolean; importedBy: string }) {
@@ -18,7 +18,7 @@ export function HistoryPanel({ history, git, items, profileNames, editable, impo
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
   const upload = useRef<HTMLInputElement>(null)
-  // The names the reports know: everyone Assigned To a Task in Azure DevOps, and everyone in Admin → People & roles → People.
+  // The names the reports know: everyone Assigned To a Task in Azure DevOps, and everyone in Admin → People & access → People.
   const known = useMemo(() => [...new Set([...items.filter((item) => item.workItemType === 'Task' && item.assignedTo).map((item) => item.assignedTo), ...profileNames])].sort((a, b) => a.localeCompare(b)), [items, profileNames])
   const epics = useMemo(() => items.filter((item) => item.workItemType === 'Epic' && item.state.trim().toLowerCase() !== 'removed').sort((a, b) => a.title.localeCompare(b.title)), [items])
   const file = history.file
@@ -102,8 +102,8 @@ export function HistoryPanel({ history, git, items, profileNames, editable, impo
   const afterCutoff = draft ? draft.rows.filter((row) => row.month >= draft.cutoff).length : 0
   const reasons = draft ? Object.entries(draft.skipped.reduce<Record<string, number>>((all, entry) => { const reason = entry.reason.replace(/^\d{4}-\d{2}: /, ''); all[reason] = (all[reason] ?? 0) + 1; return all }, {})) : []
 
-  return <Panel className="admin-section" eyebrow="SHARED DATA" title="Historical hours" info={<ul><li>The planned and recorded hours of the months before Time Writing in Azure DevOps, from the planning workbook (sheet TransformedData: QA/QE, Month(Date), Epic No, Stream(Features), Project / Release Title, Expected, Actual, and the optional Feature ID and Tag columns), uploaded from this computer or read from the Git data repository (its folder or history/).</li><li>A Tag of “Training” or “NPRA” (several separated by ; or ,) counts the row as training / NPRA, like the same tag in Azure DevOps — also under the absence Epic, where the other rows count as leave.</li><li>Where a row has a Feature ID of a Feature in the fetched data, its hours count under that Feature and its Epic; else under the Epic No; else under the Epic chosen for its stream.</li><li>Before the cut-off month the history is the only source of hours: Azure DevOps Time Writing Tasks of those months are not counted (they stay in Azure DevOps). From the cut-off on, only Azure DevOps counts.</li><li>The rows are kept in the Git data repository (history-hours.json), never in the app's source; nothing is written to Azure DevOps.</li><li>People who have left appear by name; add them in Admin → People & roles → People (region, role, Left on) so their utilization has a capacity.</li></ul>}>
-    {!git.connected && <Notice tone="info">Connect Git storage (Admin → Data & sharing): the historical hours are shared with everyone through Git.</Notice>}
+  return <Panel className="admin-section" eyebrow="SHARED DATA" title="Historical hours" info={<ul><li>The planned and recorded hours of the months before Time Writing in Azure DevOps, from the planning workbook (sheet TransformedData: QA/QE, Month(Date), Epic No, Stream(Features), Project / Release Title, Expected, Actual, and the optional Feature ID and Tag columns), uploaded from this computer or read from the Git data repository (its folder or history/).</li><li>A Tag of “Training” or “NPRA” (several separated by ; or ,) counts the row as training / NPRA, like the same tag in Azure DevOps — also under the absence Epic, where the other rows count as leave.</li><li>Where a row has a Feature ID of a Feature in the fetched data, its hours count under that Feature and its Epic; else under the Epic No; else under the Epic chosen for its stream.</li><li>Before the cut-off month the history is the only source of hours: Azure DevOps Time Writing Tasks of those months are not counted (they stay in Azure DevOps). From the cut-off on, only Azure DevOps counts.</li><li>The rows are kept in the Git data repository (history-hours.json), never in the app's source; nothing is written to Azure DevOps.</li><li>People who have left appear by name; add them in Admin → People & access → People (region, role, Left on) so their utilization has a capacity.</li></ul>}>
+    {!git.connected && <Notice tone="info">Connect Git storage (Admin → Data & history): the historical hours are shared with everyone through Git.</Notice>}
     {history.note && <Notice tone="warning">{history.note}</Notice>}
     {file ? <SettingsSummary rows={[
       ['Source', `${file.source} · sheet ${file.sheet}`],
@@ -135,7 +135,7 @@ export function HistoryPanel({ history, git, items, profileNames, editable, impo
         <Metric label="Rows to check" value={toCheck.length} tone={toCheck.length ? 'negative' : undefined} hint={reasons.filter(([reason]) => !expected(reason)).map(([reason, count]) => `${count} ${reason}`).join(' · ') || 'none'} />
         <Metric label="Left out as expected" value={draft.skipped.length - toCheck.length + afterCutoff} hint={[afterCutoff ? `${afterCutoff} from ${monthName(draft.cutoff)} on (Azure DevOps counts)` : '', ...reasons.filter(([reason]) => expected(reason)).map(([reason, count]) => `${count} ${reason}`)].filter(Boolean).join(' · ') || 'none'} />
       </Metrics>
-      {groups.length > 0 && <Notice tone="info">Rows for a group apply to each person in it, like a regional holiday Feature: {groups.map(([label, count]) => `${count} for ${label}`).join(' · ')}. Holidays and leave under the Team Holidays and Training Epic count as public holidays, everything else as reserved common time. People need their region in Admin → People & roles → People.</Notice>}
+      {groups.length > 0 && <Notice tone="info">Rows for a group apply to each person in it, like a regional holiday Feature: {groups.map(([label, count]) => `${count} for ${label}`).join(' · ')}. Holidays and leave under the Team Holidays and Training Epic count as public holidays, everything else as reserved common time. People need their region in Admin → People & access → People.</Notice>}
       <h4>People</h4>
       <p className="muted">Each name in the Excel, and the name the reports use. A name matched to Azure DevOps joins that person's hours from the cut-off on; “As written” keeps the Excel name (for people who have left).</p>
       <div className="azure-table"><table><thead><tr><th>Name in the Excel</th><th>Rows</th><th>Name in the reports</th></tr></thead><tbody>

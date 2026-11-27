@@ -15,7 +15,7 @@ export type MonthStatus = 'elapsed' | 'partial' | 'future'
 export interface DashboardFilter { regions: Region[]; roles: ResourceRole[]; people: string[]; streams: string[] }
 export const noFilter: DashboardFilter = { regions: [], roles: [], people: [], streams: [] }
 export interface StreamHours { key: string; title: string; plan: number; actual: number }
-export interface PersonMonth { month: string; status: MonthStatus; person: string; region?: Region; role?: ResourceRole; plan: number; actual: number; capacity: number; absence: number; reserved: number; tasks: number; contractual: number; work: number; training: number; npraOther: number; activities: number; planLines: number; blankActuals: number; streams: StreamHours[] }
+export interface PersonMonth { month: string; status: MonthStatus; person: string; region?: Region; role?: ResourceRole; plan: number; actual: number; capacity: number; absence: number; holiday: number; reserved: number; tasks: number; contractual: number; work: number; training: number; npraOther: number; activities: number; planLines: number; blankActuals: number; streams: StreamHours[] }
 export interface Totals { plan: number; actual: number; capacity: number; absence: number; people: number; planUtil: number | null; actualUtil: number | null; gap: number; ratio: number | null }
 
 const ratio = (part: number, whole: number) => whole > 0 ? Math.round(part / whole * 1000) / 10 : null
@@ -116,7 +116,7 @@ export function personMonths(source: AzureWorkItem[], months: string[], today: s
       const profile = profiles[person.name]
       rows.push({
         month, status: monthStatus(month, today), person: person.name, region: profile?.region, role: profile?.role,
-        plan: round(person.utilizedPlanned), actual: round(person.utilized), capacity: round(person.available), absence: round(person.absence), reserved: round(person.reserved), tasks: person.tasks + person.npraTasks,
+        plan: round(person.utilizedPlanned), actual: round(person.utilized), capacity: round(person.available), absence: round(person.absence), holiday: round(person.absenceByKind['Public holiday'] ?? 0), reserved: round(person.reserved), tasks: person.tasks + person.npraTasks,
         // CAP-39: the CAP-38 split, for Workload by person.
         contractual: round(person.funded), work: round(person.work), training: round(person.training), npraOther: round(person.npraOther), activities: round(person.reservedActual),
         planLines: lines.get(person.name)?.planLines ?? 0, blankActuals: lines.get(person.name)?.blankActuals ?? 0,
@@ -126,6 +126,20 @@ export function personMonths(source: AzureWorkItem[], months: string[], today: s
   }
   return rows
 }
+
+// ACT-28: what the capacity of some person-months is made of — contractual hours less leave (every kind but public
+// holidays) and holidays, each by its actual if recorded, else planned (CAP-63), and anything else the calculation
+// profile takes off (Standard Hours, deducted buckets) — and the text for the Capacity tile, only the non-zero parts.
+export function capacityParts(rows: PersonMonth[]) {
+  const sum = (pick: (row: PersonMonth) => number) => round(rows.reduce((total, row) => total + pick(row), 0))
+  const contractual = sum((row) => row.contractual), holiday = sum((row) => Math.min(row.holiday ?? 0, row.absence)), leave = sum((row) => row.absence - Math.min(row.holiday ?? 0, row.absence)), capacity = sum((row) => row.capacity)
+  const other = Math.max(0, round(contractual - leave - holiday - capacity))
+  return { contractual, leave, holiday, other, capacity }
+}
+export function capacityText(parts: ReturnType<typeof capacityParts>, hours: (value: number) => string = String) {
+  return [`${hours(parts.contractual)}h contractual`, ...(parts.leave ? [`${hours(parts.leave)}h leave`] : []), ...(parts.holiday ? [`${hours(parts.holiday)}h holiday`] : []), ...(parts.other ? [`${hours(parts.other)}h other deductions`] : [])].join(' − ')
+}
+export const absenceRuleText = 'leave and holidays: actual if recorded, else planned'
 
 // Regions, roles and people narrow the people; streams narrow the hours to those Epics and the people to those with
 // hours in them (their capacity is still counted whole).
@@ -198,7 +212,7 @@ export function concentration(rows: PersonMonth[], measure: 'actual' | 'plan', b
 // Rebalancing within the same role and month: overload (plan above capacity) can only move to headroom of that role
 // in that month. People without a role are left out.
 // Overload (plan above capacity) can move only to headroom of the same role in the same month, and only in current or
-// future months. People without a role (Admin → People & roles → People) are left out of the moves — not listed as relief needs or
+// future months. People without a role (Admin → People & access → People) are left out of the moves — not listed as relief needs or
 // receivers — and counted apart so the Overview can say so; gross overload and headroom still count everyone.
 export function rebalancing(rows: PersonMonth[]) {
   let overload = 0, headroom = 0, movable = 0

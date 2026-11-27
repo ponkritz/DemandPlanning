@@ -31,7 +31,7 @@ export function RemovedConnections({ git, azure, canShare }: { git: GitStorage; 
       // everyone at their next start; restored here only, it stays here (the marker counts as applied here).
       if (row.removal && share) await git.clearViewRemoval(row.view.id, name)
       else if (row.removal) git.keepRemovedHere(row.removal)
-      const restored = restoreViews([row.view], '')
+      const restored = restoreViews([row.view], null)
       azure.reloadConnectionProfiles()
       let text = `“${name}” is back here`
       // CON-120: an Other view comes back as the restorer's own (their file in Git), never into the shared setup.
@@ -55,7 +55,7 @@ export function RemovedConnections({ git, azure, canShare }: { git: GitStorage; 
   }
 
   return <Panel className="connection-panel removed-connections" eyebrow="GIT HISTORY" title="Removed connections" info="Connections that were in an older version of the shared connection setup in Git but are no longer there nor here — for example one dropped when another computer saved its own list — and the views the Tool Owner removed or deleted for everyone (listed first, with who and when). Restore puts it back (with its query and settings, never a PAT); for a view removed for everyone it also takes the removal away, so it comes back for everyone at their next start. Nothing is changed until you press Restore.">
-    {!git.connected ? <p className="muted">Connect Git storage (Admin → Data &amp; sharing) to look in its history.</p> : <>
+    {!git.connected ? <p className="muted">Connect Git storage (Admin → Data &amp; history) to look in its history.</p> : <>
       <div className="button-row"><button type="button" className="ghost" disabled={busy} onClick={() => void look()}>{busy && !rows ? 'Looking…' : rows ? 'Look again' : 'Look in Git history'}</button></div>
       {rows && (rows.length ? <div className="azure-table"><table>
         <thead><tr><th scope="col">Connection</th><th scope="col">Query</th><th scope="col">Last in Git</th><th scope="col" /></tr></thead>

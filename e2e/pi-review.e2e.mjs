@@ -7,10 +7,11 @@ import { navigate, openPage, startApp, text } from './helpers.mjs'
 // iterations (PI 2026.4 current) and the Comments API with two pages — the current PI is chosen, its Features listed,
 // a Feature's Discussion read in the drawer as plain text from both pages, and Read all Discussions completes as a
 // background job. Synthetic data only; every step waits for what it needs, never for a time.
-// PI Review columns (PIR-07…PIR-10; TC-PIR-09, UAT): Feature 201's newest comment is written with the headings, so the
-// drawer's Latest comment and the table's five columns show it split; Feature 202's newest comment (listed after an
-// older one) has no headings, so only Date and Comment are filled; Export carries the five columns.
-// PI Review keyword fallback (PIR-11; TC-PIR-11, UAT): Feature 204's newest comment has no heading but sentences with
+// PI Review columns (PIR-07…PIR-10; TC-PIR-09, UAT): Feature 201's newest comment is a review headed "Feature Review for
+// PI 2026.4" written with the field headings, so the drawer's Latest review and the table's five columns show it split;
+// Feature 202's comments have no "Feature Review for PI …" heading (PIR-49, PIR-50: older reviews and chat do not count),
+// so it is Not reviewed and its columns stay empty; Export carries the five columns.
+// PI Review keyword fallback (PIR-11; TC-PIR-11, UAT): Feature 204's newest review has no field heading but sentences with
 // keywords, so its Struggles, Learnings and Move to Next PI are suggested — marked "(suggested)" with the tooltip — the
 // drawer says "Suggested from keywords" and Export's Split from says Keywords (Headings for 201, None for 202).
 let app
@@ -31,15 +32,16 @@ const node = (path, children = [], attributes) => ({ name: path.split('\\').at(-
 export const piToken = 'page 2/of+2=='
 // The Discussion of Feature 201 in two pages (newest first), with a mention, an image, a script and a deleted comment.
 const firstPage = [
-  { id: 5, text: '<div><b>Struggles:</b> test rig late</div><div>Learnings: book the rig early<br>share the calendar</div><div>Move to next PI: Yes - waiting for vendor</div>', createdBy: { displayName: 'Ben Okafor' }, createdDate: '2026-11-21T14:30:00Z' },
+  { id: 5, text: '<div><b>Feature Review for PI 2026.4</b></div><div><b>Struggles:</b> test rig late</div><div>Learnings: book the rig early<br>share the calendar</div><div>Move to next PI: Yes - waiting for vendor</div>', createdBy: { displayName: 'Ben Okafor' }, createdDate: '2026-11-21T14:30:00Z' },
   { id: 4, text: '<div>Blocked by the <b>test rig</b>, asked <a href="#" data-vss-mention="version:2.0,aa11">@Ana Costa</a> to help</div>', createdBy: { displayName: 'Rita Gomez' }, createdDate: '2026-11-20T09:00:00Z' },
   { id: 3, text: '<p>Lesson: book the rig early</p><script>window.hacked = true</script>', createdBy: { displayName: 'Ben Okafor' }, createdDate: '2026-11-18T09:00:00Z' },
 ]
-// Feature 204 (TC-PIR-11): the newest comment without a heading, an older one with headings.
+// Feature 204 (TC-PIR-11): the newest review without a field heading, an older comment with headings but without the
+// review heading (no review, PIR-49).
 export const keywordFeature = raw(204, 'Feature', 'Lab move review', 'Project\\PI 2026.4', 100)
 const keywordComments = [
   { id: 12, text: '<div>Struggles: old text</div>', createdBy: { displayName: 'Rita Gomez' }, createdDate: '2026-11-10T09:00:00Z' },
-  { id: 13, text: '<div>We were blocked by the vendor for two Sprints. No issues with the docs.</div><div>Next time we book the rig at PI planning.</div><div>Spill over to next PI — partly, the rig test.</div>', createdBy: { displayName: 'Ben Okafor' }, createdDate: '2026-11-22T10:00:00Z' },
+  { id: 13, text: '<div>Feature Review for PI 2026.4:</div><div>We were blocked by the vendor for two Sprints. No issues with the docs.</div><div>Next time we book the rig at PI planning.</div><div>Spill over to next PI — partly, the rig test.</div>', createdBy: { displayName: 'Ben Okafor' }, createdDate: '2026-11-22T10:00:00Z' },
 ]
 const secondPage = [
   { id: 2, text: 'Gone', isDeleted: true, createdBy: { displayName: 'Ben Okafor' }, createdDate: '2026-11-10T09:00:00Z' },
@@ -115,7 +117,7 @@ test('TC-PIR-06: the current PI is preselected, its Features listed, a Discussio
   // PIR-03, PIR-04: the PI's Features by ID; the toggle adds the Feature with a User Story in the PI.
   await page.locator('.pir-table tr[data-row-key="example/project/202"]').waitFor()
   assert.deepEqual(await rowKeys(page), ['example/project/201', 'example/project/202'])
-  assert.match(await text(page.locator('.pir-table tr[data-row-key="example/project/201"]')), /^201 DP 4\.2 release review DP releases Active Rita Gomez — PI 2026\.4 — — — — — — — — — Review…$/)
+  assert.match(await text(page.locator('.pir-table tr[data-row-key="example/project/201"]')), /^201 DP 4\.2 release review DP releases Active Rita Gomez — PI 2026\.4 — — — — — — — — — — Review…$/) // PIR-77: one more — for Old format
   assert.match(await text(page.locator('.data-table-status')), /^2 of 2 Features$/)
   await page.getByRole('checkbox', { name: 'Also Features with User Stories in this PI' }).check()
   await page.locator('.pir-table tr[data-row-key="example/project/203"]').waitFor()
@@ -127,7 +129,7 @@ test('TC-PIR-06: the current PI is preselected, its Features listed, a Discussio
   await drawer.waitFor()
   const items = drawer.locator('.pir-comments > li')
   await drawer.getByRole('heading', { name: 'Discussion (4)' }).waitFor()
-  assert.deepEqual(await items.locator('.pir-comment-text').allInnerTexts(), ['Struggles: test rig late\n\nLearnings: book the rig early\nshare the calendar\n\nMove to next PI: Yes - waiting for vendor', 'Blocked by the test rig, asked @Ana Costa to help', 'Lesson: book the rig early', 'Screenshot [image] attached'])
+  assert.deepEqual(await items.locator('.pir-comment-text').allInnerTexts(), ['Feature Review for PI 2026.4\n\nStruggles: test rig late\n\nLearnings: book the rig early\nshare the calendar\n\nMove to next PI: Yes - waiting for vendor', 'Blocked by the test rig, asked @Ana Costa to help', 'Lesson: book the rig early', 'Screenshot [image] attached'])
   assert.match(await text(items.first()), /^Ben Okafor /)
   assert.equal(await drawer.locator('.pir-comments img, .pir-comments script, .pir-comments a').count(), 0, 'no markup rendered')
   assert.equal(await page.evaluate(() => window.hacked), undefined)
@@ -162,17 +164,21 @@ test('TC-PIR-09: after Read all Discussions the five columns show each Feature\'
   await panel.locator('li.job', { hasText: 'Reading Discussions · PI 2026.4' }).filter({ hasText: '2 of 2 read.' }).waitFor()
   await panel.getByRole('button', { name: 'Close', exact: true }).click()
   // PIR-07, PIR-09: each Feature's newest comment by date — split for 201; for 202 (listed after an older one) whole only.
-  assert.deepEqual(await values('example/project/201'), [await localDateTime(page, '2026-11-21T14:30:00Z'), 'Struggles: test rig late · Learnings: book the rig early · share the calendar · Move to next PI: Yes - waiting for vendor', 'test rig late', 'book the rig early · share the calendar', 'Yes — waiting for vendor'])
-  assert.deepEqual(await values('example/project/202'), [await localDateTime(page, '2026-11-19T09:00:00Z'), 'Ready for review', '', '', ''])
+  assert.deepEqual(await values('example/project/201'), [await localDateTime(page, '2026-11-21T14:30:00Z'), 'Feature Review for PI 2026.4 · Struggles: test rig late · Learnings: book the rig early · share the calendar · Move to next PI: Yes - waiting for vendor', 'test rig late', 'book the rig early · share the calendar', 'Yes — waiting for vendor'])
+  // PIR-49, PIR-50: 202's comments carry no "Feature Review for PI 2026.4" heading (an older review, a chat): Not reviewed.
+  assert.deepEqual(await values('example/project/202'), ['Not reviewed', '', '', '', ''])
+  assert.match(await cellTitle(page, 'example/project/202', 'Date and Time of Comment'), /^Not reviewed: no comment headed “Feature Review for PI 2026\.4”\. Only comments headed “Feature Review for PI …” count as a PI review/)
   assert.match(await cellTitle(page, 'example/project/201', 'Move to Next PI'), /^Yes — waiting for vendor$/)
   // PIR-09: sorted by the date, newest first on the first click; filtered by the Move value.
   const byDate = page.locator('.pir-table thead .sort-button', { hasText: 'Date and Time of Comment' })
   await byDate.click()
   await page.locator('.pir-table thead th[aria-sort="descending"]', { hasText: 'Date and Time of Comment' }).waitFor()
-  assert.deepEqual(await rowKeys(page), ['example/project/201', 'example/project/202'])
+  // (202 is Not reviewed: no date, so the two clicks only reverse the order.)
+  const descending = await rowKeys(page)
+  assert.deepEqual([...descending].sort(), ['example/project/201', 'example/project/202'])
   await byDate.click()
   await page.locator('.pir-table thead th[aria-sort="ascending"]', { hasText: 'Date and Time of Comment' }).waitFor()
-  assert.deepEqual(await rowKeys(page), ['example/project/202', 'example/project/201'])
+  assert.deepEqual(await rowKeys(page), [...descending].reverse())
   await page.getByRole('button', { name: /^Move to next PI:/ }).click()
   await page.getByRole('listbox', { name: 'Move to next PI' }).getByRole('checkbox', { name: 'Yes', exact: true }).check()
   await page.locator('.pir-table tr[data-row-key="example/project/202"]').waitFor({ state: 'detached' })
@@ -189,13 +195,13 @@ test('TC-PIR-09: after Read all Discussions the five columns show each Feature\'
   if (menu) await page.getByRole('menuitem', { name: 'CSV (.csv)' }).click()
   const csv = readFileSync(await (await download).path(), 'utf8').replace(/\r\n/g, '\n')
   assert.match(csv, /Date and Time of Comment,Comment,Struggles,Learnings,Move to Next PI/)
-  assert.match(csv, /2026-11-21[^,]*,"Struggles: test rig late\n\nLearnings: book the rig early\nshare the calendar\n\nMove to next PI: Yes - waiting for vendor",test rig late,"book the rig early\nshare the calendar",Yes — waiting for vendor/)
-  assert.match(csv, /2026-11-19[^,]*,Ready for review,,,/)
-  // PIR-10: the drawer shows the newest comment split above the Discussion (read already: not read again).
+  assert.match(csv, /2026-11-21[^,]*,"Feature Review for PI 2026\.4\n\nStruggles: test rig late\n\nLearnings: book the rig early\nshare the calendar\n\nMove to next PI: Yes - waiting for vendor",test rig late,"book the rig early\nshare the calendar",Yes — waiting for vendor/)
+  assert.doesNotMatch(csv, /Ready for review/)
+  // PIR-10: the drawer shows the latest review split above the Discussion (read already: not read again).
   await page.locator('.pir-table tr[data-row-key="example/project/201"] td').nth(1).click()
   const drawer = page.locator('aside.drawer[role="dialog"]', { has: page.getByRole('heading', { name: 'Feature #201', exact: true }) })
   await drawer.getByRole('heading', { name: 'Discussion (4)' }).waitFor()
-  const latest = drawer.getByRole('region', { name: 'Latest comment' })
+  const latest = drawer.getByRole('region', { name: 'Latest review' })
   assert.equal(await text(latest.locator('.pir-comment-head')), `Ben Okafor ${await localDateTime(page, '2026-11-21T14:30:00Z')}`)
   assert.deepEqual(await latest.locator('dd').allInnerTexts(), ['test rig late', 'book the rig early\nshare the calendar', 'Yes — waiting for vendor', '—', '—'])
   await page.keyboard.press('Escape')
@@ -245,14 +251,14 @@ test('TC-PIR-11: a newest comment without headings has its Struggles, Learnings 
   if (menu) await page.getByRole('menuitem', { name: 'CSV (.csv)' }).click()
   const csv = readFileSync(await (await download).path(), 'utf8').replace(/\r\n/g, '\n')
   assert.match(csv, /Struggles,Learnings,Move to Next PI,Review mode,Additional Remarks,Reviewed PI,Split from\n/)
-  assert.match(csv, /Yes — waiting for vendor,,,,Headings\n/)
-  assert.match(csv, /2026-11-19[^,]*,Ready for review,,,,,,,None\n/)
-  assert.match(csv, /,We were blocked by the vendor for two Sprints\.,Next time we book the rig at PI planning\.,Partly — the rig test\.,,,,Keywords\n?/)
+  assert.match(csv, /Yes — waiting for vendor,,,PI 2026\.4,Headings\n/)
+  assert.match(csv, /,,,,,,,,,None\n/)
+  assert.match(csv, /,We were blocked by the vendor for two Sprints\.,Next time we book the rig at PI planning\.,Partly — the rig test\.,,,PI 2026\.4,Keywords\n?/)
   // PIR-10, PIR-11: the drawer's Latest comment says the texts are suggested.
   await page.locator(`.pir-table tr[data-row-key="${row}"] td`).nth(1).click()
   const drawer = page.locator('aside.drawer[role="dialog"]', { has: page.getByRole('heading', { name: 'Feature #204', exact: true }) })
   await drawer.getByRole('heading', { name: 'Discussion (2)' }).waitFor()
-  const latest = drawer.getByRole('region', { name: 'Latest comment' })
+  const latest = drawer.getByRole('region', { name: 'Latest review' })
   assert.match(await text(latest.locator('.pir-suggested-note')), /^Suggested from keywords/)
   assert.deepEqual(await latest.locator('.pir-split.pir-suggested dd').allInnerTexts(), ['We were blocked by the vendor for two Sprints.', 'Next time we book the rig at PI planning.', 'Partly — the rig test.'])
   await page.keyboard.press('Escape')

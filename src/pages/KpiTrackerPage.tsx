@@ -85,7 +85,7 @@ export function KpiTrackerPage({ git, canManage, who }: { git: GitStorage; canMa
       </div> : <Notice tone="info">Reading the file live from SharePoint needs the desktop app (it signs in with your company account). Here the page shows the copy saved in Git.</Notice>}
       {notice && <Notice tone={notice.tone}>{notice.text}</Notice>}
       <SaveQueueStatus state={git.queueState(kpiTrackerFile)} onRetry={() => void git.retryQueued(kpiTrackerFile).then(loadGit)} />
-      {!connected && <Notice tone="warning">Connect Git storage (Admin → Data & sharing) to see the copy saved in Git{desktop ? ' and to save the reads' : ''}.</Notice>}
+      {!connected && <Notice tone="warning">Connect Git storage (Admin → Data & history) to see the copy saved in Git{desktop ? ' and to save the reads' : ''}.</Notice>}
       {gitState.error && <Notice tone="error">{gitState.error}</Notice>}
     </Panel>
     {!tracker ? (gitState.loaded && <EmptyState title="No KPI tracker yet." detail={desktop && canManage ? 'Paste the SharePoint link of the Excel file and read it: it is then saved to Git for everyone.' : 'An admin reads it from SharePoint in the desktop app; it then shows here for everyone.'} />)

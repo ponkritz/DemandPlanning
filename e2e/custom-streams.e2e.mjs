@@ -106,7 +106,7 @@ test('TC-STR-06: as Tool Owner add a stream “Labeling” (Azure DevOps, Like C
   // The Stream mapping has its row; Add query maps a connection named “Labeling”.
   const mapping = page.locator('.connection-panel', { hasText: 'STEP 2' })
   const row = mapping.locator('tbody tr', { hasText: 'Labeling' })
-  assert.match(await text(row), /Labeling Custom .*Like Content — each document is a release by its title Not mapped/)
+  assert.match(await text(row), /Labeling Custom .*Like Content — each document is a release by its title Whole board Not mapped/)
   await row.getByRole('button', { name: 'Add query' }).click()
   const form = page.getByRole('dialog', { name: 'New connection' })
   assert.equal(await form.getByLabel('Name', { exact: true }).inputValue(), 'Labeling')
@@ -175,7 +175,7 @@ test('TC-STR-07: a viewer without “Change the stream mapping” sees the custo
   const add = panel.getByRole('button', { name: '＋ Add stream…' })
   await panel.locator('tbody tr', { hasText: 'Labeling' }).waitFor()
   assert.equal(await add.isDisabled(), true)
-  const reason = 'Your role does not allow “Change the stream mapping and its query logic: servers, projects and queries of the streams, their data sets, release naming (Tool Owner)”. An Admin can change this in Admin → People & roles → Role rights.'
+  const reason = 'Your role does not allow “Change the stream mapping and its query logic: servers, projects and queries of the streams, their data sets, release naming (Tool Owner)”. An Admin can change this in Admin → People & access → Role rights.'
   assert.equal(await text(panel.locator('.write-blocked')), reason, 'the reason, visible next to the button')
   assert.equal(await add.getAttribute('title'), reason)
   assert.equal(await panel.getByRole('button', { name: 'Edit' }).isDisabled(), true)

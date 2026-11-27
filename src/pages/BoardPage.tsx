@@ -1,4 +1,7 @@
 import { useCan, useWriteBlock } from '../useCan'
+import { ProductOwnerFilter } from '../components/ProductOwnerFilter'
+import { useOwnerFilter } from '../useOwnerFilter'
+import { featureOwner } from '../epicOwners'
 import { countStreams, monthReleaseCount, releaseRegister, timeWritingHours } from '../releaseSource'
 import { runInBackground } from '../backgroundJobs'
 import { useBulkEpic, useStreamEpics } from '../useStreamEpics'
@@ -56,6 +59,7 @@ import type { GitStorage } from '../useGitStorage'
 import { columnName, queryLayout, type QueryColumn, type QueryOrder } from '../queryView'
 import { dataSetOfProfile, defaultMatchThreshold, streamArea, streamOfProfile } from '../streams'
 import { normalizeReleaseSourceSettings, streamPatterns } from '../releaseSource'
+import { usePageSettingsGear } from '../usePageSettingsGear'
 
 // One page for all configured Azure DevOps views (each its own entry in the sidebar): the Time Writing backlog
 // (QMS-0025) as an editable tree, and every other shown connection as a read-only query view.
@@ -139,6 +143,8 @@ function useMissingParentTitles(documentsId: string | undefined, fetchedAt: stri
   }, [documentsId, fetchedAt, report, titles, update])
 }
 function ReadOnlyView({ id, name, role, azure, store, month, gitNote, otherView, onOpenConnection, onOpenSettings, assign, featureSetup }: { otherView?: OtherViewEnv; onOpenSettings?: (tab: SettingsTab, section?: string) => void; featureSetup?: FeatureSetups | null; id: string; name: string; role: BacklogView['role']; azure: AzureWorkspace; store: PageProps['store']; month: string; gitNote?: { tone: string; text: string }; onOpenConnection: () => void; assign?: { me: string; canChoose: boolean } }) {
+  // SET-32: ⚙ Settings for this Release Details page (page actions, last), for the people who may change one of its settings.
+  const settingsGear = usePageSettingsGear()
   // QV-16: the header month, or every month (Show: {month} / All months).
   const [scope, setScope] = useState<ReleaseScope>('month')
   const allMonths = scope === 'all'
@@ -199,6 +205,12 @@ function ReadOnlyView({ id, name, role, azure, store, month, gitNote, otherView,
   const completionName = toolTwo ? completionFieldOptions(toolTwo.toolSource && 'columns' in toolTwo.toolSource ? toolTwo.toolSource.columns : undefined, toolTwo.toolSource?.items).find((option) => option.ref === toolTwo.report.completionField)?.name ?? toolTwo.report.completionField : ''
   const monthItems = source ? isCp ? source.items : source.items.filter((item) => isDp ? dpListedIn(item, month) : viewMonthOf(item) === month) : noItems
   const items = source ? allMonths || isCp ? source.items : monthItems : noItems
+  // PIR-69: the Product Owner filter of this Release Details page (remembered per page): a release row is kept when the
+  // Epic of its QMS-0025 Feature has a chosen Product Owner. The counts stay the stream's.
+  const owners = useOwnerFilter(`release:${id}`)
+  const boardById = useMemo(() => new Map(azure.items.map((item) => [item.id, item])), [azure.items])
+  const ownerFile = owners.file, ownerActive = owners.active, ownerKeeps = owners.keeps
+  const keepRelease = useMemo(() => ownerActive ? (features: (AzureWorkItem | undefined)[]) => ownerKeeps(features.map((feature) => featureOwner(ownerFile, azure.items, feature && (boardById.get(feature.id) ?? feature), boardById))) : undefined, [ownerActive, ownerKeeps, ownerFile, azure.items, boardById])
   // DP rows matched to the QMS-0025 board (Feature / User Story by SourceProgram + Title), with Create Feature.
   const boardColumn = useDpBoardColumn(isDp ? items : noItems, azure, threshold, assign, featureSetup)
   // QV-53: DP's Month & Year (the DDT Date's month, which the list filters on) and every milestone's month and status.
@@ -208,7 +220,8 @@ function ReadOnlyView({ id, name, role, azure, store, month, gitNote, otherView,
   const can = useCan(), bulkWhy = useWriteBlock().why('work.bulk')
   // QV-59: no DP bulk creation Epic is built in — without one mapped, Create Features is disabled and links to the setting.
   const dpBulkEpic = useBulkEpic('DP').epicId
-  const openBulkEpics = onOpenSettings ? () => onOpenSettings('options', 'bulk') : undefined
+  // SET-29: the shared Epics (Admin → Streams → Bulk creation) for those allowed to set them, else My bulk creation Epics.
+  const openBulkEpics = onOpenSettings ? () => can('streams.options') ? onOpenSettings('connections', 'bulk') : onOpenSettings('my', 'bulk') : undefined
   const dpSetup = useMemo(() => chooseSetup(featureSetup, dpBulkEpic, true).setup, [featureSetup, dpBulkEpic])
   // DPF-02: the QE page of the DP bulk Epic's setup.
   const qeSource = useQeSource(dpSetup)
@@ -216,6 +229,8 @@ function ReadOnlyView({ id, name, role, azure, store, month, gitNote, otherView,
   const dpCandidates = useMemo(() => isDp ? dpBoardCandidates(azure.items, dpEpics) : null, [isDp, azure.items, dpEpics])
   const dpMatches = useDpMatches(isDp ? source?.items : undefined, dpCandidates, threshold)
   const featureMatch = useMemo(() => (row: AzureWorkItem) => dpCandidates ? (dpMatches?.get(row.id) ?? dpBoardMatch(row, dpCandidates, threshold)).feature : undefined, [dpCandidates, dpMatches, threshold])
+  // PIR-69: the DP releases the Product Owner filter keeps, by the QMS-0025 Feature matched.
+  const dpShown = isDp && keepRelease ? items.filter((item) => keepRelease([featureMatch(item)?.item])) : items
   // QV-65: the hours of the matched Feature's Time Writing Tasks (as IOCC, Content and Tool Validations show them).
   const hoursOf = useMemo(() => timeWritingHours(azure.items), [azure.items])
   const allDp = source?.items ?? noItems
@@ -226,7 +241,7 @@ function ReadOnlyView({ id, name, role, azure, store, month, gitNote, otherView,
   const dpLead: DataColumn<AzureWorkItem>[] = isDp ? [
     { id: '@dp-name', label: 'Release name', value: (item) => dpRowName(item) },
     { id: '@dp-version', label: 'Version', value: (item) => dpRowVersion(item), render: (item) => dpRowVersion(item) || '—' },
-    { id: '@dp-class', label: `${dpClasses.label} (detected)`, value: (item) => dpBulkEpic ? detectClassification(dpClasses, dpRowVersion(item)) : '', render: (item) => (dpBulkEpic && detectClassification(dpClasses, dpRowVersion(item))) || '—', title: () => !dpBulkEpic ? 'No DP bulk creation Epic is set (Admin → Stream options → Bulk creation Epics)' : !dpClasses.values.length ? `Epic #${dpBulkEpic} has no ${dpClasses.label} List field (Admin → Epic & Feature setup)` : dpClasses.rules.length ? `Detected from the version by the rules of Epic #${dpBulkEpic} (Admin → Epic & Feature setup)` : `Epic #${dpBulkEpic} has no rules yet: the value named like the release type (Major, Minor, MLD, Platform Update)` },
+    { id: '@dp-class', label: `${dpClasses.label} (detected)`, value: (item) => dpBulkEpic ? detectClassification(dpClasses, dpRowVersion(item)) : '', render: (item) => (dpBulkEpic && detectClassification(dpClasses, dpRowVersion(item))) || '—', title: () => !dpBulkEpic ? 'No DP bulk creation Epic is set (Admin → Streams → Bulk creation)' : !dpClasses.values.length ? `Epic #${dpBulkEpic} has no ${dpClasses.label} List field (Admin → Feature & PI setup)` : dpClasses.rules.length ? `Detected from the version by the rules of Epic #${dpBulkEpic} (Admin → Feature & PI setup)` : `Epic #${dpBulkEpic} has no rules yet: the value named like the release type (Major, Minor, MLD, Platform Update)` },
   ] : []
   const dpColumns: DataColumn<AzureWorkItem>[] = isDp ? [
     { id: '@dp-pick', label: 'Select', fixed: true, sortable: false, export: false, value: (item) => picked.includes(item.id) ? 'yes' : '', render: (item) => { const full = fullMatch(featureMatch(item)); return <input type="checkbox" aria-label={`Select ${item.title}`} disabled={full} title={full ? `Feature #${featureMatch(item)!.item.id} on QMS-0025 matches this release 100%: nothing to create` : undefined} checked={!full && picked.includes(item.id)} onChange={() => setPicked((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])} /> } },
@@ -331,7 +346,7 @@ function ReadOnlyView({ id, name, role, azure, store, month, gitNote, otherView,
 
   // (3) and (4): the Releases | Source data tabs with the Releases table, else why there is nothing to show.
   const raw = (rows: AzureWorkItem[]) => <TablePanel><QueryView name={name} items={rows} columns={columns} orderBy={orderBy} unresolved={unresolved} /></TablePanel>
-  const dpBulk = <><span className="muted">{picked.length} selected</span><button type="button" className="ghost" disabled={!items.length} onClick={() => setPicked(items.filter((item) => !fullMatch(featureMatch(item))).map((item) => item.id))}>Select all shown</button><button type="button" className="ghost" disabled={!picked.length} onClick={() => setPicked([])}>Clear</button><WriteBlocked reason={bulkWhy} />{!bulkWhy && !dpBulkEpic && <BulkEpicNotSet stream="DP" onOpen={openBulkEpics} />}<button type="button" className="primary" disabled={!picked.length || !assign?.canChoose || !can('work.bulk') || !dpBulkEpic} title={bulkWhy ? bulkWhy : !dpBulkEpic ? bulkEpicMissing('DP') : assign?.canChoose ? 'Create a Feature for each selected release, assigned to its QE' : 'Needs the right to create work items for other people (Admin → People & roles → Role rights)'} onClick={() => setBulkOpen(true)}>Create Features ({picked.length})</button></>
+  const dpBulk = <><span className="muted">{picked.length} selected</span><button type="button" className="ghost" disabled={!dpShown.length} onClick={() => setPicked(dpShown.filter((item) => !fullMatch(featureMatch(item))).map((item) => item.id))}>Select all shown</button><button type="button" className="ghost" disabled={!picked.length} onClick={() => setPicked([])}>Clear</button><WriteBlocked reason={bulkWhy} />{!bulkWhy && !dpBulkEpic && <BulkEpicNotSet stream="DP" onOpen={openBulkEpics} />}<button type="button" className="primary" disabled={!picked.length || !assign?.canChoose || !can('work.bulk') || !dpBulkEpic} title={bulkWhy ? bulkWhy : !dpBulkEpic ? bulkEpicMissing('DP') : assign?.canChoose ? 'Create a Feature for each selected release, assigned to its QE' : 'Needs the right to create work items for other people (Admin → People & access → Role rights)'} onClick={() => setBulkOpen(true)}>Create Features ({picked.length})</button></>
   // TVL-14: the built-in Tool Validations stream has its own tabs — Expiry list, Master list (with the counts and the
   // Current Month Status), Tool List [TFS] (the Tools query's rows, or the fetch empty state), Validation Documents [TFS]
   // (with the two queries) and one per other source — also before a fetch and in a month without documents (the master
@@ -346,17 +361,17 @@ function ReadOnlyView({ id, name, role, azure, store, month, gitNote, otherView,
     : !items.length && source.items.length ? (<TablePanel title={stream ? 'Releases' : undefined}>{isDp ? <EmptyState title={`No release has its DDT Date — or, without one, a planned milestone — in ${monthName(month)}.`} detail="Pick another month in the header, or choose All months (next to ↻). The counts above still include milestones Done in the month." /> : <EmptyState title={`No items in ${monthName(month)}.`} detail={`${source.items.length} items have an approval date (else a changed date) in other months. Pick another month in the header, or choose All months (next to ↻).`} />}</TablePanel>)
     : isDp ? <ResultTabs id={`azure:${id}`} rawCount={items.length} main={<TablePanel title="Releases">
         {bulkOpen && <DpBulkCreate rows={(source?.items ?? []).filter((item) => picked.includes(item.id))} azure={azure} featureSetup={featureSetup} featureMatch={featureMatch} onClose={() => { setBulkOpen(false); setPicked([]) }} />}
-        <QueryView name={name} items={items} columns={columns} orderBy={orderBy} unresolved={unresolved} queryOnly choose lead={dpLead} more={dpColumns} extra={boardColumn} actions={dpBulk} />
+        <QueryView name={name} items={dpShown} columns={columns} orderBy={orderBy} unresolved={unresolved} queryOnly choose lead={dpLead} more={dpColumns} extra={boardColumn} actions={dpBulk} />
       </TablePanel>} raw={raw(items)} />
-    : isCp && cp ? <ResultTabs id={`azure:${id}`} rawCount={source.items.length} main={<CpReportView report={(cpShown ?? cp).report} azure={azure} assign={assign} featureSetup={featureSetup} threshold={threshold} enrichment={cp.enrichmentName} />} raw={raw(source.items)} />
-    : role === 'release-source' || stream ? <ReleaseView name={name} items={items} backlog={azure.items} azure={azure} assign={assign} featureSetup={featureSetup} rule={stream?.rule} patterns={namingPatterns} area={area} fuzzy={stream?.fuzzy} onOpenBulkEpics={openBulkEpics} threshold={threshold} columns={viewColumns} orderBy={orderBy} unresolved={unresolved} />
+    : isCp && cp ? <ResultTabs id={`azure:${id}`} rawCount={source.items.length} main={<CpReportView keep={keepRelease} report={(cpShown ?? cp).report} azure={azure} assign={assign} featureSetup={featureSetup} threshold={threshold} enrichment={cp.enrichmentName} />} raw={raw(source.items)} />
+    : role === 'release-source' || stream ? <ReleaseView keep={keepRelease} name={name} items={items} backlog={azure.items} azure={azure} assign={assign} featureSetup={featureSetup} rule={stream?.rule} patterns={namingPatterns} area={area} fuzzy={stream?.fuzzy} onOpenBulkEpics={openBulkEpics} threshold={threshold} columns={viewColumns} orderBy={orderBy} unresolved={unresolved} />
     : <TablePanel><QueryView name={name} items={items} columns={viewColumns} orderBy={orderBy} unresolved={unresolved} /></TablePanel>
-  return <Page className="release-page">
+  return <Page className="release-page" actions={settingsGear ?? undefined}>
     {/* (1) QV-48, QV-70: the source bar; Show (on CP too since QV-72: All months lists every release container signed in any month; its counts stay the header month's), ↻ and ⋯. */}
     <ReleaseSourceBar name={name} source={`${config ? `${config.organization} / ${config.project}` : 'connection not found'}${profile?.query ? ' · query' : config?.team ? ` · team ${config.team}` : ''}`}
       fetched={source ? `fetched ${formatDateTime(source.fetchedAt)}${'fromGit' in source && source.fromGit ? ' (desktop app, via Git)' : ''}` : undefined}
       about={notes.length > 0 ? notes.map((note) => <p key={note}>{note}</p>) : undefined}
-      period={source && !toolPage && !isToolDocuments ? <PeriodSelect month={month} value={scope} onChange={setScope} /> : undefined} primary={refresh} menu={menu} last={viewActions.items}>
+      period={source && !toolPage && !isToolDocuments ? <><PeriodSelect month={month} value={scope} onChange={setScope} /><ProductOwnerFilter filter={owners} /></> : undefined} primary={refresh} menu={menu} last={viewActions.items}>
       {source && status?.state === 'error' && <Notice tone="warning">Not refreshed: {status.message} The data shown is from {formatDateTime(source.fetchedAt)}.</Notice>}
       {!azure.isSample && gitNote?.tone === 'error' && <Notice tone="error">{gitNote.text}</Notice>}
       {stale && !busy && <Notice tone="warning">The saved data was fetched with different columns than the connection's query now has. Refresh from Azure to load every column's values.</Notice>}

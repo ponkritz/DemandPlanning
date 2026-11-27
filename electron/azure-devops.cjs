@@ -65,6 +65,9 @@ function azureFeatureRequest(input) {
   const feature = input.feature
   if (!feature || !Number.isSafeInteger(feature.parentId) || feature.parentId < 1 || typeof feature.title !== 'string' || !feature.title.trim() || feature.title.length > 255 || typeof feature.areaPath !== 'string' || !feature.areaPath.trim()) throw new Error('A parent Epic, title and area path are required.')
   for (const field of ['description', 'acceptanceCriteria']) if (typeof feature[field] !== 'string' || feature[field].length > 100000) throw new Error('Invalid Feature text.')
+  // BKL-53 (SM-295): a new Feature keeps its Acceptance Criteria (Feature DoD) in the Description; the Azure DevOps
+  // Acceptance Criteria field is written on a new User Story only, never on a Feature create.
+  if (type === 'Feature' && feature.acceptanceCriteria.trim()) throw new Error('A new Feature keeps its Acceptance Criteria (Feature DoD) in the Description: the Acceptance Criteria field is not written. Nothing was created.')
   // Every created work item is assigned to someone (an email); never blank.
   if (typeof feature.assignedTo !== 'string' || feature.assignedTo.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(feature.assignedTo.trim())) throw new Error('A new work item must be assigned to someone (an email). Nothing was created.')
   if (feature.targetDate && !/^\d{4}-\d{2}-\d{2}$/.test(feature.targetDate)) throw new Error('Invalid target date.')
@@ -73,8 +76,9 @@ function azureFeatureRequest(input) {
   for (const field of ['taskOriginalEstimate', 'taskCompletedWork']) if (feature[field] != null && (!Number.isFinite(feature[field]) || feature[field] < 0 || feature[field] > 1000000)) throw new Error('Invalid Task effort.')
   // The only tag a new work item can carry: 'ad-hoc' on a Time Writing Task created after planning has locked.
   if (feature.adhoc != null && (feature.adhoc !== true || type !== 'Task')) throw new Error('Only a new Task can be tagged ad-hoc. Nothing was created.')
-  // A new User Story's Planning / Classification fields: fixed values only, on a new User Story only.
-  const storyFields = ['storyPoints', 'priority', 'risk', 'valueArea'].filter((field) => feature[field] != null)
+  // A new User Story's Planning / Classification fields: fixed values only, on a new User Story only — except the
+  // Priority, which a new Feature may carry too (BKL-52).
+  const storyFields = ['storyPoints', 'priority', 'risk', 'valueArea'].filter((field) => feature[field] != null && !(field === 'priority' && input.operation === 'create-feature'))
   if (storyFields.length && (type !== 'User Story' || input.operation !== 'create-child')) throw new Error('Story Points, Priority, Risk and Value area are set on a new User Story only. Nothing was created.')
   if (feature.storyPoints != null && (typeof feature.storyPoints !== 'number' || !Number.isFinite(feature.storyPoints) || feature.storyPoints < 0 || feature.storyPoints > 1000)) throw new Error('Story Points must be a number from 0 to 1,000. Nothing was created.')
   if (feature.priority != null && ![1, 2, 3, 4].includes(feature.priority)) throw new Error('Priority must be 1, 2, 3 or 4. Nothing was created.')

@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
-import { clearFinishedJobs, listJobs, subscribeJobs, type Job } from '../backgroundJobs'
+import { clearFinishedJobs, listJobs, runJobAction, subscribeJobs, type Job } from '../backgroundJobs'
 
 const stateLabel: Record<Job['state'], string> = { running: 'Running', done: 'Done', error: 'Needs a look' }
 const time = (at: number) => new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -26,6 +26,7 @@ export function JobsIndicator() {
       <ul>{jobs.map((job) => <li key={job.id} className={`job job-${job.state}`}>
         <div><strong>{job.label}</strong> <small className="muted">{stateLabel[job.state]} · {time(job.started)}{job.finished ? `–${time(job.finished)}` : ''}</small></div>
         <p>{job.detail}</p>
+        {job.action && job.state !== 'running' && <div className="button-row"><button type="button" className="ghost" onClick={() => runJobAction(job.id)}>{job.action.label}</button></div>}
       </li>)}</ul>
       <div className="button-row"><button type="button" className="text-button" disabled={jobs.every((job) => job.state === 'running')} onClick={clearFinishedJobs}>Clear finished</button><button type="button" className="text-button" onClick={() => setOpen(false)}>Close</button></div>
     </div>}

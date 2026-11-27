@@ -1,0 +1,162 @@
+import test, { after, before } from 'node:test'
+import assert from 'node:assert/strict'
+import { mkdirSync } from 'node:fs'
+import { loadSample, navigate, openPage, startApp, text } from './helpers.mjs'
+
+// Month Task states (ACT-23…ACT-27; TC-ACT-18…TC-ACT-22, TC-ACT-20 UAT). Against a mocked dev.azure.com that records
+// every PATCH: at start the app fetches the Time Writing connection and the background job "Month Task states" closes
+// the signed-in person's own Month Task of a past month whose Actuals are locked, and the one under a Closed Feature,
+// with their own Time Writing stories (another person's Task is never written); on Time Writing the tile "Features
+// Working on" counts the Features with a Month Task, and saving hours on a New Month Task sets the Task, its Time
+// Writing story and its New Feature to Active (each PATCH body checked). With the synthetic sample, and with an
+// on-premises Time Writing connection, nothing is written. Synthetic data only; every step waits for what it needs.
+let app
+before(async () => { app = await startApp() })
+after(async () => { await app.stop() })
+
+const shots = process.env.E2E_SHOTS
+const shot = async (page, name) => { if (!shots) return; mkdirSync(shots, { recursive: true }); await page.screenshot({ path: `${shots}/${name}.png` }) }
+
+const now = new Date()
+const label = (months) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + months, 1)).toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+const me = 'lead@example.com', other = 'ben.okafor@example.com'
+const raw = (id, type, title, parent, state, who = me, fields = {}) => ({ id, rev: 1, fields: { 'System.TeamProject': 'Quality', 'System.WorkItemType': type, 'System.Title': title, 'System.State': state, 'System.AreaPath': 'Quality', 'System.IterationPath': 'Quality\\PI 1', ...(parent ? { 'System.Parent': parent } : {}), 'System.AssignedTo': { displayName: who === me ? 'Lea Lead' : 'Ben Okafor', uniqueName: who }, ...fields } })
+// Two months ago is locked for Actuals (the 4th of last month has passed); this month is open.
+const worldOf = () => [
+  raw(100, 'Epic', 'Quality stream', undefined, 'Active'),
+  raw(200, 'Feature', 'Core platform', 100, 'New'), raw(201, 'User Story', 'Core platform - Time Writing', 200, 'New'), raw(202, 'Task', `${label(0)} | Core platform`, 201, 'New'),
+  raw(300, 'Feature', 'Lab tools', 100, 'Active'), raw(301, 'User Story', 'Lab tools - Time Writing', 300, 'Active'), raw(302, 'Task', `${label(-2)} | Lab tools`, 301, 'Active', me, { 'Microsoft.VSTS.Scheduling.CompletedWork': 12 }),
+  raw(401, 'User Story', 'Lab tools - Time Writing (Ben)', 300, 'Active', other), raw(402, 'Task', `${label(-2)} | Lab tools`, 401, 'Active', other),
+  raw(500, 'Feature', 'Retired reports', 100, 'Closed'), raw(501, 'User Story', 'Retired reports - Time Writing', 500, 'Active'), raw(502, 'Task', `${label(0)} | Retired reports`, 501, 'Active'),
+]
+function fakeAzure() {
+  const world = worldOf(), patches = [], writes = []
+  let reads = 0
+  const route = (route) => {
+    const request = route.request(), url = new URL(request.url()), path = decodeURIComponent(url.pathname)
+    reads += 1
+    const json = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
+    if (path.endsWith('/_apis/work/teamsettings/teamfieldvalues')) return json({ field: { referenceName: 'System.AreaPath' }, values: [{ value: 'Quality', includeChildren: true }] })
+    if (path.endsWith('/_apis/work/backlogs/Microsoft.EpicCategory/workItems')) return json({ workItems: [{ target: { id: 100 } }] })
+    if (path.endsWith('/_apis/wit/workitemsbatch')) { const ids = JSON.parse(request.postData() ?? '{}').ids ?? []; return json({ value: world.filter((item) => ids.includes(item.id)) }) }
+    if (path.endsWith('/_apis/wit/wiql')) {
+      const query = JSON.parse(request.postData() ?? '{}').query ?? ''
+      const one = /\[System\.Parent\] = (\d+)/.exec(query), many = /\[System\.Parent\] IN \(([\d,\s]+)\)/.exec(query)
+      const parents = one ? [Number(one[1])] : (many?.[1] ?? '').split(',').map(Number), after = Number(/\[System\.Id\] > (\d+)/.exec(query)?.[1] ?? 0)
+      return json({ workItems: world.filter((item) => parents.includes(item.fields['System.Parent']) && item.id > after).map((item) => ({ id: item.id })) })
+    }
+    const update = /\/_apis\/wit\/workitems\/(\d+)$/.exec(path)
+    if (update && request.method() === 'PATCH') {
+      const item = world.find((entry) => entry.id === Number(update[1])), body = JSON.parse(request.postData() ?? '[]')
+      patches.push({ id: item.id, host: url.hostname, body })
+      for (const entry of body) if (entry.path?.startsWith('/fields/')) item.fields[entry.path.slice(8)] = entry.value
+      item.rev += 1
+      return json(item)
+    }
+    if (!['GET'].includes(request.method()) && !/\/_apis\/wit\/(wiql|workitemsbatch)$/.test(path)) writes.push(`${request.method()} ${path}`)
+    return json({ value: [] })
+  }
+  return { route, patches, writes, world, get reads() { return reads } }
+}
+// The State each PATCH set, as "id:State", and the fields of the other PATCHes (the hours).
+const states = (patches) => patches.flatMap((patch) => patch.body.filter((entry) => entry.path === '/fields/System.State').map((entry) => `${patch.id}:${entry.value}`))
+
+async function openApp(profile) {
+  const azure = fakeAzure()
+  const opened = await openPage(app, { width: 1440, height: 900, scale: shots ? 2 : undefined, roles: true, init: ({ list, email }) => {
+    localStorage.setItem('demand-planning-work-email-v1', email)
+    localStorage.setItem('demand-planning-azure-connection-profiles-v1', JSON.stringify(list))
+  }, initArg: { list: [profile], email: me } })
+  await opened.context.route('https://dev.azure.com/**', azure.route)
+  await opened.context.route('https://azure.example.com/**', azure.route)
+  const dialog = opened.page.getByRole('dialog').filter({ hasText: 'Could not fetch from Azure DevOps' })
+  await opened.page.addLocatorHandler(dialog, () => dialog.getByRole('button', { name: 'Close', exact: true }).last().click())
+  await opened.page.reload()
+  await opened.page.locator('.sidebar nav').waitFor()
+  return { ...opened, azure }
+}
+async function jobsPanel(page) {
+  await page.locator('.jobs-button').click()
+  const panel = page.getByRole('dialog', { name: 'Background jobs' })
+  await panel.waitFor()
+  return panel
+}
+const tile = (page) => page.locator('article', { has: page.locator('span', { hasText: /^Features Working on$/ }) }).first()
+const cloud = { id: 'tw', url: 'https://dev.azure.com/example/Quality/_backlogs/backlog/Team%20A/Epics', token: 'x'.repeat(52), reason: 'Time Writing', role: 'time-tracking', showInMenu: true, creatorEmail: me }
+
+test('TC-ACT-20: at start the background job Month Task states closes my Month Tasks of a locked month and under a Closed Feature, with my Time Writing stories — never another person\'s; TC-ACT-18: Features Working on counts the Features with my Month Task', async () => {
+  const { page, context, errors, azure } = await openApp(cloud)
+  const panel = await jobsPanel(page)
+  const job = panel.locator('li.job', { hasText: 'Month Task states' })
+  await job.getByText(/items? updated\./).waitFor()
+  const detail = await text(job)
+  assert.match(detail, /4 of 4 items updated\./)
+  assert.match(detail, new RegExp(`Task #302 set to Closed \\(Active before\\), because the Actuals of \\d{4}-\\d{2} are locked\\.`))
+  assert.match(detail, /Task #502 set to Closed \(Active before\), because its Feature #500 is Closed\./)
+  assert.match(detail, /Time Writing story #301 set to Closed \(Active before\), because all its Tasks are Closed\./)
+  assert.deepEqual(states(azure.patches).sort(), ['301:Closed', '302:Closed', '501:Closed', '502:Closed'], 'only my items; Ben\'s Task #402 and his story stay as they are, the Features are not closed')
+  assert.ok(azure.patches.every((patch) => patch.host === 'dev.azure.com' && patch.body.length === 1 && patch.body[0].op === 'add'), 'each PATCH sets the State only')
+  await shot(page, 'month-task-states-1-jobs')
+  await panel.getByRole('button', { name: 'Close', exact: true }).click()
+  // TC-ACT-18: this month, my Month Tasks are under Core platform and Retired reports — 2 Features.
+  await navigate(page, 'Time Writing')
+  const card = tile(page)
+  await card.waitFor()
+  assert.match(await text(card), new RegExp(`^Features Working on 2 Features with your ${label(0)} Time Writing Task$`))
+  assert.equal(await page.locator('.metric-grid article > span', { hasText: /^Tasks$/ }).count(), 0, 'the tile is no longer called Tasks')
+  // Nothing more is written while the page is used: the job ran once for these items.
+  assert.equal(states(azure.patches).length, 4)
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
+test('TC-ACT-19: saving hours on a New Month Task sets the Task, its Time Writing story and its New Feature to Active (PATCH bodies checked)', async () => {
+  const { page, context, errors, azure } = await openApp(cloud)
+  const panel = await jobsPanel(page)
+  await panel.locator('li.job', { hasText: 'Month Task states' }).getByText(/items? updated\./).waitFor()
+  await panel.getByRole('button', { name: 'Close', exact: true }).click()
+  const before = azure.patches.length
+  await navigate(page, 'Time Writing')
+  await page.getByLabel('Actual hours for Core platform').fill('6')
+  await page.getByRole('button', { name: 'Save 1 activity' }).click()
+  await page.locator('.act-message', { hasText: '1 updated' }).waitFor()
+  const saved = azure.patches.slice(before)
+  const hours = saved.find((patch) => patch.id === 202 && patch.body.some((entry) => entry.path === '/fields/Microsoft.VSTS.Scheduling.CompletedWork'))
+  assert.ok(hours, 'the hours are written first')
+  assert.equal(hours.body.find((entry) => entry.path === '/fields/Microsoft.VSTS.Scheduling.CompletedWork').value, 6)
+  assert.deepEqual(states(saved), ['202:Active', '201:Active', '200:Active'], 'Task, Time Writing story, then the Feature — each from New')
+  for (const patch of saved.filter((entry) => entry.body.some((op) => op.path === '/fields/System.State'))) assert.deepEqual(patch.body, [{ op: 'add', path: '/fields/System.State', value: 'Active' }])
+  const message = await text(page.locator('.act-message'))
+  assert.match(message, /Task #202 set to Active \(New before\), because hours were entered\./)
+  assert.match(message, /Feature #200 set to Active \(New before\), because its Time Writing story is Active\./)
+  await shot(page, 'month-task-states-2-saved')
+  assert.deepEqual(errors, [])
+  await context.close()
+})
+
+test('TC-ACT-20: with the synthetic sample, and with an on-premises Time Writing connection, nothing is written', async () => {
+  // On-premises (read-only): the Time Writing connection is fetched with ⟳ Time Writing, and no State is written.
+  const onPrem = { ...cloud, id: 'tw-onprem', url: 'https://azure.example.com/tfs/Collection/Quality/_backlogs/backlog/Team%20A/Epics', baseUrl: 'https://azure.example.com/tfs/Collection' }
+  const first = await openApp(onPrem)
+  await first.page.locator('.fetch-time-writing').click()
+  await navigate(first.page, 'Time Writing')
+  await first.page.getByText('Time Writing fetched from Azure DevOps and saved').first().waitFor()
+  assert.ok(first.azure.reads > 0, 'the on-premises server was read')
+  const panel = await jobsPanel(first.page)
+  await panel.locator('li.job').first().waitFor()
+  assert.equal(await panel.locator('li.job', { hasText: 'Month Task states' }).count(), 0, 'no Month Task states job on-premises')
+  assert.deepEqual(first.azure.patches, [])
+  assert.deepEqual(first.azure.writes, [])
+  await first.context.close()
+  // The synthetic sample: no job, and no request to Azure DevOps that changes anything.
+  const { page, context, errors } = await openPage(app, { roles: true })
+  const writes = []
+  await context.route('https://dev.azure.com/**', (route) => { if (route.request().method() !== 'GET') writes.push(route.request().url()); return route.fulfill({ status: 401, contentType: 'application/json', body: '{}' }) })
+  await loadSample(page)
+  await navigate(page, 'Time Writing')
+  await page.locator('main').getByText(/activities|Time Writing/).first().waitFor()
+  if (await page.locator('.jobs-button').count()) { const list = await jobsPanel(page); assert.equal(await list.locator('li.job', { hasText: 'Month Task states' }).count(), 0, 'no Month Task states job with the sample') }
+  assert.deepEqual(writes, [])
+  assert.deepEqual(errors, [])
+  await context.close()
+})

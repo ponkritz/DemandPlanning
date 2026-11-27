@@ -60,9 +60,9 @@ export function ioccPlan(releases: ReleaseEntry[], options: { setup?: EpicSetup;
     const typed = dpReleaseType(release.release), detected = detectClassification({ values: options.classValues ?? [], rules: options.classRules ?? [] }, release.release), classification = options.classes?.[release.key] ?? detected, found = qeForName(release.name, options.qe)
     const qe = found?.qe ?? '', email = qe ? emailFor(qe, options.board) : ''
     const hit = options.featureMatch(release)
-    const baseSkip = !options.epicId ? 'no IOCC bulk Epic is set (Admin → Stream options → Bulk creation Epics)'
+    const baseSkip = !options.epicId ? 'no IOCC bulk Epic is set (Admin → Streams → Bulk creation)'
       : fullMatch(hit) ? `Feature #${hit!.item.id} on QMS-0025 matches it 100%`
-      : !options.setup ? 'the IOCC bulk Epic has no Feature setup (Admin → Epic & Feature setup)' : ''
+      : !options.setup ? 'the IOCC bulk Epic has no Feature setup (Admin → Feature & PI setup)' : ''
     const qeSkip = qeProblem(options.qe, 'IOCC bulk Epic')
       || (!qe ? 'no QE on the QE page for this release name'
       : !email ? `no email found for ${qe} (not assigned anything on QMS-0025 yet)` : '')
@@ -114,7 +114,7 @@ export function bulkPlan(rows: AzureWorkItem[], options: { setup?: EpicSetup; qe
     const qe = found?.qe ?? '', email = qe ? emailFor(qe, options.board) : ''
     const hit = options.featureMatch(row)
     const baseSkip = fullMatch(hit) ? `Feature #${hit!.item.id} on QMS-0025 matches it 100%`
-      : !options.setup ? 'the DP bulk Epic has no Feature setup (Admin → Epic & Feature setup)' : ''
+      : !options.setup ? 'the DP bulk Epic has no Feature setup (Admin → Feature & PI setup)' : ''
     const qeSkip = qeProblem(options.qe, 'bulk Epic')
       || (!qe ? 'no QE on the QE page for this product'
       : !email ? `no email found for ${qe} (not assigned anything on QMS-0025 yet)` : '')

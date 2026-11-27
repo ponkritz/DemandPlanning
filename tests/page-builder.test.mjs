@@ -103,7 +103,7 @@ test('PGB-08…PGB-11: rights — Tool Owner, group co-owner, page co-owner and 
   assert.equal(addPageReason(tool, next, quality), '')
   assert.equal(addPageReason(lead, next, quality), '')
   for (const person of [keeper, other]) assert.equal(addPageReason(person, next, quality), 'Only a Tool Owner or a co-owner of the group “Quality” can add pages to it.')
-  assert.equal(addPageReason(tool, next, 'data-insights'), '“Data Insights” does not accept added pages. A Tool Owner can turn this on in Admin → Pages & menu.')
+  assert.equal(addPageReason(tool, next, 'data-insights'), '“Data Insights” does not accept added pages. A Tool Owner can turn this on in Admin → Pages & reports → Menu groups & pages.')
   assert.deepEqual(groupsForAdding(lead, next).map((group) => group.name), ['Quality'])
   assert.deepEqual(groupsForAdding(other, next), [])
   // Rename, reorder, remove a page and name its co-owners: Tool Owner and the group co-owner.

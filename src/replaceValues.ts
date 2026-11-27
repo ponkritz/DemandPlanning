@@ -59,7 +59,7 @@ export function replaceError(column: OnDemandColumn | undefined, find: string, t
   if (!to.trim()) return 'Type the new value.'
   if (to.trim().length > maxReplaceValue) return `The new value is longer than ${maxReplaceValue.toLocaleString('en-US')} characters.`
   // LST-10: a built-in list column takes only a value of its list (the list is changed in Admin, not here).
-  if (column.list && !column.options.includes(to.trim())) return `“${to.trim()}” is not in the built-in list of ${column.name}. Choose one of its values, or add it to the list (Admin → Epic & Feature setup → Value lists) first.`
+  if (column.list && !column.options.includes(to.trim())) return `“${to.trim()}” is not in the built-in list of ${column.name}. Choose one of its values, or add it to the list (Admin → Feature & PI setup → Lists) first.`
   if ((column.type === 'dropdown' || column.type === 'multi') && !column.options.includes(to.trim())) return `“${to.trim()}” is not an option of ${column.name}. Add it with Set up columns… first, or choose one of its options.`
   return ''
 }

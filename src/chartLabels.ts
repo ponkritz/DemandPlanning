@@ -1,4 +1,4 @@
-// UI-17: data labels on every chart. The shared default comes from My settings → Look & feel → Table and chart defaults; each chart's
+// UI-17: data labels on every chart. The shared default comes from My settings → Admin → Pages & reports → Table & chart defaults; each chart's
 // own Data labels box overrides it on this computer (kept per chart).
 const labelsKey = 'demand-planning-chart-labels-v1'
 export function readChartLabels(storage: Pick<Storage, 'getItem'> = localStorage): Record<string, boolean> {

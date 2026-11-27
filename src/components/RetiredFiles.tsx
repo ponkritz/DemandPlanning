@@ -4,7 +4,7 @@ import { retiredCopyName, retiredDeleteBlock, retiredDeleteMessage, retiredFiles
 import type { GitStorage } from '../useGitStorage'
 import { Modal, Notice, Panel, WriteBlocked } from './ui'
 
-// GIT-28: Admin → Data & sharing → Shared setup in Git — a one-time notice for each shared file the app no longer uses
+// GIT-28: Admin → Data & history → Connections in Git — a one-time notice for each shared file the app no longer uses
 // (qe-mapping.json since QE Mapping was removed), shown only while the file is in Git: Download a copy first, then a
 // confirmation pop-up, then one commit that deletes the file at the version downloaded. Blocked in View as, with the
 // synthetic sample and with a read-only Git token. Its history stays in GitHub.

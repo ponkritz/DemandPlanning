@@ -11,7 +11,7 @@ import { builtInFormSetup, parsePiFormSetup, serializePiFormSetup } from '../src
 // mocked GitHub (access.json, the shared pi-review-form.json) and a fake dev.azure.com (the Time Writing fetch, the
 // iterations, the Discussions and a comment POST). Rita Gomez is the Scrum Master and the assignee of Feature 205; Pia
 // Patel is a People Manager; Tom Owner the Tool Owner (Feature 206); Tia Member a Team Member (Feature 207). The Scrum
-// Master opens Admin → PI Review Setup from the menu, adds a field and changes the Move default (the shared column-list
+// Master opens Admin → Feature & PI setup → PI Review form from the menu, adds a field and changes the Move default (the shared column-list
 // editor of the On-Demand pages); a colliding heading is refused; the form and the posted comment follow the setup. The
 // People Manager has no PI Review Setup (menu, Search settings, gear), and PI Review shows the added field as a column.
 // The ⚙ PI Review Setup button in My PI Review and PI Review: shown to the Tool Owner and the Scrum Master — in View as
@@ -78,10 +78,13 @@ async function open(gh, email, { comments = {} } = {}) {
   await page.locator('.sidebar nav').waitFor()
   return { page, context, errors, state }
 }
-// PIR-29: Admin → PI Review Setup, from the menu.
+// PIR-29: Admin → Feature & PI setup → PI Review form, from the menu.
 async function openSetup(page) {
-  await navigate(page, 'PI Review Setup')
-  assert.equal(await text(page.locator('header.topbar h1')), 'PI Review Setup')
+  await navigate(page, 'Feature & PI setup')
+  assert.equal(await text(page.locator('header.topbar h1')), 'Feature & PI setup')
+  // SET-26: a section of Feature & PI setup (the tab row only when the person sees more than this section).
+  const tab = page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'PI Review form' })
+  if (await tab.count()) await tab.click()
   const panel = page.locator('article.pir-setup')
   await panel.waitFor()
   return panel
@@ -172,11 +175,13 @@ test('TC-PIR-24: a People Manager has no PI Review Setup — not in the menu, Se
   const setup = builtInFormSetup()
   setup.fields.splice(4, 0, { id: 'f-6', label: 'Customer impact', heading: 'Customer impact', type: 'dropdown', options: ['None', 'Some sites'], required: true, defaultValue: '', help: '' })
   const gh = fakeGitHub({ files: { 'access.json': policy(), 'pi-review-form.json': serializePiFormSetup(setup) } })
-  const comment = buildReviewComment({ ...emptyReviewForm('PI 2026.5', setup), learnings: 'a', struggles: 'b', mode: 'Offline Review', extra: { 'f-6': 'Some sites' } }, setup)
+  const comment = buildReviewComment({ ...emptyReviewForm('PI 2026.5', setup), learnings: 'a', struggles: 'b', mode: 'Offline Review', extra: { 'f-6': 'Some sites' }, reviewedPi: 'PI 2026.4' }, setup)
   const { page, context, errors } = await open(gh, 'pia.patel@example.com', { comments: { 205: [{ id: 7, text: comment, createdBy: rita, createdDate: '2026-11-21T14:30:00Z' }] } })
   // PIR-29: without "PI Review: set up the review form" the page is hidden — not in the Admin menu, not found by Search settings.
-  await page.locator('.sidebar nav button', { hasText: 'Epic & Feature setup' }).waitFor()
-  assert.equal(await page.locator('.sidebar nav button', { hasText: 'PI Review Setup' }).count(), 0, 'not in the menu')
+  await navigate(page, 'Feature & PI setup')
+  await page.locator('header.topbar h1', { hasText: 'Feature & PI setup' }).waitFor()
+  assert.equal(await page.getByRole('tab', { name: 'PI Review form' }).count(), 0, 'SET-27: no PI Review form section')
+  assert.equal(await page.locator('article.pir-setup').count(), 0)
   await page.keyboard.press('Control+k')
   const search = page.getByRole('dialog').filter({ hasText: 'Search settings' })
   await search.getByLabel('Search settings').fill('pi review form')
@@ -210,7 +215,8 @@ test('TC-PIR-31: ⚙ PI Review Setup in My PI Review and PI Review — the Tool 
   await shot(page, 'my-pi-review-gear-tool-owner')
   await button.click()
   await page.locator('article.pir-setup').waitFor()
-  assert.equal(await text(page.locator('header.topbar h1')), 'PI Review Setup')
+  assert.equal(await text(page.locator('header.topbar h1')), 'Feature & PI setup')
+  assert.equal(await page.getByRole('tab', { name: 'PI Review form' }).getAttribute('aria-selected'), 'true', 'the gear opens the PI Review form section')
   assert.equal(await page.getByRole('button', { name: 'Edit form…' }).isDisabled(), false, 'the Tool Owner may edit')
   // PI Review: the same gear replaces Form setup.
   await navigate(page, 'PI Review')
@@ -241,7 +247,10 @@ test('TC-PIR-31: ⚙ PI Review Setup in My PI Review and PI Review — the Tool 
   await navigate(page, 'My PI Review')
   await page.getByRole('button', { name: 'Review Feature 207' }).waitFor()
   assert.equal(await gear(page).count(), 0, 'no gear for the Team Member')
-  assert.equal(await page.locator('.sidebar nav button', { hasText: 'PI Review Setup' }).count(), 0, 'not in the menu')
+  await navigate(page, 'Feature & PI setup')
+  await page.locator('header.topbar h1', { hasText: 'Feature & PI setup' }).waitFor()
+  assert.equal(await page.getByRole('tab', { name: 'PI Review form' }).count(), 0, 'no PI Review form for the Team Member (SET-27)')
+  assert.equal(await page.locator('article.pir-setup').count(), 0)
   await shot(page, 'my-pi-review-no-gear-team-member')
   assert.deepEqual(member.errors, [])
   await member.context.close()

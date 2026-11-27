@@ -256,7 +256,7 @@ td small{color:var(--text-3)}
 /* My Tasks [Board]: Features expand to their User Stories, Bugs and Tasks. */
 /* BKL-50: + / − in a small box (product owner: "For Expanding the Features - Give a Plus Symbol"); a row with nothing under it keeps the space, no box. */
 .work-toggle{background:var(--surface);border:1px solid var(--line);border-radius:5px;padding:0;margin-right:6px;width:20px;height:20px;color:var(--text);cursor:pointer;font-size:15px;font-weight:600;line-height:1;display:inline-grid;place-items:center}.work-toggle:hover{background:var(--surface-2)}.work-toggle.work-toggle-empty,.work-toggle.work-toggle-empty:hover{border-color:transparent;background:none;cursor:default}
-.work-open td{border-bottom-color:transparent}.work-child td{background:var(--surface-2)}.work-child .work-indent{display:inline-block;width:26px}.work-depth-2 .work-indent{width:52px}.work-child strong.inline{font-weight:500}
+.work-open td{border-bottom-color:transparent}.work-tw-tag{margin-left:6px;vertical-align:middle;border:1px solid var(--accent-line)}.work-table tr.work-tw-open td,.work-table tr.work-tw-child td{background:var(--accent-soft)}.work-table tr.work-tw-open td:first-child,.work-table tr.work-tw-child td:first-child{box-shadow:inset 3px 0 0 var(--accent)}.work-tw-open strong.inline{color:var(--accent-text)}.work-child td{background:var(--surface-2)}.work-child .work-indent{display:inline-block;width:26px}.work-depth-2 .work-indent{width:52px}.work-child strong.inline{font-weight:500}
 /* Create Feature: the title's three parts (Program · Service · Release / Platform · Name · Release). */
 .create-release-feature .title-parts{display:grid;grid-template-columns:minmax(140px,1fr) minmax(180px,2fr) minmax(120px,1fr);gap:10px}.create-release-feature .title-parts label{display:grid;gap:4px;font-size:12px;color:var(--text-2)}.create-release-feature .add-platform{display:flex;gap:6px;align-items:center}.create-release-feature .add-platform input{flex:1;min-width:0}
 @media (max-width:760px){.create-release-feature .title-parts{grid-template-columns:1fr}}
@@ -594,6 +594,7 @@ details.act-leave{border:1px solid var(--line);border-radius:10px;padding:8px 12
 .act-tile-update small b{color:var(--navy)}
 .act-tile-deadline strong{font-size:18px!important;line-height:1.25}
 .act-tile-deadline.act-urgent{border-color:var(--warning-line,var(--line))!important;background:var(--warning-soft)!important}
+.act-deadline-head{display:flex;align-items:center;justify-content:space-between;gap:6px}.act-deadline-head button{padding:2px 6px;min-height:0}
 @media (max-width:1100px){.activities-page .act-top .metric-grid:has(> article){grid-auto-flow:row;grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:640px){.activities-page .act-top .metric-grid:has(> article){grid-template-columns:repeat(2,minmax(0,1fr))}}
 .act-card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.act-card-head h3{margin:0}.act-card-head .act-save-top{width:auto;margin:0;padding:9px 18px}
@@ -1226,6 +1227,10 @@ tbody tr.tvl-hl-red td{background:var(--hl-red-bg)}tbody tr.tvl-hl-red td:first-
    its split in the drawer, line breaks kept. */
 .pir-table table.no-wrap .pir-clip{display:block;max-width:18rem;overflow:hidden;text-overflow:ellipsis}
 .pir-status{display:grid;justify-items:start;gap:3px}.pir-status small{font-size:11px}
+/* PIR-75…PIR-78 (temporary): the Old format flag, the old-format comments in the drawer, Convert…, Search Discussions */
+.pir-old-format{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap}.pir-old-format small{font-size:11px}
+.pir-old-formats ul{display:grid;gap:8px;margin:6px 0 0;padding:0;list-style:none}.pir-old-formats li{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.pir-convert-why{flex-basis:100%;font-size:11.5px}
+.pir-convert{display:grid;gap:8px;justify-items:start;margin-bottom:10px}.pir-search-note{margin:0 0 8px}.pir-search table.no-wrap .pir-clip{display:block;max-width:24rem;overflow:hidden;text-overflow:ellipsis}
 .pir-latest{display:grid;gap:6px;padding-top:4px}.pir-latest h3{margin:0;font-size:14px;color:var(--heading)}.pir-latest .pir-comment-head,.pir-latest p{margin:0}
 .pir-split dd{margin:0;font-size:13px;white-space:pre-line;overflow-wrap:anywhere}
 .pir-suggested,.pir-split.pir-suggested dd{font-style:italic;color:var(--text-2)}.pir-suggested-mark{font-style:normal;font-size:11px;color:var(--muted)}
@@ -1246,6 +1251,7 @@ tbody tr.tvl-hl-red td{background:var(--hl-red-bg)}tbody tr.tvl-hl-red td:first-
 .pir-review-preview{display:grid;gap:6px;min-width:0;position:sticky;top:0}.pir-review-preview h3,.close-review h3{margin:0;font-size:14px;color:var(--heading)}
 .pir-review-preview pre{margin:0;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:min(460px,55vh);overflow:auto}
 .pir-review-comment{margin:0;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);font-size:13px;overflow-wrap:anywhere;max-height:min(460px,55vh);overflow:auto}.pir-review-comment ul,.pir-review-comment ol{margin:0;padding-left:22px}.pir-review-comment>ul{list-style:disc}.pir-review-comment li ul{list-style:circle}.pir-review-comment p{margin:8px 0 0;color:var(--muted)}.pir-review-none{display:grid;gap:2px}
+.pir-review-comment p.pir-review-heading{margin:0 0 6px;color:var(--text);font-weight:600}
 .close-review{border-top:1px solid var(--line);padding-top:12px}
 @media(max-width:760px){.pir-review-columns{grid-template-columns:1fr}.pir-review-preview{position:static}}
 .pir-moves-to{display:grid;gap:4px}.pir-moves-to>label{display:grid}.pir-next-pi .info-button{margin-left:4px}.pir-next-pi-warn{color:var(--warning-text);font-weight:600}.pir-review-help{justify-self:start}
@@ -1257,6 +1263,27 @@ tbody tr.tvl-hl-red td{background:var(--hl-red-bg)}tbody tr.tvl-hl-red td:first-
 .pir-setup-extra{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:10px;align-items:start}.pir-setup-extra label{display:grid}.pir-setup-extra small{font-size:11px;color:var(--muted)}
 @media(max-width:760px){.pir-setup-editor,.pir-setup-extra{grid-template-columns:1fr}}
 .pir-setup-gear{padding:6px 10px;font-size:14px;line-height:1;border-radius:8px}
+/* SET-32…SET-35: a page's ⚙ settings pop-up — the Admin panels of its sections as tabs, each with Open in Admin →. */
+.page-settings-intro{margin:0 0 10px}
+.page-settings-admin{display:flex;justify-content:flex-end;margin:6px 0}
+.page-settings-body .panel{box-shadow:none}
+/* PIR-58…PIR-62: the Meeting presentation settings — the accent swatch of the summary and the editor (the title slide
+   preview beside the content settings). */
+.pir-accent{display:inline-flex;align-items:center;gap:6px}.pir-swatch{display:inline-block;width:14px;height:14px;border-radius:3px;border:1px solid var(--line)}
+.modal:has(.pir-meeting-editor){width:min(1180px,100%)}
+.pir-meeting-editor{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:start}
+.pir-meeting-editor section{display:grid;gap:10px;min-width:0}.pir-meeting-editor h3{margin:6px 0 0;font-size:14px;color:var(--heading)}
+.pir-meeting-editor label{display:grid;gap:3px}.pir-meeting-editor small{font-size:11px;color:var(--muted)}
+.pir-meeting-editor .form-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+.pir-meeting-editor .pir-long-running table{min-width:0;width:100%}.pir-meeting-editor .pir-long-running td:last-child,.pir-meeting-editor .pir-long-running th:last-child{width:8rem}.pir-meeting-editor .pir-long-running input{width:100%;box-sizing:border-box}
+.pir-streams{display:flex;flex-wrap:wrap;gap:4px 14px;border:1px solid var(--line);border-radius:8px;padding:8px 12px;margin:0}.pir-streams legend{font-size:12px;font-weight:600;padding:0 4px}.pir-streams .check{display:inline-flex;margin:0;font-size:13px;color:var(--text)}.pir-streams small{flex-basis:100%}
+.pir-meeting-preview{display:grid;gap:6px;aspect-ratio:16/9;max-width:480px;overflow:hidden;padding:18px 20px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;color:#0b5394}
+.pir-meeting-preview.dark{color:#fff}
+.pir-preview-eyebrow{font-size:10px;letter-spacing:.08em;font-weight:600;opacity:.75}
+.pir-preview-title{font-size:22px;line-height:1.2}
+.pir-preview-subtitle{font-size:13px;color:#1b2430}.pir-meeting-preview.dark .pir-preview-subtitle{color:#fff}
+.pir-preview-footer{display:flex;justify-content:space-between;gap:8px;margin-top:auto;padding-top:6px;border-top:1px solid #e3e7ec;font-size:11px;color:#6b778a}.pir-meeting-preview.dark .pir-preview-footer{color:#fff;border-top-color:rgba(255,255,255,.4)}
+@media(max-width:760px){.pir-meeting-editor,.pir-meeting-editor .form-row{grid-template-columns:1fr}}
 /* UI-24: a wide table's sticky horizontal scroll bar — fixed at the bottom of the screen above the sticky footer (its
    place and width set by StickyScrollbar.tsx from the table's box and the footer's real top edge), in the theme's
    colours; the native scroll bar follows color-scheme (dark theme) and the system colours (high contrast). */
@@ -1319,3 +1346,17 @@ tbody tr.tvl-hl-red td{background:var(--hl-red-bg)}tbody tr.tvl-hl-red td:first-
    width the list drops State so it fits without scrolling sideways. */
 .modal-full>:not(.modal-heading)>.pir-bulk-scroll{display:block}.pir-bulk-scroll>*+*{margin-top:12px}.pir-bulk-list{overflow:visible}.pir-bulk-list table{min-width:0}.pir-bulk-list td{overflow-wrap:anywhere}.pir-bulk-list td:first-child{white-space:nowrap;overflow-wrap:normal}
 @media(max-width:640px){.pir-bulk-list th:nth-child(3),.pir-bulk-list td:nth-child(3){display:none}.pir-bulk-list th,.pir-bulk-list td{padding:8px 6px}}
+/* PIR-82…PIR-84: the per-Feature grid of the bulk review — the shared paragraphs in two columns on a wide screen, the
+   grid scrolling sideways in its box when it is wider (its first two columns kept narrow), the row "All Features" with
+   Apply to all / Fill down, the active row marked (its Preview below), the Result pill with its detail. */
+.pir-bulk-shared{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px 16px;align-items:start}.pir-bulk-shared h3{grid-column:1/-1;margin:0;font-size:14px;color:var(--heading)}.pir-bulk-shared>.checkbox-label{grid-column:1/-1}
+.pir-bulk-shared-field{display:grid;gap:6px}.pir-bulk-shared-field textarea{width:100%}
+.pir-bulk-grid{overflow-x:auto}.pir-bulk-grid table{min-width:960px}.pir-bulk-grid td{vertical-align:top}.pir-bulk-grid td:nth-child(2){min-width:160px;overflow-wrap:anywhere}
+.pir-bulk-grid select,.pir-bulk-grid input{min-width:7.5em;width:100%}.pir-bulk-grid select{min-width:10em}.pir-bulk-scroll>small.pir-next-pi{display:block}.pir-bulk-grid textarea{min-width:14em;width:100%}
+.pir-bulk-all th,.pir-bulk-all td{background:var(--surface-2);font-weight:400;vertical-align:top}.pir-bulk-all th small{display:block;font-weight:400}
+.pir-bulk-all-cell{display:grid;gap:4px}.pir-bulk-all-cell .button-row{gap:6px;flex-wrap:wrap}
+.pir-bulk-grid tbody tr.pir-bulk-active td{background:var(--surface-2)}.pir-bulk-grid tbody tr.pir-bulk-active td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
+.pir-bulk-result{min-width:180px}.pir-bulk-result small{display:block;margin-top:4px}.pir-bulk-result .danger-text{color:var(--danger-text)}.pir-bulk-grid textarea[aria-invalid="true"]{border-color:var(--danger-line)}
+.pir-bulk-preview{position:static;max-width:760px}
+/* EPS-11: the Product Owner of an Epic (Setup per Epic) — one person picker, as wide as a name and its email. */
+.efe-owner .efe-inline .search-select{width:min(100%,360px)}.efe-owner .efe-inline .search-select input{width:100%}

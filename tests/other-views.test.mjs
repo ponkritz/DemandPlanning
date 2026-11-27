@@ -238,9 +238,10 @@ test('GIT-32: Continue without loading only in a GitHub outage — every failure
   assert.equal(isGitOutage(undefined), false)
 })
 
-test('GIT-33…GIT-35: Load everything as one background job — listed in Jobs done, one at a time, the version recorded only when every part loaded (TC-GIT-28, TC-GIT-29, TC-GIT-30)', async () => {
+test('GIT-33…GIT-38: Load everything and Load latest Release Details as background jobs — listed in Jobs done, one at a time (either kind), the version recorded only when every part loaded (TC-GIT-28, TC-GIT-29, TC-GIT-30, TC-GIT-31)', async () => {
   const { listJobs, resetJobs } = await import('../src/backgroundJobs.ts')
-  const { loadEverythingRunning, loadJobText, startLoadEverything } = await import('../src/loadEverythingJob.ts')
+  const { loadJobRunning: loadEverythingRunning, loadJobText, startLoadJob } = await import('../src/loadEverythingJob.ts')
+  const startLoadEverything = (load, ...rest) => startLoadJob('everything', load, ...rest)
   resetJobs()
   const storage = memory()
   globalThis.localStorage = storage
@@ -272,5 +273,23 @@ test('GIT-33…GIT-35: Load everything as one background job — listed in Jobs 
   assert.equal(loadJobText({ loaded: [], failed: [] }), 'Loaded: nothing.')
   assert.equal(loadEverythingRunning(), false)
   assert.deepEqual(steps, ['load'])
+  // GIT-36, GIT-38: Load latest Release Details is a job of its own; while either load runs, neither starts.
+  let free = () => undefined
+  const held = new Promise((resolve) => { free = resolve })
+  const mapping = startLoadJob('mapping', async (progress) => { progress('Loading stream mapping…'); await held; return { loaded: ['custom streams', 'connection setup'], failed: [] } }, repo, () => 'sha-map')
+  assert.ok(mapping)
+  assert.deepEqual([listJobs()[0].label, listJobs()[0].state], ['Load latest Release Details', 'running'])
+  assert.equal(startLoadJob('everything', async () => ({ loaded: [], failed: [] }), repo, () => null), null, 'Load everything waits for the mapping load')
+  assert.equal(startLoadJob('mapping', async () => ({ loaded: [], failed: [] }), repo, () => null), null)
+  free()
+  await mapping
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.equal(loadedStreamsVersion(repo, storage), 'sha-map', 'the mapping load records the Streams file too')
+  assert.equal(loadEverythingRunning(), false)
+  // The pop-up's job is the mapping load; the full load is Admin → Data & history → Git storage only.
+  const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8')
+  assert.match(app, /onRun=\{\(\) => \{ void startJob\('mapping'\) \}\}/)
+  const release2 = app.slice(app.indexOf('async function loadReleaseDetails'), app.indexOf('return { loaded, failed }', app.indexOf('async function loadReleaseDetails')))
+  assert.deepEqual([...release2.matchAll(/await step\('([^']+)'/g)].map((match) => match[1]), ['Custom streams', 'Stream mapping'], 'only the Stream mapping and the custom streams')
   delete globalThis.localStorage
 })

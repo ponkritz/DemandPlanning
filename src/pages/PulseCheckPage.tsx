@@ -34,6 +34,7 @@ import type { MyWork } from '../useMyWork'
 import type { Page as PageId } from './registry'
 import type { PageProps } from './types'
 import type { PersonalViewsStore } from '../usePersonalViews'
+import { usePageSettingsGear } from '../usePageSettingsGear'
 
 type Tab = 'releases' | 'last' | 'ongoing' | 'current' | 'pack'
 const tabKeys: Tab[] = ['releases', 'last', 'ongoing', 'current', 'pack']
@@ -49,6 +50,8 @@ const change = (now: number, before: number) => now === before ? <span className
 // before the selected one: the Dashboard's "This month" picture for it, its releases next to the selected month's, the
 // Features and User Stories created and closed, and its Time Writing gaps.
 export function PulseCheckPage({ month, azure, store, my, navigate, windchill, openWindchill, git, pack, views, canPickProfile = false }: { canPickProfile?: boolean; month: string; azure: AzureWorkspace; store: PageProps['store']; my: MyWork; navigate: (page: PageId) => void; windchill: WindchillWorkspace; openWindchill: (id: string) => void; git: GitStorage; pack: MonthlyPackStore; views?: PersonalViewsStore }) {
+  // SET-32: ⚙ Settings for this page (page actions, last), for the people who may change one of its settings.
+  const settingsGear = usePageSettingsGear()
   const [tab, setTabState] = useState<Tab>(() => { try { const saved = localStorage.getItem(tabKey) as Tab; return tabKeys.includes(saved) ? saved : 'releases' } catch { return 'releases' } })
   const setTab = (next: Tab) => { setTabState(next); try { localStorage.setItem(tabKey, next) } catch { /* convenience only */ } }
   // QV-32: the DP Supported Releases list is folded by default (the Supported summary already names them); "Show list"
@@ -124,9 +127,9 @@ export function PulseCheckPage({ month, azure, store, my, navigate, windchill, o
     // after the current one left empty (not read).
     const current = utcToday().slice(0, 7)
     const cumulative = period.kind === 'year' ? cumulativeYear(chosen.months, chosen.months.map((at) => at > current ? [] : monthCounts(defaultStreamReleases(store.state, azure.connectionProfiles, at), windchillLines(at))), utcToday(), excluded) : undefined
-    return <Page>{bar}<PeriodPulse label={chosen.label} previous={before.label} months={chosen.months} rows={periodComparison(of(chosen.months), of(before.months))} azure={azure} absenceEpicId={capacityContext(store.state).absenceEpicId} counted={counted} note={note} cumulative={cumulative && { data: cumulative, switches, onSwitches: setSwitches }} /></Page>
+    return <Page actions={settingsGear ?? undefined}>{bar}<PeriodPulse label={chosen.label} previous={before.label} months={chosen.months} rows={periodComparison(of(chosen.months), of(before.months))} azure={azure} absenceEpicId={capacityContext(store.state).absenceEpicId} counted={counted} note={note} cumulative={cumulative && { data: cumulative, switches, onSwitches: setSwitches }} /></Page>
   }
-  return <Page>
+  return <Page actions={settingsGear ?? undefined}>
     {bar}
     <div className="overview-tabs" role="tablist" aria-label="Pulse Check sections">{tabLabels.map(([key, label]) => <button key={key} type="button" role="tab" aria-selected={tab === key} className={`backlog-tab ${tab === key ? 'backlog-tab-active' : ''}`} onClick={() => setTab(key)}>{label}</button>)}</div>
     {tab === 'releases' && releases(lastStreams, last)}

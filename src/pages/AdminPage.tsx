@@ -1,6 +1,6 @@
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { subscribeJobs } from '../backgroundJobs'
-import { loadEverythingRunning } from '../loadEverythingJob'
+import { loadJobRunning as anyLoadRunning } from '../loadEverythingJob'
 import { dpQueryDateColumns } from '../dpQueryColumns'
 import { EpicFeatureEditor } from '../components/EpicFeatureEditor'
 import { AdminOverview } from '../components/AdminOverview'
@@ -12,9 +12,11 @@ import { NamingPatternsPanel } from '../components/NamingPatternsPanel'
 import { EpicSetupPanel } from '../components/EpicSetupPanel'
 import { SharedListsPanel, type SharedListsEnv } from '../components/SharedListsPanel'
 import { StoryTemplatesPanel } from '../components/StoryTemplatesPanel'
+import { MyStoryTemplatesPanel } from '../components/MyStoryTemplatesPanel'
 import type { EpicSetupStore } from '../useEpicSetup'
-import { ScopeChip } from '../components/ScopeChip'
 import { MyViewsPanel } from '../components/MyViewsPanel'
+import { RoleStarterViewsPanel } from '../components/RoleStarterViews'
+import { startersBlocked } from '../roleStarters'
 import { useNow } from '../useNow'
 import { actualsLockDate, actualsLocked, defaultActualsLockDay, defaultPlanLockDay, planLockDate, planningLocked } from '../planningLock'
 import { groupOf } from '../history'
@@ -40,7 +42,7 @@ import { AccessPanel } from '../components/AccessPanel'
 import { SharedTimePanel } from '../components/SharedTimePanel'
 import { CalculationProfilesPanel } from '../components/CalculationProfilesPanel'
 import { CapacityRolesPanel } from '../components/CapacityRolesPanel'
-import { defaultPolicy, keepsManager, toolOwnerExists, type Action, type Role } from '../access'
+import { defaultPolicy, toolOwnerExists, type Action, type Role } from '../access'
 import { PeoplePanel } from '../components/PeoplePanel'
 import { patchProfiles, personStatus, setRolesFor, type PersonEntry } from '../people'
 import { BucketRulesPanel } from '../components/BucketRulesPanel'
@@ -51,23 +53,25 @@ import type { CalculationProfile, ProfileTerms } from '../calculationProfiles'
 import type { FeatureSetup } from '../useFeatureSetup'
 import type { Access } from '../useAccess'
 import type { PageProps } from './types'
-import { shownSettingsTab, type SettingsTab } from '../settingsTabs'
-import { SectionTabs } from '../components/SectionTabs'
+import { sectionsFor, shownSettingsTab, type AdminTab, type SettingsTab } from '../settingsTabs'
+import { SectionTabs, type Section } from '../components/SectionTabs'
 import { MonthlyPackSetupPanel } from '../components/MonthlyPackSetupPanel'
 import type { MonthlyPackStore } from '../useMonthlyPack'
+import type { PageSetting } from '../pageSettings'
+
+// SET-32: the sections of a page's ⚙ settings pop-up (the person may change each), its stream on a Release Details page.
+export interface PageSettingsOnly { sections: PageSetting[]; stream?: string; onOpenAdmin: (tab: AdminTab, section: string) => void }
 
 const shortMonthName = (month: string) => new Intl.DateTimeFormat('en', { month: 'short', year: 'numeric' }).format(new Date(`${month}-01T00:00:00`))
 
 // The Windchill host and views setup is hidden (Windchill exports are imported under Release Details instead).
 // Everyone sets up their own connections and tokens here; the shared sections need the role right to manage them.
-export function AdminPage({ store, month, azure, git, access, featureSetup, epicSetup, sharedLists, setupSteps = [], onSearch = () => undefined, monthlyPack, history, loadEverything, onOpenBoard, tab: requested, onOpenTab, look }: PageProps & { look?: { startView: StartView; onStartView: (view: StartView) => void; onCustomizeMenu: () => void }; tab: SettingsTab; onOpenTab: (tab: SettingsTab, section?: string) => void; azure: AzureWorkspace; git: GitStorage; access: Access; featureSetup: FeatureSetup; epicSetup: EpicSetupStore; sharedLists?: SharedListsEnv; setupSteps?: SetupStep[]; onSearch?: () => void; monthlyPack: MonthlyPackStore; history: HistoryStore; loadEverything: () => Promise<{ loaded: string[]; failed: string[] }> | null; onOpenBoard: () => void }) {
+export function AdminPage({ store, month, azure, git, access, featureSetup, epicSetup, sharedLists, setupSteps = [], onSearch = () => undefined, monthlyPack, history, loadEverything, onOpenBoard, tab: requested, onOpenTab, look, piReview, pagesMenu, listsOwner = false, only }: PageProps & { only?: PageSettingsOnly; piReview?: ReactNode; pagesMenu?: ReactNode; listsOwner?: boolean; look?: { startView: StartView; onStartView: (view: StartView) => void; onCustomizeMenu: () => void }; tab: SettingsTab; onOpenTab: (tab: SettingsTab, section?: string) => void; azure: AzureWorkspace; git: GitStorage; access: Access; featureSetup: FeatureSetup; epicSetup: EpicSetupStore; sharedLists?: SharedListsEnv; setupSteps?: SetupStep[]; onSearch?: () => void; monthlyPack: MonthlyPackStore; history: HistoryStore; loadEverything: () => Promise<{ loaded: string[]; failed: string[] }> | null; onOpenBoard: () => void }) {
   const [everything, setEverything] = useState<{ busy: boolean; loaded?: string[]; failed?: string[] }>({ busy: false })
   // GIT-33, GIT-34: Load everything runs as the background job of the forced load (Jobs done); one at a time.
-  const loadJobRunning = useSyncExternalStore(subscribeJobs, loadEverythingRunning)
+  const loadJobRunning = useSyncExternalStore(subscribeJobs, anyLoadRunning)
   // CON-94: each shared section needs its own permission.
   const can = access.can
-  const peopleShared = can('people.edit') || can('people.capacityRoles')
-  const capacityNeeds: Record<string, Action> = { history: 'capacity.history', capacity: 'capacity.settings', profiles: 'capacity.settings', rules: 'capacity.rules', insights: 'capacity.rules', time: 'capacity.time', period: 'capacity.periods' }
   const [reason, setReason] = useState('Approved operational extension')
   const [capacityMessage, setCapacityMessage] = useState('')
   const [capacityOpen, setCapacityOpen] = useState(false)
@@ -139,7 +143,7 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, epic
     if (!accessEditable) throw new Error(accessReason)
     const result = setRolesFor(access.policy ?? defaultPolicy(access.email), chosenFor, chosen)
     if (!result.changed.length) return { changed: [], skipped: result.skipped, path: access.path }
-    if (!keepsManager(result.policy, access.email)) throw new Error(`Not saved: ${access.email || 'you'} would lose “Manage access”.`)
+    // CON-131: access.save checks the Tool Owner rule (CON-93) and that the saver keeps “Manage access”.
     await access.save(result.policy, `Access: ${result.changed.join(', ')} → ${chosen.join(', ') || 'no app access role'}`)
     return { changed: result.changed, skipped: result.skipped, path: access.path }
   }
@@ -158,7 +162,7 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, epic
       return draft
     })
   }
-  // The default Time tracking started (Admin → People & roles → People) of everyone without their own; '' clears it.
+  // The default Time tracking started (Admin → People & access → People) of everyone without their own; '' clears it.
   function setDefaultJoined(value: string) {
     store.update((draft) => {
       draft.capacitySettings = normalizeCapacitySettings({ ...normalizeCapacitySettings(draft.capacitySettings), defaultJoinedOn: value })
@@ -247,59 +251,65 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, epic
     setCapacityMessage(`${detail}. Save to Git (bar above) so everyone gets it.`)
   }
 
-  // One Settings page at a time (chosen in the menu, SET-14); the shared pages only for roles that manage shared settings.
+  // One Admin page at a time (chosen in the menu, SET-14, SET-26); a page the viewer may not see opens the Overview.
   // SET-15: My settings for everyone; an older page key opens the page it moved to.
   const tab = shownSettingsTab(requested, can)
   // ADM-01: the Overview's shared-setup checks.
   const ioccBulk = useBulkEpic('IOCC').epicId, dpBulk = useBulkEpic('DP').epicId, contentBulk = useBulkEpic('Content').epicId
+  const releaseEpic = (only?.stream === 'DP' ? dpBulk : only?.stream === 'IOCC' ? ioccBulk : only?.stream === 'Content' ? contentBulk : 0) || 0
   const facts = { policy: Boolean(access.policy), toolOwner: toolOwnerExists(access.policy), epicSetups: epicSetup.file?.epics.filter((entry) => entry.fields.length).length ?? 0, sharedFeatureSetups: featureSetup.shared?.epics.length ?? 0, bulkEpicsUnset: ([['DP', dpBulk], ['IOCC', ioccBulk], ['Content', contentBulk]] as const).filter(([, epicId]) => !epicId).map(([stream]) => stream), unsaved: git.dirty, gitConnected: git.connected, gitReadOnly: git.readOnly,
     ...setupGaps(featureSetup.shared, [{ stream: 'DP', epicId: dpBulk }, { stream: 'IOCC', epicId: ioccBulk }]) }
-  // ADM-04: History, filtered by area and text.
+  // ADM-04: the Changes (formerly the page History), filtered by area and text.
   const [auditFilter, setAuditFilter] = useState({ entity: '', text: '' })
   const auditEntities = [...new Set(store.state.audits.map((item) => item.entity))].sort()
   const auditShown = store.state.audits.filter((item) => (!auditFilter.entity || item.entity === auditFilter.entity) && (!auditFilter.text.trim() || `${item.entity} ${item.detail} ${item.action}`.toLowerCase().includes(auditFilter.text.trim().toLowerCase())))
-  return <Page>
-    {tab === 'home' && <AdminOverview steps={setupSteps} facts={facts} git={git} audits={store.state.audits} onOpenTab={onOpenTab} onSearch={onSearch} />}
-    {tab === 'my' && <SectionTabs page="my" sections={[
-      { key: 'email', label: 'Your work email', scope: 'you', node: <AzureConnections section="email" azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={can('streams.options')} /> },
-      { key: 'servers', label: 'Servers and PATs', scope: 'you', node: <AzureConnections section="servers" azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={can('streams.options')} canManageStreams={access.canManageStreams} /> },
-      { key: 'myviews', label: 'My views', scope: 'you', node: <MyViewsPanel azure={azure} /> },
-      { key: 'patterns', label: 'My naming patterns', scope: 'you', node: <NamingPatternsPanel store={store} canManage mode="mine" /> },
-      { key: 'usage', label: 'My page usage', scope: 'you', node: <UsagePanel /> },
-    ]} />}
-    {tab === 'connections' && <SectionTabs page="connections" sections={[
-      { key: 'mapping', label: 'Stream mapping', scope: 'tool-owner', node: <AzureConnections section="mapping" azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={can('streams.options')} canEnterCounts={can('release.counts')} canManageStreams={access.canManageStreams} /> },
-    ]} />}
-    {tab === 'options' && <SectionTabs page="options" sections={[
-      { key: 'epics', label: 'Epics to match Features in', scope: 'everyone', node: <AzureConnections section="epics" azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={can('streams.options')} /> },
-      { key: 'bulk', label: 'Bulk creation Epics', scope: 'both', node: <AzureConnections section="bulk" azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={can('streams.options')} /> },
-      { key: 'counts', label: 'Release counts', scope: 'everyone', node: <AzureConnections section="counts" azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={can('streams.options')} canEnterCounts={can('release.counts')} /> },
-    ]} />}
-    {tab === 'storage' && <SectionTabs page="storage" sections={[
-      { key: 'git', label: 'Git storage', scope: 'computer', node: <GitStoragePanel git={git} /> },
-      ...(git.connected ? [{ key: 'load', label: 'Load from Git', scope: 'computer' as const, node: <Panel className="connection-panel" eyebrow="GIT" title="Load everything from Git" info="Loads everything shared through Git at once: planning data, the connection setup, on-prem view data, Windchill exports, access roles and the Feature setup. Data here is replaced only by newer data from Git; connections you changed here are kept."
+  // SET-26, SET-27: the sections of an Admin page in the order of adminSections, only those the viewer may see.
+  // LST-12: a co-owner of an On-Demand page creates and refreshes the built-in lists, so Lists is shown to them too.
+  const sees = (action: Action) => can(action) || (action === 'lists.manage' && listsOwner)
+  const sections = (page: AdminTab, nodes: Record<string, ReactNode>): Section[] => sectionsFor(page, sees).map((section) => ({ key: section.key, label: section.label, scope: section.scope, node: nodes[section.key] }))
+  const connection = (part: 'mapping' | 'counts' | 'bulk' | 'views' | 'sample' | 'mybulk', extra: Partial<Parameters<typeof AzureConnections>[0]> = {}) => <AzureConnections section={part} azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={can('streams.options')} canEnterCounts={can('release.counts')} canManageStreams={access.canManageStreams} {...extra} />
+  const gitBar = <div className="shared-time-panel"><GitSyncBar git={git} /></div>
+  // SET-32…SET-36: the panels of each Admin page by section — shown here, or in a page's ⚙ settings pop-up (`only`).
+  const nodes = {
+    connections: {
+      // SET-29: Stream mapping, with the Epics to match Features in on each stream's row.
+      // SET-34: in a Release Details page's settings, the row of its stream only and its Release counts.
+      mapping: connection('mapping', only?.stream ? { stream: only.stream } : {}),
+      counts: connection('counts', only?.stream ? { stream: only.stream } : {}),
+      bulk: connection('bulk'),
+    } as Record<string, ReactNode>,
+    storage: {
+      // GIT-37: Load everything from Git is part of the Git storage section (the separate Load from Git section is gone).
+      git: <><GitStoragePanel git={git} />{git.connected && <Panel className="connection-panel load-everything-panel" eyebrow="GIT" title="Load everything from Git" info="Loads everything shared through Git at once: planning data, the connection setup, on-prem view data, Windchill exports, access roles and the Feature setup. Data here is replaced only by newer data from Git; connections you changed here are kept."
         action={<button type="button" className="primary" disabled={loadJobRunning || git.isSample} onClick={() => { const done = loadEverything(); if (!done) return; setEverything({ busy: true }); void done.then((result) => setEverything({ busy: false, ...result })) }}>{loadJobRunning ? 'Loading in the background…' : 'Load everything from Git'}</button>}>
         {git.isSample && <Notice tone="warning">Synthetic sample data is loaded: loading from Git is disabled.</Notice>}
-        {loadJobRunning && <Notice tone="info" className="load-job-running">Loading everything from Git in the background — follow it in Background jobs (top bar); you can go on working.</Notice>}
+        {loadJobRunning && <Notice tone="info" className="load-job-running">A load from Git is running in the background — follow it in Background jobs (top bar); you can go on working.</Notice>}
         {everything.loaded && <Notice tone={everything.failed?.length ? 'warning' : 'success'}>Loaded: {everything.loaded.join('; ') || 'nothing'}.{everything.failed?.length ? ` Not loaded — ${everything.failed.join(' · ')}` : ''}</Notice>}
-      </Panel> }] : []),
-      ...(can('storage.shared') ? [{ key: 'shared', label: 'Shared setup in Git', scope: 'tool-owner' as const, node: <><RetiredFilesPanel git={git} viewingAs={Boolean(access.viewingAs)} toolOwner={access.rights.roles.includes('Tool Owner')} staleQeEpics={([['DP', dpBulk], ['IOCC', ioccBulk]] as const).flatMap(([stream, id]) => id && needsQePage(chooseSetup(featureSetup.setups, id, true).setup) ? [`Epic #${id} (${stream})`] : [])} /><AzureViewsGitPanel git={git} azure={azure} /></> }] : []),
-      { key: 'views', label: 'Other views', scope: 'both', node: <AzureConnections section="views" azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={can('streams.options')} canRemoveForEveryone={access.canManageStreams} canAssignOtherViews={can('storage.shared')} people={Object.keys(access.policy?.members ?? {}).sort()} viewingAs={Boolean(access.viewingAs)} /> },
-      ...((store.state.azureSources ?? []).length ? [{ key: 'sources', label: 'Read-only sources', scope: 'computer' as const, node: <AzureConnections section="sources" azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={can('streams.options')} /> }] : []),
-      { key: 'sample', label: 'Synthetic sample', scope: 'computer', node: <AzureConnections section="sample" azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={can('streams.options')} /> },
-    ]} />}
-    {tab === 'look' && <SectionTabs page="look" sections={[
-      { key: 'layout', label: 'Page layout', scope: 'you', node: <PageLayoutPanel /> },
-      { key: 'theme', label: 'Theme and zoom', scope: 'you', node: <ThemePanel desktop={Boolean(window.desktopZoom)} /> },
-      ...(look ? [{ key: 'start', label: 'Start view and menu', scope: 'you' as const, node: <StartViewPanel startView={look.startView} onStartView={look.onStartView} onCustomizeMenu={look.onCustomizeMenu} /> }] : []),
-      ...(can('layout.defaults') ? [{ key: 'tables', label: 'Table and chart defaults', scope: 'everyone' as const, node: <TableDefaultsPanel store={store} git={git} canEdit={can('layout.defaults')} /> }] : []),
-    ]} />}
-    {tab === 'pack' && <SectionTabs page="pack" sections={[
-      ...(can('pack.setup') ? [{ key: 'pack', label: 'Monthly pack', scope: 'everyone' as const, node: <MonthlyPackSetupPanel pack={monthlyPack} git={git} items={azure.items} /> }] : []),
-    ]} />}
-    {!peopleShared && tab === 'resources' && <Notice tone="info">People and capacity roles are edited by roles allowed “Edit people” or “Capacity roles” (Role rights).</Notice>}
-    {tab === 'capacity' && <SectionTabs page="capacity" sections={[
-      { key: 'capacity', label: 'Capacity and absence', node: <Panel eyebrow="CAPACITY" title="Capacity and absence" info="Used by the Dashboard to compute available hours and utilization. Saved with the planning data in Git (with the holidays and common activities), so everyone who loads from Git gets the same settings.">
+      </Panel>}</>,
+      // SET-29, AR-141: Other views, with each read-only view's work items by type in its row (no Read-only sources section).
+      views: <>{connection('views', { canRemoveForEveryone: access.canManageStreams, canAssignOtherViews: can('storage.shared'), people: Object.keys(access.policy?.members ?? {}).sort(), viewingAs: Boolean(access.viewingAs) })}<RoleStarterViewsPanel git={git} azure={azure} admin={can('storage.shared')} viewingAs={Boolean(access.viewingAs)} /></>,
+      // Connections in Git (formerly Shared setup in Git).
+      shared: <><RetiredFilesPanel git={git} viewingAs={Boolean(access.viewingAs)} toolOwner={access.rights.roles.includes('Tool Owner')} staleQeEpics={([['DP', dpBulk], ['IOCC', ioccBulk]] as const).flatMap(([stream, id]) => id && needsQePage(chooseSetup(featureSetup.setups, id, true).setup) ? [`Epic #${id} (${stream})`] : [])} /><AzureViewsGitPanel git={git} azure={azure} /></>,
+      // HIS-01: Historical hours (formerly Capacity & time).
+      history: <HistoryPanel history={history} git={git} items={azure.items} profileNames={Object.keys(capacityContext(store.state).profiles ?? {})} editable={git.connected && !git.readOnly && !git.isSample} importedBy={access.email} />,
+      // ADM-04: the Changes (formerly the page History).
+      changes: <Panel eyebrow="CHANGES" title="Changes" info="The changes made to the shared planning data, newest first, with who and what. Filter by area or text.">
+        <div className="query-toolbar"><select aria-label="Area" value={auditFilter.entity} onChange={(event) => setAuditFilter({ ...auditFilter, entity: event.target.value })}><option value="">All areas</option>{auditEntities.map((entity) => <option key={entity}>{entity}</option>)}</select><input className="search" aria-label="Search changes" placeholder="Search changes" value={auditFilter.text} onChange={(event) => setAuditFilter({ ...auditFilter, text: event.target.value })} /><small className="muted">{auditShown.length} of {store.state.audits.length}</small></div>
+        {auditShown.slice(0, 200).map((item) => <div className="audit-row" key={item.id}><span>{item.action}</span><div><strong>{item.entity}</strong><small>{item.detail}</small></div><time>{formatDateTime(item.timestamp)}</time></div>)}
+        {!store.state.audits.length && <EmptyState title="No changes recorded yet." detail="Changes made in the app will appear here." />}
+      </Panel>,
+      // Demo data: the synthetic sample, and Reset synthetic MVP data for the holders of storage.shared (as on History before).
+      sample: connection('sample', can('storage.shared') ? { onResetDemo: () => store.reset() } : {}),
+    } as Record<string, ReactNode>,
+    pages: {
+      // PGB-12: the menu groups, the added pages and the row locks (formerly the page Pages & menu).
+      menu: pagesMenu,
+      pack: <MonthlyPackSetupPanel pack={monthlyPack} git={git} items={azure.items} />,
+      // UI-12: Table & chart defaults (formerly in Look & feel).
+      tables: <TableDefaultsPanel store={store} git={git} canEdit={can('layout.defaults')} />,
+    } as Record<string, ReactNode>,
+    capacity: {
+      capacity: <>{can('capacity.settings') && <Panel eyebrow="CAPACITY" title="Capacity and absence" info="Used by the Dashboard to compute available hours and utilization. Saved with the planning data in Git (with the holidays and common activities), so everyone who loads from Git gets the same settings.">
         {/* CAP-34 (moved here from People, CAP-61): who counts in the month's capacity, and the regional holidays. */}
         {resources.length > 0 && <Notice tone="info"><strong>Capacity in {monthName(month)}: {counted.length} {counted.length === 1 ? 'person' : 'people'}, {formatHours(sumOf((person) => person.available))}h available</strong> = {formatHours(sumOf((person) => person.funded))}h contractual − {formatHours(sumOf((person) => person.absence))}h absence (PTO, sick, unplanned leave, public holidays, other absence). Actual utilization = Total actual (project work, training, other NPRA, common activities) ÷ Available hours. <Info label="Who counts">Counted: everyone with a {monthName(month)} Time Writing Task (absence included), employed that month (Time tracking started / Left on), not removed. Per person: working days employed × {capacity.hoursPerDay}h (contractual), less absence and the public holidays of their region; never below 0. The team total is the sum.<br />{counted.map((person) => `${person.name} ${formatHours(person.available)}h`).join(' · ') || 'Nobody yet.'}{monthModel.people.some((person) => person.name === 'Unassigned') ? ' · Tasks without an assignee (Unassigned) are not in this total.' : ''}</Info></Notice>}
         {resources.length > 0 && <Notice tone={unmapped.length ? 'warning' : 'info'}>
@@ -315,13 +325,17 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, epic
           <div className="modal-actions"><button type="button" className="ghost" onClick={() => setCapacityOpen(false)}>Cancel</button><button className="primary">Save capacity settings</button></div>
         </form></Modal>}
         {capacityMessage && <Notice tone="success">{capacityMessage}</Notice>}
-      </Panel> },
-      { key: 'profiles', label: 'Calculation profiles', node: <><div className="shared-time-panel"><GitSyncBar git={git} /></div><CalculationProfilesPanel settings={capacity} canEdit={can('capacity.settings')} onSave={saveProfiles} onSaveTerms={saveProfileTerms} /></> },
-      { key: 'rules', label: 'Bucket rules', node: <><div className="shared-time-panel"><GitSyncBar git={git} /></div><BucketRulesPanel settings={capacity} items={azure.items} month={month} canEdit={can('capacity.rules')} onSave={saveBucketRules} /></> },
-      { key: 'insights', label: 'Insight thresholds', node: <><div className="shared-time-panel"><GitSyncBar git={git} /></div><InsightThresholdsPanel settings={capacity} canEdit={can('capacity.rules')} onSave={saveInsightThresholds} /></> },
-      { key: 'time', label: 'Holidays and common activities', node: <><div className="shared-time-panel"><GitSyncBar git={git} /></div>
-      <SharedTimePanel settings={capacity} items={azure.items} month={month} onSave={saveSharedTime} /></> },
-      { key: 'period', label: 'Period control', node: <Panel eyebrow="PERIOD CONTROL" title={`Locks of ${monthName(month)}`} info={<ul><li>Every month has its own last days to update: the plan of the month and its actuals. The day itself is still open; the month locks from the next day (the day ends at midnight UTC, the same moment for everyone).</li><li>Without a date of its own, a month uses the default days below — e.g. the November plan can be updated until 5 November (locked from 6 November), November actuals until 4 December (locked from 5 December).</li><li>Lock now locks a month before its date; to reopen a locked month, set a later last day. Saved with the planning data in Git, so everyone sees the same locks.</li></ul>}>
+      </Panel>}
+        {/* CAP-57: the Capacity roles (formerly People & roles → Capacity roles). */}
+        {can('people.capacityRoles') && <>{gitBar}<CapacityRolesPanel settings={capacity} canEdit={can('people.capacityRoles')} onSave={saveCapacityRoles} /></>}</>,
+      profiles: <>{gitBar}<CalculationProfilesPanel settings={capacity} canEdit={can('capacity.settings')} onSave={saveProfiles} onSaveTerms={saveProfileTerms} /></>,
+      // Hour classification: the Bucket rules (CAP-46) and the Holidays and common activities.
+      classification: <>{gitBar}{can('capacity.rules') && <BucketRulesPanel settings={capacity} items={azure.items} month={month} canEdit={can('capacity.rules')} onSave={saveBucketRules} />}
+        {can('capacity.time') && <SharedTimePanel settings={capacity} items={azure.items} month={month} onSave={saveSharedTime} />}</>,
+      // Thresholds: the Insight thresholds (CAP-47); the Overloaded / Has capacity bands stay with the capacity settings.
+      thresholds: <>{gitBar}<InsightThresholdsPanel settings={capacity} canEdit={can('capacity.rules')} onSave={saveInsightThresholds} /></>,
+      // Month locks (formerly Period control, MON-21…MON-24).
+      locks: <Panel eyebrow="MONTH LOCKS" title={`Locks of ${monthName(month)}`} info={<ul><li>Every month has its own last days to update: the plan of the month and its actuals. The day itself is still open; the month locks from the next day (the day ends at midnight UTC, the same moment for everyone).</li><li>Without a date of its own, a month uses the default days below — e.g. the November plan can be updated until 5 November (locked from 6 November), November actuals until 4 December (locked from 5 December).</li><li>Lock now locks a month before its date; to reopen a locked month, set a later last day. Saved with the planning data in Git, so everyone sees the same locks.</li></ul>}>
         <GitSyncBar git={git} />
         <div className="lock-defaults">
           <label>Last day to update the plan<input type="number" min={1} max={28} value={capacity.planLockDay ?? defaultPlanLockDay} onChange={(event) => { const day = Number(event.target.value); if (day >= 1 && day <= 28) setLocks((settings) => ({ ...settings, planLockDay: day }), `Default planning lock day = ${day}`) }} /><small className="muted">of the month (every month without its own date); locked from the next day</small></label>
@@ -337,12 +351,10 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, epic
             <button type="button" className="primary" onClick={() => setMonthLock({ [flagKey]: own?.[flagKey] ? undefined : true }, `${label} of ${month} ${own?.[flagKey] ? 'no longer locked early' : 'locked now'}`)}>{own?.[flagKey] ? 'Undo early lock' : 'Lock now'}</button>
           </div>
         })}
-      </Panel> },
-      { key: 'history', label: 'Historical hours', node: <HistoryPanel history={history} git={git} items={azure.items} profileNames={Object.keys(capacityContext(store.state).profiles ?? {})} editable={git.connected && !git.readOnly && !git.isSample} importedBy={access.email} /> },
-    ].filter((section) => can(capacityNeeds[section.key])).map((section) => ({ ...section, scope: 'everyone' as const }))} />}
-    {tab === 'resources' && !peopleShared && <AccessPanel access={access} git={git} people={people} membersInPeople />}
-    {tab === 'resources' && peopleShared && <SectionTabs page="resources" sections={[
-      { key: 'people', label: 'People', node: <PeoplePanel entries={peopleEntries} names={names} outside={outside} defaultRole={access.policy?.defaultRole ?? null} defaultJoinedOn={capacity.defaultJoinedOn} accessReason={accessReason} accessOnly={accessOnly} git={git}
+      </Panel>,
+    } as Record<string, ReactNode>,
+    resources: {
+      people: <PeoplePanel entries={peopleEntries} names={names} outside={outside} defaultRole={access.policy?.defaultRole ?? null} defaultJoinedOn={capacity.defaultJoinedOn} accessReason={accessReason} accessOnly={accessOnly} git={git}
         teamError={team?.error} readTeam={{ disabled: azure.isSample || !azure.config || !azure.pat, onClick: () => setTeamRead((count) => count + 1) }}
         source={<>
           <p>Names and work emails come from Azure DevOps: the members of the team <strong>{azure.config?.team || '(Time Writing connection)'}</strong> and everyone Assigned To a work item. To add someone, add them to the Azure DevOps team (or assign them a work item), then refresh.</p>
@@ -351,30 +363,54 @@ export function AdminPage({ store, month, azure, git, access, featureSetup, epic
             : team?.error ? `The team was not read: ${team.error}. The PAT needs Project and Team (Read); the people Assigned To in the fetched work are listed.`
             : team ? `${team.members.length} team member${team.members.length === 1 ? '' : 's'} read from ${azure.config.team}.` : 'Reading the team from Azure DevOps…'}</p>
         </>}
-        saves={{ profiles: savePeopleProfiles, roles: saveRoles, defaultJoined: setDefaultJoined }} /> },
+        saves={{ profiles: savePeopleProfiles, roles: saveRoles, defaultJoined: setDefaultJoined }} />,
       // CAP-62: the reporting lines on their own tab.
-      { key: 'tree', label: 'Team tree', node: <Panel className="admin-section" eyebrow="PEOPLE & ACCESS" title="Team tree" info="Who reports to whom, from Reports to in People. People without a manager, and managers typed in by name who are not in the list (marked “not on the board”), are at the top.">
+      tree: <Panel className="admin-section" eyebrow="PEOPLE & ACCESS" title="Team tree" info="Who reports to whom, from Reports to in People. People without a manager, and managers typed in by name who are not in the list (marked “not on the board”), are at the top.">
         {resources.some((person) => profiles[person.name]?.reportsTo) ? <TeamTree names={names} profiles={profiles} /> : <EmptyState title="No reporting lines yet." detail="Open a person in People, choose Edit and set Reports to." />}
-      </Panel> },
-      { key: 'capacity-roles', label: 'Capacity roles', node: <><div className="shared-time-panel"><GitSyncBar git={git} /></div><CapacityRolesPanel settings={capacity} canEdit={can('people.capacityRoles')} onSave={saveCapacityRoles} /></> },
-      { key: 'rights', label: 'Role rights', node: <AccessPanel access={access} git={git} people={people} membersInPeople /> },
-    ].filter((section) => section.key === 'people' || section.key === 'tree' ? can('people.edit') : section.key === 'capacity-roles' ? can('people.capacityRoles') : true).map((section) => ({ ...section, scope: 'everyone' as const }))} />}
-    {tab === 'audit' && <div className="scope-line"><ScopeChip scope="everyone" /></div>}
-    {tab === 'epics' && <SectionTabs page="epics" sections={[
-      { key: 'setup', label: 'Setup per Epic', scope: 'both', node: <EpicFeatureEditor setup={featureSetup} epicSetup={epicSetup} git={git} items={azure.items} dateColumns={dpQueryDateColumns(store.state, azure.connectionProfiles).options} /> },
-      // LST-03…LST-07: the Value lists and, below them, the team lists from Azure DevOps — both usable as built-in lists of
-      // the On-Demand columns (LST-08).
-      { key: 'lists', label: 'Value lists', scope: 'everyone', node: <><EpicSetupPanel section="lists" setup={epicSetup} git={git} items={azure.items} canEdit={can('setup.epic')} canEditLists={can('setup.values')} />{sharedLists && <SharedListsPanel env={sharedLists} />}</> },
-      { key: 'templates', label: 'User Story templates', scope: 'everyone', node: <StoryTemplatesPanel setup={epicSetup} featureSetup={featureSetup} git={git} items={azure.items} canEdit={can('setup.values')} /> },
-      // PIR-29: the PI Review form is a page of its own, Admin → PI Review Setup (PiReviewSetupPage).
+      </Panel>,
+      // CON-134 (AR-011): Role rights with "Access for emails not in Azure DevOps".
+      rights: <AccessPanel access={access} git={git} people={people} accessOnly={accessOnly} />,
+    } as Record<string, ReactNode>,
+    epics: {
+      // SET-34: in a Release Details page's settings, the Release Classification of its stream — Setup per Epic opened on
+      // the stream's bulk creation Epic (its Release Classification field and the rules, DPF-10, are under Fields & title).
+      setup: <>{only?.stream && <Notice tone="info" className="page-settings-class">{releaseEpic ? <>The Release Classification of {only.stream} is the List field <strong>Release Classification</strong> of its bulk creation Epic #{releaseEpic} — its values and the rules that detect them from the release number are under <strong>Fields &amp; title</strong>.</> : <>No {only.stream} bulk creation Epic is mapped yet (Admin → Streams → Bulk creation): the Release Classification is set on that Epic. All Epics is shown.</>}</Notice>}
+        <EpicFeatureEditor key={only?.stream ? `class:${releaseEpic}` : 'setup'} initialEpicId={only?.stream ? releaseEpic : 0} setup={featureSetup} epicSetup={epicSetup} git={git} items={azure.items} dateColumns={dpQueryDateColumns(store.state, azure.connectionProfiles).options} /></>,
+      // LST-03…LST-07: Lists — the Value lists and, below them, the team lists from Azure DevOps (two files in Git) —
+      // both usable as built-in lists of the On-Demand columns (LST-08).
+      lists: <><EpicSetupPanel section="lists" setup={epicSetup} git={git} items={azure.items} canEdit={can('setup.epic')} canEditLists={can('setup.values')} />{sharedLists && <SharedListsPanel env={sharedLists} />}</>,
+      templates: <><StoryTemplatesPanel setup={epicSetup} featureSetup={featureSetup} git={git} items={azure.items} canEdit={can('setup.values')} />{/* SET-33: My templates stay in Admin (personal). */}{!only && <MyStoryTemplatesPanel email={azure.creatorEmail} viewingAs={Boolean(access.viewingAs)} items={azure.items} epicFile={epicSetup.file} />}</>,
+      // PIR-29, PIR-33: the PI Review form (formerly the page PI Review Setup).
+      pireview: piReview,
+    } as Record<string, ReactNode>,
+  }
+  // SET-32…SET-35: a page's ⚙ settings pop-up — only the sections asked (those the person may change), as tabs, each with
+  // Open in Admin →; the same panels, saves and Git bar as on the Admin pages.
+  if (only) return <SectionTabs page="home" remember={false} label="Settings" sections={only.sections.map((entry) => ({ key: `${entry.tab}:${entry.section}`, label: entry.label, scope: entry.scope,
+    node: <><p className="page-settings-admin"><button type="button" className="text-button" onClick={() => only.onOpenAdmin(entry.tab, entry.section)}>Open in Admin →</button></p>{entry.tab === 'home' ? null : nodes[entry.tab][entry.section]}</> }))} />
+  return <Page>
+    {tab === 'home' && <AdminOverview steps={setupSteps} facts={facts} git={git} audits={store.state.audits} showChanges={can('storage.shared')} onOpenTab={(page, section) => page === 'connections' && section === 'bulk' && !can('streams.options') ? onOpenTab('my', 'bulk') : onOpenTab(page, section)} onSearch={onSearch} />}
+    {tab === 'my' && <SectionTabs page="my" sections={[
+      { key: 'email', label: 'Your work email', scope: 'you', node: <AzureConnections section="email" azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={can('streams.options')} canManageStreams={access.canManageStreams} /> },
+      { key: 'servers', label: 'Servers and PATs', scope: 'you', node: <AzureConnections section="servers" azure={azure} store={store} git={git} onOpenBoard={onOpenBoard} canManage={can('streams.options')} canManageStreams={access.canManageStreams} /> },
+      { key: 'myviews', label: 'My views', scope: 'you', node: <MyViewsPanel azure={azure} startersBlocked={startersBlocked({ email: azure.creatorEmail, connected: git.connected, isSample: azure.isSample || git.isSample, viewingAs: Boolean(access.viewingAs) })} /> },
+      // SET-29, AR-114: each person's own bulk creation Epics (formerly the column Mine of Stream options → Bulk creation Epics).
+      { key: 'bulk', label: 'My bulk creation Epics', scope: 'you', node: connection('mybulk') },
+      { key: 'patterns', label: 'My naming patterns', scope: 'you', node: <NamingPatternsPanel store={store} canManage mode="mine" /> },
+      { key: 'usage', label: 'My page usage', scope: 'you', node: <UsagePanel /> },
     ]} />}
-    {tab === 'audit' && <Panel eyebrow="HISTORY" title="Changes" info="The changes made to the shared planning data, newest first, with who and what. Filter by area or text.">
-      <div className="query-toolbar"><select aria-label="Area" value={auditFilter.entity} onChange={(event) => setAuditFilter({ ...auditFilter, entity: event.target.value })}><option value="">All areas</option>{auditEntities.map((entity) => <option key={entity}>{entity}</option>)}</select><input className="search" aria-label="Search changes" placeholder="Search changes" value={auditFilter.text} onChange={(event) => setAuditFilter({ ...auditFilter, text: event.target.value })} /><small className="muted">{auditShown.length} of {store.state.audits.length}</small></div>
-      {auditShown.slice(0, 200).map((item) => <div className="audit-row" key={item.id}><span>{item.action}</span><div><strong>{item.entity}</strong><small>{item.detail}</small></div><time>{formatDateTime(item.timestamp)}</time></div>)}
-      {!store.state.audits.length && <EmptyState title="No changes recorded yet." detail="Changes made in the app will appear here." />}
-      {/* OI-09: confirmed first and recorded in History. */}
-      {<button className="danger-button" onClick={() => { if (window.confirm('Reset the planning data in this browser to the synthetic MVP data? Your periods, capacity, resources, baselines and History here are replaced, and the fetched Azure DevOps data is cleared until the next fetch (connections and PATs are kept). If Git storage is connected, the change is only shared when someone saves it to Git.')) store.reset() }}>Reset synthetic MVP data</button>}
-    </Panel>}
+    {tab === 'connections' && <SectionTabs page="connections" sections={sections('connections', nodes.connections)} />}
+    {tab === 'storage' && <SectionTabs page="storage" sections={sections('storage', nodes.storage)} />}
+    {tab === 'look' && <SectionTabs page="look" sections={[
+      { key: 'layout', label: 'Page layout', scope: 'you', node: <PageLayoutPanel /> },
+      { key: 'theme', label: 'Theme and zoom', scope: 'you', node: <ThemePanel desktop={Boolean(window.desktopZoom)} /> },
+      ...(look ? [{ key: 'start', label: 'Start view and menu', scope: 'you' as const, node: <StartViewPanel startView={look.startView} onStartView={look.onStartView} onCustomizeMenu={look.onCustomizeMenu} /> }] : []),
+    ]} />}
+    {tab === 'pages' && <SectionTabs page="pages" sections={sections('pages', nodes.pages)} />}
+    {tab === 'resources' && !can('people.edit') && <Notice tone="info">People and the team tree are edited by roles allowed “Edit people” (Role rights).</Notice>}
+    {tab === 'capacity' && <SectionTabs page="capacity" sections={sections('capacity', nodes.capacity)} />}
+    {tab === 'resources' && <SectionTabs page="resources" sections={sections('resources', nodes.resources)} />}
+    {tab === 'epics' && <SectionTabs page="epics" sections={sections('epics', nodes.epics)} />}
   </Page>
 }
 

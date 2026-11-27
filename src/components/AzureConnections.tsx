@@ -6,8 +6,8 @@ import { allStreams, dataSetOfProfile, dataSets, defaultMatchThreshold, namesStr
 import { ToolQueriesPanel } from './ToolQueriesPanel'
 import { ruleOf } from '../customStreams'
 import { CustomStreamsPanel } from './CustomStreamsPanel'
-import { normalizeReleaseSourceSettings, withToolValidationsSettings } from '../releaseSource'
-import { collectionUrlFrom, composeAzureUrl, forgetKnownServer, listKnownServers, loadServerPat, saveKnownServer, saveServerPat, serverKey, defaultShowInMenu, listAzureConnectionProfiles, loadAzureConnectionProfile, showsInMenu, splitAzureUrl, viewNameOf, splitCollectionUrl, type AzureConnectionProfileSummary, type AzureConnectionRole } from '../azureCredentials'
+import { epicMatchStreams, normalizeReleaseSourceSettings, withToolValidationsSettings } from '../releaseSource'
+import { collectionUrlFrom, composeAzureUrl, forgetKnownServer, listKnownServers, loadServerPat, saveKnownServer, saveServerPat, serverKey, defaultShowInMenu, listAzureConnectionProfiles, loadAzureConnectionProfile, showsInMenu, splitAzureUrl, viewNameOf, splitCollectionUrl, tokenOnServer, type AzureConnectionProfileSummary, type AzureConnectionRole } from '../azureCredentials'
 import { defaultReleaseQuery, projectQuery } from '../releaseSource'
 import type { AzureWorkspace, ConnectionInput } from '../useAzureWorkspace'
 import { isCloudBase } from '../azureDevOps'
@@ -42,9 +42,11 @@ const queryPlaceholder: Record<AzureConnectionRole, string> = { 'time-tracking':
 const empty = (role: AzureConnectionRole = 'time-tracking'): ConnectionInput => ({ name: '', viewName: '', showInMenu: defaultShowInMenu(role), role, serverUrl: '', organization: '', project: '', team: '', pat: '', query: '', creatorEmail: '', apiVersion: '' })
 
 // Azure DevOps connection setup, shown as the first section of Settings.
-// section: the one part to show (SET-14: Servers and PATs, Stream mapping, Other views, Read-only sources, Synthetic
-// sample); without it, every part.
-export function AzureConnections({ azure, store, git, onOpenBoard, canManage = true, canManageStreams = canManage, canEnterCounts = canManage, canRemoveForEveryone = false, canAssignOtherViews = false, people = [], viewingAs = false, section }: { azure: AzureWorkspace; store: PageProps['store']; git?: GitStorage; onOpenBoard: () => void; canManage?: boolean; canManageStreams?: boolean; canEnterCounts?: boolean; canRemoveForEveryone?: boolean; canAssignOtherViews?: boolean; people?: string[]; viewingAs?: boolean; section?: 'email' | 'servers' | 'mapping' | 'epics' | 'bulk' | 'counts' | 'views' | 'sources' | 'sample' }) {
+// section: the one part to show (SET-14, SET-26: Servers and PATs, Stream mapping, Release counts, Bulk creation, My bulk
+// creation Epics, Other views, Synthetic sample); without it, every part. stream (SET-34, a Release Details page's ⚙
+// settings): Stream mapping shows only that stream's rows (DP: with its data sets; Tool Validations: with its Signed
+// documents query) and none of the panels below it; Release counts opens on that stream.
+export function AzureConnections({ azure, store, git, onOpenBoard, canManage = false, canManageStreams = false, canEnterCounts = false, canRemoveForEveryone = false, canAssignOtherViews = false, people = [], viewingAs = false, section, onResetDemo, stream }: { azure: AzureWorkspace; store: PageProps['store']; git?: GitStorage; onOpenBoard: () => void; canManage?: boolean; canManageStreams?: boolean; canEnterCounts?: boolean; canRemoveForEveryone?: boolean; canAssignOtherViews?: boolean; people?: string[]; viewingAs?: boolean; section?: 'email' | 'servers' | 'mapping' | 'epics' | 'bulk' | 'mybulk' | 'counts' | 'views' | 'sample'; onResetDemo?: () => void; stream?: string }) {
   const show = (part: string) => !section || section === part
   const threshold = normalizeReleaseSourceSettings(store.state.releaseSourceSettings).matchThreshold ?? defaultMatchThreshold
   const { connectionProfiles, connectionStatus, activeConnectionProfileId, busy } = azure
@@ -59,11 +61,22 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
   const [removing, setRemoving] = useState<{ view: AzureConnectionProfileSummary; mode: RemovalMode } | null>(null)
   // CON-124: Remove one of my own Other views (here, from my file in Git, and by a removal marker on my other computers).
   const [removingOwn, setRemovingOwn] = useState<AzureConnectionProfileSummary | null>(null)
+  // SET-29: the Epics to match Features in, one cell per stream row: DP, CP, IOCC and Content from the shared settings
+  // (Choose… opens them; View for everyone else), a custom stream's own Epics (set in its Edit), else the whole board.
+  const [epicsFor, setEpicsFor] = useState<string | null>(null)
+  const featureEpics = normalizeReleaseSourceSettings(store.state.releaseSourceSettings).featureEpics ?? {}
+  const epicsText = (ids: number[]) => ids.length ? `${ids.length} Epic${ids.length === 1 ? '' : 's'}` : 'Whole board'
+  const epicsCell = (name: string, customEpics?: number[]) => customEpics ? <small className="plain" title="Set in the custom stream’s Edit">{epicsText(customEpics)}</small>
+    : (epicMatchStreams as readonly string[]).includes(name) ? <><small className="plain">{epicsText(featureEpics[name] ?? [])}</small> <button type="button" className="ghost" aria-label={`Epics to match ${name} Features in`} onClick={() => setEpicsFor(name)}>{canManage ? 'Choose…' : 'View'}</button></>
+    : <span className="muted">—</span>
   const removeBlocked = removalBlocked({ allowed: canRemoveForEveryone, viewingAs, git, isSample: azure.isSample })
   const [dismissed, setDismissed] = useState(loadDismissedPresets)
   const presets = pendingPresets(connectionProfiles, dismissed)
   // Only the data of connections that exist here (data of a removed or duplicate connection is not listed).
   const sources = (store.state.azureSources ?? []).filter((source) => connectionProfiles.some((profile) => profile.id === source.connectionId))
+  // SET-29, AR-141: the work items fetched for a read-only view by type, in its Other views row (formerly the section
+  // Read-only sources).
+  const byTypeOf = (id: string) => { const source = sources.find((entry) => entry.connectionId === id); if (!source) return ''; const types = Object.entries(source.items.reduce<Record<string, number>>((counts, item) => { counts[item.workItemType] = (counts[item.workItemType] ?? 0) + 1; return counts }, {})).sort((a, b) => b[1] - a[1]); return `${source.items.length} work item${source.items.length === 1 ? '' : 's'}${types.length ? ` · ${types.slice(0, 4).map(([type, count]) => `${type} ${count}`).join(' · ')}` : ''}` }
 
   const [patDrafts, setPatDrafts] = useState<Record<string, string>>({})
   const [patNote, setPatNote] = useState<{ key: string; text: string } | null>(null)
@@ -75,6 +88,10 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
   const presetHasPat = (preset: Pick<ConnectionInput, 'serverUrl' | 'organization' | 'project'>) => Boolean(loadServerPat(serverKey(placeOf(preset))) || connectionProfiles.some((profile) => serverKey(profile) === serverKey(placeOf(preset)) && profilePat(profile)))
   const formServerKey = form ? (() => { try { return serverKey(placeOf({ ...form, project: form.project || 'x' })) } catch { return '' } })() : ''
   const formServerPat = (() => { try { return form ? presetHasPat(form) : false } catch { return false } })()
+  // AR-006 (CON-142): the edited or cloned connection's PAT counts only while the form stays on its server.
+  const formSource = form ? (form.id ? loadAzureConnectionProfile(form.id) : form.cloneOf ? loadAzureConnectionProfile(form.cloneOf) : null) : null
+  const formOwnPat = Boolean(tokenOnServer(formSource, formServerKey))
+  const formServerChanged = Boolean(formSource?.token) && !formOwnPat
   // Servers: every server of a connection or a default, with its projects, what uses it and whether a PAT is saved.
   const servers = (() => {
     const map = new Map<string, { key: string; label: string; onPrem: boolean; cloud: boolean; serverUrl: string; organization: string; projects: Set<string>; uses: string[]; ids: string[]; hasPat: boolean; savedPat: boolean }>()
@@ -99,7 +116,7 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
     { name: 'Time Writing', timeWriting: true, windchill: false, profile: activeTimeWriting, preset: timeWritingPreset, rule: 'Team backlog (read & write)', where: activeTimeWriting ? whereOf(activeTimeWriting) : timeWritingPreset ? whereOf(placeOf(timeWritingPreset)) : '', query: activeTimeWriting?.query ?? '' },
     ...dataSets.map((set) => { const profile = profileForDataSet(set.name, connectionProfiles), preset = set.presetKey ? connectionPresets.find((entry) => entry.key === set.presetKey) : undefined; return { name: set.name, dataSet: true, timeWriting: false, windchill: false, profile, preset, rule: dataSetRule[set.name] ?? '', where: profile ? whereOf(profile) : preset ? whereOf(placeOf(preset)) : '', query: profile?.query ?? preset?.query ?? '' } }),
     // STR-02: the built-in streams, then the custom ones (their rule by the built-in stream it is like).
-    ...allStreams().flatMap((stream) => { const profile = profileForStream(stream, connectionProfiles), preset = stream.source === 'azure' && !stream.custom ? presetFor(stream.name) : undefined; const row = { name: stream.name, custom: Boolean(stream.custom), timeWriting: false, windchill: stream.source === 'windchill', profile, preset, rule: stream.custom ? ruleOf(stream)?.label ?? stream.rule : stream.source === 'windchill' ? 'Windchill export' : ruleLabel[stream.rule], where: profile ? whereOf(profile) : preset ? whereOf(placeOf(preset)) : '', query: profile?.query ?? preset?.query ?? '' }
+    ...allStreams().flatMap((stream) => { const profile = profileForStream(stream, connectionProfiles), preset = stream.source === 'azure' && !stream.custom ? presetFor(stream.name) : undefined; const row = { name: stream.name, custom: Boolean(stream.custom), customEpics: stream.custom ? stream.epics ?? [] : undefined, timeWriting: false, windchill: stream.source === 'windchill', profile, preset, rule: stream.custom ? ruleOf(stream)?.label ?? stream.rule : stream.source === 'windchill' ? 'Windchill export' : ruleLabel[stream.rule], where: profile ? whereOf(profile) : preset ? whereOf(placeOf(preset)) : '', query: profile?.query ?? preset?.query ?? '' }
       // TVL-19: Tool Validations' second query, the Signed documents (its own row; Add query names it so it is found).
       if (stream.rule !== 'tool' || stream.custom) return [row]
       const documents = toolQueries(stream, connectionProfiles).documents
@@ -209,7 +226,10 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
     return [a.baseUrl, a.project, a.team].join('|').toLowerCase() === [b.baseUrl, b.project, b.team].join('|').toLowerCase()
   }
   const twins = connectionProfiles.filter(sameBacklog)
+  // CON-133 (AR-001): the Time Writing connection is part of the shared Stream mapping: only a Tool Owner changes it.
+  const streamsBlocked = canManageStreams ? '' : 'Only a Tool Owner (“Change the stream mapping”) can change the Time Writing connection: it is part of the shared Stream mapping (CON-93).'
   async function switchTimeWriting(profile: AzureConnectionProfileSummary) {
+    if (streamsBlocked) { setCleanup({ tone: 'error', text: streamsBlocked }); return }
     const toGit = Boolean(git?.connected && !git.readOnly && !azure.isSample)
     const replacing = timeWriting.filter((entry) => entry.id !== profile.id).map((entry) => `“${entry.reason}”`).join(', ')
     if (!window.confirm(`Use “${profile.reason}” as the Time Writing connection${replacing ? ` and remove ${replacing}` : ''}?${toGit ? ' The connection setup in Git is updated and data saved to Git for the removed connection is deleted, so it does not come back for anyone.' : ''} Its PAT is not revoked in Azure DevOps.`)) return
@@ -233,6 +253,7 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
   }
   async function removeDuplicates() {
     if (!keep || !extras.length) return
+    if (streamsBlocked) { setCleanup({ tone: 'error', text: streamsBlocked }); return }
     const names = extras.map((profile) => profile.reason).join(', '), toGit = Boolean(git?.connected && !git.readOnly && !azure.isSample)
     if (!window.confirm(`Keep “${keep.reason}” as the only Time Writing connection and remove ${extras.length}: ${names}?${toGit ? ' The connection setup in Git is updated too, so they do not come back for anyone.' : ''} Their PATs are not revoked in Azure DevOps.`)) return
     for (const profile of extras) azure.removeConnection(profile.id)
@@ -281,18 +302,19 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
         <div className="button-row"><button className="primary">Add server</button><button type="button" className="ghost" onClick={() => setNewServer(null)}>Cancel</button></div>
       </form></Modal>}
     </Panel>}
-    {show('mapping') && <CustomStreamsPanel git={git} canManageStreams={canManageStreams} isSample={azure.isSample} />}
+    {show('mapping') && !stream && <CustomStreamsPanel git={git} canManageStreams={canManageStreams} isSample={azure.isSample} />}
     {show('mapping') && <Panel className="connection-panel" eyebrow="STEP 2" title="Stream mapping" info={<ul><li>Which server, project and query feed each stream. Time Writing (QMS-0025) is the team's backlog; DP, CP, IOCC, Content and Tool Validations are queries on the on-prem DHP.Vault project; S&amp;S IT comes from the Windchill export named like it (ECP will follow). Pedestal (the DHP release register) and DHFI are DP's two data sets: with both mapped, DP lists every Pedestal Release, dated by the DHFI documents whose Title names it.</li><li>Release rules: DP — name from the Area Path, number from the Iteration Path. IOCC — Type of Release from the Area Path segment after “IOCC”, name from the Title. Others — a “Release x.y.z” path segment. DP and IOCC are matched to QMS-0025 Features fuzzily; the best Feature counts at the threshold.</li><li>The mapping is shared with everyone through Git (azure-views.json); roles with “Manage shared settings” change it. Everyone else only enters their PAT per server.</li></ul>}
       action={<div className="button-row">{canManageStreams && git?.connected && !git.readOnly && !azure.isSample && <button type="button" className="ghost" title="Write this browser's stream mapping to the shared setup in Git now; every other user gets it at their next start" onClick={() => void shareMapping('stream mapping')}>Save stream mapping to Git</button>}{mapping.some((row) => !row.profile && row.preset && !row.timeWriting && presetHasPat(row.preset)) && <button type="button" className="primary" onClick={() => { for (const row of mapping) if (!row.profile && row.preset && !row.timeWriting && presetHasPat(row.preset)) setUpStream(row.preset) }}>Set up all with saved PATs</button>}<label className="inline-select">Fuzzy match threshold<input type="number" min={1} max={100} step={1} value={threshold} disabled={!canManage} aria-label="Fuzzy match threshold (%)" onChange={(event) => { const value = Math.round(Number(event.target.value)); if (value >= 1 && value <= 100) store.update((draft) => { draft.releaseSourceSettings = { ...normalizeReleaseSourceSettings(draft.releaseSourceSettings), matchThreshold: value }; return draft }) }} />%</label></div>}>
       {canManageStreams && git?.connected && git.dirty && <GitSyncBar git={git} />}
       {!canManageStreams && <Notice tone="info">The stream mapping (servers, projects and queries of DP, CP, IOCC, Content, Tool Validations and DP's data sets) is set by the Tool Owner (CON-93) and comes from Git: changes made here are replaced by the shared mapping at the next start. Enter your PAT per server above.</Notice>}
       {canManageStreams && <Notice tone="info">Changes you make to the stream mapping are saved to the shared setup in Git right away and replace every other user's mapping at their next start.</Notice>}
-      <div className="azure-table"><table><thead><tr><th>Stream</th><th>Server · project</th><th>Query</th><th>Rule</th><th>Status</th><th /></tr></thead><tbody>
-        {mapping.map((row) => { const [tone, label] = row.profile ? statusTone(row.profile) : ['warning' as Tone, row.windchill ? 'Windchill export' : 'Not mapped']; const status = row.profile ? connectionStatus[row.profile.id] : undefined; return <tr key={row.name}>
+      <div className="azure-table"><table><thead><tr><th>Stream</th><th>Server · project</th><th>Query</th><th>Rule</th><th>Epics to match</th><th>Status</th><th /></tr></thead><tbody>
+        {mapping.filter((row) => !stream || row.name === stream || row.name.startsWith(`${stream} · `) || (stream === 'DP' && 'dataSet' in row && row.dataSet)).map((row) => { const [tone, label] = row.profile ? statusTone(row.profile) : ['warning' as Tone, row.windchill ? 'Windchill export' : 'Not mapped']; const status = row.profile ? connectionStatus[row.profile.id] : undefined; return <tr key={row.name}>
           <td><strong>{row.name}</strong>{'custom' in row && row.custom && <Pill tone="info">Custom</Pill>}{row.profile && <small>{viewNameOf(row.profile)}</small>}{row.timeWriting && row.profile && !azure.creatorEmail && <small className="warning-text">Work email missing: set it under Your work email</small>}</td>
           <td>{row.windchill ? <small className="plain">Windchill export “{row.name}”</small> : row.where ? <small className="plain">{row.where}</small> : <span className="muted">—</span>}</td>
           <td>{row.windchill ? '—' : row.query ? <span className="query-chip" title={row.query}>Query</span> : row.timeWriting ? <small>Team Epic backlog</small> : <span className="muted">—</span>}</td>
           <td><small className="plain">{row.rule}</small></td>
+          <td>{epicsCell(row.name, 'customEpics' in row ? row.customEpics : undefined)}</td>
           <td>{row.windchill ? <small className="muted">Import on the Windchill page</small> : <><Pill tone={tone}>{label}</Pill>{status?.message && <small>{status.message}</small>}</>}</td>
           <td><div className="button-row nowrap">
             {!row.windchill && !row.profile && row.preset && <button type="button" className="primary" onClick={() => setUpStream(row.preset!)}>Set up</button>}
@@ -303,13 +325,19 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
         </tr> })}
       </tbody></table></div>
     </Panel>}
-    {show('mapping') && <ToolQueriesPanel store={store} profiles={connectionProfiles} canManage={canManageStreams} />}
-    {show('mapping') && git && <RemovedConnections git={git} azure={azure} canShare={canManageStreams} />}
-    {show('mapping') && <NamingPatternsPanel store={store} canManage={canManageStreams} />}
+    {/* SET-29, AR-051: the Epics to match Features in of one stream, from its row (formerly Stream options). */}
+    {epicsFor && <Modal title={`Epics to match ${epicsFor} Features in`} eyebrow="STREAMS · STREAM MAPPING" form={false} onClose={() => setEpicsFor(null)}>
+      <FeatureEpicsPanel store={store} items={azure.items} canManage={canManage} fixed={epicsFor} />
+      <div className="modal-actions"><button type="button" className="primary" onClick={() => setEpicsFor(null)}>Done</button></div>
+    </Modal>}
+    {show('mapping') && !stream && <ToolQueriesPanel store={store} profiles={connectionProfiles} canManage={canManageStreams} />}
+    {show('mapping') && !stream && git && <RemovedConnections git={git} azure={azure} canShare={canManageStreams} />}
+    {show('mapping') && !stream && <NamingPatternsPanel store={store} canManage={canManageStreams} />}
     {show('epics') && <FeatureEpicsPanel store={store} items={azure.items} canManage={canManage} />}
-    {show('bulk') && <BulkEpicsPanel store={store} items={azure.items} canManage={canManage} git={git} />}
+    {show('bulk') && <BulkEpicsPanel store={store} items={azure.items} canManage={canManage} git={git} mode="shared" />}
+    {show('mybulk') && <BulkEpicsPanel store={store} items={azure.items} canManage={canManage} git={git} mode="mine" />}
     {show('bulk') && <DpBulkDatesPanel store={store} profiles={connectionProfiles} canManage={canManage} git={git} />}
-    {show('counts') && <ReleaseCountsAdmin store={store} canManage={canEnterCounts} month={utcMonthKey()!} />}
+    {show('counts') && <ReleaseCountsAdmin store={store} canManage={canEnterCounts} month={utcMonthKey()!} initialStream={stream} />}
     {show('views') && <Panel className="connection-panel" eyebrow="STEP 3" title="Other views" info="Any other Azure DevOps view: custom queries, backlog views and background sources such as the DHP release register (Pedestal). Each is saved as soon as it is fetched (an empty Time Writing result never replaces saved data without asking). Nothing is written to Azure DevOps when fetching. Connections on a server with a PAT need no PAT of their own."
       action={<div className="button-row"><button type="button" className="ghost" onClick={() => { setFormError(''); setForm(empty(connectionProfiles.some((profile) => profile.role === 'time-tracking') ? 'reference' : 'time-tracking')) }}>＋ Add connection</button><button type="button" className="primary" disabled={!connectionProfiles.length || fetchingAll || busy} onClick={() => { setFetchingAll(true); void azure.fetchAll().finally(() => setFetchingAll(false)) }}>{fetchingAll ? 'Fetching all…' : 'Fetch all'}</button></div>}>
       {otherPresets.length > 0 && <div className="preset-list">{otherPresets.map((preset) => <div className="preset-row" key={preset.key}>
@@ -317,21 +345,22 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
         <Pill tone={presetHasPat(preset) ? 'info' : 'warning'}>{presetHasPat(preset) ? 'PAT on server' : 'Needs PAT'}</Pill>
         <div className="button-row nowrap"><button type="button" className="primary" onClick={() => setUpStream(preset)}>Set up</button><button type="button" className="text-button" onClick={() => { const next = [...dismissed, preset.key]; setDismissed(next); saveDismissedPresets(next) }}>Dismiss</button></div>
       </div>)}</div>}
-      {extras.length > 0 && keep && <Notice tone="warning">{timeWriting.length} Time Writing (QMS-0025) connections: only “{keep.reason}” is used; {extras.map((profile) => `“${profile.reason}”`).join(', ')} {extras.length === 1 ? 'is a duplicate' : 'are duplicates'}. <button type="button" className="text-button" onClick={() => void removeDuplicates()}>Keep “{keep.reason}”, remove the other{extras.length === 1 ? '' : 's'}</button></Notice>}
-      {keep && twins.map((profile) => <Notice key={profile.id} tone="warning">“{profile.reason}” reads the same backlog as the Time Writing connection “{keep.reason}”. If “{profile.reason}” loads and “{keep.reason}” does not, <button type="button" className="text-button" onClick={() => void switchTimeWriting(profile)}>use “{profile.reason}” as Time Writing and remove “{keep.reason}”</button>.</Notice>)}
+      {extras.length > 0 && keep && <Notice tone="warning">{timeWriting.length} Time Writing (QMS-0025) connections: only “{keep.reason}” is used; {extras.map((profile) => `“${profile.reason}”`).join(', ')} {extras.length === 1 ? 'is a duplicate' : 'are duplicates'}. <button type="button" className="text-button" disabled={Boolean(streamsBlocked)} title={streamsBlocked || undefined} onClick={() => void removeDuplicates()}>Keep “{keep.reason}”, remove the other{extras.length === 1 ? '' : 's'}</button></Notice>}
+      {keep && twins.map((profile) => <Notice key={profile.id} tone="warning">“{profile.reason}” reads the same backlog as the Time Writing connection “{keep.reason}”. If “{profile.reason}” loads and “{keep.reason}” does not, <button type="button" className="text-button" disabled={Boolean(streamsBlocked)} title={streamsBlocked || undefined} onClick={() => void switchTimeWriting(profile)}>use “{profile.reason}” as Time Writing and remove “{keep.reason}”</button>.</Notice>)}
       <Notice tone="info" className="own-views-note">These are <strong>your</strong> Other views: they are kept in Git in a file of your own ({otherViewsPath(azure.creatorEmail) || 'other-views/<your work email>.json — set your work email in My settings'}) and only you see them. The Stream mapping above is shared with everyone.</Notice>
       {cleanup && <Notice tone={cleanup.tone}>{cleanup.text}</Notice>}
+      {streamsBlocked && (extras.length > 0 || twins.length > 0 || others.some((profile) => profile.role === 'backlog-view')) && <WriteBlocked reason={`Use as Time Writing, remove duplicates: ${streamsBlocked}`} />}
       {others.length > 0 && removeBlocked && <WriteBlocked reason={`Remove / Delete for everyone: ${removeBlocked}`} />}
       {others.length ? <div className="azure-table"><table className="connection-table"><thead><tr><th>Connection</th><th>Used for</th><th>Organization / project</th><th>Query</th><th>Status</th><th /></tr></thead><tbody>{others.map((profile) => {
         const parts = splitAzureUrl(profile.url, profile.baseUrl), [tone, label] = statusTone(profile), status = connectionStatus[profile.id]
         const active = profile.role === 'time-tracking' && profile.id === activeConnectionProfileId
         return <tr key={profile.id}>
           <td><strong>{profile.reason}</strong>{active && <small>Active Time Writing source</small>}<small>{showsInMenu(profile) ? `In menu as “${viewNameOf(profile)}”` : 'Hidden from menu (backend only)'}</small></td>
-          <td>{roleLabel[profile.role]}</td>
+          <td>{roleLabel[profile.role]}{byTypeOf(profile.id) && <small className="by-type">By type: {byTypeOf(profile.id)}</small>}</td>
           <td>{parts.baseUrl.replace('https://', '')}{profile.baseUrl && <Pill tone="info">On-prem</Pill>}<small>{parts.project}{parts.team ? ` · team ${parts.team}` : ''}{profile.apiVersion ? ` · API ${profile.apiVersion}` : ''}</small></td>
           <td>{profile.query ? <span className="query-chip" title={profile.query}>Custom query</span> : <small>{profile.role === 'time-tracking' || profile.role === 'backlog-view' ? 'Team Epic backlog' : 'Default'}</small>}</td>
           <td><Pill tone={tone}>{label}</Pill><small>{status?.message ?? lastFetch(profile)}</small></td>
-          <td><div className="button-row nowrap"><button type="button" className="ghost" disabled={status?.state === 'busy' || fetchingAll} onClick={() => void azure.fetchConnection(profile.id)}>Fetch</button><button type="button" className="ghost" disabled={status?.state === 'busy' || fetchingAll} onClick={() => void azure.testConnection(profile.id)}>Test</button>{profile.role === 'backlog-view' && <button type="button" className="ghost" disabled={status?.state === 'busy' || fetchingAll || busy} onClick={() => void switchTimeWriting(profile)}>Use as Time Writing</button>}<button type="button" className="ghost" onClick={() => edit(profile)}>Edit</button><button type="button" className="ghost" title="New connection with the same settings and PAT" onClick={() => clone(profile)}>Clone</button><button type="button" className="text-button" onClick={() => { if (isOtherView(profile)) { setRemovingOwn(profile); return } if (window.confirm(`Remove “${profile.reason}” from this browser? Its PAT is not revoked in Azure DevOps.`)) azure.removeConnection(profile.id) }}>Remove</button><ViewActions label={`Shared view ${viewNameOf(profile)}`} items={[
+          <td><div className="button-row nowrap"><button type="button" className="ghost" disabled={status?.state === 'busy' || fetchingAll} onClick={() => void azure.fetchConnection(profile.id)}>Fetch</button><button type="button" className="ghost" disabled={status?.state === 'busy' || fetchingAll} onClick={() => void azure.testConnection(profile.id)}>Test</button>{profile.role === 'backlog-view' && <button type="button" className="ghost" disabled={status?.state === 'busy' || fetchingAll || busy || Boolean(streamsBlocked)} title={streamsBlocked || undefined} onClick={() => void switchTimeWriting(profile)}>Use as Time Writing</button>}<button type="button" className="ghost" onClick={() => edit(profile)}>Edit</button><button type="button" className="ghost" title="New connection with the same settings and PAT" onClick={() => clone(profile)}>Clone</button><button type="button" className="text-button" onClick={() => { if (isOtherView(profile)) { setRemovingOwn(profile); return } if (window.confirm(`Remove “${profile.reason}” from this browser? Its PAT is not revoked in Azure DevOps.`)) azure.removeConnection(profile.id) }}>Remove</button><ViewActions label={`Shared view ${viewNameOf(profile)}`} items={[
             { key: 'remove', label: 'Remove for everyone…', disabled: Boolean(removeBlocked), title: removeBlocked || 'Remove this view from the shared setup in Git for everyone (a backup is kept; Removed connections can restore it)', onClick: () => setRemoving({ view: profile, mode: 'remove' }) },
             { key: 'delete', label: 'Delete for everyone…', danger: true, disabled: Boolean(removeBlocked), title: removeBlocked || 'Remove this view for everyone and delete its data files in Git', onClick: () => setRemoving({ view: profile, mode: 'delete' }) },
           ]} /></div></td>
@@ -342,14 +371,11 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
       {removing && git && <RemoveViewForEveryone view={removing.view} mode={removing.mode} git={git} azure={azure} onClose={() => setRemoving(null)} onDone={(result) => { setRemoving(null); setCleanup(result) }} />}
     </Panel>}
     {show('views') && <UnassignedOtherViews git={git} azure={azure} admin={canAssignOtherViews} viewingAs={viewingAs} people={people} />}
-    {show('sources') && sources.length > 0 && <Panel className="connection-panel" eyebrow="READ ONLY" title="Fetched read-only sources" info="Snapshots from document and reference connections, stored with the app data.">
-      <div className="azure-table"><table><thead><tr><th>Connection</th><th>Project</th><th>Work items</th><th>By type</th><th>Fetched</th></tr></thead><tbody>{sources.map((source) => {
-        const types = Object.entries(source.items.reduce<Record<string, number>>((counts, item) => { counts[item.workItemType] = (counts[item.workItemType] ?? 0) + 1; return counts }, {})).sort((a, b) => b[1] - a[1])
-        return <tr key={source.connectionId}><td><strong>{source.name}</strong><small>{roleLabel[source.role]}</small></td><td>{source.organization} / {source.project}</td><td>{source.items.length}</td><td>{types.slice(0, 4).map(([type, count]) => `${type} ${count}`).join(' · ') || '—'}</td><td>{formatDateTime(source.fetchedAt)}</td></tr>
-      })}</tbody></table></div>
-    </Panel>}
-    {show('sample') && <Panel className="connection-panel" eyebrow="DEMO" title="Synthetic sample" info="Replaces the cached Time Writing data and release source with a generated dataset, without reading from or writing to Azure DevOps.">
-      <div className="button-row"><button type="button" className="ghost" disabled={busy} onClick={() => { if (azure.saved.length && !azure.isSample && !window.confirm('Replace the saved Azure cache with a synthetic sample dataset? Export a JSON backup first if you need the current data.')) return; azure.loadSampleData() }}>Load synthetic sample dataset</button></div>
+    {/* SET-29, AR-055: Demo data — the synthetic sample and, for the holders of “Shared setup in Git”, Reset synthetic MVP data (formerly on History). */}
+    {show('sample') && <Panel className="connection-panel" eyebrow="DEMO" title="Demo data" info="Load synthetic sample dataset replaces the cached Time Writing data and release source with a generated dataset, without reading from or writing to Azure DevOps. Reset synthetic MVP data replaces the planning data in this browser with the synthetic MVP data.">
+      <div className="button-row"><button type="button" className="ghost" disabled={busy} onClick={() => { if (azure.saved.length && !azure.isSample && !window.confirm('Replace the saved Azure cache with a synthetic sample dataset? Export a JSON backup first if you need the current data.')) return; azure.loadSampleData() }}>Load synthetic sample dataset</button>
+        {/* OI-09: confirmed first and recorded in History. */}
+        {onResetDemo && <button className="danger-button" onClick={() => { if (window.confirm('Reset the planning data in this browser to the synthetic MVP data? Your periods, capacity, resources, baselines and History here are replaced, and the fetched Azure DevOps data is cleared until the next fetch (connections and PATs are kept). If Git storage is connected, the change is only shared when someone saves it to Git.')) onResetDemo() }}>Reset synthetic MVP data</button>}</div>
     </Panel>}
     {/* The connection editor, outside the sections: Edit / Add query / Set up open it from Stream mapping and Other views alike (KI fix). */}
       {form && <Modal title={form.id ? `Edit “${connectionProfiles.find((profile) => profile.id === form.id)?.reason ?? form.name}”` : clonedFrom ? `Clone of “${clonedFrom}”` : 'New connection'} eyebrow={`AZURE DEVOPS · ${roleLabel[form.role].toUpperCase()}`} wide form onClose={() => { setForm(null); setFormError(''); setToolAdd(null) }}><form className="connection-editor" onSubmit={submit}>
@@ -363,7 +389,7 @@ export function AzureConnections({ azure, store, git, onOpenBoard, canManage = t
           <label>Project<input required list="server-projects" value={form.project} onChange={(event) => setForm({ ...form, project: event.target.value })} placeholder="Project name" /><datalist id="server-projects">{(servers.find((server) => server.key === formServerKey)?.projects ?? []).map((project) => <option key={project} value={project} />)}</datalist></label>
           {(form.role === 'time-tracking' || form.role === 'backlog-view') && <label>Team{form.query.trim() ? ' (optional with a query)' : ''}<input value={form.team} onChange={(event) => setForm({ ...form, team: event.target.value })} placeholder="Team whose Epic backlog is read" /></label>}
           <label>API version (optional)<input value={form.apiVersion} onChange={(event) => setForm({ ...form, apiVersion: event.target.value })} placeholder="Automatic" /><small>Leave empty to detect it: 7.1, then 6.0 and 5.0 for older Azure DevOps Server.</small></label>
-          <label>PAT for this server<input type="password" autoComplete="off" required={!formServerPat && (form.id ? !loadAzureConnectionProfile(form.id)?.token : !(form.cloneOf && loadAzureConnectionProfile(form.cloneOf)?.token))} value={form.pat} onChange={(event) => setForm({ ...form, pat: event.target.value })} placeholder={form.role === 'time-tracking' ? 'Work Items (Read & Write)' : 'Work Items (Read)'} /><small>{formServerPat ? 'Leave empty: the saved server PAT is used. ' : form.id ? 'Leave empty to keep the saved one. ' : clonedFrom ? `Leave empty to use the PAT of “${clonedFrom}”. ` : ''}One PAT per server: it is used by every connection on the same server.</small></label>
+          <label>PAT for this server<input type="password" autoComplete="off" required={!formServerPat && !formOwnPat} value={form.pat} onChange={(event) => setForm({ ...form, pat: event.target.value })} placeholder={form.role === 'time-tracking' ? 'Work Items (Read & Write)' : 'Work Items (Read)'} /><small>{formServerPat ? 'Leave empty: the saved server PAT is used. ' : formServerChanged ? 'The server changed: enter the PAT for this server (the PAT of the other server is never used here). ' : form.id ? 'Leave empty to keep the saved one. ' : clonedFrom ? `Leave empty to use the PAT of “${clonedFrom}”. ` : ''}One PAT per server: it is used by every connection on the same server.</small></label>
           {form.role === 'time-tracking' && <p className="muted">Your work email is set on its own under Admin → Streams → <strong>Your work email</strong>{azure.creatorEmail ? <> (now {azure.creatorEmail})</> : ' — not set yet'}.</p>}
           <label className="query-field">Query (optional, WIQL)<textarea rows={4} spellCheck={false} value={form.query} onChange={(event) => setForm({ ...form, query: event.target.value })} placeholder={queryPlaceholder[form.role]} /><small>A flat query: SELECT … FROM WorkItems WHERE …. Only the WHERE clause is used; results are read in pages. {form.role === 'time-tracking' || form.role === 'backlog-view' ? '' : 'Empty uses the default shown.'}</small></label>
         </div>

@@ -316,6 +316,6 @@ export function templateUses(file: FeatureSetupFile | null | undefined, id: stri
 }
 
 
-// BKL-38: "Complete children" is offered per Epic — a team decision in the shared setup (Admin → Epic & Feature setup),
+// BKL-38: "Complete children" is offered per Epic — a team decision in the shared setup (Admin → Feature & PI setup),
 // on unless the Epic's shared setup turns it off; an Epic without a setup keeps it on.
 export const completeChildrenOn = (setups: FeatureSetups | null | undefined, epicId: number | undefined) => epicId == null || setupFor(setups?.shared ?? null, epicId)?.completeChildren !== false

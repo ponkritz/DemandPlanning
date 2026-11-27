@@ -6,7 +6,7 @@ import type { ListItem } from '../onDemand'
 import { cleanItems, cleanSource, createList, diffEmpty, diffItems, editList, emptySharedLists, listNameProblem, maxListName, refreshList, sharedListsFile, sourceConfig, sourceLabel, teamRef, upsertSharedList, type ListDiff, type SharedList, type TeamSource } from '../sharedLists'
 import type { SharedListsStore } from '../useSharedLists'
 
-// LST-03…LST-07, LST-12, LST-13: Admin → Epic & Feature setup → Value lists → "Team lists from Azure DevOps": the built-in
+// LST-03…LST-07, LST-12, LST-13: Admin → Feature & PI setup → Lists → "Team lists from Azure DevOps": the built-in
 // lists of people that On-Demand columns use. Everyone sees them (name, source, people, last refreshed, used by, the log);
 // ＋ New list…, ↻ Refresh… and Edit… need "Manage built-in lists" or a page co-ownership, Remove "Manage built-in lists"
 // and a list no column uses — disabled with the reason otherwise (UI-STANDARDS §3). A refresh reads the team's members

@@ -301,9 +301,9 @@ test('TC-UI-04 / TC-UI-05: every table follows the table default — move, hide,
   const [sheet] = await readXlsx(new Uint8Array(readFileSync(await xlsx.path())))
   assert.deepEqual(sheet.rows[0], ['Name', 'Number', 'Last Modified'], 'the export follows the shown columns and order')
   assert.match(sheet.rows[1][2], /^\d{4}-\d{2}-\d{2}/, 'the date cell is a real date in the workbook (read back as a date)')
-  // Look & feel → Table and chart defaults (SET-18): without CSV, every Export offers Excel only.
-  await profileItem(page, 'Look & feel')
-  await page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'Table and chart defaults' }).click()
+  // Admin → Pages & reports → Table & chart defaults (SET-18): without CSV, every Export offers Excel only.
+  await navigate(page, 'Pages & reports')
+  await page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'Table & chart defaults' }).click()
   await page.getByRole('checkbox', { name: 'CSV (.csv)' }).uncheck()
   await navigate(page, 'Import Windchill export')
   await page.locator('nav button', { hasText: /windchill-export/ }).first().click().catch(() => {})
@@ -562,7 +562,7 @@ test('TC-QV-43: every Release page has the source bar, counts, Releases | Source
   await context.close()
 })
 
-test('TC-QV-40: no bulk creation Epic is built in — without one mapped, Create Features is disabled with the reason and opens Bulk creation Epics; a mapping saved there is used', async () => {
+test('TC-QV-40: no bulk creation Epic is built in — without one mapped, Create Features is disabled with the reason and opens Bulk creation; my own Epic saved in My settings is used', async () => {
   // The same synthetic DP, IOCC and Content release pages as TC-QV-43; nothing is fetched (Azure DevOps answers 401).
   const query = "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project AND [System.State] = 'Approved'"
   const view = (name) => ({ id: name.toLowerCase().replace(/\W+/g, '-'), url: `https://azure.example.com/tfs/Collection/${encodeURIComponent(name)}`, baseUrl: 'https://azure.example.com/tfs', token: 'e2e-token-0123456789', reason: name, viewName: name, role: 'release-source', query, showInMenu: true })
@@ -579,7 +579,7 @@ test('TC-QV-40: no bulk creation Epic is built in — without one mapped, Create
   const note = (stream) => releases().getByRole('note').filter({ hasText: `No ${stream} bulk creation Epic is set` })
   const create = () => releases().getByRole('button', { name: /^Create Features \(\d+\)$/ })
   await open('DP')
-  assert.equal(await text(note('DP')), 'No DP bulk creation Epic is set: map it in Admin → Stream options → Bulk creation Epics.', 'the reason next to the button')
+  assert.equal(await text(note('DP')), 'No DP bulk creation Epic is set: map it in Admin → Streams → Bulk creation, or your own in My settings → My bulk creation Epics.', 'the reason next to the button')
   await releases().getByRole('button', { name: 'Select all shown', exact: true }).click()
   assert.notEqual(await text(create()), 'Create Features (0)', 'releases are ticked')
   assert.equal(await create().isDisabled(), true, 'DP Create Features is disabled without a mapped Epic')
@@ -587,15 +587,19 @@ test('TC-QV-40: no bulk creation Epic is built in — without one mapped, Create
   await open('Content')
   await note('Content').waitFor()
   assert.equal(await create().isDisabled(), true, 'Content Create Features is disabled too')
-  // The button next to the reason opens Admin → Stream options → Bulk creation Epics: every stream "not set".
+  // The button next to the reason opens Admin → Streams → Bulk creation: every stream "not set".
   await open('DP')
   await releases().getByRole('button', { name: 'Open Bulk creation Epics' }).click()
   const panel = page.locator('.bulk-epics')
   await panel.waitFor()
-  assert.equal(await text(page.locator('header.topbar h1')), 'Stream options')
-  const row = (stream) => panel.getByRole('row', { name: new RegExp(`^${stream}`) })
+  assert.equal(await text(page.locator('header.topbar h1')), 'Streams')
+  assert.equal(await page.getByRole('tab', { name: 'Bulk creation' }).getAttribute('aria-selected'), 'true', 'SET-29: the shared bulk creation Epics')
+  const row = (stream) => page.locator('.bulk-epics').getByRole('row', { name: new RegExp(`^${stream}`) })
   for (const stream of ['DP', 'IOCC', 'Content']) { assert.match(await text(row(stream)), /not set/, `${stream}: not set`); assert.doesNotMatch(await text(row(stream)), /built in/, `${stream}: no built-in Epic`) }
-  // No Git storage is connected, so the shared Epic cannot be set here: map my own.
+  // No Git storage is connected, so the shared Epic cannot be set there: map my own in My settings (SET-29).
+  await profileItem(page, 'My settings')
+  await page.getByRole('tab', { name: 'My bulk creation Epics' }).click()
+  await page.getByRole('table', { name: 'My bulk creation Epics' }).waitFor()
   await panel.getByLabel('DP my bulk Epic').fill('15000')
   await row('DP').getByRole('button', { name: 'Save' }).click()
   await row('DP').filter({ hasText: /#15000.*mine/ }).waitFor()

@@ -46,7 +46,7 @@ export const rolesFile = (role = 'Tool Owner') => ({ type: 'file', encoding: 'ba
 // A fresh browser context (clean storage) with the Get started pop-up dismissed unless asked for, and page errors recorded.
 // roles: a role name (or true for Tool Owner) caches a roles file first (cachedRoles); a scenario's own init runs after.
 // scale: the device scale factor (2 for sharp screenshots); the default is the browser's (1).
-// loadFromGit (GIT-29): the forced "Load everything from Git" pop-up, which shows once per change of the shared Streams
+// loadFromGit (GIT-29): the forced "Load latest Release Details" pop-up (GIT-36), which shows once per change of the shared Streams
 // file, is answered whenever it is in the way (Playwright's locator handler); false leaves it to the scenario.
 export async function openPage(app, { width = 1300, height = 1000, guide = false, roles, init, initArg, scale, loadFromGit = true } = {}) {
   const context = await app.browser.newContext({ viewport: { width, height }, acceptDownloads: true, ...(scale ? { deviceScaleFactor: scale } : {}) })
@@ -57,8 +57,8 @@ export async function openPage(app, { width = 1300, height = 1000, guide = false
   const page = await context.newPage()
   page.on('pageerror', (error) => errors.push(error.message))
   if (loadFromGit) {
-    const forced = page.getByRole('dialog', { name: 'Load everything from Git' })
-    await page.addLocatorHandler(forced, async () => { await forced.getByRole('button', { name: /^(Load everything from Git|Retry)$/ }).click(); await forced.waitFor({ state: 'detached' }) })
+    const forced = page.getByRole('dialog', { name: 'Load latest Release Details' })
+    await page.addLocatorHandler(forced, async () => { await forced.getByRole('button', { name: /^(Load latest Release Details|Retry)$/ }).click(); await forced.waitFor({ state: 'detached' }) })
   }
   // CI-12: E2E_CPU_SLOWDOWN=4 runs the page on a CPU four times slower (Chromium's own throttling), as on a busy
   // laptop, so a step that only works because the app happens to be fast (a race) fails here rather than for a user.
@@ -71,6 +71,8 @@ export async function openPage(app, { width = 1300, height = 1000, guide = false
 
 // Pages load on demand: wait for the page's code too (the "Loading the page…" placeholder gone).
 export const navigate = async (page, label) => { await page.locator('.sidebar nav button', { hasText: label }).first().click(); await page.locator('header.topbar h1').waitFor(); await page.locator('.page-loading').waitFor({ state: 'detached' }) }
+// SET-26: an Admin page and one of its sections (the row of sections is there only when the person sees more than one).
+export const openSection = async (page, label, section) => { await navigate(page, label); const tab = page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: section, exact: true }); if (await tab.count()) await tab.click() }
 
 export async function loadSample(page) {
   await page.getByRole('button', { name: 'Load synthetic sample' }).first().click()
@@ -114,7 +116,7 @@ export async function profileItem(page, name) {
   await page.getByRole('menu', { name: 'Profile' }).getByRole('menuitem', { name }).click()
 }
 
-// CAP-58, CAP-59: Admin → People & roles → People — open a person's drawer by a click on their row (the name cell, not
+// CAP-58, CAP-59: Admin → People & access → People — open a person's drawer by a click on their row (the name cell, not
 // the tick box), and the text behind the source line's ⓘ (where the people come from, the team read).
 export async function openPerson(page, name) {
   await page.locator(`.people-table tr[data-row-key="${name}"] td`).nth(1).click()

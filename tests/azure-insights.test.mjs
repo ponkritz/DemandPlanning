@@ -86,7 +86,8 @@ test('utilization uses funded month hours over all Actuals less Absence Actuals 
   const fundedTask = item(13, { workItemType: 'Task', parentId: 12, title: 'October 2026 | Funded', completedWork: 80 })
   const data = azureInsights([absenceEpic, absenceFeature, absenceStory, absenceTask, fundedEpic, fundedFeature, fundedStory, fundedTask], '2026-10', '2026-10-17')
   assert.equal(data.dayCapacity, 176)
-  assert.equal(data.actual.value, 96)
+  // CAP-64: Actual leaves out the absence (it comes off the capacity); every month Task stays in allActual.
+  assert.equal(data.actual.value, 80); assert.equal(data.allActual.value, 96)
   assert.equal(data.absence.value, 16)
   assert.equal(data.available, 80)
   assert.equal(data.utilization, 220)

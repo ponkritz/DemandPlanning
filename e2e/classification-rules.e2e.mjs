@@ -41,7 +41,7 @@ test('TC-DPF-09: a Tool Owner sets the Release Classification rules per value in
   await page.addLocatorHandler(guide, () => guide.getByRole('button', { name: 'Close', exact: true }).last().click())
   await page.reload()
   await page.locator('.sidebar nav').waitFor()
-  await navigate(page, 'Epic & Feature setup')
+  await navigate(page, 'Feature & PI setup')
   await page.getByRole('tablist', { name: 'Sections' }).getByRole('tab', { name: 'Setup per Epic' }).click()
   await page.locator('.efe-epics button', { hasText: `#${epicId}` }).click()
   const rules = page.locator('fieldset.efe-rules')

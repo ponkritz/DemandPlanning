@@ -16,6 +16,29 @@ export function isMine(item: Pick<AzureWorkItem, 'assignedTo' | 'assignedToEmail
 
 export const workTypes = ['Feature', 'User Story', 'Bug', 'Task'] as const
 
+// ATM-31: the buckets (type chips) of My Tasks [Board]. The Time Writing User Story (a story holding month Tasks, or one
+// whose title says "Time Writing", timeWritingStoryIds) has a bucket of its own, "Auto Time Writing US", and is no longer
+// counted or listed under User Story; All holds every bucket and Other every type not named.
+export const timeWritingBucket = 'Auto Time Writing US'
+export const workBuckets = ['Feature', 'User Story', timeWritingBucket, 'Bug', 'Task'] as const
+export type WorkBucket = typeof workBuckets[number] | 'Other'
+export function workBucketOf(item: Pick<AzureWorkItem, 'id' | 'workItemType'>, storyIds: ReadonlySet<number>): WorkBucket {
+  if (item.workItemType === 'User Story' && storyIds.has(item.id)) return timeWritingBucket
+  return (workTypes as readonly string[]).includes(item.workItemType) ? item.workItemType as WorkBucket : 'Other'
+}
+// Pending rows per bucket; the buckets add up to the pending total.
+export function bucketCounts(rows: { item: Pick<AzureWorkItem, 'id' | 'workItemType'> }[], storyIds: ReadonlySet<number>): Record<WorkBucket, number> {
+  const counts = Object.fromEntries([...workBuckets, 'Other'].map((bucket) => [bucket, 0])) as Record<WorkBucket, number>
+  for (const { item } of rows) counts[workBucketOf(item, storyIds)]++
+  return counts
+}
+export const inBucket = (item: Pick<AzureWorkItem, 'id' | 'workItemType'>, bucket: string, storyIds: ReadonlySet<number>) => bucket === 'All' || workBucketOf(item, storyIds) === bucket
+// What a Time Writing User Story opens to (ATM-31): its Month Tasks (every item under it, any assignee), Removed left
+// out, ascending ID.
+export function storyChildren(items: AzureWorkItem[], story: Pick<AzureWorkItem, 'id' | 'organization' | 'project'>) {
+  return items.filter((item) => item.parentId === story.id && item.id !== story.id && item.state.trim().toLowerCase() !== 'removed' && item.organization === story.organization && item.project === story.project).sort((a, b) => a.id - b.id)
+}
+
 function ancestry(items: AzureWorkItem[]) {
   const byId = new Map(items.map((item) => [item.id, item]))
   return (item: AzureWorkItem) => {

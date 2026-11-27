@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { AzureWorkItem } from '../domain'
-import { mergeAzureWorkItems, completeFeatureFromSetup, createFeatureFromSetup, addMonthTasks, addUserStory, updateAzureTimeWritingEffort,  utcMonthLabel, HierarchyCreationError, withFeatureDoD, readAzureIterations, currentIterationPairs, futureIterationPairs, type AzureIteration, type AzureConfig, type FeatureInput } from '../azureDevOps'
+import { mergeAzureWorkItems, completeFeatureFromSetup, createFeatureFromSetup, addMonthTasks, addUserStory, updateAzureTimeWritingEffort,  utcMonthLabel, HierarchyCreationError, withFeatureDoD, readAzureIterations, storyPriorities, currentIterationPairs, futureIterationPairs, type AzureIteration, type AzureConfig, type FeatureInput } from '../azureDevOps'
 import { Modal, Info, Notice } from './ui'
 import { PersonPicker } from './PersonPicker'
 import { assignablePeople } from '../myWork'
@@ -10,6 +10,8 @@ import { featureMonths, isFutureMonth } from '../featureMonths'
 import { dpTaskMonths } from '../dpBulkDates'
 import { dpMilestoneOf, dpStorySprints, withStorySprints, type DpPrefill } from '../dpCreatePlan'
 import { useEpicSetupFile } from '../useEpicSetup'
+import { useMyStoryTemplates } from '../useMyStoryTemplates'
+import { StoryTemplatePick } from './StoryTemplatePick'
 import { onPremValues, useOnPremSources } from '../onPremValues'
 import { asTitleFields, epicFieldsFor, featureFromFields, listOf, offList } from '../epicSetup'
 import { chooseSetup, setForClass, withLinkedStories, emptySetup, fieldKey, fieldLines, fieldPlaceholders, fieldTitle, fieldsFromItems, fieldsFromTitle, fillTitle, missingValues, reviewStoryTitle, setupFor, titleValues, type FeatureSetups } from '../featureSetup'
@@ -55,6 +57,8 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
   // DPF-17: from a DP release, prefilled from its mapped date columns (DPF-13, DPF-14) — still changeable.
   const [startDate, setStartDate] = useState(dp?.start ?? '')
   const [targetDate, setTargetDate] = useState(dp?.target ?? '')
+  // BKL-52: the new Feature's Priority (Azure DevOps Microsoft.VSTS.Common.Priority), 1–4, default 2 as in Azure DevOps.
+  const [priority, setPriority] = useState(2)
   // BKL-48 (DPF-16, DPF-17): the month Tasks tick box, in the Feature and Time Writing sections (one choice); not ticked:
   // one Task, for the month shown. Ticked by default for a Feature; unticked on a DP release, as DP Create Features does.
   const [fromStartChoice, setFromStartChoice] = useState<boolean | undefined>(undefined)
@@ -88,17 +92,19 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
   const hoursOf = (label: string) => monthHours[label] ?? { plan: '', done: '' }
   const setHours = (label: string, change: Partial<{ plan: string; done: string }>) => setMonthHours((now) => ({ ...now, [label]: { ...(now[label] ?? { plan: '', done: '' }), ...change } }))
   const taskOriginalEstimate = hoursOf(monthLabel).plan, taskCompletedWork = isFutureMonth(monthLabel, todayMonth) ? '' : hoursOf(monthLabel).done
-  // Planning of the month has locked (Admin → Capacity & time → Period control): the new Time Writing Task is tagged ad-hoc.
+  // Planning of the month has locked (Admin → Capacity & time → Month locks): the new Time Writing Task is tagged ad-hoc.
   const lateTask = adhocAfterLock(monthLabel)
-  // The Epic's own setup (Admin → Epic & Feature setup → Feature setup), if any: its optional User Stories replace the PU / Full Release
+  // The Epic's own setup (Admin → Feature & PI setup → Setup per Epic), if any: its optional User Stories replace the PU / Full Release
   // milestones (all ticked by default) and its Task defaults apply.
   // My own setup of the Epic first, else the shared one; the switch below picks the shared one instead.
   const [preferShared, setPreferShared] = useState(Boolean(dp))
   const epicId = parent?.id ?? resumeFeature?.parentId
   const { setup: unlinkedSetup, source: setupSource } = chooseSetup(featureSetup, epicId, preferShared)
-  // EPS-02: the Epic setup's fields (Admin → Epic & Feature setup) apply to every new Feature under the Epic and take the place
+  // EPS-02: the Epic setup's fields (Admin → Feature & PI setup) apply to every new Feature under the Epic and take the place
   // of the Feature setup's title fields.
   const epicFile = useEpicSetupFile()
+  // STT-07: Your own User Story can start from a shared template or one of my own ("Mine").
+  const myTemplates = useMyStoryTemplates(me)
   // STT-02: stories linked to a User Story template take its current title and description.
   const baseSetup = withLinkedStories(unlinkedSetup, epicFile?.storyTemplates)
   const onPremSources = useOnPremSources()
@@ -170,12 +176,12 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
     if (submitting.current) return
     if (isNew && !parent) { setError('Choose the parent Epic.'); return }
     if (monthsError) { setError(monthsError); return }
-    if (fromFields?.blocked.length) { setError(`Fill ${fromFields.blocked.join(', ')}: the Epic setup of #${epicId} needs ${fromFields.blocked.length === 1 ? 'it' : 'them'} (Admin → Epic & Feature setup).`); return }
+    if (fromFields?.blocked.length) { setError(`Fill ${fromFields.blocked.join(', ')}: the Epic setup of #${epicId} needs ${fromFields.blocked.length === 1 ? 'it' : 'them'} (Admin → Feature & PI setup).`); return }
     const data = new FormData(event.currentTarget)
     const token = pat; setError(''); submitting.current = true; setCreating(true)
     const parseHours = (value: string, label: string) => { if (!value.trim()) return undefined; const hours = Number(value); if (!Number.isFinite(hours) || hours < 0 || hours > 1000000) throw new Error(`${label} must be a number from 0 to 1,000,000.`); return hours }
     let feature: FeatureInput
-    try { if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(assignee)) throw new Error(me ? 'Choose who the Feature and its children are assigned to.' : 'Configure the Feature creator email in Azure DevOps settings before creating a Feature.'); feature = { parentId: parent?.id ?? 0, title: title.trim(), description: needsDoD ? withFeatureDoD(dod, String(data.get('description') ?? ''), undefined, (fromFields ? fromFields.lines : fieldLines(titleFields, fieldValues))) : '', acceptanceCriteria: String(data.get('acceptance') ?? ''), areaPath: String(data.get('areaPath') ?? ''), iterationPath, assignedTo: assignee, storyIterationPath: sprintPath, ...(isNew && startDate ? { startDate } : {}), targetDate, taskOriginalEstimate: parseHours(taskOriginalEstimate, 'Original Estimate'), taskCompletedWork: parseHours(taskCompletedWork, 'Completed Work') } }
+    try { if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(assignee)) throw new Error(me ? 'Choose who the Feature and its children are assigned to.' : 'Configure the Feature creator email in Azure DevOps settings before creating a Feature.'); feature = { parentId: parent?.id ?? 0, title: title.trim(), description: needsDoD ? withFeatureDoD(dod, String(data.get('description') ?? ''), undefined, (fromFields ? fromFields.lines : fieldLines(titleFields, fieldValues))) : '', acceptanceCriteria: '', areaPath: String(data.get('areaPath') ?? ''), iterationPath, assignedTo: assignee, storyIterationPath: sprintPath, ...(isNew && startDate ? { startDate } : {}), targetDate, ...(isNew ? { priority } : {}), taskOriginalEstimate: parseHours(taskOriginalEstimate, 'Original Estimate'), taskCompletedWork: parseHours(taskCompletedWork, 'Completed Work') } }
     catch (failure) { setError(failure instanceof Error ? failure.message : 'Invalid Task effort.'); submitting.current = false; setCreating(false); return }
     // The months after the first one, with the hours typed for each (none for a future month's Completed Work).
     let later: { month: string; originalEstimate?: number; completedWork?: number }[]
@@ -249,7 +255,7 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
   const childCount = (epicSetup ? epicSetup.stories.length - skipStories.length : 0) + (reviewStory ? 1 : 0) + 1 + months.length
   const pairLabel = (pair: { pi: AzureIteration; sprint: AzureIteration }) => `${pair.pi.name} → ${pair.sprint.name} (${pair.sprint.attributes?.startDate?.slice(5, 10)} – ${pair.sprint.attributes?.finishDate?.slice(5, 10)})`
   const monthRange = months.length > 1 ? `${monthLabel} – ${months[months.length - 1]}` : monthLabel
-  const steps = ['Feature', 'Definition of Done', 'User Stories', `Estimates for ${monthRange}`]
+  const steps = ['Feature', 'Acceptance Criteria (Feature DoD)', 'User Stories', `Estimates for ${monthRange}`]
   const featureMissing = [!parent && 'the Parent Epic', !title.trim() && 'the title', !sprintPath && 'the PI → Sprint', monthsError && 'valid dates'].filter(Boolean) as string[]
   // BKL-30: sections 2 and 3 count as done once the person presses Continue in them (an explicit step action, as in
   // stepped forms generally — not on leaving the box): the DoD usually starts filled and the stories are optional, so
@@ -267,7 +273,7 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
     setLeft((now) => now.includes(index) ? now : [...now, index])
     setFocusSection(index + 2)
   }
-  const stepMissing = [featureMissing, dod.trim() ? [] : ['the DoD'], [], []]
+  const stepMissing = [featureMissing, dod.trim() ? [] : ['the Acceptance Criteria (Feature DoD)'], [], []]
   const done = (index: number) => !stepMissing[index].length && (index === 0 || left.includes(index))
   const ready = (index: number) => [0, 1, 2].slice(0, index).every(done)
   const wizard = isNew
@@ -282,7 +288,7 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
   </div>
   const sectionClass = (index: number) => `nf-step${wizard ? index === current ? ' nf-current' : index < 3 && done(index) ? ' nf-done' : '' : ''}`
   const heading = (index: number) => wizard ? <h3 className="nf-section-title"><span aria-hidden="true">{index < 3 && done(index) ? '✓' : index + 1}</span>{steps[index]}{index === current && <small> — fill this in next</small>}</h3> : null
-  const goOn = ['', 'Check the DoD, then Continue.', 'Choose the User Stories, then Continue.', 'Enter the hours if you know them, then Save.']
+  const goOn = ['', 'Check the Acceptance Criteria (Feature DoD), then Continue.', 'Choose the User Stories, then Continue.', 'Enter the hours if you know them, then Save.']
   const missingNote = (index: number) => wizard && index === current ? <div className="nf-missing-row"><p className="nf-missing" role="note">{stepMissing[index].length ? `To go on, fill in ${stepMissing[index].join(', ')}.` : goOn[index]}</p>{(index === 1 || index === 2) && !stepMissing[index].length && <button type="button" className="primary nf-continue" disabled={creating} onClick={() => advance(index)}>Continue</button>}</div> : null
   function submit(event: React.FormEvent<HTMLFormElement>) {
     // Only Save creates the Feature (Enter in a field does not, see onKeyDown), and only when every section is filled.
@@ -292,7 +298,7 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
   return <Modal title={resumeFeature ? 'Complete Feature children' : 'New Feature'} eyebrow="AZURE DEVOPS WRITE" onClose={closeEditor}><form onSubmit={submit} className="nf-form" noValidate={wizard && !complete} onKeyDown={(event) => { if (wizard && event.key === 'Enter' && event.target instanceof HTMLInputElement) event.preventDefault() }}>
       <section className={sectionClass(0)} hidden={!shown(0)} aria-label={wizard ? 'Section 1: Feature' : undefined}>
         {heading(0)}
-        {wizard && <p className="muted nf-hint">Start with the parent Epic: its setup decides the title fields, the DoD and the User Stories offered next.</p>}
+        {wizard && <p className="muted nf-hint">Start with the parent Epic: its setup decides the title fields, the Acceptance Criteria (Feature DoD) and the User Stories offered next.</p>}
         <div className="nf-head">
           <span className="nf-type">FEATURE</span>
           <div className="nf-headmain">
@@ -328,6 +334,7 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
             <button type="button" className="text-button" onClick={() => void loadIterations()} disabled={creating || iterationLoading || !(pat || savedPat)} title="Reload the current and future PI / Sprint schedule">↻ Reload</button></label>
           {isNew && <label>Start date<input name="startDate" type="date" aria-label="Start date" value={startDate} disabled={creating} onChange={(event) => setStartDate(event.target.value)} title={dp ? `From the ${dp.startLabel} of the release; you can change it.` : 'Empty: today. Time Writing Tasks start in this month (not before the current month).'} />{dp && !startDate && dp.startNote && <small className="warning-text">{dp.startNote}</small>}</label>}
           {isNew && <label>Target date<input name="targetDate" type="date" aria-label="Target date" value={targetDate} min={startDate || undefined} disabled={creating} onChange={(event) => setTargetDate(event.target.value)} title={dp ? `From the ${dp.targetLabel} of the release; you can change it.` : 'Time Writing Tasks are created for every month up to this one.'} />{dp && !targetDate && dp.targetNote && <small className="warning-text">{dp.targetNote}</small>}</label>}
+          {isNew && <label>Priority<select aria-label="Priority" value={priority} disabled={creating} onChange={(event) => setPriority(Number(event.target.value))} title="The Feature's Priority in Azure DevOps (1 highest – 4 lowest)">{storyPriorities.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>}
         </div>
         {isNew && <p className={`muted nf-months${monthsError ? ' error-text' : ''}`} role={monthsError ? 'alert' : undefined}>{monthsError || <>Time Writing: {months.length === 1 ? <>one Task for <strong>{monthLabel}</strong></> : <>{months.length} month Tasks, <strong>{monthRange}</strong></>}{dp ? monthsNote ? ` (${monthsNote})` : '' : <>{startDate ? '' : ' (Start date empty: from today)'}{targetDate ? '' : ' — set a Target date to add the months up to it'}</>}.</>}</p>}
         {isNew && monthsChoice('nf-months')}
@@ -336,13 +343,13 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
         {missingNote(0)}
         {resumeFeature && <p className="muted">Adds the missing children of #{resumeFeature.id} without recreating the Feature. Tick the User Stories to add — none is ticked — or add one of your own. Existing children with the same title are reused.</p>}
       </section>
-      {isNew && <section className={sectionClass(1)} hidden={!shown(1)} aria-label="Section 2: Definition of Done" tabIndex={-1}>
+      {isNew && <section className={sectionClass(1)} hidden={!shown(1)} aria-label="Section 2: Acceptance Criteria (Feature DoD)" tabIndex={-1}>
         {heading(1)}
         <p className="muted nf-hint">What has to be true for “{title.trim() || 'this Feature'}” to be done.</p>
-        <label>Feature DoD (Definition of Done) — required<textarea required maxLength={100000} rows={6} value={dod} onChange={(event) => setDodText(event.target.value)} disabled={creating} placeholder="What has to be true for this Feature to be done" /><small>{dodText == null && epicSetup?.featureDoD.trim() ? `From the ${setupSource === 'personal' ? 'your own' : 'shared'} setup of Epic #${epicSetup.epicId}${classSet ? ` for ${classValue}` : ''}. ` : dodText == null ? 'This Epic has no Definition of Done set up: type it. ' : ''}Saved at the top of the Description.</small></label>
-        <details className="nf-more"><summary>Description and acceptance criteria (optional)</summary>
+        <label>Acceptance Criteria (Feature DoD) — required<textarea required maxLength={100000} rows={6} value={dod} onChange={(event) => setDodText(event.target.value)} disabled={creating} placeholder="What has to be true for this Feature to be done" /><small>{dodText == null && epicSetup?.featureDoD.trim() ? `From the ${setupSource === 'personal' ? 'your own' : 'shared'} setup of Epic #${epicSetup.epicId}${classSet ? ` for ${classValue}` : ''}. ` : dodText == null ? 'This Epic has no Acceptance Criteria (Feature DoD) set up: type it. ' : ''}Saved at the top of the Description as “Feature DoD: …”.</small></label>
+        {/* BKL-53: the one acceptance field of a new Feature is the DoD above; the fold holds the optional Description only. */}
+        <details className="nf-more"><summary>Description (optional)</summary>
           <label>Description<textarea name="description" maxLength={100000} value={description} onChange={(event) => setDescription(event.target.value)} disabled={creating} /></label>
-          <label>Acceptance criteria<textarea name="acceptance" maxLength={100000} disabled={creating} /></label>
         </details>
         {missingNote(1)}
       </section>}
@@ -359,6 +366,7 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
         {/* BKL-49: collapsed until opened; the summary names the story once a title is typed. */}
         <details className="nf-more nf-own-story-fold"><summary>Your own User Story <small className="muted">(optional){ownStory.title.trim() ? ` · ${ownStory.title.trim()}` : ''}</small></summary>
         <fieldset className="milestone-choices nf-own-story" disabled={creating} aria-label="Your own User Story">
+          <StoryTemplatePick shared={epicFile} mine={myTemplates.templates} epicId={epicId} featureTitle={title} onPick={(story) => setOwnStory((current) => ({ ...current, ...story }))} />
           <label>User Story title<input value={ownStory.title} maxLength={255} placeholder="Leave empty for none" onChange={(event) => setOwnStory((current) => ({ ...current, title: event.target.value }))} /></label>
           <label>User Story description<textarea value={ownStory.description} rows={2} placeholder="What needs to be done, and why" onChange={(event) => setOwnStory((current) => ({ ...current, description: event.target.value }))} /></label>
           <label>Comment <small className="muted">(optional, added to its Discussion)</small><textarea value={ownStory.comment} rows={2} onChange={(event) => setOwnStory((current) => ({ ...current, comment: event.target.value }))} /></label>
@@ -391,6 +399,6 @@ export function FeatureEditor({ mode, items, config, savedPat = '', me, canChoos
       </section>}
       {error && <div className="notice error" role="alert">{error}</div>}
       <div className="modal-actions"><button type="button" className="ghost" onClick={closeEditor} disabled={creating}>Cancel</button>
-        <button className="primary" title={needsDoD && !dod.trim() ? 'Enter the Feature DoD first' : undefined} disabled={creating || !complete || iterationLoading || (needsDoD && !dod.trim()) || !title.trim() || !sprintPath}>{creating ? 'Creating and verifying…' : resumeFeature ? 'Complete missing children' : 'Save'}</button></div>
+        <button className="primary" title={needsDoD && !dod.trim() ? 'Enter the Acceptance Criteria (Feature DoD) first' : undefined} disabled={creating || !complete || iterationLoading || (needsDoD && !dod.trim()) || !title.trim() || !sprintPath}>{creating ? 'Creating and verifying…' : resumeFeature ? 'Complete missing children' : 'Save'}</button></div>
     </form></Modal>
 }

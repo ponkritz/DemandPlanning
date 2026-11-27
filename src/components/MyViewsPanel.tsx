@@ -8,7 +8,8 @@ import { DeleteMyView } from './DeleteMyView'
 
 // SET-17 My settings → My views: a person's own read-only views on a server they already have a PAT for. Shown under
 // Other views in the menu; kept on this computer only (never in Git or backups); never a stream.
-export function MyViewsPanel({ azure }: { azure: AzureWorkspace }) {
+// SET-24: startersBlocked — why the admin's starter views for the person's role are not copied here now ('' when they are).
+export function MyViewsPanel({ azure, startersBlocked = '' }: { azure: AzureWorkspace; startersBlocked?: string }) {
   const profiles = azure.connectionProfiles
   const mine = profiles.filter((profile) => profile.mine)
   const servers = myViewServers(profiles)
@@ -26,11 +27,12 @@ export function MyViewsPanel({ azure }: { azure: AzureWorkspace }) {
     setForm({ name: '', server: form.server, project: form.project, query: '' }); setProblem(''); setDone(`“${view.reason}” added under Other views in the menu. Fetching it…`)
     void azure.fetchConnection(view.id)
   }
-  return <Panel className="connection-panel my-views" eyebrow="MY VIEWS" title="My views" info="Your own read-only views: a name, a server you already have a PAT for, a project and a WIQL query. They are listed under Other views in your menu, kept in this browser or desktop app only — never shared, never saved to Git or a backup — and never replace or change a stream (DP, CP, IOCC, Content, Tool Validations). Nothing is written to Azure DevOps.">
+  return <Panel className="connection-panel my-views" eyebrow="MY VIEWS" title="My views" info="Your own read-only views: a name, a server you already have a PAT for, a project and a WIQL query. They are listed under Other views in your menu, kept in this browser or desktop app only — never shared, never saved to Git or a backup — and never replace or change a stream (DP, CP, IOCC, Content, Tool Validations). Nothing is written to Azure DevOps. Your admin may have set up starter views for your role: they are copied here once on each computer and are then yours to keep or delete.">
+    {startersBlocked && <Notice tone="info" className="starters-blocked">No starter views for your role here yet: {startersBlocked}</Notice>}
     {mine.length ? <div className="azure-table"><table className="connection-table"><thead><tr><th>View</th><th>Server / project</th><th>Status</th><th /></tr></thead><tbody>{mine.map((profile) => {
       const status = azure.connectionStatus[profile.id]
       return <tr key={profile.id}>
-        <td><strong>{profile.viewName || profile.reason}</strong><span className="query-chip" title={profile.query}>Query</span></td>
+        <td><strong>{profile.viewName || profile.reason}</strong><span className="query-chip" title={profile.query}>Query</span>{profile.id.startsWith('my-starter-') && <Pill tone="info">Starter view for your role</Pill>}</td>
         <td>{profile.url.replace('https://', '')}{profile.baseUrl && <Pill tone="info">On-prem</Pill>}</td>
         <td><small>{status?.message ?? 'Not fetched yet'}</small></td>
         <td><div className="button-row nowrap"><button type="button" className="ghost" disabled={status?.state === 'busy'} onClick={() => void azure.fetchConnection(profile.id)}>Fetch</button><button type="button" className="text-button danger-text" onClick={() => setDeleting(profile)}>Delete…</button></div></td>

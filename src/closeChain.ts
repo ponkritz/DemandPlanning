@@ -1,6 +1,8 @@
 import type { AzureWorkItem } from './domain.ts'
-import { isTimeWritingStory, timeWritingMonth } from './azureInsights.ts'
-import { updateAzureWorkItem, type AzureConfig } from './azureDevOps.ts'
+import { mergeAzureWorkItems, readAzureWorkItems, updateAzureWorkItem, type AzureConfig } from './azureDevOps.ts'
+import { runInBackground } from './backgroundJobs.ts'
+import { activationPlan, ownMonthTaskPlan, planReads, stateLabel, type StatePlan, type StateStep } from './monthTaskStates.ts'
+import type { LockSettings } from './planningLock.ts'
 import { closeFollowUp, closeStates, followUpQuestion, isMine, isPending, type CloseFollowUp, type Me } from './myWork.ts'
 
 // ATM-28: a User Story set to Active makes its Feature Active when the Feature is still New (no question asked: the
@@ -83,25 +85,56 @@ export async function closeFeatureItems(config: AzureConfig, pat: string, plan: 
   return { closed, failed, skipped }
 }
 
-// BKL-41: hours entered on a month Time Writing Task (Original Estimate or Completed Work above 0) make the Task and its
-// Time Writing story Active: New (or any other state) → Active, and a Closed one is reopened to Active — each named in
-// the notes, so the person is told. A Removed item stays Removed (named too). Only items not yet Active are written.
+// BKL-41, ACT-24, ACT-25: hours entered on a month Time Writing Task (Original Estimate or Completed Work above 0) make
+// the Task, its Time Writing story and the story's Feature Active — each only when it is still New (activationPlan):
+// a Resolved or Closed one is never reopened and a Removed one stays Removed (both named in the notes, so the person is
+// told). Only items still New are written.
 export interface HoursActivation { activated: AzureWorkItem[]; notes: string[]; failed: string[] }
-export async function activateAfterHours(config: AzureConfig, pat: string, items: AzureWorkItem[], task: AzureWorkItem, write: (config: AzureConfig, pat: string, id: number, update: { state: string }) => Promise<AzureWorkItem> = updateAzureWorkItem): Promise<HoursActivation> {
-  const result: HoursActivation = { activated: [], notes: [], failed: [] }
-  if (task.workItemType !== 'Task' || timeWritingMonth(task.title) == null) return result
-  if (!((task.originalEstimate ?? 0) > 0 || (task.completedWork ?? 0) > 0)) return result
-  const story = task.parentId == null ? undefined : items.find((item) => item.id === task.parentId && item.organization === task.organization && item.project === task.project && isTimeWritingStory(item))
-  for (const [item, label] of [[task, 'Task'], [story, 'Time Writing story']] as const) {
-    if (!item) continue
-    const state = item.state.trim().toLowerCase()
-    if (state === 'active') continue
-    if (state === 'removed') { result.notes.push(`${label} #${item.id} is Removed and stays Removed.`); continue }
-    try {
-      const updated = await write(config, pat, item.id, { state: 'Active' })
-      result.activated.push(updated)
-      result.notes.push(state === 'closed' ? `${label} #${item.id} was Closed and is reopened to Active, because hours were entered.` : `${label} #${item.id} set to Active (${item.state} before), because hours were entered.`)
-    } catch (failure) { result.failed.push(`${label} #${item.id} not set to Active: ${failure instanceof Error ? failure.message : 'update failed'}`) }
+export type StateWrite = (config: AzureConfig, pat: string, id: number, update: { state: string }) => Promise<AzureWorkItem>
+export async function activateAfterHours(config: AzureConfig, pat: string, items: AzureWorkItem[], task: AzureWorkItem, write: StateWrite = updateAzureWorkItem): Promise<HoursActivation> {
+  const plan = activationPlan(items, task)
+  const run = await runStatePlan(config, pat, plan, write)
+  return { activated: run.changed, notes: [...plan.skipped.map((entry) => entry.text).filter(Boolean), ...run.notes], failed: run.failed }
+}
+
+// Writes a plan's steps in order, each State read back (updateAzureWorkItem); a step whose needed step failed is not
+// written. Failures are reported, never thrown.
+export async function runStatePlan(config: AzureConfig, pat: string, plan: StatePlan, write: StateWrite = updateAzureWorkItem, progress?: (text: string) => void) {
+  const changed: AzureWorkItem[] = [], notes: string[] = [], failed: string[] = []
+  const bad = new Set<number>()
+  for (const [index, step] of plan.steps.entries()) {
+    progress?.(`Updating ${index + 1} of ${plan.steps.length}…`)
+    const label = `${stateLabel(step.item)} #${step.item.id}`
+    if (step.needs.some((id) => bad.has(id))) { bad.add(step.item.id); failed.push(`${label} not set to ${step.to}: an item below it could not be changed`); continue }
+    try { let updated = step.item; for (const state of step.states) updated = await write(config, pat, step.item.id, { state }); changed.push(updated); notes.push(step.why) }
+    catch (failure) { bad.add(step.item.id); failed.push(`${label} not set to ${step.to}: ${failure instanceof Error ? failure.message : 'update failed'}`) }
   }
-  return result
+  return { changed, notes, failed }
+}
+
+// ACT-26: the check of the person's own Month Tasks, as a background job (Jobs done) once the app has fetched the Time
+// Writing connection. The States are read again from Azure DevOps first and the plan made again on them, so an item
+// that changed meanwhile is not written from an old copy. Returns whether a job started (one at a time; none when
+// nothing is due).
+export const monthTaskStatesJobKey = 'time-writing:month-task-states'
+export interface MonthTaskStatesInput { config: AzureConfig; pat: string; items: AzureWorkItem[]; email: string; locks: LockSettings; now?: () => Date; onChanged: (changed: AzureWorkItem[]) => void; read?: (config: AzureConfig, pat: string, ids: number[]) => Promise<AzureWorkItem[]>; write?: StateWrite; run?: typeof runInBackground; filter?: (step: StateStep) => boolean; onPlanned?: (steps: StateStep[]) => void }
+export function startMonthTaskStatesJob(input: MonthTaskStatesInput) {
+  const now = input.now ?? (() => new Date())
+  const planOf = (items: AzureWorkItem[]) => { const plan = ownMonthTaskPlan(items, input.email, input.locks, now()); return { ...plan, steps: plan.steps.filter(input.filter ?? (() => true)) } }
+  const first = planOf(input.items)
+  if (!first.steps.length) return false
+  const started = (input.run ?? runInBackground)(monthTaskStatesJobKey, 'Month Task states', async (progress) => {
+    progress('Reading the current States…')
+    const fresh = await (input.read ?? readAzureWorkItems)(input.config, input.pat, planReads(input.items, first))
+    // Only what was due on the copy and is still due on the current States is written.
+    const due = new Set(first.steps.map((step) => `${step.item.id}:${step.to}`)), again = ownMonthTaskPlan(mergeAzureWorkItems(input.items, fresh), input.email, input.locks, now())
+    const plan = { ...again, steps: again.steps.filter((step) => due.has(`${step.item.id}:${step.to}`)) }
+    if (!plan.steps.length) { if (fresh.length) input.onChanged(fresh); return { text: 'Your Month Tasks are up to date: nothing to change.' } }
+    const run = await runStatePlan(input.config, input.pat, plan, input.write ?? updateAzureWorkItem, progress)
+    input.onChanged([...fresh, ...run.changed])
+    const text = `${run.changed.length} of ${plan.steps.length} item${plan.steps.length === 1 ? '' : 's'} updated.${run.notes.map((note) => ` ${note}`).join('')}${run.failed.length ? ` ${run.failed.length} not done — ${run.failed.join(' · ')}` : ''}`
+    return { text, failed: run.failed.length > 0 }
+  })
+  if (started) input.onPlanned?.(first.steps)
+  return started
 }
