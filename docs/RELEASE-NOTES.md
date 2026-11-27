@@ -2,6 +2,17 @@
 
 Version history of the I&D Quality Demand Planning app, newest first. Every merged change bumps the version in `package.json` and adds its entry here, in the same pull request (CI-09; [CONFIGURATION-MANAGEMENT.md](CONFIGURATION-MANAGEMENT.md) §4): **major** for a change that breaks existing data, shared setup files or the way users work; **minor** for a new or changed feature; **patch** for a fix, a dependency update or documentation only. `pnpm test` fails when the newest version here is not the version in `package.json`. CI tags each version `vX.Y.Z` on its merge commit and publishes its GitHub release with the installers and this entry (CI-10); the build number of a version is the CI build of that merge (shown in the app under Force Update, and in `latest.json`). Open bugs and accepted limitations of every version are in [KNOWN-ISSUES.md](KNOWN-ISSUES.md); the third-party components of every version are in [SWBOM.md](SWBOM.md).
 
+## v8.4.0 — 2026-11-27
+
+**Added**
+- **Start a Table (Build your own) from a file** — ＋ Add page… offers **Start from a file (optional)** while Table (Build your own) is ticked, and an empty Build-your-own page offers **Start from a file…** next to Set up columns…. The pop-up lists each column of the Excel or CSV file's header with its name, a **suggested type** (Number, Date, Currency, Long text, Dropdown with its options from the values, Text), Required and a sample value — all editable — and the preview of the rows; **Save to Git** adds the columns and the valid rows in one change, rows with errors left out and counted. Everything stays editable in Set up columns… (OND-136, OND-137, OND-138, OND-139, OND-142).
+- **New columns from Upload Excel…** — columns of the file that the page does not have are listed with a tick box (unticked) and a suggested type; ticked ones are added as new columns in the same save with their values. Needs the right of Set up columns; otherwise the tick boxes are disabled with the reason (OND-140, OND-141).
+
+**Changed**
+- Upload Excel… lists unknown columns as columns to add (OND-105) and points a page without columns to Start from a file… (OND-107).
+
+DF-575…DF-582, SM-360…SM-364; LIM-255…LIM-257; TC-OND-138…TC-OND-143.
+
 ## v8.3.0 — 2026-11-27
 
 **Added**
