@@ -1,7 +1,7 @@
 import test, { after, before } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdirSync } from 'node:fs'
-import { loadSample, navigate, openPage, startApp, text } from './helpers.mjs'
+import { cachedRoles, loadSample, navigate, openPage, startApp, text } from './helpers.mjs'
 
 // Month Task states (ACT-23…ACT-27; TC-ACT-18…TC-ACT-22, TC-ACT-20 UAT). Against a mocked dev.azure.com that records
 // every PATCH: at start the app fetches the Time Writing connection and the background job "Month Task states" closes
@@ -68,12 +68,13 @@ function fakeAzure(world = worldOf()) {
 // The State each PATCH set, as "id:State", and the fields of the other PATCHes (the hours).
 const states = (patches) => patches.flatMap((patch) => patch.body.filter((entry) => entry.op === 'add' && entry.path === '/fields/System.State').map((entry) => `${patch.id}:${entry.value}`))
 
-async function openApp(profile, world, roles = true) {
+async function openApp(profile, world, roles = true, accessFile) {
   const azure = fakeAzure(world)
-  const opened = await openPage(app, { width: 1440, height: 900, scale: shots ? 2 : undefined, roles, init: ({ list, email }) => {
+  const opened = await openPage(app, { width: 1440, height: 900, scale: shots ? 2 : undefined, roles, init: ({ list, email, accessFile }) => {
+    if (accessFile) localStorage.setItem('demand-planning-access-v1', accessFile)
     localStorage.setItem('demand-planning-work-email-v1', email)
     localStorage.setItem('demand-planning-azure-connection-profiles-v1', JSON.stringify(list))
-  }, initArg: { list: [profile], email: me } })
+  }, initArg: { list: [profile], email: me, accessFile } })
   await opened.context.route('https://dev.azure.com/**', azure.route)
   await opened.context.route('https://azure.example.com/**', azure.route)
   const dialog = opened.page.getByRole('dialog').filter({ hasText: 'Could not fetch from Azure DevOps' })
@@ -233,6 +234,48 @@ test('TC-SCR-04: a user without state-change rights can review but cannot activa
     await dialog.getByText('#200 Review locally', { exact: true }).waitFor()
     assert.equal(await dialog.getByRole('button', { name: 'Set Features to Active', exact: true }).isDisabled(), true)
     assert.deepEqual(azure.patches, [])
+    assert.deepEqual(azure.writes, [])
+    assert.deepEqual(errors, [])
+  } finally {
+    await context.close()
+  }
+})
+
+test('TC-ATM-26: Sprint check changes only the reviewed Feature after confirmation', async () => {
+  const world = [
+    raw(100, 'Epic', 'Synthetic backlog', undefined, 'Active'),
+    raw(200, 'Feature', 'Ready to activate', 100, 'Closed'),
+    raw(201, 'User Story', 'Active review', 200, 'Active', other),
+    raw(202, 'User Story', 'Earlier review', 200, 'Closed'),
+    raw(300, 'Feature', 'Ready to close', 100, 'New'),
+    raw(301, 'User Story', 'Closed review', 300, 'Closed'),
+    raw(302, 'User Story', 'Closed review by colleague', 300, 'Closed', other),
+    raw(400, 'Feature', 'No stories', 100, 'New'),
+  ]
+  const policy = JSON.parse(cachedRoles('Scrum Master'))
+  policy.roles['Scrum Master'].deny = ['work.comment', 'pireview.post']
+  const { page, context, errors, azure } = await openApp(cloud, world, false, JSON.stringify(policy))
+  try {
+    await navigate(page, 'Sprint check')
+    const table = page.getByRole('table', { name: 'State checks' })
+    const activate = table.getByRole('row').filter({ hasText: 'Ready to activate' }).getByRole('button', { name: 'Set Feature to Active', exact: true })
+    const close = table.getByRole('row').filter({ hasText: 'Ready to close' }).getByRole('button', { name: 'Close Feature', exact: true })
+    await activate.waitFor()
+    assert.equal(await table.getByRole('row').filter({ hasText: 'No stories' }).count(), 0)
+    for (const [trigger, label, target] of [[activate, 'Set Feature to Active', 200], [close, 'Close Feature', 300]]) {
+      const before = azure.patches.length
+      await trigger.click()
+      const dialog = page.getByRole('dialog').filter({ has: page.getByRole('button', { name: label, exact: true }) })
+      await dialog.waitFor()
+      assert.match(await text(dialog), new RegExp(`#${target}\\b`))
+      await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
+      assert.equal(azure.patches.length, before)
+      await trigger.click()
+      const saved = page.waitForResponse((response) => response.request().method() === 'PATCH' && new URL(response.url()).pathname.toLowerCase().endsWith(`/workitems/${target}`))
+      await Promise.all([saved, dialog.getByRole('button', { name: label, exact: true }).click()])
+      await trigger.waitFor({ state: 'detached' })
+    }
+    assert.deepEqual(states(azure.patches), ['200:Active', '300:Closed'])
     assert.deepEqual(azure.writes, [])
     assert.deepEqual(errors, [])
   } finally {

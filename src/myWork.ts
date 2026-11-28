@@ -212,7 +212,7 @@ export function assignablePeople(items: AzureWorkItem[]) {
 //  - a Feature whose User Stories are all Closed should be Closed too;
 //  - a User Story whose Tasks are all Closed should be Closed too;
 //  - an Active Feature should have at least one Active User Story;
-//  - a New Feature with an Active User Story should be Active (ATM-28).
+//  - a Feature with an Active User Story should be Active, including a Closed Feature that has work again.
 // Only items with children of that kind are judged; Removed children are ignored.
 export type StateCheckKind = 'close-feature' | 'close-story' | 'feature-needs-active-story' | 'activate-feature' | 'feature-old-pi'
 export interface StateCheck { kind: StateCheckKind; item: AzureWorkItem; children: AzureWorkItem[]; targetPi?: string }
@@ -228,18 +228,28 @@ export const piName = (path: string) => path.slice(path.lastIndexOf('\\') + 1)
 // PIR-02: true when PI a is later than PI b, compared by the PI's name with its numbers ("PI 2026.10" after "PI 2026.9").
 export const laterPi = (a: string, b: string) => piName(a).localeCompare(piName(b), undefined, { numeric: true, sensitivity: 'base' }) > 0
 const stateIs = (item: Pick<AzureWorkItem, 'state'>, state: string) => item.state.trim().toLowerCase() === state
+// Both the Sprint Check preview and its live write use this rule. A Feature with no
+// current User Stories cannot be closed on the evidence of an empty list.
+export function sprintFeatureTarget(feature: AzureWorkItem, children: AzureWorkItem[]): 'Active' | 'Closed' | null {
+  if (feature.workItemType !== 'Feature' || stateIs(feature, 'removed')) return null
+  const stories = stateCheckChildren(children, feature)
+  if (!stateIs(feature, 'active') && stories.some(story => stateIs(story, 'active'))) return 'Active'
+  if (!stateIs(feature, 'closed') && stories.length && stories.every(story => stateIs(story, 'closed'))) return 'Closed'
+  return null
+}
 export function stateChecks(items: AzureWorkItem[], me: Me, absenceEpicId?: number): StateCheck[] {
   const byId = new Map(items.map((item) => [item.id, item]))
   const underAbsence = (item: AzureWorkItem) => { const seen = new Set<number>(); for (let current: AzureWorkItem | undefined = item; current && !seen.has(current.id); current = current.parentId == null ? undefined : byId.get(current.parentId)) { if (current.id === absenceEpicId) return true; seen.add(current.id) } return false }
   const children = new Map<number, AzureWorkItem[]>()
   for (const item of items) if (item.parentId != null && !stateIs(item, 'removed')) children.set(item.parentId, [...(children.get(item.parentId) ?? []), item])
   const checks: StateCheck[] = []
-  for (const item of items.filter((entry) => isMine(entry, me) && !stateIs(entry, 'closed') && !stateIs(entry, 'removed') && !underAbsence(entry)).sort((a, b) => a.id - b.id)) {
+  for (const item of items.filter((entry) => isMine(entry, me) && !stateIs(entry, 'removed') && !underAbsence(entry)).sort((a, b) => a.id - b.id)) {
     if (item.workItemType === 'Feature') {
-      const stories = (children.get(item.id) ?? []).filter((child) => child.workItemType === 'User Story')
-      if (stories.length && stories.every((story) => stateIs(story, 'closed'))) checks.push({ kind: 'close-feature', item, children: stories })
+      const stories = stateCheckChildren(children.get(item.id) ?? [], item)
+      const targetState = sprintFeatureTarget(item, stories)
+      if (targetState === 'Closed') checks.push({ kind: 'close-feature', item, children: stories })
       else if (stateIs(item, 'active') && !stories.some((story) => stateIs(story, 'active'))) checks.push({ kind: 'feature-needs-active-story', item, children: stories })
-      else if (stateIs(item, 'new') && stories.some((story) => stateIs(story, 'active'))) checks.push({ kind: 'activate-feature', item, children: stories.filter((story) => stateIs(story, 'active')) })
+      else if (targetState === 'Active') checks.push({ kind: 'activate-feature', item, children: stories.filter((story) => stateIs(story, 'active')) })
       // ATM-30: an Active Feature left in an older PI while its Active User Stories sit in a later one.
       if (stateIs(item, 'active')) {
         const active = stories.filter((story) => stateIs(story, 'active'))
@@ -247,7 +257,7 @@ export function stateChecks(items: AzureWorkItem[], me: Me, absenceEpicId?: numb
         const own = piPathOf(item.iterationPath)
         if (target && (!own || laterPi(target, own))) checks.push({ kind: 'feature-old-pi', item, children: active.filter((story) => piPathOf(story.iterationPath)?.toLowerCase() === target.toLowerCase()), targetPi: target })
       }
-    } else if (item.workItemType === 'User Story') {
+    } else if (item.workItemType === 'User Story' && !stateIs(item, 'closed')) {
       const tasks = (children.get(item.id) ?? []).filter((child) => child.workItemType === 'Task')
       if (tasks.length && tasks.every((task) => stateIs(task, 'closed'))) checks.push({ kind: 'close-story', item, children: tasks })
     }

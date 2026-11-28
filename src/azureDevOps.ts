@@ -1,4 +1,5 @@
 import type { AzureWorkItem } from './domain'
+import { sprintFeatureTarget } from './myWork.ts'
 import { utcMonthLabel } from './businessTime.ts'
 import { featureDoD, fillTitle, missingValues, reviewStoryTitle, titleValues, fieldPlaceholders, type TitleField } from './featureSetup.ts'
 import { isTimeWritingStory, planMonthStory, timeWritingMonth } from './azureInsights.ts'
@@ -123,13 +124,15 @@ export class HierarchyCreationError extends Error {
 
 async function directChildren(config: AzureConfig, pat: string, parentId: number, transport: AzureTransport) {
   const page = await transport({ ...config, pat, operation: 'query', query: `SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = ${literal(config.project)} AND [System.Parent] = ${parentId} ORDER BY [System.Id] ASC` }) as { workItems?: { id: number }[] }
-  if (!Array.isArray(page.workItems)) throw new Error('Could not check existing children. No child creation was attempted.')
+  if (!Array.isArray(page.workItems)) throw new Error('Could not check existing children. Refresh before retrying.')
   if (page.workItems.length >= 1000) throw new Error('This parent has too many children to verify safely. Review it in Azure DevOps.')
+  const childIds = page.workItems.map(item => item.id)
+  if (childIds.some(id => !Number.isSafeInteger(id) || id < 1) || new Set(childIds).size !== childIds.length) throw new Error('Invalid list of child IDs from Azure DevOps. Refresh before retrying.')
   const items: AzureWorkItem[] = []
   for (let index = 0; index < page.workItems.length; index += 200) {
-    const ids = page.workItems.slice(index, index + 200).map((item) => item.id)
+    const ids = childIds.slice(index, index + 200)
     const batch = await transport({ ...config, pat, operation: 'items', ids }) as { value?: RawItem[] }
-    if (batch.value?.length !== ids.length) throw new Error('Could not read all existing children. Refresh before retrying.')
+    if (batch.value?.length !== ids.length || new Set(batch.value.map(item => item.id)).size !== ids.length || batch.value.some(item => !ids.includes(item.id) || (typeof item.fields['System.TeamProject'] === 'string' && item.fields['System.TeamProject'].toLowerCase() !== config.project.toLowerCase()))) throw new Error('Could not read all existing children in this project. Refresh before retrying.')
     items.push(...batch.value.map((item) => mapAzureWorkItem(item, config)))
   }
   return items
@@ -575,9 +578,22 @@ export async function readAzureWorkItems(config: AzureConfig, pat: string, ids: 
   const wanted = [...new Set(ids)].filter((id) => Number.isSafeInteger(id) && id > 0)
   for (let index = 0; index < wanted.length; index += 200) {
     const batch = await transport({ ...config, pat, operation: 'items', ids: wanted.slice(index, index + 200) }) as { value?: RawItem[] }
+    if (batch.value?.some(item => typeof item.fields['System.TeamProject'] === 'string' && item.fields['System.TeamProject'].toLowerCase() !== config.project.toLowerCase())) throw new Error('Work item belongs to a different project. Refresh before retrying.')
     items.push(...(batch.value ?? []).map((item) => mapAzureWorkItem(item, config)))
   }
   return items
+}
+
+// The Sprint Check confirmation names this Feature and the target state. Re-read the full
+// set of direct children because a cached backlog can omit a newly added or reopened story.
+export async function applySprintFeatureState(config: AzureConfig, pat: string, reviewed: AzureWorkItem, target: 'Active' | 'Closed', transport: AzureTransport = requestAzure) {
+  if (reviewed.workItemType !== 'Feature' || reviewed.organization.toLowerCase() !== config.organization.toLowerCase() || reviewed.project.toLowerCase() !== config.project.toLowerCase()) throw new Error('The selected Feature belongs to a different connection. Refresh Sprint Check.')
+  const [live] = await readAzureWorkItems(config, pat, [reviewed.id], transport)
+  const identity = (item: AzureWorkItem) => (item.assignedToEmail || item.assignedTo).trim().toLowerCase()
+  if (!live || live.id !== reviewed.id || live.workItemType !== 'Feature' || live.state !== reviewed.state || identity(live) !== identity(reviewed)) throw new Error('The Feature or its assignee changed. Refresh Sprint Check before applying a new suggestion.')
+  const children = await directChildren(config, pat, live.id, transport)
+  if (children.some(child => child.parentId !== live.id || !child.workItemType || !child.state) || sprintFeatureTarget(live, children) !== target) throw new Error('The User Stories no longer support this change. Refresh Sprint Check.')
+  return updateAzureWorkItem(config, pat, live.id, { state: target, expectedState: reviewed.state }, transport)
 }
 
 // Changes a work item's state and/or iteration path, then reads it back and checks the change landed.

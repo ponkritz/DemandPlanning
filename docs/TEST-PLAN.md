@@ -696,6 +696,8 @@ Cases marked **UAT** are also run in acceptance testing.
 
 **TC-ATM-25 Expand an Auto Time Writing US: Month Tasks and highlight** — Req ATM-32 — L1 `my-work.test.mjs` ("TC-ATM-25: a Time Writing User Story opens to its Month Tasks, any assignee, Removed and other projects left out (ATM-32)"); E2E `board-time-writing-bucket.e2e.mjs` ("TC-ATM-25: My Tasks [Board] lists the Time Writing User Stories in "Auto Time Writing US" and highlights one when expanded"); browser check in light and dark theme: + opens the story's Month Tasks, the story and its Tasks get the accent background and left bar, the label reads "Auto Time Writing US · expanded" and the button Collapse … (aria-expanded true); − removes the highlight; a Time Writing story opened under its Feature (All, ＋ on the Feature) is highlighted the same way.
 
+**TC-ATM-26 Sprint check prompts for the Feature state** — Req ATM-34 — L1 `my-work.test.mjs` ("TC-ATM-26: Feature prompts use only direct User Stories in scope") and E2E `month-task-states.e2e.mjs` ("TC-ATM-26: Sprint check changes only the reviewed Feature after confirmation"). UAT using synthetic Azure data. Give the selected person a Feature with only Closed and Removed direct stories, a Closed Feature with an Active story assigned to someone else, and a Feature with no qualifying stories. Verify that only the first two prompt for closure and activation respectively. Cancel and check that no Feature write occurs. On a Feature close, verify only the Feature is listed; a viewer who can post its PI review sees the review before closing (PIR-18). Confirm an eligible correction and verify the resulting Feature state. Change the live child set between review and confirmation (including a child missing from the cached backlog) and verify the app skips an invalid change. Activate a story in Sprint check and check its parent changes only after separate confirmation. **UAT**
+
 **TC-ATM-03 Close an item** — Req ATM-06 — **UAT**
 - Steps:
   1. On a New User Story press Set User Story to Active, then Close User Story; on a New Feature press Set Feature to Active, then Close Feature. A Resolved story or Feature shows "Set to Active first".
@@ -2841,6 +2843,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | ATM-31 | TC-ATM-24 |
 | ATM-32 | TC-ATM-25 |
 | ATM-33 | TC-SCR-04 |
+| ATM-34 | TC-ATM-26 |
 | BKL-01…03, BKL-12 | TC-BKL-01, TC-BKL-34 |
 | BKL-04…09, BKL-11 | TC-BKL-02 |
 | BKL-10 | TC-BKL-03, TC-ATM-11 |
@@ -3714,7 +3717,7 @@ Expected (L3): an India holiday applies only to people mapped to India, and a pe
 | UC-03 | TC-CON-03, TC-FET-01…06, TC-FET-09 |
 | UC-04 | TC-TWN-01, TC-TWN-02, TC-MON-01…06, TC-MON-09, TC-MON-10, TC-ATM-19, TC-BKL-18, TC-ACT-14, TC-ACT-15, TC-ACT-16, TC-ACT-17, TC-ACT-18…22, TC-ACT-23, TC-CAP-35, TC-BKL-29, TC-BKL-30, TC-BKL-31, TC-BKL-33, TC-NAV-51 |
 | UC-05 | TC-MON-07, TC-FET-11 |
-| UC-06 | TC-ATM-01…11, TC-ATM-21, TC-ATM-22, TC-ATM-23, TC-ATM-24, TC-ATM-25, TC-TWN-03, TC-CON-20, TC-CON-33, TC-CON-34, TC-CON-43, TC-BKL-30, TC-BKL-31, TC-BKL-32 |
+| UC-06 | TC-ATM-01…11, TC-ATM-21, TC-ATM-22, TC-ATM-23, TC-ATM-24, TC-ATM-25, TC-TWN-03, TC-CON-20, TC-CON-33, TC-CON-34, TC-CON-43, TC-BKL-30, TC-BKL-31, TC-BKL-32, TC-ATM-26 |
 | UC-07 | TC-BKL-01…09, TC-BKL-34, TC-BKL-35, TC-BKL-36, TC-BKL-37, TC-BKL-38, TC-BKL-39, TC-BKL-40, TC-BKL-41, TC-BKL-42, TC-BKL-15, TC-BKL-16, TC-BKL-17, TC-BKL-18, TC-BKL-19, TC-BKL-20, TC-BKL-21, TC-BKL-22, TC-BKL-23, TC-BKL-24, TC-BKL-25, TC-BKL-26, TC-BKL-27, TC-BKL-28, TC-DPF-06, TC-NAV-36, TC-CON-23, TC-CON-25…27, TC-CON-29…32, TC-CON-35 |
 | UC-08 | TC-QV-01…05, TC-FET-07, TC-CON-08, TC-CON-11…16, TC-QV-08, TC-QV-09, TC-QV-10, TC-QV-11, TC-QV-12, TC-QV-13, TC-QV-14, TC-QV-15, TC-QV-16, TC-CON-37, TC-CON-38, TC-CON-39, TC-CON-40, TC-CON-41, TC-QV-18, TC-QV-19, TC-QV-20, TC-QV-21, TC-QV-22, TC-CON-42, TC-QV-41, TC-QV-42, TC-CON-61, TC-NAV-51, TC-QV-43, TC-QV-44, TC-QV-45, TC-QV-46, TC-STR-01…07, TC-UI-13…16, TC-TVL-14…18, TC-CON-68, TC-CON-69, TC-UI-18, TC-UI-19 |, TC-UI-20…25, TC-CON-72, TC-CON-74 |
 | UC-09 | TC-OV-11…15, TC-CAP-35, TC-CAP-01, TC-CAP-02, TC-CAP-03, TC-CAP-08, TC-CAP-10, TC-CAP-11, TC-CAP-12, TC-CAP-13, TC-CAP-14, TC-CAP-15, TC-CAP-16, TC-CAP-17, TC-CAP-18, TC-CAP-19, TC-CAP-20, TC-CAP-21, TC-CAP-22, TC-CAP-23, TC-CAP-24, TC-CAP-25, TC-CAP-26, TC-CAP-27, TC-QV-17, TC-CON-21, TC-QV-10, TC-QV-11, TC-QV-21, TC-CHT-17, TC-CHT-19 |

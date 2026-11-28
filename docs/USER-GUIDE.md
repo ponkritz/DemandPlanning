@@ -592,6 +592,7 @@ Every page creates a Feature with the same **New Feature** form: QMS-0025, My Ta
 1. **Find current Sprint** works out today's PI and Sprint from the team's iteration dates.
 2. **Move to current PI + Sprint** lists your User Stories still in a past Sprint, in the states you choose (**New**, **Active** or **Both**). Confirm to move them.
 3. **State checks** list your Features and User Stories whose state does not match their children. Open a row (**›**) to set a New User Story **Active** right there; an Active Feature in an older PI than its stories offers **Move Feature to <PI>**.
+   For a Feature assigned to you, all Closed direct stories offer closure, and any Active direct story offers activation, including reopening a Closed Feature. Removed stories are ignored. Review the proposed Feature state and confirm it separately. Closing lists only that Feature and asks for its PI review when you have permission to post it. Changing a story does not confirm a change to its parent. If the live child list has changed and the action no longer fits, refresh and review the suggestion again.
 
 ### My dashboard
 

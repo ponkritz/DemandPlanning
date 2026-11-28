@@ -1319,8 +1319,12 @@ test('TC-ATM-20: Sprint check offers the move to the current PI + Sprint and the
   // ATM-29: the Sprint panel spans the page; State checks is a backlog tree whose rows expand to the items below them.
   const [sprintWidth, pageWidth] = await content.evaluate((node) => [node.querySelector('.sprint-full .action-card').getBoundingClientRect().width, node.querySelector('.sprint-full').getBoundingClientRect().width])
   assert.ok(sprintWidth >= pageWidth - 2, `full width: ${sprintWidth} of ${pageWidth}`)
-  // The sample data has no state mismatch for Ana: the panel says so (the tree and its ▸ rows: TC-ATM-22).
-  assert.match(await text(content.locator('.state-checks')), /Nothing to fix/)
+  // The sample includes Closed Features with Active stories. Suggestions can be inspected in sample mode.
+  const row = content.getByRole('row').filter({ hasText: 'Content | Clinical Library | v6.4' })
+  await row.getByRole('button', { name: 'Set Feature to Active' }).click()
+  const prompt = page.getByRole('dialog', { name: /Set Feature to Active/ })
+  assert.equal(await prompt.getByRole('button', { name: 'Set Feature to Active', exact: true }).isDisabled(), true)
+  await prompt.getByRole('button', { name: 'Cancel' }).click()
   assert.deepEqual(errors, [])
   await context.close()
 })
